@@ -1210,6 +1210,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -3161,6 +3162,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -3218,6 +3220,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -5023,6 +5026,7 @@
                                     "$current_url": "<fixture-origin>/",
                                     "$host": "<fixture-host>",
                                     "$initial__kx": null,
+                                    "$initial_bfcid": null,
                                     "$initial_current_url": "<fixture-origin>/",
                                     "$initial_dclid": null,
                                     "$initial_epik": null,
@@ -5056,6 +5060,7 @@
                                     "$referrer": "$direct",
                                     "$referring_domain": "$direct",
                                     "_kx": null,
+                                    "bfcid": null,
                                     "dclid": null,
                                     "epik": null,
                                     "fbclid": null,
@@ -5658,6 +5663,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -5717,6 +5723,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -5774,6 +5781,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -5837,6 +5845,7 @@
                                                 "$current_url": "<fixture-origin>/",
                                                 "$host": "<fixture-host>",
                                                 "$initial__kx": null,
+                                                "$initial_bfcid": null,
                                                 "$initial_current_url": "<fixture-origin>/",
                                                 "$initial_dclid": null,
                                                 "$initial_epik": null,
@@ -5870,6 +5879,7 @@
                                                 "$referrer": "$direct",
                                                 "$referring_domain": "$direct",
                                                 "_kx": null,
+                                                "bfcid": null,
                                                 "dclid": null,
                                                 "epik": null,
                                                 "fbclid": null,
@@ -7993,6 +8003,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -10607,6 +10618,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -10665,6 +10677,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -12544,6 +12557,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -14251,6 +14265,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -16230,6 +16245,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -18822,6 +18838,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -21165,6 +21182,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -23316,6 +23334,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -25868,6 +25887,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -28260,6 +28280,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -31207,6 +31228,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -33451,6 +33473,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -33510,6 +33533,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -33568,6 +33592,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -35520,6 +35545,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -37421,6 +37447,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -37479,6 +37506,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -39268,6 +39296,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -41219,6 +41248,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -41276,6 +41306,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -43081,6 +43112,7 @@
                                     "$current_url": "<fixture-origin>/",
                                     "$host": "<fixture-host>",
                                     "$initial__kx": null,
+                                    "$initial_bfcid": null,
                                     "$initial_current_url": "<fixture-origin>/",
                                     "$initial_dclid": null,
                                     "$initial_epik": null,
@@ -43114,6 +43146,7 @@
                                     "$referrer": "$direct",
                                     "$referring_domain": "$direct",
                                     "_kx": null,
+                                    "bfcid": null,
                                     "dclid": null,
                                     "epik": null,
                                     "fbclid": null,
@@ -43716,6 +43749,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -43775,6 +43809,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -43832,6 +43867,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -43895,6 +43931,7 @@
                                                 "$current_url": "<fixture-origin>/",
                                                 "$host": "<fixture-host>",
                                                 "$initial__kx": null,
+                                                "$initial_bfcid": null,
                                                 "$initial_current_url": "<fixture-origin>/",
                                                 "$initial_dclid": null,
                                                 "$initial_epik": null,
@@ -43928,6 +43965,7 @@
                                                 "$referrer": "$direct",
                                                 "$referring_domain": "$direct",
                                                 "_kx": null,
+                                                "bfcid": null,
                                                 "dclid": null,
                                                 "epik": null,
                                                 "fbclid": null,
@@ -46051,6 +46089,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -48665,6 +48704,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -48723,6 +48763,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -50602,6 +50643,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -52309,6 +52351,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -54288,6 +54331,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -56880,6 +56924,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -59223,6 +59268,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -61374,6 +61420,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -63926,6 +63973,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -66318,6 +66366,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -69265,6 +69314,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -71509,6 +71559,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -71568,6 +71619,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -71626,6 +71678,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -73578,6 +73631,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -75479,6 +75533,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -75537,6 +75592,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -77326,6 +77382,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -79277,6 +79334,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -79334,6 +79392,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -81139,6 +81198,7 @@
                                     "$current_url": "<fixture-origin>/",
                                     "$host": "<fixture-host>",
                                     "$initial__kx": null,
+                                    "$initial_bfcid": null,
                                     "$initial_current_url": "<fixture-origin>/",
                                     "$initial_dclid": null,
                                     "$initial_epik": null,
@@ -81172,6 +81232,7 @@
                                     "$referrer": "$direct",
                                     "$referring_domain": "$direct",
                                     "_kx": null,
+                                    "bfcid": null,
                                     "dclid": null,
                                     "epik": null,
                                     "fbclid": null,
@@ -81774,6 +81835,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -81833,6 +81895,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -81890,6 +81953,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -81953,6 +82017,7 @@
                                                 "$current_url": "<fixture-origin>/",
                                                 "$host": "<fixture-host>",
                                                 "$initial__kx": null,
+                                                "$initial_bfcid": null,
                                                 "$initial_current_url": "<fixture-origin>/",
                                                 "$initial_dclid": null,
                                                 "$initial_epik": null,
@@ -81986,6 +82051,7 @@
                                                 "$referrer": "$direct",
                                                 "$referring_domain": "$direct",
                                                 "_kx": null,
+                                                "bfcid": null,
                                                 "dclid": null,
                                                 "epik": null,
                                                 "fbclid": null,
@@ -84109,6 +84175,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -86723,6 +86790,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -86781,6 +86849,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -88660,6 +88729,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -90367,6 +90437,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -92346,6 +92417,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -94938,6 +95010,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -97281,6 +97354,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -99432,6 +99506,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -101984,6 +102059,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -104376,6 +104452,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -107323,6 +107400,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -109567,6 +109645,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -109626,6 +109705,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -109684,6 +109764,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -111636,6 +111717,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -113537,6 +113619,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
@@ -113595,6 +113678,7 @@
                                     "groups": {},
                                     "person_properties": {
                                         "$initial__kx": null,
+                                        "$initial_bfcid": null,
                                         "$initial_current_url": "<fixture-origin>/",
                                         "$initial_dclid": null,
                                         "$initial_epik": null,
