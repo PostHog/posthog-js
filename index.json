@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/5297": {
+    "key": "PostHog/posthog-js/issue/5297",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5297",
+    "url": "https://github.com/PostHog/posthog-js/issues/5297",
+    "conclusion": "Confirmed browser SDK bug: a backward wall-clock adjustment subtracts persisted client-rate-limit tokens and can cause an extended false rate-limit period.",
+    "labels": [
+      "web",
+      "javascript",
+      "team/client-libraries",
+      "bug"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/5298",
+    "closed": false,
+    "updatedAt": "2026-10-14T08:22:34.051Z"
+  },
   "PostHog/posthog-js/issue/5287": {
     "key": "PostHog/posthog-js/issue/5287",
     "repo": "PostHog/posthog-js",
@@ -2919,21 +2935,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-28T08:17:17.283Z"
-  },
-  "PostHog/posthog-js/issue/3338": {
-    "key": "PostHog/posthog-js/issue/3338",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3338",
-    "url": "https://github.com/PostHog/posthog-js/issues/3338",
-    "conclusion": "Valid feature gap for bare React Native Hermes sourcemap support; current serializer code is consistent with the reported failure.",
-    "labels": [
-      "enhancement",
-      "help wanted",
-      "react-native",
-      "feature/error-tracking",
-      "team/error-tracking"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-27T09:24:20.940Z"
   }
 }
