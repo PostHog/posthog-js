@@ -51,8 +51,8 @@ export class RateLimiter {
             last: now,
         }
 
-        bucket.tokens += ((now - bucket.last) / 1000) * captureEventsPerSecond
-        bucket.last = now
+        bucket.tokens += (Math.max(0, now - bucket.last) / 1000) * captureEventsPerSecond
+        bucket.last = Math.max(bucket.last, now)
 
         if (bucket.tokens > captureEventsBurstLimit) {
             bucket.tokens = captureEventsBurstLimit
