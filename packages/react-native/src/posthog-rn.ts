@@ -2952,6 +2952,8 @@ export class PostHog extends PostHogCore {
             nativeAutocapture: nativeErrorAutocapture.nativeCrashes,
             androidNdkCrashes: nativeErrorAutocapture.androidNdkCrashes,
             exceptionSteps: this._errorTracking.getNativePluginExceptionStepsConfig(),
+            // Tells native to drop its fatal JS crash report only after markFatalExceptionHandled().
+            fatalExceptionMarker: true,
           },
           // Always sent, even when push init isn't the reason we're here: the native
           // defaults are true, so an explicit opt-out must reach the native config.
