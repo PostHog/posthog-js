@@ -35,6 +35,11 @@ export interface PostHogReactNativePluginErrorTrackingConfig {
   nativeAutocapture?: boolean
   androidNdkCrashes?: boolean
   exceptionSteps?: PostHogReactNativePluginExceptionStepsConfig
+  /**
+   * Native drops its report of a fatal JS crash only after {@link markFatalExceptionHandled}
+   * marked it. When absent, native drops every fatal JS crash report.
+   */
+  fatalExceptionMarker?: boolean
 }
 
 export interface PostHogReactNativePluginPushConfig {
@@ -149,6 +154,11 @@ export function captureFatalException(
  * @internal Used by `posthog-react-native`'s fatal handler. Not part of the public API.
  */
 export function markFatalExceptionHandled(message: string): Promise<void> {
+  // An OTA-updated JS bundle can run on a native build that predates this method. That build
+  // drops every fatal JS report natively, so there is nothing to mark.
+  if (typeof PosthogReactNativePlugin.markFatalExceptionHandled !== 'function') {
+    return Promise.resolve()
+  }
   return PosthogReactNativePlugin.markFatalExceptionHandled(message)
 }
 

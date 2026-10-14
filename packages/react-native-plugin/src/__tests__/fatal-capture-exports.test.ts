@@ -43,4 +43,14 @@ describe('fatal capture exports', () => {
       typeof (Plugin.default as unknown as { markFatalExceptionHandled?: unknown }).markFatalExceptionHandled
     ).toBe('function')
   })
+
+  it('resolves without marking when the native build lacks markFatalExceptionHandled', async () => {
+    const original = nativeMock.markFatalExceptionHandled
+    ;(nativeMock as any).markFatalExceptionHandled = undefined
+    try {
+      await expect(Plugin.markFatalExceptionHandled('boom')).resolves.toBeUndefined()
+    } finally {
+      nativeMock.markFatalExceptionHandled = original
+    }
+  })
 })
