@@ -1352,6 +1352,50 @@ function initMediaInteractionObserver({
   });
 }
 
+/**
+ * Reports an image's natural size once it loads, for images serialized before
+ * they had one (lazy loading, a slow network) and for images whose `src` changed.
+ * The serializer records the size of images that were already loaded.
+ */
+function initImageSizeObserver({
+  mutationCb,
+  mirror,
+  blockClass,
+  blockSelector,
+  doc,
+}: observerParam): listenerHandler {
+  const reported = new WeakMap<HTMLImageElement, string>();
+  const handler = callbackWrapper((event: Event) => {
+    const target = getEventTarget(event);
+    if (!target || (target as Node).nodeName !== 'IMG') return;
+    const image = target as HTMLImageElement;
+    const { naturalWidth, naturalHeight } = image;
+    if (!naturalWidth) return;
+    const meta = mirror.getMeta(image);
+    if (!meta || !('attributes' in meta)) return;
+    if (isBlocked(image, blockClass, blockSelector, true)) return;
+    const size = `${naturalWidth}x${naturalHeight}`;
+    const serialized = `${meta.attributes.rr_naturalWidth}x${meta.attributes.rr_naturalHeight}`;
+    if ((reported.get(image) ?? serialized) === size) return;
+    reported.set(image, size);
+    mutationCb({
+      texts: [],
+      attributes: [
+        {
+          id: meta.id,
+          attributes: {
+            rr_naturalWidth: naturalWidth,
+            rr_naturalHeight: naturalHeight,
+          },
+        },
+      ],
+      removes: [],
+      adds: [],
+    });
+  });
+  return on('load', handler, doc);
+}
+
 function initFontObserver({ fontCb, doc }: observerParam): listenerHandler {
   const win = doc.defaultView as IWindow;
   if (!win) {
@@ -1712,6 +1756,7 @@ export function initObservers(
       if (o.collectFonts) {
         startObserver('font', () => initFontObserver(o));
       }
+      startObserver('imageSize', () => initImageSizeObserver(o));
     }
     startObserver('selection', () => initSelectionObserver(o));
     startObserver('customElement', () => initCustomElementObserver(o));

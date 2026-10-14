@@ -265,6 +265,50 @@ describe('scrollTop/scrollLeft', () => {
   });
 });
 
+describe('img natural size', () => {
+  const image = (natural: {
+    complete: boolean;
+    width: number;
+    height: number;
+  }): HTMLImageElement => {
+    const img = document.createElement('img');
+    img.setAttribute('src', 'https://example.com/photo.png');
+    Object.defineProperty(img, 'complete', { value: natural.complete });
+    Object.defineProperty(img, 'naturalWidth', { value: natural.width });
+    Object.defineProperty(img, 'naturalHeight', { value: natural.height });
+    return img;
+  };
+
+  it.each([
+    {
+      name: 'loaded',
+      natural: { complete: true, width: 1200, height: 800 },
+      expected: { rr_naturalWidth: 1200, rr_naturalHeight: 800 },
+    },
+    {
+      name: 'still loading',
+      natural: { complete: false, width: 0, height: 0 },
+      expected: {},
+    },
+    {
+      name: 'failed to load',
+      natural: { complete: true, width: 0, height: 0 },
+      expected: {},
+    },
+  ])('records the size of an image that is $name', ({ natural, expected }) => {
+    const attributes = (serializeNode(image(natural)) as elementNode)
+      .attributes;
+    expect({
+      rr_naturalWidth: attributes.rr_naturalWidth,
+      rr_naturalHeight: attributes.rr_naturalHeight,
+    }).toEqual({
+      rr_naturalWidth: undefined,
+      rr_naturalHeight: undefined,
+      ...expected,
+    });
+  });
+});
+
 describe('form', () => {
   const render = (html: string): HTMLTextAreaElement => {
     document.write(html);

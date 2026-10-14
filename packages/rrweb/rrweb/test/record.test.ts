@@ -217,6 +217,53 @@ describe('record', function (this: ISuite) {
     expect(mouseInteractionCount).toBeGreaterThanOrEqual(0);
   });
 
+  it('records the natural size of an image when it loads and when its src changes', async () => {
+    const picture = (width: number, height: number) =>
+      `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}'/>`;
+    await ctx.page.evaluate((src: string) => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const img = document.createElement('img');
+      img.src = src;
+      document.body.appendChild(img);
+    }, picture(30, 20));
+
+    // The serializer records an image that has already loaded, the observer one
+    // that loads later, so either may report the first size, but only once.
+    const reportedSizes = () => {
+      const sizes: string[] = [];
+      for (const e of ctx.events) {
+        if (e.type !== EventType.IncrementalSnapshot) continue;
+        if (e.data.source !== IncrementalSource.Mutation) continue;
+        for (const add of e.data.adds) {
+          const attributes = (
+            add.node as { attributes?: Record<string, unknown> }
+          ).attributes;
+          if (attributes?.rr_naturalWidth !== undefined)
+            sizes.push(
+              `${attributes.rr_naturalWidth}x${attributes.rr_naturalHeight}`,
+            );
+        }
+        for (const mutation of e.data.attributes) {
+          if (mutation.attributes.rr_naturalWidth !== undefined)
+            sizes.push(
+              `${mutation.attributes.rr_naturalWidth}x${mutation.attributes.rr_naturalHeight}`,
+            );
+        }
+      }
+      return sizes;
+    };
+    await waitForCondition(() => reportedSizes().length === 1);
+
+    await ctx.page.evaluate((src: string) => {
+      document.querySelector('img')!.src = src;
+    }, picture(40, 10));
+    await waitForCondition(() => reportedSizes().length === 2);
+    await waitForRAF(ctx.page);
+
+    expect(reportedSizes()).toEqual(['30x20', '40x10']);
+  });
+
   it('can checkout full snapshot by count', async () => {
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;

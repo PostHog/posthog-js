@@ -321,7 +321,8 @@ export type attributeCursor = {
 export type attributeMutation = {
   id: number;
   attributes: {
-    [key: string]: string | styleOMValue | null;
+    // number: generated properties such as rr_naturalWidth
+    [key: string]: string | number | styleOMValue | null;
   };
 };
 
