@@ -81,6 +81,16 @@ describe('PostHogSpanProcessor request context', () => {
     expect(ended[0].attributes).toEqual({ [key]: 'bob', $session_id: 's_alice' })
   })
 
+  it('drops a distinct ID property when the span already has an identity', () => {
+    const provider = providerWithClient()
+
+    posthog.withContext({ properties: { 'posthog.distinct_id': 'alice' } }, () =>
+      emitAISpan(provider, { 'user.id': 'bob' })
+    )
+
+    expect(ended[0].attributes).toEqual({ 'user.id': 'bob' })
+  })
+
   it('encodes structured properties as JSON', () => {
     const provider = providerWithClient()
 

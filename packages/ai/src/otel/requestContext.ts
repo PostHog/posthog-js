@@ -89,6 +89,9 @@ function toAttributes(context: CapturedContext, spanAttributes: Attributes): Att
   }
   const attributes: Attributes = {}
   for (const [key, value] of Object.entries(values)) {
+    if (hasIdentity && key === DISTINCT_ID_ATTRIBUTE) {
+      continue
+    }
     const attribute = toAttributeValue(value)
     if (attribute !== undefined) {
       attributes[key] = attribute
