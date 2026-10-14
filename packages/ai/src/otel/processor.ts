@@ -3,6 +3,7 @@ import type { Context } from '@opentelemetry/api'
 import { BatchSpanProcessor, type SpanProcessor, type ReadableSpan, type Span } from '@opentelemetry/sdk-trace-base'
 
 import { redactSpan } from './redact'
+import { captureContext, withRequestContext, type CapturedContext, type PostHogContextSource } from './requestContext'
 import { isAISpan } from './spans'
 import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
 
@@ -28,6 +29,17 @@ export interface PostHogSpanProcessorOptions {
    * PostHog host URL. Defaults to `https://us.i.posthog.com`.
    */
   host?: string
+
+  /**
+   * Your posthog-node client. When set, each AI span this processor exports gets the distinct ID,
+   * session ID (as `$session_id`) and properties from the context entered with `client.withContext()` or
+   * `client.enterContext()`. Other processors on the provider don't see them.
+   * Attributes already on the span win over properties, which win over the context's IDs.
+   * The context is captured when a span starts, but its properties are read when the span ends,
+   * so mutating a context object while a span is open shows up in the export.
+   * Must be the same posthog-node instance you call `withContext` or `enterContext` on.
+   */
+  client?: PostHogContextSource
 
   /**
    * @internal Injected processor for testing — bypasses exporter creation.
@@ -80,9 +92,18 @@ class NoopSpanProcessor implements SpanProcessor {
  * // In request-scoped runtimes, wait for queued exports before returning.
  * await processor.forceFlush()
  * ```
+ *
+ * @example
+ * ```ts
+ * // Per request: pass your posthog-node client, then wrap the work in a context.
+ * const processor = new PostHogSpanProcessor({ projectToken: 'phc_...', client: posthog })
+ * await posthog.withContext({ distinctId: user.id, properties: { plan: 'pro' } }, () => handleRequest())
+ * ```
  */
 export class PostHogSpanProcessor implements SpanProcessor {
   private readonly inner: SpanProcessor
+  private readonly client?: PostHogContextSource
+  private readonly capturedContexts = new WeakMap<ReadableSpan, CapturedContext>()
 
   constructor(options: PostHogSpanProcessorOptions) {
     const token = normalizeToken(options.projectToken)
@@ -91,6 +112,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
       this.inner = new NoopSpanProcessor()
       return
     }
+    this.client = options.client
 
     if (options._spanProcessor) {
       this.inner = options._spanProcessor
@@ -107,6 +129,10 @@ export class PostHogSpanProcessor implements SpanProcessor {
   }
 
   onStart(span: Span, parentContext: Context): void {
+    const captured = this.client && captureContext(this.client)
+    if (captured) {
+      this.capturedContexts.set(span, captured)
+    }
     // Forwarded unconditionally — filtering happens in onEnd. We can't filter
     // here because the span hasn't finished yet and may not have AI attributes
     // set. BatchSpanProcessor.onStart is a no-op so this is safe.
@@ -114,9 +140,11 @@ export class PostHogSpanProcessor implements SpanProcessor {
   }
 
   onEnd(span: ReadableSpan): void {
+    const captured = this.capturedContexts.get(span)
+    this.capturedContexts.delete(span)
     if (isAISpan(span)) {
       warnIfPostHogAiGatewayOtelAttributes(span.attributes)
-      this.inner.onEnd(redactSpan(span))
+      this.inner.onEnd(redactSpan(captured ? withRequestContext(span, captured) : span))
     }
   }
 

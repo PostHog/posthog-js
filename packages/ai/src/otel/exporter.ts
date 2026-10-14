@@ -56,6 +56,9 @@ export type PostHogTraceExporterOptions = { projectToken: string; host?: string 
  * `projectToken` is required; a blank token disables the exporter as a defensive no-op.
  * You can also optionally override the `host` URL.
  *
+ * Exporters only see finished spans, so they can't add per-request PostHog context;
+ * use {@link PostHogSpanProcessor} with `client` for that.
+ *
  * @example
  * ```ts
  * import { PostHogTraceExporter } from '@posthog/ai/otel'
