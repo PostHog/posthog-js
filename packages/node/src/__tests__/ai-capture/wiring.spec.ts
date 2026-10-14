@@ -219,6 +219,14 @@ describe('AI capture lane wiring (Node SDK)', () => {
     expect(harness.makeClient({ enableFullAiCapture: true }).enableFullAiCapture).toBe(true)
   })
 
+  // The AI wrappers in @posthog/ai read privacyMode off the client to redact input/output content,
+  // so the option has to survive construction rather than only existing on the options type.
+  it('exposes privacyMode as a readonly field, default false', () => {
+    expect(harness.makeClient().privacyMode).toBe(false)
+    expect(harness.makeClient({ privacyMode: true }).privacyMode).toBe(true)
+    expect(harness.makeClient({ privacyMode: true, enableFullAiCapture: true }).privacyMode).toBe(true)
+  })
+
   it('captureAi returns the event uuid and stamps it on the wire event', async () => {
     const posthog = harness.makeClient()
     const uuid = posthog.captureAi({ distinctId: 'u', event: '$ai_generation' })
