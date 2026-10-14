@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.56.1
+
+### Patch Changes
+
+- [#5289](https://github.com/PostHog/posthog-js/pull/5289) [`e6598be`](https://github.com/PostHog/posthog-js/commit/e6598be4d3f4c09c47d4c052987fafd33fc3f59e) Thanks [@pauldambra](https://github.com/pauldambra)! - Link captured exceptions to active OpenTelemetry traces when the API is available.
+  (2026-10-14)
+
 ## 5.56.0
 
 ### Minor Changes
