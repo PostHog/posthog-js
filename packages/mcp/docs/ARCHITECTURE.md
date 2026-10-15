@@ -7,7 +7,7 @@ It documents the **current state** only. The reasoning behind architectural deci
 ## TL;DR
 
 - `instrument(server, posthog, options?)` wraps an MCP server, intercepts request handlers, and pushes structured events through a small in-memory pipeline into PostHog via the host's `posthog-node` client (`posthog.capture()`). It returns an `McpAnalytics` handle.
-- Every SDK-owned PostHog **event name** is `$`-prefixed (`$mcp_tool_call`, `$mcp_initialize`, `$identify`, …) per the PostHog naming convention. (Custom events you emit via `analytics.capture()` keep your own verbatim name — they're customer events, not SDK-owned.)
+- Every SDK-owned PostHog **event name** is `$`-prefixed (`$mcp_tool_call`, `$mcp_initialize`, …) per the PostHog naming convention. (Custom events you emit via `analytics.capture()` keep your own verbatim name — they're customer events, not SDK-owned.)
 - Every PostHog **property key** is also `$`-prefixed (`$mcp_tool_name`, `$mcp_intent`, `$mcp_duration_ms`, …) so MCP keys never collide with PostHog autocapture, web analytics, or other product events.
 - `$session_id` ties one MCP connection to one PostHog session. `distinct_id` falls back through `identified user → session id → "anonymous"`.
 - Tool calls additionally emit a sibling `$exception` event whenever a tool errors (unless `enableExceptionAutocapture: false`).
@@ -47,7 +47,7 @@ Both converge on the same internal `McpEvent` shape (`src/types.ts`) and funnel 
 ```
 client → MCP server → tools/call wrapper (instrument-highlevel.ts) → captureToolCall (instrumentation.ts)
   ├─ prepareToolCallEvent         ← build McpEvent, resolve session
-  ├─ handleIdentify               ← resolves identity; $identify at most once per session (§4)
+  ├─ handleIdentify               ← resolves identity (§4)
   ├─ applyResolvedMetadata        ← runs eventProperties callback
   ├─ resolveToolCallIntent        ← context arg OR intentFallback callback
   ├─ execute(request, extra)      ← run the wrapped tool handler
@@ -90,9 +90,8 @@ Use it when your server can accept that a caller-chosen name reaches analytics, 
 
 ```ts
 instrument(server, posthog, {
-  shouldRecordInputKey: (key, { declared }) =>
-    declared || /^[A-Za-z0-9_.-]+$/.test(key),
-});
+  shouldRecordInputKey: (key, { declared }) => declared || /^[A-Za-z0-9_.-]+$/.test(key),
+})
 ```
 
 SDK argument names (`context`, `llm_model`, and `conversation_id`) are omitted unless the application schema declares them.
@@ -111,20 +110,20 @@ For example, this server accepts `city` or `place` instead of `location` for one
 It also accepts `orderId` or `id` instead of `order_id` for another tool:
 
 ```ts
-import { instrument, type InputAliasMap } from "@posthog/mcp";
+import { instrument, type InputAliasMap } from '@posthog/mcp'
 
 const inputAliasesByTool: Record<string, InputAliasMap> = {
-  "weather-current": {
-    location: ["city", "place"],
+  'weather-current': {
+    location: ['city', 'place'],
   },
-  "order-get": {
-    order_id: ["orderId", "id"],
+  'order-get': {
+    order_id: ['orderId', 'id'],
   },
-};
+}
 
 instrument(server, posthog, {
   resolveInputAliases: (toolName) => inputAliasesByTool[toolName],
-});
+})
 ```
 
 The resolver returns canonical name to aliases in the order the server tries them.
@@ -154,16 +153,13 @@ The SDK adds these properties to the `$mcp_tool_call` event:
 Custom dispatchers use the same helper through the existing `properties` argument:
 
 ```ts
-import { getToolInputProperties, PostHogMCP } from "@posthog/mcp";
+import { getToolInputProperties, PostHogMCP } from '@posthog/mcp'
 
-const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN);
-await posthog.register({ $mcp_server_build: "example-build" });
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN)
+await posthog.register({ $mcp_server_build: 'example-build' })
 
-const properties = getToolInputProperties(
-  rawArguments,
-  originalTool.inputSchema,
-);
-posthog.captureToolCall({ toolName, isError: false, properties });
+const properties = getToolInputProperties(rawArguments, originalTool.inputSchema)
+posthog.captureToolCall({ toolName, isError: false, properties })
 ```
 
 Compute these properties before argument normalization, and include them in both success and error events.
@@ -172,13 +168,9 @@ Custom command formats must extract the actual tool arguments and schema before 
 A server that accepts alternative field names passes its own alias map as `inputAliases`, canonical name to aliases in the order the server tries them:
 
 ```ts
-const properties = getToolInputProperties(
-  rawArguments,
-  originalTool.inputSchema,
-  {
-    inputAliases: { id: ["experimentId", "experiment_id"] },
-  },
-);
+const properties = getToolInputProperties(rawArguments, originalTool.inputSchema, {
+  inputAliases: { id: ['experimentId', 'experiment_id'] },
+})
 // { experimentId: 30 } → $mcp_input_keys: ['experimentId'], $mcp_input_aliases_used: ['experimentId:id']
 ```
 
@@ -202,9 +194,9 @@ Use the underlying PostHog client's `register()` method for values that apply to
 
 ```ts
 await posthog.register({
-  $mcp_server_build: "example-build",
-  environment: "production",
-});
+  $mcp_server_build: 'example-build',
+  environment: 'production',
+})
 ```
 
 Register these values during startup, before the server accepts requests.
@@ -235,12 +227,7 @@ Keep user and request data on individual events, because a shared client can ser
 - **Custom dispatchers**: `PostHogMCP` uses the same conversation-first rule. `prepareToolCall` accepts an optional carried session, validates or mints the conversation handle, and derives the session id. `prepareToolResult` adds a newly minted handle to compatible results. If no result channel can deliver a new handle, capture keeps the derived session id but omits `$mcp_conversation_id`.
 - **`distinct_id`** (`posthog-events.ts`): `identifyActorGivenId || sessionId || "anonymous"`. Pre-identify events are session-scoped; once `options.identify()` returns a user, subsequent events attribute to that user and PostHog's standard identity merge takes over.
 - **Person processing**: events for sessions with **no resolved identity** carry `$process_person_profile: false`, so anonymous MCP sessions don't each mint a throwaway person profile (the distinct id is just the session id). Once an identity is resolved, person processing stays on so `$set` lands on a real person.
-- **`$identify` event** (`handleIdentify`, `src/extensions/internal.ts`): `options.identify()` is resolved on **every** request (that's what stamps `distinct_id`/`$set`), but the standalone `$identify` event is published **at most once per session**. It fires when either:
-  - the identity **materially changed** vs. the one cached for this session, or
-  - the identity is **first-seen** for this server instance _and_ the session wasn't already announced at `initialize` (i.e. not a token session replaying past its handshake).
-
-  "First-seen" is decided by an `IdentityCache` (bounded LRU, max 1000 entries) keyed by session id and **per-server** (one instance per server's tracking data via the `WeakMap`) — which a stateless pod resets on every request. So on a token session, a first-seen identity on a non-`initialize` request is treated as already announced at the handshake and suppressed. On stateless deployments this means an identity that only resolves after `initialize`, or changes mid-session, gets no standalone `$identify`; person properties still land, because every event carries `distinct_id`/`$set`. Accepted as inherent to statelessness — see ADR-0003's consequences. To drop `$identify` entirely, return `null` from `beforeSend` for `event === '$identify'`.
-
+- **No `$identify` event** (`handleIdentify`, `src/extensions/internal.ts`): `options.identify()` is resolved on **every** request and merged into an `IdentityCache` (bounded LRU, max 1000 entries) keyed by session id and **per-server**. The result stamps `distinct_id`/`$set` onto each event. The SDK publishes no standalone `$identify`: it would carry no `$anon_distinct_id`, so ingestion would merge no person.
 - **Groups (`$groups`)**: if `options.identify()` returns a `groups?: Record<string, string>` field (groupType → groupKey), it is stamped onto every event for that session as `$groups`. Callers never hand-write the `$groups` dollar-key themselves — they just return `groups` from `identify`.
 - **Person properties (`$set`)**: the `properties` object returned from `options.identify()` is written verbatim to `$set` (same as posthog-node's `identify({ distinctId, properties })`). Put `name`/`email`/etc in there.
 
@@ -248,20 +235,19 @@ Keep user and request data on individual events, because a shared client can ser
 
 All events are emitted by `buildPostHogCaptureEvents`. The main event name is computed by looking up the internal `MCPAnalyticsEventType` in `BUILT_IN_EVENT_NAME_BY_TYPE`.
 
-| PostHog event             | When                                                                                        | Notable extras                                                                                                                                                                                                                                                                  |
-| ------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `$mcp_tool_call`          | Every tool invocation                                                                       | `$mcp_tool_name`, `$mcp_tool_description`, `$mcp_tool_category`, `$mcp_parameters`, `$mcp_response`, `$mcp_duration_ms`, `$mcp_is_error`, optionally `$mcp_intent` / `$mcp_intent_source`, `$mcp_llm_model` / `$mcp_llm_model_source`                                           |
-| `$mcp_tools_list`         | Client lists tools                                                                          | `$mcp_listed_tool_names` (array of tool names advertised); useful for "did this client discover us?" and "which advertised tools never get called?". With `instrument()`, `$mcp_response` keeps only the envelope (`nextCursor`, `ttlMs`, …), never the tool descriptors        |
-| `$mcp_initialize`         | Client/server handshake                                                                     | `$mcp_client_name`, `$mcp_client_version`, `$mcp_server_name`, `$mcp_server_version`, `$mcp_protocol_version` (negotiated MCP spec version — for tracking spec-revision adoption)                                                                                               |
-| `$mcp_missing_capability` | Agent calls the `get_more_tools` virtual tool                                               | A capability gap, **not** a tool invocation. The `context` arg is captured as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`                                                                                                                                     |
-| `$mcp_feedback`           | Agent calls the `send_feedback` virtual tool                                                | A feedback report, **not** a tool invocation. `$mcp_feedback_type` (`missing_capability` \| `issue` \| `praise` \| `other`), `$mcp_feedback_summary` and the other `$mcp_feedback_*` fields, declared extras as `$mcp_feedback_<key>`, and the summary/details as `$mcp_intent` |
-| `$mcp_resources_list`     | Client lists resources or resource templates                                                | `$mcp_parameters` (`request.method` separates `resources/list` from `resources/templates/list`), `$mcp_response` (the listing metadata — names, uris, uri templates, mime types, next cursor), `$mcp_duration_ms`, `$mcp_is_error`                                              |
-| `$mcp_resource_read`      | Resource fetched                                                                            | `$mcp_resource_name`, `$mcp_parameters`, `$mcp_duration_ms`, `$mcp_is_error`; resource bodies are never captured                                                                                                                                                                |
-| `$mcp_prompts_list`       | Client lists prompts                                                                        | —                                                                                                                                                                                                                                                                               |
-| `$mcp_prompt_get`         | Prompt fetched                                                                              | `$mcp_resource_name` (= prompt name)                                                                                                                                                                                                                                            |
-| _(your event name)_       | `analytics.capture({ event, properties })`                                                  | A customer event sent under the verbatim `event` name (not `$`-prefixed). Carries `$session_id`, `distinct_id`, server/client metadata, plus whatever you pass in `properties`                                                                                                  |
-| `$identify`               | Once per session: `initialize`, or the identity appears/changes on a long-lived server (§4) | `$set` populated                                                                                                                                                                                                                                                                |
-| `$exception`              | Sibling to any errored event (unless `enableExceptionAutocapture: false`)                   | `$exception_list`, `$exception_level` (standard `@posthog/core` error-tracking shape)                                                                                                                                                                                           |
+| PostHog event             | When                                                                      | Notable extras                                                                                                                                                                                                                                                                  |
+| ------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `$mcp_tool_call`          | Every tool invocation                                                     | `$mcp_tool_name`, `$mcp_tool_description`, `$mcp_tool_category`, `$mcp_parameters`, `$mcp_response`, `$mcp_duration_ms`, `$mcp_is_error`, optionally `$mcp_intent` / `$mcp_intent_source`, `$mcp_llm_model` / `$mcp_llm_model_source`                                           |
+| `$mcp_tools_list`         | Client lists tools                                                        | `$mcp_listed_tool_names` (array of tool names advertised); useful for "did this client discover us?" and "which advertised tools never get called?". With `instrument()`, `$mcp_response` keeps only the envelope (`nextCursor`, `ttlMs`, …), never the tool descriptors        |
+| `$mcp_initialize`         | Client/server handshake                                                   | `$mcp_client_name`, `$mcp_client_version`, `$mcp_server_name`, `$mcp_server_version`, `$mcp_protocol_version` (negotiated MCP spec version — for tracking spec-revision adoption)                                                                                               |
+| `$mcp_missing_capability` | Agent calls the `get_more_tools` virtual tool                             | A capability gap, **not** a tool invocation. The `context` arg is captured as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`                                                                                                                                     |
+| `$mcp_feedback`           | Agent calls the `send_feedback` virtual tool                              | A feedback report, **not** a tool invocation. `$mcp_feedback_type` (`missing_capability` \| `issue` \| `praise` \| `other`), `$mcp_feedback_summary` and the other `$mcp_feedback_*` fields, declared extras as `$mcp_feedback_<key>`, and the summary/details as `$mcp_intent` |
+| `$mcp_resources_list`     | Client lists resources or resource templates                              | `$mcp_parameters` (`request.method` separates `resources/list` from `resources/templates/list`), `$mcp_response` (the listing metadata — names, uris, uri templates, mime types, next cursor), `$mcp_duration_ms`, `$mcp_is_error`                                              |
+| `$mcp_resource_read`      | Resource fetched                                                          | `$mcp_resource_name`, `$mcp_parameters`, `$mcp_duration_ms`, `$mcp_is_error`; resource bodies are never captured                                                                                                                                                                |
+| `$mcp_prompts_list`       | Client lists prompts                                                      | —                                                                                                                                                                                                                                                                               |
+| `$mcp_prompt_get`         | Prompt fetched                                                            | `$mcp_resource_name` (= prompt name)                                                                                                                                                                                                                                            |
+| _(your event name)_       | `analytics.capture({ event, properties })`                                | A customer event sent under the verbatim `event` name (not `$`-prefixed). Carries `$session_id`, `distinct_id`, server/client metadata, plus whatever you pass in `properties`                                                                                                  |
+| `$exception`              | Sibling to any errored event (unless `enableExceptionAutocapture: false`) | `$exception_list`, `$exception_level` (standard `@posthog/core` error-tracking shape)                                                                                                                                                                                           |
 
 ## 6. Property catalog
 
@@ -479,21 +465,20 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 
    ```ts
    intentFallback: (request) => {
-     const tool = request.params?.name;
-     const args = request.params?.arguments ?? {};
-     if (tool === "search_events")
-       return `Searching events for "${args.query}"`;
-     return tool ? `Invoking ${tool}` : null;
-   };
+     const tool = request.params?.name
+     const args = request.params?.arguments ?? {}
+     if (tool === 'search_events') return `Searching events for "${args.query}"`
+     return tool ? `Invoking ${tool}` : null
+   }
    ```
 
 2. **Transport metadata** (when `extra` carries user-agent or session info worth surfacing):
 
    ```ts
    intentFallback: (request, extra) => {
-     const ua = extra?.requestInfo?.headers?.["user-agent"];
-     return `${ua ?? "unknown client"} invoked ${request.params?.name}`;
-   };
+     const ua = extra?.requestInfo?.headers?.['user-agent']
+     return `${ua ?? 'unknown client'} invoked ${request.params?.name}`
+   }
    ```
 
 3. **LLM-derived** (async, expensive — push back unless the value is high). Sits on the hot path of every uncontextualized tool call.
