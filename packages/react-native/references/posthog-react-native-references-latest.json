@@ -823,7 +823,7 @@
         },
         {
           "category": "Privacy",
-          "description": "Opts the user in to data capture.\nBy default, PostHog has tracking enabled unless it is forcefully disabled by default using the option  defaultOptIn: false . Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called. When opting in after an opt-out, the promise resolves once session replay has been re-evaluated; if replay is eligible, it continues under a new session.",
+          "description": "Opts the user in to data capture.\nBy default, PostHog has tracking enabled unless it is forcefully disabled by default using the option  defaultOptIn: false . Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called. When opting in after an opt-out, events captured from then on use a new session if replay is eligible and the app hasn't started or stopped recording itself. The promise resolves once session replay has been re-evaluated.",
           "details": null,
           "id": "optIn",
           "showDocs": true,
@@ -845,7 +845,7 @@
         },
         {
           "category": "Privacy",
-          "description": "Opts the user out of data capture.\nYou can completely opt-out users from data capture. Once this has been called it is persisted and will be respected until optIn is called again or the reset function is called.",
+          "description": "Opts the user out of data capture.\nYou can completely opt-out users from data capture. Once this has been called it is persisted and will be respected until optIn is called again or the reset function is called. The promise resolves once session replay has stopped.",
           "details": null,
           "id": "optOut",
           "showDocs": true,

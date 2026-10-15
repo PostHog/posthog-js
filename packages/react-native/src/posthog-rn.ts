@@ -306,8 +306,8 @@ export class PostHog extends PostHogCore {
   private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
-  // Set by stopSessionRecording() and cleared when a manual start is attempted with consent,
-  // so opt-in doesn't restart a recording the app stopped.
+  // Set by stopSessionRecording() and cleared when a manual start is attempted with consent or
+  // a flags evaluation starts recording again, so opt-in doesn't restart a recording the app stopped.
   private _sessionReplayStoppedByApp: boolean = false
   // Set when a manual start is attempted with consent, cleared by stopSessionRecording() and
   // optOut(), so the opt-in evaluation leaves a recording the app started alone.
@@ -877,6 +877,7 @@ export class PostHog extends PostHogCore {
 
     // Cancel before super.reset() emits flags for the next, anonymous user.
     this._cancelManualRecordingStart()
+    const wasOptedOut = this.optedOut
 
     // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
     // always preserve them so replay can re-arm against the new user's flags. The
@@ -916,7 +917,12 @@ export class PostHog extends PostHogCore {
     }
     // super.reset() cleared the persisted opt-out, but native keeps its own copy and would
     // stay opted out for the rest of the process.
-    this._propagateNativeOptOut()
+    const nativeOptIn = this._propagateNativeOptOut()
+    // Clearing the opt-out opts native back in, and posthog-ios optIn() restarts the recorder,
+    // so re-evaluate replay as optIn() does.
+    if (this._isInitialized && wasOptedOut && !this.optedOut) {
+      void nativeOptIn.then(() => this._evaluateAndStartSessionReplay(undefined, true)).catch(() => {})
+    }
 
     // Logout must be durable so a crash in the debounce window can't resurface the previous user.
     void this._eventsStorage.waitForPersist()
@@ -1093,7 +1099,7 @@ export class PostHog extends PostHogCore {
    *
    * By default, PostHog has tracking enabled unless it is forcefully disabled by default using the option { defaultOptIn: false }.
    * Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called.
-   * When opting in after an opt-out, the promise resolves once session replay has been re-evaluated; if replay is eligible, it continues under a new session.
+   * When opting in after an opt-out, events captured from then on use a new session if replay is eligible and the app hasn't started or stopped recording itself. The promise resolves once session replay has been re-evaluated.
    *
    * {@label Privacy}
    *
@@ -1110,10 +1116,28 @@ export class PostHog extends PostHogCore {
     // Consent must be durable. See reset()/identify().
     const result = super.optIn()
     void this._eventsStorage.waitForPersist()
+    // Rotate before native opts in, so events captured right after an unawaited optIn() and the
+    // first frames of the recorder posthog-ios optIn() restarts land in the new session.
+    if (
+      this._isInitialized &&
+      wasOptedOut &&
+      this._isEnableSessionReplay() &&
+      !this._sessionReplayStoppedByApp &&
+      !this._sessionReplayStartedByApp &&
+      this._isSessionReplayLinkedFlagActive(
+        (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType }
+      )
+    ) {
+      try {
+        this._rotateReplaySession()
+      } catch (e) {
+        this._logger.error(`Failed to rotate sessionId: ${e}.`)
+      }
+    }
     // Native re-arms push on opt-in (iOS reinstalls its integrations, Android resumes deferred
     // work on the next flush), so the token unregistered by optOut() comes back without a restart.
     const nativeOptIn = this._propagateNativeOptOut()
-    // Replay was stopped at opt-out; re-evaluate it under a new session. Before initialization
+    // Replay was stopped at opt-out; re-evaluate it. Before initialization
     // there is nothing to restart, because startup evaluates replay against the saved consent.
     // Waits for native opt-in, because posthog-ios ignores a start while it is opted out.
     if (this._isInitialized && wasOptedOut) {
@@ -1129,6 +1153,7 @@ export class PostHog extends PostHogCore {
    * Opts the user out of data capture.
    *
    * You can completely opt-out users from data capture. Once this has been called it is persisted and will be respected until optIn is called again or the reset function is called.
+   * The promise resolves once session replay has stopped.
    *
    * {@label Privacy}
    *
@@ -1145,16 +1170,17 @@ export class PostHog extends PostHogCore {
     // Consent must be durable. See reset()/identify().
     const coreOptOut = super.optOut()
     this._sessionReplayStartedByApp = false
-    // Stop recording as soon as consent is withdrawn, not just drop what it captures afterwards.
-    if (this._isInitialized) {
-      void coreOptOut.then(() => this._evaluateAndStartSessionReplay()).catch(() => {})
-    }
+    // Stop recording when consent is withdrawn, not just drop what it captures afterwards.
+    const replayStop = this._isInitialized
+      ? coreOptOut.then(() => this._evaluateAndStartSessionReplay()).catch(() => {})
+      : Promise.resolve()
     const persistOptOut = (): Promise<void> => {
       this.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, null)
       return this._eventsStorage.waitForPersist()
     }
     const result = Promise.all([
       coreOptOut,
+      replayStop,
       this._isInitialized ? persistOptOut() : this._initPromise.then(persistOptOut),
     ]).then(() => undefined)
     // A fatal exception captured before this point lives in the native SDK's own queue, so
@@ -3030,6 +3056,8 @@ export class PostHog extends PostHogCore {
       if (enableSessionReplay) {
         this._sessionReplayNativeInitialized = true
         this._logger.info(`Session replay started with sessionId ${sessionId}.`)
+        // Moves native onto a session rotated while setup was in flight, e.g. by optIn().
+        this.getSessionId()
       }
       if (enableNativeErrorTracking) {
         this._nativeErrorTrackingInitialized = true
@@ -3089,8 +3117,8 @@ export class PostHog extends PostHogCore {
 
   private async _evaluateAndStartSessionReplayInternal(
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>,
-    // Set for the evaluation after the user opts back in: rotates the session, and stops a
-    // recorder that posthog-ios optIn() restarted unless the app started one since.
+    // Set for the evaluation after the user opts back in (optIn() or reset()): stops a recorder
+    // that posthog-ios optIn() restarted unless the app started one since.
     freshSession: boolean = false
   ): Promise<void> {
     const options = this._sessionReplayOptions
@@ -3126,61 +3154,10 @@ export class PostHog extends PostHogCore {
       return
     }
 
-    // if Flags API has not returned yet, we will start session replay with default config.
-    const sessionReplay = this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}
-    const featureFlags = this.getKnownFeatureFlags() ?? {}
-    const cachedFeatureFlags = (featureFlags as { [key: string]: FeatureFlagValue }) ?? {}
-    const cachedSessionReplayConfig = (sessionReplay as { [key: string]: JsonType }) ?? {}
-
-    this._logger.info('Session replay feature flags from flags cached config:', JSON.stringify(cachedFeatureFlags))
-
-    let recordingActive = true
-    const linkedFlag = cachedSessionReplayConfig['linkedFlag'] as
-      | string
-      | { [key: string]: JsonType }
-      | null
-      | undefined
-
-    if (typeof linkedFlag === 'string') {
-      const value = cachedFeatureFlags[linkedFlag]
-      if (typeof value === 'boolean') {
-        recordingActive = value
-      } else if (typeof value === 'string') {
-        // if its a multi-variant flag linked to "any"
-        recordingActive = true
-      } else {
-        // disable recording if the flag does not exist/quota limited
-        recordingActive = false
-      }
-
-      this._logger.info(`Session replay '${linkedFlag}' linked flag value: '${value}'`)
-    } else if (linkedFlag && typeof linkedFlag === 'object') {
-      const flag = linkedFlag['flag'] as string | undefined
-      const variant = linkedFlag['variant'] as string | undefined
-      if (flag && variant) {
-        const value = cachedFeatureFlags[flag]
-        recordingActive = value === variant
-        this._logger.info(`Session replay '${flag}' linked flag variant '${variant}' and value '${value}'`)
-      } else {
-        // disable recording if the flag does not exist/quota limited
-        this._logger.info(`Session replay '${flag}' linked flag variant: '${variant}' does not exist/quota limited.`)
-        recordingActive = false
-      }
-    } else {
-      this._logger.info(`Session replay has no cached linkedFlag.`)
+    const cachedSessionReplayConfig = (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as {
+      [key: string]: JsonType
     }
-
-    // Rotate first on opt-in, so triggers have to fire again in the new session.
-    if (
-      freshSession &&
-      recordingActive &&
-      !this.optedOut &&
-      !this._sessionReplayStoppedByApp &&
-      !this._sessionReplayStartedByApp &&
-      this._sessionReplayNativeInitialized
-    ) {
-      this._rotateReplaySession()
-    }
+    let recordingActive = this._isSessionReplayLinkedFlagActive(cachedSessionReplayConfig)
 
     // Event triggers: replay records only once the client captures an event whose name matches a
     // configured trigger, and stays active for the rest of that session. Cache the armed triggers in
@@ -3234,6 +3211,10 @@ export class PostHog extends PostHogCore {
       this._sessionReplayRecordingActive = this._sessionReplayNativeInitialized
         ? await this._startSessionRecording(true)
         : await this.initializeNativePlugin(options, remoteConfig, true)
+      // Replay is recording again, so a stop the app made earlier no longer holds on opt-in.
+      if (this._sessionReplayRecordingActive) {
+        this._sessionReplayStoppedByApp = false
+      }
     } else {
       this._logger.info('Session replay disabled.')
 
@@ -3254,6 +3235,53 @@ export class PostHog extends PostHogCore {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
     }
+  }
+
+  // Whether the cached linked flag lets replay record. If the Flags API has not returned yet,
+  // replay starts with the default config.
+  private _isSessionReplayLinkedFlagActive(cachedSessionReplayConfig: { [key: string]: JsonType }): boolean {
+    const featureFlags = this.getKnownFeatureFlags() ?? {}
+    const cachedFeatureFlags = (featureFlags as { [key: string]: FeatureFlagValue }) ?? {}
+
+    this._logger.info('Session replay feature flags from flags cached config:', JSON.stringify(cachedFeatureFlags))
+
+    let recordingActive = true
+    const linkedFlag = cachedSessionReplayConfig['linkedFlag'] as
+      | string
+      | { [key: string]: JsonType }
+      | null
+      | undefined
+
+    if (typeof linkedFlag === 'string') {
+      const value = cachedFeatureFlags[linkedFlag]
+      if (typeof value === 'boolean') {
+        recordingActive = value
+      } else if (typeof value === 'string') {
+        // if its a multi-variant flag linked to "any"
+        recordingActive = true
+      } else {
+        // disable recording if the flag does not exist/quota limited
+        recordingActive = false
+      }
+
+      this._logger.info(`Session replay '${linkedFlag}' linked flag value: '${value}'`)
+    } else if (linkedFlag && typeof linkedFlag === 'object') {
+      const flag = linkedFlag['flag'] as string | undefined
+      const variant = linkedFlag['variant'] as string | undefined
+      if (flag && variant) {
+        const value = cachedFeatureFlags[flag]
+        recordingActive = value === variant
+        this._logger.info(`Session replay '${flag}' linked flag variant '${variant}' and value '${value}'`)
+      } else {
+        // disable recording if the flag does not exist/quota limited
+        this._logger.info(`Session replay '${flag}' linked flag variant: '${variant}' does not exist/quota limited.`)
+        recordingActive = false
+      }
+    } else {
+      this._logger.info(`Session replay has no cached linkedFlag.`)
+    }
+
+    return recordingActive
   }
 
   /**
