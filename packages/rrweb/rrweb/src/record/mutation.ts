@@ -490,9 +490,13 @@ export default class MutationBuffer {
     }
 
     for (const n of this.movedSet) {
+      // a removed ancestor that was re-added in this batch puts its whole
+      // current subtree in removesSubTreeCache, including nodes moved into a
+      // new parent inside it, so keep anything that sits under a moved node
+      // (the same rescue the addedSet loop below applies)
       if (
         isParentRemoved(this.removesSubTreeCache, n, this.mirror) &&
-        !this.movedSet.has(dom.parentNode(n)!)
+        !isAncestorInSet(this.movedSet, n)
       ) {
         continue;
       }
