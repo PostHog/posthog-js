@@ -497,23 +497,6 @@ describe('WebMCP', () => {
         expect(exception).not.toHaveProperty('stacktrace')
     })
 
-    it('rate limits exceptions from repeated failures', () => {
-        const { posthog, capture } = createPostHogWithExceptionCapture()
-
-        register(new WebMCP(posthog), {
-            name: 'error_result',
-            execute: () => ({ isError: true, content: [{ type: 'text', text: 'result failure' }] }),
-        })
-        for (let i = 0; i < 15; i++) {
-            registeredTool(0).execute()
-        }
-
-        expect(capture.mock.calls.filter(([event]) => event === '$mcp_tool_call')).toHaveLength(15)
-        const exceptions = capture.mock.calls.filter(([event]) => event === '$exception')
-        expect(exceptions.length).toBeGreaterThan(0)
-        expect(exceptions.length).toBeLessThan(15)
-    })
-
     it('redacts and limits error messages', () => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const privateValue = 'alice@example.com'

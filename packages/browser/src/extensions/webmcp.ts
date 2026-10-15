@@ -1,6 +1,7 @@
 import { isArray, isFunction, isObject, isPromise, isString, isUndefined, sanitizeFreeText } from '@posthog/core'
 import type { WebMCPCaptureConfig } from '@posthog/types'
 import type { PostHog } from '../posthog-core'
+import type { PostHogExceptions } from '../posthog-exceptions'
 import { document, location } from '../utils/globals'
 import { patch } from './replay/rrweb-plugins/patch'
 
@@ -38,8 +39,6 @@ interface WebMCPMetadata {
 }
 
 interface WebMCPFailure {
-    error: unknown
-    errorResult: boolean
     message: string
     type: string
 }
@@ -275,21 +274,14 @@ function getErrorMessage(error: unknown, errorResult: boolean): string {
     }
 }
 
-function getExceptionList(instance: PostHog, failure: WebMCPFailure) {
-    if (failure.errorResult) {
-        return [
-            { type: 'Error', value: failure.message, mechanism: { type: 'generic', handled: true, synthetic: true } },
-        ]
+function getExceptionList(exceptions: PostHogExceptions, failureInput: WebMCPFailureInput, message: string) {
+    if (failureInput.errorResult) {
+        return [{ type: 'Error', value: message, mechanism: { type: 'generic', handled: true, synthetic: true } }]
     }
-    try {
-        const properties = instance.exceptions?.buildProperties(failure.error, { handled: true })
-        return properties?.$exception_list.map((exception) => ({
-            ...exception,
-            value: sanitizeErrorMessage(exception.value),
-        }))
-    } catch {
-        return undefined
-    }
+    return exceptions.buildProperties(failureInput.error, { handled: true }).$exception_list.map((exception) => ({
+        ...exception,
+        value: sanitizeErrorMessage(exception.value),
+    }))
 }
 
 function getErrorType(error: unknown, errorResult: boolean): string {
@@ -314,8 +306,6 @@ function getErrorType(error: unknown, errorResult: boolean): string {
 function getFailure(error: unknown, errorResult: boolean): WebMCPFailure {
     const message = getErrorMessage(error, errorResult)
     return {
-        error,
-        errorResult,
         message,
         type: getErrorType(error, errorResult),
     }
@@ -473,16 +463,14 @@ export class WebMCP {
                     },
                     { timestamp }
                 )
-            } catch {}
+            } catch {
+                continue
+            }
 
-            if (failure && instance.exceptionObserver?.isEnabled) {
+            if (failureInput && failure && instance.exceptions && instance.exceptionObserver?.isEnabled) {
                 try {
-                    const exceptionList = getExceptionList(instance, failure)
-                    if (!exceptionList?.length) {
-                        continue
-                    }
                     const properties = {
-                        $exception_list: exceptionList,
+                        $exception_list: getExceptionList(instance.exceptions, failureInput, failure.message),
                         $exception_source: 'mcp.tool_call',
                         $mcp_interface: 'webmcp',
                         $mcp_tool_name: tool.name,
