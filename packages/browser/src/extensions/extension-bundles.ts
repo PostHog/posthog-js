@@ -121,7 +121,7 @@ export const MetricsExtensions = {
 /** WebMCP tool call and exception capture. */
 export const WebMCPExtensions = {
     webMCP: WebMCP,
-    exceptions: PostHogExceptions,
+    ...ErrorTrackingExtensions,
 } as const satisfies ExtensionClasses
 
 /** All extensions — equivalent to the default `posthog-js` bundle. */

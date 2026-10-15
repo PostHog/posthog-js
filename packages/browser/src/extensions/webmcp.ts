@@ -276,54 +276,20 @@ function getErrorMessage(error: unknown, errorResult: boolean): string {
     }
 }
 
-function sanitizeEncodedFrameFilenameComponent(component: string, plusAsSpace: boolean): string {
-    let decoded: string
-    try {
-        decoded = decodeURIComponent(plusAsSpace ? component.replace(/\+/g, ' ') : component)
-    } catch {
-        return encodeURIComponent('[redacted]')
+function getExceptionList(instance: PostHog, failure: WebMCPFailure) {
+    if (failure.errorResult) {
+        return [
+            { type: 'Error', value: failure.message, mechanism: { type: 'generic', handled: true, synthetic: true } },
+        ]
     }
-
-    const sanitized = sanitizeFreeText(decoded, { maxStringLength: decoded.length, truncationSuffix: '' })
-    return sanitized === decoded ? component : encodeURIComponent(sanitized)
-}
-
-function sanitizeFrameFilename(filename: string): string {
-    const sanitized = sanitizeFreeText(filename, { maxStringLength: filename.length, truncationSuffix: '' })
-    const queryOrFragmentIndex = sanitized.search(/[?#]/)
-    const prefixEnd = queryOrFragmentIndex === -1 ? sanitized.length : queryOrFragmentIndex
-    const prefix = sanitized
-        .slice(0, prefixEnd)
-        .replace(/[^/\\]+/g, (component) => sanitizeEncodedFrameFilenameComponent(component, false))
-    const suffix = sanitized
-        .slice(prefixEnd)
-        .replace(/[^?#&=]+/g, (component) => sanitizeEncodedFrameFilenameComponent(component, true))
-    return prefix + suffix
-}
-
-function getSanitizedExceptionList(instance: PostHog, failure: WebMCPFailure) {
     try {
         const properties = instance.exceptions?.buildProperties(failure.error, {
             handled: true,
             syntheticException: new Error('PostHog syntheticException'),
         })
-        return properties?.$exception_list.map((exception, index) => ({
+        return properties?.$exception_list.map((exception) => ({
             ...exception,
-            ...(failure.errorResult && index === 0
-                ? { type: 'Error', value: failure.message }
-                : { value: sanitizeErrorMessage(exception.value) }),
-            ...(exception.stacktrace
-                ? {
-                      stacktrace: {
-                          ...exception.stacktrace,
-                          frames: exception.stacktrace.frames?.map((frame) =>
-                              isString(frame.filename)
-                                  ? { ...frame, filename: sanitizeFrameFilename(frame.filename) }
-                                  : { ...frame }
-                          ),
-                      },
-                  }
-                : {}),
+            value: sanitizeErrorMessage(exception.value),
         }))
     } catch {
         return undefined
@@ -352,7 +318,7 @@ function getErrorType(error: unknown, errorResult: boolean): string {
 function getFailure(error: unknown, errorResult: boolean): WebMCPFailure {
     const message = getErrorMessage(error, errorResult)
     return {
-        error: errorResult ? message : error,
+        error,
         errorResult,
         message,
         type: getErrorType(error, errorResult),
@@ -513,22 +479,25 @@ export class WebMCP {
                 )
             } catch {}
 
-            if (failure) {
+            if (failure && instance.exceptionObserver?.isEnabled) {
                 try {
-                    const exceptionList = getSanitizedExceptionList(instance, failure)
+                    const exceptionList = getExceptionList(instance, failure)
                     if (!exceptionList?.length) {
                         continue
                     }
-                    const captured = instance.captureException(failure.error, {
+                    const properties = {
+                        $exception_list: exceptionList,
                         $exception_source: 'mcp.tool_call',
                         $mcp_interface: 'webmcp',
                         $mcp_tool_name: tool.name,
                         $mcp_resource_name: tool.name,
                         $mcp_tool_description: tool.description,
                         $mcp_server_name: location?.hostname,
-                        $exception_list: exceptionList,
-                    })
-                    if (captured) {
+                    }
+                    if (failure.errorResult) {
+                        instance.exceptionObserver.captureException(properties)
+                    } else {
+                        instance.exceptionObserver.captureException(properties, failure.error)
                         markExceptionCaptured(instance, failure.error)
                     }
                 } catch {}

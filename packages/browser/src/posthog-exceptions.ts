@@ -168,7 +168,6 @@ export class PostHogExceptions implements Extension {
 
                 if (
                     !this._instance.config.error_tracking.__capturePostHogExceptions &&
-                    properties.$exception_source !== 'mcp.tool_call' &&
                     this._isPostHogException(exceptionList)
                 ) {
                     this._addDroppedExceptionStep('Exception dropped: thrown by the PostHog SDK')

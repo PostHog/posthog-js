@@ -218,6 +218,7 @@ describe('__extensionClasses enrollment', () => {
                 __preview_deferred_init_extensions: false,
                 __extensionClasses: WebMCPExtensions,
                 capture_webmcp: true,
+                capture_exceptions: true,
                 capture_pageview: false,
             })
             const capture = vi.spyOn(posthog, 'capture')

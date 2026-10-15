@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Capture WebMCP failures in Error Tracking with stack traces.
+Capture WebMCP failures in Error Tracking when exception autocapture is enabled.

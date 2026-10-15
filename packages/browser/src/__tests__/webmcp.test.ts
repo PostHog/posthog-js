@@ -1,5 +1,6 @@
 import { WebMCP } from '../extensions/webmcp'
 import { isExceptionCaptured } from '../extensions/exception-autocapture/captured-errors'
+import { ExceptionObserver } from '../extensions/exception-autocapture'
 import { defaultConfig, PostHog } from '../posthog-core'
 import { PostHogExceptions } from '../posthog-exceptions'
 import { createMockPostHog } from './helpers/posthog-instance'
@@ -38,14 +39,16 @@ describe('WebMCP', () => {
     const capturedProperties = (posthog: PostHog, index = 0): Record<string, unknown> =>
         vi.mocked(posthog.capture).mock.calls[index][1] as Record<string, unknown>
 
-    const createPostHogWithExceptionCapture = () => {
+    const createPostHogWithExceptionCapture = (captureExceptions = true) => {
         const capture = vi.fn().mockReturnValue({ uuid: 'exception-uuid', event: '$exception', properties: {} })
         const posthog = createMockPostHog({
-            config: { ...defaultConfig(), capture_webmcp: true },
+            config: { ...defaultConfig(), capture_webmcp: true, capture_exceptions: captureExceptions },
             capture,
             get_property: vi.fn(),
         })
+        vi.spyOn(ExceptionObserver.prototype, 'startIfEnabledOrStop').mockImplementation(() => {})
         posthog.exceptions = new PostHogExceptions(posthog)
+        posthog.exceptionObserver = new ExceptionObserver(posthog)
         posthog.captureException = PostHog.prototype.captureException.bind(posthog)
         return { posthog, capture }
     }
@@ -352,12 +355,8 @@ describe('WebMCP', () => {
     })
 
     it('preserves error results, synchronous throws, and promise rejections', async () => {
-        const captureException = vi.fn(() => ({ uuid: 'exception-uuid', event: '$exception', properties: {} }) as any)
-        const posthog = createMockPostHog({
-            config: { ...defaultConfig(), capture_webmcp: true },
-            captureException,
-        })
-        posthog.exceptions = new PostHogExceptions(posthog)
+        const { posthog } = createPostHogWithExceptionCapture()
+        const captureException = vi.spyOn(posthog.exceptionObserver!, 'captureException').mockImplementation(() => {})
         const otherPosthog = createMockPostHog()
         const webMCP = new WebMCP(posthog)
         const errorResult = { isError: true, content: [{ type: 'text', text: 'result failure' }] }
@@ -395,10 +394,10 @@ describe('WebMCP', () => {
             }),
             expect.any(Object)
         )
-        expect(posthog.captureException).toHaveBeenNthCalledWith(
+        expect(captureException).toHaveBeenNthCalledWith(
             1,
-            'result failure',
             expect.objectContaining({
+                $exception_list: [expect.objectContaining({ type: 'Error', value: 'result failure' })],
                 $exception_source: 'mcp.tool_call',
                 $mcp_interface: 'webmcp',
                 $mcp_tool_name: 'error_result',
@@ -406,21 +405,21 @@ describe('WebMCP', () => {
                 $mcp_server_name: 'localhost',
             })
         )
-        expect(posthog.captureException).toHaveBeenNthCalledWith(
+        expect(captureException).toHaveBeenNthCalledWith(
             2,
-            thrown,
             expect.objectContaining({
                 $exception_source: 'mcp.tool_call',
                 $mcp_tool_name: 'throw',
-            })
+            }),
+            thrown
         )
-        expect(posthog.captureException).toHaveBeenNthCalledWith(
+        expect(captureException).toHaveBeenNthCalledWith(
             3,
-            rejected,
             expect.objectContaining({
                 $exception_source: 'mcp.tool_call',
                 $mcp_tool_name: 'reject',
-            })
+            }),
+            rejected
         )
         expect(posthog.capture).toHaveBeenNthCalledWith(
             2,
@@ -463,156 +462,45 @@ describe('WebMCP', () => {
                 type: 'Error',
                 value: 'TypeError: denied',
                 mechanism: expect.objectContaining({ handled: true, synthetic: true }),
-                stacktrace: expect.objectContaining({ frames: expect.any(Array) }),
             })
         )
+        expect(exception).not.toHaveProperty('stacktrace')
     })
 
-    it('redacts sensitive stack frame values without changing locations or the original error', () => {
-        const { posthog, capture } = createPostHogWithExceptionCapture()
-        const thrown = new Error('tool failed')
-        const originalStack = thrown.stack
-        const frames = [
-            {
-                platform: 'web:javascript' as const,
-                filename: 'https://example.com/app.js?token=sk_live_example&view=summary',
-                function: 'runTool',
-                lineno: 12,
-                colno: 4,
-                chunk_id: 'bundle-1',
-            },
-            {
-                platform: 'web:javascript' as const,
-                filename: 'https://example.com/helper.js?email=alice@example.com&view=summary',
-                lineno: 3,
-                colno: 8,
-            },
-            {
-                platform: 'web:javascript' as const,
-                filename: 'webpack:///src/tool.ts?first=one&email=alice%40example.com&last=two',
-                lineno: 6,
-                colno: 2,
-                chunk_id: 'bundle-2',
-            },
-            {
-                platform: 'web:javascript' as const,
-                filename: 'https://example.com/helper.js#/route?email=alice%40example.com',
-                lineno: 9,
-                colno: 5,
-            },
-            {
-                platform: 'web:javascript' as const,
-                filename: 'https://example.com/helper.js?value=%E0%A4%A',
-                lineno: 11,
-                colno: 7,
-            },
-            {
-                platform: 'web:javascript' as const,
-                filename: 'https://example.com/alice%40example.com/app.js',
-                lineno: 14,
-                colno: 6,
-            },
-        ]
-        vi.spyOn(posthog.exceptions, 'buildProperties').mockReturnValue({
-            $exception_list: [
-                {
-                    type: 'Error',
-                    value: thrown.message,
-                    stacktrace: { type: 'raw', frames },
-                },
-            ],
-        })
+    it('does not capture exceptions when exception autocapture is disabled', () => {
+        const { posthog, capture } = createPostHogWithExceptionCapture(false)
 
         register(new WebMCP(posthog), {
-            name: 'private_stack',
-            execute: () => {
-                throw thrown
-            },
-        })
-        expect(() => registeredTool(0).execute()).toThrow(thrown)
-
-        const exception = capture.mock.calls.find(([event]) => event === '$exception')?.[1].$exception_list[0]
-        expect(exception.stacktrace.frames).toEqual([
-            {
-                ...frames[0],
-                filename: 'https://example.com/app.js?token=%5Bredacted%5D&view=summary',
-            },
-            {
-                ...frames[1],
-                filename: 'https://example.com/helper.js?email=[redacted]&view=summary',
-            },
-            {
-                ...frames[2],
-                filename: 'webpack:///src/tool.ts?first=one&email=%5Bredacted%5D&last=two',
-            },
-            {
-                ...frames[3],
-                filename: 'https://example.com/helper.js#/route?email=%5Bredacted%5D',
-            },
-            {
-                ...frames[4],
-                filename: 'https://example.com/helper.js?value=%5Bredacted%5D',
-            },
-            {
-                ...frames[5],
-                filename: 'https://example.com/%5Bredacted%5D/app.js',
-            },
-        ])
-        expect(frames[0].filename).toBe('https://example.com/app.js?token=sk_live_example&view=summary')
-        expect(thrown.stack).toBe(originalStack)
-    })
-
-    it('does not capture an exception when its stack frame filename cannot be sanitized', () => {
-        const { posthog, capture } = createPostHogWithExceptionCapture()
-        const frame = {
-            platform: 'web:javascript' as const,
-            get filename(): string {
-                throw new Error('filename unavailable')
-            },
-        }
-        vi.spyOn(posthog.exceptions, 'buildProperties').mockReturnValue({
-            $exception_list: [{ type: 'Error', value: 'tool failed', stacktrace: { type: 'raw', frames: [frame] } }],
-        })
-
-        register(new WebMCP(posthog), {
-            name: 'unreadable_stack',
+            name: 'failing_tool',
             execute: () => {
                 throw new Error('tool failed')
             },
         })
         expect(() => registeredTool(0).execute()).toThrow('tool failed')
-        expect(capture).toHaveBeenCalledWith('$mcp_tool_call', expect.any(Object), expect.any(Object))
+
+        expect(capture).toHaveBeenCalledWith(
+            '$mcp_tool_call',
+            expect.objectContaining({ $mcp_is_error: true }),
+            expect.any(Object)
+        )
         expect(capture).not.toHaveBeenCalledWith('$exception', expect.any(Object), expect.any(Object))
     })
 
-    it('captures handled errors when the synthetic stack points to the PostHog SDK', () => {
+    it('rate limits exceptions from repeated failures', () => {
         const { posthog, capture } = createPostHogWithExceptionCapture()
-        vi.spyOn(posthog.exceptions, 'buildProperties').mockReturnValue({
-            $exception_list: [
-                {
-                    type: 'Error',
-                    value: 'result failure',
-                    stacktrace: {
-                        type: 'raw',
-                        frames: [{ filename: 'https://us-assets.i.posthog.com/static/array.js' }],
-                    },
-                },
-            ],
-        })
+
         register(new WebMCP(posthog), {
             name: 'error_result',
             execute: () => ({ isError: true, content: [{ type: 'text', text: 'result failure' }] }),
         })
-        registeredTool(0).execute()
+        for (let i = 0; i < 15; i++) {
+            registeredTool(0).execute()
+        }
 
-        expect(capture).toHaveBeenCalledWith(
-            '$exception',
-            expect.objectContaining({
-                $exception_source: 'mcp.tool_call',
-                $mcp_tool_name: 'error_result',
-            }),
-            expect.objectContaining({ _originatedFromCaptureException: true })
-        )
+        expect(capture.mock.calls.filter(([event]) => event === '$mcp_tool_call')).toHaveLength(15)
+        const exceptions = capture.mock.calls.filter(([event]) => event === '$exception')
+        expect(exceptions.length).toBeGreaterThan(0)
+        expect(exceptions.length).toBeLessThan(15)
     })
 
     it('redacts and limits error messages', () => {
