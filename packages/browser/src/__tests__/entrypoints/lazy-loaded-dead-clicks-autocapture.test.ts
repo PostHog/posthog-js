@@ -1494,6 +1494,39 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
         })
 
+        const shadowRootDeniedElement = (): HTMLElement => {
+            const denied = document.createElement('div')
+            Object.defineProperty(denied, 'shadowRoot', {
+                get: () => {
+                    throw new Error('Permission denied to access property "shadowRoot"')
+                },
+            })
+            return denied
+        }
+
+        it('observes the other shadow roots on start when one shadowRoot cannot be read', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            const denied = shadowRootDeniedElement()
+            document.body.appendChild(denied)
+            attachHost()
+
+            expect(() => lazyLoadedDeadClicksAutocapture.start(document)).not.toThrow()
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+            denied.remove()
+        })
+
+        it('observes the other roots in a gesture path when one shadowRoot cannot be read', () => {
+            attachHost()
+            const event = {
+                composedPath: () => [shadowRootDeniedElement(), host],
+            } as unknown as Event
+
+            expect(() => lazyLoadedDeadClicksAutocapture['_observeGesturePath'](event)).not.toThrow()
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
         it('does not throw when a selection endpoint cannot be read', () => {
             attachHost()
             const denied = document.createElement('div')

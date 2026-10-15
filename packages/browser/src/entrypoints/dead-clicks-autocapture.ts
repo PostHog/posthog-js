@@ -34,6 +34,11 @@ function isInspectableElement(node: Node | EventTarget | null | undefined): node
     return !!trySafe(() => isElementNode(node as Node))
 }
 
+// the same denial applies to `shadowRoot`, and a root we cannot read is a root we cannot observe
+function readableShadowRoot(node: Node | EventTarget | null | undefined): ShadowRoot | null | undefined {
+    return trySafe(() => (isElementNode(node as Node) ? (node as Element).shadowRoot : null))
+}
+
 function swipeDirection(dx: number, dy: number): 'left' | 'right' | 'up' | 'down' {
     if (Math.abs(dx) >= Math.abs(dy)) {
         return dx >= 0 ? 'right' : 'left'
@@ -240,13 +245,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     // because each root observed here is scanned in turn. Every scanned element is added to
     // `scanned`, when given, so a caller can skip nodes an earlier scan already covered.
     private _observeShadowRoots(node: Node, scanned?: Set<Node>): void {
-        if (isElementNode(node) && node.shadowRoot) {
-            this._observeRoot(node.shadowRoot)
-        }
+        this._observeRoot(readableShadowRoot(node))
         const descendants = (node as Element).querySelectorAll?.('*') ?? []
         for (let i = 0; i < descendants.length; i++) {
             scanned?.add(descendants[i])
-            this._observeRoot(descendants[i].shadowRoot)
+            this._observeRoot(readableShadowRoot(descendants[i]))
         }
     }
 
@@ -255,10 +258,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _observeGesturePath(event: Event): void {
         const path = event.composedPath?.() ?? []
         for (let i = 0; i < path.length; i++) {
-            const node = path[i]
-            if (isInspectableElement(node)) {
-                this._observeRoot(node.shadowRoot)
-            }
+            this._observeRoot(readableShadowRoot(path[i]))
         }
     }
 
