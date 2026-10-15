@@ -17,5 +17,5 @@
   leaves: the citation in the because: line
   step: witness its refutation, then run spec --check and see 0 problems
   pitfall: the idle-rotation replay invariant first claimed a trigger release, a host-app release and a discard that its one test does not check, and had to be narrowed (d-5ddcdf64)
-  learned: d-5ddcdf64, 187a5c5c7, 8922ab259
+  learned: d-5ddcdf64
   because: sdk-specs is the cross-SDK source of truth for behaviour; an invariant that is not grounded in it can enforce a rule the other SDKs and the spec disagree with, and one that claims more than its test proves gives false confidence
