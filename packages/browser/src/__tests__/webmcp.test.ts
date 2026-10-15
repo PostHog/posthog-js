@@ -450,7 +450,9 @@ describe('WebMCP', () => {
         })
         registeredTool(0).execute()
 
-        const exception = capture.mock.calls.find(([event]) => event === '$exception')?.[1].$exception_list[0]
+        const exceptionProperties = capture.mock.calls.find(([event]) => event === '$exception')?.[1]
+        expect(exceptionProperties?.$exception_level).toBe('error')
+        const exception = exceptionProperties?.$exception_list[0]
         expect(exception).toEqual(
             expect.objectContaining({
                 type: 'Error',
@@ -534,6 +536,7 @@ describe('WebMCP', () => {
         expect(() => registeredTool(0).execute()).toThrow(thrown)
 
         const exceptionProperties = capture.mock.calls.find(([event]) => event === '$exception')?.[1]
+        expect(exceptionProperties?.$exception_level).toBe('error')
         const exceptionValues = exceptionProperties?.$exception_list.map(({ value }: { value: string }) => value)
         expect(exceptionValues).toHaveLength(3)
         expect(exceptionValues).not.toEqual(expect.arrayContaining([expect.stringContaining(privateValue)]))

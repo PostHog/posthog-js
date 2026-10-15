@@ -477,6 +477,7 @@ export class WebMCP {
                 try {
                     const properties = {
                         $exception_list: getExceptionList(instance.exceptions, failureInput, failure.message),
+                        $exception_level: 'error' as const,
                         $exception_source: 'mcp.tool_call',
                         $mcp_interface: 'webmcp',
                         $mcp_tool_name: tool.name,
