@@ -1182,3 +1182,103 @@ export function checkDataURLSize(
 
   return STRIPED_PLACEHOLDER_SVG;
 }
+
+const KEYFRAME_TIMING_KEYS = new Set([
+  'offset',
+  'computedOffset',
+  'easing',
+  'composite',
+]);
+
+function keyframeKeyToCssProperty(key: string): string {
+  if (key.startsWith('--')) return key;
+  // `float` and `offset` are escaped in keyframe objects
+  if (key === 'cssFloat') return 'float';
+  if (key === 'cssOffset') return 'offset';
+  return key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+}
+
+/**
+ * The CSS properties an animation sets on its target element. Empty for
+ * animations on pseudo-elements, which can't be expressed as the element's
+ * inline style.
+ */
+export function getAnimatedProperties(animation: Animation): string[] {
+  const effect = animation.effect as KeyframeEffect | null;
+  if (
+    !effect ||
+    typeof effect.getKeyframes !== 'function' ||
+    effect.pseudoElement
+  )
+    return [];
+  let keyframes: ComputedKeyframe[];
+  try {
+    keyframes = effect.getKeyframes();
+  } catch (e) {
+    return [];
+  }
+  const properties = new Set<string>();
+  for (const keyframe of keyframes) {
+    for (const key of Object.keys(keyframe)) {
+      if (!KEYFRAME_TIMING_KEYS.has(key))
+        properties.add(keyframeKeyToCssProperty(key));
+    }
+  }
+  return Array.from(properties);
+}
+
+/**
+ * The current values of every property held by a script-driven Web Animation
+ * (`element.animate(...)`) on this element. Those animations change how the
+ * element renders without touching the DOM, so neither a snapshot nor the
+ * replay can see them: an animation that holds its end state can keep an
+ * element visible that its stylesheets hide, as Ionic overlays do. CSS
+ * animations and transitions are left out because their rules are in the
+ * recorded stylesheets and the replay runs them itself.
+ */
+export function getAnimatedStyles(el: Element): Record<string, string> | null {
+  if (typeof el.getAnimations !== 'function') return null;
+  let animations: Animation[];
+  try {
+    animations = el.getAnimations();
+  } catch (e) {
+    return null;
+  }
+  const properties = new Set<string>();
+  for (const animation of animations) {
+    // a cancelled animation no longer applies; CSSAnimation and CSSTransition
+    // are told apart by shape so this works for animations from other realms
+    if (
+      animation.playState === 'idle' ||
+      'animationName' in animation ||
+      'transitionProperty' in animation
+    )
+      continue;
+    getAnimatedProperties(animation).forEach((p) => properties.add(p));
+  }
+  if (!properties.size) return null;
+  const computed = (el.ownerDocument.defaultView || window).getComputedStyle(
+    el,
+  );
+  const styles: Record<string, string> = {};
+  properties.forEach((property) => {
+    const value = computed.getPropertyValue(property);
+    if (value) styles[property] = value;
+  });
+  return Object.keys(styles).length ? styles : null;
+}
+
+/**
+ * An inline style with animated values appended, so they win over the
+ * element's own declarations of the same properties.
+ */
+export function appendAnimatedStyles(
+  style: string | null | undefined,
+  animated: Record<string, string>,
+): string {
+  const existing = (style || '').trim().replace(/;$/, '');
+  const appended = Object.entries(animated)
+    .map(([property, value]) => `${property}: ${value};`)
+    .join(' ');
+  return [existing, appended].filter(Boolean).join('; ');
+}
