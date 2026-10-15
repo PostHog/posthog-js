@@ -1,6 +1,7 @@
 import { isArray, isFunction, isObject, isPromise, isString, isUndefined, sanitizeFreeText } from '@posthog/core'
 import type { WebMCPCaptureConfig } from '@posthog/types'
 import type { PostHog } from '../posthog-core'
+import type { PostHogExceptions } from '../posthog-exceptions'
 import { document, location } from '../utils/globals'
 import { patch } from './replay/rrweb-plugins/patch'
 
@@ -254,6 +255,10 @@ function getErrorResultMessage(value: unknown): string | undefined {
     }
 }
 
+function sanitizeErrorMessage(message: string | undefined): string {
+    return sanitizeFreeText(message || 'Unknown error', ERROR_SANITIZATION_OPTIONS).slice(0, MAX_ERROR_MESSAGE_LENGTH)
+}
+
 function getErrorMessage(error: unknown, errorResult: boolean): string {
     try {
         const message = errorResult
@@ -263,13 +268,26 @@ function getErrorMessage(error: unknown, errorResult: boolean): string {
               : isString(error)
                 ? error
                 : String(error)
-        return sanitizeFreeText(message || 'Unknown error', ERROR_SANITIZATION_OPTIONS).slice(
-            0,
-            MAX_ERROR_MESSAGE_LENGTH
-        )
+        return sanitizeErrorMessage(message)
     } catch {
         return 'Unknown error'
     }
+}
+
+function getExceptionList(exceptions: PostHogExceptions, failureInput: WebMCPFailureInput, message: string) {
+    if (failureInput.errorResult) {
+        return [
+            {
+                type: 'Error',
+                value: message,
+                mechanism: { type: 'generic', handled: true, synthetic: true, exception_id: 0 },
+            },
+        ]
+    }
+    return exceptions.buildProperties(failureInput.error, { handled: true }).$exception_list.map((exception) => ({
+        ...exception,
+        value: sanitizeErrorMessage(exception.value),
+    }))
 }
 
 function getErrorType(error: unknown, errorResult: boolean): string {
@@ -453,6 +471,22 @@ export class WebMCP {
                 )
             } catch {
                 continue
+            }
+
+            if (failureInput && failure && instance.exceptions && instance.exceptionObserver?.isEnabled) {
+                try {
+                    const properties = {
+                        $exception_list: getExceptionList(instance.exceptions, failureInput, failure.message),
+                        $exception_level: 'error' as const,
+                        $exception_source: 'mcp.tool_call',
+                        $mcp_interface: 'webmcp',
+                        $mcp_tool_name: tool.name,
+                        $mcp_resource_name: tool.name,
+                        $mcp_tool_description: tool.description,
+                        $mcp_server_name: location?.hostname,
+                    }
+                    instance.exceptionObserver.captureException(properties)
+                } catch {}
             }
         }
     }

@@ -4,9 +4,11 @@ import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
 import {
     AllExtensions,
+    ErrorTrackingExtensions,
     FeatureFlagsExtensions,
     LogsExtensions,
     SurveysExtensions,
+    WebMCPExtensions,
 } from '../extensions/extension-bundles'
 import { BrowserAutocapture } from '../browser-autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
@@ -200,6 +202,49 @@ describe('__extensionClasses enrollment', () => {
         expect(SurveysExtensions).toEqual(
             expect.objectContaining({ surveys: expect.any(Function), featureFlags: PostHogFeatureFlags })
         )
+    })
+
+    it.each([
+        ['only the WebMCP bundle', WebMCPExtensions, false],
+        ['the WebMCP and error tracking bundles', { ...WebMCPExtensions, ...ErrorTrackingExtensions }, true],
+    ])('captures failed WebMCP calls with %s', async (_, extensionClasses, capturesException) => {
+        PostHog.__defaultExtensionClasses = {}
+        const registerTool = vi.fn()
+        let posthog: PostHog | undefined
+
+        Object.defineProperty(document, 'modelContext', {
+            configurable: true,
+            value: { registerTool },
+        })
+
+        try {
+            posthog = await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                __extensionClasses: extensionClasses,
+                capture_webmcp: true,
+                capture_exceptions: true,
+                capture_pageview: false,
+            })
+            const capture = vi.spyOn(posthog, 'capture')
+            const errorResult = { isError: true, content: [{ type: 'text', text: 'tool failed' }] }
+
+            ;(document as any).modelContext.registerTool({
+                name: 'failing_tool',
+                execute: () => errorResult,
+            })
+            const registeredTool = registerTool.mock.calls[0][0]
+
+            expect(registeredTool.execute()).toBe(errorResult)
+            expect(capture).toHaveBeenCalledWith(
+                '$mcp_tool_call',
+                expect.objectContaining({ $mcp_tool_name: 'failing_tool', $mcp_is_error: true }),
+                expect.any(Object)
+            )
+            expect(capture.mock.calls.some(([event]) => event === '$exception')).toBe(capturesException)
+        } finally {
+            await posthog?.shutdown()
+            Reflect.deleteProperty(document, 'modelContext')
+        }
     })
 
     it('preserves the PostHog constructor and initialize contract for custom logs classes', async () => {
