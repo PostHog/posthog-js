@@ -276,7 +276,13 @@ function getErrorMessage(error: unknown, errorResult: boolean): string {
 
 function getExceptionList(exceptions: PostHogExceptions, failureInput: WebMCPFailureInput, message: string) {
     if (failureInput.errorResult) {
-        return [{ type: 'Error', value: message, mechanism: { type: 'generic', handled: true, synthetic: true } }]
+        return [
+            {
+                type: 'Error',
+                value: message,
+                mechanism: { type: 'generic', handled: true, synthetic: true, exception_id: 0 },
+            },
+        ]
     }
     return exceptions.buildProperties(failureInput.error, { handled: true }).$exception_list.map((exception) => ({
         ...exception,

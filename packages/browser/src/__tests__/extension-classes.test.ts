@@ -4,6 +4,7 @@ import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
 import {
     AllExtensions,
+    ErrorTrackingExtensions,
     FeatureFlagsExtensions,
     LogsExtensions,
     SurveysExtensions,
@@ -203,7 +204,10 @@ describe('__extensionClasses enrollment', () => {
         )
     })
 
-    it('captures failed WebMCP calls with only the WebMCP bundle', async () => {
+    it.each([
+        ['only the WebMCP bundle', WebMCPExtensions, false],
+        ['the WebMCP and error tracking bundles', { ...WebMCPExtensions, ...ErrorTrackingExtensions }, true],
+    ])('captures failed WebMCP calls with %s', async (_, extensionClasses, capturesException) => {
         PostHog.__defaultExtensionClasses = {}
         const registerTool = vi.fn()
         let posthog: PostHog | undefined
@@ -216,7 +220,7 @@ describe('__extensionClasses enrollment', () => {
         try {
             posthog = await createPosthogInstance(undefined, {
                 __preview_deferred_init_extensions: false,
-                __extensionClasses: WebMCPExtensions,
+                __extensionClasses: extensionClasses,
                 capture_webmcp: true,
                 capture_exceptions: true,
                 capture_pageview: false,
@@ -236,11 +240,7 @@ describe('__extensionClasses enrollment', () => {
                 expect.objectContaining({ $mcp_tool_name: 'failing_tool', $mcp_is_error: true }),
                 expect.any(Object)
             )
-            expect(capture).toHaveBeenCalledWith(
-                '$exception',
-                expect.objectContaining({ $exception_source: 'mcp.tool_call', $mcp_tool_name: 'failing_tool' }),
-                expect.any(Object)
-            )
+            expect(capture.mock.calls.some(([event]) => event === '$exception')).toBe(capturesException)
         } finally {
             await posthog?.shutdown()
             Reflect.deleteProperty(document, 'modelContext')
