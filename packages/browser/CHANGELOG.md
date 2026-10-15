@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.438.12
+
+### Patch Changes
+
+- [#5298](https://github.com/PostHog/posthog-js/pull/5298) [`e940c92`](https://github.com/PostHog/posthog-js/commit/e940c92b9471e718375a40c5f2fdda952ce16663) Thanks [@github-actions](https://github.com/apps/github-actions)! - Prevent backward device clock changes from subtracting client rate-limit tokens.
+  (2026-10-15)
+
 ## 1.438.11
 
 ### Patch Changes
