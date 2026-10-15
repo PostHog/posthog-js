@@ -18,13 +18,10 @@ const safely = <T>(fn: () => T, fallback: T): T => {
     }
 }
 
-type CaptureException = (props: ErrorTracking.ErrorProperties, error?: unknown) => void
-
 const safelyBuildAndCapture = (
-    captureFn: CaptureException,
-    buildProperties: () => ErrorTracking.ErrorProperties,
-    error?: unknown
-): void => safely(() => captureFn(buildProperties(), error), undefined)
+    captureFn: (props: ErrorTracking.ErrorProperties) => void,
+    buildProperties: () => ErrorTracking.ErrorProperties
+): void => safely(() => captureFn(buildProperties()), undefined)
 
 // Firefox throws on every read, write and call that touches an object from another compartment or
 // from a destroyed document, such as a handler left behind by a removed or cross-origin iframe.
@@ -64,7 +61,7 @@ const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventAr
     return event
 }
 
-const wrapOnError = (captureFn: CaptureException) => {
+const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onerror')
@@ -72,15 +69,11 @@ const wrapOnError = (captureFn: CaptureException) => {
     const originalOnError = safely(() => win.onerror, undefined)
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        safely(() => {
-            const input = resolveOnErrorInput(args)
-            captureFn(
-                errorPropertiesBuilder.buildFromUnknown(input, {
-                    mechanism: { handled: false },
-                }),
-                input
-            )
-        }, undefined)
+        safelyBuildAndCapture(captureFn, () =>
+            errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
+                mechanism: { handled: false },
+            })
+        )
         if (!isReachableFunction(originalOnError)) {
             return false
         }
@@ -91,7 +84,10 @@ const wrapOnError = (captureFn: CaptureException) => {
     return () => restore(win, 'onerror', originalOnError)
 }
 
-const wrapUnhandledRejection = (captureFn: CaptureException, defaultReturnValue = false) => {
+const wrapUnhandledRejection = (
+    captureFn: (props: ErrorTracking.ErrorProperties) => void,
+    defaultReturnValue = false
+) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onUnhandledRejection')
@@ -100,14 +96,11 @@ const wrapUnhandledRejection = (captureFn: CaptureException, defaultReturnValue 
     const originalOnUnhandledRejection = safely(() => win.onunhandledrejection, undefined)
 
     win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
-        safely(() => {
-            captureFn(
-                errorPropertiesBuilder.buildFromUnknown(ev, {
-                    mechanism: { handled: false },
-                }),
-                ev.reason
-            )
-        }, undefined)
+        safelyBuildAndCapture(captureFn, () =>
+            errorPropertiesBuilder.buildFromUnknown(ev, {
+                mechanism: { handled: false },
+            })
+        )
         if (!isReachableFunction(originalOnUnhandledRejection)) {
             return defaultReturnValue
         }
@@ -118,7 +111,7 @@ const wrapUnhandledRejection = (captureFn: CaptureException, defaultReturnValue 
     return () => restore(win, 'onunhandledrejection', originalOnUnhandledRejection)
 }
 
-const wrapConsoleError = (captureFn: CaptureException) => {
+const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
     const con = console as any
     if (!con) {
         logger.info('console not available, cannot wrap console.error')

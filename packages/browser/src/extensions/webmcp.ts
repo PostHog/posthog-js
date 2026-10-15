@@ -2,7 +2,6 @@ import { isArray, isFunction, isObject, isPromise, isString, isUndefined, saniti
 import type { WebMCPCaptureConfig } from '@posthog/types'
 import type { PostHog } from '../posthog-core'
 import { document, location } from '../utils/globals'
-import { markExceptionCaptured } from './exception-autocapture/captured-errors'
 import { patch } from './replay/rrweb-plugins/patch'
 
 type WebMCPExecute = (this: unknown, ...args: unknown[]) => unknown
@@ -494,12 +493,7 @@ export class WebMCP {
                         $mcp_tool_description: tool.description,
                         $mcp_server_name: location?.hostname,
                     }
-                    if (failure.errorResult) {
-                        instance.exceptionObserver.captureException(properties)
-                    } else {
-                        instance.exceptionObserver.captureException(properties, failure.error)
-                        markExceptionCaptured(instance, failure.error)
-                    }
+                    instance.exceptionObserver.captureException(properties)
                 } catch {}
             }
         }

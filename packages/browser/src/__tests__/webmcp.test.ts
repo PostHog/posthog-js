@@ -1,5 +1,4 @@
 import { WebMCP } from '../extensions/webmcp'
-import { isExceptionCaptured } from '../extensions/exception-autocapture/captured-errors'
 import { ExceptionObserver } from '../extensions/exception-autocapture'
 import { defaultConfig, PostHog } from '../posthog-core'
 import { PostHogExceptions } from '../posthog-exceptions'
@@ -357,7 +356,6 @@ describe('WebMCP', () => {
     it('preserves error results, synchronous throws, and promise rejections', async () => {
         const { posthog } = createPostHogWithExceptionCapture()
         const captureException = vi.spyOn(posthog.exceptionObserver!, 'captureException').mockImplementation(() => {})
-        const otherPosthog = createMockPostHog()
         const webMCP = new WebMCP(posthog)
         const errorResult = { isError: true, content: [{ type: 'text', text: 'result failure' }] }
         class SyncFailure extends Error {}
@@ -409,17 +407,17 @@ describe('WebMCP', () => {
             2,
             expect.objectContaining({
                 $exception_source: 'mcp.tool_call',
+                $exception_list: [expect.objectContaining({ value: 'sync failure' })],
                 $mcp_tool_name: 'throw',
-            }),
-            thrown
+            })
         )
         expect(captureException).toHaveBeenNthCalledWith(
             3,
             expect.objectContaining({
                 $exception_source: 'mcp.tool_call',
+                $exception_list: [expect.objectContaining({ type: 'Error', value: 'async failure' })],
                 $mcp_tool_name: 'reject',
-            }),
-            rejected
+            })
         )
         expect(posthog.capture).toHaveBeenNthCalledWith(
             2,
@@ -441,10 +439,6 @@ describe('WebMCP', () => {
             }),
             expect.any(Object)
         )
-        expect(isExceptionCaptured(posthog, thrown)).toBe(true)
-        expect(isExceptionCaptured(posthog, rejected)).toBe(true)
-        expect(isExceptionCaptured(otherPosthog, thrown)).toBe(false)
-        expect(isExceptionCaptured(otherPosthog, rejected)).toBe(false)
     })
 
     it('keeps type-like error result text as a synthetic Error', () => {
