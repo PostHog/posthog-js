@@ -262,6 +262,43 @@ describe('record', function (this: ISuite) {
     await waitForRAF(ctx.page);
 
     expect(reportedSizes()).toEqual(['30x20', '40x10']);
+
+    // A source that fails to load clears the size instead of keeping the old one.
+    await ctx.page.evaluate(() => {
+      document.querySelector('img')!.src = 'data:image/png;base64,broken';
+    });
+    await waitForCondition(() => reportedSizes().length === 3);
+    expect(reportedSizes()[2]).toBe('nullxnull');
+  });
+
+  it('records the natural size of an image that loads inside a shadow root', async () => {
+    await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const shadow = host.attachShadow({ mode: 'open' });
+      const img = document.createElement('img');
+      shadow.appendChild(img);
+      setTimeout(() => {
+        img.src = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='34'/>`;
+      }, 50);
+    });
+
+    const sizes = () =>
+      ctx.events.flatMap((e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        e.data.source === IncrementalSource.Mutation
+          ? e.data.attributes
+              .filter((m) => m.attributes.rr_naturalWidth !== undefined)
+              .map(
+                (m) =>
+                  `${m.attributes.rr_naturalWidth}x${m.attributes.rr_naturalHeight}`,
+              )
+          : [],
+      );
+    await waitForCondition(() => sizes().length === 1);
+    expect(sizes()).toEqual(['12x34']);
   });
 
   it('can checkout full snapshot by count', async () => {

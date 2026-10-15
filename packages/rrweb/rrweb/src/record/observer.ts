@@ -31,6 +31,7 @@ import {
 import type {
   mutationCallBack,
   mousemoveCallBack,
+  serializedNodeWithId,
   mousePosition,
   mouseInteractionCallBack,
   listenerHandler,
@@ -1355,45 +1356,62 @@ function initMediaInteractionObserver({
 /**
  * Reports an image's natural size once it loads, for images serialized before
  * they had one (lazy loading, a slow network) and for images whose `src` changed.
- * The serializer records the size of images that were already loaded.
+ * The serializer records the size of images that were already loaded. A source
+ * that fails to load clears the size, so a replay does not pair it with the box
+ * of the picture it replaced.
+ *
+ * `load` and `error` are not composed, so each shadow root needs its own observer.
  */
-function initImageSizeObserver({
+export function initImageSizeObserver({
   mutationCb,
   mirror,
   blockClass,
   blockSelector,
   doc,
-}: observerParam): listenerHandler {
-  const reported = new WeakMap<HTMLImageElement, string>();
+}: Pick<
+  observerParam,
+  'mutationCb' | 'mirror' | 'blockClass' | 'blockSelector' | 'doc'
+>): listenerHandler {
+  // Keyed to the serialized node, so a re-serialized image starts from what
+  // its new serialization recorded rather than from an older report.
+  const reported = new WeakMap<
+    HTMLImageElement,
+    { meta: serializedNodeWithId; size: string | null }
+  >();
   const handler = callbackWrapper((event: Event) => {
     const target = getEventTarget(event);
     if (!target || (target as Node).nodeName !== 'IMG') return;
     const image = target as HTMLImageElement;
-    const { naturalWidth, naturalHeight } = image;
-    if (!naturalWidth) return;
     const meta = mirror.getMeta(image);
     if (!meta || !('attributes' in meta)) return;
     if (isBlocked(image, blockClass, blockSelector, true)) return;
-    const size = `${naturalWidth}x${naturalHeight}`;
-    const serialized = `${meta.attributes.rr_naturalWidth}x${meta.attributes.rr_naturalHeight}`;
-    if ((reported.get(image) ?? serialized) === size) return;
-    reported.set(image, size);
+    const { naturalWidth, naturalHeight } = image;
+    const size = naturalWidth ? `${naturalWidth}x${naturalHeight}` : null;
+    const last = reported.get(image);
+    const recorded =
+      last && last.meta === meta
+        ? last.size
+        : meta.attributes.rr_naturalWidth === undefined
+          ? null
+          : `${meta.attributes.rr_naturalWidth}x${meta.attributes.rr_naturalHeight}`;
+    if (recorded === size) return;
+    reported.set(image, { meta, size });
     mutationCb({
       texts: [],
       attributes: [
         {
           id: meta.id,
-          attributes: {
-            rr_naturalWidth: naturalWidth,
-            rr_naturalHeight: naturalHeight,
-          },
+          attributes: size
+            ? { rr_naturalWidth: naturalWidth, rr_naturalHeight: naturalHeight }
+            : { rr_naturalWidth: null, rr_naturalHeight: null },
         },
       ],
       removes: [],
       adds: [],
     });
   });
-  return on('load', handler, doc);
+  const handlers = [on('load', handler, doc), on('error', handler, doc)];
+  return () => handlers.forEach((h) => h());
 }
 
 function initFontObserver({ fontCb, doc }: observerParam): listenerHandler {
