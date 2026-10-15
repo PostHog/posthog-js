@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.14.1
+
+### Patch Changes
+
+- [#5305](https://github.com/PostHog/posthog-js/pull/5305) [`7319620`](https://github.com/PostHog/posthog-js/commit/73196206fa975dcefb8db023330c7f3629ba52d0) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <0.135.0`, so installs can pick 0.134.0, the first version with OpenTelemetry tracing.
+  (2026-10-15)
+
 ## 8.14.0
 
 ### Minor Changes

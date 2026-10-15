@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.438.11
+
+### Patch Changes
+
+- [#5260](https://github.com/PostHog/posthog-js/pull/5260) [`845bf99`](https://github.com/PostHog/posthog-js/commit/845bf99fe65302169e8b2b50cbcb38eacb4b122f) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP failures in Error Tracking when exception autocapture is enabled. With `posthog-js/slim`, add `ErrorTrackingExtensions` next to `WebMCPExtensions` to get these events.
+  (2026-10-15)
+
 ## 1.438.10
 
 ### Patch Changes
