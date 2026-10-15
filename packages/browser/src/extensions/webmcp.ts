@@ -282,10 +282,7 @@ function getExceptionList(instance: PostHog, failure: WebMCPFailure) {
         ]
     }
     try {
-        const properties = instance.exceptions?.buildProperties(failure.error, {
-            handled: true,
-            syntheticException: new Error('PostHog syntheticException'),
-        })
+        const properties = instance.exceptions?.buildProperties(failure.error, { handled: true })
         return properties?.$exception_list.map((exception) => ({
             ...exception,
             value: sanitizeErrorMessage(exception.value),

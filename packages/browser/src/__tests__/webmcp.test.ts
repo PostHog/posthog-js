@@ -480,6 +480,23 @@ describe('WebMCP', () => {
         expect(capture).not.toHaveBeenCalledWith('$exception', expect.any(Object), expect.any(Object))
     })
 
+    it('does not add an SDK stack to rejections that are not errors', async () => {
+        const { posthog, capture } = createPostHogWithExceptionCapture()
+        vi.spyOn(posthog.exceptions, '_isPostHogException' as any).mockImplementation(
+            (list: any) => !!list[0].stacktrace
+        )
+
+        register(new WebMCP(posthog), {
+            name: 'string_rejection',
+            execute: () => Promise.reject('denied'),
+        })
+        await expect(registeredTool(0).execute()).rejects.toBe('denied')
+
+        const exception = capture.mock.calls.find(([event]) => event === '$exception')?.[1].$exception_list[0]
+        expect(exception).toEqual(expect.objectContaining({ value: 'denied' }))
+        expect(exception).not.toHaveProperty('stacktrace')
+    })
+
     it('rate limits exceptions from repeated failures', () => {
         const { posthog, capture } = createPostHogWithExceptionCapture()
 
