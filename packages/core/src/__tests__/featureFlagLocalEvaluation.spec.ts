@@ -193,6 +193,25 @@ describe('feature flag local evaluation primitives', () => {
       expect(() => matchFeatureFlagProperty(property('exact', 'x'), {})).toThrow(InconclusiveMatchError)
     })
 
+    test.each([
+      ['icontains', 'nul', true],
+      ['icontains', 'x', false],
+      ['not_icontains', 'x', true],
+      ['not_icontains', 'nul', false],
+      ['starts_with', 'x', false],
+      ['not_starts_with', 'x', true],
+      ['ends_with', 'x', false],
+      ['not_ends_with', 'x', true],
+      ['regex', '^nu', true],
+      ['regex', 'Nu', false],
+      ['regex', 'x', false],
+      ['not_regex', 'x', true],
+      ['not_regex', '^nu', false],
+      ['gt', '5', false],
+    ])('matches %s %p against an explicit null as the string "null"', (operator, value, expected) => {
+      expect(matchFeatureFlagProperty(property(operator, value), { key: null })).toBe(expected)
+    })
+
     test('preserves invalid regex and unknown operator behavior', () => {
       expect(matchFeatureFlagProperty(property('regex', '['), { key: 'value' })).toBe(false)
       expect(matchFeatureFlagProperty(property('not_regex', '['), { key: 'value' })).toBe(false)
