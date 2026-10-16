@@ -7117,6 +7117,7 @@ describe('Lazy SessionRecording', () => {
                 [
                     '$recording_status',
                     '$sdk_debug_replay_flush_hold_reason',
+                    '$sdk_debug_replay_document_was_ever_visible',
                     '$sdk_debug_replay_internal_buffer_length',
                     '$sdk_debug_replay_internal_buffer_size',
                     '$sdk_debug_session_start',
