@@ -2459,8 +2459,16 @@ export class PostHog implements PostHogInterface {
      * Registers super properties for the current session only.
      *
      * @remarks
-     * Session super properties are automatically added to all events during the current browser session.
-     * Unlike regular super properties, these are cleared when the session ends and are stored in sessionStorage.
+     * Session super properties are automatically added to all events during the current PostHog session.
+     * They are stored in sessionStorage, but they do not last as long as the browser tab.
+     * PostHog clears all of them when the PostHog session rotates: after the session idle timeout,
+     * after the maximum session length, or when this tab adopts a session from a different tab.
+     * The next event in the new session does not include them.
+     *
+     * If a value must be on every event, do not set it only once at init:
+     * - Use {@link register} for a value that is the same in all tabs.
+     * - For a value that is specific to one tab, register it again in {@link onSessionId}.
+     *   The callback runs before the first event of the new session.
      *
      * {@label Capture}
      *
@@ -2480,6 +2488,14 @@ export class PostHog implements PostHogInterface {
      *     selected_plan: 'pro',
      *     completed_steps: 3,
      *     flow_id: 'signup_flow_v2'
+     * })
+     * ```
+     *
+     * @example
+     * ```js
+     * // keep a tab-specific property on every event across session rotations
+     * posthog.onSessionId(() => {
+     *     posthog.register_for_session({ client_type: 'desktop_app' })
      * })
      * ```
      *
@@ -2524,6 +2540,8 @@ export class PostHog implements PostHogInterface {
      * @remarks
      * This will stop the property from being automatically included in future events for this session.
      * The property is removed from sessionStorage.
+     * You do not need to call this when the session ends. PostHog clears all session super properties
+     * when the PostHog session rotates.
      *
      * {@label Capture}
      *
