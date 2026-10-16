@@ -1,5 +1,5 @@
 export class SimpleEventEmitter {
-    private _events: { [key: string]: ((...args: any[]) => void)[] } = {}
+    private _events: { [key: string]: ((...args: any[]) => void)[] } = Object.create(null)
 
     on(event: string, listener: (...args: any[]) => void): () => void {
         if (!this._events[event]) {
