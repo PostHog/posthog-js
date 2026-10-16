@@ -1,0 +1,14 @@
+{
+    "name": "posthog-js-slim-no-external",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Subpath entry point for the tree-shakeable core bundle that ships no external script loader, the combination desktop apps and strict CSP sites need. Extensions come from posthog-js/extensions through the __extensionClasses config. ESM-only; consumed by bundlers via the `module` field.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js",
+        "directory": "packages/browser/slim/no-external"
+    },
+    "main": "../../dist/module.slim.no-external.js",
+    "module": "../../dist/module.slim.no-external.js",
+    "types": "../../dist/module.slim.no-external.d.ts"
+}
