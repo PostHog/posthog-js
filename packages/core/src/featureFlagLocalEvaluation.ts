@@ -29,7 +29,19 @@ export type FeatureFlagVariantLookupEntry = {
   key: string
 }
 
-const NULL_VALUES_ALLOWED_OPERATORS = ['is_not', 'is_set']
+// String operators match null as the string "null", like the flags service.
+const NULL_VALUES_ALLOWED_OPERATORS = [
+  'is_not',
+  'is_set',
+  'icontains',
+  'not_icontains',
+  'starts_with',
+  'not_starts_with',
+  'ends_with',
+  'not_ends_with',
+  'regex',
+  'not_regex',
+]
 
 // This value is intentionally larger than Number.MAX_SAFE_INTEGER. Changing its rounding changes
 // existing rollout and variant assignments.
