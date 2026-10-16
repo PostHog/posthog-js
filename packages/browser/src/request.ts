@@ -22,6 +22,7 @@ import {
     isGzipRequest,
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
+    isNumber,
     isUndefined,
     parseRetryAfterMs,
 } from '@posthog/core'
@@ -503,6 +504,33 @@ const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolea
 // below this size a rejection means the shared quota is exhausted, not that the payload is too big
 const BEACON_SPLIT_FLOOR_BYTES = 16 * 1024
 
+const halve = <T>(items: T[]): T[][] => {
+    const mid = Math.ceil(items.length / 2)
+    return [items.slice(0, mid), items.slice(mid)]
+}
+
+// A replay flush ships one session's snapshots as a single `$snapshot` event, so halving the
+// batch by event count cannot make it smaller. The server ingests `$snapshot_data` entries
+// independently, so halve those instead.
+const halveSnapshotEvent = (event: Record<string, any> | undefined): Record<string, any>[] | undefined => {
+    const snapshotData = event?.properties?.$snapshot_data
+    if (!isArray(snapshotData) || snapshotData.length < 2) {
+        return undefined
+    }
+
+    return halve(snapshotData).map((half) => ({
+        ...event,
+        properties: {
+            ...event!.properties,
+            $snapshot_data: half,
+            // the server reads this for size accounting, so it has to describe the half we send
+            ...(isNumber(event!.properties.$snapshot_bytes)
+                ? { $snapshot_bytes: new Blob([jsonStringify(half)]).size }
+                : {}),
+        },
+    }))
+}
+
 const addSentAtToBody = (
     data: NonNullable<RequestWithOptions['data']>,
     sentAt = new Date().toISOString()
@@ -514,7 +542,45 @@ const addSentAtToBody = (
     return data.map((item) => ({ ...item, sent_at: sentAt }))
 }
 
-const _sendBeacon = (options: TransportRequestOptions) => {
+// Mirrors the retry queue: anything but a 200 or a 4xx is retried.
+const outcomeSeverity = ({ statusCode }: RequestResponse): number =>
+    statusCode === 200 ? 0 : statusCode >= 400 && statusCode < 500 ? 1 : 2
+
+// A split is still one request to the caller (the retry queue re-sends the whole original payload),
+// so report one outcome once every fallback leaf settles, keeping the most severe one.
+const splitOutcome = (callback: TransportCallback) => {
+    let pending = 0
+    let dispatched = false
+    let outcome: Parameters<TransportCallback> | undefined
+
+    const report = () => {
+        if (dispatched && pending === 0 && outcome) {
+            callback(...outcome)
+        }
+    }
+
+    return {
+        leaf: (): TransportCallback => {
+            pending++
+            return (response, retryAfterMs) => {
+                pending--
+                if (!outcome || outcomeSeverity(response) > outcomeSeverity(outcome[0])) {
+                    outcome = [response, retryAfterMs]
+                }
+                report()
+            }
+        },
+        // leaves can settle synchronously (e.g. an encoding error), so hold the report until all are sent
+        dispatched: () => {
+            dispatched = true
+            report()
+        },
+    }
+}
+
+type SplitOutcome = ReturnType<typeof splitOutcome>
+
+const _sendBeacon = (options: TransportRequestOptions, split?: SplitOutcome) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
 
@@ -535,23 +601,30 @@ const _sendBeacon = (options: TransportRequestOptions) => {
         // rejected: over the page's shared ~64KiB in-flight keepalive quota
         // (https://fetch.spec.whatwg.org/#http-network-or-cache-fetch) — halve so what fits still delivers
         const batch = isArray(options.data) ? options.data : options.data?.batch
-        if (isArray(batch) && batch.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
-            const mid = Math.ceil(batch.length / 2)
+        if (isArray(batch) && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
             const splitData = (events: Record<string, any>[]): RequestWithOptions['data'] =>
                 isArray(options.data) ? events : { ...options.data, batch: events }
-            _sendBeacon({ ...options, data: splitData(batch.slice(0, mid)) })
-            _sendBeacon({ ...options, data: splitData(batch.slice(mid)) })
-            return
+            const halves = batch.length > 1 ? halve(batch) : halveSnapshotEvent(batch[0])?.map((event) => [event])
+
+            if (halves) {
+                const outcome = split ?? (options.callback ? splitOutcome(options.callback) : undefined)
+                each(halves, (events) => _sendBeacon({ ...options, data: splitData(events) }, outcome))
+                if (!split) {
+                    outcome?.dispatched()
+                }
+                return
+            }
         }
 
         logger.warn(
             `Beacon of ~${estimatedSize ?? 0} bytes was rejected by the browser, falling back to ${fetch ? 'fetch' : 'XHR'}`
         )
+        const fallbackOptions = split ? { ...options, callback: split.leaf() } : options
         if (fetch) {
             // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
-            _fetch({ ...options, _keepaliveDisabled: true })
+            _fetch({ ...fallbackOptions, _keepaliveDisabled: true })
         } else {
-            xhr(options)
+            xhr(fallbackOptions)
         }
     } catch (error) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
