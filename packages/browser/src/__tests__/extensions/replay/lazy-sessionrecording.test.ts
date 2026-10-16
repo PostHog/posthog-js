@@ -9104,6 +9104,40 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
+        it('re-activates a URL trigger group when a session rotation clears it on an unchanged URL', () => {
+            fakeNavigateTo('https://test.com/checkout')
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'checkout',
+                                name: 'Checkout',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    urls: [{ url: 'checkout', matching: 'regex' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(sessionRecording.status).toBe('sampled')
+
+            // _onSessionIdCallback clears trigger persistence after the re-entrant restart
+            // has already checked this URL for the new session
+            sessionRecording['_lazyLoadedSessionRecording']['_clearConditionalRecordingPersistence']()
+            expect(sessionRecording.status).toBe('buffering')
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
         it('matchType all requires ALL conditions to match before triggering', () => {
             const registerSpy = vi.spyOn(posthog, 'register_for_session')
 
