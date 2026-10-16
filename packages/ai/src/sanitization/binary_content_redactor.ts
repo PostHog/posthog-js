@@ -41,9 +41,9 @@ export class BinaryContentRedactor {
   }
 
   private redactString(value: string, ctx: MediaTypeContext): string {
-    const hasExplicitBinaryMediaType = ctx.hasExplicitBinaryMediaType()
-    const recognitionValue = hasExplicitBinaryMediaType ? value.replace(/[\r\n]/g, '') : value
-    const minLength = hasExplicitBinaryMediaType
+    const hasDefiniteBinaryData = ctx.hasDefiniteBinaryData()
+    const recognitionValue = hasDefiniteBinaryData ? value.replace(/[\r\n]/g, '') : value
+    const minLength = hasDefiniteBinaryData
       ? Math.min(recognitionValue.length, STRONG_CONTEXT_MIN_LENGTH)
       : ctx.signalsBinary()
         ? STRONG_CONTEXT_MIN_LENGTH

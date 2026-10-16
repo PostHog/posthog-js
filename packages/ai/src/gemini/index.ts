@@ -27,6 +27,7 @@ import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isString } from '../typeGuards'
 import { mapGeminiUsage } from './usage'
+import { WrappedInteractions } from './interactions'
 
 interface MonitoringGeminiConfig extends GoogleGenAIOptions {
   posthog: PostHog
@@ -44,12 +45,14 @@ export class PostHogGoogleGenAI {
   private readonly phClient: PostHog
   private readonly client: GoogleGenAI
   public models: WrappedModels
+  public interactions: WrappedInteractions
 
   constructor(config: MonitoringGeminiConfig) {
     const { posthog, ...geminiConfig } = config
     this.phClient = posthog
     this.client = new GoogleGenAI(geminiConfig)
     this.models = new WrappedModels(this.client, this.phClient)
+    this.interactions = new WrappedInteractions(this.client, this.phClient)
   }
 }
 
