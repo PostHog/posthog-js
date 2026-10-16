@@ -85,7 +85,8 @@ export const getQueryParam = function (url: string, param: string): string {
     let keyValuePair
 
     for (let i = 0; i < queryParts.length; i++) {
-        const parts = queryParts[i]!.split('=')
+        // Split only on the first = so values that contain = (e.g. base64) are kept whole
+        const parts = queryParts[i]!.split(/=(.*)/)
         if (parts[0] === param) {
             keyValuePair = parts
             break
@@ -95,13 +96,14 @@ export const getQueryParam = function (url: string, param: string): string {
     if (!isArray(keyValuePair) || keyValuePair.length < 2) {
         return ''
     } else {
-        let result = keyValuePair[1]!
+        // Replace + with a space before decoding, so an encoded plus (%2B) stays a +
+        let result = keyValuePair[1]!.replace(/\+/g, ' ')
         try {
             result = decodeURIComponent(result)
         } catch {
             logger.error('Skipping decoding for malformed query param: ' + result)
         }
-        return result.replace(/\+/g, ' ')
+        return result
     }
 }
 
