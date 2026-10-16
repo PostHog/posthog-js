@@ -36,6 +36,7 @@ export class ConsentManager {
     }
 
     public isOptedOut() {
+        // In cookieless 'always' mode we report opted out because nothing is persisted, but is_capturing() still returns true
         if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             return true
         }
