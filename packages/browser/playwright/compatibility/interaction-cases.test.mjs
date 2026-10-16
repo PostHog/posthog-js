@@ -10,23 +10,59 @@ const auto = (id, type = 'click', event = '$autocapture') => ({
 })
 
 test('form proof requires submit/change events and preserves input privacy checks', () => {
-    const network = { events: [auto('compat-form', 'submit'), auto('category', 'change'), auto('plan', 'change')] }
-    assertInteractionProof('forms', network, { submissions: 1 })
-    assert.throws(() => assertInteractionProof('forms', { events: network.events.slice(1) }, { submissions: 1 }))
+    const category = auto('category', 'change')
+    category.properties.$input_value = 'widgets'
+    const network = { events: [auto('compat-form', 'submit'), category, auto('plan', 'change')] }
+    assertInteractionProof('forms', network, { submissions: 1 }, 'current')
+    assert.throws(() =>
+        assertInteractionProof('forms', { events: network.events.slice(1) }, { submissions: 1 }, 'current')
+    )
     assert.throws(() =>
         assertInteractionProof(
             'forms',
             { events: [...network.events, auto('private-input', 'change')] },
-            { submissions: 1 }
+            { submissions: 1 },
+            'current'
         )
     )
     assert.throws(() =>
         assertInteractionProof(
             'forms',
             { events: [...network.events, { event: '$autocapture', properties: { value: 'form-secret-password' } }] },
-            { submissions: 1 }
+            { submissions: 1 },
+            'current'
         )
     )
+})
+
+test('form value proof requires exact opt-in values and keeps unannotated controls private', () => {
+    const category = auto('category', 'change')
+    category.properties.$input_value = 'widgets'
+    const network = { events: [auto('compat-form', 'submit'), category, auto('plan', 'change')] }
+    for (const value of [undefined, 'wrong']) {
+        const broken = structuredClone(network)
+        broken.events[1].properties.$input_value = value
+        assert.throws(() => assertInteractionProof('forms', broken, { submissions: 1 }, 'current'))
+    }
+    const unannotated = structuredClone(network)
+    unannotated.events[2].properties.$input_value = 'pro'
+    assert.throws(() => assertInteractionProof('forms', unannotated, { submissions: 1 }, 'current'))
+
+    for (const key of ['$elements', '$elements_chain']) {
+        const duplicated = structuredClone(network)
+        if (key === '$elements') duplicated.events[1].properties.$elements[0].attr__value = 'widgets'
+        else duplicated.events[1].properties.$elements_chain = 'input:attr__id="category",attr__value="widgets"'
+        assert.throws(
+            () => assertInteractionProof('forms', duplicated, { submissions: 1 }, 'current'),
+            /Opted-in value appeared in the element hierarchy/
+        )
+    }
+
+    const historical = structuredClone(network)
+    delete historical.events[1].properties.$input_value
+    assertInteractionProof('forms', historical, { submissions: 1 }, 'historical')
+    assert.throws(() => assertInteractionProof('forms', network, { submissions: 1 }, 'historical'))
+    assert.throws(() => assertInteractionProof('forms', historical, { submissions: 1 }, undefined))
 })
 
 test('link proof requires actual navigation, destination attribution and privacy', () => {

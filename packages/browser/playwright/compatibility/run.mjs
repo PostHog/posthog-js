@@ -354,7 +354,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             await player.close()
         }
         if (interactionCase)
-            ui = await exerciseInteractions({ scenario, page, received, expect, origin: server.origin })
+            ui = await exerciseInteractions({ scenario, page, received, expect, origin: server.origin, comparison })
         await waitFor(() => window.__compat.promises.every((promise) => promise.state !== 'pending'))
         if (scenario === 'unload') {
             await page.evaluate(() => {
