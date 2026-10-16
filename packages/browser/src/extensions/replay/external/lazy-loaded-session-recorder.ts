@@ -1316,6 +1316,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // it synchronously flushes deferred stylesheet mutations, and this later
         // listener then ships them (beforeunload has already fired, so nothing else will)
         addEventListener(window, 'pagehide', this._onPageHide)
+        addEventListener(window, 'pageshow', this._onPageShow)
         addEventListener(window, 'offline', this._onOffline)
         addEventListener(window, 'online', this._onOnline)
         addEventListener(document, 'visibilitychange', this._onVisibilityChange)
@@ -1458,6 +1459,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _teardown() {
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
         window?.removeEventListener('pagehide', this._onPageHide)
+        window?.removeEventListener('pageshow', this._onPageShow)
         window?.removeEventListener('offline', this._onOffline)
         window?.removeEventListener('online', this._onOnline)
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
@@ -2620,6 +2622,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // events ship instead of dying in a buffer nothing will ever flush again.
     private _onPageHide = (): void => {
         this._onBeforeUnload()
+    }
+
+    // A back/forward cache restore brings back this page's DOM without a reload, but the
+    // last full snapshot in the session can belong to the page the user left. Without a
+    // new snapshot the player applies this page's mutations to that other page's DOM.
+    private _onPageShow = (event: Event): void => {
+        if (!(event as PageTransitionEvent).persisted) {
+            return
+        }
+        this._tryAddCustomEvent('$bfcache_restore', { href: window?.location.href })
+        this._tryTakeFullSnapshot()
     }
 
     private _onOffline = (): void => {
