@@ -147,6 +147,32 @@ describe('posthog core', () => {
             })
         })
 
+        it('still queues the event when an eventCaptured listener throws', () => {
+            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+            const { posthog } = setup()
+            const enqueueSpy = vi.spyOn(posthog._requestQueue!, 'enqueue')
+            const laterListener = vi.fn()
+            posthog.on('eventCaptured', (event) => {
+                if (event.event === 'quiz_step_viewed') {
+                    throw new Error('listener failure')
+                }
+            })
+            posthog.on('eventCaptured', laterListener)
+
+            posthog.capture('quiz_step_viewed', { step: 1 })
+
+            expect(enqueueSpy).toHaveBeenCalledWith(
+                expect.objectContaining({ data: expect.objectContaining({ event: 'quiz_step_viewed' }) })
+            )
+            expect(laterListener).toHaveBeenCalledWith(expect.objectContaining({ event: 'quiz_step_viewed' }))
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                '[PostHog.js]',
+                'A listener for "eventCaptured" threw an error',
+                expect.any(Error)
+            )
+            consoleErrorSpy.mockRestore()
+        })
+
         it('produces a representative custom event capture', () => {
             const { posthog, beforeSendMock } = setup({}, 'snapshot-token')
             posthog.register({ plan: 'growth', workspace_id: 'workspace-42' })
