@@ -45,7 +45,7 @@ describe(`Autocapture utility functions`, () => {
           <p>not</p>
           there
       `
-            expect(getSafeText(el)).toBe(`Whyhellothere`)
+            expect(getSafeText(el)).toBe(`Why hello there`)
         })
 
         it(`shouldn't collect text from element children`, () => {
@@ -66,7 +66,7 @@ describe(`Autocapture utility functions`, () => {
       `
             safeText = getSafeText(el)
             expect(safeText).toEqual(expect.not.arrayContaining([`sensitive`]))
-            expect(safeText).toBe(`Whyhellothere`)
+            expect(safeText).toBe(`Why hello there`)
         })
 
         it(`shouldn't collect text from potentially sensitive elements`, () => {
@@ -120,6 +120,31 @@ describe(`Autocapture utility functions`, () => {
 
             el.innerHTML = `Mixed "double" and 'single' quotes`
             expect(getSafeText(el)).toBe(`Mixed "double" and 'single' quotes`)
+        })
+
+        it.each([
+            ['split by an inline icon', [`Next `, `<svg>`, ` page`], `Next page`],
+            ['with a boundary space', [`3`, ` items`], `3 items`],
+            ['with a whitespace-only node between them', [`Next`, ` `, `<svg>`, `page`], `Next page`],
+            ['with no boundary space', [`50`, `%`], `50%`],
+            ['with no boundary space before a number', [`$`, `12.99`], `$12.99`],
+            ['with a scrubbed value at a node edge', [`hello 123-45-6789`, ` world`], `hello world`],
+            [
+                'with a scrubbed value at the start of a node',
+                [`Hello`, `<svg>`, `4111111111111111 world`],
+                `Hello world`,
+            ],
+            ['with a fully scrubbed node in between', [`a `, `123-45-6789`, ` b`], `a b`],
+        ])(`should join text nodes %s as the page renders them`, (_, nodes, expected) => {
+            const el = document!.createElement(`button`)
+            nodes.forEach((node) =>
+                el.appendChild(
+                    node === `<svg>`
+                        ? document!.createElementNS(`http://www.w3.org/2000/svg`, `svg`)
+                        : document!.createTextNode(node)
+                )
+            )
+            expect(getSafeText(el)).toBe(expected)
         })
     })
 
@@ -562,6 +587,7 @@ describe(`Autocapture utility functions`, () => {
 
         it(`should not include values that look like social security numbers`, () => {
             expect(shouldCaptureValue(`123-45-6789`)).toBe(false)
+            expect(shouldCaptureValue(`123 45 6789`)).toBe(false)
         })
     })
 
@@ -600,6 +626,24 @@ describe(`Autocapture utility functions`, () => {
             child.innerHTML = `test 1`
             parent.appendChild(child)
             expect(getDirectAndNestedSpanText(parent)).toBe('test test 1')
+        })
+        it(`should not produce double spaces when direct text is split by an inline icon and a span follows`, () => {
+            const link = document!.createElement(`a`)
+            link.appendChild(document!.createTextNode(`Next `))
+            link.appendChild(document!.createElementNS(`http://www.w3.org/2000/svg`, `svg`))
+            link.appendChild(document!.createTextNode(` page `))
+            const span = document!.createElement(`span`)
+            span.textContent = `now`
+            link.appendChild(span)
+            expect(getDirectAndNestedSpanText(link)).toBe(`Next page now`)
+        })
+
+        it(`should drop a social security number split across inline nodes`, () => {
+            const button = document!.createElement(`button`)
+            ;[`123 `, `<i>`, `45 `, `<i>`, `6789`].forEach((node) =>
+                button.appendChild(node === `<i>` ? document!.createElement(`i`) : document!.createTextNode(node))
+            )
+            expect(getDirectAndNestedSpanText(button)).toBe('')
         })
 
         it(`should properly handle quotation marks in link text`, () => {
@@ -642,9 +686,7 @@ describe(`Autocapture utility functions`, () => {
             link.appendChild(textNode1)
             link.appendChild(textNode2)
 
-            // Since we're creating direct text nodes, we need to check the actual output format
-            // This matches how makeSafeText joins text segments without spaces between text nodes
-            const expected = 'Course Title:"Understanding the \'Creative Process\' in Modern Design"'
+            const expected = 'Course Title: "Understanding the \'Creative Process\' in Modern Design"'
             expect(getDirectAndNestedSpanText(link)).toBe(expected)
         })
 
