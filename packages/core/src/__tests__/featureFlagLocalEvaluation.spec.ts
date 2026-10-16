@@ -228,6 +228,42 @@ describe('feature flag local evaluation primitives', () => {
     })
   })
 
+  describe('inconclusive match reasons', () => {
+    const reasonFor = (prop: FeatureFlagProperty, propertyValues: Record<string, any>): string | undefined => {
+      try {
+        matchFeatureFlagProperty(prop, propertyValues)
+      } catch (e) {
+        return e instanceof InconclusiveMatchError ? e.reason : undefined
+      }
+      return undefined
+    }
+
+    test('defaults to unsupported_definition', () => {
+      expect(new InconclusiveMatchError('message').reason).toBe('unsupported_definition')
+    })
+
+    test.each([
+      ['a missing property', property('exact', 'x'), {}, 'missing_context'],
+      ['an unknown operator', property('unknown', 'x'), { key: 'x' }, 'unsupported_definition'],
+      ['a boolean date filter', property('is_date_after', true), { key: '2025-01-01' }, 'unsupported_definition'],
+      [
+        'an invalid date filter',
+        property('is_date_after', 'not-a-date'),
+        { key: '2025-01-01' },
+        'unsupported_definition',
+      ],
+      ['an invalid context date', property('is_date_after', '2025-01-01'), { key: 'not-a-date' }, 'missing_context'],
+      ['an invalid semver filter', property('semver_gt', 'x.y'), { key: '1.2.3' }, 'unsupported_definition'],
+      ['an invalid wildcard filter', property('semver_wildcard', '1x.*'), { key: '1.8.0' }, 'unsupported_definition'],
+      ['an invalid context semver', property('semver_gt', '1.2.3'), { key: 'x.y' }, 'missing_context'],
+      ['an ambiguous context number', property('exact', '323'), { key: 323 }, 'missing_context'],
+      ['an ambiguous filter number', property('exact', [323]), { key: 'x' }, 'unsupported_definition'],
+      ['a non-JSON context value', property('exact', true), { key: new Date(0) }, 'missing_context'],
+    ])('reports %s', (_, prop, propertyValues, reason) => {
+      expect(reasonFor(prop, propertyValues)).toBe(reason)
+    })
+  })
+
   describe('deterministic hashing and variants', () => {
     test.each([
       ['abc', 'a9993e364706816aba3e25717850c26c9cd0d89d'],

@@ -1,4 +1,4 @@
-import { FeatureFlagValue, JsonType } from '@posthog/core'
+import { FeatureFlagValue, JsonType, UnresolvedFlagReason } from '@posthog/core'
 
 import { FeatureFlagError } from './types'
 
@@ -73,6 +73,7 @@ export class FeatureFlagEvaluations {
   private readonly _groups: Record<string, string | number> | undefined
   private readonly _disableGeoip: boolean | undefined
   private readonly _flags: Record<string, EvaluatedFlagRecord>
+  private readonly _unresolvedFlags: Readonly<Record<string, UnresolvedFlagReason>>
   private readonly _requestId: string | undefined
   private readonly _evaluatedAt: number | undefined
   private readonly _flagDefinitionsLoadedAt: number | undefined
@@ -92,6 +93,7 @@ export class FeatureFlagEvaluations {
     groups?: Record<string, string | number>
     disableGeoip?: boolean
     flags: Record<string, EvaluatedFlagRecord>
+    unresolvedFlags?: Record<string, UnresolvedFlagReason>
     requestId?: string
     evaluatedAt?: number
     flagDefinitionsLoadedAt?: number
@@ -105,6 +107,7 @@ export class FeatureFlagEvaluations {
     this._groups = init.groups
     this._disableGeoip = init.disableGeoip
     this._flags = init.flags
+    this._unresolvedFlags = Object.freeze({ ...init.unresolvedFlags })
     this._requestId = init.requestId
     this._evaluatedAt = init.evaluatedAt
     this._flagDefinitionsLoadedAt = init.flagDefinitionsLoadedAt
@@ -217,6 +220,18 @@ export class FeatureFlagEvaluations {
   }
 
   /**
+   * Flags that have a loaded local definition but that neither local evaluation nor a remote
+   * fallback resolved, mapped to the reason local evaluation was inconclusive. These flags are
+   * absent from `keys` and read as missing. Reading this does not count as an access and does
+   * not fire any event.
+   *
+   * Always empty on snapshots returned by `only()` / `onlyAccessed()`.
+   */
+  get unresolvedFlags(): Readonly<Record<string, UnresolvedFlagReason>> {
+    return this._unresolvedFlags
+  }
+
+  /**
    * Build the `$feature/*` and `$active_feature_flags` event properties derived
    * from the current flag set. Called by `capture()` when an event is captured
    * with `flags: ...`.
@@ -313,7 +328,11 @@ export class FeatureFlagEvaluations {
       errors.push(FeatureFlagError.QUOTA_LIMITED)
     }
     if (flag === undefined) {
-      errors.push(FeatureFlagError.FLAG_MISSING)
+      errors.push(
+        Object.prototype.hasOwnProperty.call(this._unresolvedFlags, key)
+          ? FeatureFlagError.LOCAL_EVALUATION_INCONCLUSIVE
+          : FeatureFlagError.FLAG_MISSING
+      )
     }
     if (errors.length > 0) {
       properties.$feature_flag_error = errors.join(',')

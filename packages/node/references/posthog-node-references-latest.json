@@ -4867,6 +4867,13 @@
       "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {
+      "id": "UnresolvedFlagReason",
+      "name": "UnresolvedFlagReason",
+      "properties": [],
+      "path": "../core/src/featureFlagLocalEvaluation.ts",
+      "example": "\"experience_continuity\" | \"unsupported_definition\" | \"missing_context\" | \"unresolved_dependency\""
+    },
+    {
       "id": "UnsetPersonPropertiesMessage",
       "name": "UnsetPersonPropertiesMessage",
       "properties": [
