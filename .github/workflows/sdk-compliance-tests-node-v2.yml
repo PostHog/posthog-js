@@ -19,26 +19,33 @@ on:
             - 'turbo.json'
             - 'LICENSE'
     pull_request:
-        paths:
-            - 'packages/node/**'
-            - 'packages/core/**'
-            - 'packages/types/**'
-            - 'tooling/tsconfig-base/**'
-            - 'compliance/node/v2/**'
-            - '.github/workflows/sdk-compliance-tests-node-v2.yml'
-            # Frozen workspace installation also checks workspace manifests.
-            - '**/package.json'
-            - 'pnpm-lock.yaml'
-            - 'pnpm-workspace.yaml'
-            - '.npmrc'
-            - 'patches/**'
-            - 'turbo.json'
-            - 'LICENSE'
 
 permissions: {}
 
 jobs:
+    affected:
+        if: github.event_name == 'pull_request'
+        permissions:
+            contents: read
+        uses: ./.github/workflows/check-affected.yml
+        with:
+            package-name: posthog-node
+            additional-paths: |
+                compliance/node/v2/
+                .github/workflows/sdk-compliance-tests-node-v2.yml
+                .github/workflows/check-affected.yml
+                .github/actions/is-affected/action.yaml
+                .dockerignore
+                .npmrc
+                package.json
+                pnpm-workspace.yaml
+                turbo.json
+                patches/
+                LICENSE
+
     compliance:
+        needs: affected
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.affected.outputs.is-affected == 'true') }}
         runs-on: ubuntu-24.04
         # Leave time for bounded startup/cleanup and artifact upload after a timeout.
         timeout-minutes: 85
@@ -104,7 +111,7 @@ jobs:
     report:
         name: Compliance results (advisory)
         needs: compliance
-        if: always()
+        if: always() && needs.compliance.result != 'skipped'
         concurrency:
             group: node-compliance-report-${{ github.event.pull_request.number || github.run_id }}
             cancel-in-progress: false
