@@ -45,6 +45,14 @@
         "@posthog/browser#check-types": {
             "dependsOn": ["build"]
         },
+        "posthog-js#check-types": {
+            "dependsOn": ["^build"],
+            "inputs": [
+                "$TURBO_DEFAULT$",
+                "$TURBO_ROOT$/packages/browser-next/src/**",
+                "$TURBO_ROOT$/packages/browser-common/tests/**"
+            ]
+        },
         "package": {
             "cache": false,
             "dependsOn": ["^package", "build"],
