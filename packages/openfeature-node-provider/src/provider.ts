@@ -34,8 +34,10 @@ export interface PostHogServerProviderOptions {
   defaultDistinctId?: string
   /**
    * Forwarded to `getFeatureFlagResult` to control `$feature_flag_called`
-   * capture. Defaults to `true` so PostHog flag analytics (and experiments)
-   * keep working.
+   * capture. When omitted, the client's `sendFeatureFlagEvent` option decides,
+   * and that defaults to `true` so PostHog flag analytics (and experiments)
+   * keep working. Set it to override the client option for evaluations made
+   * through this provider.
    */
   sendFeatureFlagEvents?: boolean
 }
@@ -70,12 +72,12 @@ export class PostHogServerProvider implements Provider {
 
   private readonly _client: PostHog
   private readonly _defaultDistinctId?: string
-  private readonly _sendFeatureFlagEvents: boolean
+  private readonly _sendFeatureFlagEvents: boolean | undefined
 
   constructor(client: PostHog, options: PostHogServerProviderOptions = {}) {
     this._client = client
     this._defaultDistinctId = options.defaultDistinctId
-    this._sendFeatureFlagEvents = options.sendFeatureFlagEvents ?? true
+    this._sendFeatureFlagEvents = options.sendFeatureFlagEvents
   }
 
   async initialize(): Promise<void> {
