@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.56.2
+
+### Patch Changes
+
+- [#5263](https://github.com/PostHog/posthog-js/pull/5263) [`cd31356`](https://github.com/PostHog/posthog-js/commit/cd3135648ae506f5e00d044d6f7443ec1ff3f311) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow local feature flag evaluation from a shared definition cache without a secret or personal API key.
+  (2026-10-16)
+
 ## 5.56.1
 
 ### Patch Changes
