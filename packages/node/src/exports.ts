@@ -3,6 +3,8 @@ export * from './extensions/express'
 export * from './types'
 
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
+export { MessagingPreferencesError } from './messaging'
+export type { Messaging, MessagingPreferenceFailure, MessagingPreferences } from './messaging'
 export type {
   FlagDefinitionCacheData,
   FlagDefinitionCacheInput,
