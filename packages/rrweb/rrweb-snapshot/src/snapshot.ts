@@ -1032,6 +1032,17 @@ function serializeElementNode(
     mediaAttributes.rr_mediaLoop = (n as HTMLMediaElement).loop;
     mediaAttributes.rr_mediaVolume = (n as HTMLMediaElement).volume;
   }
+  // A replay that cannot load the picture (an expired URL, an image dropped
+  // by anonymization) can still reserve the box the page laid out from it.
+  if (tagName === 'img') {
+    const image = n as HTMLImageElement;
+    if (image.complete && image.naturalWidth > 0) {
+      attributes.rr_naturalWidth = image.naturalWidth;
+      attributes.rr_naturalHeight = image.naturalHeight;
+      generatedAttributeNames.add('rr_naturalWidth');
+      generatedAttributeNames.add('rr_naturalHeight');
+    }
+  }
   // Scroll
   if (!newlyAddedElement) {
     // `scrollTop` and `scrollLeft` are expensive calls because they trigger reflow.

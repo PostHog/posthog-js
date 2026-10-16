@@ -12233,6 +12233,24 @@ exports[`record integration tests > should record images inside iframe with blob
         }
       ]
     }
+  },
+  {
+    \\"type\\": 3,
+    \\"data\\": {
+      \\"source\\": 0,
+      \\"texts\\": [],
+      \\"attributes\\": [
+        {
+          \\"id\\": 41,
+          \\"attributes\\": {
+            \\"rr_naturalWidth\\": 76,
+            \\"rr_naturalHeight\\": 96
+          }
+        }
+      ],
+      \\"removes\\": [],
+      \\"adds\\": []
+    }
   }
 ]"
 `;
@@ -12667,6 +12685,24 @@ exports[`record integration tests > should record images inside iframe with blob
         }
       ]
     }
+  },
+  {
+    \\"type\\": 3,
+    \\"data\\": {
+      \\"source\\": 0,
+      \\"texts\\": [],
+      \\"attributes\\": [
+        {
+          \\"id\\": 47,
+          \\"attributes\\": {
+            \\"rr_naturalWidth\\": 76,
+            \\"rr_naturalHeight\\": 96
+          }
+        }
+      ],
+      \\"removes\\": [],
+      \\"adds\\": []
+    }
   }
 ]"
 `;
@@ -12873,6 +12909,24 @@ exports[`record integration tests > should record images with blob url 1`] = `
           }
         }
       ]
+    }
+  },
+  {
+    \\"type\\": 3,
+    \\"data\\": {
+      \\"source\\": 0,
+      \\"texts\\": [],
+      \\"attributes\\": [
+        {
+          \\"id\\": 24,
+          \\"attributes\\": {
+            \\"rr_naturalWidth\\": 76,
+            \\"rr_naturalHeight\\": 96
+          }
+        }
+      ],
+      \\"removes\\": [],
+      \\"adds\\": []
     }
   }
 ]"

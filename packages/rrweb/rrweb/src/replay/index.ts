@@ -2380,7 +2380,7 @@ export class Replayer {
                 error,
               );
             }
-          } else if (attributeName === 'style') {
+          } else if (attributeName === 'style' && typeof value === 'object') {
             const styleValues = value;
             const targetEl = target as HTMLElement | RRElement;
             for (const s in styleValues) {
