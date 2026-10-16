@@ -12,6 +12,7 @@ import {
   getLastSnapshotCost,
   getMutationCost,
   getSuspensionGeneration,
+  isSnapshotCostTrackingActive,
   noteVisibilityChange,
   recordDeferredStylesheetSlice,
   recordMutationCost,
@@ -204,6 +205,73 @@ describe('snapshot cost accounting', () => {
     // the incremental path never opens a tracking scope, so nothing is ever deferred
     appendLink('/a.css', makeSheet('http://localhost/a.css', 5000));
     expect(takeDeferredStylesheetLinks()).toHaveLength(0);
+  });
+
+  describe('same-origin iframe documents', () => {
+    // the iframe document serializes in a later task than the snapshot that
+    // serialized the <iframe> element, outside that snapshot's window
+    const snapshotIframe = async (
+      onDeferredStylesheetLinks?: (links: HTMLLinkElement[]) => void,
+    ) => {
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+      const frameDoc = iframe.contentDocument!;
+      const link = frameDoc.createElement('link');
+      link.setAttribute('rel', 'stylesheet');
+      link.setAttribute('href', 'http://localhost/frame.css');
+      Object.defineProperty(link, 'sheet', {
+        configurable: true,
+        get: () => makeSheet('http://localhost/frame.css', 50),
+      });
+      frameDoc.head.appendChild(link);
+
+      const calls: string[] = [];
+      let attached: serializedNodeWithId | null = null;
+      let windowOpenWhileAttaching = true;
+      snapshot(document, {
+        mirror: new Mirror(),
+        inlineStylesheetBudgetRules: 10,
+        onIframeLoad: (_, sn) => {
+          calls.push('attach');
+          attached = sn;
+          windowOpenWhileAttaching = isSnapshotCostTrackingActive();
+        },
+        onDeferredStylesheetLinks: onDeferredStylesheetLinks
+          ? (links) => {
+              calls.push('deferred');
+              onDeferredStylesheetLinks(links);
+            }
+          : undefined,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { link, calls, attached, windowOpenWhileAttaching };
+    };
+
+    it('serializes the document under its own budget and hands the deferred links over after the attach', async () => {
+      const deferred = vi.fn();
+
+      const { link, calls, attached, windowOpenWhileAttaching } =
+        await snapshotIframe(deferred);
+
+      expect(calls).toEqual(['attach', 'deferred']);
+      expect(deferred).toHaveBeenCalledWith([link]);
+      const links = findByTag(attached!, 'link');
+      expect(links[0].attributes._cssText).toBeUndefined();
+      expect(links[0].attributes.href).toBe('http://localhost/frame.css');
+      expect(windowOpenWhileAttaching).toBe(false);
+      expect(isSnapshotCostTrackingActive()).toBe(false);
+      // a mutation-style window: it must not replace the full snapshot's cost
+      expect(getLastSnapshotCost()!.deferredStylesheetCount).toBe(0);
+    });
+
+    it('inlines in full when nothing would consume the deferred links', async () => {
+      const { calls, attached } = await snapshotIframe();
+
+      expect(calls).toEqual(['attach']);
+      expect(findByTag(attached!, 'link')[0].attributes._cssText).toContain(
+        '.rule-49',
+      );
+    });
   });
 
   describe('safeCssRuleCount', () => {

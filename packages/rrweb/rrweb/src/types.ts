@@ -141,6 +141,12 @@ export type observerParam = {
   maskAttributeFn?: MaskAttributeFn;
   keepIframeSrcFn: KeepIframeSrcFn;
   inlineStylesheet: boolean;
+  inlineStylesheetBudgetRules?: number;
+  /**
+   * Hands the recorder the `<link rel=stylesheet>` elements an added subtree hit
+   * its stylesheet budget on, so it can inline them off the critical path.
+   */
+  onDeferredStylesheetLinks?: (links: HTMLLinkElement[]) => void;
   styleSheetRuleCb: styleSheetRuleCallback;
   styleDeclarationCb: styleDeclarationCallback;
   canvasMutationCb: canvasMutationCallback;
@@ -184,6 +190,8 @@ export type MutationBufferParam = Pick<
   | 'maskTextClass'
   | 'maskTextSelector'
   | 'inlineStylesheet'
+  | 'inlineStylesheetBudgetRules'
+  | 'onDeferredStylesheetLinks'
   | 'maskInputOptions'
   | 'maskTextFn'
   | 'maskInputFn'

@@ -42,8 +42,10 @@ import {
   countSerializedNode,
   deferStylesheetLink,
   endSnapshotCostTracking,
+  isSnapshotCostTrackingActive,
   runNonDeferrableStylesheetWork,
   shouldDeferStylesheetInlining,
+  takeDeferredStylesheetLinks,
 } from './snapshot-cost';
 
 let _id = 1;
@@ -1281,6 +1283,8 @@ export function serializeNodeWithId(
       node: serializedElementNodeWithId,
     ) => unknown;
     stylesheetLoadTimeout?: number;
+    inlineStylesheetBudgetRules?: number;
+    onDeferredStylesheetLinks?: (links: HTMLLinkElement[]) => void;
     depth?: number;
     maxDepth?: number;
     onMaxDepthReached?: () => void;
@@ -1311,6 +1315,8 @@ export function serializeNodeWithId(
     onIframeListenerRegistered,
     onStylesheetLoad,
     stylesheetLoadTimeout = 5000,
+    inlineStylesheetBudgetRules,
+    onDeferredStylesheetLinks,
     keepIframeSrcFn = () => false,
     newlyAddedElement = false,
     depth = 0,
@@ -1447,6 +1453,8 @@ export function serializeNodeWithId(
       onIframeListenerRegistered,
       onStylesheetLoad,
       stylesheetLoadTimeout,
+      inlineStylesheetBudgetRules,
+      onDeferredStylesheetLinks,
       keepIframeSrcFn,
       depth: depth + 1,
       maxDepth,
@@ -1494,43 +1502,71 @@ export function serializeNodeWithId(
       () => {
         const iframeDoc = (n as HTMLIFrameElement).contentDocument;
         if (iframeDoc && onIframeLoad) {
-          const serializedIframeNode = serializeNodeWithId(iframeDoc, {
-            doc: iframeDoc,
-            mirror,
-            blockClass,
-            blockSelector,
-            needsMask,
-            maskTextClass,
-            maskTextSelector,
-            skipChild: false,
-            inlineStylesheet,
-            maskInputOptions,
-            maskTextFn,
-            maskInputFn,
-            maskAllElementAttributes,
-            maskAttributeFn,
-            slimDOMOptions,
-            dataURLOptions,
-            inlineImages,
-            recordCanvas,
-            canvasMaskingConfigured,
-            preserveWhiteSpace,
-            onSerialize,
-            onIframeLoad,
-            iframeLoadTimeout,
-            onIframeListenerRegistered,
-            onStylesheetLoad,
-            stylesheetLoadTimeout,
-            keepIframeSrcFn,
-            depth: depth + 1,
-            maxDepth,
-          });
+          // This runs in a later task than the one that serialized the
+          // <iframe>, so no window is open: give the document its own budget.
+          // Only with a consumer for the deferred links, since nothing else
+          // drains them once this task ends.
+          const budgeted =
+            Boolean(onDeferredStylesheetLinks) &&
+            !isSnapshotCostTrackingActive();
+          let deferredLinks: HTMLLinkElement[] = [];
+          if (budgeted) {
+            beginSnapshotCostTracking(inlineStylesheetBudgetRules, {
+              isSnapshot: false,
+            });
+          }
+          let serializedIframeNode: serializedNodeWithId | null = null;
+          try {
+            serializedIframeNode = serializeNodeWithId(iframeDoc, {
+              doc: iframeDoc,
+              mirror,
+              blockClass,
+              blockSelector,
+              needsMask,
+              maskTextClass,
+              maskTextSelector,
+              skipChild: false,
+              inlineStylesheet,
+              maskInputOptions,
+              maskTextFn,
+              maskInputFn,
+              maskAllElementAttributes,
+              maskAttributeFn,
+              slimDOMOptions,
+              dataURLOptions,
+              inlineImages,
+              recordCanvas,
+              canvasMaskingConfigured,
+              preserveWhiteSpace,
+              onSerialize,
+              onIframeLoad,
+              iframeLoadTimeout,
+              onIframeListenerRegistered,
+              onStylesheetLoad,
+              stylesheetLoadTimeout,
+              inlineStylesheetBudgetRules,
+              onDeferredStylesheetLinks,
+              keepIframeSrcFn,
+              depth: depth + 1,
+              maxDepth,
+            });
+          } finally {
+            if (budgeted) {
+              endSnapshotCostTracking();
+              deferredLinks = takeDeferredStylesheetLinks();
+            }
+          }
 
           if (serializedIframeNode) {
             onIframeLoad(
               n as HTMLIFrameElement,
               serializedIframeNode as serializedElementNodeWithId,
             );
+            // after the attach: the deferred `_cssText` arrives as an
+            // attribute mutation, so the player needs the node first
+            if (deferredLinks.length) {
+              onDeferredStylesheetLinks?.(deferredLinks);
+            }
           }
         }
       },
@@ -1663,6 +1699,12 @@ function snapshot(
      * previous unbounded behaviour.
      */
     inlineStylesheetBudgetRules?: number;
+    /**
+     * Receives the `<link rel=stylesheet>` elements a same-origin iframe
+     * document deferred past the budget. Iframe documents serialize after
+     * `snapshot()` returns, so `takeDeferredStylesheetLinks()` never sees them.
+     */
+    onDeferredStylesheetLinks?: (links: HTMLLinkElement[]) => void;
   },
 ): serializedNodeWithId | null {
   const {
@@ -1692,6 +1734,7 @@ function snapshot(
     keepIframeSrcFn = () => false,
     maxDepth,
     inlineStylesheetBudgetRules,
+    onDeferredStylesheetLinks,
   } = options || {};
   const maskInputOptions: MaskInputOptions =
     maskAllInputs === true
@@ -1748,6 +1791,8 @@ function snapshot(
       onStylesheetLoad,
       stylesheetLoadTimeout,
       keepIframeSrcFn,
+      inlineStylesheetBudgetRules,
+      onDeferredStylesheetLinks,
       newlyAddedElement: false,
       maxDepth,
     });
