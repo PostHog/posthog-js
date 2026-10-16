@@ -229,6 +229,13 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * @deprecated Use `secretKey` instead.
    */
   personalApiKey?: string
+  /**
+   * When true, AI wrappers in `@posthog/ai` strip input and output content from the events they
+   * capture. Privacy mode always wins: it takes precedence over `enableFullAiCapture` and over a
+   * per-call `privacyMode: false`.
+   *
+   * @default false
+   */
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
   /**

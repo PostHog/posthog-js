@@ -1,4 +1,4 @@
-import { toContentString, getTokensSource, getModelParams } from '../src/utils'
+import { toContentString, getTokensSource, getModelParams, withPrivacyMode } from '../src/utils'
 
 describe('getTokensSource', () => {
   it.each([
@@ -230,5 +230,23 @@ describe('getModelParams', () => {
     const params = { model: 'gpt-4o', temperature: 0.5 } as any
     const result = getModelParams(params)
     expect(result).not.toHaveProperty('service_tier')
+  })
+})
+
+describe('withPrivacyMode', () => {
+  const client = (props: Record<string, unknown>): any => props
+
+  it('returns the input when nothing asks for privacy mode', () => {
+    expect(withPrivacyMode(client({}), false, 'sensitive')).toBe('sensitive')
+  })
+
+  it('redacts when the call asks for privacy mode', () => {
+    expect(withPrivacyMode(client({}), true, 'sensitive')).toBeNull()
+  })
+
+  // `privacyMode` is the `PostHogOptions` name the client carries; `privacy_mode` is the historical
+  // snake_case spelling some callers set directly on a client. Either one wins over the per-call value.
+  it.each(['privacyMode', 'privacy_mode'])('redacts when the client has %s enabled', (property) => {
+    expect(withPrivacyMode(client({ [property]: true }), false, 'sensitive')).toBeNull()
   })
 })
