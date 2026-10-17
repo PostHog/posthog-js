@@ -2,7 +2,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { context, trace, ROOT_CONTEXT, SpanKind, type Attributes } from '@opentelemetry/api'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
-import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import {
+    BasicTracerProvider,
+    InMemorySpanExporter,
+    SimpleSpanProcessor,
+    SamplingDecision,
+} from '@opentelemetry/sdk-trace-base'
 import { PostHog, type IPostHog } from 'posthog-node'
 import { cookies, headers } from 'next/headers.js'
 import { createPostHog } from '../src/server/createPostHog.js'
@@ -92,6 +97,41 @@ describe('Next.js optional span context', () => {
             })
         }
     )
+
+    it('does not guess server ancestry across a sampler-dropped span', async () => {
+        const bridge = createPostHogSpanContext(config)
+        provider = new BasicTracerProvider({
+            sampler: {
+                shouldSample: (_parent, _traceId, name) => ({
+                    decision: name === 'dropped' ? SamplingDecision.NOT_RECORD : SamplingDecision.RECORD_AND_SAMPLED,
+                }),
+                toString: () => 'drop-intermediate',
+            },
+            spanProcessors: [await bridge.createContextSpanProcessor(), new SimpleSpanProcessor(exporter)],
+        })
+        const tracer = provider.getTracer('sampled-gap')
+        await tracer.startActiveSpan('server', { kind: SpanKind.SERVER }, async (server) => {
+            await tracer.startActiveSpan('dropped', async (dropped) => {
+                expect(dropped.isRecording()).toBe(false)
+                await tracer.startActiveSpan('inner', async (inner) => {
+                    await bridge.withPostHogContext(() => tracer.startSpan('child').end())
+                    inner.end()
+                })
+                dropped.end()
+            })
+            server.end()
+        })
+        await provider.forceFlush()
+        const spans = exporter.getFinishedSpans()
+        expect(spans.find((span) => span.name === 'server')?.attributes).toEqual({})
+        expect(spans.some((span) => span.name === 'dropped')).toBe(false)
+        for (const name of ['inner', 'child']) {
+            expect(spans.find((span) => span.name === name)?.attributes).toEqual({
+                sessionId: 'header-session',
+                posthogDistinctId: 'header-person',
+            })
+        }
+    })
 
     it('uses the configured cached client at startup without reading a request', async () => {
         const getDistinctId = vi.fn(() => 'trusted-person')
