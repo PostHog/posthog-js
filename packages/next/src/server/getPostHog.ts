@@ -1,5 +1,5 @@
 import { isFunction } from '@posthog/core'
-import type { PostHogOptions, IPostHog } from 'posthog-node'
+import type { PostHog, PostHogOptions, IPostHog } from 'posthog-node'
 import { cookies, headers } from 'next/headers.js'
 import { getOrCreateNodeClient } from './clientCache.node.js'
 import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
@@ -13,7 +13,11 @@ import { resolveServerDistinctId, type PostHogDistinctIdResolver } from '../shar
  * AsyncLocalStorage.enterWith() doesn't propagate back to the caller
  * across the await boundary of this async function.
  */
-export function withRequestContext(client: IPostHog, contextData: Parameters<IPostHog['withContext']>[0]): IPostHog {
+export function withRequestContext(
+    client: IPostHog,
+    contextData: Parameters<IPostHog['withContext']>[0],
+    options?: Parameters<IPostHog['withContext']>[2]
+): IPostHog {
     return new Proxy(client, {
         get(target, prop, receiver) {
             if (prop === 'withContext') {
@@ -21,7 +25,10 @@ export function withRequestContext(client: IPostHog, contextData: Parameters<IPo
             }
             const value = Reflect.get(target, prop, receiver)
             if (isFunction(value)) {
-                return (...args: unknown[]) => target.withContext(contextData, () => value.apply(target, args))
+                return (...args: unknown[]) =>
+                    options
+                        ? target.withContext(contextData, () => value.apply(target, args), options)
+                        : target.withContext(contextData, () => value.apply(target, args))
             }
             return value
         },
@@ -60,24 +67,33 @@ function resolveServerDistinctIdOncePerRequest(
     return result
 }
 
-export async function getRequestScopedPostHog(
+export async function getConfiguredPostHogClient(
     apiKey?: string,
-    options?: Partial<PostHogOptions>,
-    getDistinctId?: PostHogDistinctIdResolver
-): Promise<IPostHog> {
+    options?: Partial<PostHogOptions>
+): Promise<{ client: PostHog; resolvedApiKey?: string }> {
     const resolvedApiKey = resolveApiKey(apiKey)
     const host = resolveHostOrDefault(options?.host)
     const resolvedOptions = { ...options, host }
     const client = await getOrCreateNodeClient(resolvedApiKey ?? '', resolvedOptions)
 
+    return { client, resolvedApiKey }
+}
+
+export async function resolvePostHogRequest(
+    apiKey?: string,
+    options?: Partial<PostHogOptions>,
+    getDistinctId?: PostHogDistinctIdResolver
+): Promise<{ client: PostHog; contextData?: Parameters<IPostHog['withContext']>[0] }> {
+    const { client, resolvedApiKey } = await getConfiguredPostHogClient(apiKey, options)
+
     if (!resolvedApiKey) {
-        return client
+        return { client }
     }
 
     const cookieStore = await cookies()
 
     if (isOptedOut(cookieStore, resolvedApiKey)) {
-        return client
+        return { client }
     }
 
     const state = readPostHogCookie(cookieStore, resolvedApiKey)
@@ -92,5 +108,14 @@ export async function getRequestScopedPostHog(
         }
     }
 
-    return withRequestContext(client, contextData)
+    return { client, contextData }
+}
+
+export async function getRequestScopedPostHog(
+    apiKey?: string,
+    options?: Partial<PostHogOptions>,
+    getDistinctId?: PostHogDistinctIdResolver
+): Promise<IPostHog> {
+    const { client, contextData } = await resolvePostHogRequest(apiKey, options, getDistinctId)
+    return contextData ? withRequestContext(client, contextData) : client
 }
