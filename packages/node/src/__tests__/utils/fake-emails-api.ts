@@ -45,7 +45,8 @@ interface ScheduledFault {
 /**
  * An in-memory PostHog that speaks the upload and send routes of the transactional email API, including the
  * content hash rule: a current or absent hash sends, a superseded hash sends the current content with a warning,
- * and a hash PostHog never published answers `template_outdated`.
+ * and a hash PostHog never published answers `template_outdated`. An upload with `if_not_superseded` of replaced
+ * content changes nothing and answers `superseded`.
  */
 export class FakeEmailsApi {
   readonly received: ReceivedRequest[] = []
@@ -137,10 +138,13 @@ export class FakeEmailsApi {
   private async upload(
     key: string,
     body: Record<string, any>
-  ): Promise<{ template: PublishedTemplate; result: 'created' | 'updated' | 'unchanged' }> {
+  ): Promise<{ template: PublishedTemplate; result: 'created' | 'updated' | 'unchanged' | 'superseded' }> {
     const content: EmailContent = { subject: body.subject, preheader: body.preheader, html: body.html, text: body.text }
     const contentHash = await emailContentHash(content)
     const existing = this.templates.get(key)
+    if (body.if_not_superseded === true && existing?.supersededHashes.includes(contentHash)) {
+      return { template: existing, result: 'superseded' }
+    }
     const source = { ...existing?.source, ...body.source }
     if (!existing) {
       const template = { id: `template-${this.nextId++}`, key, name: body.name, ...content, contentHash, source }

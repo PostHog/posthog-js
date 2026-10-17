@@ -272,6 +272,30 @@ describe('emails', () => {
       expect(warn.mock.calls.filter((call) => call.join(' ').includes('"welcome"'))).toHaveLength(1)
     })
 
+    it('never publishes content that newer content replaced while its first send was answered', async () => {
+      const older = createClient()
+      const olderFile = writeTemplate('old/welcome.html', welcomeHtml('Welcome'))
+      await sendWelcome(older, olderFile)
+      await sendWelcome(createClient(), writeTemplate('new/welcome.html', welcomeHtml('Welcome aboard')))
+      api.failWhen((request) => request.path.endsWith('/send/email/'), outdated(), 1)
+      api.received.length = 0
+
+      const result = await sendWelcome(older, olderFile)
+
+      expect(api.requestLog).toEqual([SEND, UPLOAD_WELCOME, SEND])
+      expect(api.template('welcome')?.subject).toBe('Welcome aboard')
+      expect(api.delivered.at(-1)?.subject).toBe('Welcome aboard')
+      expect(result).toEqual({
+        data: {
+          id: api.delivered.at(-1)?.messageId,
+          warnings: [
+            { code: 'template_superseded', message: 'The email was sent with the template’s current content.' },
+          ],
+        },
+        error: null,
+      })
+    })
+
     it('returns a second template_outdated as the error', async () => {
       const file = writeTemplate('welcome.html', welcomeHtml('Welcome'))
       api.failWhen((request) => request.path.endsWith('/send/email/'), outdated(), 2)

@@ -123,6 +123,8 @@ export interface NodeEmails extends Emails {
    * With a template file, every send reads the file and sends its content hash. When PostHog never published that
    * content, the SDK uploads the file and sends again, once. When newer content replaced it, PostHog sends the newer
    * content and the result carries a `template_superseded` warning, so an older deploy never brings old content back.
+   * That holds when a newer deploy replaces the content between the send and the upload, too: the upload then
+   * changes nothing.
    *
    * Never throws on API or network errors: it returns `{ data, error }`. A send is not idempotent, so two calls send
    * two emails. The SDK never retries a send that may have queued, after a timeout or a server error, for example.
@@ -225,7 +227,7 @@ export class PostHogEmails implements NodeEmails {
   ): Promise<UploadEmailTemplateResult> {
     return this.whenReady(async () => {
       const loaded = await this.load(template)
-      return loaded.error ? loaded : this.upload(template, loaded.data, options.source)
+      return loaded.error ? loaded : this.upload(template, loaded.data, { source: options.source })
     })
   }
 
@@ -258,7 +260,7 @@ export class PostHogEmails implements NodeEmails {
     if (!needsUpload(sent)) {
       return this.logWarnings(reference, sent)
     }
-    const uploaded = await this.upload(template, loaded.data)
+    const uploaded = await this.upload(template, loaded.data, { ifNotSuperseded: true })
     if (uploaded.error) {
       return uploaded
     }
@@ -312,12 +314,13 @@ export class PostHogEmails implements NodeEmails {
   private async upload(
     template: EmailTemplateFile,
     { content, sourcePath }: LoadedTemplateFile,
-    source: EmailTemplateSource = {}
+    { source, ifNotSuperseded = false }: { source?: EmailTemplateSource; ifNotSuperseded?: boolean }
   ): Promise<UploadEmailTemplateResult> {
     const body = {
       name: template.name ?? content.subject,
       ...content,
       source: { path: sourcePath, ...source },
+      if_not_superseded: ifNotSuperseded,
     }
     const response = await this.request('PUT', `${TEMPLATE_BY_KEY_PATH}${template.key}/`, body)
     if (response.error) {
