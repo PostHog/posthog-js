@@ -6,3 +6,11 @@ export function checkPublicInterface(posthog: PostHog): Promise<void> {
   client.captureException(new Error('queued exception'), 'user')
   return client.captureExceptionImmediate(new Error('immediate exception'), 'user')
 }
+
+export async function checkOpenTelemetryInterface(posthog: PostHog): Promise<void> {
+  const { BasicTracerProvider } = await import('@opentelemetry/sdk-trace-base')
+  const { PostHogContextSpanProcessor, enrichCurrentSpan } = await import('../../entrypoints/otel')
+  const provider = new BasicTracerProvider({ spanProcessors: [new PostHogContextSpanProcessor(posthog)] })
+  enrichCurrentSpan(posthog)
+  await provider.shutdown()
+}

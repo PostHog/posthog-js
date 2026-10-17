@@ -8,6 +8,29 @@ SDK usage examples and code snippets live in the official documentation so they 
 
 - [Node.js library docs](https://posthog.com/docs/libraries/node)
 
+## OpenTelemetry request context
+
+The optional `posthog-node/otel` entrypoint exports `PostHogContextSpanProcessor`.
+Pass your PostHog client to its constructor and add the processor to the application's OpenTelemetry provider.
+Install the optional `@opentelemetry/api` peer dependency and keep the application's provider, exporter, sampling, and other processors.
+Configure OpenTelemetry before the application accepts requests, and install `setupExpressRequestContext` before Express routes.
+
+The processor adds available `sessionId` and `posthogDistinctId` attributes to recording OpenTelemetry SDK spans.
+It also updates an active request span when PostHog reads the request context.
+It preserves explicit span attributes and reads values once, so exported spans keep their original context.
+API-only spans without public readable attributes are skipped.
+For a manual request integration, call `enrichCurrentSpan(posthog)` from `posthog-node/otel` after entering the header context.
+This fills missing attributes on an incoming span that already has application context.
+The helper does nothing when no context processor is installed.
+Express preserves an existing application identity and treats incoming headers as fallback analytics context.
+The headers must not be used for authentication or authorization.
+
+Express context stays active through async request work until the response finishes or closes.
+New spans from detached work after that point have no request IDs.
+Use explicit context for a background job that needs its own IDs.
+This integration does not create IDs, traces, recordings, or log exporters.
+It does not change the application's OpenTelemetry setup or require OpenTelemetry for other SDK use.
+
 ## Questions??
 
 ### [Check out our community page.](https://posthog.com/posts)

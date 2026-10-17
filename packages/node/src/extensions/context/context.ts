@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { ContextData, ContextOptions, IPostHogContext } from './types'
+import { inheritContextLifetime, isContextActive } from './lifetime'
 
 export class PostHogContext implements IPostHogContext {
   private storage: AsyncLocalStorage<ContextData>
@@ -9,7 +10,8 @@ export class PostHogContext implements IPostHogContext {
   }
 
   get(): ContextData | undefined {
-    return this.storage.getStore()
+    const context = this.storage.getStore()
+    return context && isContextActive(context) ? context : undefined
   }
 
   run<T>(context: ContextData, fn: () => T, options?: ContextOptions): T {
@@ -21,18 +23,18 @@ export class PostHogContext implements IPostHogContext {
   }
 
   private resolve(context: ContextData, options?: ContextOptions): ContextData {
+    const current = this.get()
     if (options?.fresh === true) {
-      return context
+      return inheritContextLifetime(current, { ...context })
     }
 
-    const current = this.get() || {}
-    return {
-      distinctId: context.distinctId ?? current.distinctId,
-      sessionId: context.sessionId ?? current.sessionId,
+    return inheritContextLifetime(current, {
+      distinctId: context.distinctId ?? current?.distinctId,
+      sessionId: context.sessionId ?? current?.sessionId,
       properties: {
-        ...(current.properties || {}),
+        ...(current?.properties || {}),
         ...(context.properties || {}),
       },
-    }
+    })
   }
 }
