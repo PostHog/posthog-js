@@ -80,6 +80,45 @@ describe('OpenTelemetry request context', () => {
     }
   )
 
+  it.each([false, true])('keeps a fresh job independent of the response with own signal=%s', async (withSignal) => {
+    const response = new EventEmitter()
+    const controller = new AbortController()
+    const tracer = provider.getTracer('job-test')
+    const data = { distinctId: 'job-user', sessionId: 'job-session' }
+    let job: Promise<void> | undefined
+    middleware()(
+      { headers: { 'x-posthog-session-id': 'request-session', 'x-posthog-distinct-id': 'request-user' } },
+      response,
+      () => {
+        job = client.withContext(
+          data,
+          async () => {
+            await Promise.resolve()
+            expect(client.getContext()).toEqual(data)
+            tracer.startSpan('job').end()
+            if (withSignal) {
+              controller.abort()
+              expect(client.getContext()).toBeUndefined()
+              tracer.startSpan('ended-job').end()
+            }
+          },
+          { fresh: true, signal: withSignal ? controller.signal : undefined }
+        )
+        response.emit('finish')
+        expect(client.getContext()).toBeUndefined()
+        tracer.startSpan('ended-request').end()
+      }
+    )
+    await job
+    const spans = exporter.getFinishedSpans()
+    expect(spans.find((span) => span.name === 'job')?.attributes).toEqual({
+      sessionId: 'job-session',
+      posthogDistinctId: 'job-user',
+    })
+    expect(spans.find((span) => span.name === 'ended-request')?.attributes).toEqual({})
+    if (withSignal) expect(spans.find((span) => span.name === 'ended-job')?.attributes).toEqual({})
+  })
+
   it.each([
     [{}, { sessionId: 'browser-session', posthogDistinctId: 'browser-user' }],
     [{ sessionId: 'explicit-session' }, { sessionId: 'explicit-session', posthogDistinctId: 'browser-user' }],
