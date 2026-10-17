@@ -97,6 +97,34 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     expect(readGradle('app/build.gradle')).toBe(app)
   })
 
+  it('starts node from the Android project root when resolving posthog.gradle', async () => {
+    await prebuild()
+    const app = readGradle('app/build.gradle')
+    const applyFromLines = app.split('\n').filter((line) => line.startsWith('apply from: new File('))
+    expect(applyFromLines).toHaveLength(1)
+    // a bare .execute() would run node wherever Gradle was launched, which can be outside the project
+    expect(applyFromLines[0]).toContain('.execute(null, rootDir).text.trim()')
+    expect(applyFromLines[0]).not.toContain('.execute().')
+  })
+
+  it('rewrites the resolver of a project prebuilt before it ran from the project root', async () => {
+    const legacyLine =
+      'apply from: new File(["node", "--print", "require(\'path\').join(require(\'path\').dirname(require.resolve(\'posthog-react-native\')), \'..\', \'tooling\', \'posthog.gradle\')"].execute().text.trim())'
+    fs.writeFileSync(
+      path.join(projectRoot, 'android/app/build.gradle'),
+      `apply plugin: "com.android.application"\n\n${legacyLine}\n\nandroid {\n    namespace "com.example"\n}\n`
+    )
+
+    await prebuild()
+    const app = readGradle('app/build.gradle')
+    expect(app).not.toContain(legacyLine)
+    expect(app.split('apply from: new File(')).toHaveLength(2)
+    expect(app).toContain('.execute(null, rootDir).text.trim()')
+
+    await prebuild()
+    expect(readGradle('app/build.gradle')).toBe(app)
+  })
+
   it('upgrades a project prebuilt with a classpath that predates native symbols', async () => {
     fs.writeFileSync(
       path.join(projectRoot, 'android/build.gradle'),
