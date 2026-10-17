@@ -303,6 +303,11 @@ describe('emails', () => {
         { subject: 'Welcome', preheader: 'New' },
       ],
       [
+        'a comment marker inside a quoted attribute',
+        '<meta name="preheader" content="Use <!-- marker"><title>Welcome</title>',
+        { subject: 'Welcome', preheader: 'Use <!-- marker' },
+      ],
+      [
         'a quoted > in the preheader',
         '<title>Welcome</title><meta content="Save > spend" name="preheader">',
         { subject: 'Welcome', preheader: 'Save > spend' },

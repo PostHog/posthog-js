@@ -5,35 +5,36 @@ export interface TemplateFileContent {
   html: string
 }
 
-const TITLE = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i
-const META_TAG = /<meta\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi
-const COMMENT = /<!--[\s\S]*?(?:-->|$)/g
+// One left-to-right scan, so a comment hides the tags in it and a quoted attribute can hold `<!--` or `>`.
+const ELEMENT = /<!--[\s\S]*?(?:-->|$)|<title\b[^>]*>([\s\S]*?)<\/title\s*>|(<meta\b(?:[^>"']|"[^"]*"|'[^']*')*>)/gi
 const ATTRIBUTE = /([^\s"'=<>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g
 const CHARACTER_REFERENCE = /&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|(amp|lt|gt|quot|apos|nbsp));/g
-const NAMED_CHARACTERS: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+const NAMED_CHARACTERS: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0' }
 
 /** Reads the subject from `<title>` and the preheader from `<meta name="preheader">`. The HTML is the whole file. */
 export function parseTemplateFile(html: string): TemplateFileContent {
-  const markup = html.replace(COMMENT, '')
-  const preheader = preheaderOf(markup)
-  return { subject: subjectOf(markup), ...(preheader !== undefined && { preheader }), html }
+  let title: string | undefined
+  let preheader: string | undefined
+  for (const [, titleText, metaTag] of html.matchAll(ELEMENT)) {
+    title ??= titleText
+    if (metaTag !== undefined && preheader === undefined) {
+      preheader = preheaderOf(metaTag)
+    }
+  }
+  return { subject: subjectOf(title ?? ''), ...(preheader !== undefined && { preheader }), html }
 }
 
-function subjectOf(html: string): string {
-  const title = TITLE.exec(html)?.[1] ?? ''
+function subjectOf(title: string): string {
   return decodeCharacterReferences(title)
     .replace(/[\t\n\f\r ]+/g, ' ')
     .trim()
 }
 
-function preheaderOf(html: string): string | undefined {
-  for (const tag of html.match(META_TAG) ?? []) {
-    const attributes = attributesOf(tag)
-    if (attributes.get('name')?.toLowerCase() === 'preheader') {
-      return decodeCharacterReferences(attributes.get('content') ?? '')
-    }
-  }
-  return undefined
+function preheaderOf(metaTag: string): string | undefined {
+  const attributes = attributesOf(metaTag)
+  return attributes.get('name')?.toLowerCase() === 'preheader'
+    ? decodeCharacterReferences(attributes.get('content') ?? '')
+    : undefined
 }
 
 function attributesOf(tag: string): Map<string, string> {
