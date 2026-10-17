@@ -46,6 +46,108 @@ describe('PostHog Context', () => {
     await posthog.shutdown()
   })
 
+  describe('context lifetime signals', () => {
+    it.each(['withContext', 'enterContext'] as const)('expires %s without cancelling its callback', async (method) => {
+      const controller = new AbortController()
+      const data = { distinctId: 'request-user', sessionId: 'request-session' }
+      const callback = async (): Promise<string> => {
+        expect(posthog.getContext()).toMatchObject(data)
+        controller.abort()
+        await Promise.resolve()
+        expect(posthog.getContext()).toBeUndefined()
+        return 'handler completed'
+      }
+      const result =
+        method === 'withContext'
+          ? posthog.withContext(data, callback, { signal: controller.signal })
+          : posthog.withContext({}, () => {
+              posthog.enterContext(data, { signal: controller.signal })
+              return callback()
+            })
+      expect(await result).toBe('handler completed')
+      expect(posthog.getContext()).toBeUndefined()
+    })
+
+    it.each([
+      ['parent', false],
+      ['parent', true],
+      ['child', false],
+      ['child', true],
+    ] as const)('composes %s expiry with fresh=%s nested scopes', (expired, fresh) => {
+      const parent = new AbortController()
+      const child = new AbortController()
+      posthog.withContext(
+        { distinctId: 'parent-user', sessionId: 'parent-session' },
+        () => {
+          posthog.withContext(
+            { distinctId: 'child-user' },
+            () => {
+              expect(posthog.getContext()).toMatchObject({ distinctId: 'child-user' })
+              const controller = expired === 'parent' ? parent : child
+              controller.abort()
+              expect(posthog.getContext()).toBeUndefined()
+            },
+            { fresh, signal: child.signal }
+          )
+          if (expired === 'parent') expect(posthog.getContext()).toBeUndefined()
+          else expect(posthog.getContext()).toMatchObject({ distinctId: 'parent-user', sessionId: 'parent-session' })
+        },
+        { signal: parent.signal }
+      )
+    })
+
+    it.each([{ distinctId: 'new-user' }, { sessionId: 'new-session' }])(
+      'starts explicit scopes after expiry with %j',
+      (data) => {
+        const controller = new AbortController()
+        posthog.withContext(
+          { distinctId: 'ended-user', sessionId: 'ended-session' },
+          () => {
+            controller.abort()
+            posthog.withContext(data, () => expect(posthog.getContext()).toEqual(data), { fresh: true })
+            posthog.withContext(data, () => {
+              expect(posthog.getContext()?.distinctId).toBe(data.distinctId)
+              expect(posthog.getContext()?.sessionId).toBe(data.sessionId)
+            })
+          },
+          { signal: controller.signal }
+        )
+      }
+    )
+
+    it('runs a callback with no active context when its signal is already aborted', () => {
+      const controller = new AbortController()
+      controller.abort()
+      const result = posthog.withContext(
+        { distinctId: 'ended-user' },
+        () => {
+          expect(posthog.getContext()).toBeUndefined()
+          return 'handler completed'
+        },
+        { signal: controller.signal }
+      )
+      expect(result).toBe('handler completed')
+    })
+
+    it('isolates signal expiry across concurrent async contexts', async () => {
+      const controllers = [new AbortController(), new AbortController()]
+      const releases: (() => void)[] = []
+      const results = controllers.map((controller, index) =>
+        posthog.withContext(
+          { sessionId: `session-${index}` },
+          async () => {
+            await new Promise<void>((resolve) => releases.push(resolve))
+            return posthog.getContext()?.sessionId
+          },
+          { signal: controller.signal }
+        )
+      )
+      controllers[0].abort()
+      releases.forEach((release) => release())
+      expect(await Promise.all(results)).toEqual([undefined, 'session-1'])
+    })
+  })
+
   it('should attach context tags to events', async () => {
     posthog.withContext({ properties: { plan: 'premium', region: 'us-east' } }, () => {
       posthog.capture({ distinctId: 'user-1', event: 'test_event' })

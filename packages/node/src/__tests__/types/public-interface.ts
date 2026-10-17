@@ -2,6 +2,9 @@ import type { IPostHog, PostHog } from '../../entrypoints/index.node'
 
 export function checkPublicInterface(posthog: PostHog): Promise<void> {
   const client: IPostHog = posthog
+  const signal = new AbortController().signal
+  client.withContext({ sessionId: 'request-session' }, () => client.getContext(), { fresh: true, signal })
+  client.enterContext({ distinctId: 'request-user' }, { signal })
   client.metrics.count('jobs.processed', 1)
   client.captureException(new Error('queued exception'), 'user')
   return client.captureExceptionImmediate(new Error('immediate exception'), 'user')

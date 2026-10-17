@@ -25,16 +25,20 @@ export class PostHogContext implements IPostHogContext {
   private resolve(context: ContextData, options?: ContextOptions): ContextData {
     const current = this.get()
     if (options?.fresh === true) {
-      return inheritContextLifetime(current, { ...context })
+      return inheritContextLifetime(current, { ...context }, options.signal)
     }
 
-    return inheritContextLifetime(current, {
-      distinctId: context.distinctId ?? current?.distinctId,
-      sessionId: context.sessionId ?? current?.sessionId,
-      properties: {
-        ...(current?.properties || {}),
-        ...(context.properties || {}),
+    return inheritContextLifetime(
+      current,
+      {
+        distinctId: context.distinctId ?? current?.distinctId,
+        sessionId: context.sessionId ?? current?.sessionId,
+        properties: {
+          ...(current?.properties || {}),
+          ...(context.properties || {}),
+        },
       },
-    })
+      options?.signal
+    )
   }
 }

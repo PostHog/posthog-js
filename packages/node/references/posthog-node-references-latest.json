@@ -2098,6 +2098,11 @@
           "description": "If true, replaces the current context entirely. If false, merges with the existing context (new values override existing ones).   false",
           "type": "boolean",
           "name": "fresh"
+        },
+        {
+          "description": "Ends this context and its inherited scopes when aborted, without cancelling the callback. An already aborted signal starts no active context. Parent lifetime limits still apply.",
+          "type": "AbortSignal",
+          "name": "signal"
         }
       ],
       "path": "src/extensions/context/types.ts"

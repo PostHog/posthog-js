@@ -11,6 +11,11 @@ export interface ContextOptions {
    * @default false
    */
   fresh?: boolean
+  /**
+   * Ends this context and its inherited scopes when aborted, without cancelling the callback.
+   * An already aborted signal starts no active context. Parent lifetime limits still apply.
+   */
+  signal?: AbortSignal
 }
 
 export interface IPostHogContext {
