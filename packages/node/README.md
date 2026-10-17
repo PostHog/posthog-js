@@ -36,6 +36,9 @@ Express context stays active through async request work until the response finis
 New spans from detached work after that point have no request IDs.
 Exceptions captured before completion keep their original context while asynchronous error processing finishes.
 Use explicit context for a background job that needs its own IDs.
+The Node.js `PostHogInterceptor` from `posthog-node/nestjs` also enriches request and child spans.
+It keeps its existing fresh header context and ends it when the Express or Fastify response finishes or closes.
+Explicit `sessionId` and `posthogDistinctId` span attributes keep their values.
 This integration does not create IDs, traces, recordings, or log exporters.
 It does not change the application's OpenTelemetry setup or require OpenTelemetry for other SDK use.
 
