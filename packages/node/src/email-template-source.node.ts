@@ -15,17 +15,19 @@ const MAX_PART_LENGTH = 400
 const COMMIT_HASH = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i
 const HOST = /^[a-z0-9-]+(?:\.[a-z0-9-]+)*(?::\d+)?$/
 const PATH_SEGMENT = /^[\w.-]+$/
-const VERCEL_HOSTS: Record<string, string> = {
-  github: 'github.com',
-  gitlab: 'gitlab.com',
-  bitbucket: 'bitbucket.org',
-}
+/** A git file larger than this, or one that is not a regular file such as a pipe, is not read. */
+const MAX_GIT_FILE_BYTES = 4 * 1024 * 1024
+const VERCEL_HOSTS = new Map([
+  ['github', 'github.com'],
+  ['gitlab', 'gitlab.com'],
+  ['bitbucket', 'bitbucket.org'],
+])
 
 const REPOSITORY_FROM_ENVIRONMENT: ((environment: Environment) => string | undefined)[] = [
   ({ GITHUB_SERVER_URL, GITHUB_REPOSITORY }) => repositoryOf(hostOfUrl(GITHUB_SERVER_URL), GITHUB_REPOSITORY),
   ({ CI_SERVER_HOST, CI_PROJECT_PATH }) => repositoryOf(CI_SERVER_HOST, CI_PROJECT_PATH),
   ({ VERCEL_GIT_PROVIDER, VERCEL_GIT_REPO_OWNER, VERCEL_GIT_REPO_SLUG }) =>
-    repositoryOf(VERCEL_HOSTS[VERCEL_GIT_PROVIDER ?? ''], pathOf(VERCEL_GIT_REPO_OWNER, VERCEL_GIT_REPO_SLUG)),
+    repositoryOf(VERCEL_HOSTS.get(VERCEL_GIT_PROVIDER ?? ''), pathOf(VERCEL_GIT_REPO_OWNER, VERCEL_GIT_REPO_SLUG)),
   ({ RAILWAY_GIT_REPO_OWNER, RAILWAY_GIT_REPO_NAME }) =>
     repositoryOf('github.com', pathOf(RAILWAY_GIT_REPO_OWNER, RAILWAY_GIT_REPO_NAME)),
 ]
@@ -88,7 +90,7 @@ async function gitDirectoriesOf(
   isWorktreeLink: boolean
 ): Promise<{ gitDirectory: string; commonDirectory: string }> {
   const gitDirectory = isWorktreeLink ? await linkedGitDirectory(dotGit) : dotGit
-  const commonDirectory = await readFile(join(gitDirectory, 'commondir'), 'utf8').then(
+  const commonDirectory = await readGitFile(join(gitDirectory, 'commondir')).then(
     (common) => resolve(gitDirectory, common.trim()),
     () => gitDirectory
   )
@@ -96,7 +98,7 @@ async function gitDirectoriesOf(
 }
 
 async function linkedGitDirectory(dotGitFile: string): Promise<string> {
-  const link = /^gitdir:\s*(.+?)\s*$/m.exec(await readFile(dotGitFile, 'utf8'))
+  const link = /^gitdir:\s*(.+?)\s*$/m.exec(await readGitFile(dotGitFile))
   if (!link) {
     throw new Error('Not a git link file')
   }
@@ -104,7 +106,7 @@ async function linkedGitDirectory(dotGitFile: string): Promise<string> {
 }
 
 async function originRepository(commonDirectory: string): Promise<string | undefined> {
-  const url = originUrlOf(await readFile(join(commonDirectory, 'config'), 'utf8'))
+  const url = originUrlOf(await readGitFile(join(commonDirectory, 'config')))
   return url === undefined ? undefined : repositoryOfRemote(url)
 }
 
@@ -116,12 +118,32 @@ function originUrlOf(config: string): string | undefined {
       inOrigin = section[1].toLowerCase() === 'remote' && section[2] === 'origin'
       continue
     }
-    const url = inOrigin ? /^\s*url\s*=\s*(.*?)\s*$/i.exec(line) : null
+    const url = inOrigin ? /^\s*url\s*=(.*)$/i.exec(line) : null
     if (url) {
-      return url[1].replace(/^"(.*)"$/, '$1')
+      return configValueOf(url[1])
     }
   }
   return undefined
+}
+
+/** Git config values may be quoted, escape characters with a backslash, and end in a `#` or `;` comment. */
+function configValueOf(raw: string): string {
+  let value = ''
+  let quoted = false
+  for (let index = 0; index < raw.length; index++) {
+    const character = raw[index]
+    if (character === '\\') {
+      const escaped = raw[++index] ?? ''
+      value += { n: '\n', t: '\t', b: '\b' }[escaped] ?? escaped
+    } else if (character === '"') {
+      quoted = !quoted
+    } else if (!quoted && (character === '#' || character === ';')) {
+      break
+    } else {
+      value += character
+    }
+  }
+  return value.trim()
 }
 
 /** Normalizes SSH, scp-like and HTTPS remotes to `host/owner/name`, keeping only the host and the path. */
@@ -137,7 +159,7 @@ function repositoryOfRemote(url: string): string | undefined {
 }
 
 async function headCommit(gitDirectory: string, commonDirectory: string): Promise<string | undefined> {
-  const head = (await readFile(join(gitDirectory, 'HEAD'), 'utf8')).trim()
+  const head = (await readGitFile(join(gitDirectory, 'HEAD'))).trim()
   const branch = /^ref:\s*(refs\/[^\s]+)$/.exec(head)?.[1]
   if (!branch) {
     return commitHashOf(head)
@@ -146,12 +168,12 @@ async function headCommit(gitDirectory: string, commonDirectory: string): Promis
     return undefined
   }
   for (const directory of new Set([gitDirectory, commonDirectory])) {
-    const loose = await readFile(join(directory, branch), 'utf8').catch(() => undefined)
+    const loose = await readGitFile(join(directory, branch)).catch(() => undefined)
     if (loose !== undefined) {
       return commitHashOf(loose.trim())
     }
   }
-  const packedRefs = await readFile(join(commonDirectory, 'packed-refs'), 'utf8')
+  const packedRefs = await readGitFile(join(commonDirectory, 'packed-refs'))
   for (const line of packedRefs.split(/\r?\n/)) {
     const [hash, name] = line.split(' ')
     if (name === branch) {
@@ -159,6 +181,14 @@ async function headCommit(gitDirectory: string, commonDirectory: string): Promis
     }
   }
   return undefined
+}
+
+async function readGitFile(path: string): Promise<string> {
+  const entry = await stat(path)
+  if (!entry.isFile() || entry.size > MAX_GIT_FILE_BYTES) {
+    throw new Error(`Not a readable git file: ${path}`)
+  }
+  return readFile(path, 'utf8')
 }
 
 function repositoryOf(host: string | undefined, path: string | undefined): string | undefined {
