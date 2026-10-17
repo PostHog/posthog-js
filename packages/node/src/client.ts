@@ -7,9 +7,11 @@ import {
   isBlockedUA,
   isPlainObject,
   isPostHogFetchContentTooLargeError,
+  isPostHogFetchNetworkError,
   JsonType,
   minimizeFlagCalledEventProperties,
   PostHogCaptureOptions,
+  PostHogApiResponse,
   PostHogCoreStateless,
   PostHogEventProperties,
   PostHogFetchOptions,
@@ -70,6 +72,7 @@ import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routi
 import { V1CaptureSender } from './capture-v1/sender'
 import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
+import { type Emails, PostHogEmails, type TemplateFiles } from './emails'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -114,6 +117,10 @@ function normalizeHost(value?: unknown): string {
   return normalizedValue || DEFAULT_NODE_HOST
 }
 
+function isTimeout(error: unknown): boolean {
+  return isPostHogFetchNetworkError(error) && error.error instanceof Error && error.error.name === 'AbortError'
+}
+
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
   const propertyNames = Array.isArray(value) ? value : [value]
   return propertyNames.filter(
@@ -152,6 +159,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
+  private _emails?: Emails
   private _traces?: PostHogTraces
   private _spanContext?: SpanContextManager
 
@@ -659,6 +667,39 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
     }
     return this._metrics
+  }
+
+  /**
+   * The `posthog.emails` API: send transactional email from a template uploaded to PostHog, by its key.
+   * Needs the `secretKey` client option.
+   *
+   * @example
+   * ```ts
+   * const { data, error } = await client.emails.send({ template: 'welcome', to: 'jane@example.com' })
+   * ```
+   *
+   * {@label Emails}
+   */
+  public get emails(): Emails {
+    this._emails ??= this.createEmails()
+    return this._emails
+  }
+
+  /**
+   * Builds the `emails` API. The Node entrypoint passes file system access, so it can send template files.
+   * @internal
+   */
+  protected createEmails(templateFiles?: TemplateFiles): PostHogEmails {
+    return new PostHogEmails(
+      {
+        isDisabled: () => this.disabled,
+        hasSecretKey: () => this.options.personalApiKey !== undefined,
+        warn: (message) => this._logger.warn(message),
+        track: (work) => this.addPendingPromise(work),
+        request: (method, path, body) => this._requestWithSecretKey(method, path, body),
+      },
+      templateFiles
+    )
   }
 
   /**
@@ -2961,6 +3002,32 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       if (abortTimeout) {
         clearTimeout(abortTimeout)
       }
+    }
+  }
+
+  /** One attempt, never retried: an email send that timed out or failed on the server may still have queued. */
+  private async _requestWithSecretKey(
+    method: 'POST' | 'PUT',
+    path: string,
+    body: JsonType
+  ): Promise<PostHogApiResponse> {
+    try {
+      return await this.requestJson(
+        `${this.host}${path}`,
+        {
+          method,
+          headers: {
+            ...this.getCustomHeaders(),
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.options.personalApiKey}`,
+          },
+          body: JSON.stringify(body),
+        },
+        { retryCount: 0 }
+      )
+    } catch (error) {
+      this._events.emit('error', error)
+      throw new Error(isTimeout(error) ? `Request timed out after ${this.requestTimeout}ms` : 'Request failed')
     }
   }
 

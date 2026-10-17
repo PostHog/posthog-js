@@ -12,10 +12,31 @@ import { PostHogContext } from '../extensions/context/context'
 import { AsyncLocalStorageSpanContextManager } from '../extensions/context/span-context.node'
 import { gzipCompress } from '../gzip.node'
 import { hostOsResourceAttributes } from '../host-os.node'
+import { nodeTemplateFiles } from '../email-template-file.node'
+import type { NodeEmails } from '../emails'
 
 export class PostHog extends PostHogBackendClient {
+  private _nodeEmails?: NodeEmails
+
   getLibraryId(): string {
     return 'posthog-node'
+  }
+
+  /**
+   * The `posthog.emails` API: send transactional email from an HTML template file in your repository, or from a
+   * template uploaded to PostHog, by its key. Needs the `secretKey` client option.
+   *
+   * @example
+   * ```ts
+   * const welcome = client.emails.templateFile(new URL('./emails/welcome.html', import.meta.url))
+   * const { data, error } = await client.emails.send({ template: welcome, to: 'jane@example.com' })
+   * ```
+   *
+   * {@label Emails}
+   */
+  override get emails(): NodeEmails {
+    this._nodeEmails ??= this.createEmails(nodeTemplateFiles)
+    return this._nodeEmails
   }
 
   protected override compressPayload(payload: string): Promise<PostHogFetchBodyBytes | null> {
