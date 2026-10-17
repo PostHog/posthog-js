@@ -37,6 +37,41 @@ describe('OpenTelemetry request context', () => {
     await client.shutdown()
   })
 
+  it.each(['disabled', 'default-opt-out', 'runtime-opt-out'] as const)(
+    'keeps request IDs off spans when the client is %s',
+    async (privacy) => {
+      await provider.shutdown()
+      await client.shutdown()
+      client = new PostHog('test-key', {
+        disabled: privacy === 'disabled',
+        defaultOptIn: privacy !== 'default-opt-out',
+      })
+      exporter = new InMemorySpanExporter()
+      processor = new PostHogContextSpanProcessor(client)
+      provider = new BasicTracerProvider({ spanProcessors: [processor, new SimpleSpanProcessor(exporter)] })
+      const tracer = provider.getTracer('privacy')
+      await tracer.startActiveSpan('server', { kind: SpanKind.SERVER }, async (server) => {
+        await tracer.startActiveSpan('active', { attributes: { sessionId: 'application-session' } }, async (active) => {
+          if (privacy === 'runtime-opt-out') await client.optOut()
+          middleware()(
+            { headers: { 'x-posthog-session-id': 'browser-session', 'x-posthog-distinct-id': 'browser-user' } },
+            new EventEmitter(),
+            () => {
+              enrichCurrentSpan(client)
+              tracer.startSpan('child').end()
+            }
+          )
+          active.end()
+        })
+        server.end()
+      })
+      const spans = exporter.getFinishedSpans()
+      expect(spans.find((span) => span.name === 'server')?.attributes).toEqual({})
+      expect(spans.find((span) => span.name === 'active')?.attributes).toEqual({ sessionId: 'application-session' })
+      expect(spans.find((span) => span.name === 'child')?.attributes).toEqual({})
+    }
+  )
+
   function middleware(): (...args: any[]) => void {
     const app = { use: vi.fn() }
     setupExpressRequestContext(client, app)

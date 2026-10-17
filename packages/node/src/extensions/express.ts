@@ -78,6 +78,7 @@ function posthogRequestContext(posthog: PostHogBackendClient): ExpressMiddleware
     }
     res.once('finish', complete)
     res.once('close', complete)
+    if (res.destroyed || res.writableFinished) complete()
     posthog.withContext(
       buildRequestContextData(posthog, req),
       () => {
