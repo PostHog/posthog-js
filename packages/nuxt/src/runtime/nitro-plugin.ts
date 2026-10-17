@@ -50,6 +50,7 @@ export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose, wr
   const requestContexts = new WeakMap<object, RequestIdentity>()
 
   if (requestContext) {
+    const spanContext = import('posthog-node/otel').catch(() => undefined)
     wrapRequest?.(async (request, handler) => {
       const existing = client.getContext()
       const identity = {
@@ -62,6 +63,8 @@ export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose, wr
         identity,
         async () => {
           try {
+            const tracing = await spanContext
+            tracing?.enrichCurrentSpan?.(client)
             return await handler()
           } finally {
             lifetime.abort()
