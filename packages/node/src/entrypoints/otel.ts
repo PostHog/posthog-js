@@ -1,15 +1,13 @@
 import { trace, SpanKind, type Attributes, type Context, type Span } from '@opentelemetry/api'
 import type { PostHogBackendClient } from '../client'
-import { addContextListener, notifyContextListeners } from '../extensions/context/listeners'
+import { addContextListener } from '../extensions/context/listeners'
+
+export { enrichCurrentSpan } from '../extensions/context/listeners'
 
 type ReadableSpan = Span & { readonly attributes: Attributes }
 
 function hasReadableAttributes(span: Span | undefined): span is ReadableSpan {
   return !!span && 'attributes' in span && typeof span.attributes === 'object' && span.attributes !== null
-}
-
-export function enrichCurrentSpan(posthog: PostHogBackendClient): void {
-  notifyContextListeners(posthog, true)
 }
 
 export class PostHogContextSpanProcessor {

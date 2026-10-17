@@ -7,8 +7,8 @@ import {
   SimpleSpanProcessor,
   SamplingDecision,
 } from '@opentelemetry/sdk-trace-base'
-import { PostHog } from '@/entrypoints/index.node'
-import { PostHogContextSpanProcessor, enrichCurrentSpan } from '@/entrypoints/otel'
+import { PostHog, enrichCurrentSpan } from '@/entrypoints/index.node'
+import { PostHogContextSpanProcessor } from '@/entrypoints/otel'
 import { setupExpressRequestContext } from '@/extensions/express'
 
 describe('OpenTelemetry request context', () => {
