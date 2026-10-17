@@ -5,7 +5,6 @@ import { addProperty, getFirstHeaderValue, getPostHogTracingHeaderValues } from 
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import type { Request, Response } from 'express'
 import type { ContextData } from './context/types'
-import { bindContextLifetime } from './context/lifetime'
 import { notifyContextListeners } from './context/listeners'
 
 type ExpressMiddleware = (req: Request, res: Response, next: () => void) => void
@@ -71,24 +70,27 @@ export function setupExpressRequestContext(
 
 function posthogRequestContext(posthog: PostHogBackendClient): ExpressMiddleware {
   return (req, res, next): void => {
-    const lifetime = { active: true }
+    const controller = new AbortController()
     const complete = (): void => {
-      lifetime.active = false
+      controller.abort()
       res.removeListener('finish', complete)
       res.removeListener('close', complete)
     }
     res.once('finish', complete)
     res.once('close', complete)
-    posthog.withContext(buildRequestContextData(posthog, req), () => {
-      bindContextLifetime(posthog.getContext(), lifetime)
-      notifyContextListeners(posthog, true)
-      try {
-        next()
-      } catch (error) {
-        complete()
-        throw error
-      }
-    })
+    posthog.withContext(
+      buildRequestContextData(posthog, req),
+      () => {
+        notifyContextListeners(posthog, true)
+        try {
+          next()
+        } catch (error) {
+          complete()
+          throw error
+        }
+      },
+      { signal: controller.signal }
+    )
   }
 }
 
