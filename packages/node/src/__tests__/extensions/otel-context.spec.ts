@@ -38,6 +38,48 @@ describe('OpenTelemetry request context', () => {
     return app.use.mock.calls[0][0]
   }
 
+  it.each(['signal', 'request', 'outer-signal'] as const)(
+    'expires nested span context on %s completion',
+    async (expired) => {
+      const response = new EventEmitter()
+      const controller = new AbortController()
+      const outer = new AbortController()
+      const tracer = provider.getTracer('signal-test')
+      client.withContext(
+        {},
+        () => {
+          middleware()(
+            { headers: { 'x-posthog-session-id': 'request-session', 'x-posthog-distinct-id': 'request-user' } },
+            response,
+            () => {
+              client.withContext(
+                { properties: { scope: 'nested' } },
+                () => {
+                  const before = tracer.startSpan('before')
+                  if (expired === 'signal') controller.abort()
+                  else if (expired === 'outer-signal') outer.abort()
+                  else response.emit('finish')
+                  expect(client.getContext()).toBeUndefined()
+                  tracer.startSpan('after').end()
+                  before.end()
+                },
+                { signal: controller.signal }
+              )
+              response.emit('finish')
+            }
+          )
+        },
+        { signal: outer.signal }
+      )
+      await provider.forceFlush()
+      expect(exporter.getFinishedSpans().find((span) => span.name === 'before')?.attributes).toEqual({
+        sessionId: 'request-session',
+        posthogDistinctId: 'request-user',
+      })
+      expect(exporter.getFinishedSpans().find((span) => span.name === 'after')?.attributes).toEqual({})
+    }
+  )
+
   it.each([
     [{}, { sessionId: 'browser-session', posthogDistinctId: 'browser-user' }],
     [{ sessionId: 'explicit-session' }, { sessionId: 'explicit-session', posthogDistinctId: 'browser-user' }],
