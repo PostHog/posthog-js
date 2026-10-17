@@ -25,7 +25,7 @@ export class PostHogContext implements IPostHogContext {
   private resolve(context: ContextData, options?: ContextOptions): ContextData {
     const current = this.get()
     if (options?.fresh === true) {
-      return inheritContextLifetime(current, { ...context }, options.signal)
+      return inheritContextLifetime(undefined, { ...context }, options.signal)
     }
 
     return inheritContextLifetime(

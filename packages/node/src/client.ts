@@ -66,6 +66,7 @@ import { getActiveTraceProperties } from './extensions/error-tracking/trace-cont
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 import { notifyContextListeners } from './extensions/context/listeners'
+import { getEventContext } from './extensions/context/event-context'
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
 import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routing'
 import { V1CaptureSender } from './capture-v1/sender'
@@ -3166,7 +3167,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           error,
           { syntheticException },
           distinctId,
-          additionalProperties
+          additionalProperties,
+          this.getContext()
         ).then((msg) => this._capturePreparedEvent({ ...msg, uuid, flags }, false))
       )
     }
@@ -3222,7 +3224,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           error,
           { syntheticException },
           distinctId,
-          additionalProperties
+          additionalProperties,
+          this.getContext()
         ).then((msg) => this.captureImmediate({ ...msg, flags }))
       )
     }
@@ -3258,7 +3261,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       uuid,
     }: EventMessage = props
 
-    const contextData = this.context?.get()
+    const contextData = getEventContext(props, this.context?.get())
     const includeContextProperties = options.includeContextProperties ?? true
 
     let mergedDistinctId = distinctId || contextData?.distinctId

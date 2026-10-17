@@ -144,7 +144,8 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
           error,
           hint,
           contextData.distinctId,
-          additionalProperties
+          additionalProperties,
+          posthog.getContext()
         ),
         // Downstream error handlers can choose a different status, even asynchronously.
         getResponseStatusCode(res),
