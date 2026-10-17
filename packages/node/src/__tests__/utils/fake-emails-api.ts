@@ -5,6 +5,7 @@ const UPLOAD_PATH = /^\/api\/projects\/@current\/messaging_templates\/by_key\/([
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 const DOCS_URL = 'https://posthog.com/docs/workflows/transactional-email-api'
+const PUBLISHED_PARTS = ['subject', 'preheader', 'html', 'text'] as const
 
 export interface ReceivedRequest {
   method: string
@@ -146,7 +147,10 @@ export class FakeEmailsApi {
       this.templates.set(key, { ...template, supersededHashes: [] })
       return { template: this.templates.get(key)!, result: 'created' }
     }
-    if (existing.contentHash === contentHash && existing.name === body.name) {
+    if (
+      existing.name === body.name &&
+      PUBLISHED_PARTS.every((part) => (existing[part] ?? '') === (content[part] ?? ''))
+    ) {
       existing.source = source
       return { template: existing, result: 'unchanged' }
     }

@@ -135,6 +135,17 @@ describe('emails', () => {
       expect(api.requestLog).toEqual([SEND])
     })
 
+    it('drops warnings it cannot read instead of throwing', async () => {
+      api.failWhen(() => true, {
+        status: 202,
+        body: { message_id: 'message-1', warnings: [{ code: { toString: null }, detail: 'x' }, 'oops', null] },
+      })
+
+      const result = await createClient().emails.send({ template: 'welcome', to: JANE })
+
+      expect(result).toEqual({ data: { id: 'message-1', warnings: [] }, error: null })
+    })
+
     it('returns a network failure without retrying, and hands the original error to the error event', async () => {
       const networkError = new Error('getaddrinfo ENOTFOUND example.com')
       api.failWhen(() => true, { networkError })
@@ -273,6 +284,40 @@ describe('emails', () => {
         error: expect.objectContaining({ code: 'template_outdated', statusCode: 409 }),
       })
       expect(api.delivered).toEqual([])
+    })
+
+    it('never uploads or sends again after a server error, whatever code its body carries', async () => {
+      const file = writeTemplate('welcome.html', welcomeHtml('Welcome'))
+      api.failWhen((request) => request.method === 'POST', { status: 503, body: outdated().body })
+
+      const result = await sendWelcome(createClient(), file)
+
+      expect(api.requestLog).toEqual([SEND])
+      expect(result.error).toMatchObject({ code: 'template_outdated', statusCode: 503 })
+    })
+
+    it.each([
+      [
+        'a commented-out title and preheader',
+        '<!-- <title>Draft</title><meta name="preheader" content="Old"> --><title>Welcome</title><meta name="preheader" content="New">',
+        { subject: 'Welcome', preheader: 'New' },
+      ],
+      [
+        'a quoted > in the preheader',
+        '<title>Welcome</title><meta content="Save > spend" name="preheader">',
+        { subject: 'Welcome', preheader: 'Save > spend' },
+      ],
+      [
+        'character references in the subject',
+        '<title>Caf&#233; &amp; &#x2014; bar</title>',
+        { subject: 'Café & — bar', preheader: undefined },
+      ],
+    ])('reads the subject and preheader from %s', async (_, head, expected) => {
+      const file = writeTemplate('welcome.html', `<html><head>${head}</head><body>Hi</body></html>`)
+
+      await sendWelcome(createClient(), file)
+
+      expect(api.template('welcome')).toMatchObject(expected)
     })
 
     it('returns a failed upload and sends nothing', async () => {

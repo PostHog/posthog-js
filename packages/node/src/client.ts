@@ -685,7 +685,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this._emails
   }
 
-  /** Builds the `emails` API. The Node entrypoint passes file system access, so it can send template files. */
+  /**
+   * Builds the `emails` API. The Node entrypoint passes file system access, so it can send template files.
+   * @internal
+   */
   protected createEmails(templateFiles?: TemplateFiles): PostHogEmails {
     return new PostHogEmails(
       {

@@ -51,7 +51,8 @@ export interface EmailWarning {
 export interface EmailError {
   /**
    * The API's error code, such as `template_not_found`, or one of the SDK's own: `missing_secret_key`,
-   * `client_disabled`, `network_error`, `invalid_template_key`, `template_file_unreadable`, `template_missing_subject`.
+   * `client_disabled`, `network_error`, `invalid_template_key`, `template_file_unreadable`, `template_missing_subject`,
+   * `api_error` for an answer PostHog gave without a code, and `unexpected_error`.
    */
   code: string
   message: string
@@ -146,6 +147,9 @@ export interface NodeEmails extends Emails {
    * Reference an HTML email template file. The subject is the file's `<title>`, the inbox preview text is the
    * `content` of `<meta name="preheader">`, and the HTML is the whole file. Nothing is read until a send.
    *
+   * The subject and preheader decode numeric character references such as `&#233;` and the named ones `&amp;`,
+   * `&lt;`, `&gt;`, `&quot;`, `&apos;` and `&nbsp;`. Write other characters as they are, since the file is UTF-8.
+   *
    * Serverless bundlers only ship files your code imports, so include the template files in the deployment.
    *
    * @param file - A `file:` URL, such as `new URL('./emails/welcome.html', import.meta.url)`, or an absolute path.
@@ -160,13 +164,17 @@ export interface NodeEmails extends Emails {
   uploadTemplate(template: EmailTemplateFile, options?: UploadEmailTemplateOptions): Promise<UploadEmailTemplateResult>
 }
 
-/** File system access for template files, which only the Node.js entry has. */
+/**
+ * File system access for template files, which only the Node.js entry has.
+ * @internal
+ */
 export interface TemplateFiles {
   locate(file: URL | string): string
   read(path: string): Promise<string>
   sourcePath(path: string): string
 }
 
+/** @internal */
 export interface EmailsApi {
   isDisabled(): boolean
   hasSecretKey(): boolean
@@ -186,6 +194,7 @@ interface LoadedTemplateFile {
 
 type Recipient = Omit<SendEmailOptions, 'template'>
 
+/** @internal */
 export class PostHogEmails implements NodeEmails {
   private readonly loggedWarnings = new Set<string>()
 
@@ -229,7 +238,7 @@ export class PostHogEmails implements NodeEmails {
         failure('missing_secret_key', 'Sending email needs the secretKey client option, a project secret API key.')
       )
     }
-    return this.api.track(work())
+    return this.api.track(work().catch(unexpectedFailure))
   }
 
   private async sendTemplate({ template, ...recipient }: SendEmailOptions): Promise<SendEmailResult> {
@@ -364,8 +373,12 @@ function sendBody(reference: { key: string; hash?: string }, { to, data, distinc
   }
 }
 
+/** Only answers that queued nothing: a server error may have queued the email, whatever code its body carries. */
 function needsUpload({ error }: SendEmailResult): boolean {
-  return error?.code === 'template_outdated' || error?.code === 'template_not_found'
+  return (
+    (error?.statusCode === 409 && error.code === 'template_outdated') ||
+    (error?.statusCode === 404 && error.code === 'template_not_found')
+  )
 }
 
 function isTemplateKey(key: unknown): key is string {
@@ -388,6 +401,10 @@ function failure(code: string, message: string, details: Partial<EmailError> = {
   return { data: null, error: { code, message, ...details } }
 }
 
+function unexpectedFailure(error: unknown): { data: null; error: EmailError } {
+  return failure('unexpected_error', error instanceof Error ? error.message : 'The email call failed unexpectedly.')
+}
+
 function unexpectedResponse(statusCode: number): { data: null; error: EmailError } {
   return failure('api_error', `PostHog answered HTTP ${statusCode} with an unexpected body.`, { statusCode })
 }
@@ -404,10 +421,11 @@ function apiError({ status, body }: PostHogApiResponse): EmailError {
 }
 
 function warningsOf(warnings: unknown): EmailWarning[] {
-  return (Array.isArray(warnings) ? warnings : []).filter(isRecord).map((warning) => ({
-    code: String(warning.code),
-    message: String(warning.detail),
-  }))
+  return (Array.isArray(warnings) ? warnings : []).flatMap((warning) =>
+    isRecord(warning) && typeof warning.code === 'string' && typeof warning.detail === 'string'
+      ? [{ code: warning.code, message: warning.detail }]
+      : []
+  )
 }
 
 function isSuccess(status: number): boolean {
