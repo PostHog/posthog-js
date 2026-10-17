@@ -16,10 +16,12 @@ Install the optional `@opentelemetry/api` peer dependency and keep the applicati
 Configure OpenTelemetry before the application accepts requests, and install `setupExpressRequestContext` before Express routes.
 
 The processor adds available `sessionId` and `posthogDistinctId` attributes to recording OpenTelemetry SDK spans.
+Disabled or opted-out clients add no PostHog attributes. Existing span attributes keep their values.
 It also updates an active request span when PostHog reads the request context.
 `enrichCurrentSpan` is also available from the main `posthog-node` entry without loading OpenTelemetry. It is a no-op until a processor is registered.
 Explicit request entry also fills missing IDs on the nearest recording server ancestor, following parent span objects observed by the processor.
-If the sampler drops an intermediate span, that parent chain cannot be verified and the earlier server span stays unchanged.
+Parent links use weak references, so a retained child does not keep ended ancestors alive.
+If the sampler drops an intermediate span or garbage collection removes it, that parent chain cannot be verified and the earlier server span stays unchanged.
 Ordinary context entry keeps its current-span behavior and does not walk to server ancestors.
 It preserves explicit span attributes and reads values once, so exported spans keep their original context.
 It recognizes `sessionId` and `posthogDistinctId`; `user.id` alone does not override header-derived analytics identity.
@@ -37,6 +39,7 @@ Express preserves an existing application identity and treats incoming headers a
 The headers must not be used for authentication or authorization.
 
 Express context stays active through async request work until the response finishes or closes.
+If the response is already finished or destroyed when the middleware runs, its context starts expired.
 New spans from detached work after that point have no request IDs.
 Exceptions captured before completion keep their original context while asynchronous error processing finishes.
 Use explicit context for a background job that needs its own IDs.

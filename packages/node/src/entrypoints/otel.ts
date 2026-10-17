@@ -13,7 +13,7 @@ function hasReadableAttributes(span: Span | undefined): span is ReadableSpan {
 export class PostHogContextSpanProcessor {
   private active = true
   private readonly snapshots = new WeakSet<Span>()
-  private readonly parents = new WeakMap<Span, Span>()
+  private readonly parents = new WeakMap<Span, WeakRef<Span>>()
   private readonly unsubscribe: () => void
 
   constructor(private readonly posthog: PostHogBackendClient) {
@@ -27,6 +27,7 @@ export class PostHogContextSpanProcessor {
   private enrich(span: Span | undefined, requestEntry = false): void {
     if (!this.active) return
     try {
+      if (this.posthog.isDisabled || this.posthog.optedOut) return
       if (!hasReadableAttributes(span) || !span.isRecording() || (this.snapshots.has(span) && !requestEntry)) return
       const context = this.posthog.getContext()
       if (!context) return
@@ -47,14 +48,14 @@ export class PostHogContextSpanProcessor {
         if (span !== current) this.enrich(span, true)
         return
       }
-      span = this.parents.get(span)
+      span = this.parents.get(span)?.deref()
     }
   }
 
   onStart(span: Span, parentContext?: Context): void {
     if (!this.active) return
     const parent = parentContext && trace.getSpan(parentContext)
-    if (parent && parent !== span) this.parents.set(span, parent)
+    if (parent && parent !== span) this.parents.set(span, new WeakRef(parent))
     this.enrich(span)
   }
 
