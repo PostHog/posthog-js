@@ -17,6 +17,7 @@ Configure OpenTelemetry before the application accepts requests, and install `se
 
 The processor adds available `sessionId` and `posthogDistinctId` attributes to recording OpenTelemetry SDK spans.
 It also updates an active request span when PostHog reads the request context.
+`enrichCurrentSpan` is also available from the main `posthog-node` entry without loading OpenTelemetry. It is a no-op until a processor is registered.
 Explicit request entry also fills missing IDs on the nearest recording server ancestor, following parent span objects observed by the processor.
 If the sampler drops an intermediate span, that parent chain cannot be verified and the earlier server span stays unchanged.
 Ordinary context entry keeps its current-span behavior and does not walk to server ancestors.
