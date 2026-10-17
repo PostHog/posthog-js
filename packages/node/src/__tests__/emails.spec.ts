@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,6 +12,24 @@ const JANE = 'jane@example.com'
 const SECRET_KEY = 'phs_secret'
 const SEND = 'POST /api/projects/@current/messaging/send/email/'
 const UPLOAD_WELCOME = 'PUT /api/projects/@current/messaging_templates/by_key/welcome/'
+const SOURCE_VARIABLES = [
+  'GITHUB_SERVER_URL',
+  'GITHUB_REPOSITORY',
+  'GITHUB_SHA',
+  'GITHUB_WORKSPACE',
+  'CI_SERVER_HOST',
+  'CI_PROJECT_PATH',
+  'CI_COMMIT_SHA',
+  'CI_PROJECT_DIR',
+  'VERCEL_GIT_PROVIDER',
+  'VERCEL_GIT_REPO_OWNER',
+  'VERCEL_GIT_REPO_SLUG',
+  'VERCEL_GIT_COMMIT_SHA',
+  'RAILWAY_GIT_REPO_OWNER',
+  'RAILWAY_GIT_REPO_NAME',
+  'RAILWAY_GIT_COMMIT_SHA',
+]
+const DEPLOYED = '3f2c1ab9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3'
 
 const welcomeHtml = (subject: string): string =>
   [
@@ -379,6 +398,200 @@ describe('emails', () => {
         error: { code: 'sender_unavailable', message: 'This project has no verified default sender.', statusCode: 400 },
       })
       expect(api.delivered).toEqual([])
+    })
+  })
+
+  describe('the source an upload carries', () => {
+    const git = (cwd: string, ...args: string[]): string =>
+      execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', ...args], {
+        cwd,
+        encoding: 'utf8',
+        env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+      }).trim()
+
+    const checkout = (relativePath: string, remote: string): { root: string; head: string } => {
+      const root = join(directory, relativePath)
+      mkdirSync(root, { recursive: true })
+      git(root, 'init', '--quiet', '--initial-branch=main')
+      git(root, 'remote', 'add', 'origin', remote)
+      git(root, 'commit', '--quiet', '--allow-empty', '--message=first')
+      return { root, head: git(root, 'rev-parse', 'HEAD') }
+    }
+
+    const uploadedSource = (): Record<string, unknown> | undefined =>
+      api.received.find((request) => request.method === 'PUT')?.body.source
+
+    beforeEach(() => {
+      for (const variable of SOURCE_VARIABLES) {
+        vi.stubEnv(variable, '')
+      }
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it('names the repository without credentials, the path in it and the commit, from a git checkout', async () => {
+      const { head } = checkout('app', 'https://x-access-token:ghp_secret@github.com/example/app.git')
+
+      const result = await sendWelcome(createClient(), writeTemplate('app/emails/welcome.html', welcomeHtml('Hi')))
+
+      expect(result.error).toBeNull()
+      expect(uploadedSource()).toEqual({ repository: 'github.com/example/app', path: 'emails/welcome.html', ref: head })
+      expect(JSON.stringify(api.received)).not.toContain('ghp_secret')
+    })
+
+    it.each([
+      [
+        'an SSH remote and a detached head',
+        'git@github.com:example/app.git',
+        (root: string) => git(root, 'checkout', '--quiet', '--detach'),
+        'github.com/example/app',
+      ],
+      [
+        'an ssh:// remote with a port, and the branch only in packed-refs',
+        'ssh://git@gitlab.example.com:2222/group/sub/app.git',
+        (root: string) => git(root, 'pack-refs', '--all'),
+        'gitlab.example.com/group/sub/app',
+      ],
+    ])('reads a checkout with %s', async (_, remote, prepare, repository) => {
+      const { root, head } = checkout('app', remote)
+      prepare(root)
+
+      await sendWelcome(createClient(), writeTemplate('app/emails/welcome.html', welcomeHtml('Hi')))
+
+      expect(uploadedSource()).toEqual({ repository, path: 'emails/welcome.html', ref: head })
+    })
+
+    it('reads a worktree through its .git file, with the path inside the worktree and its own commit', async () => {
+      const { root } = checkout('app', 'https://github.com/example/app.git')
+      const worktree = join(directory, 'app-feature')
+      git(root, 'worktree', 'add', '--quiet', '-b', 'feature', worktree)
+      git(worktree, 'commit', '--quiet', '--allow-empty', '--message=second')
+
+      await sendWelcome(createClient(), writeTemplate('app-feature/emails/welcome.html', welcomeHtml('Hi')))
+
+      expect(uploadedSource()).toEqual({
+        repository: 'github.com/example/app',
+        path: 'emails/welcome.html',
+        ref: git(worktree, 'rev-parse', 'HEAD'),
+      })
+    })
+
+    it.each([
+      [
+        'GitHub Actions',
+        { GITHUB_SERVER_URL: 'https://github.example.com', GITHUB_REPOSITORY: 'example/app', GITHUB_SHA: DEPLOYED },
+        { repository: 'github.example.com/example/app', ref: DEPLOYED },
+      ],
+      [
+        'GitLab CI',
+        { CI_SERVER_HOST: 'gitlab.example.com', CI_PROJECT_PATH: 'group/app', CI_COMMIT_SHA: DEPLOYED },
+        { repository: 'gitlab.example.com/group/app', ref: DEPLOYED },
+      ],
+      [
+        'Vercel',
+        {
+          VERCEL_GIT_PROVIDER: 'bitbucket',
+          VERCEL_GIT_REPO_OWNER: 'example',
+          VERCEL_GIT_REPO_SLUG: 'app',
+          VERCEL_GIT_COMMIT_SHA: DEPLOYED,
+        },
+        { repository: 'bitbucket.org/example/app', ref: DEPLOYED },
+      ],
+      [
+        'Railway',
+        { RAILWAY_GIT_REPO_OWNER: 'example', RAILWAY_GIT_REPO_NAME: 'app', RAILWAY_GIT_COMMIT_SHA: DEPLOYED },
+        { repository: 'github.com/example/app', ref: DEPLOYED },
+      ],
+      [
+        'GitHub Actions over GitLab CI',
+        {
+          GITHUB_SERVER_URL: 'https://github.com',
+          GITHUB_REPOSITORY: 'example/app',
+          CI_SERVER_HOST: 'gitlab.com',
+          CI_PROJECT_PATH: 'example/other',
+        },
+        { repository: 'github.com/example/app' },
+      ],
+      [
+        'nothing from a Vercel provider without a known host',
+        { VERCEL_GIT_PROVIDER: 'other', VERCEL_GIT_REPO_OWNER: 'example', VERCEL_GIT_REPO_SLUG: 'app' },
+        {},
+      ],
+      [
+        'nothing from a repository too long to store',
+        { VERCEL_GIT_PROVIDER: 'github', VERCEL_GIT_REPO_OWNER: 'example', VERCEL_GIT_REPO_SLUG: 'a'.repeat(400) },
+        {},
+      ],
+    ])('takes %s from the environment, before the checkout', async (_, variables, expected) => {
+      const { head } = checkout('app', 'https://github.com/example/checkout.git')
+      for (const [variable, value] of Object.entries(variables)) {
+        vi.stubEnv(variable, value)
+      }
+
+      await sendWelcome(createClient(), writeTemplate('app/emails/welcome.html', welcomeHtml('Hi')))
+
+      expect(uploadedSource()).toEqual({
+        repository: 'github.com/example/checkout',
+        path: 'emails/welcome.html',
+        ref: head,
+        ...expected,
+      })
+    })
+
+    it.each([
+      ['the path in GITHUB_WORKSPACE', 'GITHUB_WORKSPACE'],
+      ['the path in CI_PROJECT_DIR', 'CI_PROJECT_DIR'],
+    ])('sends %s without a checkout', async (_, variable) => {
+      vi.stubEnv(variable, directory)
+
+      await sendWelcome(createClient(), writeTemplate('emails/welcome.html', welcomeHtml('Hi')))
+
+      expect(uploadedSource()).toEqual({ path: 'emails/welcome.html' })
+    })
+
+    it('sends only the path from the working directory when nothing names the repository', async () => {
+      const file = writeTemplate('emails/welcome.html', welcomeHtml('Hi'))
+
+      await sendWelcome(createClient(), file)
+
+      expect(uploadedSource()).toEqual({ path: file })
+    })
+
+    it('lets each part of an explicit source win, and detects the others', async () => {
+      const { head } = checkout('app', 'https://github.com/example/app.git')
+      vi.stubEnv('GITHUB_SHA', DEPLOYED)
+      const posthog = createClient()
+      const file = posthog.emails.templateFile(writeTemplate('app/emails/welcome.html', welcomeHtml('Hi')))
+
+      await posthog.emails.uploadTemplate(file, { source: { path: 'templates/welcome.html', ref: head } })
+
+      expect(uploadedSource()).toEqual({
+        repository: 'github.com/example/app',
+        path: 'templates/welcome.html',
+        ref: head,
+      })
+    })
+
+    it.each([
+      [
+        'a .git directory whose files are unreadable',
+        (dotGit: string) => {
+          mkdirSync(join(dotGit, 'config'), { recursive: true })
+          mkdirSync(join(dotGit, 'HEAD'), { recursive: true })
+        },
+      ],
+      ['a .git file that points nowhere', (dotGit: string) => writeFileSync(dotGit, 'gitdir: ./missing\n')],
+      ['a .git file that is not a link', (dotGit: string) => writeFileSync(dotGit, 'not a link\n')],
+    ])('still sends from %s', async (_, makeDotGit) => {
+      mkdirSync(join(directory, 'app'))
+      makeDotGit(join(directory, 'app', '.git'))
+
+      const result = await sendWelcome(createClient(), writeTemplate('app/emails/welcome.html', welcomeHtml('Hi')))
+
+      expect(result.error).toBeNull()
+      expect(uploadedSource()).toEqual({ path: 'emails/welcome.html' })
     })
   })
 

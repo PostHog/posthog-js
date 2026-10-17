@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises'
-import { isAbsolute, relative, sep } from 'node:path'
+import { isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { TemplateFiles } from './emails'
+import { templateSourceOf } from './email-template-source.node'
 
 export const nodeTemplateFiles: TemplateFiles = {
   locate(file: URL | string): string {
@@ -16,12 +17,8 @@ export const nodeTemplateFiles: TemplateFiles = {
     return readFile(path, 'utf8')
   },
 
-  sourcePath(path: string): string {
-    const fromWorkingDirectory = relative(process.cwd(), path)
-    const insideWorkingDirectory = fromWorkingDirectory !== '' && !fromWorkingDirectory.startsWith('..')
-    return insideWorkingDirectory && !isAbsolute(fromWorkingDirectory)
-      ? fromWorkingDirectory.split(sep).join('/')
-      : path
+  source(path: string) {
+    return templateSourceOf(path)
   },
 }
 
