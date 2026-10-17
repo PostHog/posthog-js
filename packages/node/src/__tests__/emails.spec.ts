@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -454,6 +454,18 @@ describe('emails', () => {
         (root: string) => git(root, 'pack-refs', '--all'),
         'gitlab.example.com/group/sub/app',
       ],
+      [
+        'a quoted remote followed by a comment in the config',
+        'https://github.com/example/app.git',
+        (root: string) => {
+          const config = join(root, '.git', 'config')
+          writeFileSync(
+            config,
+            readFileSync(config, 'utf8').replace(/url = .*/, 'url = "https://github.com/example/app.git" # the app')
+          )
+        },
+        'github.com/example/app',
+      ],
     ])('reads a checkout with %s', async (_, remote, prepare, repository) => {
       const { root, head } = checkout('app', remote)
       prepare(root)
@@ -517,6 +529,11 @@ describe('emails', () => {
       [
         'nothing from a Vercel provider without a known host',
         { VERCEL_GIT_PROVIDER: 'other', VERCEL_GIT_REPO_OWNER: 'example', VERCEL_GIT_REPO_SLUG: 'app' },
+        {},
+      ],
+      [
+        'nothing from a Vercel provider named like an object property',
+        { VERCEL_GIT_PROVIDER: 'constructor', VERCEL_GIT_REPO_OWNER: 'example', VERCEL_GIT_REPO_SLUG: 'app' },
         {},
       ],
       [
@@ -584,6 +601,13 @@ describe('emails', () => {
       ],
       ['a .git file that points nowhere', (dotGit: string) => writeFileSync(dotGit, 'gitdir: ./missing\n')],
       ['a .git file that is not a link', (dotGit: string) => writeFileSync(dotGit, 'not a link\n')],
+      [
+        'a .git directory whose files are pipes nobody writes to',
+        (dotGit: string) => {
+          mkdirSync(dotGit)
+          execFileSync('mkfifo', [join(dotGit, 'config'), join(dotGit, 'HEAD')])
+        },
+      ],
     ])('still sends from %s', async (_, makeDotGit) => {
       mkdirSync(join(directory, 'app'))
       makeDotGit(join(directory, 'app', '.git'))
