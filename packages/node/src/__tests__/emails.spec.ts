@@ -313,6 +313,11 @@ describe('emails', () => {
         { subject: 'Welcome', preheader: 'Save > spend' },
       ],
       [
+        'a file of unclosed tags, in linear time',
+        '<title>Welcome</title><meta name=preheader content=Preview>' + '<title>'.repeat(120000),
+        { subject: 'Welcome', preheader: 'Preview' },
+      ],
+      [
         'character references in the subject',
         '<title>Caf&#233; &amp; &#x2014; bar</title>',
         { subject: 'Café & — bar', preheader: undefined },
