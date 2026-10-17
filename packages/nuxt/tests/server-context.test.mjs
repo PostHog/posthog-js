@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { createServer } from 'node:http'
 import ts from 'typescript'
 import { PostHog } from 'posthog-node'
-import { PostHogContextSpanProcessor } from 'posthog-node/otel'
+import { PostHogContextSpanProcessor, enrichCurrentSpan } from 'posthog-node/otel'
 import { context } from '@opentelemetry/api'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
@@ -32,6 +32,7 @@ const server = loadRuntime('server', { './server-client': clientState })
 assert.equal(server.getPostHogServerClient(), undefined)
 const { setupPostHogNitroPlugin } = loadRuntime('nitro-plugin', {
   'posthog-node': { PostHog: CapturingPostHog },
+  'posthog-node/otel': { enrichCurrentSpan },
   '@posthog/core/vendor/uuidv7': { uuidv7: () => 'anonymous-id' },
   './server-client': clientState,
 })
@@ -62,6 +63,31 @@ for (const requestContext of [undefined, false, true]) {
   await onError(new Error('background'))
   assert.equal(errors.at(-1).distinctId, 'anonymous-id')
   if (wrapper) {
+    const manager = new AsyncLocalStorageContextManager().enable()
+    context.setGlobalContextManager(manager)
+    const provider = new BasicTracerProvider({ spanProcessors: [new PostHogContextSpanProcessor(client)] })
+    try {
+      for (const explicit of [{}, { posthogDistinctId: 'explicit-person' }]) {
+        await client.withContext({ distinctId: 'application-person' }, () =>
+          provider.getTracer('incoming-context').startActiveSpan('incoming', { attributes: explicit }, async (span) => {
+            try {
+              await wrapper({ source: {}, headers: { 'x-posthog-session-id': 'request-session' } }, () => {
+                assert.equal(client.getContext().distinctId, 'application-person')
+              })
+              assert.equal(span.attributes.posthogDistinctId, explicit.posthogDistinctId ?? 'application-person')
+              assert.equal(span.attributes.sessionId, 'request-session')
+            } finally {
+              span.end()
+            }
+          })
+        )
+      }
+    } finally {
+      await provider.shutdown()
+      context.disable()
+      manager.disable()
+    }
+
     for (const headers of [undefined, {}, { 'x-posthog-distinct-id': ' ', 'x-posthog-session-id': '\t' }]) {
       const source = {}
       await wrapper({ source, headers }, async () => {
