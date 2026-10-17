@@ -1173,11 +1173,7 @@ export function initAdoptedStyleSheetObserver(
         // recorder realm's constructor. The cross-document sharing error we
         // want to contain is exactly that cross-realm case, so a name check
         // is what keeps iframe recordings protected too.
-        if (
-          !!e &&
-          typeof e === 'object' &&
-          (e as { name?: unknown }).name === 'NotAllowedError'
-        ) {
+        if (isNotAllowedError(e)) {
           return;
         }
         throw e;
@@ -1193,6 +1189,19 @@ export function initAdoptedStyleSheetObserver(
     },
   });
 
+  // Where adoptedStyleSheets is a mutable array, pages can change it in place
+  // without ever calling the setter above: Stencil (used by Ionic) does
+  // `adoptedStyleSheets.push(sheet)` for every component it styles. The array
+  // keeps its identity across assignments, so patching its mutators once
+  // covers the host for as long as we observe it.
+  const restoreMutators = patchAdoptedStyleSheetMutators(
+    originalPropertyDescriptor.get?.call(host) as CSSStyleSheet[] | undefined,
+    (sheets) => {
+      if (hostId !== null && hostId !== -1)
+        stylesheetManager.adoptStyleSheets(sheets, hostId);
+    },
+  );
+
   return callbackWrapper(() => {
     Object.defineProperty(host, 'adoptedStyleSheets', {
       configurable: originalPropertyDescriptor.configurable,
@@ -1200,7 +1209,73 @@ export function initAdoptedStyleSheetObserver(
       get: originalPropertyDescriptor.get,
       set: originalPropertyDescriptor.set,
     });
+    restoreMutators();
   });
+}
+
+const ADOPTED_STYLESHEET_MUTATORS = [
+  'push',
+  'unshift',
+  'splice',
+  'pop',
+  'shift',
+] as const;
+
+function patchAdoptedStyleSheetMutators(
+  sheets: CSSStyleSheet[] | undefined,
+  onChange: (sheets: CSSStyleSheet[]) => void,
+): () => void {
+  // older browsers hand out a frozen array that can only be replaced, which
+  // the setter already records
+  if (!sheets || Object.isFrozen(sheets))
+    return () => {
+      //
+    };
+  const patched: string[] = [];
+  for (const method of ADOPTED_STYLESHEET_MUTATORS) {
+    const original = sheets[method] as (...args: unknown[]) => unknown;
+    if (typeof original !== 'function') continue;
+    try {
+      Object.defineProperty(sheets, method, {
+        configurable: true,
+        writable: true,
+        enumerable: false,
+        value(this: CSSStyleSheet[], ...args: unknown[]) {
+          let result: unknown;
+          try {
+            result = original.apply(this, args);
+          } catch (e) {
+            // same containment as the setter: the browser rejects a sheet
+            // from another document without changing the array
+            if (isNotAllowedError(e)) return undefined;
+            throw e;
+          }
+          try {
+            onChange(this);
+          } catch (e) {
+            // for safety
+          }
+          return result;
+        },
+      });
+      patched.push(method);
+    } catch (e) {
+      // leave the array alone if it refuses own properties
+    }
+  }
+  return () => {
+    patched.forEach((method) => {
+      delete (sheets as unknown as Record<string, unknown>)[method];
+    });
+  };
+}
+
+function isNotAllowedError(e: unknown): boolean {
+  return (
+    !!e &&
+    typeof e === 'object' &&
+    (e as { name?: unknown }).name === 'NotAllowedError'
+  );
 }
 
 function initStyleDeclarationObserver(
