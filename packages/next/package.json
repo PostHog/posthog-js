@@ -43,6 +43,15 @@
             "react-server": "./dist/pages.js",
             "node": "./dist/pages.js",
             "default": "./dist/pages.client.js"
+        },
+        "./otel": {
+            "types": "./dist/otel.d.ts",
+            "edge-light": "./dist/otel.unsupported.js",
+            "edge": "./dist/otel.unsupported.js",
+            "worker": "./dist/otel.unsupported.js",
+            "browser": "./dist/otel.unsupported.js",
+            "node": "./dist/otel.js",
+            "default": "./dist/otel.unsupported.js"
         }
     },
     "main": "./dist/index.client.js",
@@ -74,6 +83,9 @@
         "server-only": "^0.0.1"
     },
     "devDependencies": {
+        "@opentelemetry/api": "^1.9.0",
+        "@opentelemetry/context-async-hooks": "^2.10.0",
+        "@opentelemetry/sdk-trace-base": "^2.10.0",
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@testing-library/jest-dom": "^6.6.3",
         "@testing-library/react": "^16.1.0",
@@ -91,10 +103,14 @@
         "@vercel/functions": ">=1.0.0",
         "next": ">=13.0.0",
         "react": ">=18.0.0",
-        "react-dom": ">=18.0.0"
+        "react-dom": ">=18.0.0",
+        "@opentelemetry/api": "^1.9.0"
     },
     "peerDependenciesMeta": {
         "@vercel/functions": {
+            "optional": true
+        },
+        "@opentelemetry/api": {
             "optional": true
         }
     },
