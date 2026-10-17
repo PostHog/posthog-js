@@ -31,8 +31,7 @@ const clientState = loadRuntime('server-client', {})
 const server = loadRuntime('server', { './server-client': clientState })
 assert.equal(server.getPostHogServerClient(), undefined)
 const { setupPostHogNitroPlugin } = loadRuntime('nitro-plugin', {
-  'posthog-node': { PostHog: CapturingPostHog },
-  'posthog-node/otel': { enrichCurrentSpan },
+  'posthog-node': { PostHog: CapturingPostHog, enrichCurrentSpan },
   '@posthog/core/vendor/uuidv7': { uuidv7: () => 'anonymous-id' },
   './server-client': clientState,
 })

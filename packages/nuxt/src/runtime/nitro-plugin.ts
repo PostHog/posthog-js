@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-node'
+import { PostHog, enrichCurrentSpan } from 'posthog-node'
 import { serverClient } from './server-client'
 import { uuidv7 } from '@posthog/core/vendor/uuidv7'
 import type { PostHogCommon, PostHogServerConfig } from '../module'
@@ -50,7 +50,6 @@ export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose, wr
   const requestContexts = new WeakMap<object, RequestIdentity>()
 
   if (requestContext) {
-    const spanContext = import('posthog-node/otel').catch(() => undefined)
     wrapRequest?.(async (request, handler) => {
       const existing = client.getContext()
       const identity = {
@@ -63,8 +62,7 @@ export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose, wr
         identity,
         async () => {
           try {
-            const tracing = await spanContext
-            tracing?.enrichCurrentSpan?.(client)
+            enrichCurrentSpan(client)
             return await handler()
           } finally {
             lifetime.abort()
