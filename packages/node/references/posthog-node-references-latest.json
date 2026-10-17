@@ -2109,6 +2109,119 @@
       "path": "../core/src/cookie.ts"
     },
     {
+      "id": "EmailError",
+      "name": "EmailError",
+      "properties": [
+        {
+          "description": "The API's error code, such as `template_not_found`, or one of the SDK's own: `missing_secret_key`, `client_disabled`, `network_error`, `invalid_template_key`, `template_file_unreadable`, `template_missing_subject`, `api_error` for an answer PostHog gave without a code, and `unexpected_error`.",
+          "type": "string",
+          "name": "code"
+        },
+        {
+          "description": "A link to the docs section that explains the fix.",
+          "type": "string",
+          "name": "docsUrl"
+        },
+        {
+          "description": "The request field the error is about, such as `template__key`.",
+          "type": "string",
+          "name": "field"
+        },
+        {
+          "type": "string",
+          "name": "message"
+        },
+        {
+          "description": "The HTTP status, when PostHog answered.",
+          "type": "number",
+          "name": "statusCode"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "Emails",
+      "name": "Emails",
+      "properties": [],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "EmailTemplateFile",
+      "name": "EmailTemplateFile",
+      "properties": [
+        {
+          "description": "The template's key in PostHog: the file name without `.html`, unless you gave one.",
+          "type": "string",
+          "name": "key"
+        },
+        {
+          "description": "The template's name in PostHog. Defaults to the subject.",
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "description": "Absolute path of the `.html` file.",
+          "type": "string",
+          "name": "path"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "EmailTemplateFileOptions",
+      "name": "EmailTemplateFileOptions",
+      "properties": [
+        {
+          "description": "The template's key in PostHog. Defaults to the file name without `.html`.",
+          "type": "string",
+          "name": "key"
+        },
+        {
+          "description": "The template's name in the PostHog template library. Defaults to the subject.",
+          "type": "string",
+          "name": "name"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "EmailTemplateSource",
+      "name": "EmailTemplateSource",
+      "properties": [
+        {
+          "description": "Path of the file in the repository. Defaults to the file's path relative to the working directory.",
+          "type": "string",
+          "name": "path"
+        },
+        {
+          "description": "Commit or branch the file is uploaded from.",
+          "type": "string",
+          "name": "ref"
+        },
+        {
+          "description": "Host and path of the repository, such as `github.com/example/app`.",
+          "type": "string",
+          "name": "repository"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "EmailWarning",
+      "name": "EmailWarning",
+      "properties": [
+        {
+          "type": "string",
+          "name": "code"
+        },
+        {
+          "type": "string",
+          "name": "message"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
       "id": "EndBranching",
       "name": "EndBranching",
       "properties": [
@@ -2668,6 +2781,11 @@
       "name": "IPostHog",
       "properties": [
         {
+          "description": "The `posthog.emails` API: send transactional email from a template, by its key or, in Node.js, from an HTML template file. Needs the `secretKey` client option.",
+          "type": "Emails",
+          "name": "emails"
+        },
+        {
           "description": "The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count, gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed periodically. Configure via the `metrics` client option.",
           "type": "Metrics",
           "name": "metrics"
@@ -2907,6 +3025,12 @@
       "path": "../core/src/types.ts"
     },
     {
+      "id": "NodeEmails",
+      "name": "NodeEmails",
+      "properties": [],
+      "path": "src/emails.ts"
+    },
+    {
       "id": "ObjectLike",
       "name": "ObjectLike",
       "properties": [],
@@ -2982,6 +3106,21 @@
         }
       ],
       "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "PostHogApiResponse",
+      "name": "PostHogApiResponse",
+      "properties": [
+        {
+          "type": "number",
+          "name": "status"
+        },
+        {
+          "type": "unknown",
+          "name": "body"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogCaptureOptions",
@@ -4186,6 +4325,40 @@
       "path": "../core/src/utils/index.ts"
     },
     {
+      "id": "SendEmailOptions",
+      "name": "SendEmailOptions",
+      "properties": [
+        {
+          "description": "Values for the template, read as `{{ variables.* }}`. The template can't read person properties, so pass everything it needs here.",
+          "type": "Record<string, unknown>",
+          "name": "data"
+        },
+        {
+          "description": "The distinct ID of the recipient's person, to attribute the send and its delivery events. It never loads person properties.",
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "description": "The key of a template uploaded to PostHog, such as `'welcome'`, or a template file from `posthog.emails.templateFile()`.",
+          "type": "string | EmailTemplateFile",
+          "name": "template"
+        },
+        {
+          "description": "The recipient's email address.",
+          "type": "string",
+          "name": "to"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "SendEmailResult",
+      "name": "SendEmailResult",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "{\n    data: {\n        id: string;\n        warnings: EmailWarning[];\n    };\n    error: null;\n} | {\n    data: null;\n    error: EmailError;\n}"
+    },
+    {
       "id": "SendFeatureFlagsOptions",
       "name": "SendFeatureFlagsOptions",
       "properties": [
@@ -4888,6 +5061,24 @@
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "UploadEmailTemplateOptions",
+      "name": "UploadEmailTemplateOptions",
+      "properties": [
+        {
+          "type": "EmailTemplateSource",
+          "name": "source"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "UploadEmailTemplateResult",
+      "name": "UploadEmailTemplateResult",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "{\n    data: {\n        id: string;\n        key: string;\n        result: 'created' | 'updated' | 'unchanged';\n        contentHash: string;\n    };\n    error: null;\n} | {\n    data: null;\n    error: EmailError;\n}"
     }
   ],
   "categories": [

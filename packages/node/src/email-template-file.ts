@@ -6,15 +6,17 @@ export interface TemplateFileContent {
 }
 
 const TITLE = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i
-const META_TAG = /<meta\b[^>]*>/gi
+const META_TAG = /<meta\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi
+const COMMENT = /<!--[\s\S]*?(?:-->|$)/g
 const ATTRIBUTE = /([^\s"'=<>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g
 const CHARACTER_REFERENCE = /&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|(amp|lt|gt|quot|apos|nbsp));/g
 const NAMED_CHARACTERS: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
 
 /** Reads the subject from `<title>` and the preheader from `<meta name="preheader">`. The HTML is the whole file. */
 export function parseTemplateFile(html: string): TemplateFileContent {
-  const preheader = preheaderOf(html)
-  return { subject: subjectOf(html), ...(preheader !== undefined && { preheader }), html }
+  const markup = html.replace(COMMENT, '')
+  const preheader = preheaderOf(markup)
+  return { subject: subjectOf(markup), ...(preheader !== undefined && { preheader }), html }
 }
 
 function subjectOf(html: string): string {
