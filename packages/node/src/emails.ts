@@ -69,13 +69,29 @@ export type SendEmailResult =
   | { data: { id: string; warnings: EmailWarning[] }; error: null }
   | { data: null; error: EmailError }
 
-/** Where a template file lives, shown on the template in PostHog. */
+/**
+ * Where a template file lives, shown on the template in PostHog. An upload fills each part on its own: from the part
+ * you pass, then from the variables of a CI or hosting platform, then from the nearest git checkout above the file.
+ * A part with no value is left out. The checkout is read as files, without running git, and credentials in a
+ * remote URL are never sent.
+ */
 export interface EmailTemplateSource {
-  /** Host and path of the repository, such as `github.com/example/app`. */
+  /**
+   * Host and path of the repository, such as `github.com/example/app`. Detected from `GITHUB_SERVER_URL` and
+   * `GITHUB_REPOSITORY` (GitHub Actions), `CI_SERVER_HOST` and `CI_PROJECT_PATH` (GitLab CI), `VERCEL_GIT_PROVIDER`,
+   * `VERCEL_GIT_REPO_OWNER` and `VERCEL_GIT_REPO_SLUG` (Vercel), `RAILWAY_GIT_REPO_OWNER` and `RAILWAY_GIT_REPO_NAME`
+   * (Railway, on `github.com`), then the checkout's `origin` remote.
+   */
   repository?: string
-  /** Path of the file in the repository. Defaults to the file's path relative to the working directory. */
+  /**
+   * Path of the file in the repository. Detected relative to the checkout's root, then to `GITHUB_WORKSPACE` or
+   * `CI_PROJECT_DIR` when the file is inside it, then to the working directory.
+   */
   path?: string
-  /** Commit or branch the file is uploaded from. */
+  /**
+   * Commit or branch the file is uploaded from. Detected from `GITHUB_SHA`, `CI_COMMIT_SHA`, `VERCEL_GIT_COMMIT_SHA`
+   * or `RAILWAY_GIT_COMMIT_SHA`, then the commit the checkout's `HEAD` points to.
+   */
   ref?: string
 }
 
@@ -173,7 +189,8 @@ export interface NodeEmails extends Emails {
 export interface TemplateFiles {
   locate(file: URL | string): string
   read(path: string): Promise<string>
-  sourcePath(path: string): string
+  /** Never rejects: a part it can't detect is left out. */
+  source(path: string): Promise<EmailTemplateSource>
 }
 
 /** @internal */
@@ -191,7 +208,6 @@ type Outcome<T> = { data: T; error: null } | { data: null; error: EmailError }
 interface LoadedTemplateFile {
   content: TemplateFileContent
   hash: string
-  sourcePath: string
 }
 
 type Recipient = Omit<SendEmailOptions, 'template'>
@@ -290,10 +306,7 @@ export class PostHogEmails implements NodeEmails {
         `The template file ${template.path} has no <title> to use as the subject.`
       )
     }
-    return {
-      data: { content, hash: await emailContentHash(content), sourcePath: this.files.sourcePath(template.path) },
-      error: null,
-    }
+    return { data: { content, hash: await emailContentHash(content) }, error: null }
   }
 
   private async post(reference: { key: string; hash?: string }, recipient: Recipient): Promise<SendEmailResult> {
@@ -313,13 +326,14 @@ export class PostHogEmails implements NodeEmails {
 
   private async upload(
     template: EmailTemplateFile,
-    { content, sourcePath }: LoadedTemplateFile,
-    { source, ifNotSuperseded = false }: { source?: EmailTemplateSource; ifNotSuperseded?: boolean }
+    { content }: LoadedTemplateFile,
+    { source = {}, ifNotSuperseded = false }: { source?: EmailTemplateSource; ifNotSuperseded?: boolean }
   ): Promise<UploadEmailTemplateResult> {
+    const detected = (await this.files?.source(template.path)) ?? {}
     const body = {
       name: template.name ?? content.subject,
       ...content,
-      source: { path: sourcePath, ...source },
+      source: { ...detected, ...withoutUndefinedParts(source) },
       if_not_superseded: ifNotSuperseded,
     }
     const response = await this.request('PUT', `${TEMPLATE_BY_KEY_PATH}${template.key}/`, body)
@@ -429,6 +443,11 @@ function warningsOf(warnings: unknown): EmailWarning[] {
       ? [{ code: warning.code, message: warning.detail }]
       : []
   )
+}
+
+/** @internal */
+export function withoutUndefinedParts(source: EmailTemplateSource): EmailTemplateSource {
+  return Object.fromEntries(Object.entries(source).filter(([, part]) => part !== undefined))
 }
 
 function isSuccess(status: number): boolean {

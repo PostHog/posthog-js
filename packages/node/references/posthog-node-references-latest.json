@@ -2189,17 +2189,17 @@
       "name": "EmailTemplateSource",
       "properties": [
         {
-          "description": "Path of the file in the repository. Defaults to the file's path relative to the working directory.",
+          "description": "Path of the file in the repository. Detected relative to the checkout's root, then to `GITHUB_WORKSPACE` or `CI_PROJECT_DIR` when the file is inside it, then to the working directory.",
           "type": "string",
           "name": "path"
         },
         {
-          "description": "Commit or branch the file is uploaded from.",
+          "description": "Commit or branch the file is uploaded from. Detected from `GITHUB_SHA`, `CI_COMMIT_SHA`, `VERCEL_GIT_COMMIT_SHA` or `RAILWAY_GIT_COMMIT_SHA`, then the commit the checkout's `HEAD` points to.",
           "type": "string",
           "name": "ref"
         },
         {
-          "description": "Host and path of the repository, such as `github.com/example/app`.",
+          "description": "Host and path of the repository, such as `github.com/example/app`. Detected from `GITHUB_SERVER_URL` and `GITHUB_REPOSITORY` (GitHub Actions), `CI_SERVER_HOST` and `CI_PROJECT_PATH` (GitLab CI), `VERCEL_GIT_PROVIDER`, `VERCEL_GIT_REPO_OWNER` and `VERCEL_GIT_REPO_SLUG` (Vercel), `RAILWAY_GIT_REPO_OWNER` and `RAILWAY_GIT_REPO_NAME` (Railway, on `github.com`), then the checkout's `origin` remote.",
           "type": "string",
           "name": "repository"
         }
