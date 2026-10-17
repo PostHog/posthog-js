@@ -46,11 +46,11 @@ function scanHead(html: string): { title?: string; preheader?: string } {
         break
       }
       next = tag.lastIndex
-      if (isTitle && title === undefined && titleCanClose) {
+      if (isTitle && titleCanClose) {
         TITLE_CLOSE.lastIndex = next
         const close = TITLE_CLOSE.exec(html)
         if (close) {
-          title = html.slice(next, close.index)
+          title ??= html.slice(next, close.index)
           next = TITLE_CLOSE.lastIndex
         } else {
           titleCanClose = false
