@@ -7,7 +7,11 @@ import { getConfiguredPostHogClient, resolvePostHogRequest, withRequestContext }
 export interface PostHogSpanContext {
     /** Add this processor to the application's existing Node.js tracer provider before it handles requests. */
     createContextSpanProcessor(): Promise<PostHogContextSpanProcessor>
-    /** Scope Node.js App Router work. Context ends when the callback settles, including on error. */
+    /**
+     * Scope Node.js App Router work. Context ends when the callback settles, including on error.
+     * Earlier server spans are enriched only through parent links observed by the processor;
+     * a sampler-dropped intermediate span breaks that chain. New recording child spans still receive context.
+     */
     withPostHogContext<T>(work: (posthog: IPostHog) => T | Promise<T>): Promise<T>
 }
 
