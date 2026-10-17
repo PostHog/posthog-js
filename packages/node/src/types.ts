@@ -16,6 +16,7 @@ import type {
 import { ContextData, ContextOptions } from './extensions/context/types'
 
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
+import type { Emails } from './emails'
 import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 export type IdentifyMessage = {
@@ -903,6 +904,12 @@ export interface IPostHog {
    * periodically. Configure via the `metrics` client option.
    */
   readonly metrics: Metrics
+
+  /**
+   * @description The `posthog.emails` API: send transactional email from a template, by its key or, in Node.js,
+   * from an HTML template file. Needs the `secretKey` client option.
+   */
+  readonly emails: Emails
 
   /**
    * @description Starts a span without making it active, for work that can't wrap a callback.
