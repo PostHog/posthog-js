@@ -1,7 +1,12 @@
 import { EventEmitter } from 'node:events'
-import { context, trace, ROOT_CONTEXT, type Attributes } from '@opentelemetry/api'
+import { context, trace, ROOT_CONTEXT, SpanKind, type Attributes } from '@opentelemetry/api'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
-import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+  SamplingDecision,
+} from '@opentelemetry/sdk-trace-base'
 import { PostHog } from '@/entrypoints/index.node'
 import { PostHogContextSpanProcessor, enrichCurrentSpan } from '@/entrypoints/otel'
 import { setupExpressRequestContext } from '@/extensions/express'
@@ -226,6 +231,136 @@ describe('OpenTelemetry request context', () => {
       sessionId: 'browser-session',
       posthogDistinctId: 'authenticated-user',
     })
+  })
+
+  it.each([
+    [{}, { sessionId: 'browser-session', posthogDistinctId: 'browser-user' }],
+    [{ sessionId: 'explicit-session' }, { sessionId: 'explicit-session', posthogDistinctId: 'browser-user' }],
+    [{ posthogDistinctId: false }, { sessionId: 'browser-session', posthogDistinctId: false }],
+  ])('enriches only the nearest verified server ancestor, preserving %j', async (attributes, expected) => {
+    const tracer = provider.getTracer('server-chain')
+    await tracer.startActiveSpan('outer-server', { kind: SpanKind.SERVER }, async (outer) => {
+      await tracer.startActiveSpan('server', { kind: SpanKind.SERVER, attributes }, async (server) => {
+        await tracer.startActiveSpan('express-layer', async (layer) => {
+          await tracer.startActiveSpan('active-middleware', async (active) => {
+            await client.withContext({ distinctId: 'browser-user', sessionId: 'browser-session' }, async () => {
+              enrichCurrentSpan(client)
+              tracer.startSpan('child').end()
+              client.enterContext({ distinctId: 'later-user', sessionId: 'later-session' })
+            })
+            active.end()
+          })
+          layer.end()
+        })
+        server.end()
+      })
+      outer.end()
+    })
+    await provider.forceFlush()
+    const spans = exporter.getFinishedSpans()
+    expect(spans.find((span) => span.name === 'server')?.attributes).toEqual(expected)
+    for (const name of ['outer-server', 'express-layer']) {
+      expect(spans.find((span) => span.name === name)?.attributes).toEqual({})
+    }
+    for (const name of ['active-middleware', 'child']) {
+      expect(spans.find((span) => span.name === name)?.attributes).toEqual({
+        sessionId: 'browser-session',
+        posthogDistinctId: 'browser-user',
+      })
+    }
+  })
+
+  it('does not walk to server ancestors on ordinary context entry', async () => {
+    const tracer = provider.getTracer('ordinary-scope')
+    await tracer.startActiveSpan('server', { kind: SpanKind.SERVER }, async (server) => {
+      await tracer.startActiveSpan('caller', async (caller) => {
+        client.withContext({ distinctId: 'job-user', sessionId: 'job-session' }, () => {
+          tracer.startSpan('job-child').end()
+        })
+        caller.end()
+      })
+      server.end()
+    })
+    expect(exporter.getFinishedSpans().find((span) => span.name === 'server')?.attributes).toEqual({})
+    expect(exporter.getFinishedSpans().find((span) => span.name === 'job-child')?.attributes).toEqual({
+      sessionId: 'job-session',
+      posthogDistinctId: 'job-user',
+    })
+  })
+
+  it('does not guess server ancestry across a sampler-dropped span', async () => {
+    await provider.shutdown()
+    exporter = new InMemorySpanExporter()
+    processor = new PostHogContextSpanProcessor(client)
+    provider = new BasicTracerProvider({
+      sampler: {
+        shouldSample: (_parent, _traceId, name) => ({
+          decision: name === 'dropped' ? SamplingDecision.NOT_RECORD : SamplingDecision.RECORD_AND_SAMPLED,
+        }),
+        toString: () => 'drop-intermediate',
+      },
+      spanProcessors: [processor, new SimpleSpanProcessor(exporter)],
+    })
+    const tracer = provider.getTracer('sampled-gap')
+    await tracer.startActiveSpan('server', { kind: SpanKind.SERVER }, async (server) => {
+      await tracer.startActiveSpan('dropped', async (dropped) => {
+        expect(dropped.isRecording()).toBe(false)
+        await tracer.startActiveSpan('inner', async (inner) => {
+          client.withContext({ sessionId: 'browser-session' }, () => {
+            enrichCurrentSpan(client)
+            tracer.startSpan('child').end()
+          })
+          inner.end()
+        })
+        dropped.end()
+      })
+      server.end()
+    })
+    const spans = exporter.getFinishedSpans()
+    expect(spans.find((span) => span.name === 'server')?.attributes).toEqual({})
+    expect(spans.some((span) => span.name === 'dropped')).toBe(false)
+    for (const name of ['inner', 'child']) {
+      expect(spans.find((span) => span.name === name)?.attributes).toEqual({ sessionId: 'browser-session' })
+    }
+  })
+
+  it('keeps concurrent server ancestor chains in separate traces', async () => {
+    const tracer = provider.getTracer('concurrent-server-chains')
+    const releases: (() => void)[] = []
+    await Promise.all(
+      ['first', 'second'].map((id) =>
+        context.with(ROOT_CONTEXT, () =>
+          tracer.startActiveSpan(id, { kind: SpanKind.SERVER }, async (server) => {
+            await tracer.startActiveSpan(`middleware-${id}`, async (active) => {
+              await client.withContext({ sessionId: id }, async () => {
+                const ready = new Promise<void>((resolve) => releases.push(resolve))
+                if (releases.length === 2) releases.reverse().forEach((release) => release())
+                await ready
+                enrichCurrentSpan(client)
+              })
+              active.end()
+            })
+            server.end()
+          })
+        )
+      )
+    )
+    const servers = exporter.getFinishedSpans().filter((span) => span.kind === SpanKind.SERVER)
+    expect(new Set(servers.map((span) => span.spanContext().traceId)).size).toBe(2)
+    for (const span of servers) expect(span.attributes).toEqual({ sessionId: span.name })
+  })
+
+  it('does not enrich recorded server ancestors after shutdown', async () => {
+    const tracer = provider.getTracer('stopped-chain')
+    await tracer.startActiveSpan('server', { kind: SpanKind.SERVER }, async (server) => {
+      await tracer.startActiveSpan('middleware', async (active) => {
+        await processor.shutdown()
+        client.withContext({ sessionId: 'ignored' }, () => enrichCurrentSpan(client))
+        active.end()
+      })
+      server.end()
+    })
+    expect(exporter.getFinishedSpans().map((span) => span.attributes)).toEqual([{}, {}])
   })
 
   it('does not read context on export or enrich spans after shutdown', async () => {

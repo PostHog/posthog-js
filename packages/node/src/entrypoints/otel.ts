@@ -1,4 +1,4 @@
-import { trace, type Attributes, type Span } from '@opentelemetry/api'
+import { trace, SpanKind, type Attributes, type Context, type Span } from '@opentelemetry/api'
 import type { PostHogBackendClient } from '../client'
 import { addContextListener, notifyContextListeners } from '../extensions/context/listeners'
 
@@ -15,10 +15,15 @@ export function enrichCurrentSpan(posthog: PostHogBackendClient): void {
 export class PostHogContextSpanProcessor {
   private active = true
   private readonly snapshots = new WeakSet<Span>()
+  private readonly parents = new WeakMap<Span, Span>()
   private readonly unsubscribe: () => void
 
   constructor(private readonly posthog: PostHogBackendClient) {
-    this.unsubscribe = addContextListener(posthog, (requestEntry) => this.enrich(trace.getActiveSpan(), requestEntry))
+    this.unsubscribe = addContextListener(posthog, (requestEntry) => {
+      const span = trace.getActiveSpan()
+      this.enrich(span, requestEntry)
+      if (requestEntry) this.enrichNearestServerSpan(span)
+    })
   }
 
   private enrich(span: Span | undefined, requestEntry = false): void {
@@ -37,7 +42,21 @@ export class PostHogContextSpanProcessor {
     } catch {}
   }
 
-  onStart(span: Span): void {
+  private enrichNearestServerSpan(current: Span | undefined): void {
+    let span = current
+    while (span) {
+      if ('kind' in span && span.kind === SpanKind.SERVER && span.isRecording()) {
+        if (span !== current) this.enrich(span, true)
+        return
+      }
+      span = this.parents.get(span)
+    }
+  }
+
+  onStart(span: Span, parentContext?: Context): void {
+    if (!this.active) return
+    const parent = parentContext && trace.getSpan(parentContext)
+    if (parent && parent !== span) this.parents.set(span, parent)
     this.enrich(span)
   }
 
