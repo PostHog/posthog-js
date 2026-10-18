@@ -43,7 +43,7 @@ for (const requestContext of [undefined, false, true]) {
   setupPostHogNitroPlugin({
     useRuntimeConfig: () => ({
       public: { posthog: { publicKey: 'phc_test', host: 'https://example.com' } },
-      posthogServerConfig: { disabled: true, enableExceptionAutocapture: true, requestContext },
+      posthogServerConfig: { before_send: () => null, enableExceptionAutocapture: true, requestContext },
     }),
     wrapRequest: (handler) => {
       wrapper = handler
@@ -160,7 +160,7 @@ console.log(
 for (const version of [2, 3]) {
   const config = {
     public: { posthog: { publicKey: 'phc_test', host: 'https://example.com' } },
-    posthogServerConfig: { disabled: true, enableExceptionAutocapture: true, requestContext: true },
+    posthogServerConfig: { before_send: () => null, enableExceptionAutocapture: true, requestContext: true },
   }
   const hooks = {}
   const h3 = createRequire(import.meta.resolve(version === 2 ? 'nitropack/runtime' : 'nitro'))('h3')
