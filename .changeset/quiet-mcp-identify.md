@@ -2,4 +2,4 @@
 '@posthog/mcp': minor
 ---
 
-Stop sending standalone `$identify` events. The `identify` callback still sets `distinct_id` and `$set` on every event.
+Stop sending standalone `$identify` events, so insights, funnels, or cohorts built on MCP `$identify` stop receiving new data. The `identify` callback still sets `distinct_id`, `$set` and `$groups` on every event.
