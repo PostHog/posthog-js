@@ -218,10 +218,10 @@ importers:
         version: 3.0.18
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.251
-        version: 0.3.251(@anthropic-ai/sdk@0.128.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.1.13))(zod@4.1.13)
+        version: 0.3.251(@anthropic-ai/sdk@0.131.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.1.13))(zod@4.1.13)
       '@anthropic-ai/sdk':
-        specifier: '>=0.112.3 <0.129.0'
-        version: 0.128.0(zod@4.1.13)
+        specifier: '>=0.112.3 <0.135.0'
+        version: 0.131.0(zod@4.1.13)
       '@babel/preset-env':
         specifier: 'catalog:'
         version: 7.28.5(@babel/core@7.28.5)
@@ -795,6 +795,12 @@ importers:
       '@edge-runtime/vm':
         specifier: ^5.0.0
         version: 5.0.0
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.0
+      '@opentelemetry/context-async-hooks':
+        specifier: ^2.2.0
+        version: 2.10.0(@opentelemetry/api@1.9.0)
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
@@ -1882,8 +1888,8 @@ packages:
       '@modelcontextprotocol/sdk': ^1.29.0
       zod: ^4.0.0
 
-  '@anthropic-ai/sdk@0.128.0':
-    resolution: {integrity: sha512-tl5cBFZC1jVFrTuQyvQObA4WmuNgcYVeXfriqOumgtLAHUm4gPUj18YnszBW60v0PrjDB8nBDOC6wd9CmHQFlA==}
+  '@anthropic-ai/sdk@0.131.0':
+    resolution: {integrity: sha512-9+PepoU7qVMmM70jSahdnfcMHAvAnzhMOLv2W9WjRLO+OG/MAiBETkwKZqv7KIJ1Cj5h8eZ019bHzZaq+Mbepw==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -18963,9 +18969,9 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.251':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.251(@anthropic-ai/sdk@0.128.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.1.13))(zod@4.1.13)':
+  '@anthropic-ai/claude-agent-sdk@0.3.251(@anthropic-ai/sdk@0.131.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.1.13))(zod@4.1.13)':
     dependencies:
-      '@anthropic-ai/sdk': 0.128.0(zod@4.1.13)
+      '@anthropic-ai/sdk': 0.131.0(zod@4.1.13)
       '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.1.13)
       zod: 4.1.13
     optionalDependencies:
@@ -18978,7 +18984,7 @@ snapshots:
       '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.251
       '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.251
 
-  '@anthropic-ai/sdk@0.128.0(zod@4.1.13)':
+  '@anthropic-ai/sdk@0.131.0(zod@4.1.13)':
     dependencies:
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.1.1

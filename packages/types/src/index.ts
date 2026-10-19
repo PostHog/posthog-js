@@ -136,6 +136,7 @@ export type {
     BeforeSendMetricFn,
     Metrics,
     OtlpNumberDataPoint,
+    OtlpExemplar,
     OtlpHistogramDataPoint,
     OtlpMetric,
     OtlpMetricsPayload,

@@ -1,5 +1,21 @@
 # posthog-react-native
 
+## 4.81.2
+
+### Patch Changes
+
+- [#5271](https://github.com/PostHog/posthog-js/pull/5271) [`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27) Thanks [@posthog](https://github.com/apps/posthog)! - Report fatal JS crashes the JS error handler did not capture, such as React render errors on iOS, through native crash capture instead of dropping them (requires updating both `posthog-react-native` and `@posthog/react-native-plugin`). Apps with `errorTracking.autocapture.nativeCrashes` on and `uncaughtExceptions` off now get every fatal JS crash reported this way.
+  (2026-10-14)
+- Updated dependencies [[`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27)]:
+  - @posthog/react-native-plugin@2.12.6
+
+## 4.81.1
+
+### Patch Changes
+
+- [#5290](https://github.com/PostHog/posthog-js/pull/5290) [`f3ca9c4`](https://github.com/PostHog/posthog-js/commit/f3ca9c48e7610cf1bdd4124fcf02e443a679be17) Thanks [@tsayin4](https://github.com/tsayin4)! - Fix fatal crashes being reported without a stack trace since 4.77.0 when a stack frame has no chunk ID.
+  (2026-10-13)
+
 ## 4.81.0
 
 ### Minor Changes

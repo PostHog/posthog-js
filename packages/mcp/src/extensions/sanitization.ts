@@ -32,8 +32,8 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
     result.parameters = sanitizeParameters(result.parameters)
   }
 
-  // Every event type, not just `resources/read`: `$identify` and the `$exception`
-  // sibling carry the same name, and a tool or prompt name is free text an
+  // Every event type, not just `resources/read`: the `$exception` sibling
+  // carries the same name, and a tool or prompt name is free text an
   // application can spell as a URL too.
   if (result.resourceName != null) {
     result.resourceName = sanitizeCapturedValue(result.resourceName) as string

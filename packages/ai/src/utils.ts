@@ -376,8 +376,11 @@ export const mergeSystemPrompt = (params: MessageCreateParams & MonitoringParams
   return params.messages
 }
 
+export const isPrivacyModeEnabled = (client: PostHog, privacyMode: boolean): boolean =>
+  Boolean((client as any).privacy_mode || privacyMode)
+
 export const withPrivacyMode = (client: PostHog, privacyMode: boolean, input: any): any => {
-  return (client as any).privacy_mode || privacyMode ? null : input
+  return isPrivacyModeEnabled(client, privacyMode) ? null : input
 }
 
 function toSafeString(input: unknown): string {

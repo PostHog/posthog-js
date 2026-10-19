@@ -138,6 +138,8 @@ jobs:
         environment: 'NPM Release' # This will require an approval from a maintainer, they are notified in Slack above
         permissions:
             contents: read
+            actions: read
+            pull-requests: read
         outputs:
             commit-hash: ${{ steps.commit-version-bump.outputs.commit-hash }}
             # posthog-js SDK version after `pnpm bump`. Downstream jobs use this
@@ -146,9 +148,14 @@ jobs:
             version: ${{ steps.get-version.outputs.version }}
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
+
+            - name: Block approval by the authors of the released PRs
+              uses: PostHog/.github/.github/actions/release-approval-guard@68f2906c222a22652292c6120028c196db916c3f # main
+              with:
+                  environment: 'NPM Release'
 
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
@@ -289,7 +296,7 @@ jobs:
         if: always() && needs.version-bump.result == 'failure' && needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
 
@@ -373,7 +380,7 @@ jobs:
         # the separately gated posthog-js job below.
         steps: &publish-package-steps
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
 
@@ -563,7 +570,7 @@ jobs:
         if: always() && needs.version-bump.outputs.commit-hash != ''
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
 
@@ -732,7 +739,7 @@ jobs:
                       path: packages/rollup-plugin
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
 
@@ -863,7 +870,7 @@ jobs:
             contents: read
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
 
@@ -988,7 +995,7 @@ jobs:
             TOOLBAR_PUBLIC_PATH: https://${{ matrix.region.host }}/static/${{ needs.version-bump.outputs.version }}/
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
 
@@ -1202,7 +1209,7 @@ jobs:
                     - { name: eu, bucket: eu-assets.i.posthog.com, aws_region: eu-central-1 }
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
 
@@ -1366,7 +1373,7 @@ jobs:
                     - { name: eu, bucket: eu-assets.i.posthog.com, aws_region: eu-central-1 }
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
 
@@ -1512,7 +1519,7 @@ jobs:
             needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
 
@@ -1545,7 +1552,7 @@ jobs:
              inputs.force_overwrite == true)
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
               with:
                   egress-policy: audit
 

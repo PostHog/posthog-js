@@ -1,5 +1,12 @@
 # @posthog/nextjs-config
 
+## 1.11.3
+
+### Patch Changes
+
+- [#5282](https://github.com/PostHog/posthog-js/pull/5282) [`9b7ef84`](https://github.com/PostHog/posthog-js/commit/9b7ef8478b7380dfa41c22cbeae2552caf88bdeb) Thanks [@marandaneto](https://github.com/marandaneto)! - Use the package’s own PostHog CLI to prevent sourcemap upload failures when an older CLI is installed elsewhere in a monorepo.
+  (2026-10-13)
+
 ## 1.11.2
 
 ### Patch Changes

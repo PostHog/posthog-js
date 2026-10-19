@@ -7,6 +7,8 @@ export const routes = [
     '/capture_ai',
     '/identify',
     '/alias',
+    '/group_identify',
+    '/capture_exception',
     '/flush',
     '/get_feature_flag',
     '/reload_feature_flags',
@@ -216,6 +218,30 @@ export class Binding {
                 result = this.client.alias(
                     rename(args, { distinct_id: 'distinctId', alias: 'alias', disable_geoip: 'disableGeoip' }, route)
                 )
+            } else if (route === '/group_identify') {
+                result = this.client.groupIdentify(
+                    rename(
+                        args,
+                        {
+                            group_type: 'groupType',
+                            group_key: 'groupKey',
+                            properties: 'properties',
+                            distinct_id: 'distinctId',
+                            disable_geoip: 'disableGeoip',
+                        },
+                        route
+                    )
+                )
+            } else if (route === '/capture_exception') {
+                checkKeys(args, ['error', 'distinct_id', 'properties'], route)
+                if (!object(args.error)) blocked('exception-fixture', 'Expected a native exception descriptor')
+                checkKeys(args.error, ['type', 'message'], `${route}/error`)
+                if (args.error.type !== 'TypeError' || typeof args.error.message !== 'string')
+                    blocked('exception-fixture', 'Native fixture requires TypeError and a string message')
+                const parameters = [new TypeError(args.error.message)]
+                if (own(args, 'distinct_id') || own(args, 'properties')) parameters.push(args.distinct_id)
+                if (own(args, 'properties')) parameters.push(args.properties)
+                result = this.client.captureException(...parameters)
             } else if (route === '/flush') {
                 checkKeys(args, [], route)
                 result = await this.client.flush()
@@ -245,6 +271,8 @@ export class Binding {
                     route === '/capture' ||
                         route === '/identify' ||
                         route === '/alias' ||
+                        route === '/group_identify' ||
+                        route === '/capture_exception' ||
                         route === '/flush' ||
                         route === '/reload_feature_flags'
                 ),
