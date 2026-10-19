@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/5318": {
+    "key": "PostHog/posthog-js/issue/5318",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5318",
+    "url": "https://github.com/PostHog/posthog-js/issues/5318",
+    "conclusion": "Confirmed browser SDK bug: final web-vitals buffered at page hide can be lost because their delayed timer cannot run after unload.",
+    "labels": [
+      "feature/web-analytics",
+      "javascript",
+      "web",
+      "team/client-libraries",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-19T01:32:53.143Z"
+  },
   "PostHog/posthog-js/issue/5311": {
     "key": "PostHog/posthog-js/issue/5311",
     "repo": "PostHog/posthog-js",
@@ -2922,20 +2938,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-28T09:32:47.688Z"
-  },
-  "PostHog/posthog-js/issue/3130": {
-    "key": "PostHog/posthog-js/issue/3130",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3130",
-    "url": "https://github.com/PostHog/posthog-js/issues/3130",
-    "conclusion": "Valid feature request, but part of the requested API already exists and same-instance persistence switching should already preserve the current session in this codebase.",
-    "labels": [
-      "enhancement",
-      "feature",
-      "feature/web-analytics",
-      "web"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-28T09:32:06.821Z"
   }
 }
