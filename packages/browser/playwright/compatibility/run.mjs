@@ -6,7 +6,15 @@ import { normalize, differences, decodeReplay } from './normalize.mjs'
 import { parseOptions, selection } from './options.mjs'
 import { assertLoaderProof } from './loader-proof.mjs'
 import { interactionScenarios, exerciseInteractions } from './interaction-cases.mjs'
+import { replayLifecycleScenarios, exerciseReplayLifecycle } from './replay-cases.mjs'
 import { compatibilityServer } from './server.mjs'
+import {
+    legacyRecordingConfig,
+    expectedReplayStyles,
+    assertWebVitalsDelivery,
+    assertCssReconstruction,
+    assertPersistedConfigProof,
+} from './product-cases.mjs'
 import { createCompatibilityContext } from './network.mjs'
 import { directory as lab, repository, verifyInputs, digest, coreSource } from './prepare.mjs'
 import { MATRIX, buildGoldens, compareGoldens, updateGoldens } from './golden.mjs'
@@ -109,12 +117,14 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             unexpectedNetwork.push(request.url())
     })
     const interactionCase = interactionScenarios.includes(scenario)
-    if (interactionCase) {
+    const replayLifecycleCase = replayLifecycleScenarios.includes(scenario)
+    const controlledClock = interactionCase || replayLifecycleCase
+    if (controlledClock) {
         await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
         await page.clock.pauseAt(new Date('2024-01-01T00:00:01Z'))
     } else await page.clock.setFixedTime(new Date('2024-01-01T00:00:00Z'))
     const waitFor = (fn, argument) =>
-        interactionCase
+        controlledClock
             ? expect.poll(() => page.evaluate(fn, argument)).toBeTruthy()
             : page.waitForFunction(fn, argument)
     const remote = async (path, body) => {
@@ -139,6 +149,17 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
         replay = {}
     const loading = {}
     try {
+        if (scenario === 'replay-persisted-config')
+            await page.addInitScript(
+                ({ origin, config }) => {
+                    if (location.origin === origin && location.pathname === '/')
+                        localStorage.setItem(
+                            'ph_phc_COMPAT_posthog',
+                            JSON.stringify({ $session_recording_remote_config: config })
+                        )
+                },
+                { origin: server.origin, config: legacyRecordingConfig }
+            )
         await page.goto(server.origin, { waitUntil: 'domcontentloaded' })
         if (mode !== 'snippet') await waitFor(() => window.__compat?.installed)
         await page.evaluate(
@@ -158,8 +179,33 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
         await page.evaluate(() => window.__compat.probe('pending'))
         assert(!(await remote('/__compat/barriers')).config, 'Config gate released too early')
         assert(!(await remote('/__compat/barriers')).flags, 'Flags gate released too early')
+        if (scenario === 'replay-persisted-config') {
+            await release('extensions')
+            await expect
+                .poll(async () => (await received()).requests.some((request) => /recorder\.js$/.test(request.path)))
+                .toBe(true)
+            await waitFor(
+                () =>
+                    typeof window.__PosthogExtensions__?.initSessionRecording === 'function' &&
+                    window.__compat.ph.sessionRecording.status !== 'lazy_loading'
+            )
+            loading.startedBeforeConfig = await page.evaluate(() => window.__compat.ph.sessionRecordingStarted())
+            await page.evaluate(() => window.__compat.call('capture', ['compat-replay-cached-config']))
+            loading.retainedLegacyConfig = await page.evaluate(
+                (config) =>
+                    JSON.stringify(window.__compat.call('get_property', ['$session_recording_remote_config'])) ===
+                    JSON.stringify(config),
+                legacyRecordingConfig
+            )
+            assert(!(await remote('/__compat/barriers')).config, 'Live config released before cached-config proof')
+            assert(
+                (await server.inspect()).blockedRequests.some((request) => request.barrier === 'config'),
+                'No live config request was held'
+            )
+            loading.configHeld = true
+        }
         await release('config', 'flags')
-        if (interactionCase) {
+        if (controlledClock) {
             await expect
                 .poll(async () =>
                     (await received()).requests.some((request) => /\/config(?:\.js)?$/.test(request.path))
@@ -188,7 +234,27 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 window.__compat.call('capture', ['compat-during-extension-delay'])
             })
         }
+        if (scenario === 'surveys-auto') {
+            // Resolve public API probes before automatic rendering consumes the same cache.
+            await release('surveys')
+            await waitFor(() => window.__compat.surveyNotifications >= 3)
+            assert(!(await remote('/__compat/barriers')).extensions, 'Survey renderer released before definitions')
+        }
+        const autoSurveyFlags =
+            scenario === 'surveys-auto' ? await page.evaluate(() => window.__compat.flagNotifications) : undefined
         await release('extensions', 'surveys')
+        if (scenario === 'surveys-auto') {
+            await expect(page.locator('.PostHogSurvey-compat-survey .survey-question')).toHaveText(
+                'How was your experience?'
+            )
+            await page.waitForFunction((count) => window.__compat.flagNotifications > count, autoSurveyFlags)
+        }
+        if (scenario === 'web-vitals') {
+            await expect
+                .poll(async () => (await received()).events.some((event) => event.event === '$web_vitals'))
+                .toBe(true)
+            assertWebVitalsDelivery(await received())
+        }
         const logsSupported = scenario === 'logs' && (await page.evaluate(() => window.__compat.checkLogSupport()))
         if (logsSupported) {
             await page.waitForFunction(() => typeof window.__PosthogExtensions__?.logs?.initializeLogs === 'function')
@@ -203,7 +269,11 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 )
                 .toBe(true)
         }
-        if (scenario === 'replay') await page.waitForFunction(() => window.__compat.ph.sessionRecordingStarted())
+        if (scenario.startsWith('replay')) await waitFor(() => window.__compat.ph.sessionRecordingStarted())
+        if (scenario === 'replay-persisted-config') {
+            loading.startedAfterConfig = true
+            assertPersistedConfigProof(loading)
+        }
         if (scenario === 'extension-failure') {
             await expect
                 .poll(async () =>
@@ -263,16 +333,18 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 .poll(async () => (await received()).events.filter((e) => e.event === '$autocapture').length)
                 .toBe(1)
         }
-        if (scenario === 'surveys') {
+        if (['surveys', 'surveys-auto'].includes(scenario)) {
             let notifications = await page.evaluate(() => window.__compat.flagNotifications)
-            await page.evaluate(() => {
-                window.__compat.phase = 'survey-shown'
-                window.__compat.call('displaySurvey', ['compat-survey'])
-            })
+            if (scenario === 'surveys')
+                await page.evaluate(() => {
+                    window.__compat.phase = 'survey-shown'
+                    window.__compat.call('displaySurvey', ['compat-survey'])
+                })
             const survey = page.locator('.PostHogSurvey-compat-survey')
             await expect(survey.locator('.survey-question')).toHaveText('How was your experience?')
             ui.before = await survey.innerText()
-            await page.waitForFunction((count) => window.__compat.flagNotifications > count, notifications)
+            if (scenario === 'surveys')
+                await page.waitForFunction((count) => window.__compat.flagNotifications > count, notifications)
             notifications = await page.evaluate(() => window.__compat.flagNotifications)
             await page.evaluate(() => {
                 window.__compat.phase = 'survey-submitted'
@@ -299,7 +371,12 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 .toBe(true)
             await expect.poll(async () => JSON.stringify((await received()).logs).includes('compat-console')).toBe(true)
         }
-        if (scenario === 'replay') {
+        if (['replay', 'replay-css', 'replay-persisted-config'].includes(scenario)) {
+            if (scenario === 'replay-css')
+                replay.originalStyles = await page.evaluate((keys) => {
+                    const style = getComputedStyle(document.querySelector('#css-probe'))
+                    return Object.fromEntries(keys.map((key) => [key, style[key]]))
+                }, Object.keys(expectedReplayStyles))
             await page.evaluate(() => {
                 document.querySelector('#change').textContent = 'Updated'
                 document.querySelector('#masked').value = 'changed-secret-password'
@@ -342,20 +419,39 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                     )
                 )
                 .toBe(true)
-            replay = await player.evaluate(() => ({
-                fullSnapshotRebuilt: !!document
-                    .querySelector('.replayer-wrapper iframe')
-                    ?.contentDocument?.querySelector('#change'),
-                input: document.querySelector('.replayer-wrapper iframe')?.contentDocument?.querySelector('#masked')
-                    ?.value,
-                text: document.querySelector('.replayer-wrapper iframe')?.contentDocument?.querySelector('#change')
-                    ?.textContent,
-            }))
+            replay = {
+                ...replay,
+                ...(await player.evaluate(() => ({
+                    fullSnapshotRebuilt: !!document
+                        .querySelector('.replayer-wrapper iframe')
+                        ?.contentDocument?.querySelector('#change'),
+                    input: document.querySelector('.replayer-wrapper iframe')?.contentDocument?.querySelector('#masked')
+                        ?.value,
+                    text: document.querySelector('.replayer-wrapper iframe')?.contentDocument?.querySelector('#change')
+                        ?.textContent,
+                }))),
+            }
+            if (scenario === 'replay-css') {
+                replay.rebuiltStyles = await player.evaluate((keys) => {
+                    const document = window.document.querySelector('.replayer-wrapper iframe').contentDocument
+                    const style = document.defaultView.getComputedStyle(document.querySelector('#css-probe'))
+                    return Object.fromEntries(keys.map((key) => [key, style[key]]))
+                }, Object.keys(expectedReplayStyles))
+                assertCssReconstruction(replay)
+            }
             await player.close()
         }
         if (interactionCase)
             ui = await exerciseInteractions({ scenario, page, received, expect, origin: server.origin })
         await waitFor(() => window.__compat.promises.every((promise) => promise.state !== 'pending'))
+        if (replayLifecycleCase)
+            ({ replay, api } = await exerciseReplayLifecycle({
+                scenario,
+                page,
+                received,
+                expect,
+                origin: server.origin,
+            }))
         if (scenario === 'unload') {
             await page.evaluate(() => {
                 window.__compat.phase = 'unload'
@@ -363,7 +459,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             })
             api = await page.evaluate(() => window.__compat.finish())
             await page.goto(server.origin + '/after')
-        } else api = await page.evaluate(() => window.__compat.finish())
+        } else if (!api) api = await page.evaluate(() => window.__compat.finish())
         await expect
             .poll(
                 async () =>
@@ -379,6 +475,16 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             )
             .toBe(1)
         const network = await received()
+        if (scenario === 'web-vitals') assertWebVitalsDelivery(network)
+        if (['surveys', 'surveys-auto'].includes(scenario)) {
+            const sent = network.events.filter((event) => event.event === 'survey sent')
+            assert(sent.length === 1, 'Missing or duplicate survey submission')
+            assert(sent[0].properties.$survey_id === 'compat-survey', 'Incorrect submitted survey ID')
+            assert(
+                sent[0].properties['$survey_response_question-1'] === 'Compatibility feedback',
+                'Incorrect submitted survey answer'
+            )
+        }
         assert(!network.events.some((e) => e.event === 'compat-must-not-deliver'), 'Opted-out event reached the server')
         assert(unexpectedNetwork.length === 0, `Unexpected network: ${unexpectedNetwork}`)
         assert(pageErrors.length === 0, `Page errors: ${JSON.stringify(pageErrors)}`)

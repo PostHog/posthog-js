@@ -108,12 +108,32 @@ for (const cell of logReport.results) {
         )
     }
 }
+writeFileSync(join(dist, 'web-vitals.js'), '/* Deliberately empty metric extension. */\n')
+manifest.inputIntegrity = inputInventory(manifest)
+run('web-vitals-canary', 'update', { scenarios: 'web-vitals' })
+const vitalsReport = JSON.parse(readFileSync(join(folder, 'web-vitals-canary/report.json')))
+assert.equal(vitalsReport.completedRuns, 4)
+assert.equal(vitalsReport.passed, false)
+for (const cell of vitalsReport.results) {
+    assert.equal(cell.status, 'failed')
+    for (const run of cell.runs) {
+        assert.equal(run.status, 'failed')
+        const failure = JSON.parse(readFileSync(join(run.folder, 'failure.json')))
+        assert(
+            failure.state.network.requests.some(
+                (request) => request.path === '/static/web-vitals.js' && request.status === 200
+            )
+        )
+        assert(!failure.state.network.events.some((event) => event.event === '$web_vitals'))
+    }
+}
 const evidence = {
     passed: true,
     folder,
     integrityRejectedChangedBytes: true,
     browserEgressDenied: true,
     missingCurrentCaptureLogRejected: true,
+    missingWebVitalsDeliveryRejected: vitalsReport.results.map((cell) => cell.coreFamily),
     nativeThrowDetected: report.results.map((cell) => cell.coreFamily),
     failedRuns: report.completedRuns,
     expectedSnapshotsUnchanged: true,
