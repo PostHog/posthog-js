@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.14.2
+
+### Patch Changes
+
+- [#5155](https://github.com/PostHog/posthog-js/pull/5155) [`a9d29f1`](https://github.com/PostHog/posthog-js/commit/a9d29f1d7500340d02f94769b7a0e635a1fedddc) Thanks [@gouveags](https://github.com/gouveags)! - Normalize AI tool-result capture and redact binary content while preserving existing provider limits.
+  (2026-10-19)
+
 ## 8.14.1
 
 ### Patch Changes
