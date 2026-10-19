@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/5319": {
+    "key": "PostHog/posthog-js/issue/5319",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5319",
+    "url": "https://github.com/PostHog/posthog-js/issues/5319",
+    "conclusion": "Likely a legacy cross-tab/cross-subdomain persistence-consistency problem exposed by bfcache, but the report does not yet prove a new bfcache-specific regression.",
+    "labels": [
+      "web",
+      "team/client-libraries",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-19T07:35:28.334Z"
+  },
   "PostHog/posthog-js/issue/5318": {
     "key": "PostHog/posthog-js/issue/5318",
     "repo": "PostHog/posthog-js",
@@ -2922,21 +2936,5 @@
     "prUrl": "https://github.com/PostHog/posthog-js/pull/4001",
     "closed": false,
     "updatedAt": "2026-06-28T09:37:17.665Z"
-  },
-  "PostHog/posthog-js/issue/3522": {
-    "key": "PostHog/posthog-js/issue/3522",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3522",
-    "url": "https://github.com/PostHog/posthog-js/issues/3522",
-    "conclusion": "Valid feature request; current survey appearance supports single light/default palette but no first-class dark-mode palette.",
-    "labels": [
-      "enhancement",
-      "feature",
-      "feature/surveys",
-      "web",
-      "react-native"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-28T09:32:47.688Z"
   }
 }
