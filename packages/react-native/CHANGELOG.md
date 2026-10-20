@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.81.5
+
+### Patch Changes
+
+- [#5253](https://github.com/PostHog/posthog-js/pull/5253) [`cc0d20e`](https://github.com/PostHog/posthog-js/commit/cc0d20e9f11749ba95dfa3e110480d5965bd16a4) Thanks [@Brian-1812](https://github.com/Brian-1812)! - Respect the survey wait period (`seenSurveyWaitPeriodInDays`), so a survey does not show if the user saw any survey within that many days
+  (2026-10-20)
+
 ## 4.81.4
 
 ### Patch Changes

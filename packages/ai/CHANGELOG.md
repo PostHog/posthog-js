@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.14.3
+
+### Patch Changes
+
+- [#5251](https://github.com/PostHog/posthog-js/pull/5251) [`717d2fc`](https://github.com/PostHog/posthog-js/commit/717d2fca88abbcffd81ca20839343f7f439ab952) Thanks [@yoarajota](https://github.com/yoarajota)! - Capture Chat Completions responses that contain custom tool calls instead of throwing from the wrapped `create()` call.
+  (2026-10-20)
+
 ## 8.14.2
 
 ### Patch Changes
