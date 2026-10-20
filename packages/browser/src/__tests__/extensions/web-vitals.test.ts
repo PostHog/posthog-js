@@ -259,6 +259,51 @@ describe('web vitals', () => {
                 ])
             })
 
+            it('flushes a pending web vital immediately on pagehide without resending on the timer (#5318)', () => {
+                const captureSpy = vi.spyOn(posthog, 'capture')
+                try {
+                    onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
+                    expect(captureSpy.mock.calls.filter(([event]) => event === '$web_vitals')).toHaveLength(0)
+
+                    window.dispatchEvent(new Event('pagehide'))
+
+                    expect(captureSpy).toHaveBeenCalledWith(
+                        '$web_vitals',
+                        expect.objectContaining({ $web_vitals_CLS_value: 123.45 }),
+                        expect.objectContaining({ send_instantly: true, transport: 'sendBeacon' })
+                    )
+                    vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                    expect(captureSpy.mock.calls.filter(([event]) => event === '$web_vitals')).toHaveLength(1)
+                } finally {
+                    captureSpy.mockRestore()
+                }
+            })
+
+            it('flushes on visibilitychange to hidden, but not on visible (#5318)', () => {
+                const captureSpy = vi.spyOn(posthog, 'capture')
+                const visibilityState = vi.spyOn(document, 'visibilityState', 'get')
+                try {
+                    onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
+                    visibilityState.mockReturnValue('visible')
+                    document.dispatchEvent(new Event('visibilitychange'))
+                    expect(captureSpy.mock.calls.filter(([event]) => event === '$web_vitals')).toHaveLength(0)
+
+                    visibilityState.mockReturnValue('hidden')
+                    document.dispatchEvent(new Event('visibilitychange'))
+
+                    expect(captureSpy).toHaveBeenCalledWith(
+                        '$web_vitals',
+                        expect.objectContaining({ $web_vitals_CLS_value: 123.45 }),
+                        expect.objectContaining({ send_instantly: true, transport: 'sendBeacon' })
+                    )
+                    window.dispatchEvent(new Event('pagehide'))
+                    expect(captureSpy.mock.calls.filter(([event]) => event === '$web_vitals')).toHaveLength(1)
+                } finally {
+                    visibilityState.mockRestore()
+                    captureSpy.mockRestore()
+                }
+            })
+
             it('should ignore a ridiculous value', async () => {
                 onCLSCallback?.({ name: 'CLS', value: FIFTEEN_MINUTES_IN_MILLIS, extra: 'property' })
 
