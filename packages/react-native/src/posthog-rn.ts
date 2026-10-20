@@ -65,6 +65,12 @@ import { getExceptionContext } from './error-tracking/exception-context'
 
 export { PostHogPersistedProperty }
 
+// The native SDK is process-wide and keeps only the first setup(), so one client owns its
+// session and the other clients in the process leave it alone. A new client for the same
+// project takes over, since it replaces a client the app no longer uses (e.g. a remounted
+// PostHogProvider).
+let nativeSessionOwner: PostHog | undefined
+
 /**
  * Collapses RN's broader AppState status set into the OTLP `app.state`
  * enum (foreground|background). 'inactive' (iOS transition) and 'extension'
@@ -728,6 +734,9 @@ export class PostHog extends PostHogCore {
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     this._cancelManualRecordingStart()
+    if (nativeSessionOwner === this) {
+      nativeSessionOwner = undefined
+    }
     const start = Date.now()
     try {
       const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
@@ -1691,9 +1700,21 @@ export class PostHog extends PostHogCore {
     return !this.isDisabled && !isMacOS() && (this._enableSessionReplay ?? false)
   }
 
+  private _isNativeSessionOwner(): boolean {
+    return nativeSessionOwner === undefined || nativeSessionOwner === this
+  }
+
+  private _isSameProjectAs(other: PostHog): boolean {
+    return other.apiKey === this.apiKey && other.host === this.host
+  }
+
+  private _canTakeOverNativeSession(owner: PostHog): boolean {
+    return !this._isNativePluginInitialized() && this._isSameProjectAs(owner)
+  }
+
   _resetSessionId(reactNativeSessionReplay: typeof OptionalReactNativePlugin | undefined, sessionId: string): void {
     // _resetSessionId is only called if reactNativeSessionReplay not undefined, but the linter wasn't happy
-    if (reactNativeSessionReplay) {
+    if (reactNativeSessionReplay && this._isNativeSessionOwner()) {
       reactNativeSessionReplay.endSession()
       reactNativeSessionReplay.startSession(sessionId)
     }
@@ -1732,7 +1753,11 @@ export class PostHog extends PostHogCore {
 
   resetSessionId(): void {
     super.resetSessionId()
-    if ((this._isEnableSessionReplay() || this._isNativePluginInitialized()) && OptionalReactNativePlugin) {
+    if (
+      (this._isEnableSessionReplay() || this._isNativePluginInitialized()) &&
+      OptionalReactNativePlugin &&
+      this._isNativeSessionOwner()
+    ) {
       try {
         OptionalReactNativePlugin.endSession()
         this._logger.info(`Native PostHog session ended.`)
@@ -1948,13 +1973,15 @@ export class PostHog extends PostHogCore {
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
       .catch(() => {})
       .then(async () => {
-        await this._stopSessionRecording()
+        await this._stopSessionRecording(true)
       })
     await this._sessionReplayEvalChain
   }
 
-  // Shared stop path, also called by the flags-driven evaluation.
-  private async _stopSessionRecording(): Promise<boolean> {
+  // Shared stop path, also called by the flags-driven evaluation. A stop the app asked for
+  // (stopSessionRecording(), opt-out) may stop a recording its project owns from any client,
+  // but a client's own flags only stop its own recording.
+  private async _stopSessionRecording(byApp: boolean = false): Promise<boolean> {
     await this._initPromise
 
     if (this.isDisabled) {
@@ -1972,6 +1999,14 @@ export class PostHog extends PostHogCore {
         this._logger.warn(
           'stopRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
         )
+        return false
+      }
+
+      if (
+        !this._isNativeSessionOwner() &&
+        !(byApp && nativeSessionOwner && this._isSameProjectAs(nativeSessionOwner))
+      ) {
+        this._logger.info('Session recording belongs to another PostHog client.')
         return false
       }
 
@@ -2009,6 +2044,10 @@ export class PostHog extends PostHogCore {
 
     if (!OptionalReactNativePlugin) {
       // No native plugin loaded (web, or plugin not installed) - not active
+      return false
+    }
+
+    if (nativeSessionOwner && nativeSessionOwner !== this && !this._isSameProjectAs(nativeSessionOwner)) {
       return false
     }
 
@@ -2983,6 +3022,13 @@ export class PostHog extends PostHogCore {
         ? await OptionalReactNativePlugin.isEnabled().catch(() => false)
         : false
 
+      // setup() and start() overwrite the native session id even when the native SDK ignores
+      // them as a repeat setup, so only the owner of the native session may call them.
+      if (nativeSessionOwner && nativeSessionOwner !== this && !this._canTakeOverNativeSession(nativeSessionOwner)) {
+        this._logger.info('Native PostHog plugin already set up by another PostHog client.')
+        return false
+      }
+
       if (OptionalReactNativePlugin.setup) {
         // The provider can't cross the bridge, so only an enabled marker goes into the
         // setup map; the JS listener itself must be installed here, before setup() captures it.
@@ -3024,6 +3070,7 @@ export class PostHog extends PostHogCore {
           },
           ...(options?.rageClickConfig && { rageClick: options.rageClickConfig }),
         }
+        nativeSessionOwner = this
         await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)
         // Native resolves its own persisted opt-out over the config value passed above, so an
         // earlier optIn() keeps winning and sdkOptions.optOut alone can't opt a user back out.
@@ -3054,6 +3101,7 @@ export class PostHog extends PostHogCore {
         if (!enableSessionReplay) {
           return false
         }
+        nativeSessionOwner = this
         if (!(await OptionalReactNativePlugin.isEnabled())) {
           await OptionalReactNativePlugin.start(
             String(sessionId),
@@ -3088,6 +3136,9 @@ export class PostHog extends PostHogCore {
       }
       return true
     } catch (e) {
+      if (nativeSessionOwner === this && !this._isNativePluginInitialized()) {
+        nativeSessionOwner = undefined
+      }
       this._logger.error(`Native PostHog plugin failed to start: ${e}.`)
       return false
     }
@@ -3156,7 +3207,7 @@ export class PostHog extends PostHogCore {
         this._sessionReplayNativeInitialized &&
         (this.optedOut || (freshSession && !this._sessionReplayStartedByApp))
       ) {
-        await this._stopSessionRecording()
+        await this._stopSessionRecording(this.optedOut)
       }
       if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
         await this.initializeNativePlugin(options, remoteConfig, false)
@@ -3197,7 +3248,7 @@ export class PostHog extends PostHogCore {
       }
       // Also ends a manual recording, which _sessionReplayRecordingActive doesn't track.
       if (this._sessionReplayNativeInitialized) {
-        await this._stopSessionRecording()
+        await this._stopSessionRecording(true)
       }
       // A recording the app stopped leaves _sessionReplayRecordingActive true, so a flags reload
       // after opt-in treats it as running and leaves it stopped, as it does without an opt-out.
@@ -3210,7 +3261,7 @@ export class PostHog extends PostHogCore {
     // posthog-ios optIn() reinstalls its integrations, which restarts the recorder the app stopped.
     if (freshSession && this._sessionReplayStoppedByApp) {
       if (this._sessionReplayNativeInitialized) {
-        await this._stopSessionRecording()
+        await this._stopSessionRecording(true)
       }
       return
     }
