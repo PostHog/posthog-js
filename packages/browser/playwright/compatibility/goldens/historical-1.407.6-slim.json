@@ -26879,7 +26879,6 @@
                                         "$sdk_debug_extensions_init_method": "synchronous",
                                         "$sdk_debug_extensions_init_time_ms": "<cpu-duration-ms>",
                                         "$sdk_debug_replay_event_trigger_status": "trigger_disabled",
-                                        "$sdk_debug_replay_flush_hold_reason": "no_interaction_since_recording_started",
                                         "$sdk_debug_replay_flushed_size": "<encoded-size>",
                                         "$sdk_debug_replay_internal_buffer_length": "<buffer-count>",
                                         "$sdk_debug_replay_internal_buffer_size": "<encoded-size>",
@@ -27383,7 +27382,6 @@
                                     "$sdk_debug_extensions_init_method": "synchronous",
                                     "$sdk_debug_extensions_init_time_ms": "<cpu-duration-ms>",
                                     "$sdk_debug_replay_event_trigger_status": "trigger_disabled",
-                                    "$sdk_debug_replay_flush_hold_reason": "no_interaction_since_recording_started",
                                     "$sdk_debug_replay_flushed_size": "<encoded-size>",
                                     "$sdk_debug_replay_internal_buffer_length": "<buffer-count>",
                                     "$sdk_debug_replay_internal_buffer_size": "<encoded-size>",
@@ -27852,7 +27850,6 @@
                                                 "$sdk_debug_extensions_init_method": "synchronous",
                                                 "$sdk_debug_extensions_init_time_ms": "<cpu-duration-ms>",
                                                 "$sdk_debug_replay_event_trigger_status": "trigger_disabled",
-                                                "$sdk_debug_replay_flush_hold_reason": "no_interaction_since_recording_started",
                                                 "$sdk_debug_replay_flushed_size": "<encoded-size>",
                                                 "$sdk_debug_replay_internal_buffer_length": "<buffer-count>",
                                                 "$sdk_debug_replay_internal_buffer_size": "<encoded-size>",
@@ -27892,6 +27889,60 @@
                                 "contentType": "application/json",
                                 "method": "POST",
                                 "path": "/e",
+                                "query": {},
+                                "status": 200
+                            },
+                            {
+                                "body": {
+                                    "event": "$snapshot",
+                                    "properties": {
+                                        "$config_defaults": "unset",
+                                        "$lib": "web",
+                                        "$lib_version": "<extension-version>",
+                                        "$session_id": "generated-id-2",
+                                        "$snapshot_bytes": "<encoded-size>",
+                                        "$snapshot_data": [
+                                            {
+                                                "cv": "2024-10",
+                                                "data": {
+                                                    "adds": [
+                                                        {
+                                                            "nextId": null,
+                                                            "node": {
+                                                                "id": 30,
+                                                                "textContent": "Updated",
+                                                                "type": 3
+                                                            },
+                                                            "parentId": 22
+                                                        }
+                                                    ],
+                                                    "attributes": [],
+                                                    "removes": [
+                                                        {
+                                                            "id": 23,
+                                                            "parentId": 22
+                                                        }
+                                                    ],
+                                                    "source": 0,
+                                                    "texts": []
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 3
+                                            }
+                                        ],
+                                        "$snapshot_host": "127.0.0.1",
+                                        "$window_id": "generated-id-4",
+                                        "distinct_id": "generated-id-1",
+                                        "token": "phc_COMPAT"
+                                    },
+                                    "sent_at": "2024-01-01T00:00:00.000Z",
+                                    "timestamp": "2024-01-01T00:00:00.000Z",
+                                    "uuid": "generated-id-17"
+                                },
+                                "contentEncoding": null,
+                                "contentType": "application/json",
+                                "method": "POST",
+                                "path": "/s",
                                 "query": {},
                                 "status": 200
                             },
@@ -28158,7 +28209,9 @@
                                             {
                                                 "data": {
                                                     "payload": {
-                                                        "activePlugins": [],
+                                                        "activePlugins": [
+                                                            "rrweb/network@1"
+                                                        ],
                                                         "sessionRecordingOptions": {
                                                             "blockClass": "ph-no-capture",
                                                             "collectFonts": false,
@@ -28222,7 +28275,7 @@
                                                             "disable_external_dependency_loading": false,
                                                             "disable_persistence": false,
                                                             "disable_product_tours": false,
-                                                            "disable_session_recording": true,
+                                                            "disable_session_recording": false,
                                                             "disable_surveys": true,
                                                             "disable_surveys_automatic_display": true,
                                                             "disable_web_experiments": true,
@@ -28265,7 +28318,9 @@
                                                                 "blockClass": "ph-no-capture",
                                                                 "maskAllInputs": true,
                                                                 "maskTextSelector": ".ph-mask",
-                                                                "recordCrossOriginIframes": false
+                                                                "recordBody": true,
+                                                                "recordCrossOriginIframes": false,
+                                                                "recordHeaders": true
                                                             },
                                                             "split_storage": false,
                                                             "strict_script_versioning": false,
@@ -28291,28 +28346,10 @@
                                                 "type": 5
                                             },
                                             {
-                                                "cv": "2024-10",
                                                 "data": {
-                                                    "adds": [
-                                                        {
-                                                            "nextId": null,
-                                                            "node": {
-                                                                "id": 30,
-                                                                "textContent": "Updated",
-                                                                "type": 3
-                                                            },
-                                                            "parentId": 22
-                                                        }
-                                                    ],
-                                                    "attributes": [],
-                                                    "removes": [
-                                                        {
-                                                            "id": 23,
-                                                            "parentId": 22
-                                                        }
-                                                    ],
-                                                    "source": 0,
-                                                    "texts": []
+                                                    "id": 16,
+                                                    "source": 2,
+                                                    "type": 5
                                                 },
                                                 "timestamp": 1704067200000,
                                                 "type": 3
@@ -28336,6 +28373,115 @@
                                     "sent_at": "2024-01-01T00:00:00.000Z",
                                     "timestamp": "2024-01-01T00:00:00.000Z",
                                     "uuid": "generated-id-15"
+                                },
+                                "contentEncoding": null,
+                                "contentType": "application/json",
+                                "method": "POST",
+                                "path": "/s",
+                                "query": {},
+                                "status": 200
+                            },
+                            {
+                                "body": {
+                                    "event": "$snapshot",
+                                    "properties": {
+                                        "$config_defaults": "unset",
+                                        "$lib": "web",
+                                        "$lib_version": "<extension-version>",
+                                        "$session_id": "generated-id-2",
+                                        "$snapshot_bytes": "<encoded-size>",
+                                        "$snapshot_data": [
+                                            {
+                                                "data": {
+                                                    "payload": {
+                                                        "requests": [
+                                                            {
+                                                                "endTime": "<network-clock-ms>",
+                                                                "initiatorType": "fetch",
+                                                                "method": "POST",
+                                                                "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                                "requestBody": "{\"message\":\"compat request body\"}",
+                                                                "requestHeaders": {
+                                                                    "authorization": "redacted",
+                                                                    "content-type": "application/json",
+                                                                    "x-compat-request": "retained"
+                                                                },
+                                                                "responseBody": "{\"message\":\"compat response body\"}",
+                                                                "responseHeaders": {
+                                                                    "access-control-allow-headers": "*",
+                                                                    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                    "access-control-allow-origin": "*",
+                                                                    "authorization": "redacted",
+                                                                    "cache-control": "no-store",
+                                                                    "connection": "keep-alive",
+                                                                    "content-length": "34",
+                                                                    "content-type": "application/json",
+                                                                    "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                    "keep-alive": "timeout=5",
+                                                                    "x-compat-response": "retained"
+                                                                },
+                                                                "startTime": "<network-clock-ms>",
+                                                                "status": 200,
+                                                                "timeOrigin": "<network-clock-ms>",
+                                                                "timestamp": "<network-clock-ms>"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "plugin": "rrweb/network@1"
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 6
+                                            },
+                                            {
+                                                "data": {
+                                                    "payload": {
+                                                        "requests": [
+                                                            {
+                                                                "endTime": "<network-clock-ms>",
+                                                                "initiatorType": "fetch",
+                                                                "method": "POST",
+                                                                "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                                "requestBody": "[SessionRecording] Request body redacted as might contain: password",
+                                                                "requestHeaders": {
+                                                                    "authorization": "redacted",
+                                                                    "content-type": "application/json",
+                                                                    "x-compat-request": "retained"
+                                                                },
+                                                                "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                                "responseHeaders": {
+                                                                    "access-control-allow-headers": "*",
+                                                                    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                    "access-control-allow-origin": "*",
+                                                                    "authorization": "redacted",
+                                                                    "cache-control": "no-store",
+                                                                    "connection": "keep-alive",
+                                                                    "content-length": "36",
+                                                                    "content-type": "application/json",
+                                                                    "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                    "keep-alive": "timeout=5",
+                                                                    "x-compat-response": "retained"
+                                                                },
+                                                                "startTime": "<network-clock-ms>",
+                                                                "status": 200,
+                                                                "timeOrigin": "<network-clock-ms>",
+                                                                "timestamp": "<network-clock-ms>"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "plugin": "rrweb/network@1"
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 6
+                                            }
+                                        ],
+                                        "$snapshot_host": "127.0.0.1",
+                                        "$window_id": "generated-id-4",
+                                        "distinct_id": "generated-id-1",
+                                        "token": "phc_COMPAT"
+                                    },
+                                    "sent_at": "2024-01-01T00:00:00.000Z",
+                                    "timestamp": "2024-01-01T00:00:00.000Z",
+                                    "uuid": "generated-id-16"
                                 },
                                 "contentEncoding": null,
                                 "contentType": "application/json",
@@ -28624,7 +28770,9 @@
                                         {
                                             "data": {
                                                 "payload": {
-                                                    "activePlugins": [],
+                                                    "activePlugins": [
+                                                        "rrweb/network@1"
+                                                    ],
                                                     "sessionRecordingOptions": {
                                                         "blockClass": "ph-no-capture",
                                                         "collectFonts": false,
@@ -28688,7 +28836,7 @@
                                                         "disable_external_dependency_loading": false,
                                                         "disable_persistence": false,
                                                         "disable_product_tours": false,
-                                                        "disable_session_recording": true,
+                                                        "disable_session_recording": false,
                                                         "disable_surveys": true,
                                                         "disable_surveys_automatic_display": true,
                                                         "disable_web_experiments": true,
@@ -28731,7 +28879,9 @@
                                                             "blockClass": "ph-no-capture",
                                                             "maskAllInputs": true,
                                                             "maskTextSelector": ".ph-mask",
-                                                            "recordCrossOriginIframes": false
+                                                            "recordBody": true,
+                                                            "recordCrossOriginIframes": false,
+                                                            "recordHeaders": true
                                                         },
                                                         "split_storage": false,
                                                         "strict_script_versioning": false,
@@ -28756,6 +28906,145 @@
                                             "timestamp": 1704067200000,
                                             "type": 5
                                         },
+                                        {
+                                            "data": {
+                                                "id": 16,
+                                                "source": 2,
+                                                "type": 5
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 3
+                                        },
+                                        {
+                                            "data": {
+                                                "id": 16,
+                                                "isChecked": false,
+                                                "source": 5,
+                                                "text": "***********************"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 3
+                                        }
+                                    ],
+                                    "$snapshot_host": "127.0.0.1",
+                                    "$window_id": "generated-id-4",
+                                    "distinct_id": "generated-id-1",
+                                    "token": "phc_COMPAT"
+                                },
+                                "sent_at": "2024-01-01T00:00:00.000Z",
+                                "timestamp": "2024-01-01T00:00:00.000Z",
+                                "uuid": "generated-id-15"
+                            },
+                            {
+                                "event": "$snapshot",
+                                "properties": {
+                                    "$config_defaults": "unset",
+                                    "$lib": "web",
+                                    "$lib_version": "<extension-version>",
+                                    "$session_id": "generated-id-2",
+                                    "$snapshot_bytes": "<encoded-size>",
+                                    "$snapshot_data": [
+                                        {
+                                            "data": {
+                                                "payload": {
+                                                    "requests": [
+                                                        {
+                                                            "endTime": "<network-clock-ms>",
+                                                            "initiatorType": "fetch",
+                                                            "method": "POST",
+                                                            "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                            "requestBody": "{\"message\":\"compat request body\"}",
+                                                            "requestHeaders": {
+                                                                "authorization": "redacted",
+                                                                "content-type": "application/json",
+                                                                "x-compat-request": "retained"
+                                                            },
+                                                            "responseBody": "{\"message\":\"compat response body\"}",
+                                                            "responseHeaders": {
+                                                                "access-control-allow-headers": "*",
+                                                                "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                "access-control-allow-origin": "*",
+                                                                "authorization": "redacted",
+                                                                "cache-control": "no-store",
+                                                                "connection": "keep-alive",
+                                                                "content-length": "34",
+                                                                "content-type": "application/json",
+                                                                "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                "keep-alive": "timeout=5",
+                                                                "x-compat-response": "retained"
+                                                            },
+                                                            "startTime": "<network-clock-ms>",
+                                                            "status": 200,
+                                                            "timeOrigin": "<network-clock-ms>",
+                                                            "timestamp": "<network-clock-ms>"
+                                                        }
+                                                    ]
+                                                },
+                                                "plugin": "rrweb/network@1"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 6
+                                        },
+                                        {
+                                            "data": {
+                                                "payload": {
+                                                    "requests": [
+                                                        {
+                                                            "endTime": "<network-clock-ms>",
+                                                            "initiatorType": "fetch",
+                                                            "method": "POST",
+                                                            "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                            "requestBody": "[SessionRecording] Request body redacted as might contain: password",
+                                                            "requestHeaders": {
+                                                                "authorization": "redacted",
+                                                                "content-type": "application/json",
+                                                                "x-compat-request": "retained"
+                                                            },
+                                                            "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                            "responseHeaders": {
+                                                                "access-control-allow-headers": "*",
+                                                                "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                "access-control-allow-origin": "*",
+                                                                "authorization": "redacted",
+                                                                "cache-control": "no-store",
+                                                                "connection": "keep-alive",
+                                                                "content-length": "36",
+                                                                "content-type": "application/json",
+                                                                "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                "keep-alive": "timeout=5",
+                                                                "x-compat-response": "retained"
+                                                            },
+                                                            "startTime": "<network-clock-ms>",
+                                                            "status": 200,
+                                                            "timeOrigin": "<network-clock-ms>",
+                                                            "timestamp": "<network-clock-ms>"
+                                                        }
+                                                    ]
+                                                },
+                                                "plugin": "rrweb/network@1"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 6
+                                        }
+                                    ],
+                                    "$snapshot_host": "127.0.0.1",
+                                    "$window_id": "generated-id-4",
+                                    "distinct_id": "generated-id-1",
+                                    "token": "phc_COMPAT"
+                                },
+                                "sent_at": "2024-01-01T00:00:00.000Z",
+                                "timestamp": "2024-01-01T00:00:00.000Z",
+                                "uuid": "generated-id-16"
+                            },
+                            {
+                                "event": "$snapshot",
+                                "properties": {
+                                    "$config_defaults": "unset",
+                                    "$lib": "web",
+                                    "$lib_version": "<extension-version>",
+                                    "$session_id": "generated-id-2",
+                                    "$snapshot_bytes": "<encoded-size>",
+                                    "$snapshot_data": [
                                         {
                                             "cv": "2024-10",
                                             "data": {
@@ -28782,16 +29071,6 @@
                                             },
                                             "timestamp": 1704067200000,
                                             "type": 3
-                                        },
-                                        {
-                                            "data": {
-                                                "id": 16,
-                                                "isChecked": false,
-                                                "source": 5,
-                                                "text": "***********************"
-                                            },
-                                            "timestamp": 1704067200000,
-                                            "type": 3
                                         }
                                     ],
                                     "$snapshot_host": "127.0.0.1",
@@ -28801,7 +29080,7 @@
                                 },
                                 "sent_at": "2024-01-01T00:00:00.000Z",
                                 "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-15"
+                                "uuid": "generated-id-17"
                             }
                         ]
                     },
@@ -87771,7 +88050,6 @@
                                         "$sdk_debug_extensions_init_method": "synchronous",
                                         "$sdk_debug_extensions_init_time_ms": "<cpu-duration-ms>",
                                         "$sdk_debug_replay_event_trigger_status": "trigger_disabled",
-                                        "$sdk_debug_replay_flush_hold_reason": "no_interaction_since_recording_started",
                                         "$sdk_debug_replay_flushed_size": "<encoded-size>",
                                         "$sdk_debug_replay_internal_buffer_length": "<buffer-count>",
                                         "$sdk_debug_replay_internal_buffer_size": "<encoded-size>",
@@ -88275,7 +88553,6 @@
                                     "$sdk_debug_extensions_init_method": "synchronous",
                                     "$sdk_debug_extensions_init_time_ms": "<cpu-duration-ms>",
                                     "$sdk_debug_replay_event_trigger_status": "trigger_disabled",
-                                    "$sdk_debug_replay_flush_hold_reason": "no_interaction_since_recording_started",
                                     "$sdk_debug_replay_flushed_size": "<encoded-size>",
                                     "$sdk_debug_replay_internal_buffer_length": "<buffer-count>",
                                     "$sdk_debug_replay_internal_buffer_size": "<encoded-size>",
@@ -88744,7 +89021,6 @@
                                                 "$sdk_debug_extensions_init_method": "synchronous",
                                                 "$sdk_debug_extensions_init_time_ms": "<cpu-duration-ms>",
                                                 "$sdk_debug_replay_event_trigger_status": "trigger_disabled",
-                                                "$sdk_debug_replay_flush_hold_reason": "no_interaction_since_recording_started",
                                                 "$sdk_debug_replay_flushed_size": "<encoded-size>",
                                                 "$sdk_debug_replay_internal_buffer_length": "<buffer-count>",
                                                 "$sdk_debug_replay_internal_buffer_size": "<encoded-size>",
@@ -88784,6 +89060,60 @@
                                 "contentType": "application/json",
                                 "method": "POST",
                                 "path": "/e",
+                                "query": {},
+                                "status": 200
+                            },
+                            {
+                                "body": {
+                                    "event": "$snapshot",
+                                    "properties": {
+                                        "$config_defaults": "unset",
+                                        "$lib": "web",
+                                        "$lib_version": "<extension-version>",
+                                        "$session_id": "generated-id-2",
+                                        "$snapshot_bytes": "<encoded-size>",
+                                        "$snapshot_data": [
+                                            {
+                                                "cv": "2024-10",
+                                                "data": {
+                                                    "adds": [
+                                                        {
+                                                            "nextId": null,
+                                                            "node": {
+                                                                "id": 30,
+                                                                "textContent": "Updated",
+                                                                "type": 3
+                                                            },
+                                                            "parentId": 22
+                                                        }
+                                                    ],
+                                                    "attributes": [],
+                                                    "removes": [
+                                                        {
+                                                            "id": 23,
+                                                            "parentId": 22
+                                                        }
+                                                    ],
+                                                    "source": 0,
+                                                    "texts": []
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 3
+                                            }
+                                        ],
+                                        "$snapshot_host": "127.0.0.1",
+                                        "$window_id": "generated-id-4",
+                                        "distinct_id": "generated-id-1",
+                                        "token": "phc_COMPAT"
+                                    },
+                                    "sent_at": "2024-01-01T00:00:00.000Z",
+                                    "timestamp": "2024-01-01T00:00:00.000Z",
+                                    "uuid": "generated-id-17"
+                                },
+                                "contentEncoding": null,
+                                "contentType": "application/json",
+                                "method": "POST",
+                                "path": "/s",
                                 "query": {},
                                 "status": 200
                             },
@@ -89050,7 +89380,9 @@
                                             {
                                                 "data": {
                                                     "payload": {
-                                                        "activePlugins": [],
+                                                        "activePlugins": [
+                                                            "rrweb/network@1"
+                                                        ],
                                                         "sessionRecordingOptions": {
                                                             "blockClass": "ph-no-capture",
                                                             "collectFonts": false,
@@ -89114,7 +89446,7 @@
                                                             "disable_external_dependency_loading": false,
                                                             "disable_persistence": false,
                                                             "disable_product_tours": false,
-                                                            "disable_session_recording": true,
+                                                            "disable_session_recording": false,
                                                             "disable_surveys": true,
                                                             "disable_surveys_automatic_display": true,
                                                             "disable_web_experiments": true,
@@ -89157,7 +89489,9 @@
                                                                 "blockClass": "ph-no-capture",
                                                                 "maskAllInputs": true,
                                                                 "maskTextSelector": ".ph-mask",
-                                                                "recordCrossOriginIframes": false
+                                                                "recordBody": true,
+                                                                "recordCrossOriginIframes": false,
+                                                                "recordHeaders": true
                                                             },
                                                             "split_storage": false,
                                                             "strict_script_versioning": false,
@@ -89183,28 +89517,10 @@
                                                 "type": 5
                                             },
                                             {
-                                                "cv": "2024-10",
                                                 "data": {
-                                                    "adds": [
-                                                        {
-                                                            "nextId": null,
-                                                            "node": {
-                                                                "id": 30,
-                                                                "textContent": "Updated",
-                                                                "type": 3
-                                                            },
-                                                            "parentId": 22
-                                                        }
-                                                    ],
-                                                    "attributes": [],
-                                                    "removes": [
-                                                        {
-                                                            "id": 23,
-                                                            "parentId": 22
-                                                        }
-                                                    ],
-                                                    "source": 0,
-                                                    "texts": []
+                                                    "id": 16,
+                                                    "source": 2,
+                                                    "type": 5
                                                 },
                                                 "timestamp": 1704067200000,
                                                 "type": 3
@@ -89228,6 +89544,115 @@
                                     "sent_at": "2024-01-01T00:00:00.000Z",
                                     "timestamp": "2024-01-01T00:00:00.000Z",
                                     "uuid": "generated-id-15"
+                                },
+                                "contentEncoding": null,
+                                "contentType": "application/json",
+                                "method": "POST",
+                                "path": "/s",
+                                "query": {},
+                                "status": 200
+                            },
+                            {
+                                "body": {
+                                    "event": "$snapshot",
+                                    "properties": {
+                                        "$config_defaults": "unset",
+                                        "$lib": "web",
+                                        "$lib_version": "<extension-version>",
+                                        "$session_id": "generated-id-2",
+                                        "$snapshot_bytes": "<encoded-size>",
+                                        "$snapshot_data": [
+                                            {
+                                                "data": {
+                                                    "payload": {
+                                                        "requests": [
+                                                            {
+                                                                "endTime": "<network-clock-ms>",
+                                                                "initiatorType": "fetch",
+                                                                "method": "POST",
+                                                                "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                                "requestBody": "{\"message\":\"compat request body\"}",
+                                                                "requestHeaders": {
+                                                                    "authorization": "redacted",
+                                                                    "content-type": "application/json",
+                                                                    "x-compat-request": "retained"
+                                                                },
+                                                                "responseBody": "{\"message\":\"compat response body\"}",
+                                                                "responseHeaders": {
+                                                                    "access-control-allow-headers": "*",
+                                                                    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                    "access-control-allow-origin": "*",
+                                                                    "authorization": "redacted",
+                                                                    "cache-control": "no-store",
+                                                                    "connection": "keep-alive",
+                                                                    "content-length": "34",
+                                                                    "content-type": "application/json",
+                                                                    "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                    "keep-alive": "timeout=5",
+                                                                    "x-compat-response": "retained"
+                                                                },
+                                                                "startTime": "<network-clock-ms>",
+                                                                "status": 200,
+                                                                "timeOrigin": "<network-clock-ms>",
+                                                                "timestamp": "<network-clock-ms>"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "plugin": "rrweb/network@1"
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 6
+                                            },
+                                            {
+                                                "data": {
+                                                    "payload": {
+                                                        "requests": [
+                                                            {
+                                                                "endTime": "<network-clock-ms>",
+                                                                "initiatorType": "fetch",
+                                                                "method": "POST",
+                                                                "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                                "requestBody": "[SessionRecording] Request body redacted as might contain: password",
+                                                                "requestHeaders": {
+                                                                    "authorization": "redacted",
+                                                                    "content-type": "application/json",
+                                                                    "x-compat-request": "retained"
+                                                                },
+                                                                "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                                "responseHeaders": {
+                                                                    "access-control-allow-headers": "*",
+                                                                    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                    "access-control-allow-origin": "*",
+                                                                    "authorization": "redacted",
+                                                                    "cache-control": "no-store",
+                                                                    "connection": "keep-alive",
+                                                                    "content-length": "36",
+                                                                    "content-type": "application/json",
+                                                                    "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                    "keep-alive": "timeout=5",
+                                                                    "x-compat-response": "retained"
+                                                                },
+                                                                "startTime": "<network-clock-ms>",
+                                                                "status": 200,
+                                                                "timeOrigin": "<network-clock-ms>",
+                                                                "timestamp": "<network-clock-ms>"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "plugin": "rrweb/network@1"
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 6
+                                            }
+                                        ],
+                                        "$snapshot_host": "127.0.0.1",
+                                        "$window_id": "generated-id-4",
+                                        "distinct_id": "generated-id-1",
+                                        "token": "phc_COMPAT"
+                                    },
+                                    "sent_at": "2024-01-01T00:00:00.000Z",
+                                    "timestamp": "2024-01-01T00:00:00.000Z",
+                                    "uuid": "generated-id-16"
                                 },
                                 "contentEncoding": null,
                                 "contentType": "application/json",
@@ -89516,7 +89941,9 @@
                                         {
                                             "data": {
                                                 "payload": {
-                                                    "activePlugins": [],
+                                                    "activePlugins": [
+                                                        "rrweb/network@1"
+                                                    ],
                                                     "sessionRecordingOptions": {
                                                         "blockClass": "ph-no-capture",
                                                         "collectFonts": false,
@@ -89580,7 +90007,7 @@
                                                         "disable_external_dependency_loading": false,
                                                         "disable_persistence": false,
                                                         "disable_product_tours": false,
-                                                        "disable_session_recording": true,
+                                                        "disable_session_recording": false,
                                                         "disable_surveys": true,
                                                         "disable_surveys_automatic_display": true,
                                                         "disable_web_experiments": true,
@@ -89623,7 +90050,9 @@
                                                             "blockClass": "ph-no-capture",
                                                             "maskAllInputs": true,
                                                             "maskTextSelector": ".ph-mask",
-                                                            "recordCrossOriginIframes": false
+                                                            "recordBody": true,
+                                                            "recordCrossOriginIframes": false,
+                                                            "recordHeaders": true
                                                         },
                                                         "split_storage": false,
                                                         "strict_script_versioning": false,
@@ -89648,6 +90077,145 @@
                                             "timestamp": 1704067200000,
                                             "type": 5
                                         },
+                                        {
+                                            "data": {
+                                                "id": 16,
+                                                "source": 2,
+                                                "type": 5
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 3
+                                        },
+                                        {
+                                            "data": {
+                                                "id": 16,
+                                                "isChecked": false,
+                                                "source": 5,
+                                                "text": "***********************"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 3
+                                        }
+                                    ],
+                                    "$snapshot_host": "127.0.0.1",
+                                    "$window_id": "generated-id-4",
+                                    "distinct_id": "generated-id-1",
+                                    "token": "phc_COMPAT"
+                                },
+                                "sent_at": "2024-01-01T00:00:00.000Z",
+                                "timestamp": "2024-01-01T00:00:00.000Z",
+                                "uuid": "generated-id-15"
+                            },
+                            {
+                                "event": "$snapshot",
+                                "properties": {
+                                    "$config_defaults": "unset",
+                                    "$lib": "web",
+                                    "$lib_version": "<extension-version>",
+                                    "$session_id": "generated-id-2",
+                                    "$snapshot_bytes": "<encoded-size>",
+                                    "$snapshot_data": [
+                                        {
+                                            "data": {
+                                                "payload": {
+                                                    "requests": [
+                                                        {
+                                                            "endTime": "<network-clock-ms>",
+                                                            "initiatorType": "fetch",
+                                                            "method": "POST",
+                                                            "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                            "requestBody": "{\"message\":\"compat request body\"}",
+                                                            "requestHeaders": {
+                                                                "authorization": "redacted",
+                                                                "content-type": "application/json",
+                                                                "x-compat-request": "retained"
+                                                            },
+                                                            "responseBody": "{\"message\":\"compat response body\"}",
+                                                            "responseHeaders": {
+                                                                "access-control-allow-headers": "*",
+                                                                "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                "access-control-allow-origin": "*",
+                                                                "authorization": "redacted",
+                                                                "cache-control": "no-store",
+                                                                "connection": "keep-alive",
+                                                                "content-length": "34",
+                                                                "content-type": "application/json",
+                                                                "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                "keep-alive": "timeout=5",
+                                                                "x-compat-response": "retained"
+                                                            },
+                                                            "startTime": "<network-clock-ms>",
+                                                            "status": 200,
+                                                            "timeOrigin": "<network-clock-ms>",
+                                                            "timestamp": "<network-clock-ms>"
+                                                        }
+                                                    ]
+                                                },
+                                                "plugin": "rrweb/network@1"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 6
+                                        },
+                                        {
+                                            "data": {
+                                                "payload": {
+                                                    "requests": [
+                                                        {
+                                                            "endTime": "<network-clock-ms>",
+                                                            "initiatorType": "fetch",
+                                                            "method": "POST",
+                                                            "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                            "requestBody": "[SessionRecording] Request body redacted as might contain: password",
+                                                            "requestHeaders": {
+                                                                "authorization": "redacted",
+                                                                "content-type": "application/json",
+                                                                "x-compat-request": "retained"
+                                                            },
+                                                            "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                            "responseHeaders": {
+                                                                "access-control-allow-headers": "*",
+                                                                "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                "access-control-allow-origin": "*",
+                                                                "authorization": "redacted",
+                                                                "cache-control": "no-store",
+                                                                "connection": "keep-alive",
+                                                                "content-length": "36",
+                                                                "content-type": "application/json",
+                                                                "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                "keep-alive": "timeout=5",
+                                                                "x-compat-response": "retained"
+                                                            },
+                                                            "startTime": "<network-clock-ms>",
+                                                            "status": 200,
+                                                            "timeOrigin": "<network-clock-ms>",
+                                                            "timestamp": "<network-clock-ms>"
+                                                        }
+                                                    ]
+                                                },
+                                                "plugin": "rrweb/network@1"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 6
+                                        }
+                                    ],
+                                    "$snapshot_host": "127.0.0.1",
+                                    "$window_id": "generated-id-4",
+                                    "distinct_id": "generated-id-1",
+                                    "token": "phc_COMPAT"
+                                },
+                                "sent_at": "2024-01-01T00:00:00.000Z",
+                                "timestamp": "2024-01-01T00:00:00.000Z",
+                                "uuid": "generated-id-16"
+                            },
+                            {
+                                "event": "$snapshot",
+                                "properties": {
+                                    "$config_defaults": "unset",
+                                    "$lib": "web",
+                                    "$lib_version": "<extension-version>",
+                                    "$session_id": "generated-id-2",
+                                    "$snapshot_bytes": "<encoded-size>",
+                                    "$snapshot_data": [
                                         {
                                             "cv": "2024-10",
                                             "data": {
@@ -89674,16 +90242,6 @@
                                             },
                                             "timestamp": 1704067200000,
                                             "type": 3
-                                        },
-                                        {
-                                            "data": {
-                                                "id": 16,
-                                                "isChecked": false,
-                                                "source": 5,
-                                                "text": "***********************"
-                                            },
-                                            "timestamp": 1704067200000,
-                                            "type": 3
                                         }
                                     ],
                                     "$snapshot_host": "127.0.0.1",
@@ -89693,7 +90251,7 @@
                                 },
                                 "sent_at": "2024-01-01T00:00:00.000Z",
                                 "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-15"
+                                "uuid": "generated-id-17"
                             }
                         ]
                     },
@@ -148663,7 +149221,6 @@
                                         "$sdk_debug_extensions_init_method": "synchronous",
                                         "$sdk_debug_extensions_init_time_ms": "<cpu-duration-ms>",
                                         "$sdk_debug_replay_event_trigger_status": "trigger_disabled",
-                                        "$sdk_debug_replay_flush_hold_reason": "no_interaction_since_recording_started",
                                         "$sdk_debug_replay_flushed_size": "<encoded-size>",
                                         "$sdk_debug_replay_internal_buffer_length": "<buffer-count>",
                                         "$sdk_debug_replay_internal_buffer_size": "<encoded-size>",
@@ -149167,7 +149724,6 @@
                                     "$sdk_debug_extensions_init_method": "synchronous",
                                     "$sdk_debug_extensions_init_time_ms": "<cpu-duration-ms>",
                                     "$sdk_debug_replay_event_trigger_status": "trigger_disabled",
-                                    "$sdk_debug_replay_flush_hold_reason": "no_interaction_since_recording_started",
                                     "$sdk_debug_replay_flushed_size": "<encoded-size>",
                                     "$sdk_debug_replay_internal_buffer_length": "<buffer-count>",
                                     "$sdk_debug_replay_internal_buffer_size": "<encoded-size>",
@@ -149636,7 +150192,6 @@
                                                 "$sdk_debug_extensions_init_method": "synchronous",
                                                 "$sdk_debug_extensions_init_time_ms": "<cpu-duration-ms>",
                                                 "$sdk_debug_replay_event_trigger_status": "trigger_disabled",
-                                                "$sdk_debug_replay_flush_hold_reason": "no_interaction_since_recording_started",
                                                 "$sdk_debug_replay_flushed_size": "<encoded-size>",
                                                 "$sdk_debug_replay_internal_buffer_length": "<buffer-count>",
                                                 "$sdk_debug_replay_internal_buffer_size": "<encoded-size>",
@@ -149676,6 +150231,60 @@
                                 "contentType": "application/json",
                                 "method": "POST",
                                 "path": "/e",
+                                "query": {},
+                                "status": 200
+                            },
+                            {
+                                "body": {
+                                    "event": "$snapshot",
+                                    "properties": {
+                                        "$config_defaults": "unset",
+                                        "$lib": "web",
+                                        "$lib_version": "<extension-version>",
+                                        "$session_id": "generated-id-2",
+                                        "$snapshot_bytes": "<encoded-size>",
+                                        "$snapshot_data": [
+                                            {
+                                                "cv": "2024-10",
+                                                "data": {
+                                                    "adds": [
+                                                        {
+                                                            "nextId": null,
+                                                            "node": {
+                                                                "id": 30,
+                                                                "textContent": "Updated",
+                                                                "type": 3
+                                                            },
+                                                            "parentId": 22
+                                                        }
+                                                    ],
+                                                    "attributes": [],
+                                                    "removes": [
+                                                        {
+                                                            "id": 23,
+                                                            "parentId": 22
+                                                        }
+                                                    ],
+                                                    "source": 0,
+                                                    "texts": []
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 3
+                                            }
+                                        ],
+                                        "$snapshot_host": "127.0.0.1",
+                                        "$window_id": "generated-id-4",
+                                        "distinct_id": "generated-id-1",
+                                        "token": "phc_COMPAT"
+                                    },
+                                    "sent_at": "2024-01-01T00:00:00.000Z",
+                                    "timestamp": "2024-01-01T00:00:00.000Z",
+                                    "uuid": "generated-id-17"
+                                },
+                                "contentEncoding": null,
+                                "contentType": "application/json",
+                                "method": "POST",
+                                "path": "/s",
                                 "query": {},
                                 "status": 200
                             },
@@ -149942,7 +150551,9 @@
                                             {
                                                 "data": {
                                                     "payload": {
-                                                        "activePlugins": [],
+                                                        "activePlugins": [
+                                                            "rrweb/network@1"
+                                                        ],
                                                         "sessionRecordingOptions": {
                                                             "blockClass": "ph-no-capture",
                                                             "collectFonts": false,
@@ -150006,7 +150617,7 @@
                                                             "disable_external_dependency_loading": false,
                                                             "disable_persistence": false,
                                                             "disable_product_tours": false,
-                                                            "disable_session_recording": true,
+                                                            "disable_session_recording": false,
                                                             "disable_surveys": true,
                                                             "disable_surveys_automatic_display": true,
                                                             "disable_web_experiments": true,
@@ -150049,7 +150660,9 @@
                                                                 "blockClass": "ph-no-capture",
                                                                 "maskAllInputs": true,
                                                                 "maskTextSelector": ".ph-mask",
-                                                                "recordCrossOriginIframes": false
+                                                                "recordBody": true,
+                                                                "recordCrossOriginIframes": false,
+                                                                "recordHeaders": true
                                                             },
                                                             "split_storage": false,
                                                             "strict_script_versioning": false,
@@ -150075,28 +150688,58 @@
                                                 "type": 5
                                             },
                                             {
-                                                "cv": "2024-10",
                                                 "data": {
-                                                    "adds": [
-                                                        {
-                                                            "nextId": null,
-                                                            "node": {
-                                                                "id": 30,
-                                                                "textContent": "Updated",
-                                                                "type": 3
-                                                            },
-                                                            "parentId": 22
-                                                        }
-                                                    ],
-                                                    "attributes": [],
-                                                    "removes": [
-                                                        {
-                                                            "id": 23,
-                                                            "parentId": 22
-                                                        }
-                                                    ],
-                                                    "source": 0,
-                                                    "texts": []
+                                                    "payload": {
+                                                        "requests": [
+                                                            {
+                                                                "connectEnd": "<network-clock-ms>",
+                                                                "connectStart": "<network-clock-ms>",
+                                                                "decodedBodySize": 517,
+                                                                "domComplete": "<network-clock-ms>",
+                                                                "domContentLoadedEventEnd": "<network-clock-ms>",
+                                                                "domContentLoadedEventStart": "<network-clock-ms>",
+                                                                "domInteractive": "<network-clock-ms>",
+                                                                "domainLookupEnd": "<network-clock-ms>",
+                                                                "domainLookupStart": "<network-clock-ms>",
+                                                                "duration": "<network-clock-ms>",
+                                                                "encodedBodySize": 517,
+                                                                "endTime": "<network-clock-ms>",
+                                                                "entryType": "navigation",
+                                                                "fetchStart": "<network-clock-ms>",
+                                                                "initiatorType": "navigation",
+                                                                "loadEventEnd": "<network-clock-ms>",
+                                                                "loadEventStart": "<network-clock-ms>",
+                                                                "name": "<fixture-origin>/",
+                                                                "nextHopProtocol": "http/1.1",
+                                                                "redirectCount": 0,
+                                                                "redirectEnd": "<network-clock-ms>",
+                                                                "redirectStart": "<network-clock-ms>",
+                                                                "requestStart": "<network-clock-ms>",
+                                                                "responseEnd": "<network-clock-ms>",
+                                                                "responseStart": "<network-clock-ms>",
+                                                                "secureConnectionStart": "<network-clock-ms>",
+                                                                "serverTiming": [],
+                                                                "startTime": "<network-clock-ms>",
+                                                                "timeOrigin": "<network-clock-ms>",
+                                                                "timestamp": "<network-clock-ms>",
+                                                                "transferSize": 817,
+                                                                "type": "navigate",
+                                                                "unloadEventEnd": "<network-clock-ms>",
+                                                                "unloadEventStart": "<network-clock-ms>",
+                                                                "workerStart": "<network-clock-ms>"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "plugin": "rrweb/network@1"
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 6
+                                            },
+                                            {
+                                                "data": {
+                                                    "id": 16,
+                                                    "source": 2,
+                                                    "type": 5
                                                 },
                                                 "timestamp": 1704067200000,
                                                 "type": 3
@@ -150120,6 +150763,115 @@
                                     "sent_at": "2024-01-01T00:00:00.000Z",
                                     "timestamp": "2024-01-01T00:00:00.000Z",
                                     "uuid": "generated-id-15"
+                                },
+                                "contentEncoding": null,
+                                "contentType": "application/json",
+                                "method": "POST",
+                                "path": "/s",
+                                "query": {},
+                                "status": 200
+                            },
+                            {
+                                "body": {
+                                    "event": "$snapshot",
+                                    "properties": {
+                                        "$config_defaults": "unset",
+                                        "$lib": "web",
+                                        "$lib_version": "<extension-version>",
+                                        "$session_id": "generated-id-2",
+                                        "$snapshot_bytes": "<encoded-size>",
+                                        "$snapshot_data": [
+                                            {
+                                                "data": {
+                                                    "payload": {
+                                                        "requests": [
+                                                            {
+                                                                "endTime": "<network-clock-ms>",
+                                                                "initiatorType": "fetch",
+                                                                "method": "POST",
+                                                                "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                                "requestBody": "{\"message\":\"compat request body\"}",
+                                                                "requestHeaders": {
+                                                                    "authorization": "redacted",
+                                                                    "content-type": "application/json",
+                                                                    "x-compat-request": "retained"
+                                                                },
+                                                                "responseBody": "{\"message\":\"compat response body\"}",
+                                                                "responseHeaders": {
+                                                                    "access-control-allow-headers": "*",
+                                                                    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                    "access-control-allow-origin": "*",
+                                                                    "authorization": "redacted",
+                                                                    "cache-control": "no-store",
+                                                                    "connection": "keep-alive",
+                                                                    "content-length": "34",
+                                                                    "content-type": "application/json",
+                                                                    "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                    "keep-alive": "timeout=5",
+                                                                    "x-compat-response": "retained"
+                                                                },
+                                                                "startTime": "<network-clock-ms>",
+                                                                "status": 200,
+                                                                "timeOrigin": "<network-clock-ms>",
+                                                                "timestamp": "<network-clock-ms>"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "plugin": "rrweb/network@1"
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 6
+                                            },
+                                            {
+                                                "data": {
+                                                    "payload": {
+                                                        "requests": [
+                                                            {
+                                                                "endTime": "<network-clock-ms>",
+                                                                "initiatorType": "fetch",
+                                                                "method": "POST",
+                                                                "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                                "requestBody": "[SessionRecording] Request body redacted as might contain: password",
+                                                                "requestHeaders": {
+                                                                    "authorization": "redacted",
+                                                                    "content-type": "application/json",
+                                                                    "x-compat-request": "retained"
+                                                                },
+                                                                "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                                "responseHeaders": {
+                                                                    "access-control-allow-headers": "*",
+                                                                    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                    "access-control-allow-origin": "*",
+                                                                    "authorization": "redacted",
+                                                                    "cache-control": "no-store",
+                                                                    "connection": "keep-alive",
+                                                                    "content-length": "36",
+                                                                    "content-type": "application/json",
+                                                                    "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                    "keep-alive": "timeout=5",
+                                                                    "x-compat-response": "retained"
+                                                                },
+                                                                "startTime": "<network-clock-ms>",
+                                                                "status": 200,
+                                                                "timeOrigin": "<network-clock-ms>",
+                                                                "timestamp": "<network-clock-ms>"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "plugin": "rrweb/network@1"
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 6
+                                            }
+                                        ],
+                                        "$snapshot_host": "127.0.0.1",
+                                        "$window_id": "generated-id-4",
+                                        "distinct_id": "generated-id-1",
+                                        "token": "phc_COMPAT"
+                                    },
+                                    "sent_at": "2024-01-01T00:00:00.000Z",
+                                    "timestamp": "2024-01-01T00:00:00.000Z",
+                                    "uuid": "generated-id-16"
                                 },
                                 "contentEncoding": null,
                                 "contentType": "application/json",
@@ -150408,7 +151160,9 @@
                                         {
                                             "data": {
                                                 "payload": {
-                                                    "activePlugins": [],
+                                                    "activePlugins": [
+                                                        "rrweb/network@1"
+                                                    ],
                                                     "sessionRecordingOptions": {
                                                         "blockClass": "ph-no-capture",
                                                         "collectFonts": false,
@@ -150472,7 +151226,7 @@
                                                         "disable_external_dependency_loading": false,
                                                         "disable_persistence": false,
                                                         "disable_product_tours": false,
-                                                        "disable_session_recording": true,
+                                                        "disable_session_recording": false,
                                                         "disable_surveys": true,
                                                         "disable_surveys_automatic_display": true,
                                                         "disable_web_experiments": true,
@@ -150515,7 +151269,9 @@
                                                             "blockClass": "ph-no-capture",
                                                             "maskAllInputs": true,
                                                             "maskTextSelector": ".ph-mask",
-                                                            "recordCrossOriginIframes": false
+                                                            "recordBody": true,
+                                                            "recordCrossOriginIframes": false,
+                                                            "recordHeaders": true
                                                         },
                                                         "split_storage": false,
                                                         "strict_script_versioning": false,
@@ -150540,6 +151296,193 @@
                                             "timestamp": 1704067200000,
                                             "type": 5
                                         },
+                                        {
+                                            "data": {
+                                                "payload": {
+                                                    "requests": [
+                                                        {
+                                                            "connectEnd": "<network-clock-ms>",
+                                                            "connectStart": "<network-clock-ms>",
+                                                            "decodedBodySize": 517,
+                                                            "domComplete": "<network-clock-ms>",
+                                                            "domContentLoadedEventEnd": "<network-clock-ms>",
+                                                            "domContentLoadedEventStart": "<network-clock-ms>",
+                                                            "domInteractive": "<network-clock-ms>",
+                                                            "domainLookupEnd": "<network-clock-ms>",
+                                                            "domainLookupStart": "<network-clock-ms>",
+                                                            "duration": "<network-clock-ms>",
+                                                            "encodedBodySize": 517,
+                                                            "endTime": "<network-clock-ms>",
+                                                            "entryType": "navigation",
+                                                            "fetchStart": "<network-clock-ms>",
+                                                            "initiatorType": "navigation",
+                                                            "loadEventEnd": "<network-clock-ms>",
+                                                            "loadEventStart": "<network-clock-ms>",
+                                                            "name": "<fixture-origin>/",
+                                                            "nextHopProtocol": "http/1.1",
+                                                            "redirectCount": 0,
+                                                            "redirectEnd": "<network-clock-ms>",
+                                                            "redirectStart": "<network-clock-ms>",
+                                                            "requestStart": "<network-clock-ms>",
+                                                            "responseEnd": "<network-clock-ms>",
+                                                            "responseStart": "<network-clock-ms>",
+                                                            "secureConnectionStart": "<network-clock-ms>",
+                                                            "serverTiming": [],
+                                                            "startTime": "<network-clock-ms>",
+                                                            "timeOrigin": "<network-clock-ms>",
+                                                            "timestamp": "<network-clock-ms>",
+                                                            "transferSize": 817,
+                                                            "type": "navigate",
+                                                            "unloadEventEnd": "<network-clock-ms>",
+                                                            "unloadEventStart": "<network-clock-ms>",
+                                                            "workerStart": "<network-clock-ms>"
+                                                        }
+                                                    ]
+                                                },
+                                                "plugin": "rrweb/network@1"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 6
+                                        },
+                                        {
+                                            "data": {
+                                                "id": 16,
+                                                "source": 2,
+                                                "type": 5
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 3
+                                        },
+                                        {
+                                            "data": {
+                                                "id": 16,
+                                                "isChecked": false,
+                                                "source": 5,
+                                                "text": "***********************"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 3
+                                        }
+                                    ],
+                                    "$snapshot_host": "127.0.0.1",
+                                    "$window_id": "generated-id-4",
+                                    "distinct_id": "generated-id-1",
+                                    "token": "phc_COMPAT"
+                                },
+                                "sent_at": "2024-01-01T00:00:00.000Z",
+                                "timestamp": "2024-01-01T00:00:00.000Z",
+                                "uuid": "generated-id-15"
+                            },
+                            {
+                                "event": "$snapshot",
+                                "properties": {
+                                    "$config_defaults": "unset",
+                                    "$lib": "web",
+                                    "$lib_version": "<extension-version>",
+                                    "$session_id": "generated-id-2",
+                                    "$snapshot_bytes": "<encoded-size>",
+                                    "$snapshot_data": [
+                                        {
+                                            "data": {
+                                                "payload": {
+                                                    "requests": [
+                                                        {
+                                                            "endTime": "<network-clock-ms>",
+                                                            "initiatorType": "fetch",
+                                                            "method": "POST",
+                                                            "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                            "requestBody": "{\"message\":\"compat request body\"}",
+                                                            "requestHeaders": {
+                                                                "authorization": "redacted",
+                                                                "content-type": "application/json",
+                                                                "x-compat-request": "retained"
+                                                            },
+                                                            "responseBody": "{\"message\":\"compat response body\"}",
+                                                            "responseHeaders": {
+                                                                "access-control-allow-headers": "*",
+                                                                "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                "access-control-allow-origin": "*",
+                                                                "authorization": "redacted",
+                                                                "cache-control": "no-store",
+                                                                "connection": "keep-alive",
+                                                                "content-length": "34",
+                                                                "content-type": "application/json",
+                                                                "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                "keep-alive": "timeout=5",
+                                                                "x-compat-response": "retained"
+                                                            },
+                                                            "startTime": "<network-clock-ms>",
+                                                            "status": 200,
+                                                            "timeOrigin": "<network-clock-ms>",
+                                                            "timestamp": "<network-clock-ms>"
+                                                        }
+                                                    ]
+                                                },
+                                                "plugin": "rrweb/network@1"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 6
+                                        },
+                                        {
+                                            "data": {
+                                                "payload": {
+                                                    "requests": [
+                                                        {
+                                                            "endTime": "<network-clock-ms>",
+                                                            "initiatorType": "fetch",
+                                                            "method": "POST",
+                                                            "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                            "requestBody": "[SessionRecording] Request body redacted as might contain: password",
+                                                            "requestHeaders": {
+                                                                "authorization": "redacted",
+                                                                "content-type": "application/json",
+                                                                "x-compat-request": "retained"
+                                                            },
+                                                            "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                            "responseHeaders": {
+                                                                "access-control-allow-headers": "*",
+                                                                "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+                                                                "access-control-allow-origin": "*",
+                                                                "authorization": "redacted",
+                                                                "cache-control": "no-store",
+                                                                "connection": "keep-alive",
+                                                                "content-length": "36",
+                                                                "content-type": "application/json",
+                                                                "date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                                                                "keep-alive": "timeout=5",
+                                                                "x-compat-response": "retained"
+                                                            },
+                                                            "startTime": "<network-clock-ms>",
+                                                            "status": 200,
+                                                            "timeOrigin": "<network-clock-ms>",
+                                                            "timestamp": "<network-clock-ms>"
+                                                        }
+                                                    ]
+                                                },
+                                                "plugin": "rrweb/network@1"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 6
+                                        }
+                                    ],
+                                    "$snapshot_host": "127.0.0.1",
+                                    "$window_id": "generated-id-4",
+                                    "distinct_id": "generated-id-1",
+                                    "token": "phc_COMPAT"
+                                },
+                                "sent_at": "2024-01-01T00:00:00.000Z",
+                                "timestamp": "2024-01-01T00:00:00.000Z",
+                                "uuid": "generated-id-16"
+                            },
+                            {
+                                "event": "$snapshot",
+                                "properties": {
+                                    "$config_defaults": "unset",
+                                    "$lib": "web",
+                                    "$lib_version": "<extension-version>",
+                                    "$session_id": "generated-id-2",
+                                    "$snapshot_bytes": "<encoded-size>",
+                                    "$snapshot_data": [
                                         {
                                             "cv": "2024-10",
                                             "data": {
@@ -150566,16 +151509,6 @@
                                             },
                                             "timestamp": 1704067200000,
                                             "type": 3
-                                        },
-                                        {
-                                            "data": {
-                                                "id": 16,
-                                                "isChecked": false,
-                                                "source": 5,
-                                                "text": "***********************"
-                                            },
-                                            "timestamp": 1704067200000,
-                                            "type": 3
                                         }
                                     ],
                                     "$snapshot_host": "127.0.0.1",
@@ -150585,7 +151518,7 @@
                                 },
                                 "sent_at": "2024-01-01T00:00:00.000Z",
                                 "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-15"
+                                "uuid": "generated-id-17"
                             }
                         ]
                     },

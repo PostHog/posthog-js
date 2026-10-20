@@ -38,6 +38,34 @@ const otelRecord = /\.resourceLogs\[\d+\]\.scopeLogs\[\d+\]\.logRecords\[\d+\]$/
 
 export function normalize(snapshot, { origin, version, extensionVersion = version }) {
     const ids = new Map()
+    const replayNetworkRequests = new WeakSet()
+    const replayNetworkClocks = new Set([
+        'startTime',
+        'endTime',
+        'timeOrigin',
+        'timestamp',
+        'duration',
+        'workerStart',
+        'redirectStart',
+        'redirectEnd',
+        'fetchStart',
+        'domainLookupStart',
+        'domainLookupEnd',
+        'connectStart',
+        'connectEnd',
+        'secureConnectionStart',
+        'requestStart',
+        'responseStart',
+        'responseEnd',
+        'unloadEventStart',
+        'unloadEventEnd',
+        'domInteractive',
+        'domContentLoadedEventStart',
+        'domContentLoadedEventEnd',
+        'domComplete',
+        'loadEventStart',
+        'loadEventEnd',
+    ])
     const metadataVersion = (value, expected, role, path) => {
         if (value !== expected)
             throw new Error(`Unexpected ${role} metadata at ${path}: ${value}; expected ${expected}`)
@@ -158,6 +186,9 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
         }
         if (Array.isArray(value)) return value.map((item, index) => visit(item, key, `${path}[${index}]`))
         if (!value || typeof value !== 'object') return value
+        if (replayMarkerData.test(path) && value.plugin === 'rrweb/network@1' && Array.isArray(value.payload?.requests))
+            for (const request of value.payload.requests)
+                if (request && typeof request === 'object') replayNetworkRequests.add(request)
         const result = Object.create(null)
         for (const child of Object.keys(value).sort()) {
             let item = value[child]
@@ -178,6 +209,15 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                 /^\d+$/.test(item)
             )
                 item = '<clock>'
+            // Only native Replay network clocks vary here; retain headers, bodies, status and array order.
+            if (
+                replayNetworkRequests.has(value) &&
+                replayNetworkClocks.has(child) &&
+                typeof item === 'number' &&
+                Number.isFinite(item) &&
+                (['timeOrigin', 'timestamp'].includes(child) ? item > 0 : item >= 0)
+            )
+                item = '<network-clock-ms>'
             const debugProperties = sdkProperties.test(path) || storageRoot.test(path)
             if (
                 child === '$sdk_debug_extensions_init_time_ms' &&

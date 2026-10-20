@@ -7,6 +7,7 @@ import { parseOptions, selection } from './options.mjs'
 import { assertLoaderProof } from './loader-proof.mjs'
 import { interactionScenarios, exerciseInteractions } from './interaction-cases.mjs'
 import { replayLifecycleScenarios, exerciseReplayLifecycle } from './replay-cases.mjs'
+import { exerciseReplayNetwork, assertReplayNetworkCapture } from './replay-network.mjs'
 import { compatibilityServer } from './server.mjs'
 import {
     legacyRecordingConfig,
@@ -372,6 +373,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             await expect.poll(async () => JSON.stringify((await received()).logs).includes('compat-console')).toBe(true)
         }
         if (['replay', 'replay-css', 'replay-persisted-config'].includes(scenario)) {
+            if (scenario === 'replay') await exerciseReplayNetwork({ page, received, expect })
             if (scenario === 'replay-css')
                 replay.originalStyles = await page.evaluate((keys) => {
                     const style = getComputedStyle(document.querySelector('#css-probe'))
@@ -387,7 +389,21 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
             )
             await page.evaluate(() => window.__compat.call('stopSessionRecording'))
-            await expect.poll(async () => (await received()).snapshots.length, { timeout: 15000 }).toBeGreaterThan(0)
+            await expect
+                .poll(
+                    async () =>
+                        decodeReplay((await received()).snapshots)
+                            .flatMap((snapshot) => snapshot.properties?.$snapshot_data ?? [])
+                            .some(
+                                (event) =>
+                                    event.type === 3 &&
+                                    event.data.source === 0 &&
+                                    (event.data.texts?.some((text) => text.value === 'Updated') ||
+                                        event.data.adds?.some((addition) => addition.node.textContent === 'Updated'))
+                            ),
+                    { message: 'Replay DOM update was not delivered', timeout: 15000 }
+                )
+                .toBe(true)
             const snapshots = decodeReplay((await received()).snapshots)
             const events = snapshots.flatMap((event) => event.properties?.$snapshot_data ?? [])
             assert(
@@ -413,12 +429,12 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 .poll(async () =>
                     player.evaluate(
                         () =>
-                            !!document
+                            document
                                 .querySelector('.replayer-wrapper iframe')
-                                ?.contentDocument?.querySelector('#change')
+                                ?.contentDocument?.querySelector('#change')?.textContent
                     )
                 )
-                .toBe(true)
+                .toBe('Updated')
             replay = {
                 ...replay,
                 ...(await player.evaluate(() => ({
@@ -475,6 +491,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             )
             .toBe(1)
         const network = await received()
+        if (scenario === 'replay') assertReplayNetworkCapture(network, server.inspect(), server.origin)
         if (scenario === 'web-vitals') assertWebVitalsDelivery(network)
         if (['surveys', 'surveys-auto'].includes(scenario)) {
             const sent = network.events.filter((event) => event.event === 'survey sent')

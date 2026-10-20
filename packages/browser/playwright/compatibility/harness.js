@@ -145,10 +145,13 @@
             maskTextSelector: '.ph-mask',
             recordCrossOriginIframes: false,
             blockClass: 'ph-no-capture',
+            ...(lab.scenario === 'replay' ? { recordHeaders: true, recordBody: true } : {}),
         },
         ...(lab.scenario === 'logs' ? { logs: { captureConsoleLogs: true, flushIntervalMs: 1000 } } : {}),
         ...(lab.mode === 'slim' ? { __extensionClasses: lab.extensions } : {}),
         loaded: (ph) => {
+            // Exercise native network capture on the loopback fixture, as in the focused Replay tests.
+            if (lab.scenario === 'replay') ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
             lab.ph = ph
             lab.loaded = true
             lab.probe('loaded')
