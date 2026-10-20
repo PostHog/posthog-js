@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5333](https://github.com/PostHog/posthog-js/issues/5333) | Confirmed: Next 16 webpack builds can be misclassified as Turbopack, causing the native-debug-ID upload path to run without webpack chunk-ID injection. | bug, frameworks/next-js, feature/error-tracking, web, team/error-tracking, team/client-libraries |  | no | 2026-10-20T12:44:27.790Z |
 | PostHog/posthog-js | [issue 5332](https://github.com/PostHog/posthog-js/issues/5332) | Confirmed webpack sourcemap instrumentation bug affecting immutable Next.js client assets. | bug, frameworks/next-js, feature/error-tracking, web, team/error-tracking, team/client-libraries |  | no | 2026-10-20T09:23:17.977Z |
 | PostHog/posthog-js | [issue 5319](https://github.com/PostHog/posthog-js/issues/5319) | Likely a legacy cross-tab/cross-subdomain persistence-consistency problem exposed by bfcache, but the report does not yet prove a new bfcache-specific regression. | web, team/client-libraries, bug |  | no | 2026-10-19T07:35:28.334Z |
 | PostHog/posthog-js | [issue 5318](https://github.com/PostHog/posthog-js/issues/5318) | Confirmed browser SDK bug: final web-vitals buffered at page hide can be lost because their delayed timer cannot run after unload. | feature/web-analytics, javascript, web, team/client-libraries, bug |  | no | 2026-10-19T01:32:53.143Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 3586](https://github.com/PostHog/posthog-js/issues/3586) | Valid feature request; the Node SDK still lacks groupIdentifyImmediate(). | enhancement, feature/product-analytics, node | https://github.com/PostHog/posthog-js/pull/4006 | no | 2026-06-29T10:08:46.834Z |
 | PostHog/posthog-js | [issue 3583](https://github.com/PostHog/posthog-js/issues/3583) | Valid bug: OpenAI Responses API streaming helper is not wrapped for PostHog params. | bug, team/llm-analytics |  | no | 2026-06-29T10:04:38.826Z |
 | PostHog/posthog-js | [issue 3573](https://github.com/PostHog/posthog-js/issues/3573) | Valid bug: `register_for_session` is currently scoped to browser `sessionStorage`, not to PostHog `$session_id` rotation. | feature/product-analytics, web |  | no | 2026-06-29T09:59:28.987Z |
-| PostHog/posthog-js | [issue 3435](https://github.com/PostHog/posthog-js/issues/3435) | Likely already fixed for posthog-js consumers by removing OpenTelemetry from published dependencies. | enhancement, dependencies, web, feature, team/logs |  | no | 2026-06-28T09:38:18.835Z |
