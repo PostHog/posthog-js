@@ -357,6 +357,19 @@ describe('PostHog RN session replay follows consent', () => {
     await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
   })
 
+  it('restarts replay on opt-in when reading the recorder state at opt-out fails', async () => {
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+    replay.isEnabled.mockRejectedValueOnce(new Error('bridge error'))
+
+    await posthog.optOut()
+    expect(nativeRecording).toBe(false)
+    await posthog.optIn()
+
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+  })
+
   it('still stops replay on opt-out when reading the recorder state hangs', async () => {
     posthog = newPostHog({ enableSessionReplay: true })
     await posthog.ready()

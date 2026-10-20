@@ -3270,8 +3270,14 @@ export class PostHog extends PostHogCore {
       return
     }
     this._sessionReplayOptOutReadPending = false
-    // Unknown counts as recording, as in posthog-ios.
-    const active = await raceWithTimeout(this.isSessionReplayActive(), NATIVE_CALL_TIMEOUT_MS, () =>
+    // Unknown (failed or timed out) counts as recording, as in posthog-ios.
+    const read: Promise<boolean | undefined> = OptionalReactNativePlugin
+      ? OptionalReactNativePlugin.isEnabled().catch((e) => {
+          this._logger.warn(`Failed to read the session replay state: ${e}`)
+          return undefined
+        })
+      : Promise.resolve(false)
+    const active = await raceWithTimeout(read, NATIVE_CALL_TIMEOUT_MS, () =>
       this._logger.warn(`Reading the session replay state timed out after ${NATIVE_CALL_TIMEOUT_MS}ms; continuing.`)
     )
     this._restartSessionReplayOnOptIn = active ?? true
