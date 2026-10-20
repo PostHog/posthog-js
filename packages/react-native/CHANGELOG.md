@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.81.3
+
+### Patch Changes
+
+- [#5124](https://github.com/PostHog/posthog-js/pull/5124) [`10ec4ba`](https://github.com/PostHog/posthog-js/commit/10ec4ba84758531465707ae36caca80175e181f9) Thanks [@nandinitiw](https://github.com/nandinitiw)! - Stop session replay on `optOut()` and resume automatic replay under a new session ID on `optIn()`, unless the app stopped it with `stopSessionRecording()`
+  (2026-10-20)
+
 ## 4.81.2
 
 ### Patch Changes
