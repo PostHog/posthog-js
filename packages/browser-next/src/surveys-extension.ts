@@ -24,10 +24,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     let remoteEnabled = false
     let manual = false
     let disposed = false
-    let finishDisposal!: () => void
-    const disposal = new Promise<SurveyRenderReason>((resolve) => {
-        finishDisposal = () => resolve({ visible: false, disabledReason: 'Surveys unavailable' })
-    })
+    const pendingEligibility = new Set<(reason: SurveyRenderReason) => void>()
     let manager: SurveysManager | undefined
     let renderer: Renderer | undefined
     let loading: Promise<Renderer> | undefined
@@ -173,20 +170,42 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                     })
             ),
         canRenderSurvey: (id, forceReload) =>
-            Promise.race([
-                disposal,
-                (async (): Promise<SurveyRenderReason> => {
+            new Promise<SurveyRenderReason>((resolve, reject) => {
+                const finish = (reason: SurveyRenderReason) => {
+                    pendingEligibility.delete(finish)
+                    resolve(reason)
+                }
+                if (disposed) {
+                    finish({ visible: false, disabledReason: 'Surveys unavailable' })
+                    return
+                }
+                pendingEligibility.add(finish)
+                void (async (): Promise<SurveyRenderReason> => {
                     if (!(await ensureRenderer()))
                         return { visible: false, disabledReason: 'Survey renderer unavailable' }
                     return shared.canRenderSurveyAsync(id, forceReload ?? false)
-                })(),
-            ]),
+                })().then(finish, (error) => {
+                    pendingEligibility.delete(finish)
+                    reject(error)
+                })
+            }),
         onSurveysLoaded: (callback) => {
             let active = true
-            const unsubscribe = shared.onSurveysLoaded((surveys, context) => {
-                if (active) deliver(callback)(surveys, context)
+            const notify = deliver((surveys, context) => {
+                if (active) callback(surveys, context)
             })
-            void ensureRenderer()
+            const unsubscribe = shared.onSurveysLoaded(notify)
+            if (!client || typeof document === 'undefined') {
+                notify([], { isLoaded: false, error: 'Survey renderer unavailable' })
+            } else if (!disposed) {
+                manual = true
+                try {
+                    // Shared initialization owns load failures as well as success notifications.
+                    shared.loadIfEnabled()
+                } catch (error) {
+                    client.logger.error('Survey renderer loading failed', error)
+                }
+            }
             return {
                 dispose: () => {
                     active = false
@@ -200,7 +219,9 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
         reset,
         dispose: () => {
             disposed = true
-            finishDisposal()
+            for (const finish of pendingEligibility) {
+                finish({ visible: false, disabledReason: 'Surveys unavailable' })
+            }
             remoteSubscription?.dispose()
             resetSubscription?.dispose()
             if (typeof window !== 'undefined') window.removeEventListener('pagehide', pagehide)

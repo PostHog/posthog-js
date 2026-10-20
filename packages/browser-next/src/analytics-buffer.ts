@@ -49,17 +49,23 @@ export const createAnalyticsExtension = (
     let loading: Promise<void> | undefined
     let disposed = false
     const teardownCallbacks = new Set<() => void>()
+    let isTearingDown = false
     const beforeTeardown = () => {
-        for (const callback of teardownCallbacks) {
-            try {
-                callback()
-            } catch (error) {
+        isTearingDown = true
+        try {
+            for (const callback of teardownCallbacks) {
                 try {
-                    host.reportFailure(error)
-                } catch {
-                    /* A product must not block the handoff. */
+                    callback()
+                } catch (error) {
+                    try {
+                        host.reportFailure(error)
+                    } catch {
+                        /* A product must not block the handoff. */
+                    }
                 }
             }
+        } finally {
+            isTearingDown = false
         }
     }
     let failures = 0
@@ -118,6 +124,9 @@ export const createAnalyticsExtension = (
 
     return {
         name: Analytics,
+        get isTearingDown() {
+            return isTearingDown
+        },
         setup(value) {
             client = value
         },

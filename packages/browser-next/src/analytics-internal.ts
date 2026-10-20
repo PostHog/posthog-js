@@ -56,6 +56,7 @@ export type AnalyticsDeliveryFactory = (
 
 /** The capture operations required by core, independent of extension setup or loading. */
 export interface CaptureSink {
+    readonly isTearingDown: boolean
     enqueue(message: AnalyticsMessage, bytes: number): boolean
     discardQueued(message: AnalyticsMessage): void
     admitted(): void

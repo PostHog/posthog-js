@@ -9,14 +9,15 @@ import {
     dismissedSurveyEvent,
 } from '@posthog/browser-common/surveys/surveys-extension-utils'
 import { createPostHog, FeatureFlagsExtension } from '../src'
-import { createPostHog as createCore } from '../src/core'
+import { createPostHog as createCore, type RemoteConfig } from '../src/core'
 import { createSurveys } from '../src/surveys-extension'
 import { surveys, type SurveysExtension } from '../src/surveys'
 import { generateSurveys } from '@posthog/browser-common/surveys-renderer'
 import type { PostHog, PostHogOptions } from '../src/types'
 import type { Survey, SurveyCallback } from '../src/surveys-options'
 import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
-import { MemoryStorage } from './helpers'
+import { createRemoteConfigFetch, MemoryStorage } from './helpers'
+import { queryObjects } from 'node:v8'
 
 const definition: Survey = {
     id: 'survey-test',
@@ -258,6 +259,114 @@ describe('surveys', () => {
         expect(load).toHaveBeenCalledTimes(2)
     })
 
+    it('notifies subscribers of renderer failure and later successful retry', async () => {
+        const module = renderer()
+        const load = vi.fn().mockRejectedValueOnce(new Error('chunk')).mockResolvedValue(module)
+        const client = await create({
+            extensions: [createSurveys({}, load)],
+            fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
+        })
+        const callback = vi.fn()
+        getExtension(client).onSurveysLoaded(callback)
+        await vi.waitFor(() =>
+            expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Could not load surveys script' })
+        )
+        await getSurveys(client)
+        expect(callback).toHaveBeenCalledTimes(2)
+        expect(callback).toHaveBeenLastCalledWith([definition], { isLoaded: true })
+    })
+
+    it('notifies every subscriber of renderer failure and a later successful retry', async () => {
+        let reject!: (error: Error) => void
+        const loading = new Promise<ReturnType<typeof renderer>>((_, fail) => {
+            reject = fail
+        })
+        const load = vi.fn().mockReturnValueOnce(loading).mockResolvedValue(renderer())
+        const client = await create({
+            extensions: [createSurveys({}, load)],
+            fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
+        })
+        const callbacks = [vi.fn(), vi.fn()]
+        for (const callback of callbacks) getExtension(client).onSurveysLoaded(callback)
+        reject(new Error('chunk'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        for (const callback of callbacks) {
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Could not load surveys script' })
+        }
+        await getSurveys(client)
+        for (const callback of callbacks) {
+            expect(callback).toHaveBeenCalledTimes(2)
+            expect(callback).toHaveBeenLastCalledWith([definition], { isLoaded: true })
+        }
+    })
+
+    it('notifies a subscriber once when automatic and manual loading share a failed renderer', async () => {
+        let reject!: (error: Error) => void
+        const loading = new Promise<ReturnType<typeof renderer>>((_, fail) => {
+            reject = fail
+        })
+        const client = await create({
+            extensions: [createSurveys({}, () => loading)],
+            remoteConfig: { ...remote, surveys: true },
+        })
+        const callback = vi.fn()
+        getExtension(client).onSurveysLoaded(callback)
+        reject(new Error('chunk'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(callback).toHaveBeenCalledTimes(1)
+        expect(callback).toHaveBeenCalledWith(
+            [],
+            expect.objectContaining({ isLoaded: false, error: expect.any(String) })
+        )
+    })
+
+    it.each(['subscription', 'client'] as const)('suppresses renderer failure after %s disposal', async (mode) => {
+        let reject!: (error: Error) => void
+        const loading = new Promise<ReturnType<typeof renderer>>((_, fail) => {
+            reject = fail
+        })
+        const client = await create({ extensions: [createSurveys({}, () => loading)] })
+        const callback = vi.fn()
+        const subscription = getExtension(client).onSurveysLoaded(callback)
+        if (mode === 'subscription') subscription.dispose()
+        else await client.shutdown(0)
+        reject(new Error('chunk'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(callback).not.toHaveBeenCalled()
+    })
+
+    it('notifies a subscriber once when manual renderer loading precedes remote enablement', async () => {
+        let resolveRemote!: (config: RemoteConfig) => void
+        const remoteResponse = new Promise<RemoteConfig>((resolve) => {
+            resolveRemote = resolve
+        })
+        let rejectRenderer!: (error: Error) => void
+        const loading = new Promise<ReturnType<typeof renderer>>((_, reject) => {
+            rejectRenderer = reject
+        })
+        const client = await createPostHog({
+            ...base,
+            extensions: [createSurveys({}, () => loading)],
+            fetch: createRemoteConfigFetch(
+                () => remoteResponse,
+                async () => new Response(JSON.stringify({ surveys: [definition] }))
+            ),
+        })
+        clients.push(client)
+        const callback = vi.fn()
+        getExtension(client).onSurveysLoaded(callback)
+        resolveRemote({ ...remote, surveys: true })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        rejectRenderer(new Error('chunk'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(callback).toHaveBeenCalledTimes(1)
+        expect(callback).toHaveBeenCalledWith(
+            [],
+            expect.objectContaining({ isLoaded: false, error: expect.any(String) })
+        )
+    })
+
     it('does not initialize UI or deliver callbacks after disposal during a delayed load', async () => {
         let resolve!: (value: ReturnType<typeof renderer>) => void
         const load = () =>
@@ -371,6 +480,21 @@ describe('surveys', () => {
             expect(interval.mock.calls.filter(([, delay]) => delay === 1000)).toHaveLength(mode === 'enabled' ? 1 : 0)
         }
     )
+
+    it('releases completed eligibility promises while the client remains alive', async () => {
+        const client = await create({
+            extensions: [surveys({ automaticDisplay: false })],
+            fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
+        })
+        const extension = getExtension(client)
+        await extension.canRenderSurvey(definition.id)
+        const before = queryObjects(Promise, { format: 'count' })
+        for (let index = 0; index < 200; index++) {
+            await extension.canRenderSurvey(definition.id)
+        }
+        // Allow runner bookkeeping, but not a retained reaction for each completed check.
+        expect(queryObjects(Promise, { format: 'count' })).toBeLessThan(before + 50)
+    })
 
     it('settles pending eligibility when disposed during a definition request', async () => {
         const client = await create({

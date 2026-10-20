@@ -108,6 +108,14 @@ for (const mode of ['ready', 'denied', 'disposed', 'loading'] as const) {
             )
         if (mode === 'ready') {
             await expect.poll(async () => (await abandoned()).length).toBe(1)
+            const handoff = await requests()
+            expect(handoff).toHaveLength(1)
+            expect(JSON.parse(handoff[0]!.body).batch).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ event: 'survey shown' }),
+                    expect.objectContaining({ event: 'survey abandoned' }),
+                ])
+            )
             expect((await abandoned())[0]?.properties).toMatchObject({
                 $survey_id: 'browser-survey',
                 $survey_response_answer: 'First answer',

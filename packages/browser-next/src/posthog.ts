@@ -320,7 +320,7 @@ class PostHogBrowserClient implements PostHog {
 
     capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): void {
         try {
-            if (options.delivery === 'unload') {
+            if (options.delivery === 'unload' && !this._captureSink?.isTearingDown) {
                 const authority = this._immediateAuthority
                 const message = this._admitCapture(event, properties, options, false, true)
                 if (message) {
