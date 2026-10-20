@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5345](https://github.com/PostHog/posthog-js/issues/5345) | Confirmed browser-surveys validation bug: rating prefill accepts 0 for 1-based scales, allowing an impossible response to be persisted and potentially submitted. | feature/surveys, web, team/client-libraries, bug |  | no | 2026-10-20T21:34:31.431Z |
 | PostHog/posthog-js | [issue 5340](https://github.com/PostHog/posthog-js/issues/5340) | Confirmed browser SDK URL-masking bug with a small, localized fix. | web, team/client-libraries, bug |  | no | 2026-10-20T21:19:46.590Z |
 | PostHog/posthog-js | [issue 5333](https://github.com/PostHog/posthog-js/issues/5333) | Confirmed: Next 16 webpack builds can be misclassified as Turbopack, causing the native-debug-ID upload path to run without webpack chunk-ID injection. | bug, frameworks/next-js, feature/error-tracking, web, team/error-tracking, team/client-libraries |  | no | 2026-10-20T12:44:27.790Z |
 | PostHog/posthog-js | [issue 5332](https://github.com/PostHog/posthog-js/issues/5332) | Confirmed webpack sourcemap instrumentation bug affecting immutable Next.js client assets. | bug, frameworks/next-js, feature/error-tracking, web, team/error-tracking, team/client-libraries |  | no | 2026-10-20T09:23:17.977Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 3594](https://github.com/PostHog/posthog-js/issues/3594) | Valid toolbar/proxy routing issue; current code only uses ui_host for toolbar API params, not for loading toolbar.js. | feature/toolbar, frameworks/next-js, web |  | no | 2026-06-30T09:36:47.102Z |
 | PostHog/posthog-js | [issue 3575](https://github.com/PostHog/posthog-js/issues/3575) | Valid surveys/web bug report; the rendering result can plausibly diverge from canRenderSurveyAsync after completion. | feature/surveys, web |  | no | 2026-06-30T09:33:38.426Z |
 | PostHog/posthog-js | [issue 3586](https://github.com/PostHog/posthog-js/issues/3586) | Valid feature request; the Node SDK still lacks groupIdentifyImmediate(). | enhancement, feature/product-analytics, node | https://github.com/PostHog/posthog-js/pull/4006 | no | 2026-06-29T10:08:46.834Z |
-| PostHog/posthog-js | [issue 3583](https://github.com/PostHog/posthog-js/issues/3583) | Valid bug: OpenAI Responses API streaming helper is not wrapped for PostHog params. | bug, team/llm-analytics |  | no | 2026-06-29T10:04:38.826Z |
