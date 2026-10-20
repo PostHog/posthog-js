@@ -63,10 +63,17 @@ function webpackSupportsDebugIds(version: string | undefined): boolean {
 export class PosthogWebpackPlugin {
     resolvedConfig: ResolvedPluginConfig
     logger: Logger
+    private readonly _injectReleaseId: boolean
 
     constructor(pluginConfig: PluginConfig)
-    constructor(pluginConfig: ResolvedPluginConfig, resolved: true)
-    constructor(pluginConfig: PluginConfig | ResolvedPluginConfig, resolved?: boolean) {
+    /** @internal Frameworks that compile POSTHOG_RELEASE_ID before hashing can omit per-chunk release injection. */
+    constructor(pluginConfig: ResolvedPluginConfig, resolved: true, frameworkOptions?: { injectReleaseId?: boolean })
+    constructor(
+        pluginConfig: PluginConfig | ResolvedPluginConfig,
+        resolved?: boolean,
+        frameworkOptions: { injectReleaseId?: boolean } = {}
+    ) {
+        this._injectReleaseId = frameworkOptions.injectReleaseId ?? true
         this.logger = createLogger('[PostHog Webpack]')
         this.resolvedConfig = resolved
             ? (pluginConfig as ResolvedPluginConfig)
@@ -82,6 +89,7 @@ export class PosthogWebpackPlugin {
             // without the option we fall back to content-derived ids, which are equally
             // stable — just not shared with other tooling.
             const eventReleaseMode = this.resolvedConfig.sourcemaps.releaseMode === 'event'
+            const injectReleaseId = eventReleaseMode && this._injectReleaseId
             new compiler.webpack.SourceMapDevToolPlugin({
                 filename: '[file].map',
                 noSources: false,
@@ -94,8 +102,9 @@ export class PosthogWebpackPlugin {
                 compilation.hooks.processAssets.tapPromise(
                     {
                         name: 'PosthogWebpackPlugin',
-                        // Maps (including native debug ids) exist now, but content hashes and
-                        // Next.js's afterProcessAssets integrity manifest have not been finalized.
+                        // Maps exist now, before real content hashes and integrity manifests.
+                        // Chunk hashes are already fixed: frameworks using [chunkhash] must compile
+                        // the release id before hashing rather than inject it here.
                         stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_DEV_TOOLING + 1,
                     },
                     async () => {
@@ -122,7 +131,7 @@ export class PosthogWebpackPlugin {
                                             ...asset.info,
                                             posthogChunkId: chunkId,
                                         })
-                                        if (eventReleaseMode) {
+                                        if (injectReleaseId) {
                                             this.logger.warn(
                                                 `PostHog: ${file} already carries a chunk id, so no release id was injected`
                                             )
@@ -135,10 +144,10 @@ export class PosthogWebpackPlugin {
                                         )
                                         continue
                                     }
-                                    const releaseId = eventReleaseMode
+                                    const releaseId = injectReleaseId
                                         ? await (releaseIdPromise ??= resolveReleaseId(this.resolvedConfig))
                                         : undefined
-                                    if (eventReleaseMode && !releaseId && !warnedAboutMissingRelease) {
+                                    if (injectReleaseId && !releaseId && !warnedAboutMissingRelease) {
                                         warnedAboutMissingRelease = true
                                         this.logger.warn(
                                             'No release could be resolved, injecting chunk ids only. Set sourcemaps.releaseName and sourcemaps.releaseVersion, or build from git or a supported CI environment.'

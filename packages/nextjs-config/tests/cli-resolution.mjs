@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 const packageDir = fileURLToPath(new URL('..', import.meta.url))
 
 for (const format of ['cjs', 'esm']) {
-  test(`${format}: resolves the package-local CLI and preserves explicit overrides`, (t) => {
+  test(`${format}: resolves the package-local CLI for webpack selected by environment or CLI flag`, (t) => {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'posthog-next-cli-')))
     t.after(() => rmSync(root, { recursive: true, force: true }))
     const installedPackage = path.join(root, 'node_modules/@posthog/nextjs-config')
@@ -43,20 +43,32 @@ for (const format of ['cjs', 'esm']) {
         const config = await withPostHogConfig({}, {
           personalApiKey: 'phx_test',
           projectId: '1',
-          cliBinaryPath: process.argv[2],
+          cliBinaryPath: process.env.FIXTURE_CLI_BINARY || undefined,
         })('phase-production-build', { defaultConfig: {} })
         const webpack = config.webpack({ plugins: [] }, {})
+        if (config.turbopack?.debugIds || config.compiler?.runAfterProductionCompile || webpack.plugins.length !== 1) {
+          throw new Error('Expected webpack instrumentation, not the Turbopack upload hook')
+        }
         console.log(webpack.plugins.at(-1).resolvedConfig.cliBinaryPath)
       })().catch(error => { console.error(error); process.exitCode = 1 })`
     )
-    const run = (args = []) =>
-      execFileSync(process.execPath, [runner, ...args], {
+    const run = (cliBinaryPath, webpackFlag) =>
+      execFileSync(process.execPath, [runner, ...(webpackFlag ? ['build', '--webpack'] : [])], {
         cwd: root,
         encoding: 'utf8',
-        env: { ...process.env, WEBPACK: '1', TURBOPACK: '', PATH: workspaceBin },
+        env: {
+          ...process.env,
+          WEBPACK: webpackFlag ? undefined : '1',
+          TURBOPACK: undefined,
+          POSTHOG_RELEASE_ID: 'fixture-release',
+          FIXTURE_CLI_BINARY: cliBinaryPath,
+          PATH: workspaceBin,
+        },
       }).trim()
 
-    assert.equal(run(), ownCliPath)
-    assert.equal(run(['custom-posthog-cli']), 'custom-posthog-cli')
+    for (const webpackFlag of [false, true]) {
+      assert.equal(run(undefined, webpackFlag), ownCliPath)
+      assert.equal(run('custom-posthog-cli', webpackFlag), 'custom-posthog-cli')
+    }
   })
 }

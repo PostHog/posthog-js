@@ -61,10 +61,18 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
       sourceMapEnabled &&
       resolvedConfig.sourcemaps.releaseMode === 'event' &&
       utils.supportsTurbopackDebugIds()
+    const buildTimeReleaseEnabled =
+      nativeDebugIdsEnabled ||
+      (!turbopackEnabled && sourceMapEnabled && resolvedConfig.sourcemaps.releaseMode === 'event')
     let releaseId =
       normalizeReleaseId(userEnv?.POSTHOG_RELEASE_ID) ?? normalizeReleaseId(process.env.POSTHOG_RELEASE_ID)
-    if (!releaseId && nativeDebugIdsEnabled && phase === 'phase-production-build') {
-      releaseIdPromise ??= utils.resolveReleaseId(resolvedConfig)
+    if (!releaseId && buildTimeReleaseEnabled && phase === 'phase-production-build') {
+      releaseIdPromise ??= utils.resolveReleaseId(resolvedConfig).catch((error) => {
+        if (turbopackEnabled) throw error
+        // Preserve webpack's fail-soft behavior, without falling back to late release injection.
+        console.warn('[@posthog/nextjs-config] Could not resolve the release id; continuing without it.', error)
+        return undefined
+      })
       releaseId = await releaseIdPromise
     }
     const nextConfig: NextConfig = {
@@ -72,15 +80,17 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
       ...(userTurbopackConfig ? { turbopack: userTurbopackConfig } : {}),
       ...(userEnv ? { env: userEnv } : {}),
       distDir,
-      webpack: withWebpackConfig(userWebPackConfig, resolvedConfig),
+      webpack: withWebpackConfig(userWebPackConfig, resolvedConfig, buildTimeReleaseEnabled),
       compiler: withCompilerConfig(userCompilerConfig, resolvedConfig, nativeDebugIdsEnabled),
     }
     if (nativeDebugIdsEnabled) {
       const turbopackConfig: TurbopackConfigWithDebugIds = { ...userTurbopackConfig, debugIds: true }
       nextConfig.turbopack = turbopackConfig
-      if (releaseId) {
-        nextConfig.env = { ...userEnv, POSTHOG_RELEASE_ID: releaseId }
-      }
+    }
+    if (buildTimeReleaseEnabled && releaseId) {
+      // Next compiles this lookup in the SDK before webpack computes chunk hashes. Do not put
+      // per-deploy metadata in every asset after hashing: Next 14 app-router uses [chunkhash].
+      nextConfig.env = { ...userEnv, POSTHOG_RELEASE_ID: releaseId }
     }
     if (turbopackEnabled && sourceMapEnabled) {
       nextConfig.productionBrowserSourceMaps = true
@@ -138,7 +148,11 @@ function resolveUserConfig(
   }
 }
 
-function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConfig: ResolvedPluginConfig) {
+function withWebpackConfig(
+  userWebpackConfig: NextConfig['webpack'],
+  posthogConfig: ResolvedPluginConfig,
+  buildTimeReleaseEnabled: boolean
+) {
   const defaultWebpackConfig = userWebpackConfig || ((config: any) => config)
   const sourceMapEnabled = posthogConfig.sourcemaps.enabled
   const turbopackEnabled = utils.isTurbopackEnabled()
@@ -147,7 +161,9 @@ function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConf
     if (sourceMapEnabled) {
       if (!turbopackEnabled) {
         webpackConfig.plugins = webpackConfig.plugins || []
-        webpackConfig.plugins.push(new PosthogWebpackPlugin(posthogConfig, true))
+        webpackConfig.plugins.push(
+          new PosthogWebpackPlugin(posthogConfig, true, { injectReleaseId: !buildTimeReleaseEnabled })
+        )
       }
     }
     return webpackConfig

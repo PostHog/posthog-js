@@ -32,8 +32,15 @@ export function supportsTurbopackDebugIds(): boolean {
 
 // Helper to detect if Turbopack is enabled
 export function isTurbopackEnabled(): boolean {
-  // CLI flag (--turbo/--turbopack) injects TURBOPACK=1 at runtime
-  return process.env.TURBOPACK === '1' || (isTurbopackDefault() && !(process.env.WEBPACK === '1'))
+  // Next does not set WEBPACK for `next build --webpack`. The explicit flag must
+  // override the Next 16 default, otherwise webpack skips chunk-ID injection.
+  if (process.argv.includes('--webpack')) return false
+  // Next sets TURBOPACK=1 for explicit selection, or "auto" for its default.
+  return (
+    process.env.TURBOPACK === '1' ||
+    process.env.TURBOPACK === 'auto' ||
+    (isTurbopackDefault() && process.env.WEBPACK !== '1')
+  )
 }
 
 function isTurbopackDefault(): boolean {

@@ -7,6 +7,19 @@ import * as utils from './utils'
 import { PosthogWebpackPlugin, type PluginConfig } from '@posthog/webpack-plugin'
 import { withPostHogConfig } from './config'
 
+vi.mock('next/package.json', () => ({ default: { version: '16.3.8' } }))
+
+vi.mock('@posthog/webpack-plugin', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@posthog/webpack-plugin')>()
+  return {
+    ...original,
+    PosthogWebpackPlugin: vi.fn(
+      (...args: ConstructorParameters<typeof original.PosthogWebpackPlugin>) =>
+        new original.PosthogWebpackPlugin(...args)
+    ),
+  }
+})
+
 const pluginConfig: PluginConfig = {
   personalApiKey: 'phx_test',
   projectId: '1',
@@ -32,13 +45,122 @@ function getPostHogPlugin(config: NextConfig, isServer: boolean): PosthogWebpack
 }
 
 describe('withPostHogConfig webpack sourcemaps', () => {
+  const originalArgv = process.argv
+
   beforeEach(() => {
-    process.env.WEBPACK = '1'
-    delete process.env.TURBOPACK
+    vi.stubEnv('WEBPACK', '1')
+    vi.stubEnv('TURBOPACK', '')
+    vi.stubEnv('POSTHOG_RELEASE_ID', '')
+    vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue('webpack-release')
   })
 
   afterEach(() => {
-    delete process.env.WEBPACK
+    process.argv = originalArgv
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+  })
+
+  it('uses webpack instrumentation for Next 16 --webpack, without the Turbopack upload hook', async () => {
+    process.argv = ['node', 'next', 'build', '--webpack']
+    vi.stubEnv('WEBPACK', undefined)
+    vi.stubEnv('TURBOPACK', undefined)
+    const userHook = vi.fn()
+    const userWebpack = vi.fn((config) => config)
+    const config = await resolveNextConfig({
+      webpack: userWebpack,
+      compiler: { runAfterProductionCompile: userHook },
+    })
+
+    expect(utils.getNextJsVersion()).toBe('16.3.8')
+    expect(config.turbopack).toBeUndefined()
+    expect(config.compiler?.runAfterProductionCompile).toBe(userHook)
+    expect(config.env).toEqual({ POSTHOG_RELEASE_ID: 'webpack-release' })
+    expect(utils.resolveReleaseId).toHaveBeenCalledTimes(1)
+    getPostHogPlugin(config, false)
+    getPostHogPlugin(config, true)
+    expect(userWebpack).toHaveBeenCalledTimes(2)
+    expect(PosthogWebpackPlugin).toHaveBeenCalledTimes(2)
+    expect(PosthogWebpackPlugin).toHaveBeenCalledWith(expect.anything(), true, { injectReleaseId: false })
+  })
+
+  it('resolves one build-time release for client and server without late injection', async () => {
+    const configFunction = withPostHogConfig({}, pluginConfig) as unknown as (
+      phase: string,
+      context: { defaultConfig: NextConfig }
+    ) => Promise<NextConfig>
+    const first = await configFunction('phase-production-build', { defaultConfig: {} })
+    const second = await configFunction('phase-production-build', { defaultConfig: {} })
+
+    expect(first.env).toEqual({ POSTHOG_RELEASE_ID: 'webpack-release' })
+    expect(second.env).toEqual(first.env)
+    expect(utils.resolveReleaseId).toHaveBeenCalledTimes(1)
+    expect(first.turbopack).toBeUndefined()
+    getPostHogPlugin(first, false)
+    getPostHogPlugin(first, true)
+    expect(PosthogWebpackPlugin).toHaveBeenCalledTimes(2)
+    expect(PosthogWebpackPlugin).toHaveBeenCalledWith(expect.anything(), true, { injectReleaseId: false })
+  })
+
+  it.each([
+    [{ EXISTING: 'value', POSTHOG_RELEASE_ID: ' configured-release ' }, 'configured-release'],
+    [{ EXISTING: 'value', POSTHOG_RELEASE_ID: ' ' }, 'environment-release'],
+  ])('uses an explicit release without resolving another one', async (env, expected) => {
+    vi.stubEnv('POSTHOG_RELEASE_ID', ' environment-release ')
+    const config = await resolveNextConfig({ env })
+
+    expect(config.env).toEqual({ EXISTING: 'value', POSTHOG_RELEASE_ID: expected })
+    expect(utils.resolveReleaseId).not.toHaveBeenCalled()
+    getPostHogPlugin(config, false)
+    expect(PosthogWebpackPlugin).toHaveBeenCalledWith(expect.anything(), true, { injectReleaseId: false })
+  })
+
+  it('leaves symbol-set mode on its existing path', async () => {
+    const config = await resolveNextConfig(
+      {},
+      {
+        ...pluginConfig,
+        sourcemaps: { releaseMode: 'symbol-set' },
+      }
+    )
+
+    expect(config.env).toBeUndefined()
+    expect(utils.resolveReleaseId).not.toHaveBeenCalled()
+    getPostHogPlugin(config, false)
+    expect(PosthogWebpackPlugin).toHaveBeenCalledWith(expect.anything(), true, { injectReleaseId: true })
+  })
+
+  it('does not resolve a release or add a plugin when source maps are disabled', async () => {
+    const config = await resolveNextConfig({}, { ...pluginConfig, sourcemaps: { enabled: false } })
+
+    expect(config.env).toBeUndefined()
+    expect(utils.resolveReleaseId).not.toHaveBeenCalled()
+    config.webpack?.({ plugins: [] }, {} as any)
+    expect(PosthogWebpackPlugin).not.toHaveBeenCalled()
+  })
+
+  it.each(['phase-development-server', 'phase-production-server'])(
+    'does not resolve a release during %s',
+    async (phase) => {
+      const configFunction = withPostHogConfig({}, pluginConfig) as unknown as (
+        phase: string,
+        context: { defaultConfig: NextConfig }
+      ) => Promise<NextConfig>
+      await configFunction(phase, { defaultConfig: {} })
+      expect(utils.resolveReleaseId).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['missing', 'failed'])('continues without late injection when release resolution is %s', async (result) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    if (result === 'failed') vi.mocked(utils.resolveReleaseId).mockRejectedValue(new Error('offline'))
+    else vi.mocked(utils.resolveReleaseId).mockResolvedValue(undefined)
+
+    const config = await resolveNextConfig({})
+
+    expect(config.env).toBeUndefined()
+    getPostHogPlugin(config, false)
+    expect(PosthogWebpackPlugin).toHaveBeenCalledWith(expect.anything(), true, { injectReleaseId: false })
+    if (result === 'failed') expect(warn).toHaveBeenCalled()
   })
 
   it('deletes server sourcemaps and excludes them from output file tracing', async () => {
