@@ -2,21 +2,7 @@
 
 ...<older entries truncated>
 
-limiter.
-- Fix assessment: This is a localized arithmetic defect with a clear, reproducible regression and no public API change. The smallest safe change is to make elapsed time monotonic for the existing persisted bucket.
-- PR: https://github.com/PostHog/posthog-js/pull/5298
-
-## 2026-10-16T22:48:41.261Z
-- Item: issue #5310 — posthog-react-native/expo: Android posthog.gradle lookup runs node in Gradle's start directory, fails outside the project
-- Conclusion: Confirmed Android/Expo source-map setup bug: the generated Gradle resolver runs Node in Gradle's launch directory rather than the Android project root.
-- Labels: Android, react-native, feature/error-tracking, team/error-tracking, bug
-- URL: https://github.com/PostHog/posthog-js/issues/5310
-- Relevant files: `packages/react-native/src/tooling/expoconfig.ts`, `packages/react-native/test/expoconfig-android-mods.spec.ts`, `packages/react-native/tooling/posthog.gradle`, `examples/example-expo-57/android/app/build.gradle`, `packages/react-native/CONTRIBUTING.md`
-- Findings: `packages/react-native/src/tooling/expoconfig.ts` defines `resolvePostHogReactNativePackageJsonPath` with `.execute().text.trim()` and inserts it as `apply from: new File(...)` in `android/app/build.gradle`.; `examples/example-expo-57/android/app/build.gradle` contains the same generated unscoped resolver, confirming the issue affects produced Gradle configuration rather than only documentation.; `packages/react-native/tooling/posthog.gradle` resolves `@posthog/cli/package.json` and `posthog-react-native/package.json` with `.execute(null, rootDir)`, establishing an existing local pattern that scopes Node package resolution to the Android Gradle root.; The Expo Android-mod test exercises persisted Gradle output but currently only asserts that it contains `posthog.gradle`; it does not assert the resolver's working directory.
-- Fix assessment: The defect is localized to one generated Groovy command and has an established in-package resolution pattern. It does not add or alter public SDK API.
-
-## 2026-10-16T22:49:24.383Z
-- Item: issue #5311 — [react-native] Expo plugin's `posthog.gradle` lookup runs `node` in the Gradle daemon's working directory, so Android builds fail
+og.gradle` lookup runs `node` in the Gradle daemon's working directory, so Android builds fail
 - Conclusion: Confirmed React Native Expo Android configuration bug; this is a duplicate of #5310.
 - Labels: react-native, Android, feature/error-tracking, team/error-tracking, bug
 - URL: https://github.com/PostHog/posthog-js/issues/5311
@@ -77,3 +63,12 @@ limiter.
 - Relevant files: `packages/browser-common/src/utils/request-utils.ts`, `packages/browser-common/tests/utils/request-utils.spec.ts`, `packages/browser-common/src/utils/event-utils.ts`, `packages/browser/src/__tests__/request-utils.test.ts`, `packages/browser/src/posthog-persistence.ts`, `packages/browser/src/heatmaps.ts`, `packages/browser/src/extensions/web-vitals/index.ts`, `packages/browser/src/extensions/replay/external/lazy-loaded-session-recorder.ts`
 - Findings: `maskQueryParams` in `packages/browser-common/src/utils/request-utils.ts` calls `url.split('#')` and uses only `splitHash[1]`, then calls `withoutHash.split('?')` and uses only `splitQuery[1]`; subsequent delimiters and all following text are therefore lost.; The existing `getQueryParam` implementation in the same file intentionally splits on only the first `?` using `split(/\?(.*)/)`, supporting the report's root-cause analysis.; `getCampaignParams` masks `document.URL` before `_getCampaignParamsFromUrl` reads UTM values in `packages/browser-common/src/utils/event-utils.ts`; truncating a URL before a later `utm_source` therefore produces the reported attribution loss.; The shared helper supplies `$current_url` event properties and is used for heatmap URLs, web-vitals URLs, and replay URL masking, so the reported downstream impact is consistent with current call sites.; Existing tests cover ordinary masking, duplicate parameters, and a single hash, but do not cover multiple `?` characters in a query value or multiple `#` characters in the hash.; Replay incident review: this change would affect a helper called by the lazy-loaded recorder, but it does not need to change the core-to-recorder API, persisted state, recording start conditions, session rotation, or delivery behavior. The lazy-load version-skew failure mode is therefore not present if the fix remains confined to preserving the helper's existing string-return contract.
 - Fix assessment: The defect is deterministic and isolated to delimiter handling in one shared pure string utility. A surgical change can retain the current malformed-URL-preserving behavior and public API.
+
+## 2026-10-20T21:34:36.549Z
+- Item: issue #5345 — Survey prefill accepts a rating of 0 on 1-based rating scales and can auto-submit it
+- Conclusion: Confirmed browser-surveys validation bug: rating prefill accepts 0 for 1-based scales, allowing an impossible response to be persisted and potentially submitted.
+- Labels: feature/surveys, web, team/client-libraries, bug
+- URL: https://github.com/PostHog/posthog-js/issues/5345
+- Relevant files: `packages/browser/src/utils/survey-url-prefill.ts`, `packages/browser/src/utils/survey-branching.ts`, `packages/browser/src/extensions/surveys/components/QuestionTypes.tsx`, `packages/browser/src/extensions/surveys.tsx`, `packages/browser/src/__tests__/utils/survey-url-prefill.test.ts`, `packages/browser/src/__tests__/extensions/surveys.test.ts`
+- Findings: `packages/browser/src/utils/survey-url-prefill.ts` parses a rating and accepts it when it is between 0 and `scale`, so a scale-5 prefill of `q0=0` becomes a response of 0.; `RatingQuestion` in `packages/browser/src/extensions/surveys/components/QuestionTypes.tsx` sets its first selectable number to 0 only when `question.scale === 10`; all other supported rating scales start at 1.; `getRatingBucketForResponseValue` in `packages/browser/src/utils/survey-branching.ts` rejects values below 1 for scales 2, 3, 5, and 7, while allowing 0 only for scale 10.; Both URL prefill and `displaySurvey` initial responses call `_processPrefillData`, which calls `convertPrefillToResponses`; the defect therefore affects both entry points.; `_autoSubmitPrefilledResponses` sends a survey event for completed prefills or skipped responses when partial responses are enabled. Existing tests already establish this auto-submit behavior.; The existing prefill unit tests preserve 0 for a 10-point rating and test upper-bound rejection for a 5-point rating, but do not test rejection of 0 on 1-based scales.
+- Fix assessment: The invariant is already established in the rendering and branching code. A single lower-bound calculation in the shared conversion function fixes both affected prefill paths without changing public API behavior.
