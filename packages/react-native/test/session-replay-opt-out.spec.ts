@@ -300,6 +300,9 @@ describe('PostHog RN session replay follows consent', () => {
     await posthog.optIn()
     // Give the opt-in evaluation time to run; nothing may start.
     await new Promise((resolve) => setTimeout(resolve, 100))
+    // A later flags reload must not restart it either.
+    await posthog.reloadFeatureFlagsAsync()
+    await new Promise((resolve) => setTimeout(resolve, 100))
 
     expect(nativeRecording).toBe(false)
     expect(replay.startRecording).not.toHaveBeenCalled()
