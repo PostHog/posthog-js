@@ -317,6 +317,8 @@ export class PostHog extends PostHogCore {
   // Whether replay was recording at opt-out, read from native as posthog-ios and posthog-android do,
   // so opt-in brings back only a recording that opt-out stopped.
   private _restartSessionReplayOnOptIn: boolean = true
+  // Set by optOut() until that read is taken, before whichever queued step first stops the recorder.
+  private _sessionReplayOptOutReadPending: boolean = false
   // Set when a manual start is attempted with consent, cleared by stopSessionRecording() and
   // optOut(), so the opt-in evaluation leaves a recording the app started alone.
   private _sessionReplayStartedByApp: boolean = false
@@ -1182,13 +1184,12 @@ export class PostHog extends PostHogCore {
     // Consent must be durable. See reset()/identify().
     const coreOptOut = super.optOut()
     this._sessionReplayStartedByApp = false
-    // Queued before the stop below, so it sees the recorder as opt-out found it.
+    // An evaluation already queued may stop the recorder first; it takes the read before stopping.
     if (this._isInitialized && !wasOptedOut) {
+      this._sessionReplayOptOutReadPending = true
       this._sessionReplayEvalChain = this._sessionReplayEvalChain
         .catch(() => {})
-        .then(async () => {
-          this._restartSessionReplayOnOptIn = await this.isSessionReplayActive()
-        })
+        .then(() => this._readSessionReplayStateAtOptOut())
     }
     // Stop recording when consent is withdrawn, not just drop what it captures afterwards.
     const replayStop = this._isInitialized
@@ -3151,6 +3152,10 @@ export class PostHog extends PostHogCore {
       cachedRemoteConfig ??
       this.getPersistedProperty<Omit<PostHogRemoteConfig, 'surveys'>>(PostHogPersistedProperty.RemoteConfig)
 
+    if (this.optedOut) {
+      await this._readSessionReplayStateAtOptOut()
+    }
+
     if (!this._isEnableSessionReplay()) {
       this._logger.info('Session replay is not enabled.')
       // Replay off — disarm event triggers so the capture hook stays inert.
@@ -3252,6 +3257,19 @@ export class PostHog extends PostHogCore {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
     }
+  }
+
+  // Runs on _sessionReplayEvalChain.
+  private async _readSessionReplayStateAtOptOut(): Promise<void> {
+    if (!this._sessionReplayOptOutReadPending) {
+      return
+    }
+    this._sessionReplayOptOutReadPending = false
+    // Unknown counts as recording, as in posthog-ios.
+    const active = await raceWithTimeout(this.isSessionReplayActive(), NATIVE_CALL_TIMEOUT_MS, () =>
+      this._logger.warn(`Reading the session replay state timed out after ${NATIVE_CALL_TIMEOUT_MS}ms; continuing.`)
+    )
+    this._restartSessionReplayOnOptIn = active ?? true
   }
 
   // Whether the cached linked flag lets replay record. If the Flags API has not returned yet,

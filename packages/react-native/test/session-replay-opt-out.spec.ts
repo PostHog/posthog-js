@@ -331,6 +331,50 @@ describe('PostHog RN session replay follows consent', () => {
     expect(nativeRecording).toBe(false)
   })
 
+  it('restarts replay on opt-in when an evaluation queued before optOut() stopped it', async () => {
+    let releaseStart: () => void = () => {}
+    replay.start.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseStart = () => {
+            nativeRecording = true
+            resolve()
+          }
+        })
+    )
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    // The startup evaluation is held in native setup, so the flags evaluation queues behind it.
+    const reload = posthog.reloadFeatureFlagsAsync()
+    await reload
+    const optOut = posthog.optOut()
+    releaseStart()
+    await optOut
+    expect(nativeRecording).toBe(false)
+
+    await posthog.optIn()
+
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+  })
+
+  it('still stops replay on opt-out when reading the recorder state hangs', async () => {
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+    replay.isEnabled.mockImplementation(() => new Promise(() => {}))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    try {
+      const optOut = posthog.optOut()
+      await vi.advanceTimersByTimeAsync(10_000)
+      await optOut
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(nativeRecording).toBe(false)
+  })
+
   it('keeps a recording running across opt-out and opt-in once a linked flag restarted it after an app stop', async () => {
     currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
     currentFlags = { 'replay-flag': true }
