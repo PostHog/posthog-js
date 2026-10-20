@@ -1,11 +1,53 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import vm from 'node:vm'
 import {
     assertReplayNetworkCapture,
+    freezeReplayDate,
     replayNetworkCases,
     replayNetworkHeaders,
     replayNetworkPath,
 } from './replay-network.mjs'
+
+test('Replay freezes only Date while preserving explicit dates and native timing APIs', () => {
+    const fixed = Date.parse('2024-01-01T00:00:00Z')
+    const sandbox = {
+        performance,
+        setTimeout,
+        clearTimeout,
+        setInterval,
+        clearInterval,
+        requestAnimationFrame() {},
+        cancelAnimationFrame() {},
+    }
+    vm.createContext(sandbox)
+    vm.runInContext(`(${freezeReplayDate})(${fixed})`, sandbox)
+    assert.equal(vm.runInContext('Date.now()', sandbox), fixed)
+    assert.equal(vm.runInContext('new Date().getTime()', sandbox), fixed)
+    assert.equal(vm.runInContext('Date()', sandbox), new Date(fixed).toString())
+    assert.equal(vm.runInContext('new Date(123).getTime()', sandbox), 123)
+    assert.equal(
+        vm.runInContext('new Date("2020-01-01T00:00:00Z").getTime()', sandbox),
+        Date.parse('2020-01-01T00:00:00Z')
+    )
+    assert.equal(vm.runInContext('new Date(2020, 0, 1).getTime()', sandbox), new Date(2020, 0, 1).getTime())
+    assert.equal(vm.runInContext('Date.UTC(2020, 0, 1)', sandbox), Date.UTC(2020, 0, 1))
+    assert.equal(vm.runInContext('Date.parse("2020-01-01T00:00:00Z")', sandbox), Date.parse('2020-01-01T00:00:00Z'))
+    assert.equal(vm.runInContext('new Date() instanceof Date', sandbox), true)
+    assert.equal(vm.runInContext('Object.prototype.toString.call(new Date())', sandbox), '[object Date]')
+    assert.equal(vm.runInContext('class DerivedDate extends Date {}; new DerivedDate().getTime()', sandbox), fixed)
+    assert.equal(vm.runInContext('performance', sandbox), performance)
+    assert.equal(vm.runInContext('performance.now', sandbox), performance.now)
+    for (const name of [
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+    ])
+        assert.equal(vm.runInContext(name, sandbox), sandbox[name])
+})
 
 const origin = 'http://fixture.test'
 function evidence() {

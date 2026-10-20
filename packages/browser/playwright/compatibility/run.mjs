@@ -7,7 +7,7 @@ import { parseOptions, selection } from './options.mjs'
 import { assertLoaderProof } from './loader-proof.mjs'
 import { interactionScenarios, exerciseInteractions } from './interaction-cases.mjs'
 import { replayLifecycleScenarios, exerciseReplayLifecycle } from './replay-cases.mjs'
-import { exerciseReplayNetwork, assertReplayNetworkCapture } from './replay-network.mjs'
+import { exerciseReplayNetwork, assertReplayNetworkCapture, freezeReplayDate } from './replay-network.mjs'
 import { compatibilityServer } from './server.mjs'
 import {
     legacyRecordingConfig,
@@ -123,6 +123,8 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
     if (controlledClock) {
         await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
         await page.clock.pauseAt(new Date('2024-01-01T00:00:01Z'))
+    } else if (scenario === 'replay') {
+        await page.addInitScript(freezeReplayDate, Date.parse('2024-01-01T00:00:00Z'))
     } else await page.clock.setFixedTime(new Date('2024-01-01T00:00:00Z'))
     const waitFor = (fn, argument) =>
         controlledClock

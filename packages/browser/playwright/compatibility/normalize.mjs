@@ -56,6 +56,8 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
         'secureConnectionStart',
         'requestStart',
         'responseStart',
+        'firstInterimResponseStart',
+        'finalResponseHeadersStart',
         'responseEnd',
         'unloadEventStart',
         'unloadEventEnd',
@@ -215,7 +217,14 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                 replayNetworkClocks.has(child) &&
                 typeof item === 'number' &&
                 Number.isFinite(item) &&
-                (['timeOrigin', 'timestamp'].includes(child) ? item > 0 : item >= 0)
+                (['timeOrigin', 'timestamp'].includes(child)
+                    ? item > 0
+                    : item >= 0 ||
+                      // Firefox may expose initial navigation fetchStart up to 1 ms before the time origin.
+                      (child === 'fetchStart' &&
+                          value.entryType === 'navigation' &&
+                          value.isInitial === true &&
+                          item >= -1))
             )
                 item = '<network-clock-ms>'
             const debugProperties = sdkProperties.test(path) || storageRoot.test(path)

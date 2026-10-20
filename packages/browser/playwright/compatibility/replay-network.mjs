@@ -28,6 +28,19 @@ export const replayNetworkHeaders = {
     },
 }
 
+// Keep event dates deterministic without virtualizing native fetch timing or timer scheduling.
+export function freezeReplayDate(time) {
+    const NativeDate = globalThis.Date
+    function FixedDate(...args) {
+        if (!new.target) return new NativeDate(time).toString()
+        return Reflect.construct(NativeDate, args.length ? args : [time], new.target)
+    }
+    Object.setPrototypeOf(FixedDate, NativeDate)
+    FixedDate.prototype = NativeDate.prototype
+    FixedDate.now = () => time
+    globalThis.Date = FixedDate
+}
+
 export function capturedReplayRequests(network) {
     return decodeReplay(network.snapshots)
         .flatMap((snapshot) => snapshot.properties?.$snapshot_data ?? [])

@@ -27917,7 +27917,7 @@
                                     },
                                     "sent_at": "2024-01-01T00:00:00.000Z",
                                     "timestamp": "2024-01-01T00:00:00.000Z",
-                                    "uuid": "generated-id-17"
+                                    "uuid": "generated-id-16"
                                 },
                                 "contentEncoding": null,
                                 "contentType": "application/json",
@@ -28167,6 +28167,64 @@
                                             {
                                                 "data": {
                                                     "payload": {
+                                                        "isInitial": true,
+                                                        "requests": [
+                                                            {
+                                                                "activationStart": 0,
+                                                                "connectEnd": "<network-clock-ms>",
+                                                                "connectStart": "<network-clock-ms>",
+                                                                "criticalCHRestart": 0,
+                                                                "decodedBodySize": 517,
+                                                                "deliveryType": "",
+                                                                "domComplete": "<network-clock-ms>",
+                                                                "domContentLoadedEventEnd": "<network-clock-ms>",
+                                                                "domContentLoadedEventStart": "<network-clock-ms>",
+                                                                "domInteractive": "<network-clock-ms>",
+                                                                "domainLookupEnd": "<network-clock-ms>",
+                                                                "domainLookupStart": "<network-clock-ms>",
+                                                                "duration": "<network-clock-ms>",
+                                                                "encodedBodySize": 517,
+                                                                "endTime": "<network-clock-ms>",
+                                                                "entryType": "navigation",
+                                                                "fetchStart": "<network-clock-ms>",
+                                                                "finalResponseHeadersStart": "<network-clock-ms>",
+                                                                "firstInterimResponseStart": "<network-clock-ms>",
+                                                                "initiatorType": "navigation",
+                                                                "isInitial": true,
+                                                                "loadEventEnd": "<network-clock-ms>",
+                                                                "loadEventStart": "<network-clock-ms>",
+                                                                "name": "<fixture-origin>/",
+                                                                "nextHopProtocol": "http/1.1",
+                                                                "notRestoredReasons": null,
+                                                                "redirectCount": 0,
+                                                                "redirectEnd": "<network-clock-ms>",
+                                                                "redirectStart": "<network-clock-ms>",
+                                                                "renderBlockingStatus": "non-blocking",
+                                                                "requestStart": "<network-clock-ms>",
+                                                                "responseEnd": "<network-clock-ms>",
+                                                                "responseStart": "<network-clock-ms>",
+                                                                "responseStatus": 200,
+                                                                "secureConnectionStart": "<network-clock-ms>",
+                                                                "serverTiming": [],
+                                                                "startTime": "<network-clock-ms>",
+                                                                "timeOrigin": "<network-clock-ms>",
+                                                                "timestamp": "<network-clock-ms>",
+                                                                "transferSize": 817,
+                                                                "type": "navigate",
+                                                                "unloadEventEnd": "<network-clock-ms>",
+                                                                "unloadEventStart": "<network-clock-ms>",
+                                                                "workerStart": "<network-clock-ms>"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "plugin": "rrweb/network@1"
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 6
+                                            },
+                                            {
+                                                "data": {
+                                                    "payload": {
                                                         "cache_timestamp": 1704067200000,
                                                         "canvasRecording": {
                                                             "enabled": false
@@ -28347,50 +28405,41 @@
                                                 },
                                                 "timestamp": 1704067200000,
                                                 "type": 3
-                                            }
-                                        ],
-                                        "$snapshot_host": "127.0.0.1",
-                                        "$window_id": "generated-id-4",
-                                        "distinct_id": "generated-id-1",
-                                        "token": "phc_COMPAT"
-                                    },
-                                    "sent_at": "2024-01-01T00:00:00.000Z",
-                                    "timestamp": "2024-01-01T00:00:00.000Z",
-                                    "uuid": "generated-id-15"
-                                },
-                                "contentEncoding": null,
-                                "contentType": "application/json",
-                                "method": "POST",
-                                "path": "/s",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
-                                "body": {
-                                    "event": "$snapshot",
-                                    "properties": {
-                                        "$config_defaults": "unset",
-                                        "$lib": "web",
-                                        "$lib_version": "<extension-version>",
-                                        "$session_id": "generated-id-2",
-                                        "$snapshot_bytes": "<encoded-size>",
-                                        "$snapshot_data": [
+                                            },
                                             {
                                                 "data": {
                                                     "payload": {
                                                         "requests": [
                                                             {
+                                                                "connectEnd": "<network-clock-ms>",
+                                                                "connectStart": "<network-clock-ms>",
+                                                                "decodedBodySize": 34,
+                                                                "deliveryType": "",
+                                                                "domainLookupEnd": "<network-clock-ms>",
+                                                                "domainLookupStart": "<network-clock-ms>",
+                                                                "duration": "<network-clock-ms>",
+                                                                "encodedBodySize": 34,
                                                                 "endTime": "<network-clock-ms>",
+                                                                "entryType": "resource",
+                                                                "fetchStart": "<network-clock-ms>",
+                                                                "finalResponseHeadersStart": "<network-clock-ms>",
+                                                                "firstInterimResponseStart": "<network-clock-ms>",
                                                                 "initiatorType": "fetch",
                                                                 "method": "POST",
                                                                 "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                                "nextHopProtocol": "http/1.1",
+                                                                "redirectEnd": "<network-clock-ms>",
+                                                                "redirectStart": "<network-clock-ms>",
+                                                                "renderBlockingStatus": "non-blocking",
                                                                 "requestBody": "{\"message\":\"compat request body\"}",
                                                                 "requestHeaders": {
                                                                     "authorization": "redacted",
                                                                     "content-type": "application/json",
                                                                     "x-compat-request": "retained"
                                                                 },
+                                                                "requestStart": "<network-clock-ms>",
                                                                 "responseBody": "{\"message\":\"compat response body\"}",
+                                                                "responseEnd": "<network-clock-ms>",
                                                                 "responseHeaders": {
                                                                     "access-control-allow-headers": "*",
                                                                     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -28404,10 +28453,16 @@
                                                                     "keep-alive": "timeout=5",
                                                                     "x-compat-response": "retained"
                                                                 },
+                                                                "responseStart": "<network-clock-ms>",
+                                                                "responseStatus": 200,
+                                                                "secureConnectionStart": "<network-clock-ms>",
+                                                                "serverTiming": [],
                                                                 "startTime": "<network-clock-ms>",
                                                                 "status": 200,
                                                                 "timeOrigin": "<network-clock-ms>",
-                                                                "timestamp": "<network-clock-ms>"
+                                                                "timestamp": "<network-clock-ms>",
+                                                                "transferSize": 334,
+                                                                "workerStart": "<network-clock-ms>"
                                                             }
                                                         ]
                                                     },
@@ -28421,17 +28476,35 @@
                                                     "payload": {
                                                         "requests": [
                                                             {
+                                                                "connectEnd": "<network-clock-ms>",
+                                                                "connectStart": "<network-clock-ms>",
+                                                                "decodedBodySize": 36,
+                                                                "deliveryType": "",
+                                                                "domainLookupEnd": "<network-clock-ms>",
+                                                                "domainLookupStart": "<network-clock-ms>",
+                                                                "duration": "<network-clock-ms>",
+                                                                "encodedBodySize": 36,
                                                                 "endTime": "<network-clock-ms>",
+                                                                "entryType": "resource",
+                                                                "fetchStart": "<network-clock-ms>",
+                                                                "finalResponseHeadersStart": "<network-clock-ms>",
+                                                                "firstInterimResponseStart": "<network-clock-ms>",
                                                                 "initiatorType": "fetch",
                                                                 "method": "POST",
                                                                 "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                                "nextHopProtocol": "http/1.1",
+                                                                "redirectEnd": "<network-clock-ms>",
+                                                                "redirectStart": "<network-clock-ms>",
+                                                                "renderBlockingStatus": "non-blocking",
                                                                 "requestBody": "[SessionRecording] Request body redacted as might contain: password",
                                                                 "requestHeaders": {
                                                                     "authorization": "redacted",
                                                                     "content-type": "application/json",
                                                                     "x-compat-request": "retained"
                                                                 },
+                                                                "requestStart": "<network-clock-ms>",
                                                                 "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                                "responseEnd": "<network-clock-ms>",
                                                                 "responseHeaders": {
                                                                     "access-control-allow-headers": "*",
                                                                     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -28445,10 +28518,16 @@
                                                                     "keep-alive": "timeout=5",
                                                                     "x-compat-response": "retained"
                                                                 },
+                                                                "responseStart": "<network-clock-ms>",
+                                                                "responseStatus": 200,
+                                                                "secureConnectionStart": "<network-clock-ms>",
+                                                                "serverTiming": [],
                                                                 "startTime": "<network-clock-ms>",
                                                                 "status": 200,
                                                                 "timeOrigin": "<network-clock-ms>",
-                                                                "timestamp": "<network-clock-ms>"
+                                                                "timestamp": "<network-clock-ms>",
+                                                                "transferSize": 336,
+                                                                "workerStart": "<network-clock-ms>"
                                                             }
                                                         ]
                                                     },
@@ -28465,7 +28544,7 @@
                                     },
                                     "sent_at": "2024-01-01T00:00:00.000Z",
                                     "timestamp": "2024-01-01T00:00:00.000Z",
-                                    "uuid": "generated-id-16"
+                                    "uuid": "generated-id-15"
                                 },
                                 "contentEncoding": null,
                                 "contentType": "application/json",
@@ -28732,6 +28811,64 @@
                                         {
                                             "data": {
                                                 "payload": {
+                                                    "isInitial": true,
+                                                    "requests": [
+                                                        {
+                                                            "activationStart": 0,
+                                                            "connectEnd": "<network-clock-ms>",
+                                                            "connectStart": "<network-clock-ms>",
+                                                            "criticalCHRestart": 0,
+                                                            "decodedBodySize": 517,
+                                                            "deliveryType": "",
+                                                            "domComplete": "<network-clock-ms>",
+                                                            "domContentLoadedEventEnd": "<network-clock-ms>",
+                                                            "domContentLoadedEventStart": "<network-clock-ms>",
+                                                            "domInteractive": "<network-clock-ms>",
+                                                            "domainLookupEnd": "<network-clock-ms>",
+                                                            "domainLookupStart": "<network-clock-ms>",
+                                                            "duration": "<network-clock-ms>",
+                                                            "encodedBodySize": 517,
+                                                            "endTime": "<network-clock-ms>",
+                                                            "entryType": "navigation",
+                                                            "fetchStart": "<network-clock-ms>",
+                                                            "finalResponseHeadersStart": "<network-clock-ms>",
+                                                            "firstInterimResponseStart": "<network-clock-ms>",
+                                                            "initiatorType": "navigation",
+                                                            "isInitial": true,
+                                                            "loadEventEnd": "<network-clock-ms>",
+                                                            "loadEventStart": "<network-clock-ms>",
+                                                            "name": "<fixture-origin>/",
+                                                            "nextHopProtocol": "http/1.1",
+                                                            "notRestoredReasons": null,
+                                                            "redirectCount": 0,
+                                                            "redirectEnd": "<network-clock-ms>",
+                                                            "redirectStart": "<network-clock-ms>",
+                                                            "renderBlockingStatus": "non-blocking",
+                                                            "requestStart": "<network-clock-ms>",
+                                                            "responseEnd": "<network-clock-ms>",
+                                                            "responseStart": "<network-clock-ms>",
+                                                            "responseStatus": 200,
+                                                            "secureConnectionStart": "<network-clock-ms>",
+                                                            "serverTiming": [],
+                                                            "startTime": "<network-clock-ms>",
+                                                            "timeOrigin": "<network-clock-ms>",
+                                                            "timestamp": "<network-clock-ms>",
+                                                            "transferSize": 817,
+                                                            "type": "navigate",
+                                                            "unloadEventEnd": "<network-clock-ms>",
+                                                            "unloadEventStart": "<network-clock-ms>",
+                                                            "workerStart": "<network-clock-ms>"
+                                                        }
+                                                    ]
+                                                },
+                                                "plugin": "rrweb/network@1"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 6
+                                        },
+                                        {
+                                            "data": {
+                                                "payload": {
                                                     "cache_timestamp": 1704067200000,
                                                     "canvasRecording": {
                                                         "enabled": false
@@ -28912,42 +29049,41 @@
                                             },
                                             "timestamp": 1704067200000,
                                             "type": 3
-                                        }
-                                    ],
-                                    "$snapshot_host": "127.0.0.1",
-                                    "$window_id": "generated-id-4",
-                                    "distinct_id": "generated-id-1",
-                                    "token": "phc_COMPAT"
-                                },
-                                "sent_at": "2024-01-01T00:00:00.000Z",
-                                "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-15"
-                            },
-                            {
-                                "event": "$snapshot",
-                                "properties": {
-                                    "$config_defaults": "unset",
-                                    "$lib": "web",
-                                    "$lib_version": "<extension-version>",
-                                    "$session_id": "generated-id-2",
-                                    "$snapshot_bytes": "<encoded-size>",
-                                    "$snapshot_data": [
+                                        },
                                         {
                                             "data": {
                                                 "payload": {
                                                     "requests": [
                                                         {
+                                                            "connectEnd": "<network-clock-ms>",
+                                                            "connectStart": "<network-clock-ms>",
+                                                            "decodedBodySize": 34,
+                                                            "deliveryType": "",
+                                                            "domainLookupEnd": "<network-clock-ms>",
+                                                            "domainLookupStart": "<network-clock-ms>",
+                                                            "duration": "<network-clock-ms>",
+                                                            "encodedBodySize": 34,
                                                             "endTime": "<network-clock-ms>",
+                                                            "entryType": "resource",
+                                                            "fetchStart": "<network-clock-ms>",
+                                                            "finalResponseHeadersStart": "<network-clock-ms>",
+                                                            "firstInterimResponseStart": "<network-clock-ms>",
                                                             "initiatorType": "fetch",
                                                             "method": "POST",
                                                             "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                            "nextHopProtocol": "http/1.1",
+                                                            "redirectEnd": "<network-clock-ms>",
+                                                            "redirectStart": "<network-clock-ms>",
+                                                            "renderBlockingStatus": "non-blocking",
                                                             "requestBody": "{\"message\":\"compat request body\"}",
                                                             "requestHeaders": {
                                                                 "authorization": "redacted",
                                                                 "content-type": "application/json",
                                                                 "x-compat-request": "retained"
                                                             },
+                                                            "requestStart": "<network-clock-ms>",
                                                             "responseBody": "{\"message\":\"compat response body\"}",
+                                                            "responseEnd": "<network-clock-ms>",
                                                             "responseHeaders": {
                                                                 "access-control-allow-headers": "*",
                                                                 "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -28961,10 +29097,16 @@
                                                                 "keep-alive": "timeout=5",
                                                                 "x-compat-response": "retained"
                                                             },
+                                                            "responseStart": "<network-clock-ms>",
+                                                            "responseStatus": 200,
+                                                            "secureConnectionStart": "<network-clock-ms>",
+                                                            "serverTiming": [],
                                                             "startTime": "<network-clock-ms>",
                                                             "status": 200,
                                                             "timeOrigin": "<network-clock-ms>",
-                                                            "timestamp": "<network-clock-ms>"
+                                                            "timestamp": "<network-clock-ms>",
+                                                            "transferSize": 334,
+                                                            "workerStart": "<network-clock-ms>"
                                                         }
                                                     ]
                                                 },
@@ -28978,17 +29120,35 @@
                                                 "payload": {
                                                     "requests": [
                                                         {
+                                                            "connectEnd": "<network-clock-ms>",
+                                                            "connectStart": "<network-clock-ms>",
+                                                            "decodedBodySize": 36,
+                                                            "deliveryType": "",
+                                                            "domainLookupEnd": "<network-clock-ms>",
+                                                            "domainLookupStart": "<network-clock-ms>",
+                                                            "duration": "<network-clock-ms>",
+                                                            "encodedBodySize": 36,
                                                             "endTime": "<network-clock-ms>",
+                                                            "entryType": "resource",
+                                                            "fetchStart": "<network-clock-ms>",
+                                                            "finalResponseHeadersStart": "<network-clock-ms>",
+                                                            "firstInterimResponseStart": "<network-clock-ms>",
                                                             "initiatorType": "fetch",
                                                             "method": "POST",
                                                             "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                            "nextHopProtocol": "http/1.1",
+                                                            "redirectEnd": "<network-clock-ms>",
+                                                            "redirectStart": "<network-clock-ms>",
+                                                            "renderBlockingStatus": "non-blocking",
                                                             "requestBody": "[SessionRecording] Request body redacted as might contain: password",
                                                             "requestHeaders": {
                                                                 "authorization": "redacted",
                                                                 "content-type": "application/json",
                                                                 "x-compat-request": "retained"
                                                             },
+                                                            "requestStart": "<network-clock-ms>",
                                                             "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                            "responseEnd": "<network-clock-ms>",
                                                             "responseHeaders": {
                                                                 "access-control-allow-headers": "*",
                                                                 "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -29002,10 +29162,16 @@
                                                                 "keep-alive": "timeout=5",
                                                                 "x-compat-response": "retained"
                                                             },
+                                                            "responseStart": "<network-clock-ms>",
+                                                            "responseStatus": 200,
+                                                            "secureConnectionStart": "<network-clock-ms>",
+                                                            "serverTiming": [],
                                                             "startTime": "<network-clock-ms>",
                                                             "status": 200,
                                                             "timeOrigin": "<network-clock-ms>",
-                                                            "timestamp": "<network-clock-ms>"
+                                                            "timestamp": "<network-clock-ms>",
+                                                            "transferSize": 336,
+                                                            "workerStart": "<network-clock-ms>"
                                                         }
                                                     ]
                                                 },
@@ -29022,7 +29188,7 @@
                                 },
                                 "sent_at": "2024-01-01T00:00:00.000Z",
                                 "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-16"
+                                "uuid": "generated-id-15"
                             },
                             {
                                 "event": "$snapshot",
@@ -29068,7 +29234,7 @@
                                 },
                                 "sent_at": "2024-01-01T00:00:00.000Z",
                                 "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-17"
+                                "uuid": "generated-id-16"
                             }
                         ]
                     },
@@ -88780,7 +88946,7 @@
                                     },
                                     "sent_at": "2024-01-01T00:00:00.000Z",
                                     "timestamp": "2024-01-01T00:00:00.000Z",
-                                    "uuid": "generated-id-17"
+                                    "uuid": "generated-id-16"
                                 },
                                 "contentEncoding": null,
                                 "contentType": "application/json",
@@ -89030,6 +89196,58 @@
                                             {
                                                 "data": {
                                                     "payload": {
+                                                        "isInitial": true,
+                                                        "requests": [
+                                                            {
+                                                                "connectEnd": "<network-clock-ms>",
+                                                                "connectStart": "<network-clock-ms>",
+                                                                "contentType": "text/html",
+                                                                "decodedBodySize": 517,
+                                                                "domComplete": "<network-clock-ms>",
+                                                                "domContentLoadedEventEnd": "<network-clock-ms>",
+                                                                "domContentLoadedEventStart": "<network-clock-ms>",
+                                                                "domInteractive": "<network-clock-ms>",
+                                                                "domainLookupEnd": "<network-clock-ms>",
+                                                                "domainLookupStart": "<network-clock-ms>",
+                                                                "duration": "<network-clock-ms>",
+                                                                "encodedBodySize": 517,
+                                                                "endTime": "<network-clock-ms>",
+                                                                "entryType": "navigation",
+                                                                "fetchStart": "<network-clock-ms>",
+                                                                "initiatorType": "navigation",
+                                                                "isInitial": true,
+                                                                "loadEventEnd": "<network-clock-ms>",
+                                                                "loadEventStart": "<network-clock-ms>",
+                                                                "name": "<fixture-origin>/",
+                                                                "nextHopProtocol": "http/1.1",
+                                                                "redirectCount": 0,
+                                                                "redirectEnd": "<network-clock-ms>",
+                                                                "redirectStart": "<network-clock-ms>",
+                                                                "requestStart": "<network-clock-ms>",
+                                                                "responseEnd": "<network-clock-ms>",
+                                                                "responseStart": "<network-clock-ms>",
+                                                                "responseStatus": 200,
+                                                                "secureConnectionStart": "<network-clock-ms>",
+                                                                "serverTiming": [],
+                                                                "startTime": "<network-clock-ms>",
+                                                                "timeOrigin": "<network-clock-ms>",
+                                                                "timestamp": "<network-clock-ms>",
+                                                                "transferSize": 817,
+                                                                "type": "navigate",
+                                                                "unloadEventEnd": "<network-clock-ms>",
+                                                                "unloadEventStart": "<network-clock-ms>",
+                                                                "workerStart": "<network-clock-ms>"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "plugin": "rrweb/network@1"
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 6
+                                            },
+                                            {
+                                                "data": {
+                                                    "payload": {
                                                         "cache_timestamp": 1704067200000,
                                                         "canvasRecording": {
                                                             "enabled": false
@@ -89210,50 +89428,38 @@
                                                 },
                                                 "timestamp": 1704067200000,
                                                 "type": 3
-                                            }
-                                        ],
-                                        "$snapshot_host": "127.0.0.1",
-                                        "$window_id": "generated-id-4",
-                                        "distinct_id": "generated-id-1",
-                                        "token": "phc_COMPAT"
-                                    },
-                                    "sent_at": "2024-01-01T00:00:00.000Z",
-                                    "timestamp": "2024-01-01T00:00:00.000Z",
-                                    "uuid": "generated-id-15"
-                                },
-                                "contentEncoding": null,
-                                "contentType": "application/json",
-                                "method": "POST",
-                                "path": "/s",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
-                                "body": {
-                                    "event": "$snapshot",
-                                    "properties": {
-                                        "$config_defaults": "unset",
-                                        "$lib": "web",
-                                        "$lib_version": "<extension-version>",
-                                        "$session_id": "generated-id-2",
-                                        "$snapshot_bytes": "<encoded-size>",
-                                        "$snapshot_data": [
+                                            },
                                             {
                                                 "data": {
                                                     "payload": {
                                                         "requests": [
                                                             {
+                                                                "connectEnd": "<network-clock-ms>",
+                                                                "connectStart": "<network-clock-ms>",
+                                                                "contentType": "application/json",
+                                                                "decodedBodySize": 34,
+                                                                "domainLookupEnd": "<network-clock-ms>",
+                                                                "domainLookupStart": "<network-clock-ms>",
+                                                                "duration": "<network-clock-ms>",
+                                                                "encodedBodySize": 34,
                                                                 "endTime": "<network-clock-ms>",
+                                                                "entryType": "resource",
+                                                                "fetchStart": "<network-clock-ms>",
                                                                 "initiatorType": "fetch",
                                                                 "method": "POST",
                                                                 "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                                "nextHopProtocol": "http/1.1",
+                                                                "redirectEnd": "<network-clock-ms>",
+                                                                "redirectStart": "<network-clock-ms>",
                                                                 "requestBody": "{\"message\":\"compat request body\"}",
                                                                 "requestHeaders": {
                                                                     "authorization": "redacted",
                                                                     "content-type": "application/json",
                                                                     "x-compat-request": "retained"
                                                                 },
+                                                                "requestStart": "<network-clock-ms>",
                                                                 "responseBody": "{\"message\":\"compat response body\"}",
+                                                                "responseEnd": "<network-clock-ms>",
                                                                 "responseHeaders": {
                                                                     "access-control-allow-headers": "*",
                                                                     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -89267,10 +89473,16 @@
                                                                     "keep-alive": "timeout=5",
                                                                     "x-compat-response": "retained"
                                                                 },
+                                                                "responseStart": "<network-clock-ms>",
+                                                                "responseStatus": 200,
+                                                                "secureConnectionStart": "<network-clock-ms>",
+                                                                "serverTiming": [],
                                                                 "startTime": "<network-clock-ms>",
                                                                 "status": 200,
                                                                 "timeOrigin": "<network-clock-ms>",
-                                                                "timestamp": "<network-clock-ms>"
+                                                                "timestamp": "<network-clock-ms>",
+                                                                "transferSize": 334,
+                                                                "workerStart": "<network-clock-ms>"
                                                             }
                                                         ]
                                                     },
@@ -89284,17 +89496,32 @@
                                                     "payload": {
                                                         "requests": [
                                                             {
+                                                                "connectEnd": "<network-clock-ms>",
+                                                                "connectStart": "<network-clock-ms>",
+                                                                "contentType": "application/json",
+                                                                "decodedBodySize": 36,
+                                                                "domainLookupEnd": "<network-clock-ms>",
+                                                                "domainLookupStart": "<network-clock-ms>",
+                                                                "duration": "<network-clock-ms>",
+                                                                "encodedBodySize": 36,
                                                                 "endTime": "<network-clock-ms>",
+                                                                "entryType": "resource",
+                                                                "fetchStart": "<network-clock-ms>",
                                                                 "initiatorType": "fetch",
                                                                 "method": "POST",
                                                                 "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                                "nextHopProtocol": "http/1.1",
+                                                                "redirectEnd": "<network-clock-ms>",
+                                                                "redirectStart": "<network-clock-ms>",
                                                                 "requestBody": "[SessionRecording] Request body redacted as might contain: password",
                                                                 "requestHeaders": {
                                                                     "authorization": "redacted",
                                                                     "content-type": "application/json",
                                                                     "x-compat-request": "retained"
                                                                 },
+                                                                "requestStart": "<network-clock-ms>",
                                                                 "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                                "responseEnd": "<network-clock-ms>",
                                                                 "responseHeaders": {
                                                                     "access-control-allow-headers": "*",
                                                                     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -89308,10 +89535,16 @@
                                                                     "keep-alive": "timeout=5",
                                                                     "x-compat-response": "retained"
                                                                 },
+                                                                "responseStart": "<network-clock-ms>",
+                                                                "responseStatus": 200,
+                                                                "secureConnectionStart": "<network-clock-ms>",
+                                                                "serverTiming": [],
                                                                 "startTime": "<network-clock-ms>",
                                                                 "status": 200,
                                                                 "timeOrigin": "<network-clock-ms>",
-                                                                "timestamp": "<network-clock-ms>"
+                                                                "timestamp": "<network-clock-ms>",
+                                                                "transferSize": 336,
+                                                                "workerStart": "<network-clock-ms>"
                                                             }
                                                         ]
                                                     },
@@ -89328,7 +89561,7 @@
                                     },
                                     "sent_at": "2024-01-01T00:00:00.000Z",
                                     "timestamp": "2024-01-01T00:00:00.000Z",
-                                    "uuid": "generated-id-16"
+                                    "uuid": "generated-id-15"
                                 },
                                 "contentEncoding": null,
                                 "contentType": "application/json",
@@ -89595,6 +89828,58 @@
                                         {
                                             "data": {
                                                 "payload": {
+                                                    "isInitial": true,
+                                                    "requests": [
+                                                        {
+                                                            "connectEnd": "<network-clock-ms>",
+                                                            "connectStart": "<network-clock-ms>",
+                                                            "contentType": "text/html",
+                                                            "decodedBodySize": 517,
+                                                            "domComplete": "<network-clock-ms>",
+                                                            "domContentLoadedEventEnd": "<network-clock-ms>",
+                                                            "domContentLoadedEventStart": "<network-clock-ms>",
+                                                            "domInteractive": "<network-clock-ms>",
+                                                            "domainLookupEnd": "<network-clock-ms>",
+                                                            "domainLookupStart": "<network-clock-ms>",
+                                                            "duration": "<network-clock-ms>",
+                                                            "encodedBodySize": 517,
+                                                            "endTime": "<network-clock-ms>",
+                                                            "entryType": "navigation",
+                                                            "fetchStart": "<network-clock-ms>",
+                                                            "initiatorType": "navigation",
+                                                            "isInitial": true,
+                                                            "loadEventEnd": "<network-clock-ms>",
+                                                            "loadEventStart": "<network-clock-ms>",
+                                                            "name": "<fixture-origin>/",
+                                                            "nextHopProtocol": "http/1.1",
+                                                            "redirectCount": 0,
+                                                            "redirectEnd": "<network-clock-ms>",
+                                                            "redirectStart": "<network-clock-ms>",
+                                                            "requestStart": "<network-clock-ms>",
+                                                            "responseEnd": "<network-clock-ms>",
+                                                            "responseStart": "<network-clock-ms>",
+                                                            "responseStatus": 200,
+                                                            "secureConnectionStart": "<network-clock-ms>",
+                                                            "serverTiming": [],
+                                                            "startTime": "<network-clock-ms>",
+                                                            "timeOrigin": "<network-clock-ms>",
+                                                            "timestamp": "<network-clock-ms>",
+                                                            "transferSize": 817,
+                                                            "type": "navigate",
+                                                            "unloadEventEnd": "<network-clock-ms>",
+                                                            "unloadEventStart": "<network-clock-ms>",
+                                                            "workerStart": "<network-clock-ms>"
+                                                        }
+                                                    ]
+                                                },
+                                                "plugin": "rrweb/network@1"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 6
+                                        },
+                                        {
+                                            "data": {
+                                                "payload": {
                                                     "cache_timestamp": 1704067200000,
                                                     "canvasRecording": {
                                                         "enabled": false
@@ -89775,42 +90060,38 @@
                                             },
                                             "timestamp": 1704067200000,
                                             "type": 3
-                                        }
-                                    ],
-                                    "$snapshot_host": "127.0.0.1",
-                                    "$window_id": "generated-id-4",
-                                    "distinct_id": "generated-id-1",
-                                    "token": "phc_COMPAT"
-                                },
-                                "sent_at": "2024-01-01T00:00:00.000Z",
-                                "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-15"
-                            },
-                            {
-                                "event": "$snapshot",
-                                "properties": {
-                                    "$config_defaults": "unset",
-                                    "$lib": "web",
-                                    "$lib_version": "<extension-version>",
-                                    "$session_id": "generated-id-2",
-                                    "$snapshot_bytes": "<encoded-size>",
-                                    "$snapshot_data": [
+                                        },
                                         {
                                             "data": {
                                                 "payload": {
                                                     "requests": [
                                                         {
+                                                            "connectEnd": "<network-clock-ms>",
+                                                            "connectStart": "<network-clock-ms>",
+                                                            "contentType": "application/json",
+                                                            "decodedBodySize": 34,
+                                                            "domainLookupEnd": "<network-clock-ms>",
+                                                            "domainLookupStart": "<network-clock-ms>",
+                                                            "duration": "<network-clock-ms>",
+                                                            "encodedBodySize": 34,
                                                             "endTime": "<network-clock-ms>",
+                                                            "entryType": "resource",
+                                                            "fetchStart": "<network-clock-ms>",
                                                             "initiatorType": "fetch",
                                                             "method": "POST",
                                                             "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                            "nextHopProtocol": "http/1.1",
+                                                            "redirectEnd": "<network-clock-ms>",
+                                                            "redirectStart": "<network-clock-ms>",
                                                             "requestBody": "{\"message\":\"compat request body\"}",
                                                             "requestHeaders": {
                                                                 "authorization": "redacted",
                                                                 "content-type": "application/json",
                                                                 "x-compat-request": "retained"
                                                             },
+                                                            "requestStart": "<network-clock-ms>",
                                                             "responseBody": "{\"message\":\"compat response body\"}",
+                                                            "responseEnd": "<network-clock-ms>",
                                                             "responseHeaders": {
                                                                 "access-control-allow-headers": "*",
                                                                 "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -89824,10 +90105,16 @@
                                                                 "keep-alive": "timeout=5",
                                                                 "x-compat-response": "retained"
                                                             },
+                                                            "responseStart": "<network-clock-ms>",
+                                                            "responseStatus": 200,
+                                                            "secureConnectionStart": "<network-clock-ms>",
+                                                            "serverTiming": [],
                                                             "startTime": "<network-clock-ms>",
                                                             "status": 200,
                                                             "timeOrigin": "<network-clock-ms>",
-                                                            "timestamp": "<network-clock-ms>"
+                                                            "timestamp": "<network-clock-ms>",
+                                                            "transferSize": 334,
+                                                            "workerStart": "<network-clock-ms>"
                                                         }
                                                     ]
                                                 },
@@ -89841,17 +90128,32 @@
                                                 "payload": {
                                                     "requests": [
                                                         {
+                                                            "connectEnd": "<network-clock-ms>",
+                                                            "connectStart": "<network-clock-ms>",
+                                                            "contentType": "application/json",
+                                                            "decodedBodySize": 36,
+                                                            "domainLookupEnd": "<network-clock-ms>",
+                                                            "domainLookupStart": "<network-clock-ms>",
+                                                            "duration": "<network-clock-ms>",
+                                                            "encodedBodySize": 36,
                                                             "endTime": "<network-clock-ms>",
+                                                            "entryType": "resource",
+                                                            "fetchStart": "<network-clock-ms>",
                                                             "initiatorType": "fetch",
                                                             "method": "POST",
                                                             "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                            "nextHopProtocol": "http/1.1",
+                                                            "redirectEnd": "<network-clock-ms>",
+                                                            "redirectStart": "<network-clock-ms>",
                                                             "requestBody": "[SessionRecording] Request body redacted as might contain: password",
                                                             "requestHeaders": {
                                                                 "authorization": "redacted",
                                                                 "content-type": "application/json",
                                                                 "x-compat-request": "retained"
                                                             },
+                                                            "requestStart": "<network-clock-ms>",
                                                             "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                            "responseEnd": "<network-clock-ms>",
                                                             "responseHeaders": {
                                                                 "access-control-allow-headers": "*",
                                                                 "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -89865,10 +90167,16 @@
                                                                 "keep-alive": "timeout=5",
                                                                 "x-compat-response": "retained"
                                                             },
+                                                            "responseStart": "<network-clock-ms>",
+                                                            "responseStatus": 200,
+                                                            "secureConnectionStart": "<network-clock-ms>",
+                                                            "serverTiming": [],
                                                             "startTime": "<network-clock-ms>",
                                                             "status": 200,
                                                             "timeOrigin": "<network-clock-ms>",
-                                                            "timestamp": "<network-clock-ms>"
+                                                            "timestamp": "<network-clock-ms>",
+                                                            "transferSize": 336,
+                                                            "workerStart": "<network-clock-ms>"
                                                         }
                                                     ]
                                                 },
@@ -89885,7 +90193,7 @@
                                 },
                                 "sent_at": "2024-01-01T00:00:00.000Z",
                                 "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-16"
+                                "uuid": "generated-id-15"
                             },
                             {
                                 "event": "$snapshot",
@@ -89931,7 +90239,7 @@
                                 },
                                 "sent_at": "2024-01-01T00:00:00.000Z",
                                 "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-17"
+                                "uuid": "generated-id-16"
                             }
                         ]
                     },
@@ -149643,7 +149951,7 @@
                                     },
                                     "sent_at": "2024-01-01T00:00:00.000Z",
                                     "timestamp": "2024-01-01T00:00:00.000Z",
-                                    "uuid": "generated-id-17"
+                                    "uuid": "generated-id-16"
                                 },
                                 "contentEncoding": null,
                                 "contentType": "application/json",
@@ -149893,6 +150201,56 @@
                                             {
                                                 "data": {
                                                     "payload": {
+                                                        "isInitial": true,
+                                                        "requests": [
+                                                            {
+                                                                "connectEnd": "<network-clock-ms>",
+                                                                "connectStart": "<network-clock-ms>",
+                                                                "decodedBodySize": 517,
+                                                                "domComplete": "<network-clock-ms>",
+                                                                "domContentLoadedEventEnd": "<network-clock-ms>",
+                                                                "domContentLoadedEventStart": "<network-clock-ms>",
+                                                                "domInteractive": "<network-clock-ms>",
+                                                                "domainLookupEnd": "<network-clock-ms>",
+                                                                "domainLookupStart": "<network-clock-ms>",
+                                                                "duration": "<network-clock-ms>",
+                                                                "encodedBodySize": 517,
+                                                                "endTime": "<network-clock-ms>",
+                                                                "entryType": "navigation",
+                                                                "fetchStart": "<network-clock-ms>",
+                                                                "initiatorType": "navigation",
+                                                                "isInitial": true,
+                                                                "loadEventEnd": "<network-clock-ms>",
+                                                                "loadEventStart": "<network-clock-ms>",
+                                                                "name": "<fixture-origin>/",
+                                                                "nextHopProtocol": "http/1.1",
+                                                                "redirectCount": 0,
+                                                                "redirectEnd": "<network-clock-ms>",
+                                                                "redirectStart": "<network-clock-ms>",
+                                                                "requestStart": "<network-clock-ms>",
+                                                                "responseEnd": "<network-clock-ms>",
+                                                                "responseStart": "<network-clock-ms>",
+                                                                "secureConnectionStart": "<network-clock-ms>",
+                                                                "serverTiming": [],
+                                                                "startTime": "<network-clock-ms>",
+                                                                "timeOrigin": "<network-clock-ms>",
+                                                                "timestamp": "<network-clock-ms>",
+                                                                "transferSize": 817,
+                                                                "type": "navigate",
+                                                                "unloadEventEnd": "<network-clock-ms>",
+                                                                "unloadEventStart": "<network-clock-ms>",
+                                                                "workerStart": "<network-clock-ms>"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "plugin": "rrweb/network@1"
+                                                },
+                                                "timestamp": 1704067200000,
+                                                "type": 6
+                                            },
+                                            {
+                                                "data": {
+                                                    "payload": {
                                                         "cache_timestamp": 1704067200000,
                                                         "canvasRecording": {
                                                             "enabled": false
@@ -150121,50 +150479,37 @@
                                                 },
                                                 "timestamp": 1704067200000,
                                                 "type": 3
-                                            }
-                                        ],
-                                        "$snapshot_host": "127.0.0.1",
-                                        "$window_id": "generated-id-4",
-                                        "distinct_id": "generated-id-1",
-                                        "token": "phc_COMPAT"
-                                    },
-                                    "sent_at": "2024-01-01T00:00:00.000Z",
-                                    "timestamp": "2024-01-01T00:00:00.000Z",
-                                    "uuid": "generated-id-15"
-                                },
-                                "contentEncoding": null,
-                                "contentType": "application/json",
-                                "method": "POST",
-                                "path": "/s",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
-                                "body": {
-                                    "event": "$snapshot",
-                                    "properties": {
-                                        "$config_defaults": "unset",
-                                        "$lib": "web",
-                                        "$lib_version": "<extension-version>",
-                                        "$session_id": "generated-id-2",
-                                        "$snapshot_bytes": "<encoded-size>",
-                                        "$snapshot_data": [
+                                            },
                                             {
                                                 "data": {
                                                     "payload": {
                                                         "requests": [
                                                             {
+                                                                "connectEnd": "<network-clock-ms>",
+                                                                "connectStart": "<network-clock-ms>",
+                                                                "decodedBodySize": 34,
+                                                                "domainLookupEnd": "<network-clock-ms>",
+                                                                "domainLookupStart": "<network-clock-ms>",
+                                                                "duration": "<network-clock-ms>",
+                                                                "encodedBodySize": 34,
                                                                 "endTime": "<network-clock-ms>",
+                                                                "entryType": "resource",
+                                                                "fetchStart": "<network-clock-ms>",
                                                                 "initiatorType": "fetch",
                                                                 "method": "POST",
                                                                 "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                                "nextHopProtocol": "http/1.1",
+                                                                "redirectEnd": "<network-clock-ms>",
+                                                                "redirectStart": "<network-clock-ms>",
                                                                 "requestBody": "{\"message\":\"compat request body\"}",
                                                                 "requestHeaders": {
                                                                     "authorization": "redacted",
                                                                     "content-type": "application/json",
                                                                     "x-compat-request": "retained"
                                                                 },
+                                                                "requestStart": "<network-clock-ms>",
                                                                 "responseBody": "{\"message\":\"compat response body\"}",
+                                                                "responseEnd": "<network-clock-ms>",
                                                                 "responseHeaders": {
                                                                     "access-control-allow-headers": "*",
                                                                     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -150178,10 +150523,15 @@
                                                                     "keep-alive": "timeout=5",
                                                                     "x-compat-response": "retained"
                                                                 },
+                                                                "responseStart": "<network-clock-ms>",
+                                                                "secureConnectionStart": "<network-clock-ms>",
+                                                                "serverTiming": [],
                                                                 "startTime": "<network-clock-ms>",
                                                                 "status": 200,
                                                                 "timeOrigin": "<network-clock-ms>",
-                                                                "timestamp": "<network-clock-ms>"
+                                                                "timestamp": "<network-clock-ms>",
+                                                                "transferSize": 334,
+                                                                "workerStart": "<network-clock-ms>"
                                                             }
                                                         ]
                                                     },
@@ -150195,17 +150545,31 @@
                                                     "payload": {
                                                         "requests": [
                                                             {
+                                                                "connectEnd": "<network-clock-ms>",
+                                                                "connectStart": "<network-clock-ms>",
+                                                                "decodedBodySize": 36,
+                                                                "domainLookupEnd": "<network-clock-ms>",
+                                                                "domainLookupStart": "<network-clock-ms>",
+                                                                "duration": "<network-clock-ms>",
+                                                                "encodedBodySize": 36,
                                                                 "endTime": "<network-clock-ms>",
+                                                                "entryType": "resource",
+                                                                "fetchStart": "<network-clock-ms>",
                                                                 "initiatorType": "fetch",
                                                                 "method": "POST",
                                                                 "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                                "nextHopProtocol": "http/1.1",
+                                                                "redirectEnd": "<network-clock-ms>",
+                                                                "redirectStart": "<network-clock-ms>",
                                                                 "requestBody": "[SessionRecording] Request body redacted as might contain: password",
                                                                 "requestHeaders": {
                                                                     "authorization": "redacted",
                                                                     "content-type": "application/json",
                                                                     "x-compat-request": "retained"
                                                                 },
+                                                                "requestStart": "<network-clock-ms>",
                                                                 "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                                "responseEnd": "<network-clock-ms>",
                                                                 "responseHeaders": {
                                                                     "access-control-allow-headers": "*",
                                                                     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -150219,10 +150583,15 @@
                                                                     "keep-alive": "timeout=5",
                                                                     "x-compat-response": "retained"
                                                                 },
+                                                                "responseStart": "<network-clock-ms>",
+                                                                "secureConnectionStart": "<network-clock-ms>",
+                                                                "serverTiming": [],
                                                                 "startTime": "<network-clock-ms>",
                                                                 "status": 200,
                                                                 "timeOrigin": "<network-clock-ms>",
-                                                                "timestamp": "<network-clock-ms>"
+                                                                "timestamp": "<network-clock-ms>",
+                                                                "transferSize": 336,
+                                                                "workerStart": "<network-clock-ms>"
                                                             }
                                                         ]
                                                     },
@@ -150239,7 +150608,7 @@
                                     },
                                     "sent_at": "2024-01-01T00:00:00.000Z",
                                     "timestamp": "2024-01-01T00:00:00.000Z",
-                                    "uuid": "generated-id-16"
+                                    "uuid": "generated-id-15"
                                 },
                                 "contentEncoding": null,
                                 "contentType": "application/json",
@@ -150506,6 +150875,56 @@
                                         {
                                             "data": {
                                                 "payload": {
+                                                    "isInitial": true,
+                                                    "requests": [
+                                                        {
+                                                            "connectEnd": "<network-clock-ms>",
+                                                            "connectStart": "<network-clock-ms>",
+                                                            "decodedBodySize": 517,
+                                                            "domComplete": "<network-clock-ms>",
+                                                            "domContentLoadedEventEnd": "<network-clock-ms>",
+                                                            "domContentLoadedEventStart": "<network-clock-ms>",
+                                                            "domInteractive": "<network-clock-ms>",
+                                                            "domainLookupEnd": "<network-clock-ms>",
+                                                            "domainLookupStart": "<network-clock-ms>",
+                                                            "duration": "<network-clock-ms>",
+                                                            "encodedBodySize": 517,
+                                                            "endTime": "<network-clock-ms>",
+                                                            "entryType": "navigation",
+                                                            "fetchStart": "<network-clock-ms>",
+                                                            "initiatorType": "navigation",
+                                                            "isInitial": true,
+                                                            "loadEventEnd": "<network-clock-ms>",
+                                                            "loadEventStart": "<network-clock-ms>",
+                                                            "name": "<fixture-origin>/",
+                                                            "nextHopProtocol": "http/1.1",
+                                                            "redirectCount": 0,
+                                                            "redirectEnd": "<network-clock-ms>",
+                                                            "redirectStart": "<network-clock-ms>",
+                                                            "requestStart": "<network-clock-ms>",
+                                                            "responseEnd": "<network-clock-ms>",
+                                                            "responseStart": "<network-clock-ms>",
+                                                            "secureConnectionStart": "<network-clock-ms>",
+                                                            "serverTiming": [],
+                                                            "startTime": "<network-clock-ms>",
+                                                            "timeOrigin": "<network-clock-ms>",
+                                                            "timestamp": "<network-clock-ms>",
+                                                            "transferSize": 817,
+                                                            "type": "navigate",
+                                                            "unloadEventEnd": "<network-clock-ms>",
+                                                            "unloadEventStart": "<network-clock-ms>",
+                                                            "workerStart": "<network-clock-ms>"
+                                                        }
+                                                    ]
+                                                },
+                                                "plugin": "rrweb/network@1"
+                                            },
+                                            "timestamp": 1704067200000,
+                                            "type": 6
+                                        },
+                                        {
+                                            "data": {
+                                                "payload": {
                                                     "cache_timestamp": 1704067200000,
                                                     "canvasRecording": {
                                                         "enabled": false
@@ -150734,42 +151153,37 @@
                                             },
                                             "timestamp": 1704067200000,
                                             "type": 3
-                                        }
-                                    ],
-                                    "$snapshot_host": "127.0.0.1",
-                                    "$window_id": "generated-id-4",
-                                    "distinct_id": "generated-id-1",
-                                    "token": "phc_COMPAT"
-                                },
-                                "sent_at": "2024-01-01T00:00:00.000Z",
-                                "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-15"
-                            },
-                            {
-                                "event": "$snapshot",
-                                "properties": {
-                                    "$config_defaults": "unset",
-                                    "$lib": "web",
-                                    "$lib_version": "<extension-version>",
-                                    "$session_id": "generated-id-2",
-                                    "$snapshot_bytes": "<encoded-size>",
-                                    "$snapshot_data": [
+                                        },
                                         {
                                             "data": {
                                                 "payload": {
                                                     "requests": [
                                                         {
+                                                            "connectEnd": "<network-clock-ms>",
+                                                            "connectStart": "<network-clock-ms>",
+                                                            "decodedBodySize": 34,
+                                                            "domainLookupEnd": "<network-clock-ms>",
+                                                            "domainLookupStart": "<network-clock-ms>",
+                                                            "duration": "<network-clock-ms>",
+                                                            "encodedBodySize": 34,
                                                             "endTime": "<network-clock-ms>",
+                                                            "entryType": "resource",
+                                                            "fetchStart": "<network-clock-ms>",
                                                             "initiatorType": "fetch",
                                                             "method": "POST",
                                                             "name": "<fixture-origin>/__compat/replay-network/plain",
+                                                            "nextHopProtocol": "http/1.1",
+                                                            "redirectEnd": "<network-clock-ms>",
+                                                            "redirectStart": "<network-clock-ms>",
                                                             "requestBody": "{\"message\":\"compat request body\"}",
                                                             "requestHeaders": {
                                                                 "authorization": "redacted",
                                                                 "content-type": "application/json",
                                                                 "x-compat-request": "retained"
                                                             },
+                                                            "requestStart": "<network-clock-ms>",
                                                             "responseBody": "{\"message\":\"compat response body\"}",
+                                                            "responseEnd": "<network-clock-ms>",
                                                             "responseHeaders": {
                                                                 "access-control-allow-headers": "*",
                                                                 "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -150783,10 +151197,15 @@
                                                                 "keep-alive": "timeout=5",
                                                                 "x-compat-response": "retained"
                                                             },
+                                                            "responseStart": "<network-clock-ms>",
+                                                            "secureConnectionStart": "<network-clock-ms>",
+                                                            "serverTiming": [],
                                                             "startTime": "<network-clock-ms>",
                                                             "status": 200,
                                                             "timeOrigin": "<network-clock-ms>",
-                                                            "timestamp": "<network-clock-ms>"
+                                                            "timestamp": "<network-clock-ms>",
+                                                            "transferSize": 334,
+                                                            "workerStart": "<network-clock-ms>"
                                                         }
                                                     ]
                                                 },
@@ -150800,17 +151219,31 @@
                                                 "payload": {
                                                     "requests": [
                                                         {
+                                                            "connectEnd": "<network-clock-ms>",
+                                                            "connectStart": "<network-clock-ms>",
+                                                            "decodedBodySize": 36,
+                                                            "domainLookupEnd": "<network-clock-ms>",
+                                                            "domainLookupStart": "<network-clock-ms>",
+                                                            "duration": "<network-clock-ms>",
+                                                            "encodedBodySize": 36,
                                                             "endTime": "<network-clock-ms>",
+                                                            "entryType": "resource",
+                                                            "fetchStart": "<network-clock-ms>",
                                                             "initiatorType": "fetch",
                                                             "method": "POST",
                                                             "name": "<fixture-origin>/__compat/replay-network/sensitive",
+                                                            "nextHopProtocol": "http/1.1",
+                                                            "redirectEnd": "<network-clock-ms>",
+                                                            "redirectStart": "<network-clock-ms>",
                                                             "requestBody": "[SessionRecording] Request body redacted as might contain: password",
                                                             "requestHeaders": {
                                                                 "authorization": "redacted",
                                                                 "content-type": "application/json",
                                                                 "x-compat-request": "retained"
                                                             },
+                                                            "requestStart": "<network-clock-ms>",
                                                             "responseBody": "[SessionRecording] Response body redacted as might contain: password",
+                                                            "responseEnd": "<network-clock-ms>",
                                                             "responseHeaders": {
                                                                 "access-control-allow-headers": "*",
                                                                 "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -150824,10 +151257,15 @@
                                                                 "keep-alive": "timeout=5",
                                                                 "x-compat-response": "retained"
                                                             },
+                                                            "responseStart": "<network-clock-ms>",
+                                                            "secureConnectionStart": "<network-clock-ms>",
+                                                            "serverTiming": [],
                                                             "startTime": "<network-clock-ms>",
                                                             "status": 200,
                                                             "timeOrigin": "<network-clock-ms>",
-                                                            "timestamp": "<network-clock-ms>"
+                                                            "timestamp": "<network-clock-ms>",
+                                                            "transferSize": 336,
+                                                            "workerStart": "<network-clock-ms>"
                                                         }
                                                     ]
                                                 },
@@ -150844,7 +151282,7 @@
                                 },
                                 "sent_at": "2024-01-01T00:00:00.000Z",
                                 "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-16"
+                                "uuid": "generated-id-15"
                             },
                             {
                                 "event": "$snapshot",
@@ -150890,7 +151328,7 @@
                                 },
                                 "sent_at": "2024-01-01T00:00:00.000Z",
                                 "timestamp": "2024-01-01T00:00:00.000Z",
-                                "uuid": "generated-id-17"
+                                "uuid": "generated-id-16"
                             }
                         ]
                     },

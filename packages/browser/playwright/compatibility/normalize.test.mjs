@@ -11,6 +11,7 @@ test('Replay network normalization bounds native clocks without hiding captured 
         endTime: 20,
         duration: 10,
         connectEnd: 2,
+        finalResponseHeadersStart: 17,
         domContentLoadedEventEnd: 5,
         timeOrigin: 1704067200000,
         timestamp: 1704067200010,
@@ -36,6 +37,7 @@ test('Replay network normalization bounds native clocks without hiding captured 
             'timestamp',
             'duration',
             'connectEnd',
+            'finalResponseHeadersStart',
             'domContentLoadedEventEnd',
         ])
             assert.equal(record[field], '<network-clock-ms>')
@@ -64,6 +66,34 @@ test('Replay network normalization bounds native clocks without hiding captured 
             .timestamp,
         request.timestamp
     )
+})
+
+test('Replay normalizes near-origin Firefox navigation fetchStart without masking negative request clocks', () => {
+    const source = (fetchStart, entryType = 'navigation', isInitial = true) => ({
+        network: {
+            snapshots: [
+                {
+                    properties: {
+                        $snapshot_data: [
+                            {
+                                type: 6,
+                                data: {
+                                    plugin: 'rrweb/network@1',
+                                    payload: { requests: [{ fetchStart, entryType, isInitial }] },
+                                },
+                            },
+                        ],
+                    },
+                },
+            ],
+        },
+    })
+    const result = (value) =>
+        normalize(value, context).network.snapshots[0].properties.$snapshot_data[0].data.payload.requests[0].fetchStart
+    assert.equal(result(source(-1)), result(source(0)))
+    assert.equal(result(source(-2)), -2)
+    assert.equal(result(source(-1, 'resource', false)), -1)
+    assert.equal(result(source(-1, 'navigation', false)), -1)
 })
 
 test('normalize asserts core and CDN replay version roles before replacing only recognized metadata', () => {
