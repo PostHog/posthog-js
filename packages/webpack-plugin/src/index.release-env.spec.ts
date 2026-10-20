@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
@@ -12,6 +14,20 @@ vi.mock('@posthog/plugin-utils', async (importOriginal) => ({
     resolveReleaseId: vi.fn(),
     runSourcemapCli: vi.fn().mockResolvedValue(undefined),
 }))
+
+async function compile(config: webpack.Configuration) {
+    const compiler = webpack(config)!
+    try {
+        await new Promise<void>((resolve, reject) =>
+            compiler.run((error, stats) => {
+                if (error || stats?.hasErrors()) reject(error || new Error(stats?.toString()))
+                else resolve()
+            })
+        )
+    } finally {
+        await new Promise<void>((resolve, reject) => compiler.close((error) => (error ? reject(error) : resolve())))
+    }
+}
 
 describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () => {
     let directory: string
@@ -60,7 +76,7 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
                 uploadedMaps.set(path.basename(file), map)
             }
         })
-        const compiler = webpack({
+        await compile({
             mode: 'production',
             context: directory,
             entry: './entry.js',
@@ -85,17 +101,7 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
                 },
                 new PosthogWebpackPlugin(config, true, { injectReleaseId }),
             ],
-        })!
-        try {
-            await new Promise<void>((resolve, reject) =>
-                compiler.run((error, stats) => {
-                    if (error || stats?.hasErrors()) reject(error || new Error(stats?.toString()))
-                    else resolve()
-                })
-            )
-        } finally {
-            await new Promise<void>((resolve, reject) => compiler.close((error) => (error ? reject(error) : resolve())))
-        }
+        })
         const files = await fs.readdir(outputPath)
         const javascript = new Map(
             await Promise.all(
@@ -164,6 +170,75 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
             )
         }
     })
+
+    it.each(['server-release', undefined])(
+        'preserves the resolved release for an externalized server SDK (release=%s)',
+        async (releaseId) => {
+            // The real SDK reader stays outside webpack, so DefinePlugin cannot rewrite it.
+            const externalSdk = createRequire(import.meta.url).resolve('@posthog/core/error-tracking')
+            await fs.writeFile(
+                path.join(directory, 'server.js'),
+                `const sdk = require('external-sdk');
+                module.exports = {
+                    bundledReleaseId: process.env.POSTHOG_RELEASE_ID ?? null,
+                    externalReleaseId: sdk.getInjectedReleaseId() ?? null
+                };`
+            )
+            vi.mocked(resolveReleaseId).mockResolvedValue('must-not-resolve-another-release')
+            vi.mocked(runSourcemapCli).mockResolvedValue(undefined)
+            const outputPath = path.join(directory, 'server-dist')
+            await compile({
+                mode: 'production',
+                target: 'node',
+                context: directory,
+                entry: './server.js',
+                devtool: false,
+                output: { path: outputPath, filename: 'server.cjs', library: { type: 'commonjs2' } },
+                externals: { 'external-sdk': `commonjs ${externalSdk}` },
+                plugins: [
+                    new webpack.DefinePlugin({
+                        'process.env.POSTHOG_RELEASE_ID': JSON.stringify(releaseId) ?? 'undefined',
+                    }),
+                    new PosthogWebpackPlugin(
+                        resolveConfig({
+                            personalApiKey: 'dummy',
+                            projectId: '1',
+                            cliBinaryPath: 'mock-cli',
+                            sourcemaps: { releaseMode: 'event', deleteAfterUpload: true },
+                        }),
+                        true,
+                        { injectReleaseId: !!releaseId, releaseId }
+                    ),
+                ],
+            })
+            // Start a separate deployment process without the build environment. Require the
+            // external SDK before the bundle, as a server process may already have loaded it.
+            const result = JSON.parse(
+                execFileSync(
+                    process.execPath,
+                    [
+                        '-e',
+                        `const sdk = require(${JSON.stringify(externalSdk)});
+                        const before = sdk.getInjectedReleaseId() ?? null;
+                        const bundle = require(${JSON.stringify(path.join(outputPath, 'server.cjs'))});
+                        console.log(JSON.stringify({ before, bundle,
+                            environment: process.env.POSTHOG_RELEASE_ID ?? null,
+                            after: sdk.getInjectedReleaseId() ?? null }));`,
+                    ],
+                    { encoding: 'utf8', env: { ...process.env, POSTHOG_RELEASE_ID: undefined } }
+                )
+            )
+            expect(result).toEqual({
+                before: null,
+                bundle: { bundledReleaseId: releaseId ?? null, externalReleaseId: releaseId ?? null },
+                environment: null,
+                after: releaseId ?? null,
+            })
+            expect(resolveReleaseId).not.toHaveBeenCalled()
+            expect(runSourcemapCli).toHaveBeenCalledTimes(1)
+            expect(await fs.readdir(outputPath)).toEqual(['server.cjs'])
+        }
+    )
 
     it('does not change release injection for standalone webpack consumers', async () => {
         vi.mocked(resolveReleaseId).mockResolvedValue('legacy-release')

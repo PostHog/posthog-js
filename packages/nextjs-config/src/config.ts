@@ -80,7 +80,7 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
       ...(userTurbopackConfig ? { turbopack: userTurbopackConfig } : {}),
       ...(userEnv ? { env: userEnv } : {}),
       distDir,
-      webpack: withWebpackConfig(userWebPackConfig, resolvedConfig, buildTimeReleaseEnabled),
+      webpack: withWebpackConfig(userWebPackConfig, resolvedConfig, buildTimeReleaseEnabled, releaseId),
       compiler: withCompilerConfig(userCompilerConfig, resolvedConfig, nativeDebugIdsEnabled),
     }
     if (nativeDebugIdsEnabled) {
@@ -89,7 +89,7 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
     }
     if (buildTimeReleaseEnabled && releaseId) {
       // Next compiles this lookup in the SDK before webpack computes chunk hashes. Do not put
-      // per-deploy metadata in every asset after hashing: Next 14 app-router uses [chunkhash].
+      // per-deploy metadata in browser assets after hashing: Next 14 app-router uses [chunkhash].
       nextConfig.env = { ...userEnv, POSTHOG_RELEASE_ID: releaseId }
     }
     if (turbopackEnabled && sourceMapEnabled) {
@@ -151,7 +151,8 @@ function resolveUserConfig(
 function withWebpackConfig(
   userWebpackConfig: NextConfig['webpack'],
   posthogConfig: ResolvedPluginConfig,
-  buildTimeReleaseEnabled: boolean
+  buildTimeReleaseEnabled: boolean,
+  releaseId: string | undefined
 ) {
   const defaultWebpackConfig = userWebpackConfig || ((config: any) => config)
   const sourceMapEnabled = posthogConfig.sourcemaps.enabled
@@ -161,8 +162,15 @@ function withWebpackConfig(
     if (sourceMapEnabled) {
       if (!turbopackEnabled) {
         webpackConfig.plugins = webpackConfig.plugins || []
+        // Externalized server SDKs are not rewritten by Next's DefinePlugin. Keep the runtime
+        // global on server bundles, using the same release as the client without resolving again.
+        // Only server assets get this injection; immutable browser assets must not change after hashing.
+        const serverReleaseId = buildTimeReleaseEnabled && options.isServer ? releaseId : undefined
         webpackConfig.plugins.push(
-          new PosthogWebpackPlugin(posthogConfig, true, { injectReleaseId: !buildTimeReleaseEnabled })
+          new PosthogWebpackPlugin(posthogConfig, true, {
+            injectReleaseId: !buildTimeReleaseEnabled || !!serverReleaseId,
+            ...(serverReleaseId ? { releaseId: serverReleaseId } : {}),
+          })
         )
       }
     }

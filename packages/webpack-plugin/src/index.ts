@@ -64,16 +64,22 @@ export class PosthogWebpackPlugin {
     resolvedConfig: ResolvedPluginConfig
     logger: Logger
     private readonly _injectReleaseId: boolean
+    private readonly _releaseId?: string
 
     constructor(pluginConfig: PluginConfig)
-    /** @internal Frameworks that compile POSTHOG_RELEASE_ID before hashing can omit per-chunk release injection. */
-    constructor(pluginConfig: ResolvedPluginConfig, resolved: true, frameworkOptions?: { injectReleaseId?: boolean })
+    /** @internal Frameworks can compile client release IDs and reuse the same ID for server injection. */
+    constructor(
+        pluginConfig: ResolvedPluginConfig,
+        resolved: true,
+        frameworkOptions?: { injectReleaseId?: boolean; releaseId?: string }
+    )
     constructor(
         pluginConfig: PluginConfig | ResolvedPluginConfig,
         resolved?: boolean,
-        frameworkOptions: { injectReleaseId?: boolean } = {}
+        frameworkOptions: { injectReleaseId?: boolean; releaseId?: string } = {}
     ) {
         this._injectReleaseId = frameworkOptions.injectReleaseId ?? true
+        this._releaseId = frameworkOptions.releaseId
         this.logger = createLogger('[PostHog Webpack]')
         this.resolvedConfig = resolved
             ? (pluginConfig as ResolvedPluginConfig)
@@ -103,8 +109,8 @@ export class PosthogWebpackPlugin {
                     {
                         name: 'PosthogWebpackPlugin',
                         // Maps exist now, before real content hashes and integrity manifests.
-                        // Chunk hashes are already fixed: frameworks using [chunkhash] must compile
-                        // the release id before hashing rather than inject it here.
+                        // Chunk hashes are already fixed: frameworks serving immutable [chunkhash]
+                        // assets must compile the release id before hashing rather than inject it here.
                         stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_DEV_TOOLING + 1,
                     },
                     async () => {
@@ -145,7 +151,8 @@ export class PosthogWebpackPlugin {
                                         continue
                                     }
                                     const releaseId = injectReleaseId
-                                        ? await (releaseIdPromise ??= resolveReleaseId(this.resolvedConfig))
+                                        ? (this._releaseId ??
+                                          (await (releaseIdPromise ??= resolveReleaseId(this.resolvedConfig))))
                                         : undefined
                                     if (injectReleaseId && !releaseId && !warnedAboutMissingRelease) {
                                         warnedAboutMissingRelease = true
