@@ -1,5 +1,61 @@
 # posthog-node
 
+## 5.56.2
+
+### Patch Changes
+
+- [#5263](https://github.com/PostHog/posthog-js/pull/5263) [`cd31356`](https://github.com/PostHog/posthog-js/commit/cd3135648ae506f5e00d044d6f7443ec1ff3f311) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow local feature flag evaluation from a shared definition cache without a secret or personal API key.
+  (2026-10-16)
+
+## 5.56.1
+
+### Patch Changes
+
+- [#5289](https://github.com/PostHog/posthog-js/pull/5289) [`e6598be`](https://github.com/PostHog/posthog-js/commit/e6598be4d3f4c09c47d4c052987fafd33fc3f59e) Thanks [@pauldambra](https://github.com/pauldambra)! - Link captured exceptions to active OpenTelemetry traces when the API is available.
+  (2026-10-14)
+
+## 5.56.0
+
+### Minor Changes
+
+- [#5291](https://github.com/PostHog/posthog-js/pull/5291) [`7c10169`](https://github.com/PostHog/posthog-js/commit/7c10169546b1fcfcfff74d05d8d80ba1913b3543) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Attach trace exemplars to metrics recorded inside sampled spans.
+  (2026-10-13)
+
+### Patch Changes
+
+- Updated dependencies [[`7c10169`](https://github.com/PostHog/posthog-js/commit/7c10169546b1fcfcfff74d05d8d80ba1913b3543)]:
+  - @posthog/core@1.59.0
+
+## 5.55.3
+
+### Patch Changes
+
+- [#5281](https://github.com/PostHog/posthog-js/pull/5281) [`8f2d581`](https://github.com/PostHog/posthog-js/commit/8f2d5818a160040444807a7fc640aabd1ed324f5) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `before_send` callback types to accept non-null events while still allowing `null` returns to drop events.
+  (2026-10-12)
+- Updated dependencies [[`8f2d581`](https://github.com/PostHog/posthog-js/commit/8f2d5818a160040444807a7fc640aabd1ed324f5)]:
+  - @posthog/core@1.58.1
+
+## 5.55.2
+
+### Patch Changes
+
+- [#5268](https://github.com/PostHog/posthog-js/pull/5268) [`74d7eb2`](https://github.com/PostHog/posthog-js/commit/74d7eb268172b016142dd66495a7e68fc9c9bf47) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify which server-only credentials to use for local evaluation when a project API key is supplied instead.
+  (2026-10-11)
+
+## 5.55.1
+
+### Patch Changes
+
+- [#5134](https://github.com/PostHog/posthog-js/pull/5134) [`175413f`](https://github.com/PostHog/posthog-js/commit/175413fcf632ae7242354ee9cc4f463b3e0b2833) Thanks [@posthog](https://github.com/apps/posthog)! - Evict only the least recently used distinct ids from the `$feature_flag_called` dedupe cache instead of clearing it entirely. `distinctIdHasSentFlagCalls` now returns a snapshot, so writing or deleting individual keys on it no longer changes deduplication.
+  (2026-10-08)
+
+## 5.55.0
+
+### Minor Changes
+
+- [#5140](https://github.com/PostHog/posthog-js/pull/5140) [`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow `featureFlagsPollingInterval: null` to disable automatic local flag polling while retaining initialization and manual refresh.
+  (2026-09-30)
+
 ## 5.54.1
 
 ### Patch Changes

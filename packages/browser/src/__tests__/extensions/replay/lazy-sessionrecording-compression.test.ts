@@ -1,8 +1,10 @@
+import type { Mock as VitestMock } from 'vitest'
 import { gzipSync, strToU8 } from 'fflate'
+import { gunzipSync } from 'node:zlib'
 
 type SetupOptions = {
     gzipSupported: boolean
-    gzipCompress?: vi.Mock
+    gzipCompress?: VitestMock
 }
 
 const createFullSnapshot = (data: Record<string, unknown> = {}) => ({
@@ -93,18 +95,21 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
     )
 
     const simpleEventEmitter = new SimpleEventEmitter()
-    const posthog = {
+    const posthog = createMockPostHog({
         get_property: (propertyKey: string) => persistence.props[propertyKey],
         config,
         capture: vi.fn(),
         persistence,
         sessionManager,
-        requestRouter: new RequestRouter({ config } as any),
-        consent: { isOptedOut: () => false },
+        requestRouter: new RequestRouter(createMockPostHog({ config })),
         register_for_session: vi.fn(),
         _internalEventEmitter: simpleEventEmitter,
         on: vi.fn((event, cb) => simpleEventEmitter.on(event, cb)),
-    }
+    })
+
+    const { ConsentManager } = await import('../../../consent')
+    posthog.consent = new ConsentManager(posthog)
+    vi.spyOn(posthog.consent, 'isOptedOut').mockReturnValue(false)
 
     let emit: (event: any) => void = () => {}
     const stopRrweb = vi.fn()
@@ -142,7 +147,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         emit: context.emit as (event: any) => void,
         posthog: context.posthog,
         lazyLoadedSessionRecording: context.lazyLoadedSessionRecording,
-        stopRrweb: context.stopRrweb as vi.Mock,
+        stopRrweb: context.stopRrweb as VitestMock,
         assignableWindow: context.assignableWindow,
     }
 }
@@ -205,6 +210,14 @@ describe('LazyLoadedSessionRecording compression paths', () => {
 
         lazyLoadedSessionRecording['_flushBuffer']()
 
+        const snapshot = posthog.capture.mock.calls
+            .filter(([event]: any[]) => event === '$snapshot')
+            .flatMap(([, properties]: any[]) => properties.$snapshot_data)
+            .find((event: any) => event.type === 2)
+        expect(snapshot).toBeDefined()
+        expect(JSON.parse(gunzipSync(new Uint8Array(Buffer.from(snapshot.data, 'binary'))).toString('utf8'))).toEqual({
+            content: testCase.content,
+        })
         const expectedSnapshotData = [expect.objectContaining({ type: 2, cv: '2024-10', data: expect.any(String) })]
         if (testCase.shouldQueueCustomEvent) {
             expectedSnapshotData.push(createCustomSnapshot() as any)
@@ -378,7 +391,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         )
     })
 
-    it('counts an event dropped for being too large to stringify on the replay debug properties', async () => {
+    it('counts an event dropped for being too large to stringify', async () => {
         const gzipCompress = vi.fn(async (input: string) => {
             // hold the async path open so the event is still queued at unload
             await new Promise(() => {})
@@ -408,13 +421,11 @@ describe('LazyLoadedSessionRecording compression paths', () => {
 
         // the drop only writes a debug-gated console line, so without this counter the recording
         // loses data with nothing in our own data to show for it
-        expect(lazyLoadedSessionRecording.sdkDebugProperties['$sdk_debug_replay_unstringifiable_events_dropped']).toBe(
-            1
-        )
+        expect(lazyLoadedSessionRecording['_unstringifiableEventsDropped']).toBe(1)
     })
 
     it.each(['_onBeforeUnload', '_onPageHide'] as const)(
-        'includes the drop count in the encoded surviving snapshot on %s',
+        'includes the drop counts in the encoded surviving snapshot on %s',
         async (handler) => {
             const originalSendBeacon = Object.getOwnPropertyDescriptor(navigator, 'sendBeacon')
             const sendBeacon = vi.fn((_url: string, _body: Blob) => true)
@@ -425,6 +436,9 @@ describe('LazyLoadedSessionRecording compression paths', () => {
                     gzipSupported: true,
                     gzipCompress: vi.fn(() => new Promise(() => {})),
                 })
+                const dropCallbacks = lazyLoadedSessionRecording['_mutationThrottler']['_options']
+                dropCallbacks.onDroppedAttributeMutations(3)
+                dropCallbacks.onDroppedOversizedMutation(2048)
                 const { RequestQueue } = await import('../../../request-queue')
                 const { request } = await import('../../../request')
                 const queue = new RequestQueue((req, transportOverride) => {
@@ -470,6 +484,9 @@ describe('LazyLoadedSessionRecording compression paths', () => {
                             event: '$snapshot',
                             properties: expect.objectContaining({
                                 $sdk_debug_replay_unstringifiable_events_dropped: 1,
+                                $sdk_debug_replay_throttled_mutations_dropped: 3,
+                                $sdk_debug_replay_oversized_mutations_dropped: 1,
+                                $sdk_debug_replay_oversized_mutation_bytes_dropped: 2048,
                                 $snapshot_data: [expect.objectContaining({ type: 3, timestamp: 456 })],
                             }),
                         }),
@@ -531,9 +548,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
                 expect(captureException).not.toHaveBeenCalled()
                 expect(errorSpy).not.toHaveBeenCalled()
                 expect(warnSpy).toHaveBeenCalled()
-                expect(
-                    lazyLoadedSessionRecording.sdkDebugProperties['$sdk_debug_replay_unstringifiable_events_dropped']
-                ).toBe(1)
+                expect(lazyLoadedSessionRecording['_unstringifiableEventsDropped']).toBe(1)
             } finally {
                 Config.DEBUG = false
                 stringifySpy.mockRestore()

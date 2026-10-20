@@ -6,9 +6,12 @@ import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const script = new URL('./run-compliance.sh', import.meta.url).pathname
-for (const [scenario, exit, mode = 'v0'] of [
+for (const [scenario, exit, mode = 'v0', suite] of [
     ['success', 0],
     ['success', 0, 'v1'],
+    ['success', 0, 'v0', 'acceptance'],
+    ['success', 0, 'v1', 'acceptance'],
+    ['cli-failed', 7, 'v1', 'acceptance'],
     ['cli-and-cleanup-failed', 7],
     ['cli-failed', 7],
     ['missing-report', 1],
@@ -23,7 +26,7 @@ for (const [scenario, exit, mode = 'v0'] of [
     ['startup-hung', 1],
     ['cleanup-hung', 1],
 ]) {
-    test(`compliance caller (${mode}): ${scenario}`, (t) => {
+    test(`compliance caller (${mode}, ${suite || 'migration'}): ${scenario}`, (t) => {
         const root = mkdtempSync(join(tmpdir(), 'node-caller-test-'))
         t.after(() => rmSync(root, { recursive: true, force: true }))
         const bin = join(root, 'bin')
@@ -65,19 +68,23 @@ esac
         )
         writeFileSync(join(bin, 'sleep'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 })
         const started = Date.now()
-        const result = spawnSync('bash', [script, 'adapter:test', 'harness:test', mode, join(root, 'reports')], {
-            env: {
-                ...process.env,
-                PATH: `${bin}:${process.env.PATH}`,
-                CALLER_TEST_ROOT: root,
-                CALLER_TEST_SCENARIO: scenario,
-                SDK_COMPLIANCE_COMMAND_TIMEOUT_MS: '500',
-                SDK_COMPLIANCE_STARTUP_TIMEOUT_MS: '100',
-                SDK_COMPLIANCE_RUN_TIMEOUT_MS: '200',
-            },
-            encoding: 'utf8',
-            timeout: 20000,
-        })
+        const result = spawnSync(
+            'bash',
+            [script, 'adapter:test', 'harness:test', mode, join(root, 'reports'), ...(suite ? [suite] : [])],
+            {
+                env: {
+                    ...process.env,
+                    PATH: `${bin}:${process.env.PATH}`,
+                    CALLER_TEST_ROOT: root,
+                    CALLER_TEST_SCENARIO: scenario,
+                    SDK_COMPLIANCE_COMMAND_TIMEOUT_MS: '500',
+                    SDK_COMPLIANCE_STARTUP_TIMEOUT_MS: '100',
+                    SDK_COMPLIANCE_RUN_TIMEOUT_MS: '200',
+                },
+                encoding: 'utf8',
+                timeout: 20000,
+            }
+        )
         assert.equal(result.status, exit, result.stderr)
         assert.ok(Date.now() - started < 20000)
         const commands = readFileSync(join(root, 'commands'), 'utf8')
@@ -87,6 +94,7 @@ esac
         if (!scenario.startsWith('startup-')) {
             const profile = mode === 'v0' ? 'node-legacy' : 'node-analytics-v1'
             assert.ok(commands.includes(`check-report --report /reports/report.json --profile ${profile}`))
+            assert.ok(commands.includes(`run --${suite || 'migration'}-suite --adapter-url`))
             assert.ok(commands.includes(`--profile ${profile} --timeout-ms`))
             assert.ok(commands.includes(`POSTHOG_CAPTURE_MODE=${mode}`))
             assert.ok(commands.includes('--network none'))

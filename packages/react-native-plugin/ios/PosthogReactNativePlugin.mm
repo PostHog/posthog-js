@@ -52,6 +52,10 @@ RCT_EXTERN_METHOD(captureFatalException:(NSString)distinctId
                   withResolver:(RCTPromiseResolveBlock)resolve
                   withRejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(markFatalExceptionHandled:(NSString)message
+                  withResolver:(RCTPromiseResolveBlock)resolve
+                  withRejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(reset:(NSString)distinctId
                  withAnonymousId:(NSString)anonymousId
                  withResolver:(RCTPromiseResolveBlock)resolve

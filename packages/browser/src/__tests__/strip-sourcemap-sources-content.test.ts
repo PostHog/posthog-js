@@ -37,13 +37,15 @@ describe('stripSourceMapSourcesContent', () => {
                 version: 3,
                 sources: ['main.ts'],
                 sourcesContent: ['export const value = 1'],
-                names: [],
-                mappings: '',
+                names: ['value'],
+                mappings: 'AAAA',
             })
         )
 
         expect(stripSourceMapSourcesContent(packageRoot)).toMatchObject({ stripped: 1, total: 1 })
         expect(fs.existsSync(mapPath)).toBe(true)
-        expect(JSON.parse(fs.readFileSync(mapPath, 'utf8'))).not.toHaveProperty('sourcesContent')
+        const result = JSON.parse(fs.readFileSync(mapPath, 'utf8'))
+        expect(result).not.toHaveProperty('sourcesContent')
+        expect(result).toEqual({ version: 3, sources: ['main.ts'], names: ['value'], mappings: 'AAAA' })
     })
 })

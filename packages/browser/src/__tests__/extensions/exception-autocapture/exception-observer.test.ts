@@ -1,3 +1,4 @@
+import type { SpyInstance as VitestSpyInstance } from 'vitest'
 import { PostHog } from '../../../posthog-core'
 import { FlagsResponse } from '../../../types'
 import { ExceptionObserver } from '../../../extensions/exception-autocapture'
@@ -34,7 +35,7 @@ export class PromiseRejectionEvent extends Event {
 describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver
     let posthog: PostHog
-    let sendRequestSpy: vi.SpyInstance
+    let sendRequestSpy: VitestSpyInstance
     const beforeSendMock = vi.fn().mockImplementation((e) => e)
     const loadScriptMock = vi.fn()
 
@@ -173,9 +174,13 @@ describe('Exception Observer', () => {
         })
 
         it('does not start if disabled locally', () => {
+            exceptionObserver['_stopCapturing']()
+            expectNoHandlers()
             posthog.config.capture_exceptions = false
             exceptionObserver = new ExceptionObserver(posthog)
+            exceptionObserver.startIfEnabledOrStop()
             expect(exceptionObserver.isEnabled).toBe(false)
+            expectNoHandlers()
         })
     })
 

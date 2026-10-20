@@ -1,184 +1,92 @@
+import { Page, BrowserContext } from '@playwright/test'
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
-import { Request } from '@playwright/test'
 
-const startOptions = {
-    options: {},
-    url: '/playground/cypress/index.html',
+async function retryHarness(page: Page, context: BrowserContext, successesAfter: number) {
+    const attempts: number[] = []
+    let enqueued = 0
+    let initialRetryParameter: boolean | undefined
+    page.on('console', (message) => {
+        if (message.text().includes('Enqueued failed request for retry')) enqueued++
+    })
+    await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
+    await page.addInitScript(() => {
+        Math.random = () => 0.5
+    })
+    await context.route('**/e/**', async (route) => {
+        const parameters = new URL(route.request().url()).searchParams
+        if (attempts.length === 0) initialRetryParameter = parameters.has('retry_count')
+        attempts.push(Number(parameters.get('retry_count') || 0))
+        await route.fulfill({
+            status: attempts.length > successesAfter ? 200 : 500,
+            contentType: 'application/json',
+            body: '{}',
+        })
+    })
+    await start(
+        { options: { capture_pageview: false, debug: true }, url: '/playground/cypress/index.html' },
+        page,
+        context
+    )
+    await page.clock.pauseAt(new Date('2024-01-01T00:01:00Z'))
+    await page.evaluate(() =>
+        window.posthog.capture('retry-control', { marker: 'preserve-me' }, { send_instantly: true })
+    )
+    await expect.poll(() => enqueued).toBe(1)
+    expect(initialRetryParameter).toBe(false)
+    return { attempts, enqueued: () => enqueued }
+}
+
+async function advanceRetry(page: Page) {
+    const response = page.waitForResponse('**/e/**')
+    await page.clock.fastForward(45 * 60 * 1000)
+    await (await response).finished()
+    // Network callbacks cross the browser/runner boundary independently of the paused clock.
+    await page.waitForTimeout(100)
+}
+
+async function advanceBeyondRetryHorizon(page: Page) {
+    await page.clock.fastForward(45 * 60 * 1000 + 3001)
+    await page.clock.runFor(3001)
+    await page.waitForTimeout(100)
 }
 
 test.describe('retry queue', () => {
     test('retries failed capture requests and stops after success', async ({ page, context }) => {
-        test.setTimeout(90000)
-        const captureRequests: Request[] = []
-        let errorResponseCount = 0
-        const maxErrorResponses = 3
-        let successSeen = false
-
-        // Mock the capture endpoint to fail initially, then succeed
-        await context.route('**/e/**', async (route) => {
-            const request = route.request()
-            captureRequests.push(request)
-
-            if (errorResponseCount < maxErrorResponses) {
-                errorResponseCount++
-                await route.fulfill({
-                    status: 500,
-                    contentType: 'text/plain',
-                    body: 'Internal Server Error',
-                })
-            } else {
-                successSeen = true
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: JSON.stringify({ status: 'ok' }),
-                })
-            }
-        })
-
-        // Initialize PostHog without pageview to avoid extra requests
-        await start({ ...startOptions, options: { capture_pageview: false } }, page, context)
-
-        // Capture a custom event which will initially fail
-        await page.evaluate(() => {
-            window.posthog.capture('test-retry-event', { test: 'data' })
-        })
-
-        // Wait until we see the successful response (4th request)
-        await expect(async () => {
-            expect(successSeen).toBe(true)
-        }).toPass({ timeout: 50000 })
-
-        // Check that we got multiple requests
-        expect(captureRequests.length).toBeGreaterThanOrEqual(3)
-
-        // Verify the first request had no retry_count
-        const firstRequest = captureRequests[0]
-        expect(firstRequest.url()).not.toContain('retry_count')
-
-        // Verify retry_count increments
-        const retryCountMatches = captureRequests
-            .map((req) => {
-                const match = req.url().match(/retry_count=(\d+)/)
-                return match ? parseInt(match[1]) : null
-            })
-            .filter((count) => count !== null)
-
-        // Should see incrementing retry counts
-        expect(retryCountMatches.length).toBeGreaterThanOrEqual(2)
-        expect(retryCountMatches).toContain(1)
-        expect(retryCountMatches).toContain(2)
-        // Verify counts are actually incrementing (not stuck at 1)
-        const uniqueCounts = Array.from(new Set(retryCountMatches))
-        expect(uniqueCounts.length).toBeGreaterThan(1)
-
-        // After success, record the count and verify no more requests arrive
-        const requestCountAfterSuccess = captureRequests.length
-        await expect(async () => {
-            expect(captureRequests.length).toBe(requestCountAfterSuccess)
-        }).toPass({ timeout: 5000 })
+        const state = await retryHarness(page, context, 3)
+        for (let retry = 1; retry <= 3; retry++) {
+            await advanceRetry(page)
+            await expect.poll(() => state.attempts.length).toBe(retry + 1)
+            if (retry < 3) await expect.poll(state.enqueued).toBe(retry + 1)
+        }
+        expect(state.attempts).toEqual([0, 1, 2, 3])
+        await advanceBeyondRetryHorizon(page)
+        expect(state.attempts).toEqual([0, 1, 2, 3])
     })
 
-    test('stops retrying after 10 attempts', async ({ page, context }) => {
-        test.setTimeout(60000)
-        const captureRequests: Request[] = []
-
-        // Mock the capture endpoint to always fail
-        await context.route('**/e/**', async (route) => {
-            captureRequests.push(route.request())
-            await route.fulfill({
-                status: 500,
-                contentType: 'text/plain',
-                body: 'Internal Server Error',
-            })
-        })
-
-        // Initialize PostHog without pageview
-        await start({ ...startOptions, options: { capture_pageview: false } }, page, context)
-
-        // Capture a custom event which will fail
-        await page.evaluate(() => {
-            window.posthog.capture('test-max-retries-event', { test: 'data' })
-        })
-
-        // Wait for several retries
-        // The backoff increases exponentially: 3s, 6s, 12s, 24s, etc.
-        // We'll wait long enough to see at least 3-4 retries
-        await page.waitForTimeout(25000)
-
-        // Extract all retry counts
-        const retryCountMatches = captureRequests
-            .map((req) => {
-                const match = req.url().match(/retry_count=(\d+)/)
-                return match ? parseInt(match[1]) : null
-            })
-            .filter((count) => count !== null)
-            .sort((a, b) => a! - b!)
-
-        // Should have some retries but not exceed 10
-        expect(retryCountMatches.length).toBeGreaterThan(0)
-        const maxRetryCount = Math.max(...(retryCountMatches as number[]))
-        expect(maxRetryCount).toBeLessThanOrEqual(10)
-
-        // Verify counts are incrementing
-        expect(retryCountMatches).toContain(1)
-        expect(retryCountMatches).toContain(2)
+    test('stops retrying after 10 retries plus the initial attempt', async ({ page, context }) => {
+        const state = await retryHarness(page, context, Infinity)
+        for (let retry = 1; retry <= 10; retry++) {
+            await advanceRetry(page)
+            await expect.poll(() => state.attempts.length).toBe(retry + 1)
+            if (retry < 10) await expect.poll(state.enqueued).toBe(retry + 1)
+        }
+        expect(state.attempts).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        await advanceBeyondRetryHorizon(page)
+        expect(state.attempts).toHaveLength(11)
     })
 
-    test('immediately retries when coming back online', async ({ page, context }) => {
-        const captureRequests: Request[] = []
-
-        // Mock the capture endpoint to fail initially
-        let shouldSucceed = false
-        await context.route('**/e/**', async (route) => {
-            captureRequests.push(route.request())
-            if (shouldSucceed) {
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: JSON.stringify({ status: 'ok' }),
-                })
-            } else {
-                await route.fulfill({
-                    status: 500,
-                    contentType: 'text/plain',
-                    body: 'Internal Server Error',
-                })
-            }
-        })
-
-        // Initialize PostHog without pageview
-        await start({ ...startOptions, options: { capture_pageview: false } }, page, context)
-
-        // Capture an event that will fail
-        await page.evaluate(() => {
-            window.posthog.capture('test-offline-event', { test: 'data' })
-        })
-
-        // Wait for at least the initial request to be made
-        await expect(async () => {
-            expect(captureRequests.length).toBeGreaterThanOrEqual(1)
-        }).toPass({ timeout: 10000 })
-
-        // Simulate going offline
+    test('immediately retries overdue work when coming back online', async ({ page, context }) => {
+        const state = await retryHarness(page, context, 1)
         await context.setOffline(true)
-
-        // Record the count before going online
-        const requestsWhileOffline = captureRequests.length
-
-        // Switch to success mode and come back online
-        shouldSucceed = true
+        await page.evaluate(() => window.dispatchEvent(new Event('offline')))
+        await page.clock.runFor(3001)
+        expect(state.attempts).toEqual([0])
+        const response = page.waitForResponse('**/e/**')
         await context.setOffline(false)
-
-        // Trigger the online event
-        await page.evaluate(() => {
-            window.dispatchEvent(new Event('online'))
-        })
-
-        // Wait until we see at least one more request after coming online
-        await expect(async () => {
-            expect(captureRequests.length).toBeGreaterThan(requestsWhileOffline)
-        }).toPass({ timeout: 10000 })
+        await page.evaluate(() => window.dispatchEvent(new Event('online')))
+        await (await response).finished()
+        // The paused clock excludes an ordinary polling tick as the cause of this request.
+        expect(state.attempts).toEqual([0, 1])
     })
 })

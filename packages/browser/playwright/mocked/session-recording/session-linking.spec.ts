@@ -29,7 +29,7 @@ test.describe('Session Recording - Session Linking', () => {
         await page.resetCapturedEvents()
     })
 
-    test('emits session linking events when session times out', async ({ page }) => {
+    test('does not link sessions after explicit session-manager reset', async ({ page }) => {
         const firstSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
             return ph?.get_session_id()
@@ -75,11 +75,18 @@ test.describe('Session Recording - Session Linking', () => {
         const secondSnapshotData = secondSnapshot?.properties?.$snapshot_data
         expect(secondSnapshotData).toBeDefined()
 
-        const sessionEndingEvent = firstSnapshotData?.find((s: any) => s.data?.tag === '$session_ending')
-        const sessionStartingEvent = secondSnapshotData?.find((s: any) => s.data?.tag === '$session_starting')
-
-        expect(sessionEndingEvent).toBeUndefined()
-        expect(sessionStartingEvent).toBeUndefined()
+        const allPostResetData = capturedEventsAfterReset
+            .filter((e: any) => e.event === '$snapshot')
+            .flatMap((e: any) => e.properties.$snapshot_data)
+        expect(
+            allPostResetData.filter((s: any) => ['$session_ending', '$session_starting'].includes(s.data?.tag))
+        ).toEqual([])
+        const change = allPostResetData.find((s: any) => s.data?.tag === '$session_id_change')
+        expect(change?.data.payload.changeReason).toMatchObject({
+            noSessionId: true,
+            activityTimeout: false,
+            sessionPastMaximumLength: false,
+        })
     })
 
     test('does NOT emit linking events when session changes after reset()', async ({ page }) => {

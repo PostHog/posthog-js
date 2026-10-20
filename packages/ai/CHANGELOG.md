@@ -1,5 +1,68 @@
 # posthog-ai
 
+## 8.14.2
+
+### Patch Changes
+
+- [#5155](https://github.com/PostHog/posthog-js/pull/5155) [`a9d29f1`](https://github.com/PostHog/posthog-js/commit/a9d29f1d7500340d02f94769b7a0e635a1fedddc) Thanks [@gouveags](https://github.com/gouveags)! - Normalize AI tool-result capture and redact binary content while preserving existing provider limits.
+  (2026-10-19)
+
+## 8.14.1
+
+### Patch Changes
+
+- [#5305](https://github.com/PostHog/posthog-js/pull/5305) [`7319620`](https://github.com/PostHog/posthog-js/commit/73196206fa975dcefb8db023330c7f3629ba52d0) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <0.135.0`, so installs can pick 0.134.0, the first version with OpenTelemetry tracing.
+  (2026-10-15)
+
+## 8.14.0
+
+### Minor Changes
+
+- [#5299](https://github.com/PostHog/posthog-js/pull/5299) [`7587be3`](https://github.com/PostHog/posthog-js/commit/7587be3705abcc5db80ee9fa5cd875f6869fbf9c) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Add per-request PostHog context to AI spans through the PostHogSpanProcessor client option.
+  (2026-10-14)
+
+## 8.13.7
+
+### Patch Changes
+
+- [#5266](https://github.com/PostHog/posthog-js/pull/5266) [`411d364`](https://github.com/PostHog/posthog-js/commit/411d3646a511e7aea77ca9bc27add1c2a42bdddb) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `prompts.get()` now makes one request when several callers ask for the same prompt at once, instead of one request per caller. Prompt fetches also time out after 10 seconds instead of hanging on a stalled connection, and `PromptFetchError` is exported so callers can tell a timeout or server error from a missing prompt.
+  (2026-10-14)
+- Updated dependencies [[`e6598be`](https://github.com/PostHog/posthog-js/commit/e6598be4d3f4c09c47d4c052987fafd33fc3f59e)]:
+  - posthog-node@5.56.1
+
+## 8.13.6
+
+### Patch Changes
+
+- [#5286](https://github.com/PostHog/posthog-js/pull/5286) [`4f739c6`](https://github.com/PostHog/posthog-js/commit/4f739c6ee8890798f6f9c8a09499f86f3c7a0c8f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <0.134.0`.
+  (2026-10-13)
+
+## 8.13.5
+
+### Patch Changes
+
+- [#5201](https://github.com/PostHog/posthog-js/pull/5201) [`085ffd8`](https://github.com/PostHog/posthog-js/commit/085ffd8b151160a38627ed20833daf41b524205c) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.129.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.126.0`, in `peerDependencies`) (2026-10-06)
+
+## 8.13.4
+
+### Patch Changes
+
+- [#5113](https://github.com/PostHog/posthog-js/pull/5113) [`41f1243`](https://github.com/PostHog/posthog-js/commit/41f1243882210095a5841460a73b76c70708f96d) Thanks [@yoarajota](https://github.com/yoarajota)! - Capture Anthropic streaming tool call arguments when a thinking or server tool block precedes the tool call.
+  (2026-09-30)
+
+- [#5056](https://github.com/PostHog/posthog-js/pull/5056) [`9ddb74c`](https://github.com/PostHog/posthog-js/commit/9ddb74c7804e7f850d46c2087ce97e2244c21da9) Thanks [@brandon-julio-t](https://github.com/brandon-julio-t)! - Fix missing cache-read and cache-write token reporting in OpenAI Agents traces.
+  (2026-09-30)
+- Updated dependencies [[`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c)]:
+  - posthog-node@5.55.0
+
+## 8.13.3
+
+### Patch Changes
+
+- [#5088](https://github.com/PostHog/posthog-js/pull/5088) [`882606d`](https://github.com/PostHog/posthog-js/commit/882606dc43831c9683e528f28feb699532d3f7d7) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Gemini tool calls and results in captured generation input
+  (2026-09-30)
+
 ## 8.13.2
 
 ### Patch Changes

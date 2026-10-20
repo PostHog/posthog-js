@@ -12,6 +12,7 @@ import type {
 import { PostHogMCPAnalyticsProperty } from './constants'
 import { log, type LoggerFn } from './logger'
 import { sanitizeFreeText, sanitizeFreeTextValue } from './mcp-payloads'
+import { TRUNCATION_SUFFIX } from './truncation'
 
 export const SEND_FEEDBACK_TOOL_NAME = 'send_feedback' as const
 
@@ -21,7 +22,6 @@ const SENTIMENTS: readonly FeedbackSentiment[] = ['positive', 'neutral', 'negati
 // Free-text fields are agent-narrated, like `$mcp_intent`; bound them the same way.
 const MAX_FEEDBACK_TEXT_LENGTH = 2048
 const MAX_FEEDBACK_TOOL_NAME_LENGTH = 256
-const TRUNCATION_SUFFIX = '...'
 
 const DEFAULT_FEEDBACK_DESCRIPTION =
   'Send feedback about this server to its developers. Most important: report a missing capability whenever no ' +

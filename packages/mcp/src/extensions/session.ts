@@ -135,7 +135,7 @@ export function getSessionId(
   if (conversationId) {
     // The session comes from the handle, but on an instance that never processed
     // `initialize` the request's token is still the only source of client
-    // identity — without this, tool calls and `$identify` go out unattributed
+    // identity — without this, tool calls go out unattributed
     // on exactly the deployments this branch exists for.
     applyTokenClientIdentity(data, extra)
     return deriveSessionIdFromConversation(conversationId)
@@ -249,6 +249,7 @@ export function getSessionInfo(
     ipAddress: undefined,
     sdkLanguage: 'TypeScript',
     sdkVersion: version,
+    serverBuild: data?.options.serverBuild,
     serverName: server._serverInfo?.name,
     serverVersion: server._serverInfo?.version,
     clientName: clientInfo?.name,

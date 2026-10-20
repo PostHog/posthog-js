@@ -35,7 +35,7 @@ describe('external-scripts-loader', () => {
 
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
 
-            const bodyScripts = document!.querySelectorAll('body > script')
+            const bodyScripts = document!.querySelectorAll<HTMLScriptElement>('body > script')
             expect(bodyScripts.length).toBe(2)
             expect(bodyScripts[0].src).toContain('recorder.js')
             expect(bodyScripts[1].id).toBe('framework-bundle')
@@ -56,7 +56,7 @@ describe('external-scripts-loader', () => {
             expect(bodyScripts.length).toBe(1)
             expect(bodyScripts[0].id).toBe('framework-bundle')
 
-            const headScripts = document!.querySelectorAll('head > script')
+            const headScripts = document!.querySelectorAll<HTMLScriptElement>('head > script')
             expect(headScripts.length).toBe(1)
             expect(headScripts[0].src).toContain('recorder.js')
 
@@ -213,25 +213,31 @@ describe('external-scripts-loader', () => {
             expect(callback).toHaveBeenCalledWith(undefined, expect.any(Event))
         })
 
-        it('keeps the legacy toolbar cache-busting path by default', () => {
+        it.each([
+            [1726067100001, 1726067100000],
+            [1726067399999, 1726067100000],
+            [1726067400000, 1726067400000],
+        ])('keeps the legacy toolbar cache-busting path by default at %s', (now, bucket) => {
             vi.useFakeTimers()
-            vi.setSystemTime(1726067100000)
+            vi.setSystemTime(now)
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
             expect(document!.getElementsByTagName('script')[0].src).toBe(
-                'https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0&t=1726067100000'
+                `https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0&t=${bucket}`
             )
         })
 
-        it('cache-busts the legacy toolbar path when falling back', () => {
+        it.each([
+            [1726067100001, 1726067100000],
+            [1726067399999, 1726067100000],
+            [1726067400000, 1726067400000],
+        ])('cache-busts the legacy toolbar path when falling back at %s', (now, bucket) => {
             vi.useFakeTimers()
-            vi.setSystemTime(1726067100000)
+            vi.setSystemTime(now)
             mockPostHog.config.strict_script_versioning = 'fallback'
-
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
             document!.getElementsByTagName('script')[0].dispatchEvent(new Event('error'))
-
             expect(document!.getElementsByTagName('script')[0].src).toBe(
-                'https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0&t=1726067100000'
+                `https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0&t=${bucket}`
             )
         })
 

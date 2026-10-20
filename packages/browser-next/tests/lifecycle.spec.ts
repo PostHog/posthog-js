@@ -1,3 +1,4 @@
+import { localRemoteConfig } from './helpers'
 import type { Mock } from 'vitest'
 
 import { analytics } from '../src/analytics'
@@ -46,6 +47,7 @@ describe('browser-next analytics lifecycle', () => {
             .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -95,6 +97,7 @@ describe('browser-next analytics lifecycle', () => {
             return new Response('{}', { status: 200 })
         }
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -123,6 +126,7 @@ describe('browser-next analytics lifecycle', () => {
             .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -147,6 +151,7 @@ describe('browser-next analytics lifecycle', () => {
             .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -177,6 +182,7 @@ describe('browser-next analytics lifecycle', () => {
             .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -204,6 +210,7 @@ describe('browser-next analytics lifecycle', () => {
             .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -234,6 +241,7 @@ describe('browser-next analytics lifecycle', () => {
             .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -264,6 +272,7 @@ describe('browser-next analytics lifecycle', () => {
             return new Response('{}', { status: 200 })
         }
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,

@@ -82,7 +82,15 @@ test.describe('network metrics', () => {
         context,
         browserName,
     }) => {
+        const uploads: Array<{ path: string; method: string; contentType: string; body: string }> = []
         await context.route('**/__network_metrics_test/body/**', async (route: Route) => {
+            const request = route.request()
+            uploads.push({
+                path: new URL(request.url()).pathname.split('/').pop()!,
+                method: request.method(),
+                contentType: request.headers()['content-type'] || '',
+                body: request.postDataBuffer()?.toString('utf8') || '',
+            })
             await route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' })
         })
 
@@ -90,6 +98,34 @@ test.describe('network metrics', () => {
             {
                 options: { metrics: { network: true }, disable_compression: true },
                 url: '/playground/cypress/index.html',
+                runBeforePostHogInit: async (pg) => {
+                    await pg.evaluate((checkStreamInput) => {
+                        if (checkStreamInput) {
+                            const body = new ReadableStream({
+                                start(controller) {
+                                    controller.enqueue(new TextEncoder().encode('stream body'))
+                                    controller.close()
+                                },
+                            })
+                            ;(window as any).__auditNativeStreamControl = new Request(location.href, {
+                                method: 'POST',
+                                body,
+                                duplex: 'half',
+                            } as RequestInit).text()
+                        }
+                        const nativeFetch = window.fetch
+                        ;(window as any).__auditNativeBodies = {}
+                        window.fetch = function (this: Window, input: RequestInfo | URL, init?: RequestInit) {
+                            const url = input instanceof Request ? input.url : String(input)
+                            if (/\/__network_metrics_test\/body\/(readable-stream|blob)$/.test(url)) {
+                                // Protocol metadata omits streamed uploads and WebKit Blob bytes.
+                                const copy = new Request(input instanceof Request ? input.clone() : input, init)
+                                ;(window as any).__auditNativeBodies[url.split('/').pop()!] = copy.text()
+                            }
+                            return nativeFetch.call(this, input, init)
+                        }
+                    }, browserName !== 'webkit')
+                },
             },
             page,
             context
@@ -120,9 +156,8 @@ test.describe('network metrics', () => {
                 { path: 'array-buffer', init: { method: 'POST', body: encoder.encode('array buffer').buffer } },
                 { path: 'url-search-params', init: { method: 'POST', body: new URLSearchParams('field=url params') } },
             ]
-            // WebKit currently rejects ReadableStream uploads before fetch reaches the network.
-            // Chromium and Firefox exercise it below; all body types accepted by WebKit still
-            // pass through the same downstream Request wrapper here.
+            // WebKit rejects stream uploads; Chromium streams while Firefox stringifies.
+            // The pre-SDK native Request control independently verifies that distinction.
             if (navigator.userAgent.includes('Chrome') || navigator.userAgent.includes('Firefox')) {
                 requests.push({
                     path: 'readable-stream',
@@ -146,5 +181,38 @@ test.describe('network metrics', () => {
             { path: 'url-search-params', status: 200, text: 'ok' },
             ...(browserName === 'webkit' ? [] : [{ path: 'readable-stream', status: 200, text: 'ok' }]),
         ])
+        expect(uploads.map(({ path }) => path)).toEqual(responses.map(({ path }) => path))
+        for (const upload of uploads) {
+            expect(upload.method).toBe('POST')
+            if (upload.path === 'form-data') {
+                expect(upload.contentType).toMatch(/^multipart\/form-data; boundary=/)
+                const decoded = await new Response(upload.body, {
+                    headers: { 'content-type': upload.contentType },
+                }).formData()
+                expect(Array.from(decoded.entries())).toEqual([['field', 'form body']])
+            } else if (upload.path === 'readable-stream') {
+                const nativeBody = await page.evaluate(() => (window as any).__auditNativeStreamControl)
+                expect(nativeBody).toBe(browserName === 'firefox' ? '[object ReadableStream]' : 'stream body')
+                expect(await page.evaluate(() => (window as any).__auditNativeBodies['readable-stream'])).toBe(
+                    nativeBody
+                )
+                if (browserName === 'firefox') expect(upload.body).toBe(nativeBody)
+            } else if (upload.path === 'blob' && browserName === 'webkit') {
+                expect(await page.evaluate(() => (window as any).__auditNativeBodies.blob)).toBe('blob body')
+                expect(upload.contentType).toMatch(/^text\/plain/)
+            } else {
+                const expected: Record<string, string> = {
+                    string: 'string body',
+                    blob: 'blob body',
+                    'array-buffer': 'array buffer',
+                    'url-search-params': 'field=url+params',
+                }
+                expect(upload.body).toBe(expected[upload.path])
+                if (upload.path === 'string' || upload.path === 'blob')
+                    expect(upload.contentType).toMatch(/^text\/plain/)
+                if (upload.path === 'url-search-params')
+                    expect(upload.contentType).toMatch(/^application\/x-www-form-urlencoded/)
+            }
+        }
     })
 })

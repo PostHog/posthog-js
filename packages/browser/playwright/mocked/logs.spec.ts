@@ -1,216 +1,106 @@
-/* oxlint-disable posthog-js/no-direct-function-check, no-console, typescript/no-unused-vars */
+/* oxlint-disable no-console */
+import { gunzipSync } from 'node:zlib'
+import { Page, BrowserContext } from '@playwright/test'
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 
+async function logsHarness(page: Page, context: BrowserContext, enabled: boolean, preloadLocallyEnabled = false) {
+    const records: any[] = []
+    const forwarded: string[] = []
+    page.on('console', (message) => {
+        if (message.text().startsWith('audit-console-')) forwarded.push(message.text())
+    })
+    await context.route('**/i/v1/logs*', async (route) => {
+        const raw = route.request().postDataBuffer()!
+        const body = JSON.parse((raw[0] === 31 && raw[1] === 139 ? gunzipSync(raw) : raw).toString())
+        records.push(
+            ...body.resourceLogs.flatMap((resource: any) =>
+                resource.scopeLogs.flatMap((scope: any) => scope.logRecords)
+            )
+        )
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+    })
+    await start(
+        {
+            options: {
+                disable_compression: true,
+                ...(preloadLocallyEnabled ? { logs: { captureConsoleLogs: true } } : {}),
+            },
+            flagsResponseOverrides: { logs: { captureConsoleLogs: enabled } },
+            runBeforePostHogInit: preloadLocallyEnabled
+                ? async (pg) => {
+                      await pg.addScriptTag({ url: 'http://localhost:2345/static/logs.js' })
+                  }
+                : undefined,
+        },
+        page,
+        context
+    )
+    return { records, forwarded }
+}
+
+async function emitConsole(page: Page) {
+    await page.evaluate(() => {
+        console.log('audit-console-log')
+        console.warn('audit-console-warn')
+        console.error('audit-console-error')
+        ;(window as any).posthog.logs.flushLogs()
+    })
+}
+
+async function expectConsoleRecords(records: any[]) {
+    await expect
+        .poll(() =>
+            records
+                .filter((record) => record.body?.stringValue?.includes('audit-console-'))
+                .map((record) => ({ body: record.body.stringValue, severity: record.severityNumber }))
+        )
+        .toEqual([
+            { body: '"audit-console-log"', severity: 9 },
+            { body: '"audit-console-warn"', severity: 13 },
+            { body: '"audit-console-error"', severity: 17 },
+        ])
+}
+
 test.describe('logs extension', () => {
     test('should load logs extension when enabled in remote config', async ({ page, context }) => {
-        // Start PostHog
-        await start(
-            {
-                options: {
-                    api_host: 'https://localhost:1234',
-                    debug: true,
-                },
-            },
-            page,
-            context
-        )
-
-        // Wait for PostHog to initialize
-        await page.waitForTimeout(100)
-
-        // Check that PostHog logs is available
-        const logsAvailable = await page.evaluate(() => {
-            const posthog = (window as any).posthog
-            return !!(posthog && posthog.logs)
-        })
-
-        expect(logsAvailable).toBe(true)
+        const { records } = await logsHarness(page, context, true)
+        await page.waitForFunction(() => !!(window as any).__PosthogExtensions__?.logs?.initializeLogs)
+        await emitConsole(page)
+        await expectConsoleRecords(records)
     })
 
     test('should call onRemoteConfig when logs are enabled', async ({ page, context }) => {
-        await start(
-            {
-                options: {
-                    api_host: 'https://localhost:1234',
-                    debug: true,
-                },
-            },
-            page,
-            context
+        const { records } = await logsHarness(page, context, false)
+        await page.evaluate(() =>
+            (window as any).posthog.logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } })
         )
-
-        // Wait for PostHog to initialize
-        await page.waitForTimeout(100)
-
-        // Test that we can call onRemoteConfig with logs enabled
-        const result = await page.evaluate(() => {
-            const posthog = (window as any).posthog
-            let configCalled = false
-
-            if (posthog && posthog.logs && typeof posthog.logs.onRemoteConfig === 'function') {
-                try {
-                    posthog.logs.onRemoteConfig({
-                        ok: true,
-                        config: {
-                            logs: {
-                                captureConsoleLogs: true,
-                            },
-                        },
-                    })
-                    configCalled = true
-                } catch (error) {
-                    console.log('Error in onRemoteConfig:', error)
-                    configCalled = false
-                }
-            }
-
-            return {
-                hasPosthog: !!posthog,
-                hasLogs: !!(posthog && posthog.logs),
-                hasOnRemoteConfig: !!(posthog && posthog.logs && typeof posthog.logs.onRemoteConfig === 'function'),
-                configCalled: configCalled,
-            }
-        })
-
-        expect(result.hasPosthog).toBe(true)
-        expect(result.hasLogs).toBe(true)
-        expect(result.hasOnRemoteConfig).toBe(true)
-        expect(result.configCalled).toBe(true)
+        await page.waitForFunction(() => !!(window as any).__PosthogExtensions__?.logs?.initializeLogs)
+        await emitConsole(page)
+        await expectConsoleRecords(records)
     })
 
     test('should handle disabled logs in remote config', async ({ page, context }) => {
-        await start(
-            {
-                options: {
-                    api_host: 'https://localhost:1234',
-                    debug: true,
-                },
-            },
-            page,
-            context
+        const { records, forwarded } = await logsHarness(page, context, false)
+        await page.evaluate(() =>
+            (window as any).posthog.logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: false } } })
         )
-
-        // Wait for PostHog to initialize
-        await page.waitForTimeout(100)
-
-        // Test that we can call onRemoteConfig with logs disabled
-        const result = await page.evaluate(() => {
-            const posthog = (window as any).posthog
-            let configCalled = false
-
-            if (posthog && posthog.logs && typeof posthog.logs.onRemoteConfig === 'function') {
-                try {
-                    posthog.logs.onRemoteConfig({
-                        ok: true,
-                        config: {
-                            logs: {
-                                captureConsoleLogs: false,
-                            },
-                        },
-                    })
-                    configCalled = true
-                } catch (error) {
-                    console.log('Error in onRemoteConfig:', error)
-                    configCalled = false
-                }
-            }
-
-            return {
-                hasPosthog: !!posthog,
-                hasLogs: !!(posthog && posthog.logs),
-                configCalled: configCalled,
-            }
+        await emitConsole(page)
+        await page.evaluate(() => {
+            ;(window as any).posthog.captureLog({ body: 'audit-explicit-control', level: 'info' })
+            ;(window as any).posthog.logs.flushLogs()
         })
-
-        expect(result.hasPosthog).toBe(true)
-        expect(result.hasLogs).toBe(true)
-        expect(result.configCalled).toBe(true)
+        await expect
+            .poll(() => records.some((record) => record.body?.stringValue === 'audit-explicit-control'))
+            .toBe(true)
+        expect(records.filter((record) => record.body?.stringValue?.includes('audit-console-'))).toEqual([])
+        expect(forwarded).toEqual(['audit-console-log', 'audit-console-warn', 'audit-console-error'])
     })
 
-    test('should intercept console methods when logs extension is manually initialized', async ({ page, context }) => {
-        await start(
-            {
-                options: {
-                    api_host: 'https://localhost:1234',
-                    debug: true,
-                },
-            },
-            page,
-            context
-        )
-
-        // Wait for PostHog to initialize
-        await page.waitForTimeout(100)
-
-        // Set up the logs extension and initialize it in the same context
-        const result = await page.evaluate(() => {
-            // Set up the logs extension directly
-            ;(window as any).__PosthogExtensions__ = {
-                initializeLogs: (posthog: any) => {
-                    // Simple console interception
-                    const originalConsole = {
-                        log: console.log,
-                        warn: console.warn,
-                        error: console.error,
-                    }
-
-                    ;(window as any).__intercepted_logs = []
-
-                    console.log = (...args: any[]) => {
-                        ;(window as any).__intercepted_logs.push({
-                            level: 'log',
-                            args: args,
-                        })
-                        originalConsole.log.apply(console, args)
-                    }
-
-                    console.warn = (...args: any[]) => {
-                        ;(window as any).__intercepted_logs.push({
-                            level: 'warn',
-                            args: args,
-                        })
-                        originalConsole.warn.apply(console, args)
-                    }
-
-                    console.error = (...args: any[]) => {
-                        ;(window as any).__intercepted_logs.push({
-                            level: 'error',
-                            args: args,
-                        })
-                        originalConsole.error.apply(console, args)
-                    }
-                },
-            }
-
-            // Initialize the logs extension
-            const posthog = (window as any).posthog
-            const extensions = (window as any).__PosthogExtensions__
-            if (extensions && extensions.initializeLogs && posthog) {
-                extensions.initializeLogs(posthog)
-            }
-
-            // Test console methods immediately after initialization
-            console.log('Test message 1')
-            console.warn('Warning message')
-            console.error('Error message')
-
-            // Return the intercepted logs
-            return (window as any).__intercepted_logs || []
-        })
-
-        expect(result).toHaveLength(3)
-        expect(result[0]).toMatchObject({
-            level: 'log',
-            args: ['Test message 1'],
-        })
-        expect(result[1]).toMatchObject({
-            level: 'warn',
-            args: ['Warning message'],
-        })
-        expect(result[2]).toMatchObject({
-            level: 'error',
-            args: ['Error message'],
-        })
+    test('should activate the real preloaded logs extension when locally enabled', async ({ page, context }) => {
+        const { records, forwarded } = await logsHarness(page, context, false, true)
+        await emitConsole(page)
+        await expectConsoleRecords(records)
+        expect(forwarded).toEqual(['audit-console-log', 'audit-console-warn', 'audit-console-error'])
     })
 })

@@ -1,5 +1,46 @@
 # @posthog/browser-common
 
+## 0.9.5
+
+### Patch Changes
+
+- [#5300](https://github.com/PostHog/posthog-js/pull/5300) [`09d4ba2`](https://github.com/PostHog/posthog-js/commit/09d4ba28c41b7183c49e74376ea25b5e9219c2c3) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Capture the Freebuff click identifier (`bfcid`) as a campaign parameter, so it is set on events and as `$initial_bfcid` like every other ad click ID.
+  (2026-10-14)
+- Updated dependencies [[`09d4ba2`](https://github.com/PostHog/posthog-js/commit/09d4ba28c41b7183c49e74376ea25b5e9219c2c3)]:
+  - @posthog/core@1.59.1
+
+## 0.9.4
+
+### Patch Changes
+
+- [#4990](https://github.com/PostHog/posthog-js/pull/4990) [`a66cada`](https://github.com/PostHog/posthog-js/commit/a66cadac23bc13b7aa6cfbe32a467b531591982a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share browser logging across SDKs with consistent initialization and cleanup; `captureLog` and `logger` calls before logging setup are now dropped instead of buffered.
+  (2026-10-09)
+
+## 0.9.3
+
+### Patch Changes
+
+- [#5245](https://github.com/PostHog/posthog-js/pull/5245) [`76b4402`](https://github.com/PostHog/posthog-js/commit/76b4402d91a5e1b7b2d7530e14af8191d3779c4e) Thanks [@abrahamguo](https://github.com/abrahamguo)! - Fix type checking in posthog-js 1.438.2 by publishing the feature flag types it imports from @posthog/browser-common.
+  (2026-10-09)
+
+## 0.9.2
+
+### Patch Changes
+
+- [#5004](https://github.com/PostHog/posthog-js/pull/5004) [`730d92b`](https://github.com/PostHog/posthog-js/commit/730d92baaf7cca48acf9ac9efb02b8cdf851879e) Thanks [@posthog](https://github.com/apps/posthog)! - Stop carousel and pager arrow controls from capturing false `$rageclick` events. The rageclick content ignorelist, active from the `2025-11-30` config defaults, now also covers arrow glyphs (`→`, `←`, `›`, `‹`, `»`, `«`, `▶`, `◀`, `❯`, `❮`). The built-in word keywords match whole words wherever they appear, including inside a list you pass yourself, so "Preview" keeps capturing; other word keywords you add still match as substrings. Keywords now match against the clicked control (the nearest button, link, ARIA control or `cursor: pointer` wrapper), reading its label from the control's whole subtree instead of every ancestor up to the body, so a region labelled "Featured carousel" no longer suppresses the buttons inside it. A control's own text or `aria-label` wins over an icon's `aria-label` inside it, so clicking the icon and clicking the text agree. Set `rageclick: { content_ignorelist: false }` to keep capturing these events.
+  (2026-10-06)
+- Updated dependencies [[`730d92b`](https://github.com/PostHog/posthog-js/commit/730d92baaf7cca48acf9ac9efb02b8cdf851879e)]:
+  - @posthog/types@1.415.1
+
+## 0.9.1
+
+### Patch Changes
+
+- [#5046](https://github.com/PostHog/posthog-js/pull/5046) [`c360da1`](https://github.com/PostHog/posthog-js/commit/c360da1e93ba7fc04eea7cc4f96dd9782dd931a7) Thanks [@luke-belton](https://github.com/luke-belton)! - Capture the OpenAI Ads click identifier (`oppref`) as a campaign parameter, so it is set on events and as `$initial_oppref` like every other ad click ID.
+  (2026-10-01)
+- Updated dependencies [[`c360da1`](https://github.com/PostHog/posthog-js/commit/c360da1e93ba7fc04eea7cc4f96dd9782dd931a7)]:
+  - @posthog/core@1.55.3
+
 ## 0.9.0
 
 ### Minor Changes

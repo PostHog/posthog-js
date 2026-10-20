@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import type { NextConfig } from 'next'
 import * as utils from './utils'
@@ -125,13 +126,14 @@ describe('withPostHogConfig Turbopack sourcemap hook', () => {
         { compiler: { runAfterProductionCompile: userHook } },
         {
           ...pluginConfig,
-          sourcemaps: { enabled: true, deleteAfterUpload },
+          sourcemaps: { enabled: true, deleteAfterUpload, releaseMode: 'symbol-set' },
         }
       )
       await config.compiler!.runAfterProductionCompile!({ distDir, projectDir: distDir })
       expect(order).toEqual(['user', 'upload'])
       expect(userHook).toHaveBeenCalledWith({ distDir, projectDir: distDir })
       expect(processMaps).toHaveBeenCalledTimes(1)
+      expect(processMaps).toHaveBeenCalledWith(expect.anything(), distDir, 'process')
       for (const [file, code] of Object.entries(files)) {
         const stripped = deleteAfterUpload && (file === 'deleted.js' || file === 'missing.js')
         expect(await fs.readFile(path.join(distDir, 'static', file), 'utf8')).toBe(
@@ -140,4 +142,87 @@ describe('withPostHogConfig Turbopack sourcemap hook', () => {
       }
     }
   )
+
+  it('uses its own CLI dependency instead of a workspace binary for release resolution and upload', async () => {
+    vi.spyOn(utils, 'supportsTurbopackDebugIds').mockReturnValue(true)
+    const resolveRelease = vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue('release-id')
+    const processMaps = vi.spyOn(utils, 'processSourceMaps').mockResolvedValue(undefined)
+    const workspaceBinDir = path.join(distDir, 'node_modules/.bin')
+    await fs.mkdir(workspaceBinDir, { recursive: true })
+    await fs.writeFile(path.join(workspaceBinDir, 'posthog-cli'), 'outdated workspace CLI')
+    vi.spyOn(process, 'cwd').mockReturnValue(distDir)
+    vi.stubEnv('PATH', workspaceBinDir)
+    const ownCliPath = createRequire(new URL('../package.json', import.meta.url)).resolve(
+      '@posthog/cli/run-posthog-cli.js'
+    )
+
+    const config = await resolveNextConfig({}, { ...pluginConfig, cliBinaryPath: undefined })
+    await config.compiler!.runAfterProductionCompile!({ distDir, projectDir: distDir })
+
+    expect(resolveRelease).toHaveBeenCalledWith(expect.objectContaining({ cliBinaryPath: ownCliPath }))
+    expect(processMaps).toHaveBeenCalledWith(expect.objectContaining({ cliBinaryPath: ownCliPath }), distDir, 'upload')
+  })
+
+  it('enables native debug IDs and embeds one automatically resolved release id', async () => {
+    vi.spyOn(utils, 'supportsTurbopackDebugIds').mockReturnValue(true)
+    const resolveRelease = vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue('resolved-release-id')
+    const configFunction = withPostHogConfig({ turbopack: { root: '/project' } }, pluginConfig) as unknown as (
+      phase: string,
+      context: { defaultConfig: NextConfig }
+    ) => Promise<NextConfig>
+
+    const first = await configFunction('phase-production-build', { defaultConfig: {} })
+    const second = await configFunction('phase-production-build', { defaultConfig: {} })
+
+    expect(first.turbopack).toEqual({ root: '/project', debugIds: true })
+    expect(first.env).toEqual({ POSTHOG_RELEASE_ID: 'resolved-release-id' })
+    expect(second.env).toEqual({ POSTHOG_RELEASE_ID: 'resolved-release-id' })
+    expect(resolveRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('prefers an explicit release id and preserves the user environment', async () => {
+    vi.spyOn(utils, 'supportsTurbopackDebugIds').mockReturnValue(true)
+    const resolveRelease = vi.spyOn(utils, 'resolveReleaseId')
+
+    const config = await resolveNextConfig({
+      env: { EXISTING: 'value', POSTHOG_RELEASE_ID: '  configured-release-id  ' },
+    })
+
+    expect(config.env).toEqual({ EXISTING: 'value', POSTHOG_RELEASE_ID: 'configured-release-id' })
+    expect(resolveRelease).not.toHaveBeenCalled()
+  })
+
+  it('prefers the build environment release id when the config does not set one', async () => {
+    vi.spyOn(utils, 'supportsTurbopackDebugIds').mockReturnValue(true)
+    vi.stubEnv('POSTHOG_RELEASE_ID', '  build-release-id  ')
+    const resolveRelease = vi.spyOn(utils, 'resolveReleaseId')
+
+    const config = await resolveNextConfig({ env: { EXISTING: 'value', POSTHOG_RELEASE_ID: '  ' } })
+
+    expect(config.env).toEqual({ EXISTING: 'value', POSTHOG_RELEASE_ID: 'build-release-id' })
+    expect(resolveRelease).not.toHaveBeenCalled()
+  })
+
+  it('uploads native debug ID maps without rewriting JavaScript', async () => {
+    vi.spyOn(utils, 'supportsTurbopackDebugIds').mockReturnValue(true)
+    vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue(undefined)
+    const source = 'a();\n//# debugId=00000000-0000-4000-8000-000000000001\n//# sourceMappingURL=app.js.map\n'
+    await fs.writeFile(path.join(distDir, 'static/app.js'), source)
+    await fs.writeFile(path.join(distDir, 'static/app.js.map'), '{}')
+    await fs.mkdir(path.join(distDir, 'server'))
+    await fs.writeFile(path.join(distDir, 'server/app.js.map'), '{}')
+    const processMaps = vi.spyOn(utils, 'processSourceMaps').mockImplementation(async () => undefined)
+    const config = await resolveNextConfig({})
+
+    await config.compiler!.runAfterProductionCompile!({ distDir, projectDir: distDir })
+
+    expect(processMaps).toHaveBeenCalledWith(
+      expect.objectContaining({ cliBinaryPath: pluginConfig.cliBinaryPath }),
+      distDir,
+      'upload'
+    )
+    expect(await fs.readFile(path.join(distDir, 'static/app.js'), 'utf8')).toBe(source)
+    await expect(fs.access(path.join(distDir, 'static/app.js.map'))).rejects.toThrow()
+    await expect(fs.access(path.join(distDir, 'server/app.js.map'))).rejects.toThrow()
+  })
 })

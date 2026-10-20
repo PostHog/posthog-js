@@ -49,7 +49,15 @@ import {
   PostHogRageClickConfig,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate, isWeb } from './utils'
+import {
+  getReactNativeVersion,
+  getRemoteConfigBool,
+  getRemoteConfigNumber,
+  isHermes,
+  isMacOS,
+  isValidSampleRate,
+  isWeb,
+} from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -378,13 +386,14 @@ export class PostHog extends PostHogCore {
    *
    * @public
    *
-   * @param apiKey - Your PostHog API key
+   * @param apiKey - Your PostHog project token, which starts with `phc_`. Find it in your project
+   *   settings: https://us.posthog.com/settings/project-details#variables
    * @param options - PostHog configuration options
    */
   constructor(apiKey: string, options?: PostHogOptions) {
     const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
     if (!normalizedApiKey) {
-      console.error("You must pass your PostHog project's api key. The client will be disabled.")
+      console.error('You must pass your PostHog project token. The client will be disabled.')
     }
 
     super(normalizedApiKey, options)
@@ -758,11 +767,14 @@ export class PostHog extends PostHogCore {
   }
 
   getCommonEventProperties(): PostHogEventProperties {
+    // On iOS, 'screen' is UIScreen.main, which ignores resizable windows and stays the outer display on
+    // foldables. 'window' is the app's window. Android's 'window' can exclude system bars, so keep 'screen' there.
+    const { width, height } = Dimensions.get(Platform.OS === 'ios' ? 'window' : 'screen')
     return {
       ...super.getCommonEventProperties(),
       ...this._appProperties,
-      $screen_height: Dimensions.get('screen').height,
-      $screen_width: Dimensions.get('screen').width,
+      $screen_height: height,
+      $screen_width: width,
     }
   }
 
@@ -3000,6 +3012,8 @@ export class PostHog extends PostHogCore {
             nativeAutocapture: nativeErrorAutocapture.nativeCrashes,
             androidNdkCrashes: nativeErrorAutocapture.androidNdkCrashes,
             exceptionSteps: this._errorTracking.getNativePluginExceptionStepsConfig(),
+            // Tells native to drop its fatal JS crash report only after markFatalExceptionHandled().
+            fatalExceptionMarker: true,
           },
           // Always sent, even when push init isn't the reason we're here: the native
           // defaults are true, so an explicit opt-out must reach the native config.
@@ -3407,16 +3421,17 @@ export class PostHog extends PostHogCore {
         )
       }
       if (appBuild) {
+        const installProperties = { ...properties, ...maybeAdd('$react_native_version', getReactNativeVersion()) }
         if (!prevAppBuild) {
           // new app install
-          this.capture('Application Installed', properties)
+          this.capture('Application Installed', installProperties)
         } else if (prevAppBuild !== appBuild) {
           // $app_version and $app_build are already added in the common event properties
           // app updated
           this.capture('Application Updated', {
             ...maybeAdd('previous_version', prevAppVersion),
             ...maybeAdd('previous_build', prevAppBuild),
-            ...properties,
+            ...installProperties,
           })
         }
       }

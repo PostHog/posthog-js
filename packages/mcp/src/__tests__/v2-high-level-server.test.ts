@@ -170,6 +170,34 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
     expect(toolCalls[0].properties.$mcp_is_error).toBe(false)
   })
 
+  it('captures server-declared input aliases', async () => {
+    const server = makeV2Server()
+    ;(server as unknown as V2McpServerDouble).registerTool(
+      'get_alias_trends',
+      {
+        description: 'Return trends from an accepted alias.',
+        inputSchema: { type: 'object', properties: { event: { type: 'string' } } },
+      },
+      async (args: any) => ({ content: [{ type: 'text', text: `trends for ${args.eventAlias}` }] })
+    )
+    instrument(server, fakePostHog(), {
+      context: false,
+      resolveInputAliases: (toolName) => (toolName === 'get_alias_trends' ? { event: ['eventAlias'] } : undefined),
+    })
+
+    const result = await dispatch(
+      server,
+      { method: 'tools/call', params: { name: 'get_alias_trends', arguments: { eventAlias: 'pageview' } } },
+      v2Ctx()
+    )
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(result.content[0].text).toBe('trends for pageview')
+    const properties = eventCapture.findCapturesByEvent('$mcp_tool_call')[0].properties
+    expect(properties.$mcp_input_keys).toEqual(['eventAlias'])
+    expect(properties.$mcp_input_aliases_used).toEqual(['eventAlias:event'])
+  })
+
   it('captures a failing tool call as an error', async () => {
     const server = makeV2Server()
     instrument(server, fakePostHog(), { context: false })

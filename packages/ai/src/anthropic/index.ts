@@ -7,6 +7,7 @@ import {
   extractAvailableToolCalls,
   extractPosthogParams,
   getModelParams,
+  isPrivacyModeEnabled,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
 import type { FormattedContentItem, FormattedTextContent, FormattedFunctionCall, FormattedMessage } from '../types'
@@ -22,6 +23,8 @@ import { Stream } from '@anthropic-ai/sdk/streaming'
 import { sanitizeAnthropic } from '../sanitization'
 import { preserveProviderPromise } from '../providerPromise'
 import { monitoredStreamTee } from '../stream'
+import { formatToolResult } from '../toolResult'
+import { isObject } from '../typeGuards'
 
 interface ToolInProgress {
   block: FormattedFunctionCall
@@ -55,6 +58,34 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
     this.baseURL = parentClient.baseURL
   }
 
+  private formatInputForPostHog(params: MessageCreateParams, privacyMode: boolean): unknown {
+    try {
+      if (isPrivacyModeEnabled(this.phClient, privacyMode)) return null
+      const input = mergeSystemPrompt(params, 'anthropic')
+      const messages = Array.isArray(input)
+        ? input.map((message) => {
+            if (!isObject(message) || !Array.isArray(message.content)) return message
+            const originalContent = message.content
+            const content = originalContent.map((block) => {
+              if (
+                isObject(block) &&
+                typeof block.type === 'string' &&
+                (block.type === 'tool_result' || block.type.endsWith('_tool_result')) &&
+                Object.hasOwn(block, 'content')
+              ) {
+                return { ...block, content: formatToolResult(block.content, this.phClient, Infinity) }
+              }
+              return block
+            })
+            return content.some((block, index) => block !== originalContent[index]) ? { ...message, content } : message
+          })
+        : input
+      return sanitizeAnthropic(messages, this.phClient)
+    } catch {
+      return '[Unserializable]'
+    }
+  }
+
   public create(body: MessageCreateParamsNonStreaming, options?: RequestOptions): APIPromise<Message>
   public create(
     body: MessageCreateParamsStreaming & MonitoringParams,
@@ -76,7 +107,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
       const wrappedPromise = parentPromise.then((value) => {
         let accumulatedContent = ''
         const contentBlocks: FormattedContentItem[] = []
-        const toolsInProgress: Map<string, ToolInProgress> = new Map()
+        // Keyed by the stream's block index: thinking and server-tool blocks never enter
+        // contentBlocks, so a position in that array does not match the index events carry.
+        const toolsInProgress: Map<number, ToolInProgress> = new Map()
         let currentTextBlock: FormattedTextContent | null = null
         let firstTokenTime: number | undefined
         let stopReason: string | undefined
@@ -125,7 +158,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
 
                     contentBlocks.push(toolBlock)
 
-                    toolsInProgress.set(chunk.content_block.id, {
+                    toolsInProgress.set(chunk.index, {
                       block: toolBlock,
                       inputString: '',
                     })
@@ -153,14 +186,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
 
                 // Handle tool input delta events
                 if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'input_json_delta') {
-                  const block = chunk.index !== undefined ? contentBlocks[chunk.index] : undefined
-                  const toolId = block?.type === 'function' ? block.id : undefined
-
-                  if (toolId && toolsInProgress.has(toolId)) {
-                    const tool = toolsInProgress.get(toolId)
-                    if (tool) {
-                      tool.inputString += chunk.delta.partial_json || ''
-                    }
+                  const tool = toolsInProgress.get(chunk.index)
+                  if (tool) {
+                    tool.inputString += chunk.delta.partial_json || ''
                   }
                 }
 
@@ -169,21 +197,15 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                   currentTextBlock = null
 
                   // Parse accumulated tool input
-                  if (chunk.index !== undefined) {
-                    const block = contentBlocks[chunk.index]
-
-                    if (block?.type === 'function' && block.id && toolsInProgress.has(block.id)) {
-                      const tool = toolsInProgress.get(block.id)
-                      if (tool) {
-                        try {
-                          block.function.arguments = JSON.parse(tool.inputString)
-                        } catch (e) {
-                          // Keep empty object if parsing fails
-                          console.error('Error parsing tool input:', e)
-                        }
-                      }
-                      toolsInProgress.delete(block.id)
+                  const tool = toolsInProgress.get(chunk.index)
+                  if (tool) {
+                    try {
+                      tool.block.function.arguments = JSON.parse(tool.inputString)
+                    } catch (e) {
+                      // Keep empty object if parsing fails
+                      console.error('Error parsing tool input:', e)
                     }
+                    toolsInProgress.delete(chunk.index)
                   }
                 }
 
@@ -240,7 +262,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 ...posthogParams,
                 model: anthropicParams.model,
                 provider: 'anthropic',
-                input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
+                input: this.formatInputForPostHog(anthropicParams, posthogParams.privacyMode),
                 output: formattedOutput,
                 latency,
                 timeToFirstToken,
@@ -261,7 +283,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 ...posthogParams,
                 model: anthropicParams.model,
                 provider: 'anthropic',
-                input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
+                input: this.formatInputForPostHog(anthropicParams, posthogParams.privacyMode),
                 output: [],
                 latency: (Date.now() - startTime) / 1000,
                 baseURL: this.baseURL,
@@ -299,7 +321,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               ...posthogParams,
               model: anthropicParams.model,
               provider: 'anthropic',
-              input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
+              input: this.formatInputForPostHog(anthropicParams, posthogParams.privacyMode),
               output: formatResponseAnthropic(result),
               latency,
               baseURL: this.baseURL,
@@ -324,7 +346,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
             ...posthogParams,
             model: anthropicParams.model,
             provider: 'anthropic',
-            input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
+            input: this.formatInputForPostHog(anthropicParams, posthogParams.privacyMode),
             output: [],
             latency: (Date.now() - startTime) / 1000,
             baseURL: this.baseURL,

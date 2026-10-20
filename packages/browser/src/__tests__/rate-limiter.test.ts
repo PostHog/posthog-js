@@ -69,6 +69,32 @@ describe('Rate Limiter', () => {
             })
         })
 
+        it('does not subtract tokens when the clock moves backward', () => {
+            expect(rateLimiter.clientRateLimitContext()).toEqual({
+                isRateLimited: false,
+                remainingTokens: 99,
+            })
+
+            moveTimeForward(-143_000)
+
+            expect(rateLimiter.clientRateLimitContext()).toEqual({
+                isRateLimited: false,
+                remainingTokens: 98,
+            })
+
+            moveTimeForward(143_000)
+            expect(rateLimiter.clientRateLimitContext(true)).toEqual({
+                isRateLimited: false,
+                remainingTokens: 98,
+            })
+
+            moveTimeForward(100)
+            expect(rateLimiter.clientRateLimitContext(true)).toEqual({
+                isRateLimited: false,
+                remainingTokens: 99,
+            })
+        })
+
         it('adds tokens if time has passed ', () => {
             range(50).forEach(() => {
                 expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
@@ -185,7 +211,7 @@ describe('Rate Limiter', () => {
             )
         })
 
-        it('omits the page and session when they are unavailable', () => {
+        it('omits an unavailable session while retaining the page', () => {
             mockPostHog.get_session_id = vi.fn(() => '')
 
             range(200).forEach(() => rateLimiter.clientRateLimitContext())
@@ -278,8 +304,11 @@ describe('Rate Limiter', () => {
     })
 
     describe('server side', () => {
-        it('is not rate limited with no batch key', () => {
+        it('uses the events quota when no batch key is provided', () => {
             expect(rateLimiter.isServerRateLimited(undefined)).toBe(false)
+            rateLimiter.serverLimits = { events: Date.now() + 60_000 }
+            expect(rateLimiter.isServerRateLimited('events')).toBe(true)
+            expect(rateLimiter.isServerRateLimited(undefined)).toBe(true)
         })
 
         it('is not rate limited if there is nothing in persistence', () => {
@@ -397,6 +426,7 @@ describe('Rate Limiter', () => {
             })
 
             expect(mockLogger.error).not.toHaveBeenCalled()
+            expect(mockLogger.warn).not.toHaveBeenCalled()
         })
     })
 })

@@ -1,5 +1,10 @@
+import type { Mock as VitestMock } from 'vitest'
 import { PostHogConversations, ConversationsManager } from '../../../extensions/conversations/posthog-conversations'
-import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
+import {
+    ConversationsRemoteConfig,
+    SendMessageResponse,
+    GetMessagesResponse,
+} from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { RemoteConfig } from '../../../types'
 import { assignableWindow } from '../../../utils/globals'
@@ -20,11 +25,31 @@ describe('PostHogConversations', () => {
             show: vi.fn(),
             hide: vi.fn(),
             reset: vi.fn(),
+            setIdentity: vi.fn(),
+            clearIdentity: vi.fn(),
+            sendMessage: vi.fn(async (): Promise<SendMessageResponse> => ({
+                ticket_id: 'test-ticket',
+                message_id: 'test-message',
+                ticket_status: 'new',
+                created_at: '2026-01-01T00:00:00Z',
+                unread_count: 0,
+            })),
+            getMessages: vi.fn(async (): Promise<GetMessagesResponse> => ({
+                ticket_id: 'test-ticket',
+                ticket_status: 'new',
+                messages: [],
+                has_more: false,
+                unread_count: 0,
+            })),
+            markAsRead: vi.fn(async () => ({ success: true, unread_count: 0 })),
+            getTickets: vi.fn(async () => ({ count: 0, results: [] })),
+            getCurrentTicketId: vi.fn(() => null),
+            getWidgetSessionId: vi.fn(() => 'test-widget-session'),
             isVisible: vi.fn().mockReturnValue(true),
             requestRestoreLink: vi.fn(),
             restoreFromToken: vi.fn(),
             restoreFromUrlToken: vi.fn(),
-        } as ConversationsManager
+        }
 
         // Setup mock PostHog instance
         mockPostHog = createMockPostHog({
@@ -213,7 +238,7 @@ describe('PostHogConversations', () => {
 
         it('returns load_failed when the lazy bundle fails to load', () => {
             assignableWindow.__PosthogExtensions__!.loadExternalDependency = vi.fn((_instance, _path, callback) => {
-                callback(new Error('blocked'))
+                callback(new Event('error'))
             })
             conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
 
@@ -227,9 +252,9 @@ describe('PostHogConversations', () => {
             assignableWindow.__PosthogExtensions__!.loadExternalDependency = vi.fn((_instance, _path, callback) => {
                 attempt++
                 if (attempt === 1) {
-                    callback(new Error('blocked'))
+                    callback(new Event('error'))
                 } else {
-                    finishRetry = () => callback(new Error('blocked again'))
+                    finishRetry = () => callback(new Event('error'))
                 }
             })
             conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
@@ -275,7 +300,7 @@ describe('PostHogConversations', () => {
 
         it('should not load in cookieless mode without consent', () => {
             mockPostHog.config.cookieless_mode = 'always'
-            ;(mockPostHog.consent.isOptedOut as vi.Mock).mockReturnValue(true)
+            ;(mockPostHog.consent.isOptedOut as VitestMock).mockReturnValue(true)
 
             conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
 
@@ -436,7 +461,7 @@ describe('PostHogConversations', () => {
 
         beforeEach(() => {
             assignableWindow.__PosthogExtensions__ = {
-                initConversations: vi.fn((config, posthog) => {
+                initConversations: vi.fn((_config, posthog) => {
                     capturedPosthog = posthog
                     return mockManager
                 }),
@@ -502,9 +527,9 @@ describe('PostHogConversations', () => {
             conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(true)
-            ;(mockManager.isVisible as vi.Mock).mockReturnValue(true)
+            ;(mockManager.isVisible as VitestMock).mockReturnValue(true)
             expect(conversations.isVisible()).toBe(true)
-            ;(mockManager.isVisible as vi.Mock).mockReturnValue(false)
+            ;(mockManager.isVisible as VitestMock).mockReturnValue(false)
             expect(conversations.isVisible()).toBe(false)
         })
     })

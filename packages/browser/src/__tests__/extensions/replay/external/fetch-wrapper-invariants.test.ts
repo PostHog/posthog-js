@@ -15,14 +15,15 @@ function expectNotToThrow(promise: Promise<Response>) {
 
 function setupWrappedFetch(
     downstreamFetch: typeof fetch,
-    recordBody: NetworkRecordOptions['recordBody'] = true
+    recordBody: NetworkRecordOptions['recordBody'] = true,
+    fetchOptions: { captureFetchSynchronously?: boolean } = { captureFetchSynchronously: true }
 ): { wrappedFetch: typeof fetch; cleanup: () => void } {
     class MockPerformanceObserver {
         static supportedEntryTypes = ['resource']
         observe() {}
         disconnect() {}
     }
-    ;(global as any).PerformanceObserver = MockPerformanceObserver
+    vi.stubGlobal('PerformanceObserver', MockPerformanceObserver)
 
     const mockWindow = {
         fetch: downstreamFetch,
@@ -38,16 +39,44 @@ function setupWrappedFetch(
         recordBody,
         recordHeaders: true,
         initiatorTypes: ['fetch'],
+        ...fetchOptions,
     } as any)
 
+    expect(mockWindow.fetch).not.toBe(downstreamFetch)
     return { wrappedFetch: mockWindow.fetch, cleanup }
 }
 
 describe('fetch wrapper', () => {
     // Use fake timers to prevent getRequestPerformanceEntry retry timeouts
     // from keeping the Jest worker alive after tests complete.
-    beforeEach(() => vi.useFakeTimers())
-    afterEach(() => vi.useRealTimers())
+    beforeEach(() => {
+        vi.useFakeTimers()
+    })
+    afterEach(() => {
+        vi.useRealTimers()
+        vi.unstubAllGlobals()
+    })
+
+    // Reading direct Blob/File bodies in Node can leave BLOBREADER resources open;
+    // body recording is covered separately in browser tests.
+    it.each([
+        ['Blob', () => new Blob(['blob content'], { type: 'text/plain' })],
+        ['File', () => new File(['content'], 'test.txt', { type: 'text/plain' })],
+    ])('forwards %s body through the installed wrapper', async (_name, createBody) => {
+        let receivedBody: BodyInit | null | undefined
+        const result = setupWrappedFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            receivedBody = init?.body
+            return new Response('ok')
+        }, false)
+        const body = createBody()
+
+        try {
+            await expectNotToThrow(result.wrappedFetch('https://example.com/api', { method: 'POST', body }))
+            expect(receivedBody).toBe(body)
+        } finally {
+            result.cleanup()
+        }
+    })
 
     describe('does not throw for valid inputs', () => {
         let wrappedFetch: typeof fetch
@@ -108,29 +137,6 @@ describe('fetch wrapper', () => {
             await expectNotToThrow(wrappedFetch('https://example.com/api', { method: 'POST', body: createBody() }))
         })
 
-        // Reading a direct Blob or File body through Node's Request implementation leaves a
-        // BLOBREADER async resource registered with Jest even after the read has completed. Body
-        // recording remains covered by the other Node cases and the real-browser wrapper tests;
-        // keep these cases focused on forwarding without turning that artifact into a worker leak.
-        it.each([
-            ['Blob', () => new Blob(['blob content'], { type: 'text/plain' })],
-            ['File', () => new File(['content'], 'test.txt', { type: 'text/plain' })],
-        ])('handles %s body', async (_name, createBody) => {
-            let receivedBody: BodyInit | null | undefined
-            const result = setupWrappedFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
-                receivedBody = init?.body
-                return new Response('ok')
-            }, false)
-            const body = createBody()
-
-            try {
-                await expectNotToThrow(result.wrappedFetch('https://example.com/api', { method: 'POST', body }))
-                expect(receivedBody).toBe(body)
-            } finally {
-                result.cleanup()
-            }
-        })
-
         it('handles custom headers', async () => {
             await expectNotToThrow(
                 wrappedFetch('https://example.com/api', {
@@ -166,7 +172,139 @@ describe('fetch wrapper', () => {
         })
     })
 
+    describe('private init option gate', () => {
+        it.each([undefined, false, true])(
+            'requires an explicit true opt-in (%s)',
+            async (captureFetchSynchronously) => {
+                const downstreamFetch = vi.fn(async () => new Response('ok'))
+                const { wrappedFetch, cleanup } = setupWrappedFetch(downstreamFetch, true, {
+                    captureFetchSynchronously,
+                })
+                const originalClone = Request.prototype.clone
+                let release!: () => void
+                const gate = new Promise<string>((resolve) => {
+                    release = () => resolve('request body')
+                })
+                const cloneSpy = vi.spyOn(Request.prototype, 'clone').mockImplementation(function (this: Request) {
+                    const clone = originalClone.call(this)
+                    clone.text = () => gate
+                    return clone
+                })
+                try {
+                    const pending = wrappedFetch('https://example.com/api', { method: 'POST', body: 'request body' })
+                    expect(cloneSpy).toHaveBeenCalledTimes(1)
+                    expect(downstreamFetch).toHaveBeenCalledTimes(captureFetchSynchronously === true ? 1 : 0)
+                    release()
+                    await expect(pending).resolves.toBeInstanceOf(Response)
+                    expect(downstreamFetch).toHaveBeenCalledTimes(1)
+                } finally {
+                    release()
+                    cloneSpy.mockRestore()
+                    cleanup()
+                }
+            }
+        )
+    })
+
+    describe('rejection propagation', () => {
+        it.each([
+            { requestConstructionFails: false, throwsSynchronously: false },
+            { requestConstructionFails: false, throwsSynchronously: true },
+            { requestConstructionFails: true, throwsSynchronously: false },
+            { requestConstructionFails: true, throwsSynchronously: true },
+        ])(
+            'preserves rejection identity and original arguments: %j',
+            async ({ requestConstructionFails, throwsSynchronously }) => {
+                const error = new TypeError('downstream failure')
+                const downstreamFetch = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => {
+                    if (throwsSynchronously) throw error
+                    return Promise.reject(error)
+                })
+                const { wrappedFetch, cleanup } = setupWrappedFetch(downstreamFetch)
+                const url = new URL('https://example.com/api')
+                const init: RequestInit = { method: 'POST', body: 'request body', signal: new AbortController().signal }
+                if (requestConstructionFails) {
+                    vi.stubGlobal(
+                        'Request',
+                        class {
+                            constructor() {
+                                throw new Error('Request construction failed')
+                            }
+                        }
+                    )
+                }
+                try {
+                    let result!: Promise<Response>
+                    expect(() => {
+                        result = wrappedFetch(url, init)
+                    }).not.toThrow()
+                    expect(result).toBeInstanceOf(Promise)
+                    expect(downstreamFetch).toHaveBeenCalledTimes(1)
+                    expect(downstreamFetch.mock.calls[0][0]).toBe(url)
+                    expect(downstreamFetch.mock.calls[0][1]).toBe(init)
+                    await expect(result).rejects.toBe(error)
+                } finally {
+                    cleanup()
+                }
+            }
+        )
+
+        it('delegates before yielding so the application call stack is still active', async () => {
+            let rejectFetch!: (error: Error) => void
+            const networkError = new TypeError('Failed to fetch')
+            const downstreamFetch = vi.fn(
+                () =>
+                    new Promise<Response>((_resolve, reject) => {
+                        rejectFetch = reject
+                    })
+            )
+            const { wrappedFetch, cleanup } = setupWrappedFetch(downstreamFetch)
+
+            try {
+                const returnedPromise = wrappedFetch('https://example.com/api', {
+                    method: 'POST',
+                    body: 'request body',
+                })
+                expect(downstreamFetch).toHaveBeenCalledOnce()
+                rejectFetch(networkError)
+                await expect(returnedPromise).rejects.toBe(networkError)
+            } finally {
+                cleanup()
+            }
+        })
+    })
+
     describe('response availability', () => {
+        it.each([false, true])(
+            'normalizes a non-thenable returned by a downstream stub (Request construction fails: %s)',
+            async (requestConstructionFails) => {
+                const response = new Response('stubbed response')
+                const downstreamFetch = vi.fn(() => response as unknown as Promise<Response>)
+                const { wrappedFetch, cleanup } = setupWrappedFetch(downstreamFetch)
+
+                if (requestConstructionFails) {
+                    vi.stubGlobal(
+                        'Request',
+                        class {
+                            constructor() {
+                                throw new Error('Request construction failed')
+                            }
+                        }
+                    )
+                }
+
+                try {
+                    const result = wrappedFetch('https://example.com/api')
+                    expect(result).toBeInstanceOf(Promise)
+                    await expect(result).resolves.toBe(response)
+                    expect(downstreamFetch).toHaveBeenCalledTimes(1)
+                    expect(downstreamFetch).toHaveBeenCalledWith('https://example.com/api', undefined)
+                } finally {
+                    cleanup()
+                }
+            }
+        )
+
         it('caller can read response body after wrapper processes it', async () => {
             const { wrappedFetch, cleanup } = setupWrappedFetch(async () => {
                 return new Response(JSON.stringify({ data: 'test' }), {
@@ -342,10 +480,14 @@ describe('fetch wrapper', () => {
 
         const contentType = capturedRequest!.headers.get('content-type')!
         const headerBoundary = contentType.match(/boundary=([^\s;]+)/)?.[1]
-        const body = await capturedRequest!.text()
-        const bodyBoundary = body.match(/^--+([^\r\n]+)/)?.[1]
-
-        expect(headerBoundary).toContain(bodyBoundary)
+        expect(headerBoundary).toBeTruthy()
+        const body = await capturedRequest!.clone().text()
+        expect(body.split('\r\n')[0]).toBe(`--${headerBoundary}`)
+        const parsed = await capturedRequest!.formData()
+        expect(parsed.get('key')).toBe('value')
+        const file = parsed.get('file') as File
+        expect(file.name).toBe('test.txt')
+        expect(await file.text()).toBe('test content')
     })
 
     it('passes init to downstream wrappers', async () => {

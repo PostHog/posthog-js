@@ -439,6 +439,10 @@ export const sendSurveyEvent = ({
         return
     }
     setSurveySeenOnLocalStorage(survey)
+    if (isSurveyCompleted) {
+        // Capture hooks must observe the completed survey's final eligibility state.
+        clearInProgressSurveyState(survey)
+    }
     posthog.capture(SurveyEventName.SENT, {
         [SurveyEventProperties.SURVEY_NAME]: survey.name,
         [SurveyEventProperties.SURVEY_ID]: survey.id,
@@ -462,7 +466,6 @@ export const sendSurveyEvent = ({
     if (isSurveyCompleted) {
         // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
         window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
-        clearInProgressSurveyState(survey)
         // Recompute the internal targeting flag promptly. The response we just recorded makes this
         // person ineligible server-side, but the cached flag still says "eligible", so reloading now
         // stops a quick revisit from re-showing the survey and recording a duplicate response.
@@ -512,15 +515,16 @@ export const dismissedSurveyEvent = (
     // language when no in-progress state exists at all (i.e. the survey was dismissed without
     // answering any question), so check for the record's presence, not its value.
     const effectiveLanguage = inProgressSurvey ? inProgressSurvey.surveyLanguage : surveyLanguage
-    posthog.capture(SurveyEventName.DISMISSED, {
+    const properties = {
         ..._buildSurveyEventProperties('dismissed', survey, inProgressSurvey, posthog),
         ...(effectiveLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: effectiveLanguage }),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
-    })
+    }
     clearInProgressSurveyState(survey)
     setSurveySeenOnLocalStorage(survey)
+    posthog.capture(SurveyEventName.DISMISSED, properties)
     window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
 }
 

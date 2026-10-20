@@ -1012,4 +1012,4 @@ export type CaptureEvent = {
  * Function type for the `before_send` hook.
  * Receives an event and can return a modified event or null to drop the event.
  */
-export type BeforeSendFn = (event: CaptureEvent | null) => CaptureEvent | null
+export type BeforeSendFn = (event: CaptureEvent) => CaptureEvent | null

@@ -7,8 +7,8 @@ test('same-origin tabs share sessions, adopt rotations, and retain their own win
 
     await first.evaluate(() => window.consentHarness.capture('first'))
     await second.evaluate(() => window.consentHarness.capture('second'))
-    const firstSession = await first.evaluate(() => window.consentHarness.session())
-    const secondSession = await second.evaluate(() => window.consentHarness.session())
+    const firstSession = (await first.evaluate(() => window.consentHarness.session()))!
+    const secondSession = (await second.evaluate(() => window.consentHarness.session()))!
     expect(secondSession.sessionId).toBe(firstSession.sessionId)
     expect(secondSession.windowId).not.toBe(firstSession.windowId)
 
@@ -16,12 +16,12 @@ test('same-origin tabs share sessions, adopt rotations, and retain their own win
         await window.consentHarness.reset()
         await window.consentHarness.capture('rotated')
     })
-    const rotated = await first.evaluate(() => window.consentHarness.session())
+    const rotated = (await first.evaluate(() => window.consentHarness.session()))!
     expect(rotated.sessionId).not.toBe(firstSession.sessionId)
     expect(rotated.windowId).not.toBe(firstSession.windowId)
 
     await second.evaluate(() => window.consentHarness.capture('adopt'))
-    const adopted = await second.evaluate(() => window.consentHarness.session())
+    const adopted = (await second.evaluate(() => window.consentHarness.session()))!
     expect(adopted.sessionId).toBe(rotated.sessionId)
     expect(adopted.windowId).toBe(secondSession.windowId)
 })
@@ -29,30 +29,32 @@ test('same-origin tabs share sessions, adopt rotations, and retain their own win
 test('ordinary reload preserves the active window', async ({ page }) => {
     await page.goto('/')
     await page.evaluate(() => window.consentHarness.capture('before-reload'))
-    const before = await page.evaluate(() => window.consentHarness.session())
+    const before = (await page.evaluate(() => window.consentHarness.session()))!
 
     await page.reload()
-    expect(await page.evaluate(() => window.consentHarness.session())).toEqual({
-        sessionId: '',
-        windowId: '',
-        sessionStartTimestamp: 0,
-    })
+    expect(await page.evaluate(() => window.consentHarness.session())).toBeUndefined()
     await page.evaluate(() => window.consentHarness.capture('after-reload'))
 
-    expect(await page.evaluate(() => window.consentHarness.session())).toEqual(before)
+    const after = (await page.evaluate(() => window.consentHarness.session()))!
+    expect(after).toMatchObject({
+        sessionId: before.sessionId,
+        windowId: before.windowId,
+        sessionStartTimestamp: before.sessionStartTimestamp,
+    })
+    expect(after.lastActivityTimestamp).toBeGreaterThanOrEqual(before.lastActivityTimestamp)
 })
 
 test('a window.open tab with copied session storage gets its own window', async ({ page }) => {
     await page.goto('/')
     await page.evaluate(() => window.consentHarness.capture('opener'))
-    const opener = await page.evaluate(() => window.consentHarness.session())
+    const opener = (await page.evaluate(() => window.consentHarness.session()))!
 
     const popupPromise = page.waitForEvent('popup')
     await page.evaluate(() => window.open('/', '_blank'))
     const popup = await popupPromise
     await popup.waitForLoadState()
     await popup.evaluate(() => window.consentHarness.capture('popup'))
-    const duplicate = await popup.evaluate(() => window.consentHarness.session())
+    const duplicate = (await popup.evaluate(() => window.consentHarness.session()))!
 
     expect(duplicate.sessionId).toBe(opener.sessionId)
     expect(duplicate.windowId).not.toBe(opener.windowId)

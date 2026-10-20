@@ -1,7 +1,5 @@
 /// <reference lib="dom" />
 
-import sinon from 'sinon'
-
 import {
     getSafeText,
     shouldCaptureDomEvent,
@@ -16,7 +14,7 @@ import {
     makeSafeText,
 } from '@posthog/browser-common/utils/autocapture-utils'
 import { document } from '@posthog/browser-common/utils/globals'
-import { makeMouseEvent } from './autocapture.test'
+import { makeMouseEvent } from './helpers/mouse-event'
 import { createMockPostHog } from './helpers/posthog-instance'
 import { AutocaptureConfig, PostHogConfig } from '../types'
 
@@ -156,20 +154,24 @@ describe(`Autocapture utility functions`, () => {
                 `""`, // Empty quotes
             ]
 
-            // Test each string
-            testStrings.forEach((str) => {
-                const result = makeSafeText(str)
-                expect(result).not.toBeNull()
-
-                // For non-empty strings, we should get a result
-                if (str.trim().length > 0) {
-                    // If the original had quotes, the result should have them too
-                    if (str.includes('"') || str.includes("'")) {
-                        // The result should include some form of quotation mark
-                        const hasQuotes = result?.includes('"') || result?.includes("'")
-                        expect(hasQuotes).toBeTruthy()
-                    }
-                }
+            const expectedStrings = [
+                `Click "OK" to continue`,
+                `Select the "My Account" option`,
+                `Click "Order History"`,
+                `"Double quoted text" with some text after`,
+                `Text before "double quoted text"`,
+                `A string with "multiple" "quoted" sections`,
+                `A string with 'single' 'quoted' sections`,
+                `A "mixed quote' string that might cause problems`,
+                `A 'mixed quote" string that might cause problems`,
+                `"nested "quotes" within" might be an issue`,
+                `Line breaks with "quotes" might cause issues`,
+                `Quotes "at the end"`,
+                `"Quotes at the start" of text`,
+                `""`,
+            ]
+            testStrings.forEach((str, index) => {
+                expect(makeSafeText(str)).toBe(expectedStrings[index])
             })
         })
     })
@@ -425,6 +427,9 @@ describe(`Autocapture utility functions`, () => {
         })
 
         it(`should include sensitive elements with class "ph-include"`, () => {
+            el.id = 'credit-card-number'
+            expect(shouldCaptureElement(el)).toBe(false)
+
             el.className = `test1 ph-include test2`
             expect(shouldCaptureElement(el)).toBe(true)
         })
@@ -489,28 +494,24 @@ describe(`Autocapture utility functions`, () => {
         // See https://github.com/posthog/posthog-js/issues/165
         // Under specific circumstances a bug caused .replace to be called on a DOM element
         // instead of a string, removing the element from the page. Ensure this issue is mitigated.
-        it(`shouldn't inadvertently replace DOM nodes`, () => {
-            // setup
-            ;(el as any).replace = sinon.spy()
-
-            // test
-            input.name = el as any
-            shouldCaptureElement(parent1) // previously this would cause el.replace to be called
-            expect((el as any).replace.called).toBe(false)
-            input.name = ''
-
-            parent1.id = el as any
-            shouldCaptureElement(parent2) // previously this would cause el.replace to be called
-            expect((el as any).replace.called).toBe(false)
-            parent1.id = ''
-
-            input.type = el as any
-            shouldCaptureElement(parent2) // previously this would cause el.replace to be called
-            expect((el as any).replace.called).toBe(false)
-            input.type = ''
-
-            // cleanup
-            ;(el as any).replace = undefined
+        it.each(['name', 'id', 'type'])(`shouldn't inadvertently replace DOM nodes through %s`, (property) => {
+            const form = document.createElement('form')
+            const control = document.createElement('input')
+            control.name = property
+            form.appendChild(control)
+            document.body.appendChild(form)
+            // jsdom does not consistently implement named access on forms.
+            Object.defineProperty(form, property, { configurable: true, value: control })
+            const replace = vi.fn()
+            Object.defineProperty(control, 'replace', { configurable: true, value: replace })
+            try {
+                expect((form as any)[property]).toBe(control)
+                expect(shouldCaptureElement(form)).toBe(true)
+                expect(replace).not.toHaveBeenCalled()
+                expect(control.parentNode).toBe(form)
+            } finally {
+                form.remove()
+            }
         })
 
         it(`should terminate and fail closed on a cyclic ancestor chain`, () => {

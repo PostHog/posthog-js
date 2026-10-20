@@ -1,5 +1,6 @@
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { waitForSurveyDefinitions } from '../utils/survey-readiness'
 
 const startOptions = {
     options: {},
@@ -83,6 +84,8 @@ test.describe('surveys - core display logic', () => {
 
         await start({ ...startOptions, type: 'reload' }, page, context)
         await surveysAPICall
+        await waitForSurveyDefinitions(page)
+        await page.waitForTimeout(2200)
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
     })
@@ -124,6 +127,8 @@ test.describe('surveys - core display logic', () => {
 
         await start({ ...startOptions, type: 'reload' }, page, context)
         await surveysAPICall
+        await waitForSurveyDefinitions(page)
+        await page.waitForTimeout(2200)
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
 
@@ -175,6 +180,8 @@ test.describe('surveys - core display logic', () => {
 
         await start({ ...startOptions, type: 'reload' }, page, context)
         await surveysAPICall
+        await waitForSurveyDefinitions(page)
+        await page.waitForTimeout(2200)
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
     })
@@ -295,13 +302,15 @@ test.describe('surveys - core display logic', () => {
             ;(window as any).posthog.capture('trigger_event')
         })
 
-        await page.waitForTimeout(2000)
+        await expect(page.locator('.PostHogSurvey-cancel-test-survey')).toBeAttached()
+        await expect(surveyLocator).not.toBeVisible()
         await page.evaluate(() => {
             ;(window as any).posthog.capture('cancel_event')
         })
 
-        await page.waitForTimeout(5000)
-
+        await page.waitForTimeout(6000)
         await expect(surveyLocator).not.toBeVisible()
+        await page.evaluate(() => (window as any).posthog.capture('trigger_event'))
+        await expect(surveyLocator).toBeVisible({ timeout: 10000 })
     })
 })

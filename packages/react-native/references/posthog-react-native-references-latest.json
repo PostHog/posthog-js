@@ -70,7 +70,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Your PostHog API key",
+              "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
               "isOptional": false,
               "type": "string",
               "name": "apiKey"
@@ -2320,7 +2320,7 @@
       "name": "BeforeSendFn",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "(event: CaptureEvent | null) => CaptureEvent | null"
+      "example": "(event: CaptureEvent) => CaptureEvent | null"
     },
     {
       "id": "CaptureEvent",
@@ -3348,6 +3348,11 @@
           "name": "$os_version"
         },
         {
+          "description": "React Native version like \"0.79.6\". Not set by default: the SDK sends it only on `Application Installed` and `Application Updated`",
+          "type": "string | null | undefined",
+          "name": "$react_native_version"
+        },
+        {
           "description": "Timezone of the device like \"Europe/Berlin\"",
           "type": "string | null",
           "name": "$timezone"
@@ -4040,7 +4045,7 @@
       "name": "PostHogProviderProps",
       "properties": [
         {
-          "description": "Your PostHog API key",
+          "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
           "type": "string",
           "name": "apiKey"
         },
@@ -4159,6 +4164,10 @@
         {
           "type": "((distinctId: string, timestamp: string, properties: PostHogReactNativePluginMap) => Promise<void>) & ((distinctId: string, timestamp: string, properties: { [key: string]: any; }) => Promise<void>)",
           "name": "captureFatalException"
+        },
+        {
+          "type": "((message: string) => Promise<void>) & ((message: string) => Promise<void>)",
+          "name": "markFatalExceptionHandled"
         },
         {
           "type": "() => Promise<PostHogReactNativePluginMap>",

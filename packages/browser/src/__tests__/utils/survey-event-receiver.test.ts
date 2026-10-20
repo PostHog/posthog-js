@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import type { Mock as VitestMock, SpyInstance as VitestSpyInstance } from 'vitest'
 
 import {
     SurveyType,
@@ -12,15 +13,17 @@ import {
 import { SURVEYS_ACTIVATED_TIMESTAMPS } from '../../constants'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
-import { CaptureResult, PostHogConfig, PropertyMatchType } from '../../types'
+import { CaptureResult, PostHogConfig } from '../../types'
+import type { PropertyFilters } from '@posthog/core'
 import { SurveyEventReceiver } from '../../utils/survey-event-receiver'
+import type { SessionIdChangedCallback } from '../../types'
 import { createMockPostHog, createMockConfig } from '../helpers/posthog-instance'
 
 describe('survey-event-receiver', () => {
     describe('event based surveys', () => {
         let config: PostHogConfig
         let instance: PostHog
-        let mockAddCaptureHook: vi.Mock
+        let mockAddCaptureHook: VitestMock
 
         const surveysWithEvents: Survey[] = [
             {
@@ -192,14 +195,14 @@ describe('survey-event-receiver', () => {
     describe('activation lifecycle (reload persistence)', () => {
         let config: PostHogConfig
         let instance: PostHog
-        let mockAddCaptureHook: vi.Mock
+        let mockAddCaptureHook: VitestMock
         // Mutable so tests can simulate a session rollover between reloads.
         let currentSessionId: string
         // Captures the receiver's onSessionId subscription so tests can drive a live rotation.
-        let sessionIdListeners: Array<(sessionId: string) => void>
+        let sessionIdListeners: SessionIdChangedCallback[]
         const rotateSession = (sessionId: string): void => {
             currentSessionId = sessionId
-            sessionIdListeners.forEach((listener) => listener(sessionId))
+            sessionIdListeners.forEach((listener) => listener(sessionId, 'test-window-id'))
         }
 
         const makeSurvey = (overrides: Partial<Survey>): Survey =>
@@ -233,7 +236,7 @@ describe('survey-event-receiver', () => {
                 _addCaptureHook: mockAddCaptureHook,
                 getSurveys: vi.fn((callback) => callback([survey])),
                 get_session_id: () => currentSessionId,
-                onSessionId: (listener: (sessionId: string) => void) => {
+                onSessionId: (listener: SessionIdChangedCallback) => {
                     sessionIdListeners.push(listener)
                     return () => {}
                 },
@@ -282,7 +285,13 @@ describe('survey-event-receiver', () => {
         it.each([
             [
                 'repeatedActivation',
-                { conditions: { events: { values: [{ name: 'trigger_event' }], repeatedActivation: true } } },
+                {
+                    conditions: {
+                        actions: null,
+                        cancelEvents: null,
+                        events: { values: [{ name: 'trigger_event' }], repeatedActivation: true },
+                    },
+                },
             ],
             ['always schedule', { schedule: SurveySchedule.Always }],
         ])('consumes a repeatable survey (%s) when it is shown', (_label, overrides) => {
@@ -370,14 +379,20 @@ describe('survey-event-receiver', () => {
             hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
 
             // onSessionId can fire without the session id actually changing; that must not clear it.
-            sessionIdListeners.forEach((listener) => listener('session-1'))
+            sessionIdListeners.forEach((listener) => listener('session-1', 'test-window-id'))
             expect(receiver.getSurveys()).toContain('lifecycle-survey')
         })
 
         it.each([
             [
                 'repeatedActivation',
-                { conditions: { events: { values: [{ name: 'trigger_event' }], repeatedActivation: true } } },
+                {
+                    conditions: {
+                        actions: null,
+                        cancelEvents: null,
+                        events: { values: [{ name: 'trigger_event' }], repeatedActivation: true },
+                    },
+                },
             ],
             ['always schedule', { schedule: SurveySchedule.Always }],
         ])('never persists a repeatable survey (%s), so it cannot survive a reload', (_label, overrides) => {
@@ -396,7 +411,7 @@ describe('survey-event-receiver', () => {
 
             // The survey is no longer resolvable (e.g. surveys unloaded): shown should consume it,
             // not promote an unknown survey into persistence where it would re-display on reload.
-            ;(instance.getSurveys as vi.Mock).mockImplementation((cb) => cb([]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((cb) => cb([]))
             hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
 
             expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
@@ -406,11 +421,11 @@ describe('survey-event-receiver', () => {
         it('getSurveys() returns the union of armed (memory) and shown (persisted) surveys', () => {
             const armed = makeSurvey({
                 id: 'armed-survey',
-                conditions: { events: { values: [{ name: 'arm_event' }] } },
+                conditions: { actions: null, cancelEvents: null, events: { values: [{ name: 'arm_event' }] } },
             })
             const shown = makeSurvey({
                 id: 'shown-survey',
-                conditions: { events: { values: [{ name: 'show_event' }] } },
+                conditions: { actions: null, cancelEvents: null, events: { values: [{ name: 'show_event' }] } },
             })
             config = createMockConfig({
                 token: 'testtoken',
@@ -470,14 +485,14 @@ describe('survey-event-receiver', () => {
     describe('delayed survey activation (survives navigation)', () => {
         let config: PostHogConfig
         let instance: PostHog
-        let mockAddCaptureHook: vi.Mock
+        let mockAddCaptureHook: VitestMock
         let currentSessionId: string
-        let sessionIdListeners: Array<(sessionId: string) => void>
-        let nowSpy: vi.SpyInstance
+        let sessionIdListeners: SessionIdChangedCallback[]
+        let nowSpy: VitestSpyInstance
 
         const rotateSession = (sessionId: string): void => {
             currentSessionId = sessionId
-            sessionIdListeners.forEach((listener) => listener(sessionId))
+            sessionIdListeners.forEach((listener) => listener(sessionId, 'test-window-id'))
         }
 
         const makeDelayedSurvey = (overrides: Partial<Survey> = {}): Survey =>
@@ -508,7 +523,7 @@ describe('survey-event-receiver', () => {
                 getSurveys: vi.fn((callback) => callback([survey])),
                 get_session_id: () => (hasSession ? currentSessionId : undefined),
                 cancelPendingSurvey: vi.fn(),
-                onSessionId: (listener: (sessionId: string) => void) => {
+                onSessionId: (listener: SessionIdChangedCallback) => {
                     sessionIdListeners.push(listener)
                     return () => {}
                 },
@@ -662,7 +677,7 @@ describe('survey-event-receiver', () => {
     describe('property filter based surveys', () => {
         let config: PostHogConfig
         let instance: PostHog
-        let mockAddCaptureHook: vi.Mock
+        let mockAddCaptureHook: VitestMock
 
         const createEventPayload = (eventName: string, properties: Record<string, any> = {}): CaptureResult => ({
             $set: undefined,
@@ -676,25 +691,35 @@ describe('survey-event-receiver', () => {
         const createSurveyWithPropertyFilters = (
             id: string,
             eventName: string,
-            propertyFilters: Record<string, { values: string[]; operator: PropertyMatchType }>
-        ): Survey =>
-            ({
-                name: `${id} survey`,
-                id,
-                description: `${id} survey description`,
-                type: SurveyType.Popover,
-                questions: [{ type: SurveyQuestionType.Open, question: 'test question' }],
-                conditions: {
-                    events: {
-                        values: [
-                            {
-                                name: eventName,
-                                propertyFilters,
-                            },
-                        ],
-                    },
+            propertyFilters: PropertyFilters
+        ): Survey => ({
+            feature_flag_keys: null,
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+            appearance: null,
+            start_date: null,
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            name: `${id} survey`,
+            id,
+            description: `${id} survey description`,
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'test question' }],
+            conditions: {
+                actions: null,
+                cancelEvents: null,
+                events: {
+                    values: [
+                        {
+                            name: eventName,
+                            propertyFilters,
+                        },
+                    ],
                 },
-            }) as unknown as Survey
+            },
+        })
 
         beforeEach(() => {
             mockAddCaptureHook = vi.fn()
@@ -726,7 +751,7 @@ describe('survey-event-receiver', () => {
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
             // Set up getSurveys mock to return the survey
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) => callback([survey]))
 
             // Should match exact value
             registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium' }))
@@ -742,7 +767,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) => callback([survey]))
 
             // Should not match different value
             registeredHook('purchase', createEventPayload('purchase', { product_type: 'basic' }))
@@ -758,7 +783,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) => callback([survey]))
 
             // Should match when value is not 'basic'
             registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium' }))
@@ -774,7 +799,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) => callback([survey]))
 
             // Should match regex pattern
             registeredHook('page_view', createEventPayload('page_view', { url: '/app/dashboard' }))
@@ -790,7 +815,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) => callback([survey]))
 
             // Should match case-insensitive contains
             registeredHook('search', createEventPayload('search', { query: 'new product features' }))
@@ -807,7 +832,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) => callback([survey]))
 
             // Should match when both conditions are met
             registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium', amount: '200' }))
@@ -832,7 +857,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) => callback([survey]))
 
             // Should not match when property is missing
             registeredHook('purchase', createEventPayload('purchase', { other_prop: 'value' }))
@@ -846,7 +871,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) => callback([survey]))
 
             // Should match based on event name only
             registeredHook('purchase', createEventPayload('purchase', { any_prop: 'any_value' }))
@@ -862,7 +887,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) => callback([survey]))
 
             registeredHook('purchase', createEventPayload('purchase', { amount: 150 }))
             expect(surveyEventReceiver.getSurveys()).toContain('gt-test')
@@ -877,7 +902,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) => callback([survey]))
 
             registeredHook('purchase', createEventPayload('purchase', { amount: 50 }))
             expect(surveyEventReceiver.getSurveys()).toContain('lt-test')
@@ -1078,8 +1103,8 @@ describe('survey-event-receiver', () => {
     describe('cancel events', () => {
         let config: PostHogConfig
         let instance: PostHog
-        let mockAddCaptureHook: vi.Mock
-        let mockCancelPendingSurvey: vi.Mock
+        let mockAddCaptureHook: VitestMock
+        let mockCancelPendingSurvey: VitestMock
 
         const surveyWithCancelEvent: Survey = {
             name: 'survey with cancel',
@@ -1171,7 +1196,7 @@ describe('survey-event-receiver', () => {
                 },
             } as unknown as Survey
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) =>
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) =>
                 callback([surveyWithCancelPropertyFilter])
             )
 
@@ -1185,7 +1210,9 @@ describe('survey-event-receiver', () => {
             registeredHook('cancel_event', {
                 event: 'cancel_event',
                 properties: { reason: 'user_navigated_away' },
-            } as CaptureResult)
+                uuid: '0197f411-c057-7000-8000-000000000001',
+                timestamp: new Date(),
+            } satisfies CaptureResult)
 
             expect(mockCancelPendingSurvey).toHaveBeenCalledWith('survey-cancel-prop-filter')
             expect(surveyEventReceiver.getSurveys()).not.toContain('survey-cancel-prop-filter')
@@ -1210,7 +1237,7 @@ describe('survey-event-receiver', () => {
                 },
             } as unknown as Survey
 
-            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) =>
+            ;(instance.getSurveys as VitestMock).mockImplementation((callback) =>
                 callback([surveyWithCancelPropertyFilter])
             )
 
@@ -1224,7 +1251,9 @@ describe('survey-event-receiver', () => {
             registeredHook('cancel_event', {
                 event: 'cancel_event',
                 properties: { reason: 'some_other_reason' },
-            } as CaptureResult)
+                uuid: '0197f411-c057-7000-8000-000000000002',
+                timestamp: new Date(),
+            } satisfies CaptureResult)
 
             expect(mockCancelPendingSurvey).not.toHaveBeenCalled()
             expect(surveyEventReceiver.getSurveys()).toContain('survey-cancel-prop-filter')

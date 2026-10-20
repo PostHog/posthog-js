@@ -379,6 +379,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
 
         it('swipe followed by a scroll after threshold, dead swipe', () => {
             pushSwipeCandidate({ scrollDelayMs: 2501 })
+            vi.setSystemTime(3401)
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
@@ -386,7 +387,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             expect(fakeInstance.capture).toHaveBeenCalledWith(
                 '$dead_swipe',
                 expect.objectContaining({
-                    $dead_swipe_absolute_delay_ms: -900,
+                    $dead_swipe_absolute_delay_ms: 2501,
                     $dead_swipe_absolute_timeout: false,
                     $dead_swipe_event_timestamp: 900,
                     $dead_swipe_mutation_delay_ms: undefined,

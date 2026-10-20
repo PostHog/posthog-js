@@ -1,7 +1,8 @@
+import type { Mock as VitestMock } from 'vitest'
 import { clearLoggerMocks } from './helpers/mock-logger'
 
 import { PostHog } from '../posthog-core'
-import { defaultPostHog } from './helpers/posthog-instance'
+import { defaultPostHog, requirePostHogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import { isNull } from '@posthog/core'
@@ -24,13 +25,14 @@ function deleteAllCookies() {
     }
 }
 
-// periodically flakes because of unexpected console logging
-vi.setConfig({ retry: 3 })
-
 describe('consentManager', () => {
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
         const posthog = await new Promise<PostHog>((resolve) =>
-            defaultPostHog().init('testtoken', { ...config, loaded: (posthog) => resolve(posthog) }, uuidv7())!
+            defaultPostHog().init(
+                'testtoken',
+                { ...config, loaded: (posthog) => resolve(requirePostHogInstance(posthog)) },
+                uuidv7()
+            )!
         )
         return posthog
     }
@@ -232,7 +234,7 @@ describe('consentManager', () => {
                 } else {
                     posthog.opt_out_capturing()
                 }
-                ;(console.warn as vi.Mock).mockClear()
+                ;(console.warn as VitestMock).mockClear()
 
                 if (endsOptedIn) {
                     posthog.opt_in_capturing({ captureEventName: false })
@@ -283,7 +285,7 @@ describe('consentManager', () => {
         it.each(['always', 'on_reject'] as const)('does not warn in cookieless %s mode', async (cookieless_mode) => {
             posthog = await createPostHog({ cookieless_mode, opt_out_capturing_by_default: true })
             posthog.opt_in_capturing({ captureEventName: false })
-            ;(console.warn as vi.Mock).mockClear()
+            ;(console.warn as VitestMock).mockClear()
 
             posthog.reset()
 
@@ -483,7 +485,7 @@ describe('consent storage when no browser storage is available', () => {
                     'testtoken',
                     {
                         opt_out_capturing_persistence_type: persistenceType,
-                        loaded: (posthog) => resolve(posthog),
+                        loaded: (posthog) => resolve(requirePostHogInstance(posthog)),
                     },
                     uuidv7()
                 )!
