@@ -305,6 +305,29 @@ describe('PostHog RN session replay follows consent', () => {
     expect(replay.startRecording).not.toHaveBeenCalled()
   })
 
+  it('leaves replay stopped on opt-in when it was not recording at opt-out', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': false }
+    await warmCache()
+
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    // Give the startup evaluation time to run; the linked flag keeps replay off.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(nativeRecording).toBe(false)
+    mockNativeOptInRestartsRecorder()
+
+    await posthog.optOut()
+    currentFlags = { 'replay-flag': true }
+    await posthog.reloadFeatureFlagsAsync()
+    await posthog.optIn()
+    // Give the opt-in evaluation time to run; nothing may start.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(posthog.getFeatureFlag('replay-flag')).toBe(true)
+    expect(nativeRecording).toBe(false)
+  })
+
   it('keeps a recording running across opt-out and opt-in once a linked flag restarted it after an app stop', async () => {
     currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
     currentFlags = { 'replay-flag': true }
