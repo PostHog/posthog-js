@@ -7883,7 +7883,7 @@ describe('error handling and backoff', () => {
   })
 })
 
-describe('experience continuity warning', () => {
+describe('unresolvable flag warning', () => {
   let posthog: PostHog
   let warnSpy: vi.SpyInstance
 
@@ -8147,6 +8147,46 @@ describe('experience continuity warning', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 flag(s)'))
     // The context-excluded flag never takes the server-fallback path here, so it must not be named.
     expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('excluded-cont-flag'))
+  })
+
+  it('warns once about flags whose definition local evaluation does not support', async () => {
+    const flag = (key: string, properties: Record<string, any>[]): Record<string, any> => ({
+      id: 1,
+      name: key,
+      key,
+      active: true,
+      filters: { groups: [{ properties, rollout_percentage: 100 }] },
+    })
+    const flags = {
+      flags: [
+        flag('static-cohort-flag', [{ key: 'id', type: 'cohort', value: 999 }]),
+        flag('nested-static-cohort-flag', [{ key: 'id', type: 'cohort', value: 1 }]),
+        flag('missing-dependency-flag', [
+          { key: 'gone', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: ['gone'] },
+        ]),
+        flag('local-cohort-flag', [{ key: 'id', type: 'cohort', value: 2 }]),
+      ],
+      cohorts: {
+        '1': { type: 'AND', values: [{ key: 'id', type: 'cohort', value: 999 }] },
+        '2': { type: 'AND', values: [{ key: 'plan', type: 'person', value: 'pro', operator: 'exact' }] },
+      },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await vi.runOnlyPendingTimersAsync()
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    const [message] = warnSpy.mock.calls[0]
+    expect(message).toContain('reason: unsupported_definition')
+    expect(message).toContain('static-cohort-flag, nested-static-cohort-flag, missing-dependency-flag')
+    expect(message).not.toContain('local-cohort-flag')
   })
 })
 

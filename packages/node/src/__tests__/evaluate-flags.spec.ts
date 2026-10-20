@@ -952,23 +952,21 @@ describe('evaluateFlags', () => {
       expect(flags.unresolvedFlags).toEqual({})
     })
 
-    it('leaves the flag unresolved when the remote fallback fails', async () => {
-      await setupWithDefinitions([continuityFlag()], { status: 500, json: () => Promise.resolve({}) } as any)
+    it.each([
+      ['fails', { status: 500, json: () => Promise.resolve({}) } as any],
+      ['does not return it', { flags: {}, errorsWhileComputingFlags: false }],
+    ])('leaves the flag unresolved when the remote fallback %s', async (_, remoteResponse) => {
+      await setupWithDefinitions([continuityFlag()], remoteResponse)
 
       const flags = await posthog.evaluateFlags('user-123')
+      flags.isEnabled('checkout')
 
       expect(remoteFlagCalls()).toHaveLength(1)
       expect(flags.keys).toEqual([])
       expect(flags.unresolvedFlags).toEqual({ checkout: 'experience_continuity' })
-    })
-
-    it('leaves the flag unresolved when the remote fallback does not return it', async () => {
-      await setupWithDefinitions([continuityFlag()])
-
-      const flags = await posthog.evaluateFlags('user-123')
-
-      expect(remoteFlagCalls()).toHaveLength(1)
-      expect(flags.unresolvedFlags).toEqual({ checkout: 'experience_continuity' })
+      const [event] = await flagCalledEvents('checkout')
+      expect(event.properties.$feature_flag_error).toContain('local_evaluation_inconclusive')
+      expect(event.properties.$feature_flag_error).not.toContain('flag_missing')
     })
 
     it('reports a key without a local definition as missing, not unresolved', async () => {
@@ -1120,7 +1118,26 @@ describe('evaluateFlags', () => {
         {},
         'unsupported_definition',
       ],
+      [
+        'a circular dependency',
+        {
+          properties: [{ key: 'self', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: [] }],
+        },
+        {},
+        'unsupported_definition',
+      ],
       ['a static cohort', { properties: [{ key: 'id', type: 'cohort', value: 999 }] }, {}, 'unsupported_definition'],
+      [
+        'a missing property and a static cohort in one condition',
+        {
+          properties: [
+            { key: 'plan', type: 'person', value: 'pro', operator: 'exact' },
+            { key: 'id', type: 'cohort', value: 999 },
+          ],
+        },
+        {},
+        'unsupported_definition',
+      ],
       [
         'an unknown operator',
         { properties: [{ key: 'plan', type: 'person', value: 'pro', operator: 'not_a_real_operator' }] },
@@ -1138,6 +1155,17 @@ describe('evaluateFlags', () => {
         { properties: [{ key: 'version', type: 'person', value: '1.2.3', operator: 'semver_gt' }] },
         { version: 'not-semver' },
         'missing_context',
+      ],
+      [
+        'a missing property and an unknown operator in one condition',
+        {
+          properties: [
+            { key: 'plan', type: 'person', value: 'pro', operator: 'exact' },
+            { key: 'tier', type: 'person', value: 'gold', operator: 'not_a_real_operator' },
+          ],
+        },
+        { tier: 'gold' },
+        'unsupported_definition',
       ],
       [
         'an invalid date in the context',
@@ -1163,7 +1191,26 @@ describe('evaluateFlags', () => {
       expect(flags.unresolvedFlags).toEqual({ checkout: 'missing_context' })
     })
 
-    it('reports the first inconclusive cause across conditions', async () => {
+    const country = { key: 'country', type: 'person', value: 'US', operator: 'exact' }
+    it.each([
+      ['a missing property first', [{ key: 'plan', type: 'person', value: 'pro', operator: 'exact' }, country]],
+      ['a static cohort first', [{ key: 'id', type: 'cohort', value: 999 }, country]],
+      ['a static cohort last', [country, { key: 'id', type: 'cohort', value: 999 }]],
+    ])('resolves a condition as no match when another filter rules it out, with %s', async (_, properties) => {
+      await setupWithDefinitions([
+        alwaysOn('checkout', { filters: { groups: [{ properties, rollout_percentage: 100 }] } }),
+      ])
+
+      const flags = await posthog.evaluateFlags('user-123', {
+        onlyEvaluateLocally: true,
+        personProperties: { country: 'CA' },
+      })
+
+      expect(flags.getFlag('checkout')).toBe(false)
+      expect(flags.unresolvedFlags).toEqual({})
+    })
+
+    it('reports the highest-precedence reason across conditions', async () => {
       await setupWithDefinitions([
         alwaysOn('checkout', {
           filters: {
@@ -1180,7 +1227,7 @@ describe('evaluateFlags', () => {
 
       const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
 
-      expect(flags.unresolvedFlags).toEqual({ checkout: 'missing_context' })
+      expect(flags.unresolvedFlags).toEqual({ checkout: 'unsupported_definition' })
     })
   })
 

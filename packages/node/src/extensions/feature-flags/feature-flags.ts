@@ -66,13 +66,32 @@ function setCustomErrorPrototype(error: Error, constructor: new (message: string
 }
 
 class RequiresServerEvaluation extends Error {
-  readonly reason: UnresolvedFlagReason
+  // Server-side data such as a static cohort is never available locally.
+  readonly reason: UnresolvedFlagReason = 'unsupported_definition'
 
-  constructor(message: string, reason: UnresolvedFlagReason = 'unsupported_definition') {
+  constructor(message: string) {
     super(message)
-    this.reason = reason
     setCustomErrorPrototype(this, RequiresServerEvaluation)
   }
+}
+
+// When several causes apply to one flag, the spec reports the first reason in this order, so
+// every SDK picks the same reason whatever order it inspects the filters in.
+const UNRESOLVED_REASON_PRECEDENCE: readonly UnresolvedFlagReason[] = [
+  'experience_continuity',
+  'unsupported_definition',
+  'unresolved_dependency',
+  'missing_context',
+]
+
+function pickUnresolvedReason(
+  current: UnresolvedFlagReason | undefined,
+  next: UnresolvedFlagReason
+): UnresolvedFlagReason {
+  if (current === undefined) {
+    return next
+  }
+  return UNRESOLVED_REASON_PRECEDENCE.indexOf(next) < UNRESOLVED_REASON_PRECEDENCE.indexOf(current) ? next : current
 }
 
 type FeatureFlagsPollerOptions = {
@@ -600,7 +619,7 @@ class FeatureFlagsPoller {
               continue
             }
             if (!(groupName in groupProperties)) {
-              inconclusiveReason ??= 'missing_context'
+              inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
               continue
             }
             effectiveProperties = groupProperties[groupName]
@@ -635,13 +654,12 @@ class FeatureFlagsPoller {
         }
       } catch (e) {
         if (e instanceof RequiresServerEvaluation) {
-          // Static cohort or other missing server-side data - must fallback to API.
-          // An earlier inconclusive condition is still the first cause found.
-          throw inconclusiveReason ? new RequiresServerEvaluation(e.message, inconclusiveReason) : e
+          // Static cohort or other missing server-side data - must fallback to API
+          throw e
         } else if (e instanceof InconclusiveMatchError) {
           // Evaluation error (bad regex, invalid date, missing property, etc.)
           // Track that we had an inconclusive match, but try other conditions
-          inconclusiveReason ??= e.reason
+          inconclusiveReason = pickUnresolvedReason(inconclusiveReason, e.reason)
         } else {
           throw e
         }
@@ -676,33 +694,60 @@ class FeatureFlagsPoller {
       this.logMsgIfDebug(() => console.warn(msg))
     }
     if ((condition.properties || []).length > 0) {
+      // Filters in a condition have no defined order, so an inconclusive filter does not stop
+      // the loop: a later filter can still rule the condition out or carry a higher-precedence reason.
+      let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
+      let serverEvaluationError: RequiresServerEvaluation | undefined = undefined
       for (const prop of condition.properties) {
         const propertyType = prop.type
         let matches = false
 
-        if (propertyType === 'cohort') {
-          const inCohort = await matchCohort(
-            prop,
-            properties,
-            definitions.cohorts,
-            this.debugMode,
-            (depProp) => this.evaluateFlagDependency(depProp, properties, evaluationContext),
-            definitions.propertyMatchingVersion
-          )
-          // A flag-level cohort condition carries a membership operator ('in' | 'not_in').
-          // `matchCohort` only reports raw membership, so the operator must be applied here.
-          // Without this, 'not_in' is silently treated as 'in', inverting any cohort-exclusion
-          // condition (e.g. "enabled for everyone NOT in cohort X").
-          matches = prop.operator === 'not_in' ? !inCohort : inCohort
-        } else if (propertyType === 'flag') {
-          matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
-        } else {
-          matches = matchProperty(prop, properties, warnFunction, definitions.propertyMatchingVersion)
+        try {
+          if (propertyType === 'cohort') {
+            const inCohort = await matchCohort(
+              prop,
+              properties,
+              definitions.cohorts,
+              this.debugMode,
+              (depProp) => this.evaluateFlagDependency(depProp, properties, evaluationContext),
+              definitions.propertyMatchingVersion
+            )
+            // A flag-level cohort condition carries a membership operator ('in' | 'not_in').
+            // `matchCohort` only reports raw membership, so the operator must be applied here.
+            // Without this, 'not_in' is silently treated as 'in', inverting any cohort-exclusion
+            // condition (e.g. "enabled for everyone NOT in cohort X").
+            matches = prop.operator === 'not_in' ? !inCohort : inCohort
+          } else if (propertyType === 'flag') {
+            matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
+          } else {
+            matches = matchProperty(prop, properties, warnFunction, definitions.propertyMatchingVersion)
+          }
+        } catch (e) {
+          if (e instanceof RequiresServerEvaluation) {
+            serverEvaluationError ??= e
+            continue
+          }
+          if (e instanceof InconclusiveMatchError) {
+            inconclusiveReason = pickUnresolvedReason(inconclusiveReason, e.reason)
+            continue
+          }
+          throw e
         }
 
         if (!matches) {
           return 'no_match'
         }
+      }
+
+      // Server-side data outranks every other reason a filter can carry.
+      if (serverEvaluationError) {
+        throw serverEvaluationError
+      }
+      if (inconclusiveReason) {
+        throw new InconclusiveMatchError(
+          `Can't determine if a condition of flag ${flag.key} matches`,
+          inconclusiveReason
+        )
       }
 
       if (rolloutPercentage == undefined) {
@@ -788,39 +833,109 @@ class FeatureFlagsPoller {
   }
 
   /**
-   * Warn about flags that local evaluation can never resolve.
+   * Warn about flags whose definition local evaluation cannot resolve.
    * Called after loading flag definitions when local evaluation is enabled. Each flag is
    * warned about once until its definition changes.
    */
-  private warnAboutExperienceContinuityFlags(flags: PostHogFeatureFlag[]): void {
-    const experienceContinuityFlags = flags.filter((f) => {
-      if (!f.active || !f.ensure_experience_continuity) {
-        return false
+  private warnAboutUnresolvableFlags(flags: PostHogFeatureFlag[]): void {
+    const experienceContinuityFlags: string[] = []
+    const unsupportedDefinitionFlags: string[] = []
+    for (const flag of flags) {
+      const reason = this.getDefinitionUnresolvedReason(flag)
+      if (!reason) {
+        continue
       }
-      const fingerprint = JSON.stringify(f)
-      if (this.warnedUnresolvableFlags.get(f.key) === fingerprint) {
-        return false
+      const fingerprint = JSON.stringify(flag)
+      if (this.warnedUnresolvableFlags.get(flag.key) === fingerprint) {
+        continue
       }
-      this.warnedUnresolvableFlags.set(f.key, fingerprint)
-      return true
-    })
-    if (experienceContinuityFlags.length === 0) {
-      return
+      this.warnedUnresolvableFlags.set(flag.key, fingerprint)
+      if (reason === 'experience_continuity') {
+        experienceContinuityFlags.push(flag.key)
+      } else {
+        unsupportedDefinitionFlags.push(flag.key)
+      }
     }
 
-    const consequence = this.strictLocalEvaluation
-      ? `With strictLocalEvaluation enabled these flags are left unresolved. ` +
-        `To evaluate them locally, disable experience continuity on these flags in PostHog.`
-      : `Experience continuity is incompatible with local evaluation and will cause a server request on every ` +
-        `flag evaluation, negating local evaluation cost savings. ` +
-        `To avoid server requests and unexpected costs, either disable experience continuity on these flags ` +
-        `in PostHog, use strictLocalEvaluation: true in client init, or pass onlyEvaluateLocally: true ` +
-        `per flag call (flags that cannot be evaluated locally will return undefined).`
-    console.warn(
-      `[PostHog] You are using local evaluation but ${experienceContinuityFlags.length} flag(s) have experience ` +
-        `continuity enabled and cannot be resolved locally (reason: experience_continuity): ` +
-        `${experienceContinuityFlags.map((f) => f.key).join(', ')}. ` +
-        consequence
+    if (experienceContinuityFlags.length > 0) {
+      const consequence = this.strictLocalEvaluation
+        ? `With strictLocalEvaluation enabled these flags are left unresolved. ` +
+          `To evaluate them locally, disable experience continuity on these flags in PostHog.`
+        : `Experience continuity is incompatible with local evaluation and will cause a server request on every ` +
+          `flag evaluation, negating local evaluation cost savings. ` +
+          `To avoid server requests and unexpected costs, either disable experience continuity on these flags ` +
+          `in PostHog, use strictLocalEvaluation: true in client init, or pass onlyEvaluateLocally: true ` +
+          `per flag call (flags that cannot be evaluated locally will return undefined).`
+      console.warn(
+        `[PostHog] You are using local evaluation but ${experienceContinuityFlags.length} flag(s) have experience ` +
+          `continuity enabled and cannot be resolved locally (reason: experience_continuity): ` +
+          `${experienceContinuityFlags.join(', ')}. ` +
+          consequence
+      )
+    }
+
+    if (unsupportedDefinitionFlags.length > 0) {
+      const consequence = this.strictLocalEvaluation
+        ? `With strictLocalEvaluation enabled these flags are left unresolved when evaluation reaches that part.`
+        : `Evaluating these flags falls back to a server request when evaluation reaches that part.`
+      console.warn(
+        `[PostHog] You are using local evaluation but ${unsupportedDefinitionFlags.length} flag(s) use something ` +
+          `local evaluation does not support, such as a static cohort or a missing or circular flag dependency ` +
+          `(reason: unsupported_definition): ${unsupportedDefinitionFlags.join(', ')}. ` +
+          `${consequence} To evaluate them locally, change these flags in PostHog or upgrade posthog-node.`
+      )
+    }
+  }
+
+  /**
+   * The unresolved reason that comes from the flag's definition alone, so it is known when
+   * definitions load. Matches the reason local evaluation reports for the same cause.
+   */
+  private getDefinitionUnresolvedReason(flag: PostHogFeatureFlag): UnresolvedFlagReason | undefined {
+    if (!flag.active) {
+      return undefined
+    }
+    if (flag.ensure_experience_continuity) {
+      return 'experience_continuity'
+    }
+    const flagFilters = flag.filters || {}
+    const aggregation = flagFilters.aggregation_group_type_index
+    if (aggregation != undefined && !this.groupTypeMapping[String(aggregation)]) {
+      return 'unsupported_definition'
+    }
+    const usesUnsupportedProperty = (flagFilters.groups || []).some((condition) =>
+      (condition.properties || []).some((property) => this.isUnsupportedProperty(property, new Set()))
+    )
+    return usesUnsupportedProperty ? 'unsupported_definition' : undefined
+  }
+
+  private isUnsupportedProperty(property: FlagProperty, visitedCohortIds: Set<string>): boolean {
+    if (property.type === 'flag') {
+      const dependencyChain = property.dependency_chain
+      if (!Array.isArray(dependencyChain) || dependencyChain.length === 0) {
+        return true
+      }
+      return dependencyChain.some((key) => !this.featureFlagsByKey[key] && !this.filteredOutFlagKeys.has(key))
+    }
+    if (property.type !== 'cohort') {
+      return false
+    }
+    const cohortId = String(property.value)
+    if (!(cohortId in this.cohorts)) {
+      return true
+    }
+    if (visitedCohortIds.has(cohortId)) {
+      return false
+    }
+    visitedCohortIds.add(cohortId)
+    return this.isUnsupportedPropertyGroup(this.cohorts[cohortId], visitedCohortIds)
+  }
+
+  private isUnsupportedPropertyGroup(group: PropertyGroup | undefined, visitedCohortIds: Set<string>): boolean {
+    return (group?.values ?? []).some((value: PropertyGroup | FlagProperty) =>
+      'values' in value
+        ? this.isUnsupportedPropertyGroup(value, visitedCohortIds)
+        : this.isUnsupportedProperty(value, visitedCohortIds)
     )
   }
 
@@ -841,7 +956,7 @@ class FeatureFlagsPoller {
         this.onLoad?.(this.featureFlags.length)
         // Warn only about flags this instance actually evaluates locally; context-filtered flags
         // are absent from the kept set and never take the server-fallback path.
-        this.warnAboutExperienceContinuityFlags(this.featureFlags)
+        this.warnAboutUnresolvableFlags(this.featureFlags)
         return true
       }
       return false
@@ -1081,7 +1196,7 @@ class FeatureFlagsPoller {
 
           this.onLoad?.(this.featureFlags.length)
           // Warn only about the kept (context-filtered) flags, not the full payload.
-          this.warnAboutExperienceContinuityFlags(this.featureFlags)
+          this.warnAboutUnresolvableFlags(this.featureFlags)
           break
         }
 
@@ -1290,12 +1405,12 @@ async function matchPropertyGroup(
       } catch (err) {
         if (err instanceof RequiresServerEvaluation) {
           // Immediately propagate - this condition requires server-side data
-          throw errorMatchingLocally ? new RequiresServerEvaluation(err.message, errorMatchingLocally) : err
+          throw err
         } else if (err instanceof InconclusiveMatchError) {
           if (debugMode) {
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
-          errorMatchingLocally ??= err.reason
+          errorMatchingLocally = pickUnresolvedReason(errorMatchingLocally, err.reason)
         } else {
           throw err
         }
@@ -1353,12 +1468,12 @@ async function matchPropertyGroup(
       } catch (err) {
         if (err instanceof RequiresServerEvaluation) {
           // Immediately propagate - this condition requires server-side data
-          throw errorMatchingLocally ? new RequiresServerEvaluation(err.message, errorMatchingLocally) : err
+          throw err
         } else if (err instanceof InconclusiveMatchError) {
           if (debugMode) {
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
-          errorMatchingLocally ??= err.reason
+          errorMatchingLocally = pickUnresolvedReason(errorMatchingLocally, err.reason)
         } else {
           throw err
         }
