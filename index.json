@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/5345": {
+    "key": "PostHog/posthog-js/issue/5345",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5345",
+    "url": "https://github.com/PostHog/posthog-js/issues/5345",
+    "conclusion": "Confirmed browser-surveys validation bug: rating prefill accepts 0 for 1-based scales, allowing an impossible response to be persisted and potentially submitted.",
+    "labels": [
+      "feature/surveys",
+      "web",
+      "team/client-libraries",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-20T21:34:31.431Z"
+  },
   "PostHog/posthog-js/issue/5340": {
     "key": "PostHog/posthog-js/issue/5340",
     "repo": "PostHog/posthog-js",
@@ -2926,18 +2941,5 @@
     "prUrl": "https://github.com/PostHog/posthog-js/pull/4006",
     "closed": false,
     "updatedAt": "2026-06-29T10:08:46.834Z"
-  },
-  "PostHog/posthog-js/issue/3583": {
-    "key": "PostHog/posthog-js/issue/3583",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3583",
-    "url": "https://github.com/PostHog/posthog-js/issues/3583",
-    "conclusion": "Valid bug: OpenAI Responses API streaming helper is not wrapped for PostHog params.",
-    "labels": [
-      "bug",
-      "team/llm-analytics"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-29T10:04:38.826Z"
   }
 }
