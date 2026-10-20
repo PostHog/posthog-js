@@ -1951,6 +1951,11 @@ export class PostHog extends PostHogCore {
   async stopSessionRecording(): Promise<void> {
     this._cancelManualRecordingStart()
     this._sessionReplayStartedByApp = false
+    // Holds over an opt-in still in flight. A stop made while opted out is ignored on opt-in, as in
+    // the native SDKs.
+    if (!this.optedOut) {
+      this._restartSessionReplayOnOptIn = false
+    }
     // Let an in-flight native start settle before stopping its recorder.
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
       .catch(() => {})
