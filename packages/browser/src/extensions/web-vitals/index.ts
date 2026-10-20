@@ -2,7 +2,7 @@ import { PostHog } from '../../posthog-core'
 import { PostHogConfig, RemoteConfigResult, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
-import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
+import { DOM_EVENT_VISIBILITYCHANGE, WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { window, location } from '@posthog/browser-common/utils/globals'
 import {
     assignableWindow,
@@ -10,6 +10,7 @@ import {
     WebVitalsCallbackFlavor,
     WebVitalsReportOpts,
 } from '../../utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 
@@ -430,12 +431,12 @@ export class WebVitalsAutocapture {
         // Register after the web-vitals observers so their hidden-page callbacks
         // can place final LCP, CLS and INP reports into the buffer before it drains.
         const pageDocument = window?.document
-        pageDocument?.addEventListener('visibilitychange', () => {
-            if (pageDocument.visibilityState === 'hidden') {
+        addEventListener(pageDocument, DOM_EVENT_VISIBILITYCHANGE, () => {
+            if (pageDocument?.visibilityState === 'hidden') {
                 this._flushToCapture(true)
             }
         })
-        window?.addEventListener('pagehide', () => this._flushToCapture(true))
+        addEventListener(window, 'pagehide', () => this._flushToCapture(true))
 
         this._initialized = true
     }
