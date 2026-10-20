@@ -36,11 +36,11 @@ export function isTurbopackEnabled(): boolean {
   // override the Next 16 default, otherwise webpack skips chunk-ID injection.
   if (process.argv.includes('--webpack')) return false
   // Next sets TURBOPACK=1 for explicit selection, or "auto" for its default.
-  return (
-    process.env.TURBOPACK === '1' ||
-    process.env.TURBOPACK === 'auto' ||
-    (isTurbopackDefault() && process.env.WEBPACK !== '1')
-  )
+  if (process.env.TURBOPACK === '1' || process.env.TURBOPACK === 'auto') return true
+  // Forked dev/build workers lose CLI arguments, but Next forwards TURBOPACK when selected.
+  // A marked child without it is running webpack, regardless of the Next version default.
+  if (process.env.NEXT_PRIVATE_WORKER === '1' || process.env.NEXT_PRIVATE_BUILD_WORKER === '1') return false
+  return isTurbopackDefault() && process.env.WEBPACK !== '1'
 }
 
 function isTurbopackDefault(): boolean {

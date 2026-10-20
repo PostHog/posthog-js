@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 const packageDir = fileURLToPath(new URL('..', import.meta.url))
 
 for (const format of ['cjs', 'esm']) {
-  test(`${format}: resolves the package-local CLI for webpack selected by environment or CLI flag`, (t) => {
+  test(`${format}: resolves the package-local CLI for webpack in parents and Next workers`, (t) => {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'posthog-next-cli-')))
     t.after(() => rmSync(root, { recursive: true, force: true }))
     const installedPackage = path.join(root, 'node_modules/@posthog/nextjs-config')
@@ -52,23 +52,25 @@ for (const format of ['cjs', 'esm']) {
         console.log(webpack.plugins.at(-1).resolvedConfig.cliBinaryPath)
       })().catch(error => { console.error(error); process.exitCode = 1 })`
     )
-    const run = (cliBinaryPath, webpackFlag) =>
-      execFileSync(process.execPath, [runner, ...(webpackFlag ? ['build', '--webpack'] : [])], {
+    const run = (cliBinaryPath, selection) =>
+      execFileSync(process.execPath, [runner, ...(selection === 'flag' ? ['build', '--webpack'] : [])], {
         cwd: root,
         encoding: 'utf8',
         env: {
           ...process.env,
-          WEBPACK: webpackFlag ? undefined : '1',
+          WEBPACK: selection === 'environment' ? '1' : undefined,
           TURBOPACK: undefined,
+          NEXT_PRIVATE_WORKER: selection === 'dev-worker' ? '1' : undefined,
+          NEXT_PRIVATE_BUILD_WORKER: selection === 'build-worker' ? '1' : undefined,
           POSTHOG_RELEASE_ID: 'fixture-release',
           FIXTURE_CLI_BINARY: cliBinaryPath,
           PATH: workspaceBin,
         },
       }).trim()
 
-    for (const webpackFlag of [false, true]) {
-      assert.equal(run(undefined, webpackFlag), ownCliPath)
-      assert.equal(run('custom-posthog-cli', webpackFlag), 'custom-posthog-cli')
+    for (const selection of ['environment', 'flag', 'dev-worker', 'build-worker']) {
+      assert.equal(run(undefined, selection), ownCliPath)
+      assert.equal(run('custom-posthog-cli', selection), 'custom-posthog-cli')
     }
   })
 }

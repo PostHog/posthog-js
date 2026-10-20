@@ -24,7 +24,18 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
   })
   const sourceMapEnabled = resolvedConfig.sourcemaps.enabled
   const isCompilerHookSupported = utils.hasCompilerHook()
+  // Select the integration once per wrapper. Hook builders must not independently redetect
+  // the bundler from ambient state (which differs between Next's parent and worker processes).
   const turbopackEnabled = utils.isTurbopackEnabled()
+  const nativeDebugIdsEnabled =
+    turbopackEnabled &&
+    sourceMapEnabled &&
+    resolvedConfig.sourcemaps.releaseMode === 'event' &&
+    utils.supportsTurbopackDebugIds()
+  const buildTimeReleaseEnabled =
+    sourceMapEnabled &&
+    resolvedConfig.sourcemaps.releaseMode === 'event' &&
+    (!turbopackEnabled || nativeDebugIdsEnabled)
   if (turbopackEnabled && !isCompilerHookSupported) {
     console.warn('[@posthog/nextjs-config] Turbopack support is only available with next version >= 15.4.1')
   }
@@ -56,14 +67,6 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
       distDir,
       ...userConfig
     } = await resolveUserConfig(userNextConfig, phase, defaultConfig)
-    const nativeDebugIdsEnabled =
-      turbopackEnabled &&
-      sourceMapEnabled &&
-      resolvedConfig.sourcemaps.releaseMode === 'event' &&
-      utils.supportsTurbopackDebugIds()
-    const buildTimeReleaseEnabled =
-      nativeDebugIdsEnabled ||
-      (!turbopackEnabled && sourceMapEnabled && resolvedConfig.sourcemaps.releaseMode === 'event')
     let releaseId =
       normalizeReleaseId(userEnv?.POSTHOG_RELEASE_ID) ?? normalizeReleaseId(process.env.POSTHOG_RELEASE_ID)
     if (!releaseId && buildTimeReleaseEnabled && phase === 'phase-production-build') {
@@ -80,8 +83,14 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
       ...(userTurbopackConfig ? { turbopack: userTurbopackConfig } : {}),
       ...(userEnv ? { env: userEnv } : {}),
       distDir,
-      webpack: withWebpackConfig(userWebPackConfig, resolvedConfig, buildTimeReleaseEnabled, releaseId),
-      compiler: withCompilerConfig(userCompilerConfig, resolvedConfig, nativeDebugIdsEnabled),
+      webpack:
+        sourceMapEnabled && !turbopackEnabled
+          ? withWebpackConfig(userWebPackConfig, resolvedConfig, buildTimeReleaseEnabled, releaseId)
+          : userWebPackConfig,
+      compiler:
+        sourceMapEnabled && turbopackEnabled && isCompilerHookSupported
+          ? withCompilerConfig(userCompilerConfig, resolvedConfig, nativeDebugIdsEnabled)
+          : userCompilerConfig,
     }
     if (nativeDebugIdsEnabled) {
       const turbopackConfig: TurbopackConfigWithDebugIds = { ...userTurbopackConfig, debugIds: true }
@@ -155,25 +164,19 @@ function withWebpackConfig(
   releaseId: string | undefined
 ) {
   const defaultWebpackConfig = userWebpackConfig || ((config: any) => config)
-  const sourceMapEnabled = posthogConfig.sourcemaps.enabled
-  const turbopackEnabled = utils.isTurbopackEnabled()
   return (config: any, options: any) => {
     const webpackConfig = defaultWebpackConfig(config, options)
-    if (sourceMapEnabled) {
-      if (!turbopackEnabled) {
-        webpackConfig.plugins = webpackConfig.plugins || []
-        // Externalized server SDKs are not rewritten by Next's DefinePlugin. Keep the runtime
-        // global on server bundles, using the same release as the client without resolving again.
-        // Only server assets get this injection; immutable browser assets must not change after hashing.
-        const serverReleaseId = buildTimeReleaseEnabled && options.isServer ? releaseId : undefined
-        webpackConfig.plugins.push(
-          new PosthogWebpackPlugin(posthogConfig, true, {
-            injectReleaseId: !buildTimeReleaseEnabled || !!serverReleaseId,
-            ...(serverReleaseId ? { releaseId: serverReleaseId } : {}),
-          })
-        )
-      }
-    }
+    webpackConfig.plugins = webpackConfig.plugins || []
+    // Externalized server SDKs are not rewritten by Next's DefinePlugin. Keep the runtime
+    // global on server bundles, using the same release as the client without resolving again.
+    // Only server assets get this injection; immutable browser assets must not change after hashing.
+    const serverReleaseId = buildTimeReleaseEnabled && options.isServer ? releaseId : undefined
+    webpackConfig.plugins.push(
+      new PosthogWebpackPlugin(posthogConfig, true, {
+        injectReleaseId: !buildTimeReleaseEnabled || !!serverReleaseId,
+        ...(serverReleaseId ? { releaseId: serverReleaseId } : {}),
+      })
+    )
     return webpackConfig
   }
 }
@@ -183,12 +186,10 @@ function withCompilerConfig(
   posthogConfig: ResolvedPluginConfig,
   nativeDebugIdsEnabled: boolean
 ): NextConfig['compiler'] {
-  const sourceMapEnabled = posthogConfig.sourcemaps.enabled
-  const turbopackEnabled = utils.isTurbopackEnabled()
-  if (sourceMapEnabled && turbopackEnabled && utils.hasCompilerHook()) {
-    const newConfig = userCompilerConfig || {}
-    const userCompilerHook = userCompilerConfig?.runAfterProductionCompile
-    newConfig.runAfterProductionCompile = async (config: { distDir: string; projectDir: string }) => {
+  const userCompilerHook = userCompilerConfig?.runAfterProductionCompile
+  return {
+    ...userCompilerConfig,
+    runAfterProductionCompile: async (config: { distDir: string; projectDir: string }) => {
       await userCompilerHook?.(config)
       console.debug('Processing source maps from compilation hook...')
       await utils.processSourceMaps(posthogConfig, config.distDir, nativeDebugIdsEnabled ? 'upload' : 'process')
@@ -199,8 +200,6 @@ function withCompilerConfig(
           await stripDanglingSourceMapComments(config.distDir)
         }
       }
-    }
-    return newConfig
+    },
   }
-  return userCompilerConfig
 }

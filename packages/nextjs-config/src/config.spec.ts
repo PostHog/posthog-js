@@ -30,13 +30,17 @@ const pluginConfig: PluginConfig = {
   },
 }
 
-async function resolveNextConfig(userConfig: NextConfig, posthogConfig = pluginConfig): Promise<NextConfig> {
+async function resolveNextConfig(
+  userConfig: NextConfig,
+  posthogConfig = pluginConfig,
+  phase = 'phase-production-build'
+): Promise<NextConfig> {
   const configFunction = withPostHogConfig(userConfig, posthogConfig) as unknown as (
     phase: string,
     context: { defaultConfig: NextConfig }
   ) => Promise<NextConfig>
 
-  return configFunction('phase-production-build', { defaultConfig: {} })
+  return configFunction(phase, { defaultConfig: {} })
 }
 
 function getPostHogPlugin(config: NextConfig, isServer: boolean): PosthogWebpackPlugin {
@@ -51,6 +55,8 @@ describe('withPostHogConfig webpack sourcemaps', () => {
     vi.stubEnv('WEBPACK', '1')
     vi.stubEnv('TURBOPACK', '')
     vi.stubEnv('POSTHOG_RELEASE_ID', '')
+    vi.stubEnv('NEXT_PRIVATE_WORKER', undefined)
+    vi.stubEnv('NEXT_PRIVATE_BUILD_WORKER', undefined)
     vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue('webpack-release')
   })
 
@@ -85,6 +91,45 @@ describe('withPostHogConfig webpack sourcemaps', () => {
       injectReleaseId: true,
       releaseId: 'webpack-release',
     })
+  })
+
+  it.each([
+    ['NEXT_PRIVATE_WORKER', 'phase-development-server'],
+    ['NEXT_PRIVATE_BUILD_WORKER', 'phase-production-build'],
+  ])('installs webpack instrumentation in %s without inherited CLI flags', async (marker, phase) => {
+    process.argv = ['node', 'next-worker.js']
+    vi.stubEnv('WEBPACK', undefined)
+    vi.stubEnv('TURBOPACK', undefined)
+    vi.stubEnv(marker, '1')
+    const userHook = vi.fn()
+    const config = await resolveNextConfig({ compiler: { runAfterProductionCompile: userHook } }, pluginConfig, phase)
+
+    expect(config.turbopack).toBeUndefined()
+    expect(config.compiler?.runAfterProductionCompile).toBe(userHook)
+    getPostHogPlugin(config, false)
+    getPostHogPlugin(config, true)
+    expect(PosthogWebpackPlugin).toHaveBeenCalledTimes(2)
+    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(1, expect.anything(), true, { injectReleaseId: false })
+    if (phase === 'phase-production-build') {
+      expect(config.env).toEqual({ POSTHOG_RELEASE_ID: 'webpack-release' })
+      expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(2, expect.anything(), true, {
+        injectReleaseId: true,
+        releaseId: 'webpack-release',
+      })
+      expect(utils.resolveReleaseId).toHaveBeenCalledTimes(1)
+    } else {
+      expect(config.env).toBeUndefined()
+      expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(2, expect.anything(), true, { injectReleaseId: false })
+      expect(utils.resolveReleaseId).not.toHaveBeenCalled()
+    }
+  })
+
+  it('selects the integration once rather than redetecting it in each hook builder', async () => {
+    const detectBundler = vi.spyOn(utils, 'isTurbopackEnabled')
+    const config = await resolveNextConfig({})
+    getPostHogPlugin(config, false)
+    getPostHogPlugin(config, true)
+    expect(detectBundler).toHaveBeenCalledTimes(1)
   })
 
   it('resolves one release for compiled client code and externalized server SDKs', async () => {
@@ -144,8 +189,15 @@ describe('withPostHogConfig webpack sourcemaps', () => {
   })
 
   it('does not resolve a release or add a plugin when source maps are disabled', async () => {
-    const config = await resolveNextConfig({}, { ...pluginConfig, sourcemaps: { enabled: false } })
+    const userWebpack = vi.fn((config) => config)
+    const userCompiler = { runAfterProductionCompile: vi.fn() }
+    const config = await resolveNextConfig(
+      { webpack: userWebpack, compiler: userCompiler },
+      { ...pluginConfig, sourcemaps: { enabled: false } }
+    )
 
+    expect(config.webpack).toBe(userWebpack)
+    expect(config.compiler).toBe(userCompiler)
     expect(config.env).toBeUndefined()
     expect(utils.resolveReleaseId).not.toHaveBeenCalled()
     config.webpack?.({ plugins: [] }, {} as any)
@@ -229,6 +281,9 @@ describe('withPostHogConfig Turbopack sourcemap hook', () => {
 
   beforeEach(async () => {
     vi.stubEnv('TURBOPACK', '1')
+    vi.stubEnv('NEXT_PRIVATE_WORKER', undefined)
+    vi.stubEnv('NEXT_PRIVATE_BUILD_WORKER', undefined)
+    vi.stubEnv('POSTHOG_RELEASE_ID', '')
     distDir = await fs.mkdtemp(path.join(os.tmpdir(), 'posthog-next-hook-'))
     await fs.mkdir(path.join(distDir, 'static'))
   })
@@ -281,6 +336,46 @@ describe('withPostHogConfig Turbopack sourcemap hook', () => {
       }
     }
   )
+
+  it.each(['NEXT_PRIVATE_WORKER', 'NEXT_PRIVATE_BUILD_WORKER'])(
+    'retains native Turbopack instrumentation in %s when TURBOPACK is forwarded',
+    async (marker) => {
+      vi.stubEnv(marker, '1')
+      vi.stubEnv('TURBOPACK', 'auto')
+      vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue('turbopack-release')
+      const processMaps = vi.spyOn(utils, 'processSourceMaps').mockResolvedValue(undefined)
+      const userWebpack = vi.fn((config) => config)
+      const config = await resolveNextConfig({ webpack: userWebpack })
+
+      expect(config.webpack).toBe(userWebpack)
+      expect(config.turbopack).toEqual({ debugIds: true })
+      expect(config.env).toEqual({ POSTHOG_RELEASE_ID: 'turbopack-release' })
+      await config.compiler!.runAfterProductionCompile!({ distDir, projectDir: distDir })
+      expect(processMaps).toHaveBeenCalledWith(expect.anything(), distDir, 'upload')
+      expect(PosthogWebpackPlugin).not.toHaveBeenCalled()
+    }
+  )
+
+  it('composes compiler hooks without mutating or repeatedly wrapping the user config', async () => {
+    vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue('turbopack-release')
+    const processMaps = vi.spyOn(utils, 'processSourceMaps').mockResolvedValue(undefined)
+    const userHook = vi.fn()
+    const userCompiler = Object.freeze({ removeConsole: true, runAfterProductionCompile: userHook })
+    const configFunction = withPostHogConfig({ compiler: userCompiler }, pluginConfig) as unknown as (
+      phase: string,
+      context: { defaultConfig: NextConfig }
+    ) => Promise<NextConfig>
+
+    for (let i = 0; i < 2; i++) {
+      const config = await configFunction('phase-production-build', { defaultConfig: {} })
+      expect(config.compiler).not.toBe(userCompiler)
+      expect(config.compiler?.removeConsole).toBe(true)
+      await config.compiler!.runAfterProductionCompile!({ distDir, projectDir: distDir })
+    }
+    expect(userCompiler.runAfterProductionCompile).toBe(userHook)
+    expect(userHook).toHaveBeenCalledTimes(2)
+    expect(processMaps).toHaveBeenCalledTimes(2)
+  })
 
   it('uses its own CLI dependency instead of a workspace binary for release resolution and upload', async () => {
     vi.spyOn(utils, 'supportsTurbopackDebugIds').mockReturnValue(true)

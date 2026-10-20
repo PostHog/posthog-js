@@ -10,6 +10,8 @@ describe('isTurbopackEnabled', () => {
     process.argv = ['node', 'next', 'build']
     vi.stubEnv('TURBOPACK', undefined)
     vi.stubEnv('WEBPACK', undefined)
+    vi.stubEnv('NEXT_PRIVATE_WORKER', undefined)
+    vi.stubEnv('NEXT_PRIVATE_BUILD_WORKER', undefined)
     nextPackage.version = '16.3.8'
   })
 
@@ -49,6 +51,28 @@ describe('isTurbopackEnabled', () => {
   it('recognizes the automatic Turbopack environment marker', () => {
     vi.stubEnv('TURBOPACK', 'auto')
     expect(isTurbopackEnabled()).toBe(true)
+  })
+
+  describe.each(['NEXT_PRIVATE_WORKER', 'NEXT_PRIVATE_BUILD_WORKER'])('%s', (workerMarker) => {
+    beforeEach(() => {
+      // Next's child processes do not inherit the parent's --webpack argument.
+      process.argv = ['node', 'next-worker.js']
+      vi.stubEnv(workerMarker, '1')
+    })
+
+    it('uses webpack when the child has no Turbopack marker', () => {
+      expect(isTurbopackEnabled()).toBe(false)
+    })
+
+    it.each(['1', 'auto'])('preserves TURBOPACK=%s in a child process', (value) => {
+      vi.stubEnv('TURBOPACK', value)
+      expect(isTurbopackEnabled()).toBe(true)
+    })
+
+    it('only recognizes the enabled worker marker', () => {
+      vi.stubEnv(workerMarker, '0')
+      expect(isTurbopackEnabled()).toBe(true)
+    })
   })
 
   it('preserves the existing WEBPACK=1 override', () => {
