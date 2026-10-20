@@ -3,4 +3,4 @@
 '@posthog/browser-common': patch
 ---
 
-Share surveys across browser SDKs; `getSurveys` calls before survey setup now return an immediate unavailable error.
+Share surveys across browser SDKs; calls to `getSurveys` before survey setup now invoke the callback immediately with an unavailable error.

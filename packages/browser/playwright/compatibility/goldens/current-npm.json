@@ -3629,6 +3629,18 @@
                         "callbacks": [
                             {
                                 "callback": "surveys",
+                                "originPhase": "before-init",
+                                "phase": "before-init",
+                                "values": [
+                                    [],
+                                    {
+                                        "error": "SDK is not enabled or survey functionality is not yet loaded",
+                                        "isLoaded": false
+                                    }
+                                ]
+                            },
+                            {
+                                "callback": "surveys",
                                 "originPhase": "loaded",
                                 "phase": "loaded",
                                 "values": [
@@ -3641,18 +3653,6 @@
                                 "phase": "init-return",
                                 "values": [
                                     []
-                                ]
-                            },
-                            {
-                                "callback": "surveys",
-                                "originPhase": "before-init",
-                                "phase": "init-return",
-                                "values": [
-                                    [],
-                                    {
-                                        "error": "Surveys API could not be loaded, status: 0",
-                                        "isLoaded": false
-                                    }
                                 ]
                             },
                             {
@@ -65268,6 +65268,18 @@
                         "callbacks": [
                             {
                                 "callback": "surveys",
+                                "originPhase": "before-init",
+                                "phase": "before-init",
+                                "values": [
+                                    [],
+                                    {
+                                        "error": "SDK is not enabled or survey functionality is not yet loaded",
+                                        "isLoaded": false
+                                    }
+                                ]
+                            },
+                            {
+                                "callback": "surveys",
                                 "originPhase": "loaded",
                                 "phase": "loaded",
                                 "values": [
@@ -65280,18 +65292,6 @@
                                 "phase": "init-return",
                                 "values": [
                                     []
-                                ]
-                            },
-                            {
-                                "callback": "surveys",
-                                "originPhase": "before-init",
-                                "phase": "init-return",
-                                "values": [
-                                    [],
-                                    {
-                                        "error": "Surveys API could not be loaded, status: 0",
-                                        "isLoaded": false
-                                    }
                                 ]
                             },
                             {
@@ -126883,6 +126883,18 @@
                         "callbacks": [
                             {
                                 "callback": "surveys",
+                                "originPhase": "before-init",
+                                "phase": "before-init",
+                                "values": [
+                                    [],
+                                    {
+                                        "error": "SDK is not enabled or survey functionality is not yet loaded",
+                                        "isLoaded": false
+                                    }
+                                ]
+                            },
+                            {
+                                "callback": "surveys",
                                 "originPhase": "loaded",
                                 "phase": "loaded",
                                 "values": [
@@ -126895,18 +126907,6 @@
                                 "phase": "init-return",
                                 "values": [
                                     []
-                                ]
-                            },
-                            {
-                                "callback": "surveys",
-                                "originPhase": "before-init",
-                                "phase": "init-return",
-                                "values": [
-                                    [],
-                                    {
-                                        "error": "Surveys API could not be loaded, status: 0",
-                                        "isLoaded": false
-                                    }
                                 ]
                             },
                             {
