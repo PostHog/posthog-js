@@ -270,7 +270,7 @@ jobs:
         permissions: {}
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
               with:
                   egress-policy: audit
 
@@ -373,7 +373,7 @@ jobs:
               run: test "$(jq -r '.version' packages/browser/package.json)" = "$TARGET_VERSION"
 
             - name: Setup Node.js
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
               with:
                   node-version: 24
                   package-manager-cache: false
@@ -393,7 +393,7 @@ jobs:
               run: pnpm build
 
             - name: Upload dist artifact
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
                   name: s3-recovery-posthog-js-dist
                   path: |
@@ -424,7 +424,7 @@ jobs:
                   persist-credentials: false
 
             - name: Setup Node.js
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
               with:
                   node-version: 24
 
@@ -494,7 +494,7 @@ jobs:
                   echo "  built from:          PostHog/posthog@$(git rev-parse HEAD)"
 
             - name: Upload toolbar artifact
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
                   name: s3-recovery-toolbar-dist-${{ matrix.region.name }}
                   path: |
@@ -525,7 +525,7 @@ jobs:
                 region: ${{ fromJSON(needs.validate.outputs.upload-matrix) }}
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
               with:
                   egress-policy: audit
 
@@ -544,7 +544,7 @@ jobs:
                   fetch-depth: 1
 
             - name: Setup Node.js
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
               with:
                   node-version: 24
                   package-manager-cache: false
@@ -559,13 +559,13 @@ jobs:
               run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
 
             - name: Download dist artifact
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   name: s3-recovery-posthog-js-dist
                   path: packages/browser/dist
 
             - name: Download toolbar artifact
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   name: s3-recovery-toolbar-dist-${{ matrix.region.name }}
                   path: packages/browser/dist
@@ -638,7 +638,7 @@ jobs:
                 region: ${{ fromJSON(needs.validate.outputs.upload-matrix) }}
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
               with:
                   egress-policy: audit
 
@@ -657,7 +657,7 @@ jobs:
                   fetch-depth: 1
 
             - name: Setup Node.js
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
               with:
                   node-version: 24
                   package-manager-cache: false
@@ -672,13 +672,13 @@ jobs:
               run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
 
             - name: Download dist artifact
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   name: s3-recovery-posthog-js-dist
                   path: packages/browser/dist
 
             - name: Download toolbar artifact
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   name: s3-recovery-toolbar-dist-${{ matrix.region.name }}
                   path: packages/browser/dist
