@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.81.4
+
+### Patch Changes
+
+- [#5313](https://github.com/PostHog/posthog-js/pull/5313) [`1fc47eb`](https://github.com/PostHog/posthog-js/commit/1fc47eb16870d1e100beb873b70ff72afb91cecc) Thanks [@nandinitiw](https://github.com/nandinitiw)! - fix(react-native): resolve `posthog.gradle` from the Android project root, so Gradle builds started outside the project no longer fail
+  (2026-10-20)
+
 ## 4.81.3
 
 ### Patch Changes
