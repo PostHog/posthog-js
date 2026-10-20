@@ -506,21 +506,28 @@ class FeatureFlagsPoller {
       )
     }
 
+    // A dependency with no definition outranks one that is only inconclusive, so check the whole
+    // chain before evaluating any of it.
+    const missingDependency = dependencyChain.find(
+      (depFlagKey) =>
+        !(depFlagKey in evaluationCache) &&
+        !evaluationContext.definitions!.featureFlagsByKey[depFlagKey] &&
+        !evaluationContext.definitions!.filteredOutFlagKeys.has(depFlagKey)
+    )
+    if (missingDependency !== undefined) {
+      throw new InconclusiveMatchError(`Missing flag dependency '${missingDependency}' for flag '${targetFlagKey}'`)
+    }
+
     // Evaluate all dependencies in the chain order
     for (const depFlagKey of dependencyChain) {
       if (!(depFlagKey in evaluationCache)) {
         // Need to evaluate this dependency first
         const depFlag = evaluationContext.definitions!.featureFlagsByKey[depFlagKey]
         if (!depFlag) {
-          if (evaluationContext.definitions!.filteredOutFlagKeys.has(depFlagKey)) {
-            // Dependency was dropped by evaluation-context filtering, not genuinely missing. The
-            // remote evaluator pre-seeds context-filtered flags as false so conditions like
-            // `flag_evaluates_to=false` still match; do the same here instead of throwing.
-            evaluationCache[depFlagKey] = false
-          } else {
-            // Missing flag dependency - cannot evaluate locally
-            throw new InconclusiveMatchError(`Missing flag dependency '${depFlagKey}' for flag '${targetFlagKey}'`)
-          }
+          // Dependency was dropped by evaluation-context filtering, not genuinely missing (the check
+          // above already threw for those). The remote evaluator pre-seeds context-filtered flags as
+          // false so conditions like `flag_evaluates_to=false` still match; do the same here.
+          evaluationCache[depFlagKey] = false
         } else if (!depFlag.active) {
           // Inactive flag evaluates to false
           evaluationCache[depFlagKey] = false
@@ -719,12 +726,23 @@ class FeatureFlagsPoller {
             matches = prop.operator === 'not_in' ? !inCohort : inCohort
           } else if (propertyType === 'flag') {
             matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
+          } else if (!Object.prototype.hasOwnProperty.call(properties, prop.key)) {
+            // Same result as matchProperty for an absent key, without the cost of throwing for
+            // every missing filter now that the loop no longer stops at the first one.
+            inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
+            continue
           } else {
             matches = matchProperty(prop, properties, warnFunction, definitions.propertyMatchingVersion)
           }
         } catch (e) {
           if (e instanceof RequiresServerEvaluation) {
-            serverEvaluationError ??= e
+            // Fall back to the server only when this is the first filter that could not be
+            // checked, as when the loop stopped there. After another inconclusive filter, later
+            // conditions must still be able to resolve the flag locally.
+            if (inconclusiveReason === undefined) {
+              serverEvaluationError ??= e
+            }
+            inconclusiveReason = pickUnresolvedReason(inconclusiveReason, e.reason)
             continue
           }
           if (e instanceof InconclusiveMatchError) {
@@ -739,7 +757,8 @@ class FeatureFlagsPoller {
         }
       }
 
-      // Server-side data outranks every other reason a filter can carry.
+      // Rethrow the original error type: matchFeatureFlagProperties stops at it and falls back to
+      // the server instead of trying later conditions.
       if (serverEvaluationError) {
         throw serverEvaluationError
       }
@@ -840,22 +859,26 @@ class FeatureFlagsPoller {
   private warnAboutUnresolvableFlags(flags: PostHogFeatureFlag[]): void {
     const experienceContinuityFlags: string[] = []
     const unsupportedDefinitionFlags: string[] = []
+    // Rebuilt from the current definitions, so a flag that is deleted or becomes resolvable is
+    // forgotten and warns again if it later returns to an unresolvable definition.
+    const warnedFlags = new Map<string, string>()
     for (const flag of flags) {
       const reason = this.getDefinitionUnresolvedReason(flag)
       if (!reason) {
         continue
       }
       const fingerprint = JSON.stringify(flag)
+      warnedFlags.set(flag.key, fingerprint)
       if (this.warnedUnresolvableFlags.get(flag.key) === fingerprint) {
         continue
       }
-      this.warnedUnresolvableFlags.set(flag.key, fingerprint)
       if (reason === 'experience_continuity') {
         experienceContinuityFlags.push(flag.key)
       } else {
         unsupportedDefinitionFlags.push(flag.key)
       }
     }
+    this.warnedUnresolvableFlags = warnedFlags
 
     if (experienceContinuityFlags.length > 0) {
       const consequence = this.strictLocalEvaluation
@@ -1378,7 +1401,7 @@ async function matchPropertyGroup(
     return true
   }
 
-  let errorMatchingLocally: UnresolvedFlagReason | undefined = undefined
+  let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
 
   if ('values' in properties[0]) {
     // a nested property group
@@ -1410,15 +1433,15 @@ async function matchPropertyGroup(
           if (debugMode) {
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
-          errorMatchingLocally = pickUnresolvedReason(errorMatchingLocally, err.reason)
+          inconclusiveReason = pickUnresolvedReason(inconclusiveReason, err.reason)
         } else {
           throw err
         }
       }
     }
 
-    if (errorMatchingLocally) {
-      throw new InconclusiveMatchError("Can't match cohort without a given cohort property value", errorMatchingLocally)
+    if (inconclusiveReason) {
+      throw new InconclusiveMatchError("Can't match cohort without a given cohort property value", inconclusiveReason)
     }
     // if we get here, all matched in AND case, or none matched in OR case
     return propertyGroupType === 'AND'
@@ -1473,15 +1496,15 @@ async function matchPropertyGroup(
           if (debugMode) {
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
-          errorMatchingLocally = pickUnresolvedReason(errorMatchingLocally, err.reason)
+          inconclusiveReason = pickUnresolvedReason(inconclusiveReason, err.reason)
         } else {
           throw err
         }
       }
     }
 
-    if (errorMatchingLocally) {
-      throw new InconclusiveMatchError("can't match cohort without a given cohort property value", errorMatchingLocally)
+    if (inconclusiveReason) {
+      throw new InconclusiveMatchError("can't match cohort without a given cohort property value", inconclusiveReason)
     }
 
     // if we get here, all matched in AND case, or none matched in OR case

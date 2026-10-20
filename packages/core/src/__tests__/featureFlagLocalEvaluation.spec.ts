@@ -256,6 +256,13 @@ describe('feature flag local evaluation primitives', () => {
       ['an invalid semver filter', property('semver_gt', 'x.y'), { key: '1.2.3' }, 'unsupported_definition'],
       ['an invalid wildcard filter', property('semver_wildcard', '1x.*'), { key: '1.8.0' }, 'unsupported_definition'],
       ['an invalid context semver', property('semver_gt', '1.2.3'), { key: 'x.y' }, 'missing_context'],
+      ['an invalid semver filter and context', property('semver_gt', 'x.y'), { key: 'a.b' }, 'unsupported_definition'],
+      [
+        'an invalid wildcard filter and context',
+        property('semver_wildcard', '1x.*'),
+        { key: 'a.b' },
+        'unsupported_definition',
+      ],
       ['an ambiguous context number', property('exact', '323'), { key: 323 }, 'missing_context'],
       ['an ambiguous filter number', property('exact', [323]), { key: 'x' }, 'unsupported_definition'],
       ['a non-JSON context value', property('exact', true), { key: new Date(0) }, 'missing_context'],

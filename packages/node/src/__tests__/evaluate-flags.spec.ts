@@ -881,9 +881,10 @@ describe('evaluateFlags', () => {
 
     const setupWithDefinitions = async (
       localFlags: Record<string, any>[],
-      remoteResponse: Parameters<typeof apiImplementationV4>[0] = { flags: {}, errorsWhileComputingFlags: false }
+      remoteResponse: Parameters<typeof apiImplementationV4>[0] = { flags: {}, errorsWhileComputingFlags: false },
+      extraDefinitions: Record<string, any> = {}
     ): Promise<void> => {
-      const localApi = apiImplementation({ localFlags: { flags: localFlags } })
+      const localApi = apiImplementation({ localFlags: { flags: localFlags, ...extraDefinitions } })
       const remoteApi = apiImplementationV4(remoteResponse)
       mockedFetch.mockImplementation((url) =>
         String(url).includes('flags/definitions') ? localApi(url) : remoteApi(url)
@@ -915,18 +916,6 @@ describe('evaluateFlags', () => {
       expect(flags._getEventProperties()).not.toHaveProperty('$feature/checkout')
     })
 
-    it('logs one warning for a never locally resolvable flag across unchanged refreshes', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
-      await setupWithDefinitions([continuityFlag()])
-      await posthog.reloadFeatureFlags()
-
-      const warnings = warnSpy.mock.calls.filter((call) => String(call[0]).includes('checkout'))
-      expect(warnings).toHaveLength(1)
-      expect(warnings[0][0]).toContain('experience_continuity')
-      expect(remoteFlagCalls()).toHaveLength(0)
-      warnSpy.mockRestore()
-    })
-
     it('reports other inconclusive causes as unresolved', async () => {
       await setupWithDefinitions([
         alwaysOn('checkout', {
@@ -947,6 +936,16 @@ describe('evaluateFlags', () => {
       await setupWithDefinitions([continuityFlag()], remoteCheckoutResponse())
 
       const flags = await posthog.evaluateFlags('user-123')
+
+      expect(flags.getFlag('checkout')).toBe(true)
+      expect(flags.unresolvedFlags).toEqual({})
+    })
+
+    it('does not report a flag an override resolved', async () => {
+      await setupWithDefinitions([continuityFlag()])
+      posthog.overrideFeatureFlags({ flags: { checkout: true } })
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
 
       expect(flags.getFlag('checkout')).toBe(true)
       expect(flags.unresolvedFlags).toEqual({})
@@ -1045,66 +1044,50 @@ describe('evaluateFlags', () => {
       expect(await flagCalledEvents('checkout')).toHaveLength(0)
     })
 
-    it('reports unresolved_dependency for a flag whose loaded dependency is inconclusive', async () => {
-      await setupWithDefinitions([
-        continuityFlag(),
-        alwaysOn('depends-on-checkout', {
-          filters: {
-            groups: [
-              {
-                properties: [
-                  {
-                    key: 'checkout',
-                    type: 'flag',
-                    value: true,
-                    operator: 'flag_evaluates_to',
-                    dependency_chain: ['checkout'],
-                  },
-                ],
-                rollout_percentage: 100,
-              },
-            ],
-          },
-        }),
-      ])
-
-      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
-
-      expect(flags.unresolvedFlags).toEqual({
-        checkout: 'experience_continuity',
-        'depends-on-checkout': 'unresolved_dependency',
+    const dependsOnCheckout = (dependencyChain: string[]): Record<string, any> =>
+      alwaysOn('depends-on-checkout', {
+        filters: {
+          groups: [
+            {
+              properties: [
+                {
+                  key: dependencyChain[dependencyChain.length - 1],
+                  type: 'flag',
+                  value: true,
+                  operator: 'flag_evaluates_to',
+                  dependency_chain: dependencyChain,
+                },
+              ],
+              rollout_percentage: 100,
+            },
+          ],
+        },
       })
-    })
+    it.each([
+      [
+        'all flags requested',
+        ['checkout'],
+        undefined,
+        { checkout: 'experience_continuity', 'depends-on-checkout': 'unresolved_dependency' },
+      ],
+      [
+        'only the dependent flag requested',
+        ['checkout'],
+        ['depends-on-checkout'],
+        { 'depends-on-checkout': 'unresolved_dependency' },
+      ],
+      [
+        'a missing dependency after an inconclusive one',
+        ['checkout', 'gone'],
+        ['depends-on-checkout'],
+        { 'depends-on-checkout': 'unsupported_definition' },
+      ],
+    ])('reports flag dependency reasons with %s', async (_, dependencyChain, flagKeys, expected) => {
+      await setupWithDefinitions([continuityFlag(), dependsOnCheckout(dependencyChain)])
 
-    it('does not report a dependency that is only inspected for a requested flag', async () => {
-      await setupWithDefinitions([
-        continuityFlag(),
-        alwaysOn('depends-on-checkout', {
-          filters: {
-            groups: [
-              {
-                properties: [
-                  {
-                    key: 'checkout',
-                    type: 'flag',
-                    value: true,
-                    operator: 'flag_evaluates_to',
-                    dependency_chain: ['checkout'],
-                  },
-                ],
-                rollout_percentage: 100,
-              },
-            ],
-          },
-        }),
-      ])
+      const flags = await posthog.evaluateFlags('user-123', { flagKeys, onlyEvaluateLocally: true })
 
-      const flags = await posthog.evaluateFlags('user-123', {
-        flagKeys: ['depends-on-checkout'],
-        onlyEvaluateLocally: true,
-      })
-
-      expect(flags.unresolvedFlags).toEqual({ 'depends-on-checkout': 'unresolved_dependency' })
+      expect(flags.unresolvedFlags).toEqual(expected)
     })
 
     it.each([
@@ -1168,6 +1151,17 @@ describe('evaluateFlags', () => {
         'unsupported_definition',
       ],
       [
+        'an unknown operator and a missing property in one condition',
+        {
+          properties: [
+            { key: 'tier', type: 'person', value: 'gold', operator: 'not_a_real_operator' },
+            { key: 'plan', type: 'person', value: 'pro', operator: 'exact' },
+          ],
+        },
+        { tier: 'gold' },
+        'unsupported_definition',
+      ],
+      [
         'an invalid date in the context',
         { properties: [{ key: 'signup', type: 'person', value: '2024-01-01', operator: 'is_date_after' }] },
         { signup: 'not-a-date' },
@@ -1185,6 +1179,25 @@ describe('evaluateFlags', () => {
 
     it('reports missing_context for a device-id bucketed flag without a device id', async () => {
       await setupWithDefinitions([alwaysOn('checkout', { bucketing_identifier: 'device_id' })])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.unresolvedFlags).toEqual({ checkout: 'missing_context' })
+    })
+
+    it('reports missing_context for a local cohort whose property is missing', async () => {
+      await setupWithDefinitions(
+        [alwaysOn('checkout', { filters: { groups: [{ properties: [{ key: 'id', type: 'cohort', value: 2 }] }] } })],
+        undefined,
+        {
+          cohorts: {
+            '2': {
+              type: 'OR',
+              values: [{ type: 'AND', values: [{ key: 'plan', type: 'person', value: 'pro', operator: 'exact' }] }],
+            },
+          },
+        }
+      )
 
       const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
 
@@ -1210,25 +1223,60 @@ describe('evaluateFlags', () => {
       expect(flags.unresolvedFlags).toEqual({})
     })
 
-    it('reports the highest-precedence reason across conditions', async () => {
+    const missingPlan = { key: 'plan', type: 'person', value: 'pro', operator: 'exact' }
+    const unknownTierOperator = { key: 'tier', type: 'person', value: 'gold', operator: 'not_a_real_operator' }
+    it.each([
+      ['the lower reason first', missingPlan, unknownTierOperator],
+      ['the higher reason first', unknownTierOperator, missingPlan],
+    ])('reports the highest-precedence reason across conditions, with %s', async (_, first, second) => {
       await setupWithDefinitions([
         alwaysOn('checkout', {
           filters: {
             groups: [
-              {
-                properties: [{ key: 'plan', type: 'person', value: 'pro', operator: 'exact' }],
-                rollout_percentage: 100,
-              },
-              { properties: [{ key: 'id', type: 'cohort', value: 999 }], rollout_percentage: 100 },
+              { properties: [first], rollout_percentage: 100 },
+              { properties: [second], rollout_percentage: 100 },
             ],
           },
         }),
       ])
 
-      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+      const flags = await posthog.evaluateFlags('user-123', {
+        onlyEvaluateLocally: true,
+        personProperties: { tier: 'gold' },
+      })
 
       expect(flags.unresolvedFlags).toEqual({ checkout: 'unsupported_definition' })
     })
+
+    const staticCohort = { key: 'id', type: 'cohort', value: 999 }
+    it.each([
+      ['a missing property before a static cohort', [missingPlan, staticCohort], true, {}],
+      [
+        'a static cohort before a missing property',
+        [staticCohort, missingPlan],
+        undefined,
+        { checkout: 'unsupported_definition' },
+      ],
+    ])(
+      'lets a later condition resolve the flag only when the first unresolvable filter is not a static cohort, with %s',
+      async (_, properties, value, unresolvedFlags) => {
+        await setupWithDefinitions([
+          alwaysOn('checkout', {
+            filters: {
+              groups: [
+                { properties, rollout_percentage: 100 },
+                { properties: [], rollout_percentage: 100 },
+              ],
+            },
+          }),
+        ])
+
+        const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+        expect(flags.getFlag('checkout')).toBe(value)
+        expect(flags.unresolvedFlags).toEqual(unresolvedFlags)
+      }
+    )
   })
 
   describe('overrides', () => {

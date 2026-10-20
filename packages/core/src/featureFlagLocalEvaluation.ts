@@ -439,6 +439,20 @@ export function matchFeatureFlagProperty(
     throw new Error(`Invalid operator: ${comparisonOperator}`)
   }
 
+  // Lazy, because only the semver operators may parse either side.
+  const parseContextSemver = (): SemverTuple =>
+    readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy))
+  // Parses the filter before the context, so a bad filter reports unsupported_definition even
+  // when the context value is bad too.
+  const compareContextSemverToFilter = (): number => {
+    const filterParsed = parseFeatureFlagSemver(String(value), parsingPolicy)
+    return compareSemverTuples(parseContextSemver(), filterParsed)
+  }
+  const isContextSemverWithin = ({ lower, upper }: { lower: SemverTuple; upper: SemverTuple }): boolean => {
+    const overrideParsed = parseContextSemver()
+    return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
+  }
+
   switch (operator) {
     case 'exact':
       return computeExactMatch(value, overrideValue)
@@ -489,62 +503,23 @@ export function matchFeatureFlagProperty(
       return operator === 'is_date_before' ? overrideDate < parsedDate : overrideDate > parsedDate
     }
     case 'semver_eq':
-      return (
-        compareSemverTuples(
-          readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy)),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) === 0
-      )
+      return compareContextSemverToFilter() === 0
     case 'semver_neq':
-      return (
-        compareSemverTuples(
-          readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy)),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) !== 0
-      )
+      return compareContextSemverToFilter() !== 0
     case 'semver_gt':
-      return (
-        compareSemverTuples(
-          readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy)),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) > 0
-      )
+      return compareContextSemverToFilter() > 0
     case 'semver_gte':
-      return (
-        compareSemverTuples(
-          readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy)),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) >= 0
-      )
+      return compareContextSemverToFilter() >= 0
     case 'semver_lt':
-      return (
-        compareSemverTuples(
-          readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy)),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) < 0
-      )
+      return compareContextSemverToFilter() < 0
     case 'semver_lte':
-      return (
-        compareSemverTuples(
-          readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy)),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) <= 0
-      )
-    case 'semver_tilde': {
-      const overrideParsed = readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy))
-      const { lower, upper } = computeTildeBounds(String(value), parsingPolicy)
-      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
-    }
-    case 'semver_caret': {
-      const overrideParsed = readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy))
-      const { lower, upper } = computeCaretBounds(String(value), parsingPolicy)
-      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
-    }
-    case 'semver_wildcard': {
-      const overrideParsed = readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy))
-      const { lower, upper } = computeWildcardBounds(String(value), parsingPolicy)
-      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
-    }
+      return compareContextSemverToFilter() <= 0
+    case 'semver_tilde':
+      return isContextSemverWithin(computeTildeBounds(String(value), parsingPolicy))
+    case 'semver_caret':
+      return isContextSemverWithin(computeCaretBounds(String(value), parsingPolicy))
+    case 'semver_wildcard':
+      return isContextSemverWithin(computeWildcardBounds(String(value), parsingPolicy))
     default:
       throw new InconclusiveMatchError(`Unknown operator: ${operator}`)
   }

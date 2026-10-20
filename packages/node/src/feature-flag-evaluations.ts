@@ -222,8 +222,8 @@ export class FeatureFlagEvaluations {
   /**
    * Flags that have a loaded local definition but that neither local evaluation nor a remote
    * fallback resolved, mapped to the reason local evaluation was inconclusive. These flags are
-   * absent from `keys` and read as missing. Reading this does not count as an access and does
-   * not fire any event.
+   * absent from `keys`, and their accessors return undefined (`isEnabled` returns false). Reading
+   * this does not count as an access and does not fire any event.
    *
    * Always empty on snapshots returned by `only()` / `onlyAccessed()`.
    */
@@ -262,6 +262,7 @@ export class FeatureFlagEvaluations {
       groups: this._groups,
       disableGeoip: this._disableGeoip,
       flags,
+      // `unresolvedFlags` is left out on purpose: slices carry no unresolved entries.
       requestId: this._requestId,
       evaluatedAt: this._evaluatedAt,
       flagDefinitionsLoadedAt: this._flagDefinitionsLoadedAt,
@@ -319,7 +320,8 @@ export class FeatureFlagEvaluations {
 
     // Build the comma-joined `$feature_flag_error` matching the single-flag path's
     // granularity: response-level errors (errors-while-computing, quota-limited) are
-    // combined with per-flag errors (flag-missing) so consumers can filter by type.
+    // combined with per-flag errors (flag-missing or local-evaluation-inconclusive) so consumers
+    // can filter by type.
     const errors: string[] = []
     if (this._errorsWhileComputing) {
       errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
