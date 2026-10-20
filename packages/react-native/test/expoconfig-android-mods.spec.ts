@@ -109,7 +109,7 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
 
   it('rewrites the resolver of a project prebuilt before it ran from the project root', async () => {
     const legacyLine =
-      'apply from: new File(["node", "--print", "require(\'path\').join(require(\'path\').dirname(require.resolve(\'posthog-react-native\')), \'..\', \'tooling\', \'posthog.gradle\')"].execute().text.trim())'
+      "apply from: new File([\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim())"
     fs.writeFileSync(
       path.join(projectRoot, 'android/app/build.gradle'),
       `apply plugin: "com.android.application"\n\n${legacyLine}\n\nandroid {\n    namespace "com.example"\n}\n`
