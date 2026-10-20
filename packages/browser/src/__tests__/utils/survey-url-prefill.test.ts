@@ -476,6 +476,26 @@ describe('convertPrefillToResponses', () => {
             })
         })
 
+        it('should reject a rating of 0 on a scale that starts at 1', () => {
+            for (const scale of [2, 3, 5, 7] as const) {
+                const survey = { ...baseSurvey, questions: [{ ...ratingQuestion, scale }] }
+                const prefillParams: PrefillParams = { 0: ['0'] }
+
+                const result = convertPrefillToResponses(survey, prefillParams)
+                expect(result).toEqual({})
+            }
+        })
+
+        it('should accept a rating of 0 on the 0-10 scale', () => {
+            const survey = { ...baseSurvey, questions: [ratingQuestion] }
+            const prefillParams: PrefillParams = { 0: ['0'] }
+
+            const result = convertPrefillToResponses(survey, prefillParams)
+            expect(result).toEqual({
+                '$survey_response_question-3': 0,
+            })
+        })
+
         it('should reject rating above custom scale', () => {
             const customRatingQuestion: SurveyQuestion = {
                 ...ratingQuestion,

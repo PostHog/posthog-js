@@ -123,9 +123,13 @@ export function convertPrefillToResponses(survey: Survey, prefillParams: Prefill
                 case SurveyQuestionType.Rating: {
                     const rating = parseInt(values[0], 10)
                     const scale = question.scale || 10
+                    // Only the 0-10 scale starts at 0, the others start at 1 (see RatingQuestion)
+                    const min = scale === 10 ? 0 : 1
 
-                    if (isNaN(rating) || rating < 0 || rating > scale) {
-                        logger.warn(`[Survey Prefill] Invalid rating for q${index}: ${values[0]} (scale: 0-${scale})`)
+                    if (isNaN(rating) || rating < min || rating > scale) {
+                        logger.warn(
+                            `[Survey Prefill] Invalid rating for q${index}: ${values[0]} (scale: ${min}-${scale})`
+                        )
                         return
                     }
                     responses[responseKey] = rating

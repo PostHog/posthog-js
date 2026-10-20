@@ -2295,6 +2295,42 @@ describe('SurveyManager', () => {
             )
         })
 
+        it('should not auto-submit a prefilled rating of 0 on a 1-5 scale', () => {
+            const survey: Survey = {
+                id: 'prefill-survey-five',
+                name: 'Prefill Survey Five',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'How satisfied are you?',
+                        scale: 5,
+                        display: 'emoji',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
+                        skipSubmitButton: true,
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=0'
+            ;(surveyManager as any)._handleUrlPrefill(survey)
+
+            expect(mockPostHog.capture).not.toHaveBeenCalledWith('survey sent', expect.anything())
+        })
+
         it('should include caller-provided properties in the auto-submitted prefill event', () => {
             const survey: Survey = {
                 id: 'prefill-survey-props',
