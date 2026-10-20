@@ -4,17 +4,17 @@
     "repo": "PostHog/posthog-js",
     "item": "issue 5332",
     "url": "https://github.com/PostHog/posthog-js/issues/5332",
-    "conclusion": "Confirmed: the webpack sourcemap instrumentation can mutate immutable Next.js client assets after their chunk-based filenames have been determined, allowing a cached runtime to retain an obsolete chunk map across deployments.",
+    "conclusion": "Confirmed webpack sourcemap instrumentation bug affecting immutable Next.js client assets.",
     "labels": [
+      "bug",
       "frameworks/next-js",
       "feature/error-tracking",
       "web",
       "team/error-tracking",
-      "team/client-libraries",
-      "bug"
+      "team/client-libraries"
     ],
     "closed": false,
-    "updatedAt": "2026-10-20T06:56:21.870Z"
+    "updatedAt": "2026-10-20T09:23:17.977Z"
   },
   "PostHog/posthog-js/issue/5319": {
     "key": "PostHog/posthog-js/issue/5319",
