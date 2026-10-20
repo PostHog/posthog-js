@@ -78,6 +78,27 @@ describe('unload delivery', () => {
         await posthog.dispose()
     })
 
+    it.each(['success', 'rejection', 'throw'] as const)('releases the unload byte budget after %s', async (mode) => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
+        if (mode === 'throw')
+            fetch.mockImplementationOnce(() => {
+                throw new Error('fetch')
+            })
+        else if (mode === 'rejection') fetch.mockRejectedValueOnce(new Error('fetch'))
+        else fetch.mockResolvedValueOnce(new Response(''))
+        fetch.mockImplementation(() => new Promise<Response>(() => {}))
+        const posthog = await clientWithAnalytics(fetch)
+        try {
+            posthog.capture('first', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            posthog.capture('second', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
+            posthog.capture('third', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
+            expect(fetch).toHaveBeenCalledTimes(2)
+        } finally {
+            await posthog.shutdown(0)
+        }
+    })
+
     it('does not dispatch unload captures after opt-out or disposal', async () => {
         const fetch = vi.fn(responseFetch([], () => ({ result: { result: 'ok' } })))
         const posthog = await clientWithAnalytics(fetch)

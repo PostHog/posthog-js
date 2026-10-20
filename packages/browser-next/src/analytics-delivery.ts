@@ -130,6 +130,7 @@ export const createAnalyticsDelivery: AnalyticsDeliveryFactory = (buffer, client
     let compressionEnabled = false
     let online = true
     const immediateControllers = new Set<AbortController>()
+    const teardownBudget = { remaining: CAPTURE_V1_TEARDOWN_BUDGET_BYTES }
     const dispose = (): Promise<void> => {
         const disposal = lane.dispose()
         compressionEnabled = false
@@ -214,6 +215,7 @@ export const createAnalyticsDelivery: AnalyticsDeliveryFactory = (buffer, client
         teardown(events, maxBytes) {
             const result = sendCaptureV1TeardownBatches(context.runtime, [...events], context.libraryVersion, {
                 maxBytes,
+                budget: teardownBudget,
                 canContinue: context.canRetry,
                 onError: context.reportFailure,
             })

@@ -591,6 +591,51 @@ describe('surveys orchestration', () => {
                 expect(callback).toHaveBeenCalledTimes(1)
             })
 
+            it.each([false, true])(
+                'notifies all subscribers after load failure and retry (first throws: %s)',
+                (throws) => {
+                    surveys['_isSurveysEnabled'] = true
+                    extensions!.generateSurveys = undefined
+                    mockLoadExternalDependency.mockImplementation((callback) => callback(new Error('chunk')))
+                    const first = vi.fn((_surveys, context) => {
+                        if (throws && !context.isLoaded) throw new Error('application callback')
+                    })
+                    const callbacks = [first, vi.fn(), vi.fn()]
+                    for (const callback of callbacks) surveys.onSurveysLoaded(callback)
+                    surveys.loadIfEnabled()
+                    for (const callback of callbacks) {
+                        expect(callback).toHaveBeenCalledTimes(1)
+                        expect(callback).toHaveBeenCalledWith([], {
+                            isLoaded: false,
+                            error: 'Could not load surveys script',
+                        })
+                    }
+                    expect(client.sendRequest).not.toHaveBeenCalled()
+
+                    extensions!.generateSurveys = mockGenerateSurveys
+                    mockGenerateSurveys.mockReturnValue({})
+                    vi.mocked(client.kv.get).mockReturnValue([survey])
+                    surveys.loadIfEnabled()
+                    for (const callback of callbacks) {
+                        expect(callback).toHaveBeenCalledTimes(2)
+                        expect(callback).toHaveBeenLastCalledWith([survey], { isLoaded: true })
+                    }
+                }
+            )
+
+            it('stops failure delivery if a subscriber disposes surveys', () => {
+                surveys['_isSurveysEnabled'] = true
+                extensions!.generateSurveys = undefined
+                mockLoadExternalDependency.mockImplementation((callback) => callback(new Error('chunk')))
+                const first = vi.fn(() => surveys.dispose())
+                const second = vi.fn()
+                surveys.onSurveysLoaded(first)
+                surveys.onSurveysLoaded(second)
+                surveys.loadIfEnabled()
+                expect(first).toHaveBeenCalledOnce()
+                expect(second).not.toHaveBeenCalled()
+            })
+
             it('should call onSurveysLoaded callback with surveys even when generateSurveys triggers an async fetch', async () => {
                 // This test reproduces a race condition on first page load:
                 // 1. generateSurveys is called, which starts an async API fetch

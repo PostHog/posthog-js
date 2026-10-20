@@ -513,11 +513,13 @@ export class PostHogSurveys implements Extension {
     /** Helper method to notify all registered callbacks */
     private _notifySurveyCallbacks(context: { isLoaded: boolean; error?: string }): void {
         for (const callback of this._surveyCallbacks) {
+            if (this._disposed) return
             try {
                 if (!context.isLoaded) {
-                    return callback([], context)
+                    callback([], context)
+                } else {
+                    this.getSurveys(callback)
                 }
-                this.getSurveys(callback)
             } catch (error) {
                 logger.error('Error in survey callback', error)
             }
