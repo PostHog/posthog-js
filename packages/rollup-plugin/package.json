@@ -42,7 +42,7 @@
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "rollup": "~4.53.2",
-        "vite": "^8.0.16",
+        "vite": "^7.3.5",
         "@vitest/coverage-v8": "catalog:",
         "vitest": "catalog:",
         "typescript": "catalog:native"
