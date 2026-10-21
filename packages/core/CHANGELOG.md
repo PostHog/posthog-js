@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.59.2
+
+### Patch Changes
+
+- [#5307](https://github.com/PostHog/posthog-js/pull/5307) [`189da75`](https://github.com/PostHog/posthog-js/commit/189da75c7a52b319843a13405c1343565f0d4e25) Thanks [@quotentiroler](https://github.com/quotentiroler)! - Local flag evaluation now matches a null property with string operators like the flags service, so negated operators such as `not_icontains` match instead of failing.
+  (2026-10-21)
+
 ## 1.59.1
 
 ### Patch Changes
