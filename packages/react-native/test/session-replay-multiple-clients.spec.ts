@@ -14,11 +14,19 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
     identify: vi.fn(async () => {}),
     startRecording: vi.fn(async () => {}),
     stopRecording: vi.fn(async () => {}),
+    registerPushNotificationToken: vi.fn(async () => {}),
   },
 }))
 
 const native = OptionalReactNativePlugin as unknown as Record<
-  'setup' | 'startSession' | 'endSession' | 'isEnabled' | 'stopRecording',
+  | 'setup'
+  | 'startSession'
+  | 'endSession'
+  | 'isEnabled'
+  | 'stopRecording'
+  | 'identify'
+  | 'setOptOut'
+  | 'registerPushNotificationToken',
   vi.Mock
 >
 
@@ -95,6 +103,35 @@ describe('PostHog RN native session with multiple clients', () => {
     expect(native.startSession).not.toHaveBeenCalled()
     expect(native.endSession).not.toHaveBeenCalled()
     expect(nativeSessionId).toBe(first.getSessionId())
+  })
+
+  it("keeps another project's identify, push and opt-out calls off the native SDK", async () => {
+    const first = await newClient()
+    await waitForExpect(2000, () => expect(nativeSessionId).toBe(first.getSessionId()))
+    const second = await newClient('other-project-token')
+    native.identify.mockClear()
+    native.setOptOut.mockClear()
+
+    second.identify('second-user')
+    await second.registerPushNotificationToken('second-token')
+    await second.optOut()
+    await wait(50)
+
+    expect(native.identify).not.toHaveBeenCalled()
+    expect(native.registerPushNotificationToken).not.toHaveBeenCalled()
+    expect(native.setOptOut).not.toHaveBeenCalled()
+    expect(native.stopRecording).not.toHaveBeenCalled()
+
+    first.identify('first-user')
+    await first.registerPushNotificationToken('first-token')
+    await first.optOut()
+
+    await waitForExpect(2000, () => {
+      expect(native.identify).toHaveBeenCalled()
+      expect(native.registerPushNotificationToken).toHaveBeenCalled()
+      expect(native.setOptOut).toHaveBeenCalledWith(true)
+      expect(native.stopRecording).toHaveBeenCalled()
+    })
   })
 
   it('rotates the native session once, to the first client, on foreground after expiry', async () => {
