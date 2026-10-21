@@ -28,72 +28,57 @@ describe('local evaluation', () => {
     await posthog.shutdown()
   })
 
-  it('evaluates person properties with undefined property values', async () => {
-    const flags = {
-      flags: [
-        {
-          id: 1,
-          name: 'Beta Feature',
-          key: 'person-flag',
-          active: true,
-          filters: {
-            groups: [
-              {
-                variant: null,
-                properties: [
-                  {
-                    key: 'latestBuildVersion',
-                    type: 'person',
-                    value: '.+',
-                    operator: 'regex',
-                  },
-                  {
-                    key: 'latestBuildVersionMajor',
-                    type: 'person',
-                    value: '23',
-                    operator: 'gt',
-                  },
-                  {
-                    key: 'latestBuildVersionMinor',
-                    type: 'person',
-                    value: '31',
-                    operator: 'gt',
-                  },
-                  {
-                    key: 'latestBuildVersionPatch',
-                    type: 'person',
-                    value: '0',
-                    operator: 'gt',
-                  },
-                ],
-                rollout_percentage: 100,
-              },
-            ],
+  it.each(['not_icontains', 'not_starts_with', 'not_ends_with', 'not_regex', 'is_not', 'regex', 'gt'])(
+    'falls back remotely for undefined with %s unless local-only evaluation is requested',
+    async (operator) => {
+      const flags = {
+        flags: [
+          {
+            id: 1,
+            name: 'Beta Feature',
+            key: 'person-flag',
+            active: true,
+            filters: {
+              groups: [
+                {
+                  properties: [{ key: 'latestBuildVersion', type: 'person', value: '23', operator }],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
           },
-        },
-      ],
-    }
-    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+        ],
+      }
+      mockedFetch.mockImplementation(
+        apiImplementation({ localFlags: flags, decideFlags: { 'person-flag': 'server-fallback' } })
+      )
 
-    posthog = new PostHog('TEST_API_KEY', {
-      host: 'http://example.com',
-      personalApiKey: 'TEST_PERSONAL_API_KEY',
-      ...posthogImmediateResolveOptions,
-    })
-
-    expect(
-      await posthog.getFeatureFlag('person-flag', 'some-distinct-id', {
-        personProperties: {
-          latestBuildVersion: undefined,
-          latestBuildVersionMajor: undefined,
-          latestBuildVersionMinor: undefined,
-          latestBuildVersionPatch: undefined,
-        },
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
       })
-    ).toEqual(false)
+      const personProperties = { latestBuildVersion: undefined, retained: 'value', explicitNull: null }
 
-    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-  })
+      expect(
+        await posthog.getFeatureFlag('person-flag', 'some-distinct-id', {
+          personProperties,
+          onlyEvaluateLocally: true,
+        })
+      ).toBeUndefined()
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+
+      expect(await posthog.getFeatureFlag('person-flag', 'some-distinct-id', { personProperties })).toEqual(
+        'server-fallback'
+      )
+      const flagsCalls = mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')
+      expect(flagsCalls).toHaveLength(1)
+      const requestBody = JSON.parse(flagsCalls[0][1]?.body as string)
+      expect(requestBody.person_properties).toEqual({ retained: 'value', explicitNull: null })
+      expect(requestBody.person_properties).not.toHaveProperty('latestBuildVersion')
+    }
+  )
 
   it('evaluates numeric person properties with comparison operators', async () => {
     const flags = {
@@ -3568,7 +3553,7 @@ describe('match properties', () => {
 
     expect(matchProperty(property_a, { key: 'value2' })).toBe(false)
     expect(matchProperty(property_a, { key: '' })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
@@ -3594,7 +3579,7 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'value' })).toBe(false)
     expect(matchProperty(property_a, { key: 'value2' })).toBe(true)
     expect(matchProperty(property_a, { key: '' })).toBe(true)
-    expect(matchProperty(property_a, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
@@ -3607,7 +3592,7 @@ describe('match properties', () => {
     expect(matchProperty(property_c, { key: 'value4' })).toBe(true)
     expect(matchProperty(property_c, { key: 'value5' })).toBe(true)
     expect(matchProperty(property_c, { key: '' })).toBe(true)
-    expect(matchProperty(property_c, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
 
     expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
   })
@@ -3634,7 +3619,7 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: '343tfvalUe5' })).toBe(true)
 
     expect(matchProperty(property_a, { key: '' })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: 1234 })).toBe(false)
     expect(matchProperty(property_a, { key: '1234' })).toBe(false)
 
@@ -3684,9 +3669,9 @@ describe('match properties', () => {
     expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
 
     expect(matchProperty(property_a, { key: null })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_c, { key: null })).toBe(true)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
   })
 
   it('with operator ends_with', () => {
@@ -3724,9 +3709,9 @@ describe('match properties', () => {
     expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
 
     expect(matchProperty(property_a, { key: null })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_c, { key: null })).toBe(true)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
   })
 
   it('with operator regex', () => {
@@ -3738,7 +3723,7 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'valuecom' })).toBe(false)
     expect(matchProperty(property_a, { key: 'valuecom' })).toBe(false)
     expect(matchProperty(property_a, { key: '.com343tfvalue5' })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: '' })).toBe(false)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
@@ -3934,7 +3919,7 @@ describe('match properties', () => {
   it('null or undefined property value', () => {
     const property_a = { key: 'key', value: 'null', operator: 'is_not' }
     expect(matchProperty(property_a, { key: null })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: 'null' })).toBe(false)
     expect(matchProperty(property_a, { key: 'nul' })).toBe(true)
 
@@ -3946,37 +3931,37 @@ describe('match properties', () => {
 
     const property_c = { key: 'key', value: 'undefined', operator: 'icontains' }
     expect(matchProperty(property_c, { key: null })).toBe(false)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_c, { key: 'lol' })).toBe(false)
 
     const property_d = { key: 'key', value: 'undefined', operator: 'regex' }
     expect(matchProperty(property_d, { key: null })).toBe(false)
-    expect(matchProperty(property_d, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_d, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_e = { key: 'key', value: 1, operator: 'gt' }
     expect(matchProperty(property_e, { key: null })).toBe(false)
-    expect(matchProperty(property_e, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_e, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_f = { key: 'key', value: 1, operator: 'lt' }
     expect(matchProperty(property_f, { key: null })).toBe(false)
-    expect(matchProperty(property_f, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_f, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_g = { key: 'key', value: 'xyz', operator: 'gte' }
     expect(matchProperty(property_g, { key: null })).toBe(false)
-    expect(matchProperty(property_g, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_g, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_h = { key: 'key', value: 'Oo', operator: 'lte' }
     expect(matchProperty(property_h, { key: null })).toBe(false)
-    expect(matchProperty(property_h, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_h_lower = { key: 'key', value: 'oo', operator: 'lte' }
     expect(matchProperty(property_h_lower, { key: null })).toBe(false)
-    expect(matchProperty(property_h_lower, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h_lower, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_i = { key: 'key', value: '2022-05-01', operator: 'is_date_before' }
 
     expect(matchProperty(property_i, { key: null })).toBe(false)
-    expect(matchProperty(property_i, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_i, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_j = { key: 'key', value: '2022-05-01', operator: 'is_date_after' }
     expect(matchProperty(property_j, { key: null })).toBe(false)
@@ -3988,7 +3973,7 @@ describe('match properties', () => {
   it('null or undefined override value', () => {
     const property_a = { key: 'key', value: 'ab', operator: 'is_not' }
     expect(matchProperty(property_a, { key: null })).toBe(true)
-    expect(matchProperty(property_a, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: 'null' })).toBe(true)
     expect(matchProperty(property_a, { key: 'nul' })).toBe(true)
 
@@ -4000,44 +3985,44 @@ describe('match properties', () => {
 
     const property_c = { key: 'key', value: 'app.posthog.com', operator: 'icontains' }
     expect(matchProperty(property_c, { key: null })).toBe(false)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_c, { key: 'lol' })).toBe(false)
     expect(matchProperty(property_c, { key: 'https://app.posthog.com' })).toBe(true)
 
     const property_d = { key: 'key', value: '.+', operator: 'regex' }
     expect(matchProperty(property_d, { key: null })).toBe(true)
-    expect(matchProperty(property_d, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_d, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_d, { key: 'i_am_a_value' })).toBe(true)
 
     const property_e = { key: 'key', value: 1, operator: 'gt' }
     expect(matchProperty(property_e, { key: null })).toBe(false)
-    expect(matchProperty(property_e, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_e, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_e, { key: 1 })).toBe(false)
     expect(matchProperty(property_e, { key: 2 })).toBe(true)
 
     const property_f = { key: 'key', value: 1, operator: 'lt' }
     expect(matchProperty(property_f, { key: null })).toBe(false)
-    expect(matchProperty(property_f, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_f, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_f, { key: 0 })).toBe(true)
 
     const property_g = { key: 'key', value: 'xyz', operator: 'gte' }
     expect(matchProperty(property_g, { key: null })).toBe(false)
-    expect(matchProperty(property_g, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_g, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_g, { key: 'xyz' })).toBe(true)
 
     const property_h = { key: 'key', value: 'Oo', operator: 'lte' }
     expect(matchProperty(property_h, { key: null })).toBe(false)
-    expect(matchProperty(property_h, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_h, { key: 'Oo' })).toBe(true)
 
     const property_h_lower = { key: 'key', value: 'oo', operator: 'lte' }
     expect(matchProperty(property_h_lower, { key: null })).toBe(false)
-    expect(matchProperty(property_h_lower, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h_lower, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_h_lower, { key: 'oo' })).toBe(true)
 
     const property_i = { key: 'key', value: '2022-05-01', operator: 'is_date_before' }
     expect(matchProperty(property_i, { key: null })).toBe(false)
-    expect(matchProperty(property_i, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_i, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_j = { key: 'key', value: '2022-05-01', operator: 'is_date_after' }
     expect(matchProperty(property_j, { key: null })).toBe(false)
@@ -4469,10 +4454,10 @@ describe('semver operators', () => {
       )
     })
 
-    it('returns false for undefined property value', () => {
-      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: undefined })).toBe(
-        false
-      )
+    it('throws InconclusiveMatchError for undefined property value', () => {
+      expect(() =>
+        matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: undefined })
+      ).toThrow(InconclusiveMatchError)
     })
 
     it('throws InconclusiveMatchError for invalid override value', () => {

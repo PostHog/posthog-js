@@ -139,15 +139,27 @@ describe('feature flag local evaluation primitives', () => {
       )
     })
 
-    test('keeps explicit undefined values from matching non-exact operators', () => {
+    test.each([
+      ['exact', 'undefined'],
+      ['is_not', 'undefined'],
+      ['icontains', 'undefined'],
+      ['not_icontains', 'undefined'],
+      ['starts_with', 'undefined'],
+      ['not_starts_with', 'undefined'],
+      ['ends_with', 'undefined'],
+      ['not_ends_with', 'undefined'],
+      ['regex', 'undefined'],
+      ['not_regex', 'undefined'],
+      ['gt', 10],
+      ['is_date_before', '2025-01-01'],
+      ['semver_eq', '1.2.3'],
+    ] as const)('%s is inconclusive for an explicit undefined property value', (operator, target) => {
       const warnFunction = vi.fn()
-      expect(matchFeatureFlagProperty(property('icontains', 'undefined'), { key: undefined }, { warnFunction })).toBe(
-        false
+      expect(() => matchFeatureFlagProperty(property(operator, target), { key: undefined }, { warnFunction })).toThrow(
+        InconclusiveMatchError
       )
-      expect(matchFeatureFlagProperty(property('exact', 'undefined'), { key: undefined }, { warnFunction })).toBe(false)
-      expect(matchFeatureFlagProperty(property('is_not', 'undefined'), { key: undefined }, { warnFunction })).toBe(true)
       expect(warnFunction).toHaveBeenCalledWith(
-        'Property key cannot have a value of undefined with the icontains operator'
+        `Property key cannot have a value of undefined with the ${operator} operator`
       )
     })
 
