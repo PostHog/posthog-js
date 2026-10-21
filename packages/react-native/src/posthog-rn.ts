@@ -1815,6 +1815,8 @@ export class PostHog extends PostHogCore {
       return false
     }
     this._sessionReplayStartedByApp = true
+    // Undoes stopSessionRecording(), for an opt-in made before the opt-out read is taken.
+    this._restartSessionReplayOnOptIn = true
 
     const started = await this._startSessionRecording(resumeCurrent)
     // Cancellation is synchronous; a bridge call already in flight can still finish later.
