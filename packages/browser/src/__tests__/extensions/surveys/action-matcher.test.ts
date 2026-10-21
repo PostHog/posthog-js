@@ -246,4 +246,49 @@ describe('action-matcher', () => {
         actionMatcher.on('$autocapture', matchResult)
         expect(matched).toBeFalsy()
     })
+
+    describe('step text saved without spaces between text nodes', () => {
+        const matchesText = (
+            stepText: string,
+            matching: ActionStepStringMatching,
+            elText: string,
+            viaChain = false
+        ) => {
+            const action = createAction(2, '$autocapture')
+            action.steps![0].text = stepText
+            action.steps![0].text_matching = matching
+            const actionMatcher = new ActionMatcher(instance)
+            actionMatcher.register([action])
+            let matched = false
+            actionMatcher._addActionHook(() => {
+                matched = true
+            })
+            const result = createCaptureResult('$autocapture', 'https://example.com')
+            if (viaChain) {
+                result.properties.$elements_chain = `button:text="${elText}"`
+            } else {
+                result.properties.$elements = [{ tag_name: 'button', $el_text: elText }]
+            }
+            actionMatcher.on('$autocapture', result)
+            return matched
+        }
+
+        it.each([false, true])('matches exact step text ignoring whitespace (chain: %s)', (viaChain) => {
+            expect(matchesText('Nextpage', 'exact', 'Next page', viaChain)).toBe(true)
+        })
+
+        it.each([false, true])('matches contains step text ignoring whitespace (chain: %s)', (viaChain) => {
+            expect(matchesText('tpag', 'contains', 'Next page', viaChain)).toBe(true)
+            expect(matchesText('xtpa', 'contains', 'Next page', viaChain)).toBe(true)
+        })
+
+        it.each([false, true])('does not make regex steps tolerant (chain: %s)', (viaChain) => {
+            expect(matchesText('^Nextpage$', 'regex', 'Next page', viaChain)).toBe(false)
+        })
+
+        it.each([false, true])('still rejects non-matching text (chain: %s)', (viaChain) => {
+            expect(matchesText('Previouspage', 'exact', 'Next page', viaChain)).toBe(false)
+            expect(matchesText('prev', 'contains', 'Next page', viaChain)).toBe(false)
+        })
+    })
 })

@@ -1,10 +1,25 @@
 import type { PostHog } from '../../posthog-core'
-import { ActionStepType, PropertyFilters, SurveyActionType, SurveyElement } from '../../posthog-surveys-types'
+import {
+    ActionStepStringMatching,
+    ActionStepType,
+    PropertyFilters,
+    SurveyActionType,
+    SurveyElement,
+} from '../../posthog-surveys-types'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { CaptureResult, PropertyMatchType } from '../../types'
-import { isArray, isUndefined } from '@posthog/core'
+import { isArray, isNullish, isUndefined } from '@posthog/core'
 import { matchPropertyFilters } from '@posthog/browser-common/utils/property-utils'
-import { extractTexts, extractHref, matchString, matchTexts } from '@posthog/browser-common/utils/elements-chain-utils'
+import { extractTexts, extractHref, matchString } from '@posthog/browser-common/utils/elements-chain-utils'
+
+// Older steps store $el_text with text nodes concatenated ("Nextpage"), so also compare with whitespace removed.
+const stripWhitespace = (value: string): string => value.replace(/\s+/g, '')
+
+function matchStepText(value: string | undefined | null, pattern: string, matching: ActionStepStringMatching): boolean {
+    if (matchString(value, pattern, matching)) return true
+    if (matching === 'regex' || isNullish(value)) return false
+    return matchString(stripWhitespace(value), stripWhitespace(pattern), matching)
+}
 
 export class ActionMatcher {
     private readonly _actionRegistry = new Set<SurveyActionType>()
@@ -156,18 +171,17 @@ export class ActionMatcher {
     private _checkStepText(event?: CaptureResult, step?: ActionStepType): boolean {
         if (!step?.text) return true
 
+        const matching = step.text_matching || 'exact'
         const elements = this._getElementsList(event)
         if (elements.length > 0) {
             return elements.some(
-                (el) =>
-                    matchString(el.text, step.text!, step.text_matching || 'exact') ||
-                    matchString(el.$el_text, step.text!, step.text_matching || 'exact')
+                (el) => matchStepText(el.text, step.text!, matching) || matchStepText(el.$el_text, step.text!, matching)
             )
         }
 
         const chain = (event?.properties?.$elements_chain as string) || ''
         if (chain) {
-            return matchTexts(extractTexts(chain), step.text, step.text_matching || 'exact')
+            return extractTexts(chain).some((text) => matchStepText(text, step.text!, matching))
         }
 
         return false

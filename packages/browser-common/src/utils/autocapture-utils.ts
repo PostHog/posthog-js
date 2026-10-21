@@ -67,25 +67,36 @@ export function makeSafeText(s: string | null | undefined): string | null {
 
 /*
  * Get the direct text content of an element, protecting against sensitive data collection.
- * Concats textContent of each of the element's text node children; this avoids potential
- * collection of sensitive data that could happen if we used element.textContent and the
- * element had sensitive child elements, since element.textContent includes child content.
- * Scrubs values that look like they could be sensitive (i.e. cc or ssn number).
+ * Reads only the element's own text nodes (not child elements, which could be sensitive), joined with a
+ * single space only where the source text has whitespace at the node boundary.
+ * Scrubs values that look sensitive (e.g. cc or ssn number).
  * @param {Element} el - element to get the text of
  * @returns {string} the element's direct text content
  */
 export function getSafeText(el: Element): string {
     let elText = ''
+    let pendingSpace = false
 
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
         each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
-                elText += makeSafeText(child.textContent) ?? ''
+                const raw = child.textContent
+                const scrubbed = makeSafeText(raw) ?? ''
+                const safeText = trim(scrubbed)
+                const startsWithSpace = /^\s/.test(raw) || /^\s/.test(scrubbed)
+                const endsWithSpace = /\s$/.test(raw) || /\s$/.test(scrubbed)
+                pendingSpace = pendingSpace || startsWithSpace
+                if (safeText) {
+                    elText += (elText && pendingSpace ? ' ' : '') + safeText
+                    pendingSpace = endsWithSpace
+                } else {
+                    pendingSpace = pendingSpace || endsWithSpace
+                }
             }
         })
     }
 
-    return trim(elText)
+    return elText
 }
 
 export function getEventTarget(e: Event): Element | null {
@@ -594,8 +605,8 @@ const anchoredCCRegex = new RegExp(`^(?:${coreCCPattern})$`)
 const networkCCCandidateRegex = /(^|[^0-9A-Za-z_])([0-9][0-9 -]*[0-9])(?=$|[^0-9A-Za-z_])/g
 const networkCCLengths = [16, 15, 14, 13]
 
-// Define the core pattern for matching SSNs with optional dashes
-const coreSSNPattern = `\\d{3}-?\\d{2}-?\\d{4}`
+// Define the core pattern for matching SSNs with optional dash or space separators
+const coreSSNPattern = `\\d{3}[- ]?\\d{2}[- ]?\\d{4}`
 // Create the Anchored version of the regex by adding '^' at the start and '$' at the end
 const anchoredSSNRegex = new RegExp(`^(${coreSSNPattern})$`)
 // Network bodies exclude invalid SSN/ITIN groups and candidates within longer digit runs.
