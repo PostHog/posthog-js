@@ -3227,6 +3227,9 @@ export class PostHog extends PostHogCore {
       if (this._sessionReplayNativeInitialized) {
         await this._stopSessionRecording()
       }
+      // As after a stop made while opted in, so a later flags reload leaves it stopped. Opt-out cleared
+      // this if the app stopped replay during an unawaited optIn().
+      this._sessionReplayRecordingActive = true
       return
     }
 

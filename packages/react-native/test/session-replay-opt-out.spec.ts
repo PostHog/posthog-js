@@ -399,6 +399,21 @@ describe('PostHog RN session replay follows consent', () => {
     expect(nativeRecording).toBe(false)
   })
 
+  it('keeps replay stopped on a flags reload after the app stops it during an unawaited optIn()', async () => {
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+    await posthog.optOut()
+
+    const optIn = posthog.optIn()
+    await posthog.stopSessionRecording()
+    await optIn
+    await posthog.reloadFeatureFlagsAsync()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(nativeRecording).toBe(false)
+  })
+
   it('starts a new session on an immediate opt-in after an unawaited optOut() when the app restarted replay', async () => {
     posthog = newPostHog({ enableSessionReplay: true })
     await posthog.ready()
@@ -433,6 +448,27 @@ describe('PostHog RN session replay follows consent', () => {
     expect(nativeRecording).toBe(false)
     expect(posthog.getSessionId()).not.toBe(sessionBeforeOptOut)
   })
+
+  it.each([true, false])(
+    'keeps replay stopped when optOut() follows an unawaited optIn(), across a flags reload (enableSessionReplay: %s)',
+    async (enableSessionReplay) => {
+      posthog = newPostHog({ enableSessionReplay })
+      await posthog.ready()
+      if (!enableSessionReplay) {
+        await posthog.startSessionRecording()
+      }
+      await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+      await posthog.optOut()
+      mockNativeOptInRestartsRecorder()
+
+      void posthog.optIn()
+      await posthog.optOut()
+      await posthog.reloadFeatureFlagsAsync()
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      expect(nativeRecording).toBe(false)
+    }
+  )
 
   it.each([true, false])(
     'restarts replay on opt-in after an optOut() made before an unawaited optIn() restored it (enableSessionReplay: %s)',
