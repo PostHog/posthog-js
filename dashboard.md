@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5358](https://github.com/PostHog/posthog-js/issues/5358) | Confirmed: webpack/Next.js leaves source maps on disk and reports a successful build when PostHog source-map processing fails, despite deleteAfterUpload being enabled. | frameworks/next-js, feature/error-tracking, web, javascript, team/error-tracking, team/client-libraries, bug |  | no | 2026-10-21T18:11:44.746Z |
 | PostHog/posthog-js | [issue 5356](https://github.com/PostHog/posthog-js/issues/5356) | Confirmed at-least-once redelivery path; likely ingestion deduplication defect requiring cross-team validation. | react-native, iOS, feature/product-analytics, team/client-libraries, bug |  | no | 2026-10-21T15:39:40.882Z |
 | PostHog/posthog-js | [issue 5345](https://github.com/PostHog/posthog-js/issues/5345) | Confirmed browser-surveys validation bug: rating prefill accepts 0 for 1-based scales, allowing an impossible response to be persisted and potentially submitted. | feature/surveys, web, team/client-libraries, bug |  | no | 2026-10-20T21:34:31.431Z |
 | PostHog/posthog-js | [issue 5340](https://github.com/PostHog/posthog-js/issues/5340) | Confirmed browser SDK URL-masking bug with a small, localized fix. | web, team/client-libraries, bug |  | no | 2026-10-20T21:19:46.590Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 2342](https://github.com/PostHog/posthog-js/issues/2342) | Needs maintainer guidance/repro; current SDK has no awaitable init and will log repeated request failures for invalid tokens/config. | feature/flags, team/feature-flags, web |  | no | 2026-06-30T09:40:57.877Z |
 | PostHog/posthog-js | [issue 859](https://github.com/PostHog/posthog-js/issues/859) | Valid bug; bootstrapped false feature flag values are currently filtered out before they can be read. | feature/flags, team/feature-flags |  | no | 2026-06-30T09:38:39.365Z |
 | PostHog/posthog-js | [issue 3594](https://github.com/PostHog/posthog-js/issues/3594) | Valid toolbar/proxy routing issue; current code only uses ui_host for toolbar API params, not for loading toolbar.js. | feature/toolbar, frameworks/next-js, web |  | no | 2026-06-30T09:36:47.102Z |
-| PostHog/posthog-js | [issue 3575](https://github.com/PostHog/posthog-js/issues/3575) | Valid surveys/web bug report; the rendering result can plausibly diverge from canRenderSurveyAsync after completion. | feature/surveys, web |  | no | 2026-06-30T09:33:38.426Z |
