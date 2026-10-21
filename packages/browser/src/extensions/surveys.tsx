@@ -96,7 +96,6 @@ const window = _window as Window & typeof globalThis
 const document = _document as Document
 
 const DISPATCH_FEEDBACK_WIDGET_EVENT = 'ph:show_survey_widget'
-const WIDGET_LISTENER_ATTRIBUTE = 'PHWidgetSurveyClickListener'
 
 const SURVEY_NEXT_TO_TRIGGER_PARAMS = {
     ESTIMATED_MIN_HEIGHT: 250,
@@ -138,6 +137,18 @@ function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): JSX
     }
 }
 
+function findWidgetTrigger(target: Element, selector: string | undefined): HTMLElement | null {
+    if (!selector) {
+        return null
+    }
+    try {
+        return target.closest<HTMLElement>(selector)
+    } catch {
+        logger.warn(`Invalid feedback button selector: ${selector}`)
+        return null
+    }
+}
+
 // Keep in sync with posthog/constants.py on main repo
 const SURVEY_TARGETING_FLAG_PREFIX = 'survey-targeting-'
 
@@ -145,8 +156,8 @@ export class SurveyManager {
     private _posthog: PostHog
     private _surveyInFocus: string | null
     private _surveyTimeouts: Map<string, ReturnType<Window['setTimeout']>> = new Map()
-    private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
-        new Map()
+    private _widgetSelectorSurveys: Map<string, Survey> = new Map()
+    private _widgetSelectorClickListener: EventListener | null = null
     private _renderedTabWidgets: Map<string, Survey> = new Map()
     private _renderedTargets: Map<ShadowRoot, Element> = new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
@@ -305,7 +316,8 @@ export class SurveyManager {
             this._unsubscribeFeatureFlags = null
         }
         this._surveyTimeouts.forEach((_timeout, surveyId) => this._clearSurveyTimeout(surveyId))
-        this._widgetSelectorListeners.forEach((_listener, surveyId) => this._detachWidgetSelectorListener(surveyId))
+        this._detachWidgetSelectorClickListener()
+        this._widgetSelectorSurveys.clear()
         this._renderedTargets.forEach((container, target) => {
             render(null, target)
             container?.remove()
@@ -482,29 +494,15 @@ export class SurveyManager {
         )
     }
 
-    // Detach the tracked click listener (and its marker attribute) from the trigger element for a
-    // survey, without touching the rendered survey DOM. Safe to call while a survey is open — it
-    // only cleans up the trigger wiring, which is what an element swap needs.
-    private _detachWidgetSelectorListener = (surveyId: string): void => {
-        const existing = this._widgetSelectorListeners.get(surveyId)
-        if (existing) {
-            existing.element.removeEventListener('click', existing.listener)
-            existing.element.removeAttribute(WIDGET_LISTENER_ATTRIBUTE)
-            this._widgetSelectorListeners.delete(surveyId)
-            logger.info(`Removed click listener for survey ${surveyId}`)
-        }
-    }
-
-    private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
-        // Defer teardown while the survey is open (issue #2036). The trigger element may have
-        // been unmounted mid-survey — e.g. a dropdown/menu that hosts it was closed — and tearing
-        // the survey down here would make the open survey abruptly vanish. Keep it in place; the
-        // next display poll retries this cleanup once the user has closed the survey.
+    private _removeWidgetSelectorSurvey = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
+        // Defer teardown while the survey is open (issue #2036): tearing it down here would make
+        // the open survey abruptly vanish. The next display poll retries this cleanup once the
+        // user has closed the survey.
         if (this._isWidgetSurveyOpen(survey)) {
             return
         }
         this._removeSurveyFromDom(survey)
-        this._detachWidgetSelectorListener(survey.id)
+        this._widgetSelectorSurveys.delete(survey.id)
     }
 
     // A tab widget draws its own trigger, so it stays on screen until something removes it. The
@@ -531,61 +529,84 @@ export class SurveyManager {
         }
     }
 
-    private _manageWidgetSelectorListener = (survey: Survey, selector: string): void => {
-        const currentElement = document.querySelector(selector)
-        const existingListenerData = this._widgetSelectorListeners.get(survey.id)
+    // Render the widget up front: its show-event listener only attaches in an effect after render,
+    // so rendering it on click would drop that first click.
+    private _manageWidgetSelectorSurvey = (survey: Survey): void => {
+        this._handleWidget(survey)
+        this._widgetSelectorSurveys.set(survey.id, survey)
+    }
 
-        if (!currentElement) {
-            if (existingListenerData) {
-                this._removeWidgetSelectorListener(survey)
-            }
+    // One capture-phase listener on the document resolves the selector at click time. It covers
+    // elements that render after the display poll, re-rendered elements, and every matching
+    // element, and a page handler that stops propagation cannot hide the click from it.
+    private _attachWidgetSelectorClickListener = (): void => {
+        if (this._widgetSelectorClickListener || !document) {
+            return
+        }
+        this._widgetSelectorClickListener = (event: Event) => this._onWidgetSelectorClick(event)
+        addEventListener(document, 'click', this._widgetSelectorClickListener, { capture: true })
+    }
+
+    private _detachWidgetSelectorClickListener = (): void => {
+        if (this._widgetSelectorClickListener) {
+            document?.removeEventListener('click', this._widgetSelectorClickListener, { capture: true })
+            this._widgetSelectorClickListener = null
+        }
+    }
+
+    private _onWidgetSelectorClick = (event: Event): void => {
+        const target = event.target
+        if (!(target instanceof Element)) {
             return
         }
 
-        this._handleWidget(survey)
-
-        if (existingListenerData) {
-            // Listener exists, check if element changed
-            if (currentElement !== existingListenerData.element) {
-                logger.info(`Selector element changed for survey ${survey.id}. Re-attaching listener.`)
-                // Detach the *old* element's listener directly. Routing this through
-                // _removeWidgetSelectorListener would defer while the survey is open (to avoid
-                // tearing down the open survey's DOM), leaking the old element's listener — and the
-                // map entry that tracks it is overwritten just below, losing the only reference
-                // needed to ever clean it up.
-                this._detachWidgetSelectorListener(survey.id)
-                // Continue to attach listener to the new element below
-            } else {
-                // Element is the same, listener already attached, do nothing
+        let matched = false
+        this._widgetSelectorSurveys.forEach((survey) => {
+            const trigger = findWidgetTrigger(target, survey.appearance?.widgetSelector)
+            if (!trigger) {
                 return
             }
+            matched = true
+
+            const positionStyles =
+                survey.appearance?.position === SurveyPosition.NextToTrigger
+                    ? getNextToTriggerPosition(
+                          trigger,
+                          parseInt(survey.appearance?.maxWidth || defaultSurveyAppearance.maxWidth)
+                      )
+                    : {}
+
+            window.dispatchEvent(
+                new CustomEvent(DISPATCH_FEEDBACK_WIDGET_EVENT, {
+                    detail: { surveyId: survey.id, position: positionStyles },
+                })
+            )
+        })
+
+        if (!matched && this._posthog.config.debug) {
+            this._warnAboutIneligibleWidgetSelectorClick(target)
         }
+    }
 
-        // Element found, and no listener attached (or it was just removed from old element)
-        if (!currentElement.hasAttribute(WIDGET_LISTENER_ATTRIBUTE)) {
-            const listener = (event: Event) => {
-                event.stopPropagation() // Prevent bubbling
-
-                const positionStyles =
-                    survey.appearance?.position === SurveyPosition.NextToTrigger
-                        ? getNextToTriggerPosition(
-                              event.currentTarget as HTMLElement,
-                              parseInt(survey.appearance?.maxWidth || defaultSurveyAppearance.maxWidth)
-                          )
-                        : {}
-
-                window.dispatchEvent(
-                    new CustomEvent(DISPATCH_FEEDBACK_WIDGET_EVENT, {
-                        detail: { surveyId: survey.id, position: positionStyles },
-                    })
+    // Without this, a click on the button of a survey that is not shown does nothing and logs nothing.
+    private _warnAboutIneligibleWidgetSelectorClick = (target: Element): void => {
+        this._posthog.surveys?.getSurveys((surveys) => {
+            surveys.forEach((survey) => {
+                if (
+                    survey.type !== SurveyType.Widget ||
+                    survey.appearance?.widgetType !== SurveyWidgetType.Selector ||
+                    !findWidgetTrigger(target, survey.appearance?.widgetSelector)
+                ) {
+                    return
+                }
+                const reason =
+                    this.checkSurveyDisplayEligibility(survey).reason ??
+                    'Survey display conditions (URL, device, event trigger or feature flags) do not match'
+                logger.warn(
+                    `Feedback button for survey ${survey.id} was clicked, but the survey is not shown: ${reason}`
                 )
-            }
-
-            addEventListener(currentElement, 'click', listener)
-            currentElement.setAttribute(WIDGET_LISTENER_ATTRIBUTE, 'true')
-            this._widgetSelectorListeners.set(survey.id, { element: currentElement, listener, survey })
-            logger.info(`Attached click listener for feedback button survey ${survey.id}`)
-        }
+            })
+        })
     }
 
     /**
@@ -1088,7 +1109,7 @@ export class SurveyManager {
                         survey.appearance?.widgetSelector
                     ) {
                         activeSelectorSurveys.add(survey.id)
-                        this._manageWidgetSelectorListener(survey, survey.appearance?.widgetSelector)
+                        this._manageWidgetSelectorSurvey(survey)
                     }
                 }
 
@@ -1098,12 +1119,20 @@ export class SurveyManager {
                 }
             })
 
-            // Clean up listeners for surveys that are no longer active or matched
-            this._widgetSelectorListeners.forEach(({ survey }) => {
+            // Clean up selector surveys that are no longer active or matched
+            this._widgetSelectorSurveys.forEach((survey) => {
                 if (!activeSelectorSurveys.has(survey.id)) {
-                    this._removeWidgetSelectorListener(survey)
+                    this._removeWidgetSelectorSurvey(survey)
                 }
             })
+
+            // In debug mode the listener stays attached so a click on an ineligible survey's
+            // button can log why the survey is not shown.
+            if (this._widgetSelectorSurveys.size > 0 || this._posthog.config.debug) {
+                this._attachWidgetSelectorClickListener()
+            } else {
+                this._detachWidgetSelectorClickListener()
+            }
 
             // Same cleanup for a tab widget, which has no listener entry to key off.
             this._renderedTabWidgets.forEach((tabSurvey, surveyId) => {
@@ -1156,7 +1185,7 @@ export class SurveyManager {
             surveyTimeouts: this._surveyTimeouts,
             handleWidget: this._handleWidget,
             handlePopoverSurvey: this.handlePopoverSurvey,
-            manageWidgetSelectorListener: this._manageWidgetSelectorListener,
+            manageWidgetSelectorSurvey: this._manageWidgetSelectorSurvey,
             sortSurveysByAppearanceDelay: this._sortSurveysByAppearanceDelay,
             checkFlags: this._checkFlags.bind(this),
             isSurveyFeatureFlagEnabled: this._isSurveyFeatureFlagEnabled.bind(this),
