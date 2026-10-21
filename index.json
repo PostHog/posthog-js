@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/5364": {
+    "key": "PostHog/posthog-js/issue/5364",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5364",
+    "url": "https://github.com/PostHog/posthog-js/issues/5364",
+    "conclusion": "Confirmed: same-origin iframe mouse and drag events are classified against constructors from the top-level realm, causing them to be recorded as touch movement.",
+    "labels": [
+      "web",
+      "feature/replay",
+      "team/client-libraries",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-21T20:59:24.541Z"
+  },
   "PostHog/posthog-js/issue/5362": {
     "key": "PostHog/posthog-js/issue/5362",
     "repo": "PostHog/posthog-js",
@@ -2936,18 +2951,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-30T09:40:57.877Z"
-  },
-  "PostHog/posthog-js/issue/859": {
-    "key": "PostHog/posthog-js/issue/859",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 859",
-    "url": "https://github.com/PostHog/posthog-js/issues/859",
-    "conclusion": "Valid bug; bootstrapped false feature flag values are currently filtered out before they can be read.",
-    "labels": [
-      "feature/flags",
-      "team/feature-flags"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-30T09:38:39.365Z"
   }
 }
