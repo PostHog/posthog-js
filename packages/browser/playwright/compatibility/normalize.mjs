@@ -62,19 +62,49 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
         '$pageview_id',
         '$prev_pageview_id',
     ])
+    const sessionMarkerTags = new Set([
+        'sessionIdle',
+        'sessionNoLongerIdle',
+        '$session_ending',
+        '$session_starting',
+        '$session_id_change',
+    ])
+    const sessionMarkerIds = new Set([
+        'sessionId',
+        'windowId',
+        'currentSessionId',
+        'currentWindowId',
+        'nextSessionId',
+        'nextWindowId',
+        'previousSessionId',
+        'previousWindowId',
+    ])
+    const replayMarkerData = new RegExp(`^${eventRoot}\\.properties\\.\\$snapshot_data\\[\\d+\\]\\.data$`)
+    const replayFlushData = new RegExp(`^${eventRoot}\\.properties\\.\\$sess_rec_flush_size$`)
+    const sdkEvent = new RegExp(`^${eventRoot}$`)
+    const fcpMetric = new RegExp(`^${eventRoot}\\.properties\\.\\$web_vitals_FCP_event$`)
     const fixtureHost = new URL(origin).host
     const mapId = (value) => {
         if (!ids.has(value)) ids.set(value, `generated-id-${ids.size + 1}`)
         return ids.get(value)
     }
-    const visit = (value, key = '', path = '') => {
+    const visit = (value, key = '', path = '', sessionMarkerId = false, webVitals = false) => {
         if (typeof value === 'string') {
+            if (webVitals && fcpMetric.test(path.slice(0, -(key.length + 1)))) {
+                if (key === 'id' && /^v\d+-\d+-\d+$/.test(value)) return mapId(value)
+                if (key === 'rating' && ['good', 'needs-improvement', 'poor'].includes(value)) return '<metric-rating>'
+            }
             const sdkId =
+                sessionMarkerId ||
+                (webVitals &&
+                    fcpMetric.test(path.slice(0, -(key.length + 1))) &&
+                    ['$session_id', '$window_id'].includes(key)) ||
                 eventEnvelope.test(path) ||
                 (eventProperty.test(path) && identityKeys.has(key)) ||
                 flagsRequestProperty.test(path) ||
                 callbackMetadata.test(path) ||
                 storedSessionId.test(path) ||
+                (key === 'sessionId' && replayFlushData.test(path.slice(0, -(key.length + 1)))) ||
                 /^api\.(get_distinct_id|get_session_id|identified-id|reset-id)$/.test(path) ||
                 (storageProperty.test(path) && (identityKeys.has(key) || key === '$sesid')) ||
                 (storageRoot.test(path) && key.endsWith('_window_id'))
@@ -157,6 +187,15 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
             )
                 item = '<cpu-duration-ms>'
             if (
+                webVitals &&
+                ((sdkProperties.test(path) && child === '$web_vitals_FCP_value') ||
+                    (fcpMetric.test(path) && ['value', 'delta'].includes(child))) &&
+                typeof item === 'number' &&
+                Number.isFinite(item) &&
+                item >= 0
+            )
+                item = '<metric-duration-ms>'
+            if (
                 child === '$sdk_debug_replay_internal_buffer_length' &&
                 debugProperties &&
                 typeof item === 'number' &&
@@ -164,7 +203,14 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
             )
                 item = '<buffer-count>'
             if (
-                ((['$sdk_debug_replay_internal_buffer_size', '$snapshot_bytes'].includes(child) && debugProperties) ||
+                (([
+                    '$sdk_debug_replay_internal_buffer_size',
+                    '$sdk_debug_replay_flushed_size',
+                    '$snapshot_bytes',
+                ].includes(child) &&
+                    debugProperties) ||
+                    (child === 'flushed_size' && sessionMarkerId) ||
+                    (child === 'size' && replayFlushData.test(path)) ||
                     (child === 'size' &&
                         /^api\.storage\.(?:local|session)\.[^.]+\.\$sess_rec_flush_size$/.test(path))) &&
                 typeof item === 'number' &&
@@ -185,7 +231,16 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                 new RegExp(`^${eventRoot}\\.properties\\.\\$heatmap_data$`).test(path)
                     ? '<fixture-origin>' + child.slice(origin.length)
                     : child
-            result[normalizedKey] = visit(item, child, childPath)
+            const markerId =
+                (sessionMarkerId && sessionMarkerIds.has(child)) ||
+                (child === 'payload' && replayMarkerData.test(path) && sessionMarkerTags.has(value.tag))
+            result[normalizedKey] = visit(
+                item,
+                child,
+                childPath,
+                markerId,
+                webVitals || (sdkEvent.test(path) && value.event === '$web_vitals' && child === 'properties')
+            )
         }
         return result
     }

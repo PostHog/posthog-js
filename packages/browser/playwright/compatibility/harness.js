@@ -113,19 +113,31 @@
         capture_pageview: false,
         capture_pageleave: false,
         autocapture: ['autocapture', 'forms', 'links', 'rage-clicks', 'dead-clicks'].includes(lab.scenario),
-        disable_session_recording: lab.scenario !== 'replay',
-        disable_surveys: !['surveys', 'extension-failure', 'delayed-loading', 'version-fallback'].includes(
-            lab.scenario
-        ),
-        disable_surveys_automatic_display: true,
-        capture_performance: false,
+        disable_session_recording: !lab.scenario.startsWith('replay'),
+        disable_surveys: ![
+            'surveys',
+            'surveys-auto',
+            'extension-failure',
+            'delayed-loading',
+            'version-fallback',
+        ].includes(lab.scenario),
+        disable_surveys_automatic_display: lab.scenario !== 'surveys-auto',
+        capture_performance:
+            lab.scenario === 'web-vitals'
+                ? {
+                      web_vitals: true,
+                      web_vitals_allowed_metrics: ['FCP'],
+                      web_vitals_delayed_flush_ms: 100,
+                      web_vitals_attribution: false,
+                  }
+                : false,
         capture_dead_clicks: lab.scenario === 'dead-clicks',
         enable_heatmaps: false,
         ...(lab.scenario === 'heatmaps' ? { capture_heatmaps: { flush_interval_milliseconds: 1000 } } : {}),
         ...(['rage-clicks', 'heatmaps'].includes(lab.scenario) ? { rageclick: true } : {}),
         enable_recording_console_log: false,
         opt_out_useragent_filter: true,
-        request_batching: lab.scenario === 'unload',
+        request_batching: ['unload', 'replay-bounce'].includes(lab.scenario),
         strict_script_versioning:
             lab.scenario === 'version-fallback' && lab.comparison === 'current' ? 'fallback' : false,
         session_recording: {

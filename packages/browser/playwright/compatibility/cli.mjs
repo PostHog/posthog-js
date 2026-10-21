@@ -20,7 +20,7 @@ if (
     (selected.engines.length !== 3 ||
         selected.modes.length !== 3 ||
         selected.comparisons.length !== 2 ||
-        selected.scenarios.length !== 17)
+        selected.scenarios.length !== MATRIX.scenarios.length)
 )
     throw new Error('Updates require the full matrix')
 if (args.repeats && (!Number.isInteger(Number(args.repeats)) || Number(args.repeats) < 2))
