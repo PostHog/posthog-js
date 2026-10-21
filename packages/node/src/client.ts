@@ -260,8 +260,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this.options.waitUntilMaxWaitMs = Math.max(normalizedOptions.waitUntilMaxWaitMs, 0)
     }
 
-    if (!this.disabled && normalizedOptions.personalApiKey) {
-      if (normalizedOptions.personalApiKey.includes('phc_')) {
+    if (!this.disabled && (normalizedOptions.personalApiKey || normalizedOptions.flagDefinitionCacheProvider)) {
+      if (normalizedOptions.personalApiKey?.includes('phc_')) {
         throw new Error(
           'A project API key ("phc_...") was provided as secretKey or personalApiKey. Pass the project API key as the first constructor argument. For local evaluation, set secretKey (or the deprecated personalApiKey alias) to a server-only Project Secret API Key ("phs_...") or Personal API Key ("phx_...") with feature flag read access.'
         )
@@ -2662,7 +2662,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Reload feature flag definitions from the server for local evaluation.
+   * Reload feature flag definitions from the configured cache provider or PostHog for local evaluation.
    *
    * @example
    * ```ts

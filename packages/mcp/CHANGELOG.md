@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.23.0
+
+### Minor Changes
+
+- [#5306](https://github.com/PostHog/posthog-js/pull/5306) [`19b9b54`](https://github.com/PostHog/posthog-js/commit/19b9b54e10c9944f6288d2c29487e99b596e6c83) Thanks [@gesh](https://github.com/gesh)! - Stop sending standalone `$identify` events, so insights, funnels, or cohorts built on MCP `$identify` stop receiving new data. The `identify` callback still sets `distinct_id`, `$set` and `$groups` on every event.
+  (2026-10-19)
+
 ## 0.22.3
 
 ### Patch Changes

@@ -1746,6 +1746,8 @@ describe('PostHog Node.js', () => {
     })
 
     describe('sendFeatureFlags with property overrides', () => {
+      let digestSpy: vi.SpyInstance
+
       beforeEach(() => {
         const mockDecideFlags = {
           'basic-flag': true,
@@ -1854,6 +1856,17 @@ describe('PostHog Node.js', () => {
           }
           return apiImplementationWithoutDelay(url, opts)
         })
+
+        // Local evaluation uses asynchronous Web Crypto hashing, which can outlast a flush timer tick.
+        const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle)
+        digestSpy = vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(async (...args) => {
+          await waitWithRealTimers(50)
+          return digest(...args)
+        })
+      })
+
+      afterEach(() => {
+        digestSpy.mockRestore()
       })
 
       it('should fallback to remote evaluation when no local evaluation is available and onlyEvaluateLocally is not specified', async () => {
@@ -1935,7 +1948,7 @@ describe('PostHog Node.js', () => {
           groups: { organization: 'org123' },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         // Should make local evaluation call during initialization
         expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
@@ -1992,7 +2005,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2042,7 +2055,7 @@ describe('PostHog Node.js', () => {
           groups: { organization: 'org123' },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2079,7 +2092,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(

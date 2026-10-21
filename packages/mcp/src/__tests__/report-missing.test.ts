@@ -266,9 +266,6 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
 
       await new Promise((r) => setTimeout(r, 50))
 
-      const identifyEvent = capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.identify)
-      expect(identifyEvent?.resourceName).toBe(GET_MORE_TOOLS)
-
       const data = getServerTrackingData(server.server)
       expect(data?.identifiedSessions.get(data.sessionId)).toEqual({
         distinctId: 'user-1',

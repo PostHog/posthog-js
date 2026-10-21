@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.438.13
+
+### Patch Changes
+
+- [#5322](https://github.com/PostHog/posthog-js/pull/5322) [`5beb414`](https://github.com/PostHog/posthog-js/commit/5beb4146c7cd05b7b00908459d1151fd723abe4f) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Flush buffered web vitals immediately using a beacon when the page is hidden or unloaded.
+  (2026-10-20)
+
 ## 1.438.12
 
 ### Patch Changes

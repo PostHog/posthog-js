@@ -955,6 +955,80 @@ describe('Claude Agent SDK integration', () => {
     expect(onError).not.toHaveBeenCalled()
   })
 
+  it.each([false, true])(
+    'keeps original tool-span output at 200000 bytes and history at 5000 bytes (full=%s)',
+    async (full) => {
+      const client = createMockClient()
+      client.enableFullAiCapture = full
+      const content = { body: '!'.repeat(200001), summary: '42 rows matched' }
+      queryMock.mockReturnValue(
+        scriptedQuery([
+          messageStart(),
+          assistantMessage([{ type: 'tool_use', id: 'tool_span_limits', name: 'Read', input: {} }]),
+          messageStop(),
+          toolResultMessage([{ type: 'tool_result', tool_use_id: 'tool_span_limits', content, is_error: true }]),
+          messageStart(),
+          messageStop(),
+          resultMessage(),
+        ])
+      )
+      await drain(instrument({ client }).query({ prompt: 'Read' }))
+      const span = capturedEvents(client, '$ai_span').find(
+        (event) => event.properties.$ai_span_id === 'tool_span_limits'
+      )
+      const generations = capturedEvents(client, '$ai_generation')
+      expect(span.properties.$ai_output_state).toEqual({
+        body: full ? content.body : '!'.repeat(200000) + '... [truncated]',
+        summary: content.summary,
+      })
+      const history = generations[1].properties.$ai_input[0].content[0]
+      expect(history).toEqual({
+        type: 'tool_result',
+        tool_use_id: 'tool_span_limits',
+        is_error: true,
+        content: { body: full ? content.body : '!'.repeat(5000) + '... [truncated]', summary: content.summary },
+      })
+      expect(span.properties.$ai_parent_id).toBe(generations[0].properties.$ai_span_id)
+      expect(span.properties.$ai_trace_id).toBe(generations[0].properties.$ai_trace_id)
+      expect(content.body.length).toBe(200001)
+    }
+  )
+
+  it.each(['client', 'query'])(
+    'does not traverse private tool results with full capture enabled (privacy=%s)',
+    async (source) => {
+      const client = createMockClient()
+      client.enableFullAiCapture = true
+      if (source === 'client') client.privacy_mode = true
+      let reads = 0
+      const content = {
+        get secret() {
+          reads++
+          throw new Error('must not inspect private data')
+        },
+      }
+      queryMock.mockReturnValue(
+        scriptedQuery([
+          messageStart(),
+          assistantMessage([{ type: 'tool_use', id: 'private_tool', name: 'Read', input: {} }]),
+          messageStop(),
+          toolResultMessage([{ type: 'tool_result', tool_use_id: 'private_tool', content }]),
+          messageStart(),
+          messageStop(),
+          resultMessage(),
+        ])
+      )
+      await drain(instrument({ client, privacyMode: source === 'query' }).query({ prompt: 'Read' }))
+      expect(reads).toBe(0)
+      const span = capturedEvents(client, '$ai_span')[0]
+      expect(span.properties.$ai_output_state).toBeNull()
+      for (const generation of capturedEvents(client, '$ai_generation')) {
+        expect(generation.properties.$ai_input).toBeNull()
+        expect(generation.properties.$ai_output_choices).toBeNull()
+      }
+    }
+  )
+
   it('reports instrumentation failures through onError without breaking the query', async () => {
     const client = createMockClient()
     client.capture.mockImplementation(() => {

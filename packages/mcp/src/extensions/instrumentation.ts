@@ -360,15 +360,7 @@ async function prepareToolCallEvent(
     // headers (HTTP transports); `clientInfo` can't tell a vendor's products apart.
     stampTransportIdentity(event, extra)
 
-    const identity = await handleIdentify(
-      server,
-      data,
-      sessionId,
-      request,
-      sessionInfo,
-      extra,
-      !!conversation.conversationId
-    )
+    const identity = await handleIdentify(data, sessionId, request, extra)
     const requestAttribution = withIdentity(sessionInfo, identity)
 
     await applyResolvedMetadata(event, data, request, extra)
@@ -583,7 +575,7 @@ async function captureResourceRequest(params: TraceRequestParams): Promise<unkno
     }
     stampClientIdentity(event, request, extra, server)
     stampTransportIdentity(event, extra)
-    const identity = await handleIdentify(server, data, sessionId, request, sessionInfo, extra)
+    const identity = await handleIdentify(data, sessionId, request, extra)
     await applyResolvedMetadata(event, data, request, extra)
     preparedEvent = { event, requestAttribution: withIdentity(sessionInfo, identity) }
   } catch (error) {
@@ -782,7 +774,7 @@ export async function handleListToolsRequest(
   // cached on this instance. On a per-request instance that cache is always
   // empty, so without resolving `identify` here too, `tools/list` would be the
   // one request path that never attributes to a person.
-  const identity = data ? await handleIdentify(server, data, sessionId, request, sessionInfo, extra) : undefined
+  const identity = data ? await handleIdentify(data, sessionId, request, extra) : undefined
   const requestAttribution = withIdentity(sessionInfo, identity)
 
   if (data) {
@@ -1185,7 +1177,7 @@ export async function handleInitializeRequest(
   }
   stampTransportIdentity(event, extra)
 
-  const identity = await handleIdentify(server, data, sessionId, request, requestSessionInfo, extra)
+  const identity = await handleIdentify(data, sessionId, request, extra)
   const requestAttribution = withIdentity(requestSessionInfo, identity)
 
   await applyResolvedMetadata(event, data, request, extra)
