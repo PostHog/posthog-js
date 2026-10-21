@@ -1463,3 +1463,74 @@ describe('PostHogAnthropic - streaming error safety', () => {
     expect(unhandledRejections).toEqual([])
   })
 })
+
+describe('PostHogAnthropic - streaming usage', () => {
+  let usageMockPostHogClient: PostHog
+  let usageClient: PostHogAnthropic
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    usageMockPostHogClient = new (PostHog as any)()
+    usageClient = new PostHogAnthropic({
+      apiKey: 'test-api-key',
+      posthog: usageMockPostHogClient as any,
+    })
+  })
+
+  const captureStreamUsage = async (deltaUsage: Record<string, number>): Promise<Record<string, unknown>> => {
+    const events = [
+      {
+        type: 'message_start',
+        message: {
+          usage: { input_tokens: 50, cache_creation_input_tokens: 10, cache_read_input_tokens: 20, output_tokens: 1 },
+        },
+      },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: deltaUsage },
+      { type: 'message_stop' },
+    ]
+    const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+    ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockResolvedValue({
+      async *[Symbol.asyncIterator]() {
+        yield* events
+      },
+    })
+
+    const stream = await usageClient.messages.create({
+      model: 'claude-3-5-sonnet-20240620',
+      max_tokens: 100,
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+      posthogDistinctId: 'anthropic-usage-user',
+    } as any)
+    for await (const _chunk of stream as unknown as AsyncIterable<unknown>) {
+      // consume
+    }
+    await new Promise(process.nextTick)
+
+    expect(usageMockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    return (usageMockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+  }
+
+  test('uses the cumulative input and cache tokens from message_delta when they grow (server tools)', async () => {
+    const properties = await captureStreamUsage({
+      input_tokens: 120,
+      cache_creation_input_tokens: 30,
+      cache_read_input_tokens: 70,
+      output_tokens: 25,
+    })
+
+    expect(properties['$ai_input_tokens']).toBe(120)
+    expect(properties['$ai_cache_creation_input_tokens']).toBe(30)
+    expect(properties['$ai_cache_read_input_tokens']).toBe(70)
+    expect(properties['$ai_output_tokens']).toBe(25)
+  })
+
+  test('keeps the message_start input and cache tokens when message_delta omits them or reports less', async () => {
+    const properties = await captureStreamUsage({ input_tokens: 5, output_tokens: 25 })
+
+    expect(properties['$ai_input_tokens']).toBe(50)
+    expect(properties['$ai_cache_creation_input_tokens']).toBe(10)
+    expect(properties['$ai_cache_read_input_tokens']).toBe(20)
+    expect(properties['$ai_output_tokens']).toBe(25)
+  })
+})
