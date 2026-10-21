@@ -24,6 +24,7 @@
         "test:rrweb-consumers": "node --test scripts/rrweb-consumer-types.test.mjs",
         "test:rrweb-package-exports": "pnpm turbo run build --filter=@posthog/rrweb-all --filter=rrdom-nodejs && node --test scripts/rrweb-package-exports.test.mjs",
         "test:built": "turbo test:built",
+        "test:nextjs-integration": "pnpm turbo run build --filter=@posthog/nextjs-config --filter=posthog-node --filter=posthog-js --concurrency=50% && pnpm --filter=@posthog/nextjs-config test:integration",
         "test:rrweb": "turbo test:rrweb",
         "test:dependency-cooldown": "node --test scripts/__tests__/dependency-cooldown.test.mjs",
         "test:build-graph": "node --test scripts/__tests__/build-graph.test.mjs",
