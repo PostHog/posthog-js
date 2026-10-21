@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { createMockServer, buildConfigResponse } from '@posthog-tooling/sdk-mock-server'
 import { interactionScenarios } from './interaction-cases.mjs'
 import { replayMinimumDurationMs } from './replay-cases.mjs'
+import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
 
 export const survey = {
     id: 'compat-survey',
@@ -89,6 +90,9 @@ export function compatibilityServer(settings) {
         },
         async adapter(request, context) {
             const path = request.path
+            const networkSample = replayNetworkCases.find((sample) => path === `${replayNetworkPath}/${sample.name}`)
+            if (settings.scenario === 'replay' && request.method === 'POST' && networkSample)
+                return { body: networkSample.responseBody, headers: replayNetworkHeaders.response }
             if (path === '/__compat/received') return { json: observations(server) }
             if (path === '/__compat/barriers') return { json: server.barriers() }
             if (path === '/__compat/release' && request.method === 'POST') {

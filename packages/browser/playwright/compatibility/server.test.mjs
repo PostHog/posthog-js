@@ -4,6 +4,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { compatibilityServer, observations, survey } from './server.mjs'
+import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
 
 async function fixture(t, scenario = 'core') {
     const folder = await mkdtemp(join(tmpdir(), 'compat-server-'))
@@ -65,6 +66,28 @@ test('compatibility server preserves native versioned fallback and extension fau
             [404, scenario === 'version-fallback' ? 404 : 503, scenario === 'version-fallback' ? 200 : 503]
         )
     }
+})
+
+test('Replay network fixture preserves application headers and bodies on the wire', async (t) => {
+    const { server, origin } = await fixture(t, 'replay')
+    for (const sample of replayNetworkCases) {
+        const response = await fetch(`${origin}${replayNetworkPath}/${sample.name}`, {
+            method: 'POST',
+            headers: replayNetworkHeaders.request,
+            body: sample.requestBody,
+        })
+        assert.equal(response.status, 200)
+        assert.equal(await response.text(), sample.responseBody)
+        for (const [name, value] of Object.entries(replayNetworkHeaders.response))
+            assert.equal(response.headers.get(name), value)
+    }
+    const requests = server.inspect().requests
+    assert.equal(requests.length, replayNetworkCases.length)
+    for (const [index, sample] of replayNetworkCases.entries()) {
+        assert.equal(requests[index].rawBody, sample.requestBody)
+        assert.equal(requests[index].headers.authorization, replayNetworkHeaders.request.authorization)
+    }
+    assert.deepEqual(server.inspect().errors, [])
 })
 
 test('compatibility behavioral projection retains original ordered ingestion batches separately from raw bytes', async (t) => {

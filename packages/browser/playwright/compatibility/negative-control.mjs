@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node
 import { join, resolve, dirname } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { parseOptions } from './options.mjs'
+import { capturedReplayRequests, replayNetworkCases, replayNetworkPath } from './replay-network.mjs'
 import { prepare, inputInventory, directory, repository, execute, inventoryTree } from './prepare.mjs'
 
 const args = parseOptions(process.argv.slice(2), ['output'])
@@ -127,6 +128,38 @@ for (const cell of vitalsReport.results) {
         assert(!failure.state.network.events.some((event) => event.event === '$web_vitals'))
     }
 }
+for (const source of Object.values(manifest.sources)) {
+    const fixture = source.fixtures.npm?.path
+    if (!fixture) continue
+    writeFileSync(
+        fixture,
+        readFileSync(fixture, 'utf8') +
+            `\nconst replayOptions = window.__compat.options;
+window.__compat.options = () => {
+    const options = replayOptions();
+    return { ...options, session_recording: { ...options.session_recording, recordHeaders: false, recordBody: false } };
+};\n`
+    )
+}
+manifest.inputIntegrity = inputInventory(manifest)
+run('replay-network-canary', 'update', { scenarios: 'replay' })
+const networkReport = JSON.parse(readFileSync(join(folder, 'replay-network-canary/report.json')))
+assert.equal(networkReport.completedRuns, 4)
+assert.equal(networkReport.passed, false)
+for (const cell of networkReport.results) {
+    assert.equal(cell.status, 'failed')
+    for (const run of cell.runs) {
+        const failure = JSON.parse(readFileSync(join(run.folder, 'failure.json')))
+        assert.match(failure.stack, /exerciseReplayNetwork/)
+        for (const sample of replayNetworkCases) {
+            const path = `${replayNetworkPath}/${sample.name}`
+            const sent = failure.state.wire.requests.filter((request) => request.path === path)
+            assert.equal(sent.length, 1)
+            assert.equal(sent[0].status, 200)
+            assert(!capturedReplayRequests(failure.state.network).some((request) => request.name.endsWith(path)))
+        }
+    }
+}
 const evidence = {
     passed: true,
     folder,
@@ -134,6 +167,7 @@ const evidence = {
     browserEgressDenied: true,
     missingCurrentCaptureLogRejected: true,
     missingWebVitalsDeliveryRejected: vitalsReport.results.map((cell) => cell.coreFamily),
+    missingReplayNetworkCaptureRejected: networkReport.results.map((cell) => cell.coreFamily),
     nativeThrowDetected: report.results.map((cell) => cell.coreFamily),
     failedRuns: report.completedRuns,
     expectedSnapshotsUnchanged: true,
