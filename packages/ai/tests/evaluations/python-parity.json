@@ -1396,6 +1396,40 @@
             }
         }
     ],
+    "portableDeclarations": [
+        {
+            "kind": "item",
+            "json": "{\"id\":\"7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1\",\"payload\":{\"expected_output\":1000000000000000128,\"input\":{\"id\":1000000000000000128},\"metadata\":{\"id\":1000000000000000128}}}"
+        },
+        {
+            "kind": "result",
+            "json": "{\"item_id\":\"7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1\",\"scorer_version_id\":\"f72481ec-1310-41de-b5bb-d20e1c59f121\",\"status\":\"ok\",\"value\":1000000000000000128}"
+        },
+        {
+            "kind": "item",
+            "json": "{\"id\":\"7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1\",\"payload\":{\"expected_output\":-1000000000000000128,\"input\":{\"id\":-1000000000000000128},\"metadata\":{\"id\":-1000000000000000128}}}"
+        },
+        {
+            "kind": "result",
+            "json": "{\"item_id\":\"7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1\",\"scorer_version_id\":\"f72481ec-1310-41de-b5bb-d20e1c59f121\",\"status\":\"ok\",\"value\":-1000000000000000128}"
+        },
+        {
+            "kind": "item",
+            "json": "{\"id\":\"7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1\",\"payload\":{\"expected_output\":1267650600228229401496703205376,\"input\":{\"id\":1267650600228229401496703205376},\"metadata\":{\"id\":1267650600228229401496703205376}}}"
+        },
+        {
+            "kind": "result",
+            "json": "{\"item_id\":\"7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1\",\"scorer_version_id\":\"f72481ec-1310-41de-b5bb-d20e1c59f121\",\"status\":\"ok\",\"value\":1267650600228229401496703205376}"
+        },
+        {
+            "kind": "item",
+            "json": "{\"id\":\"7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1\",\"payload\":{\"expected_output\":-1267650600228229401496703205376,\"input\":{\"id\":-1267650600228229401496703205376},\"metadata\":{\"id\":-1267650600228229401496703205376}}}"
+        },
+        {
+            "kind": "result",
+            "json": "{\"item_id\":\"7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1\",\"scorer_version_id\":\"f72481ec-1310-41de-b5bb-d20e1c59f121\",\"status\":\"ok\",\"value\":-1267650600228229401496703205376}"
+        }
+    ],
     "upload": {
         "body": {
             "items": [

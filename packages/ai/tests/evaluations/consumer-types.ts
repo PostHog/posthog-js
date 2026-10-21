@@ -11,7 +11,10 @@ import {
 
 const client = new OfflineEvaluations({ projectId: 123, secretKey: 'secret', timeoutMs: 15000 })
 const item = new EvaluationItem({ input: { question: 'Hello' }, output: null })
-new EvaluationResult({ item, scorerVersionId: 'uuid', value: false })
+const result = new EvaluationResult({ item, scorerVersionId: 'uuid', value: false })
+const savedItem: string = item.toJSONString()
+const savedResult: string = result.toJSONString()
+EvaluationResult.fromJSON(JSON.parse(savedResult), { item: EvaluationItem.fromJSON(JSON.parse(savedItem)) })
 new EvaluationResult({ item, scorerVersionId: 'uuid', status: 'error', errorMessage: 'Failure' })
 new EvaluationResult({ item, scorerVersionId: 'uuid', status: 'skipped' })
 new EvaluationResult({ item, scorerVersionId: 'uuid', value: 9007199254740992n })

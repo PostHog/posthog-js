@@ -91,6 +91,19 @@ for kwargs in [{'value': False}, {'value': 0}, {'value': -1.25}, {'value': ['ðŸ˜
     kwargs = dict(item=I, scorer_version_id=V, **kwargs)
     declaration = EvaluationResult(**kwargs)
     local.append({'kind': 'result', 'options': options(kwargs), 'wire': declaration.to_dict()})
+# Keep exact JSON text: decoding these fixtures in JS before comparing would hide
+# integer changes introduced by JSON.stringify's shortest number representation.
+portable = []
+for exact in [1000000000000000128, -1000000000000000128, 2**100, -(2**100)]:
+    for kind, wire in [
+        ('item', {'id': I, 'payload': {'input': {'id': exact}, 'expected_output': exact, 'metadata': {'id': exact}}}),
+        ('result', {'item_id': I, 'scorer_version_id': V, 'status': 'ok', 'value': exact}),
+    ]:
+        saved = json.dumps(wire, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+        declaration_type = EvaluationItem if kind == 'item' else EvaluationResult
+        restored = declaration_type.from_dict(json.loads(saved))
+        assert restored.to_dict() == wire
+        portable.append({'kind': kind, 'json': saved})
 # Include a real Python-planned upload and its receipt.
 item = EvaluationItem(id=I, input='question', output='answer')
 result = EvaluationResult(item=item, scorer_version_id=V, value=False)
@@ -99,5 +112,5 @@ client.resume_experiment(E).upload_results([result])
 call = transport.request.call_args
 upload = {'body': json.loads(call.kwargs['body']), 'response': upload_response(call.kwargs['body'])}
 client.close()
-output = {'pythonRevision': subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip(), 'cases': captured, 'declarations': local, 'upload': upload}
-Path(__file__).with_name('python-parity.json').write_text(json.dumps(output, ensure_ascii=False, indent=2) + '\n')
+output = {'pythonRevision': subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip(), 'cases': captured, 'declarations': local, 'portableDeclarations': portable, 'upload': upload}
+Path(__file__).with_name('python-parity.json').write_text(json.dumps(output, ensure_ascii=False, indent=4) + '\n')

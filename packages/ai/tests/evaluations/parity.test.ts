@@ -71,6 +71,16 @@ describe('Python SDK wire parity (generated from the recorded Python revision)',
     const restored = row.kind === 'item' ? EvaluationItem.fromJSON(row.wire) : EvaluationResult.fromJSON(row.wire)
     expect(normalize(restored.toJSON())).toEqual(normalize(row.wire))
   })
+  it.each(fixtures.portableDeclarations)('preserves exact integers in Python-restorable $kind JSON %#', (row) => {
+    const saved = JSON.parse(row.json)
+    const declaration = row.kind === 'item' ? EvaluationItem.fromJSON(saved) : EvaluationResult.fromJSON(saved)
+    expect(declaration.toJSONString()).toBe(row.json)
+    const restored =
+      row.kind === 'item'
+        ? EvaluationItem.fromJSON(JSON.parse(declaration.toJSONString()))
+        : EvaluationResult.fromJSON(JSON.parse(declaration.toJSONString()))
+    expect(restored.toJSONString()).toBe(row.json)
+  })
   it('uploads the exact Python item/result declarations and accepts the Python receipt', async () => {
     const fetch = mockFetch().mockResolvedValue(reply(fixtures.upload.response))
     const item = EvaluationItem.fromJSON(fixtures.upload.body.items[0])

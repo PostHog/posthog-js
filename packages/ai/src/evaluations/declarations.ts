@@ -155,9 +155,13 @@ export class EvaluationItem {
     items.set(this, encode(body))
     Object.freeze(this)
   }
-  /** Detached wire-format JSON; preserve this before sending if restart recovery is needed. */
+  /** Detached wire-format object. Use toJSONString() for lossless cross-language persistence. */
   toJSON(): WireObject {
     return JSON.parse(itemJSON(this)) as WireObject
+  }
+  /** Exact wire JSON, including large integers. Restore with fromJSON(JSON.parse(saved)). */
+  toJSONString(): string {
+    return itemJSON(this)
   }
   static fromJSON(value: unknown): EvaluationItem {
     const data = object(value)
@@ -229,9 +233,13 @@ export class EvaluationResult {
     results.set(this, encode(body))
     Object.freeze(this)
   }
-  /** The attached item is saved separately, matching the Python declaration format. */
+  /** Detached wire-format object. Use toJSONString() for lossless cross-language persistence. */
   toJSON(): WireObject {
     return JSON.parse(resultJSON(this)) as WireObject
+  }
+  /** Exact wire JSON. Save the attached item separately and restore with fromJSON(JSON.parse(saved), { item }). */
+  toJSONString(): string {
+    return resultJSON(this)
   }
   static fromJSON(value: unknown, options: { item?: EvaluationItem } = {}): EvaluationResult {
     const data = object(value)

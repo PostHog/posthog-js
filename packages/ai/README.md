@@ -144,11 +144,25 @@ for scorer versions, `nextCursor`. Retain the original filters when requesting t
 ### Recovery, cancellation, and payloads
 
 `resumeExperiment(id)` is local and sends no request. Save creation `submission` and item/result
-declarations before relying on process recovery. `EvaluationItem.toJSON()` / `fromJSON()` and
-`EvaluationResult.toJSON()` / `fromJSON()` use detached **snake_case wire declarations** compatible
-with Python; save attached items separately and reattach them with
-`EvaluationResult.fromJSON(savedResult, { item: restoredItem })`. Public options and records use
-camelCase; arbitrary payload/metadata keys are never renamed.
+declarations before relying on process recovery. Use `EvaluationItem.toJSONString()` and
+`EvaluationResult.toJSONString()` to save the exact **snake_case wire JSON** compatible with
+Python, including large integers. Save attached items separately:
+
+```ts
+import { EvaluationItem, EvaluationResult } from '@posthog/ai/evaluations'
+
+const savedItem = item.toJSONString()
+const savedResult = result.toJSONString()
+// Persist these strings directly; JSON.stringify would wrap them in another JSON string.
+const restoredItem = EvaluationItem.fromJSON(JSON.parse(savedItem))
+const restoredResult = EvaluationResult.fromJSON(JSON.parse(savedResult), { item: restoredItem })
+```
+
+`toJSON()` returns a detached object for inspection and JavaScript-only round trips.
+`JSON.stringify()` can write a different integer outside JavaScript's safe integer range,
+even when the original value is exactly representable, so use `toJSONString()` for portable
+saved declarations. Public options and records use camelCase; arbitrary payload/metadata keys
+are never renamed.
 
 `EvaluationAPIError` exposes `status`, `code`, `detail`, `attr`, `errors`, `response`,
 `retryAfter` (seconds), and `persistence`: `not_sent`, `rejected`, or `unknown`. Creation errors
