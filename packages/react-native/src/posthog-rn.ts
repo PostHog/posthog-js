@@ -314,8 +314,8 @@ export class PostHog extends PostHogCore {
   private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
-  // Whether replay was recording at opt-out, read from native as posthog-ios and posthog-android do,
-  // so opt-in brings back only a recording that opt-out stopped.
+  // Whether replay was recording at opt-out, read from native, so opt-in brings back only a
+  // recording that opt-out stopped.
   private _restartSessionReplayOnOptIn: boolean = true
   // Set by optOut() until that read is taken, before whichever queued step first stops the recorder.
   private _sessionReplayOptOutReadPending: boolean = false
@@ -1130,8 +1130,9 @@ export class PostHog extends PostHogCore {
     // Consent must be durable. See reset()/identify().
     const result = super.optIn()
     void this._eventsStorage.waitForPersist()
-    // Rotate before native opts in, so events captured right after an unawaited optIn() and the
-    // first frames of the recorder posthog-ios optIn() restarts land in the new session.
+    // Rotate before native opts in, so the first frames of the recorder posthog-ios optIn() restarts
+    // land in the new session. Once the opt-out read has landed, events captured right after an
+    // unawaited optIn() do too.
     const rotateIfRestarting = (): void => {
       if (
         !this.optedOut &&
@@ -1964,8 +1965,7 @@ export class PostHog extends PostHogCore {
   async stopSessionRecording(): Promise<void> {
     this._cancelManualRecordingStart()
     this._sessionReplayStartedByApp = false
-    // Holds over an opt-in still in flight. A stop made while opted out is ignored on opt-in, as in
-    // the native SDKs.
+    // Holds over an opt-in still in flight. A stop made while opted out is ignored on opt-in.
     if (!this.optedOut) {
       this._restartSessionReplayOnOptIn = false
       this._sessionReplayOptOutReadPending = false
@@ -1982,6 +1982,10 @@ export class PostHog extends PostHogCore {
   // Shared stop path, also called by the flags-driven evaluation.
   private async _stopSessionRecording(): Promise<boolean> {
     await this._initPromise
+    // Opt-out decides from the recorder's state, so read it before any stop.
+    if (this.optedOut) {
+      await this._readSessionReplayStateAtOptOut()
+    }
 
     if (this.isDisabled) {
       return false
@@ -3229,7 +3233,7 @@ export class PostHog extends PostHogCore {
       if (this._sessionReplayNativeInitialized) {
         await this._stopSessionRecording()
       }
-      // Only a recording opt-in will restart is marked stopped. A recording the app stopped keeps
+      // Mark the recorder stopped only when opt-in will restart it. A recording the app stopped keeps
       // _sessionReplayRecordingActive true, so a flags reload after opt-in leaves it stopped.
       if (this._restartSessionReplayOnOptIn) {
         this._sessionReplayRecordingActive = false
@@ -3284,7 +3288,7 @@ export class PostHog extends PostHogCore {
       return
     }
     this._sessionReplayOptOutReadPending = false
-    // Unknown (failed or timed out) counts as recording, as in posthog-ios.
+    // Unknown (failed or timed out) counts as recording, so opt-in errs toward restoring replay.
     const read: Promise<boolean | undefined> = OptionalReactNativePlugin
       ? OptionalReactNativePlugin.isEnabled().catch((e) => {
           this._logger.warn(`Failed to read the session replay state: ${e}`)
