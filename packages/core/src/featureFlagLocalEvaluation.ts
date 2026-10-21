@@ -370,7 +370,8 @@ export function matchFeatureFlagProperty(
   const overrideValue = propertyValues[key]
   if (overrideValue === undefined) {
     options.warnFunction?.(`Property ${key} cannot have a value of undefined with the ${operator} operator`)
-    return operator === 'is_not'
+    // Undefined is omitted from JSON; partial local context cannot establish a remote value.
+    throw new InconclusiveMatchError(`Property ${key} is undefined in propertyValues`)
   }
   if (
     overrideValue === null &&
