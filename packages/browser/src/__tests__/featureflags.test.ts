@@ -189,6 +189,7 @@ describe('featureflags', () => {
             unregister: (key) => instance.persistence.unregister(key),
             get_property: (key) => instance.persistence.props[key],
             capture: () => {},
+            is_capturing: () => true,
             flagsEndpointWasHit: false,
             _send_request: vi.fn().mockImplementation(({ callback }) =>
                 callback({
