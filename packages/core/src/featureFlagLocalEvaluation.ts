@@ -31,8 +31,8 @@ export type FeatureFlagVariantLookupEntry = {
 
 // String operators match null as the string "null", like the flags service.
 const NULL_VALUES_ALLOWED_OPERATORS = [
+  'exact',
   'is_not',
-  'is_set',
   'icontains',
   'not_icontains',
   'starts_with',
@@ -384,12 +384,7 @@ export function matchFeatureFlagProperty(
     options.warnFunction?.(`Property ${key} cannot have a value of undefined with the ${operator} operator`)
     return operator === 'is_not'
   }
-  if (
-    overrideValue === null &&
-    !NULL_VALUES_ALLOWED_OPERATORS.includes(operator) &&
-    operator !== 'exact' &&
-    operator !== 'is_not'
-  ) {
+  if (overrideValue === null && !NULL_VALUES_ALLOWED_OPERATORS.includes(operator)) {
     options.warnFunction?.(`Property ${key} cannot have a value of null with the ${operator} operator`)
     return false
   }
