@@ -1132,19 +1132,32 @@ export class PostHog extends PostHogCore {
     void this._eventsStorage.waitForPersist()
     // Rotate before native opts in, so events captured right after an unawaited optIn() and the
     // first frames of the recorder posthog-ios optIn() restarts land in the new session.
-    if (
-      this._isInitialized &&
-      wasOptedOut &&
-      this._restartSessionReplayOnOptIn &&
-      this._isEnableSessionReplay() &&
-      this._isSessionReplayLinkedFlagActive(
-        (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType }
-      )
-    ) {
-      try {
-        this._rotateReplaySession()
-      } catch (e) {
-        this._logger.error(`Failed to rotate sessionId: ${e}.`)
+    const rotateIfRestarting = (): void => {
+      if (
+        !this.optedOut &&
+        this._restartSessionReplayOnOptIn &&
+        this._isEnableSessionReplay() &&
+        this._isSessionReplayLinkedFlagActive(
+          (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType }
+        )
+      ) {
+        try {
+          this._rotateReplaySession()
+        } catch (e) {
+          this._logger.error(`Failed to rotate sessionId: ${e}.`)
+        }
+      }
+    }
+    if (this._isInitialized && wasOptedOut) {
+      if (this._sessionReplayOptOutReadPending) {
+        // Decide once the opt-out read lands, as native decides from the recorder's state at
+        // opt-out. Native opt-in waits on this chain, so the rotation still comes first.
+        this._sessionReplayEvalChain = this._sessionReplayEvalChain
+          .catch(() => {})
+          .then(() => this._readSessionReplayStateAtOptOut())
+          .then(rotateIfRestarting)
+      } else {
+        rotateIfRestarting()
       }
     }
     // Native re-arms push on opt-in (iOS reinstalls its integrations, Android resumes deferred
@@ -1815,8 +1828,6 @@ export class PostHog extends PostHogCore {
       return false
     }
     this._sessionReplayStartedByApp = true
-    // Undoes stopSessionRecording(), for an opt-in made before the opt-out read is taken.
-    this._restartSessionReplayOnOptIn = true
 
     const started = await this._startSessionRecording(resumeCurrent)
     // Cancellation is synchronous; a bridge call already in flight can still finish later.
@@ -1957,6 +1968,7 @@ export class PostHog extends PostHogCore {
     // the native SDKs.
     if (!this.optedOut) {
       this._restartSessionReplayOnOptIn = false
+      this._sessionReplayOptOutReadPending = false
     }
     // Let an in-flight native start settle before stopping its recorder.
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
