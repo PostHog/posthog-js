@@ -6,4 +6,4 @@
 'posthog-js-lite': patch
 ---
 
-Feature flags read before the user opts in to capturing now send `$feature_flag_called` once capturing is allowed.
+Feature flags read before the user opts in to capturing now send `$feature_flag_called` the next time they are read after opt in.

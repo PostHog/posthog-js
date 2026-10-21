@@ -1339,10 +1339,13 @@ export class PostHogFeatureFlags implements Extension {
             }
         }
 
-        // The client drops the event while capture is off, so marking the flag as reported would suppress the
-        // exposure for good once consent is granted.
-        if ((options.send_event || !('send_event' in options)) && this._client?.canCapture) {
-            if (!(key in flagCallReported) || !flagCallReported[key]!.includes(flagReportValue)) {
+        if (options.send_event || !('send_event' in options)) {
+            // The client drops the event while capture is off, so marking the flag as reported would suppress the
+            // exposure after consent is granted.
+            if (
+                (!(key in flagCallReported) || !flagCallReported[key]!.includes(flagReportValue)) &&
+                this._client?.canCapture
+            ) {
                 if (isArray(flagCallReported[key])) {
                     flagCallReported[key].push(flagReportValue)
                 } else {
