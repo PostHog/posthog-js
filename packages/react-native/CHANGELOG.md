@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.81.7
+
+### Patch Changes
+
+- [#5336](https://github.com/PostHog/posthog-js/pull/5336) [`1a4ea26`](https://github.com/PostHog/posthog-js/commit/1a4ea26501f67dbecccc31e5eeed663483e11049) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Restart session replay on `optIn()` only if it was recording at `optOut()`, matching posthog-ios. A `stopSessionRecording()` call made while opted out no longer keeps replay stopped on `optIn()`; stop it before `optOut()` or after `optIn()` instead
+  (2026-10-21)
+
 ## 4.81.6
 
 ### Patch Changes
