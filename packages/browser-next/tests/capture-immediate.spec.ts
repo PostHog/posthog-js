@@ -58,6 +58,59 @@ const expectSummary = (
     }
 }
 
+describe('unload delivery', () => {
+    it('dispatches synchronously with keepalive and leaves buffered events queued', async () => {
+        const requests: CapturedRequest[] = []
+        const send = responseFetch(requests, () => ({ result: { result: 'ok' } }))
+        const fetch = vi.fn(send)
+        const posthog = await clientWithAnalytics(fetch)
+        posthog.capture('buffered')
+        posthog.capture('unloading', { answer: 'yes' }, { delivery: 'unload', uuid: 'unload-uuid' })
+
+        expect(requests.map(({ batch }) => batch.map(({ event }) => event))).toEqual([['unloading']])
+        expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+            keepalive: true,
+            headers: { Authorization: 'Bearer ph_test', 'Content-Type': 'application/json' },
+        })
+        expect(requests[0]?.batch[0]).toMatchObject({ uuid: 'unload-uuid', properties: { answer: 'yes' } })
+        await posthog.flush()
+        expect(requests.map(({ batch }) => batch.map(({ event }) => event))).toEqual([['unloading'], ['buffered']])
+        await posthog.dispose()
+    })
+
+    it.each(['success', 'rejection', 'throw'] as const)('releases the unload byte budget after %s', async (mode) => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
+        if (mode === 'throw')
+            fetch.mockImplementationOnce(() => {
+                throw new Error('fetch')
+            })
+        else if (mode === 'rejection') fetch.mockRejectedValueOnce(new Error('fetch'))
+        else fetch.mockResolvedValueOnce(new Response(''))
+        fetch.mockImplementation(() => new Promise<Response>(() => {}))
+        const posthog = await clientWithAnalytics(fetch)
+        try {
+            posthog.capture('first', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            posthog.capture('second', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
+            posthog.capture('third', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
+            expect(fetch).toHaveBeenCalledTimes(2)
+        } finally {
+            await posthog.shutdown(0)
+        }
+    })
+
+    it('does not dispatch unload captures after opt-out or disposal', async () => {
+        const fetch = vi.fn(responseFetch([], () => ({ result: { result: 'ok' } })))
+        const posthog = await clientWithAnalytics(fetch)
+        posthog.optOut()
+        posthog.capture('denied', null, { delivery: 'unload' })
+        expect(fetch).not.toHaveBeenCalled()
+        await posthog.dispose()
+        posthog.capture('disposed', null, { delivery: 'unload' })
+        expect(fetch).not.toHaveBeenCalled()
+    })
+})
+
 describe('captureImmediate', () => {
     it('bypasses the lane, awaits a V1 result, and leaves buffered work queued', async () => {
         const requests: CapturedRequest[] = []

@@ -213,6 +213,7 @@ describe('@posthog/browser automatic analytics', () => {
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
+            flags: false,
             analytics: configuration,
         })
         configuration.flushAt = 100
