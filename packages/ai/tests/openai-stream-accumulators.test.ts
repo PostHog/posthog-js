@@ -152,6 +152,18 @@ describe('OpenAI-compatible stream accumulators', () => {
       ])
     })
 
+    test('does not let a later real index overwrite an earlier call without one', () => {
+      const accumulator = new OpenAIChatStreamAccumulator()
+      accumulator.consume(chunk([{ id: 'call-b', type: 'function', function: { name: 'search', arguments: '{}' } }]))
+      accumulator.consume(chunk([{ index: 0, id: 'call-a', function: { name: 'lookup', arguments: '{}' } }]))
+      accumulator.consume(chunk([{ index: 0, function: { arguments: '' } }], 'tool_calls'))
+
+      expect(toolCallContent(accumulator)).toEqual([
+        { type: 'function', id: 'call-b', function: { name: 'search', arguments: '{}' } },
+        { type: 'function', id: 'call-a', function: { name: 'lookup', arguments: '{}' } },
+      ])
+    })
+
     test('still groups indexed deltas by index', () => {
       const accumulator = new OpenAIChatStreamAccumulator()
       accumulator.consume(chunk([{ index: 1, id: 'call-b', function: { name: 'search', arguments: '{' } }]))
