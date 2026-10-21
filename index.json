@@ -1,4 +1,22 @@
 {
+  "PostHog/posthog-js/issue/5358": {
+    "key": "PostHog/posthog-js/issue/5358",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5358",
+    "url": "https://github.com/PostHog/posthog-js/issues/5358",
+    "conclusion": "Confirmed: webpack/Next.js leaves source maps on disk and reports a successful build when PostHog source-map processing fails, despite deleteAfterUpload being enabled.",
+    "labels": [
+      "frameworks/next-js",
+      "feature/error-tracking",
+      "web",
+      "javascript",
+      "team/error-tracking",
+      "team/client-libraries",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-21T18:11:44.746Z"
+  },
   "PostHog/posthog-js/issue/5356": {
     "key": "PostHog/posthog-js/issue/5356",
     "repo": "PostHog/posthog-js",
@@ -2929,18 +2947,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-30T09:36:47.102Z"
-  },
-  "PostHog/posthog-js/issue/3575": {
-    "key": "PostHog/posthog-js/issue/3575",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3575",
-    "url": "https://github.com/PostHog/posthog-js/issues/3575",
-    "conclusion": "Valid surveys/web bug report; the rendering result can plausibly diverge from canRenderSurveyAsync after completion.",
-    "labels": [
-      "feature/surveys",
-      "web"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-30T09:33:38.426Z"
   }
 }
