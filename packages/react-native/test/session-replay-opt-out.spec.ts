@@ -746,27 +746,75 @@ describe('PostHog RN session replay follows consent', () => {
     await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
   })
 
-  it('ends a manual recording on opt-in when replay is disabled, until the app starts it again', async () => {
+  it('restarts a manual recording under a new session on opt-in when replay is disabled', async () => {
     posthog = newPostHog({ enableSessionReplay: false })
     await posthog.ready()
     await posthog.startSessionRecording()
+    const sessionBeforeOptOut = posthog.getSessionId()
+
+    await posthog.optOut()
+    expect(nativeRecording).toBe(false)
+    await posthog.optIn()
+
+    expect(nativeRecording).toBe(true)
+    expect(posthog.getSessionId()).not.toBe(sessionBeforeOptOut)
+  })
+
+  it('leaves replay off on opt-in when replay is disabled and the app never started it', async () => {
+    posthog = newPostHog({ enableSessionReplay: false })
+    await posthog.ready()
+
+    await posthog.optOut()
+    await posthog.optIn()
+    // Give the opt-in evaluation time to run; nothing may start.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(replay.startRecording).not.toHaveBeenCalled()
+    expect(nativeRecording).toBe(false)
+  })
+
+  it('leaves replay off on opt-in when replay is disabled and the app launched opted out', async () => {
+    posthog = newPostHog({ enableSessionReplay: false, defaultOptIn: false })
+    await posthog.ready()
+
+    await posthog.optIn()
+    // Give the opt-in evaluation time to run; nothing may start.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(replay.startRecording).not.toHaveBeenCalled()
+    expect(nativeRecording).toBe(false)
+  })
+
+  it('leaves a manual recording the app stopped before opt-out stopped on opt-in when replay is disabled', async () => {
+    posthog = newPostHog({ enableSessionReplay: false })
+    await posthog.ready()
+    await posthog.startSessionRecording()
+    await posthog.stopSessionRecording()
     mockNativeOptInRestartsRecorder()
 
     await posthog.optOut()
-    replay.stopRecording.mockClear()
     await posthog.optIn()
 
-    expect(replay.stopRecording).toHaveBeenCalled()
     expect(nativeRecording).toBe(false)
-
-    await posthog.startSessionRecording()
-    expect(nativeRecording).toBe(true)
   })
 
-  it('ends a manual recording when reset() clears the opt-out with replay disabled', async () => {
+  it('restarts a manual recording when reset() clears the opt-out with replay disabled', async () => {
     posthog = newPostHog({ enableSessionReplay: false })
     await posthog.ready()
     await posthog.startSessionRecording()
+    await posthog.optOut()
+    expect(nativeRecording).toBe(false)
+
+    posthog.reset()
+
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+  })
+
+  it('leaves a manual recording the app stopped stopped when reset() clears the opt-out with replay disabled', async () => {
+    posthog = newPostHog({ enableSessionReplay: false })
+    await posthog.ready()
+    await posthog.startSessionRecording()
+    await posthog.stopSessionRecording()
     mockNativeOptInRestartsRecorder()
     await posthog.optOut()
 
@@ -906,11 +954,10 @@ describe('PostHog RN session replay follows consent', () => {
     expect(posthog.getSessionId()).toBe(session)
   })
 
-  it('ends the recorder optIn() restarts when the app only tried to start one while opted out', async () => {
+  it('restarts a manual recording on opt-in when the app also tried to start one while opted out', async () => {
     posthog = newPostHog({ enableSessionReplay: false })
     await posthog.ready()
     await posthog.startSessionRecording()
-    mockNativeOptInRestartsRecorder()
     await posthog.optOut()
     await waitForExpect(2000, () => expect(nativeRecording).toBe(false))
 
@@ -918,6 +965,6 @@ describe('PostHog RN session replay follows consent', () => {
     expect(nativeRecording).toBe(false)
     await posthog.optIn()
 
-    expect(nativeRecording).toBe(false)
+    expect(nativeRecording).toBe(true)
   })
 })

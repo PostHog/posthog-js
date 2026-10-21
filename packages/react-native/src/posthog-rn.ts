@@ -1139,10 +1139,12 @@ export class PostHog extends PostHogCore {
       if (
         !this.optedOut &&
         this._restartSessionReplayOnOptIn &&
-        this._isEnableSessionReplay() &&
-        this._isSessionReplayLinkedFlagActive(
-          (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType }
-        )
+        // With replay disabled, only a recording the app started can have been running at opt-out.
+        (this._isEnableSessionReplay()
+          ? this._isSessionReplayLinkedFlagActive(
+              (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType }
+            )
+          : this._sessionReplayNativeInitialized)
       ) {
         try {
           this._rotateReplaySession()
@@ -3188,14 +3190,19 @@ export class PostHog extends PostHogCore {
       this._logger.info('Session replay is not enabled.')
       // Replay off — disarm event triggers so the capture hook stays inert.
       this._sessionReplayEventTriggers = []
-      // Opt-out ends any recording, including one the app started by hand. posthog-ios optIn()
-      // reinstalls its integrations, which restarts the recorder, so opt-in stops it again unless
-      // the app has started one since.
+      // Opt-out ends any recording, including one the app started by hand. Opt-in brings that
+      // recording back on the session optIn() rotated to; otherwise it stops the recorder
+      // posthog-ios optIn() restarts when it reinstalls its integrations, unless the app has
+      // started one since.
       if (
         this._sessionReplayNativeInitialized &&
         (this.optedOut || (freshSession && !this._sessionReplayStartedByApp))
       ) {
-        await this._stopSessionRecording()
+        if (freshSession && !this.optedOut && this._restartSessionReplayOnOptIn) {
+          await this._startSessionRecording(true)
+        } else {
+          await this._stopSessionRecording()
+        }
       }
       if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
         await this.initializeNativePlugin(options, remoteConfig, false)
