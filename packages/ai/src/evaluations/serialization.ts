@@ -222,6 +222,9 @@ export function nullable<T>(value: unknown, parse: (v: unknown) => T): T | null 
 }
 export function tags(value: unknown, limit = 100): string[] {
   if (!Array.isArray(value) || value.length > limit) throw new TypeError(`Expected at most ${limit} tag names.`)
+  for (let i = 0; i < value.length; i++) {
+    if (!Object.hasOwn(value, i)) throw new TypeError('Tag lists cannot be sparse.')
+  }
   return value.map((v) => {
     const s = text(v)
     identifier(s.trim())

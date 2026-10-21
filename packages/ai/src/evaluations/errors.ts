@@ -14,6 +14,22 @@ export interface EvaluationErrorFields {
   persistence?: Persistence
   submission?: ExperimentOptions
 }
+/** Native cancellation with the prepared creation fields needed for recovery. */
+export class ExperimentCreationAbortedError extends DOMException {
+  readonly #cause: unknown
+  readonly #submission: ExperimentOptions
+  constructor(cause: unknown, submission: ExperimentOptions) {
+    super('Offline evaluation creation was cancelled.', cause instanceof DOMException ? cause.name : 'AbortError')
+    this.#cause = cause
+    this.#submission = copy(submission)
+  }
+  get cause(): unknown {
+    return this.#cause
+  }
+  get submission(): ExperimentOptions {
+    return copy(this.#submission)
+  }
+}
 /** An operation did not receive a valid acknowledgment. Inspect persistence before recovery. */
 export class EvaluationAPIError extends Error {
   readonly status?: number

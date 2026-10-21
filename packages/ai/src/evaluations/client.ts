@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Datasets } from './datasets'
 import { EvaluationItem, EvaluationResult, itemJSON, resultJSON, type EvaluationResultOptions } from './declarations'
-import { EvaluationAPIError, parseResponse } from './errors'
+import { EvaluationAPIError, ExperimentCreationAbortedError, parseResponse } from './errors'
 import { Scorers } from './scorers'
 import {
   boolean,
@@ -379,7 +379,8 @@ export class OfflineEvaluations {
     Object.freeze(this)
   }
   async createExperiment(options: ExperimentOptions, request: RequestOptions = {}): Promise<Experiment> {
-    const body = experimentBody(options),
+    const signal = request.signal,
+      body = experimentBody(options),
       submission = object(decode(body)),
       id = uuid(submission.id)
     try {
@@ -395,6 +396,8 @@ export class OfflineEvaluations {
         body
       )
     } catch (error) {
+      if (signal?.aborted && Object.is(error, signal.reason))
+        throw new ExperimentCreationAbortedError(error, submissionOptions(submission))
       if (!(error instanceof EvaluationAPIError)) throw error
       throw new EvaluationAPIError({
         ...error,

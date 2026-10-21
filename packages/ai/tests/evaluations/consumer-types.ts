@@ -1,11 +1,12 @@
 import {
-    OfflineEvaluations,
-    EvaluationItem,
-    EvaluationResult,
-    EvaluationAPIError,
-    BulkUploadError,
-    type Scorer,
-    type JSONValue,
+  OfflineEvaluations,
+  EvaluationItem,
+  EvaluationResult,
+  EvaluationAPIError,
+  ExperimentCreationAbortedError,
+  BulkUploadError,
+  type Scorer,
+  type JSONValue,
 } from '@posthog/ai/evaluations'
 
 const client = new OfflineEvaluations({ projectId: 123, secretKey: 'secret', timeoutMs: 15000 })
@@ -36,25 +37,30 @@ client.datasets.updateItem('uuid', { input: false })
 // @ts-expect-error Dataset source provenance is immutable on updates.
 client.datasets.updateItem('uuid', { baseVersion: 1, sourceOutput: 'new' })
 async function examples(scorer: Scorer, error: unknown): Promise<void> {
-    if (scorer.kind === 'categorical') scorer.config.options.map((o) => o.key)
-    if (scorer.kind === 'numeric') scorer.config.passingRule?.threshold
-    const numeric = await client.scorers.create({
-        name: 'test',
-        kind: 'numeric',
-        config: { passingRule: { operator: 'gte', threshold: 0 } },
+  if (scorer.kind === 'categorical') scorer.config.options.map((o) => o.key)
+  if (scorer.kind === 'numeric') scorer.config.passingRule?.threshold
+  const numeric = await client.scorers.create({
+    name: 'test',
+    kind: 'numeric',
+    config: { passingRule: { operator: 'gte', threshold: 0 } },
+  })
+  numeric.config.passingRule?.threshold
+  const run = await client.createExperiment({ name: 'test', expectedItemCount: 9223372036854775807n })
+  const snapshot = await client.datasets.snapshot('uuid')
+  for await (const row of snapshot) {
+    await run.uploadResult({
+      item: EvaluationItem.fromDatasetItem(row, { output: null }),
+      scorerVersionId: numeric.currentVersionId,
+      value: false,
     })
-    numeric.config.passingRule?.threshold
-    const run = await client.createExperiment({ name: 'test', expectedItemCount: 9223372036854775807n })
-    const snapshot = await client.datasets.snapshot('uuid')
-    for await (const row of snapshot) {
-        await run.uploadResult({
-            item: EvaluationItem.fromDatasetItem(row, { output: null }),
-            scorerVersionId: numeric.currentVersionId,
-            value: false,
-        })
-    }
-    if (error instanceof EvaluationAPIError && error.submission) await client.createExperiment(error.submission)
-    if (error instanceof BulkUploadError) await run.uploadResults(error.pendingResults)
+  }
+  if (error instanceof EvaluationAPIError && error.submission) await client.createExperiment(error.submission)
+  if (error instanceof ExperimentCreationAbortedError) {
+    const cancellation: DOMException = error
+    void cancellation
+    await client.createExperiment(error.submission)
+  }
+  if (error instanceof BulkUploadError) await run.uploadResults(error.pendingResults)
 }
 void examples
 client.close()

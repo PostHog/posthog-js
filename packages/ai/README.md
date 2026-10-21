@@ -182,6 +182,12 @@ closing the client or cancelling a request does neither. Pass `{ signal }` as a 
 request options, or within listing/snapshot options. Native cancellation propagates without a
 retry and does not prove an in-flight write was unpersisted. Retain declarations for replay.
 
+Cancelled creation rejects with `ExperimentCreationAbortedError`, a `DOMException` named
+`AbortError` (or the original DOMException name, such as `TimeoutError`). Its `cause` is the
+original cancellation reason, and `submission` is a defensive copy of the prepared creation
+fields. Save that submission to replay with the same ID and start time. Each cancelled creation
+has its own recovery data, including when several requests share one `AbortSignal`.
+
 Omitted fields, explicit nulls, empty payloads, false, and zero remain distinct. `undefined`
 omits a top-level optional option, but is rejected inside payload JSON. Payloads accept plain
 JSON values without coercion, cycles, accessors, invalid Unicode, NUL characters, or non-finite

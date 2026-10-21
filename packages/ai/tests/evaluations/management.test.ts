@@ -27,6 +27,28 @@ const collect = async <T>(iterable: AsyncIterable<T>): Promise<T[]> => {
 }
 afterEach(() => vi.unstubAllGlobals())
 
+it.each(['only hole', 'leading hole', 'trailing hole'])(
+  'rejects sparse tags before any management request: %s',
+  async (shape) => {
+    const fetch = mockFetch()
+    const tags = new Array<string>(shape === 'only hole' ? 1 : 2)
+    if (shape !== 'only hole') tags[shape === 'leading hole' ? 1 : 0] = 'keep'
+    const evaluations = client()
+    for (const request of [
+      () => evaluations.resumeExperiment(ID).setTags(tags),
+      () => evaluations.datasets.create({ name: 'Cases', tags }),
+      () => evaluations.datasets.update(DATASET, { tags }),
+      () => evaluations.datasets.list({ tags }),
+      () => evaluations.scorers.create({ name: 'Quality', kind: 'boolean', config: {}, tags }),
+      () => evaluations.scorers.update(ID, { tags }),
+      () => evaluations.scorers.list({ tags }),
+    ]) {
+      await expect(request()).rejects.toThrow(TypeError)
+    }
+    expect(fetch).not.toHaveBeenCalled()
+  }
+)
+
 describe('datasets: canonical contracts', () => {
   it('Metadata changes preserve revision state', async () => {
     const fetch = mockFetch().mockResolvedValue(

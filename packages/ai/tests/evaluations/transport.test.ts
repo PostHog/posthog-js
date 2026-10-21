@@ -211,6 +211,69 @@ it('Cancellation propagates without cleanup writes', async () => {
   expect((await pending).name).toBe('AbortError')
   expect(fetch).toHaveBeenCalledTimes(1)
 })
+it('cancelled creation preserves the generated submission for exact replay', async () => {
+  const fetch = mockFetch()
+    .mockImplementationOnce(
+      (_url, init) =>
+        new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)))
+    )
+    .mockImplementation((_url, init) => reply(experimentResponse(JSON.parse(init.body))))
+  const evaluations = client({ maxRetries: 3 })
+  const abort = new AbortController()
+  const pending = evaluations.createExperiment({ name: 'private cancellation test' }, { signal: abort.signal })
+  const failed = pending.catch((error) => error)
+  abort.abort()
+  const error = await failed
+  const sent = JSON.parse(fetch.mock.calls[0][1].body)
+  expect(error.submission).toEqual({ id: sent.id, name: sent.name, startedAt: sent.started_at })
+  expect(error).toBeInstanceOf(DOMException)
+  expect(error.name).toBe('AbortError')
+  expect(error.cause).toBe(abort.signal.reason)
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(inspect(error)).not.toContain('private cancellation test')
+  error.submission.id = ITEM
+  expect(error.submission.id).toBe(sent.id)
+  await evaluations.createExperiment(error.submission)
+  expect(fetch.mock.calls[1][1].body).toBe(fetch.mock.calls[0][1].body)
+})
+it.each([Object.freeze(new Error('private cancellation reason')), 'private cancellation reason'])(
+  'shared cancellation preserves separate submissions without changing its reason: %#',
+  async (reason) => {
+    const fetch = mockFetch().mockImplementation(
+      (_url, init) =>
+        new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)))
+    )
+    const evaluations = client()
+    const abort = new AbortController()
+    const pending = ['first', 'second'].map((name) =>
+      evaluations.createExperiment({ name }, { signal: abort.signal }).catch((error) => error)
+    )
+    abort.abort(reason)
+    const errors = await Promise.all(pending)
+    for (let i = 0; i < errors.length; i++) {
+      expect(errors[i].submission.id).toBe(JSON.parse(fetch.mock.calls[i][1].body).id)
+      expect(errors[i]).toBeInstanceOf(DOMException)
+      expect(errors[i].name).toBe('AbortError')
+      expect(errors[i].cause).toBe(reason)
+      expect(inspect(errors[i])).not.toContain('private cancellation reason')
+    }
+    expect(errors[0].submission.id).not.toBe(errors[1].submission.id)
+    expect(abort.signal.reason).toBe(reason)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  }
+)
+it('an already-aborted creation retains recovery fields without I/O', async () => {
+  const fetch = mockFetch()
+  const reason = new DOMException('Timed out', 'TimeoutError')
+  const error = await client()
+    .createExperiment({ name: 'Run' }, { signal: AbortSignal.abort(reason) })
+    .catch((error) => error)
+  expect(error.submission).toMatchObject({ name: 'Run', id: expect.any(String), startedAt: expect.any(String) })
+  expect(error).toBeInstanceOf(DOMException)
+  expect(error.name).toBe('TimeoutError')
+  expect(error.cause).toBe(reason)
+  expect(fetch).not.toHaveBeenCalled()
+})
 it('keeps the timeout active while reading the response body', async () => {
   vi.useFakeTimers()
   const fetch = mockFetch().mockImplementation((_url, init) =>

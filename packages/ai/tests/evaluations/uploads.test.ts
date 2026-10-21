@@ -24,6 +24,11 @@ it('Resume does not discover or create a run', () => {
   expect(experiment.submission).toBeUndefined()
   expect(fetch).not.toHaveBeenCalled()
 })
+it('allows explicitly clearing tags with an empty array', async () => {
+  const fetch = mockFetch().mockResolvedValue(reply({ id: ID, tags: [] }))
+  expect(await client().resumeExperiment(ID).setTags([])).toEqual([])
+  expect(requestBody(fetch)).toEqual({ tags: [] })
+})
 it.each([0, 1])('rejects a sparse category array with its value at index %i before I/O', async (index) => {
   const fetch = mockFetch()
   const value = new Array<string>(2)
