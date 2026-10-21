@@ -3292,7 +3292,6 @@ export class PostHog extends PostHogCore {
     if (!this._sessionReplayOptOutReadPending) {
       return
     }
-    this._sessionReplayOptOutReadPending = false
     // Unknown (failed or timed out) counts as recording, so opt-in errs toward restoring replay.
     const read: Promise<boolean | undefined> = OptionalReactNativePlugin
       ? OptionalReactNativePlugin.isEnabled().catch((e) => {
@@ -3303,6 +3302,11 @@ export class PostHog extends PostHogCore {
     const active = await raceWithTimeout(read, NATIVE_CALL_TIMEOUT_MS, () =>
       this._logger.warn(`Reading the session replay state timed out after ${NATIVE_CALL_TIMEOUT_MS}ms; continuing.`)
     )
+    // Stays pending until applied, so an opt-in waits for it. A stop made since then has decided.
+    if (!this._sessionReplayOptOutReadPending) {
+      return
+    }
+    this._sessionReplayOptOutReadPending = false
     this._restartSessionReplayOnOptIn = active ?? true
   }
 
