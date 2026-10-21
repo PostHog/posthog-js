@@ -1,5 +1,14 @@
 # posthog-node
 
+## 5.56.4
+
+### Patch Changes
+
+- [#5350](https://github.com/PostHog/posthog-js/pull/5350) [`17260e5`](https://github.com/PostHog/posthog-js/commit/17260e501d6ae4b2fae17a2822c6a2f6d4addfe4) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back from local flag evaluation when a required property value is undefined.
+  (2026-10-21)
+- Updated dependencies [[`17260e5`](https://github.com/PostHog/posthog-js/commit/17260e501d6ae4b2fae17a2822c6a2f6d4addfe4)]:
+  - @posthog/core@1.59.3
+
 ## 5.56.3
 
 ### Patch Changes
