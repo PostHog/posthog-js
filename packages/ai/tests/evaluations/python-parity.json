@@ -1,0 +1,1438 @@
+{
+    "pythonRevision": "2936009887d4b23c9eb4156f77e06734e9513e78",
+    "cases": [
+        {
+            "name": "client.create_experiment",
+            "resource": "client",
+            "method": "createExperiment",
+            "args": [
+                {
+                    "name": "Regression",
+                    "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                    "startedAt": "2026-10-02T12:00:00.000Z",
+                    "expectedItemCount": 0,
+                    "expectedResultCount": 0,
+                    "runSource": null,
+                    "datasetRevisionId": "ba71a1bb-836f-4c19-9d06-1d36d44948a4"
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/ai_observability/offline_experiments/",
+                "params": {},
+                "retrySafe": true,
+                "body": {
+                    "dataset_revision_id": "ba71a1bb-836f-4c19-9d06-1d36d44948a4",
+                    "expected_item_count": 0,
+                    "expected_result_count": 0,
+                    "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                    "name": "Regression",
+                    "run_source": null,
+                    "started_at": "2026-10-02T12:00:00+00:00"
+                }
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "status": "uploading",
+                "created": true,
+                "started_at": "2026-10-02T12:00:00Z",
+                "created_at": "2026-10-02T12:00:00Z",
+                "finished_at": null,
+                "expected_item_count": null,
+                "expected_result_count": null,
+                "accepted_item_count": 0,
+                "accepted_result_count": 0
+            }
+        },
+        {
+            "name": "datasets.create",
+            "resource": "datasets",
+            "method": "create",
+            "args": [
+                {
+                    "name": "Cases",
+                    "description": "",
+                    "metadata": {},
+                    "tags": [" Regression "]
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/datasets/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "description": "",
+                    "metadata": {},
+                    "name": "Cases",
+                    "tags": [" Regression "]
+                }
+            },
+            "response": {
+                "id": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "name": "Capital cities",
+                "description": "Regression cases",
+                "metadata": {
+                    "owner": "support"
+                },
+                "tags": ["regression"],
+                "archived": false,
+                "current_revision": 3,
+                "current_revision_id": "ba71a1bb-836f-4c19-9d06-1d36d44948a4",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": null,
+                "created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.get",
+            "resource": "datasets",
+            "method": "get",
+            "args": ["015e4ac4-3659-456b-998c-4345b4e4c846"],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/datasets/015e4ac4-3659-456b-998c-4345b4e4c846/",
+                "params": {},
+                "retrySafe": true
+            },
+            "response": {
+                "id": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "name": "Capital cities",
+                "description": "Regression cases",
+                "metadata": {
+                    "owner": "support"
+                },
+                "tags": ["regression"],
+                "archived": false,
+                "current_revision": 3,
+                "current_revision_id": "ba71a1bb-836f-4c19-9d06-1d36d44948a4",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": null,
+                "created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.list",
+            "resource": "datasets",
+            "method": "list",
+            "args": [
+                {
+                    "search": "Cases",
+                    "archived": false,
+                    "tags": ["Regression"],
+                    "tagMatch": "all"
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/datasets/",
+                "params": {
+                    "limit": 50,
+                    "offset": 0,
+                    "tags": "[\"Regression\"]",
+                    "tag_match": "all",
+                    "archived": "false",
+                    "order_by": "-created_at",
+                    "search": "Cases"
+                },
+                "retrySafe": true
+            },
+            "response": {
+                "count": 1,
+                "results": [
+                    {
+                        "id": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                        "name": "Capital cities",
+                        "description": "Regression cases",
+                        "metadata": {
+                            "owner": "support"
+                        },
+                        "tags": ["regression"],
+                        "archived": false,
+                        "current_revision": 3,
+                        "current_revision_id": "ba71a1bb-836f-4c19-9d06-1d36d44948a4",
+                        "created_at": "2026-10-20T10:00:00Z",
+                        "updated_at": null,
+                        "created_by": null,
+                        "team_id": 123
+                    }
+                ],
+                "next": null,
+                "previous": null
+            }
+        },
+        {
+            "name": "datasets.update",
+            "resource": "datasets",
+            "method": "update",
+            "args": [
+                "015e4ac4-3659-456b-998c-4345b4e4c846",
+                {
+                    "description": "",
+                    "metadata": {},
+                    "tags": []
+                }
+            ],
+            "request": {
+                "method": "PATCH",
+                "path": "/api/projects/123/datasets/015e4ac4-3659-456b-998c-4345b4e4c846/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "description": "",
+                    "metadata": {},
+                    "tags": []
+                }
+            },
+            "response": {
+                "id": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "name": "Capital cities",
+                "description": "Regression cases",
+                "metadata": {
+                    "owner": "support"
+                },
+                "tags": ["regression"],
+                "archived": false,
+                "current_revision": 3,
+                "current_revision_id": "ba71a1bb-836f-4c19-9d06-1d36d44948a4",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": null,
+                "created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.archive",
+            "resource": "datasets",
+            "method": "archive",
+            "args": ["015e4ac4-3659-456b-998c-4345b4e4c846"],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/datasets/015e4ac4-3659-456b-998c-4345b4e4c846/archive/",
+                "params": {},
+                "retrySafe": false,
+                "body": {}
+            },
+            "response": {
+                "id": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "name": "Capital cities",
+                "description": "Regression cases",
+                "metadata": {
+                    "owner": "support"
+                },
+                "tags": ["regression"],
+                "archived": false,
+                "current_revision": 3,
+                "current_revision_id": "ba71a1bb-836f-4c19-9d06-1d36d44948a4",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": null,
+                "created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.restore",
+            "resource": "datasets",
+            "method": "restore",
+            "args": ["015e4ac4-3659-456b-998c-4345b4e4c846"],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/datasets/015e4ac4-3659-456b-998c-4345b4e4c846/restore/",
+                "params": {},
+                "retrySafe": false,
+                "body": {}
+            },
+            "response": {
+                "id": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "name": "Capital cities",
+                "description": "Regression cases",
+                "metadata": {
+                    "owner": "support"
+                },
+                "tags": ["regression"],
+                "archived": false,
+                "current_revision": 3,
+                "current_revision_id": "ba71a1bb-836f-4c19-9d06-1d36d44948a4",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": null,
+                "created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.list_revisions",
+            "resource": "datasets",
+            "method": "listRevisions",
+            "args": [
+                "015e4ac4-3659-456b-998c-4345b4e4c846",
+                {
+                    "limit": 2,
+                    "offset": 1
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/datasets/015e4ac4-3659-456b-998c-4345b4e4c846/revisions/",
+                "params": {
+                    "limit": 2,
+                    "offset": 1
+                },
+                "retrySafe": true
+            },
+            "response": {
+                "count": 1,
+                "results": [
+                    {
+                        "id": "a4137aa9-4e27-4829-928b-568cc55a0082",
+                        "dataset_id": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                        "revision": 1,
+                        "created_at": "2026-10-20T10:00:00Z",
+                        "created_by": null,
+                        "team_id": 123
+                    }
+                ],
+                "next": null,
+                "previous": null
+            }
+        },
+        {
+            "name": "datasets.list_items",
+            "resource": "datasets",
+            "method": "listItems",
+            "args": [
+                "015e4ac4-3659-456b-998c-4345b4e4c846",
+                {
+                    "revision": 3,
+                    "archived": false,
+                    "limit": 2,
+                    "offset": 1
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/dataset_items/",
+                "params": {
+                    "limit": 2,
+                    "offset": 1,
+                    "dataset": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                    "archived": "false",
+                    "revision": 3
+                },
+                "retrySafe": true
+            },
+            "response": {
+                "count": 1,
+                "results": [
+                    {
+                        "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                        "dataset": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                        "client_item_id": "capital-france",
+                        "version": 2,
+                        "version_id": "9e2bdd1a-ad9e-4a96-9bc0-77a7f4d8b35e",
+                        "dataset_revision": 2,
+                        "dataset_revision_id": "a4137aa9-4e27-4829-928b-568cc55a0082",
+                        "archived": false,
+                        "input": {
+                            "question": "Capital of France?"
+                        },
+                        "expected_output": "Paris",
+                        "source_output": "Lyon",
+                        "metadata": {
+                            "category": ["geography"]
+                        },
+                        "source_trace_id": "source-trace",
+                        "source_event_id": "source-event",
+                        "source_timestamp": "2026-10-20T10:00:00Z",
+                        "created_at": "2026-10-20T10:00:00Z",
+                        "updated_at": "2026-10-20T10:00:00Z",
+                        "created_by": null,
+                        "version_created_at": "2026-10-20T10:00:00Z",
+                        "version_created_by": null,
+                        "team_id": 123
+                    }
+                ],
+                "next": null,
+                "previous": null
+            }
+        },
+        {
+            "name": "datasets.snapshot",
+            "resource": "datasets",
+            "method": "snapshot",
+            "args": ["015e4ac4-3659-456b-998c-4345b4e4c846"],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/datasets/015e4ac4-3659-456b-998c-4345b4e4c846/",
+                "params": {},
+                "retrySafe": true
+            },
+            "response": {
+                "id": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "name": "Capital cities",
+                "description": "Regression cases",
+                "metadata": {
+                    "owner": "support"
+                },
+                "tags": ["regression"],
+                "archived": false,
+                "current_revision": 3,
+                "current_revision_id": "ba71a1bb-836f-4c19-9d06-1d36d44948a4",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": null,
+                "created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.create_item",
+            "resource": "datasets",
+            "method": "createItem",
+            "args": [
+                "015e4ac4-3659-456b-998c-4345b4e4c846",
+                {
+                    "input": false,
+                    "expectedOutput": 0,
+                    "sourceOutput": "",
+                    "metadata": {},
+                    "clientItemId": "case-A",
+                    "sourceTraceId": "source",
+                    "sourceEventId": "event",
+                    "sourceTimestamp": "2026-10-02T12:00:00.000Z"
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/dataset_items/",
+                "params": {},
+                "retrySafe": true,
+                "body": {
+                    "client_item_id": "case-A",
+                    "dataset": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                    "expected_output": 0,
+                    "input": false,
+                    "metadata": {},
+                    "source_event_id": "event",
+                    "source_output": "",
+                    "source_timestamp": "2026-10-02T12:00:00+00:00",
+                    "source_trace_id": "source"
+                }
+            },
+            "response": {
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "dataset": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "client_item_id": "capital-france",
+                "version": 2,
+                "version_id": "9e2bdd1a-ad9e-4a96-9bc0-77a7f4d8b35e",
+                "dataset_revision": 2,
+                "dataset_revision_id": "a4137aa9-4e27-4829-928b-568cc55a0082",
+                "archived": false,
+                "input": {
+                    "question": "Capital of France?"
+                },
+                "expected_output": "Paris",
+                "source_output": "Lyon",
+                "metadata": {
+                    "category": ["geography"]
+                },
+                "source_trace_id": "source-trace",
+                "source_event_id": "source-event",
+                "source_timestamp": "2026-10-20T10:00:00Z",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": "2026-10-20T10:00:00Z",
+                "created_by": null,
+                "version_created_at": "2026-10-20T10:00:00Z",
+                "version_created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.get_item",
+            "resource": "datasets",
+            "method": "getItem",
+            "args": [
+                "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                {
+                    "revision": 3
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/dataset_items/7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1/",
+                "params": {
+                    "revision": 3
+                },
+                "retrySafe": true
+            },
+            "response": {
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "dataset": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "client_item_id": "capital-france",
+                "version": 2,
+                "version_id": "9e2bdd1a-ad9e-4a96-9bc0-77a7f4d8b35e",
+                "dataset_revision": 2,
+                "dataset_revision_id": "a4137aa9-4e27-4829-928b-568cc55a0082",
+                "archived": false,
+                "input": {
+                    "question": "Capital of France?"
+                },
+                "expected_output": "Paris",
+                "source_output": "Lyon",
+                "metadata": {
+                    "category": ["geography"]
+                },
+                "source_trace_id": "source-trace",
+                "source_event_id": "source-event",
+                "source_timestamp": "2026-10-20T10:00:00Z",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": "2026-10-20T10:00:00Z",
+                "created_by": null,
+                "version_created_at": "2026-10-20T10:00:00Z",
+                "version_created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.update_item",
+            "resource": "datasets",
+            "method": "updateItem",
+            "args": [
+                "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                {
+                    "baseVersion": 2,
+                    "expectedOutput": null,
+                    "metadata": {}
+                }
+            ],
+            "request": {
+                "method": "PATCH",
+                "path": "/api/projects/123/dataset_items/7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "base_version": 2,
+                    "expected_output": null,
+                    "metadata": {}
+                }
+            },
+            "response": {
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "dataset": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "client_item_id": "capital-france",
+                "version": 2,
+                "version_id": "9e2bdd1a-ad9e-4a96-9bc0-77a7f4d8b35e",
+                "dataset_revision": 2,
+                "dataset_revision_id": "a4137aa9-4e27-4829-928b-568cc55a0082",
+                "archived": false,
+                "input": {
+                    "question": "Capital of France?"
+                },
+                "expected_output": "Paris",
+                "source_output": "Lyon",
+                "metadata": {
+                    "category": ["geography"]
+                },
+                "source_trace_id": "source-trace",
+                "source_event_id": "source-event",
+                "source_timestamp": "2026-10-20T10:00:00Z",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": "2026-10-20T10:00:00Z",
+                "created_by": null,
+                "version_created_at": "2026-10-20T10:00:00Z",
+                "version_created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.archive_item",
+            "resource": "datasets",
+            "method": "archiveItem",
+            "args": [
+                "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                {
+                    "baseVersion": 2
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/dataset_items/7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1/archive/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "base_version": 2
+                }
+            },
+            "response": {
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "dataset": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "client_item_id": "capital-france",
+                "version": 2,
+                "version_id": "9e2bdd1a-ad9e-4a96-9bc0-77a7f4d8b35e",
+                "dataset_revision": 2,
+                "dataset_revision_id": "a4137aa9-4e27-4829-928b-568cc55a0082",
+                "archived": true,
+                "input": {
+                    "question": "Capital of France?"
+                },
+                "expected_output": "Paris",
+                "source_output": "Lyon",
+                "metadata": {
+                    "category": ["geography"]
+                },
+                "source_trace_id": "source-trace",
+                "source_event_id": "source-event",
+                "source_timestamp": "2026-10-20T10:00:00Z",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": "2026-10-20T10:00:00Z",
+                "created_by": null,
+                "version_created_at": "2026-10-20T10:00:00Z",
+                "version_created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.restore_item",
+            "resource": "datasets",
+            "method": "restoreItem",
+            "args": [
+                "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                {
+                    "baseVersion": 3,
+                    "sourceVersion": 1
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/dataset_items/7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1/restore/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "base_version": 3,
+                    "source_version": 1
+                }
+            },
+            "response": {
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "dataset": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                "client_item_id": "capital-france",
+                "version": 2,
+                "version_id": "9e2bdd1a-ad9e-4a96-9bc0-77a7f4d8b35e",
+                "dataset_revision": 2,
+                "dataset_revision_id": "a4137aa9-4e27-4829-928b-568cc55a0082",
+                "archived": false,
+                "input": {
+                    "question": "Capital of France?"
+                },
+                "expected_output": "Paris",
+                "source_output": "Lyon",
+                "metadata": {
+                    "category": ["geography"]
+                },
+                "source_trace_id": "source-trace",
+                "source_event_id": "source-event",
+                "source_timestamp": "2026-10-20T10:00:00Z",
+                "created_at": "2026-10-20T10:00:00Z",
+                "updated_at": "2026-10-20T10:00:00Z",
+                "created_by": null,
+                "version_created_at": "2026-10-20T10:00:00Z",
+                "version_created_by": null,
+                "team_id": 123
+            }
+        },
+        {
+            "name": "datasets.list_item_versions",
+            "resource": "datasets",
+            "method": "listItemVersions",
+            "args": [
+                "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                {
+                    "limit": 2,
+                    "offset": 1
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/dataset_items/7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1/versions/",
+                "params": {
+                    "limit": 2,
+                    "offset": 1
+                },
+                "retrySafe": true
+            },
+            "response": {
+                "count": 1,
+                "results": [
+                    {
+                        "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                        "dataset": "015e4ac4-3659-456b-998c-4345b4e4c846",
+                        "client_item_id": "capital-france",
+                        "version": 2,
+                        "version_id": "9e2bdd1a-ad9e-4a96-9bc0-77a7f4d8b35e",
+                        "dataset_revision": 2,
+                        "dataset_revision_id": "a4137aa9-4e27-4829-928b-568cc55a0082",
+                        "archived": false,
+                        "input": {
+                            "question": "Capital of France?"
+                        },
+                        "expected_output": "Paris",
+                        "source_output": "Lyon",
+                        "metadata": {
+                            "category": ["geography"]
+                        },
+                        "source_trace_id": "source-trace",
+                        "source_event_id": "source-event",
+                        "source_timestamp": "2026-10-20T10:00:00Z",
+                        "created_at": "2026-10-20T10:00:00Z",
+                        "updated_at": "2026-10-20T10:00:00Z",
+                        "created_by": null,
+                        "version_created_at": "2026-10-20T10:00:00Z",
+                        "version_created_by": null,
+                        "team_id": 123
+                    }
+                ],
+                "next": null,
+                "previous": null
+            }
+        },
+        {
+            "name": "scorers.create",
+            "resource": "scorers",
+            "method": "create",
+            "args": [
+                {
+                    "name": "Quality",
+                    "kind": "boolean",
+                    "config": {
+                        "trueIsFailure": true,
+                        "trueLabel": "Failure",
+                        "falseLabel": "Pass"
+                    },
+                    "tags": []
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/llm_analytics/score_definitions/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "name": "Quality",
+                    "kind": "boolean",
+                    "config": {
+                        "true_is_failure": true,
+                        "true_label": "Failure",
+                        "false_label": "Pass"
+                    },
+                    "tags": []
+                }
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "name": "Quality",
+                "description": "",
+                "kind": "boolean",
+                "archived": false,
+                "current_version": 1,
+                "current_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "config": {
+                    "true_is_failure": true,
+                    "true_label": "Failure",
+                    "false_label": "Pass"
+                },
+                "created_by": null,
+                "created_at": "2026-10-02T10:00:00Z",
+                "updated_at": "2026-10-02T10:00:00Z",
+                "team": 123
+            }
+        },
+        {
+            "name": "scorers.create",
+            "resource": "scorers",
+            "method": "create",
+            "args": [
+                {
+                    "name": "Quality",
+                    "kind": "numeric",
+                    "config": {
+                        "min": null,
+                        "max": null,
+                        "passingRule": {
+                            "operator": "gte",
+                            "threshold": 0
+                        }
+                    },
+                    "tags": []
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/llm_analytics/score_definitions/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "name": "Quality",
+                    "kind": "numeric",
+                    "config": {
+                        "min": null,
+                        "max": null,
+                        "passing_rule": {
+                            "operator": "gte",
+                            "threshold": 0
+                        }
+                    },
+                    "tags": []
+                }
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "name": "Quality",
+                "description": "",
+                "kind": "numeric",
+                "archived": false,
+                "current_version": 1,
+                "current_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "config": {
+                    "min": null,
+                    "max": null,
+                    "passing_rule": {
+                        "operator": "gte",
+                        "threshold": 0
+                    }
+                },
+                "created_by": null,
+                "created_at": "2026-10-02T10:00:00Z",
+                "updated_at": "2026-10-02T10:00:00Z",
+                "team": 123
+            }
+        },
+        {
+            "name": "scorers.create",
+            "resource": "scorers",
+            "method": "create",
+            "args": [
+                {
+                    "name": "Quality",
+                    "kind": "categorical",
+                    "config": {
+                        "options": [
+                            {
+                                "key": "safe",
+                                "label": "Safe"
+                            }
+                        ],
+                        "selectionMode": "multiple",
+                        "passingRule": {
+                            "categories": []
+                        }
+                    },
+                    "tags": []
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/llm_analytics/score_definitions/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "name": "Quality",
+                    "kind": "categorical",
+                    "config": {
+                        "options": [
+                            {
+                                "key": "safe",
+                                "label": "Safe"
+                            }
+                        ],
+                        "selection_mode": "multiple",
+                        "passing_rule": {
+                            "categories": []
+                        }
+                    },
+                    "tags": []
+                }
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "name": "Quality",
+                "description": "",
+                "kind": "categorical",
+                "archived": false,
+                "current_version": 1,
+                "current_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "config": {
+                    "options": [
+                        {
+                            "key": "safe",
+                            "label": "Safe"
+                        }
+                    ],
+                    "selection_mode": "multiple",
+                    "passing_rule": {
+                        "categories": []
+                    }
+                },
+                "created_by": null,
+                "created_at": "2026-10-02T10:00:00Z",
+                "updated_at": "2026-10-02T10:00:00Z",
+                "team": 123
+            }
+        },
+        {
+            "name": "scorers.get",
+            "resource": "scorers",
+            "method": "get",
+            "args": ["8cba6d9e-d2ee-4b23-a545-a61057da5870"],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/llm_analytics/score_definitions/8cba6d9e-d2ee-4b23-a545-a61057da5870/",
+                "params": {},
+                "retrySafe": true
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "name": "Quality",
+                "description": "",
+                "kind": "numeric",
+                "archived": false,
+                "current_version": 1,
+                "current_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "config": {
+                    "min": 0,
+                    "max": 1
+                },
+                "created_by": null,
+                "created_at": "2026-10-02T10:00:00Z",
+                "updated_at": "2026-10-02T10:00:00Z",
+                "team": 123
+            }
+        },
+        {
+            "name": "scorers.list",
+            "resource": "scorers",
+            "method": "list",
+            "args": [
+                {
+                    "limit": 5,
+                    "offset": 2,
+                    "search": "Quality",
+                    "kind": "numeric",
+                    "archived": false,
+                    "orderBy": "-updated_at",
+                    "tags": ["Regression"],
+                    "tagMatch": "all"
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/llm_analytics/score_definitions/",
+                "params": {
+                    "limit": 5,
+                    "offset": 2,
+                    "search": "Quality",
+                    "kind": "numeric",
+                    "archived": "false",
+                    "order_by": "-updated_at",
+                    "tags": "[\"Regression\"]",
+                    "tag_match": "all"
+                },
+                "retrySafe": true
+            },
+            "response": {
+                "count": 1,
+                "results": [
+                    {
+                        "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                        "name": "Quality",
+                        "description": "",
+                        "kind": "numeric",
+                        "archived": false,
+                        "current_version": 1,
+                        "current_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                        "config": {
+                            "min": 0,
+                            "max": 1
+                        },
+                        "created_by": null,
+                        "created_at": "2026-10-02T10:00:00Z",
+                        "updated_at": "2026-10-02T10:00:00Z",
+                        "team": 123
+                    }
+                ],
+                "next": null,
+                "previous": null
+            }
+        },
+        {
+            "name": "scorers.update",
+            "resource": "scorers",
+            "method": "update",
+            "args": [
+                "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                {
+                    "archived": false,
+                    "description": null,
+                    "tags": []
+                }
+            ],
+            "request": {
+                "method": "PATCH",
+                "path": "/api/projects/123/llm_analytics/score_definitions/8cba6d9e-d2ee-4b23-a545-a61057da5870/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "description": null,
+                    "archived": false,
+                    "tags": []
+                }
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "name": "Quality",
+                "description": "",
+                "kind": "numeric",
+                "archived": false,
+                "current_version": 1,
+                "current_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "config": {
+                    "min": 0,
+                    "max": 1
+                },
+                "created_by": null,
+                "created_at": "2026-10-02T10:00:00Z",
+                "updated_at": "2026-10-02T10:00:00Z",
+                "team": 123
+            }
+        },
+        {
+            "name": "scorers.create_version",
+            "resource": "scorers",
+            "method": "createVersion",
+            "args": [
+                "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                {
+                    "config": {
+                        "min": 0,
+                        "passingRule": {
+                            "operator": "gte",
+                            "threshold": 0
+                        }
+                    },
+                    "baseVersion": 1,
+                    "description": null
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/llm_analytics/score_definitions/8cba6d9e-d2ee-4b23-a545-a61057da5870/new_version/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "description": null,
+                    "config": {
+                        "min": 0,
+                        "passing_rule": {
+                            "operator": "gte",
+                            "threshold": 0
+                        }
+                    },
+                    "base_version": 1
+                }
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "name": "Quality",
+                "description": "",
+                "kind": "numeric",
+                "archived": false,
+                "current_version": 1,
+                "current_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "config": {
+                    "min": 0,
+                    "max": 1
+                },
+                "created_by": null,
+                "created_at": "2026-10-02T10:00:00Z",
+                "updated_at": "2026-10-02T10:00:00Z",
+                "team": 123
+            }
+        },
+        {
+            "name": "scorers.get_version",
+            "resource": "scorers",
+            "method": "getVersion",
+            "args": ["8cba6d9e-d2ee-4b23-a545-a61057da5870", "f72481ec-1310-41de-b5bb-d20e1c59f121"],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/llm_analytics/score_definitions/8cba6d9e-d2ee-4b23-a545-a61057da5870/versions/f72481ec-1310-41de-b5bb-d20e1c59f121/",
+                "params": {},
+                "retrySafe": true
+            },
+            "response": {
+                "id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "definition_id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "version": 1,
+                "kind": "numeric",
+                "config": {
+                    "min": 0,
+                    "max": 1
+                },
+                "created_at": "2026-10-02T10:00:00Z",
+                "created_by": null
+            }
+        },
+        {
+            "name": "scorers.list_versions",
+            "resource": "scorers",
+            "method": "listVersions",
+            "args": [
+                "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                {
+                    "limit": 2,
+                    "cursor": "opaque+cursor"
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/llm_analytics/score_definitions/8cba6d9e-d2ee-4b23-a545-a61057da5870/versions/",
+                "params": {
+                    "limit": 2,
+                    "cursor": "opaque+cursor"
+                },
+                "retrySafe": true
+            },
+            "response": {
+                "count": 1,
+                "results": [
+                    {
+                        "id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                        "definition_id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                        "version": 1,
+                        "kind": "numeric",
+                        "config": {
+                            "min": 0,
+                            "max": 1
+                        },
+                        "created_at": "2026-10-02T10:00:00Z",
+                        "created_by": null
+                    }
+                ],
+                "next_cursor": null
+            }
+        },
+        {
+            "name": "experiment.get_tags",
+            "resource": "experiment",
+            "method": "getTags",
+            "args": [],
+            "request": {
+                "method": "GET",
+                "path": "/api/projects/123/ai_observability/offline_experiments/8cba6d9e-d2ee-4b23-a545-a61057da5870/",
+                "params": {},
+                "retrySafe": true
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "tags": ["regression"]
+            }
+        },
+        {
+            "name": "experiment.set_tags",
+            "resource": "experiment",
+            "method": "setTags",
+            "args": [[" Regression ", "regression"]],
+            "request": {
+                "method": "PATCH",
+                "path": "/api/projects/123/ai_observability/offline_experiments/8cba6d9e-d2ee-4b23-a545-a61057da5870/",
+                "params": {},
+                "retrySafe": false,
+                "body": {
+                    "tags": [" Regression ", "regression"]
+                }
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "tags": ["regression"]
+            }
+        },
+        {
+            "name": "experiment.complete",
+            "resource": "experiment",
+            "method": "complete",
+            "args": [],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/ai_observability/offline_experiments/8cba6d9e-d2ee-4b23-a545-a61057da5870/complete/",
+                "params": {},
+                "retrySafe": true,
+                "body": {}
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "status": "completed",
+                "created": true,
+                "started_at": "2026-10-02T12:00:00Z",
+                "created_at": "2026-10-02T12:00:00Z",
+                "finished_at": "2026-10-02T12:00:00.000Z",
+                "expected_item_count": null,
+                "expected_result_count": null,
+                "accepted_item_count": 0,
+                "accepted_result_count": 0
+            }
+        },
+        {
+            "name": "experiment.fail",
+            "resource": "experiment",
+            "method": "fail",
+            "args": [],
+            "request": {
+                "method": "POST",
+                "path": "/api/projects/123/ai_observability/offline_experiments/8cba6d9e-d2ee-4b23-a545-a61057da5870/fail/",
+                "params": {},
+                "retrySafe": true,
+                "body": {}
+            },
+            "response": {
+                "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+                "status": "failed",
+                "created": true,
+                "started_at": "2026-10-02T12:00:00Z",
+                "created_at": "2026-10-02T12:00:00Z",
+                "finished_at": "2026-10-02T12:00:00.000Z",
+                "expected_item_count": null,
+                "expected_result_count": null,
+                "accepted_item_count": 0,
+                "accepted_result_count": 0
+            }
+        }
+    ],
+    "declarations": [
+        {
+            "kind": "item",
+            "options": {
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1"
+            },
+            "wire": {
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1"
+            }
+        },
+        {
+            "kind": "item",
+            "options": {
+                "payload": {},
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1"
+            },
+            "wire": {
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "payload": {}
+            }
+        },
+        {
+            "kind": "item",
+            "options": {
+                "output": null,
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1"
+            },
+            "wire": {
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "payload": {
+                    "output": null
+                }
+            }
+        },
+        {
+            "kind": "item",
+            "options": {
+                "input": false,
+                "output": 0,
+                "expectedOutput": "",
+                "metadata": {
+                    "user_key": [false, null, "é😀"]
+                },
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1"
+            },
+            "wire": {
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "payload": {
+                    "expected_output": "",
+                    "input": false,
+                    "metadata": {
+                        "user_key": [false, null, "é😀"]
+                    },
+                    "output": 0
+                }
+            }
+        },
+        {
+            "kind": "item",
+            "options": {
+                "caseKey": "case",
+                "trial": "one",
+                "applicationTraceId": "trace",
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1"
+            },
+            "wire": {
+                "application_trace_id": "trace",
+                "case_key": "case",
+                "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "trial": "one"
+            }
+        },
+        {
+            "kind": "result",
+            "options": {
+                "item": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "value": false
+            },
+            "wire": {
+                "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "ok",
+                "value": false
+            }
+        },
+        {
+            "kind": "result",
+            "options": {
+                "item": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "value": 0
+            },
+            "wire": {
+                "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "ok",
+                "value": 0.0
+            }
+        },
+        {
+            "kind": "result",
+            "options": {
+                "item": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "value": -1.25
+            },
+            "wire": {
+                "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "ok",
+                "value": -1.25
+            }
+        },
+        {
+            "kind": "result",
+            "options": {
+                "item": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "value": ["😀", "", "a"]
+            },
+            "wire": {
+                "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "ok",
+                "value": ["a", "", "😀"]
+            }
+        },
+        {
+            "kind": "result",
+            "options": {
+                "item": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "error",
+                "errorCode": "timeout",
+                "errorMessage": null
+            },
+            "wire": {
+                "error_code": "timeout",
+                "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "payload": {
+                    "error_message": null
+                },
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "error"
+            }
+        },
+        {
+            "kind": "result",
+            "options": {
+                "item": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "skipped"
+            },
+            "wire": {
+                "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "skipped"
+            }
+        },
+        {
+            "kind": "result",
+            "options": {
+                "item": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "not_applicable"
+            },
+            "wire": {
+                "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "not_applicable"
+            }
+        },
+        {
+            "kind": "result",
+            "options": {
+                "item": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "value": true,
+                "evaluatedAt": "2026-10-02T14:00:00.123456+02:00"
+            },
+            "wire": {
+                "evaluated_at": "2026-10-02T12:00:00.123456+00:00",
+                "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                "status": "ok",
+                "value": true
+            }
+        }
+    ],
+    "upload": {
+        "body": {
+            "items": [
+                {
+                    "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                    "payload": {
+                        "input": "question",
+                        "output": "answer"
+                    }
+                }
+            ],
+            "results": [
+                {
+                    "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                    "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                    "status": "ok",
+                    "value": false
+                }
+            ]
+        },
+        "response": {
+            "items": [
+                {
+                    "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                    "created": true,
+                    "accepted_at": "2026-10-02T12:00:00Z"
+                }
+            ],
+            "results": [
+                {
+                    "id": "c925afd6-1595-5d46-b4d0-31ccc06ee3b6",
+                    "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+                    "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+                    "created": true,
+                    "accepted_at": "2026-10-02T12:00:00Z"
+                }
+            ]
+        }
+    }
+}

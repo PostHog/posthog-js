@@ -70,3 +70,128 @@ The SDK's synchronous `close()` method also starts finalization; await `return()
 ## Questions?
 
 ### [Check out our community page.](https://posthog.com/posts)
+
+## Datasets, scorers, and offline evaluations
+
+Import the server-only API from `@posthog/ai/evaluations`. It has no model-provider runtime
+requirements and does not require a `posthog-node` analytics client. Every network method
+returns a Promise that resolves only after a validated server acknowledgment; there is no
+capture queue or flush step. Your application executes models and evaluators.
+
+```ts
+import { OfflineEvaluations, EvaluationItem } from '@posthog/ai/evaluations'
+
+const evaluations = new OfflineEvaluations({
+  projectId: 123,
+  secretKey: process.env.POSTHOG_PERSONAL_API_KEY!,
+  // host: 'https://eu.posthog.com',
+  // timeoutMs: 15_000,
+  // maxRetries: 3, // additional attempts, only for operations safe to replay
+})
+
+try {
+  const snapshot = await evaluations.datasets.snapshot(datasetId)
+  const scorer = await evaluations.scorers.get(scorerId)
+  const experiment = await evaluations.createExperiment({
+    name: 'Answer quality',
+    datasetRevisionId: snapshot.revisionId,
+    runSource: 'ci',
+  })
+
+  for await (const row of snapshot) {
+    // Implement these functions in your application.
+    const output = await runApplication(row.input)
+    const value = await scoreOutput(output, row.expectedOutput)
+    await experiment.uploadResult({
+      item: EvaluationItem.fromDatasetItem(row, { output }),
+      scorerVersionId: scorer.currentVersionId,
+      value,
+    })
+  }
+  await experiment.complete()
+} finally {
+  evaluations.close()
+}
+```
+
+`datasets` provides create/get/list/update/archive/restore, item management, revision/version
+history, and `snapshot`. Item mutations require the current `baseVersion`. Supply a stable
+`clientItemId` to make item creation retryable. Snapshots pin both the numeric revision and its
+UUID before iteration. `snapshot.iterItems({ pageSize, signal })` fetches one page at a time;
+repeated iteration starts again at the same revision. Keep the client open until reads finish.
+Use the snapshot's `revisionId` for the experiment, even when individual items were introduced
+in earlier revisions. Source output and trace provenance never become a new execution's output.
+
+`scorers` provides create/get/list/update/createVersion/getVersion/listVersions. Configurations
+are typed by `kind`: `boolean`, `numeric`, or `categorical`. Store `currentVersionId` to pin a
+configuration. Metadata updates do not create versions; explicit `createVersion` does, including
+when the configuration is unchanged. Optional `baseVersion` detects conflicting version writes.
+Scorer names are not unique. A result with `status: 'ok'` means the evaluator succeeded; its score
+may still fail the pinned scorer's passing rule. Other statuses are `error`, `skipped`, and
+`not_applicable`, and carry no score.
+
+| Operation                              | Credential and scope                                                 |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| Dataset reads/writes                   | Personal key: `dataset:read` / `dataset:write`                       |
+| Scorer reads/writes                    | Personal key: `llm_analytics:read` / `llm_analytics:write`           |
+| Experiment create/upload/complete/fail | Personal or project secret key: `offline_evaluation_ingestion:write` |
+| Experiment tags                        | Personal key: `evaluation:read` / `evaluation:write`                 |
+
+Feature availability and permissions are enforced by the service. Known ingestion hosts map to
+the app API host; custom host path prefixes are preserved. Pagination exposes `nextOffset` or,
+for scorer versions, `nextCursor`. Retain the original filters when requesting the next page.
+
+### Recovery, cancellation, and payloads
+
+`resumeExperiment(id)` is local and sends no request. Save creation `submission` and item/result
+declarations before relying on process recovery. `EvaluationItem.toJSON()` / `fromJSON()` and
+`EvaluationResult.toJSON()` / `fromJSON()` use detached **snake_case wire declarations** compatible
+with Python; save attached items separately and reattach them with
+`EvaluationResult.fromJSON(savedResult, { item: restoredItem })`. Public options and records use
+camelCase; arbitrary payload/metadata keys are never renamed.
+
+`EvaluationAPIError` exposes `status`, `code`, `detail`, `attr`, `errors`, `response`,
+`retryAfter` (seconds), and `persistence`: `not_sent`, `rejected`, or `unknown`. Creation errors
+also expose `submission`, which can be passed directly to `createExperiment` to reuse the ID
+and start time. Error messages omit payloads and credentials. Structured details are explicit
+accessors for callers; treat them as potentially sensitive when logging.
+
+`uploadResults` takes a finite array of immutable `EvaluationResult` declarations. The whole
+array is validated before I/O, then uploaded sequentially in requests of at most 1,000 items,
+1,000 results, and 5 MiB of UTF-8 JSON. Memory usage is proportional to the supplied array, so
+submit caller-sized batches. Operations on one experiment handle are serialized.
+
+```ts
+import { BulkUploadError } from '@posthog/ai/evaluations'
+
+try {
+  await experiment.uploadResults(results)
+} catch (error) {
+  if (!(error instanceof BulkUploadError)) throw error
+  // Earlier chunks are acknowledged; this includes the failed, possibly committed chunk.
+  // Persist or inspect this work before deciding when to retry.
+  console.log(error.failedIndex, error.persistence)
+  await experiment.uploadResults(error.pendingResults)
+}
+```
+
+Exact replay preserves identities. Changed content for an existing identity conflicts. Ordinary
+dataset writes, scorer writes, and experiment tag updates are not automatically replayed. Never
+create a fresh ID merely because an acknowledgment was lost. `complete()` and `fail()` are explicit;
+closing the client or cancelling a request does neither. Pass `{ signal }` as a network method's
+request options, or within listing/snapshot options. Native cancellation propagates without a
+retry and does not prove an in-flight write was unpersisted. Retain declarations for replay.
+
+Omitted fields, explicit nulls, empty payloads, false, and zero remain distinct. `undefined`
+omits a top-level optional option, but is rejected inside payload JSON. Payloads accept plain
+JSON values without coercion, cycles, accessors, invalid Unicode, NUL characters, or non-finite
+numbers. Maximum nesting is 32 containers; item payloads are limited to 1 MiB and result payloads
+to 256 KiB, measured in UTF-8 bytes including their payload object.
+
+Counts accept safe integer `number` values or nonnegative signed-64-bit `bigint`; large returned
+counts remain `bigint`. Use a lossless JSON codec when persisting submissions or receipts containing
+bigint counts. Numeric scores accept finite numbers; use `bigint` for integer inputs outside the
+safe number range, which are accepted only when exactly representable as binary64. Unsafe integer
+`number` score inputs are rejected because their original precision cannot be recovered. Bigints
+are not accepted in arbitrary JSON payloads. An unrepresentable integer in returned dataset JSON
+raises an invalid-response error rather than silently rounding it.
