@@ -103,7 +103,12 @@ export async function exerciseReplayLifecycle({ scenario, page, received, expect
         }
     }
     const interact = async () => {
-        await page.locator('#action').click({ force: true })
+        assert.equal(
+            await page.evaluate(() => document.elementFromPoint(20, 30)?.id),
+            'action',
+            'Replay interaction point missed the action button'
+        )
+        await page.mouse.click(20, 30)
         await advance(100)
     }
     const mutate = async (text) => {
