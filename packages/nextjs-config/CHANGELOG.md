@@ -1,5 +1,14 @@
 # @posthog/nextjs-config
 
+## 1.11.5
+
+### Patch Changes
+
+- [#5351](https://github.com/PostHog/posthog-js/pull/5351) [`4182940`](https://github.com/PostHog/posthog-js/commit/4182940bf5f715bef16a0740cc9d08354040bdd8) Thanks [@hpouillot](https://github.com/hpouillot)! - Require PostHog CLI 0.18.11 or newer within the 0.18 release line.
+  (2026-10-21)
+- Updated dependencies [[`4182940`](https://github.com/PostHog/posthog-js/commit/4182940bf5f715bef16a0740cc9d08354040bdd8)]:
+  - @posthog/webpack-plugin@1.7.3
+
 ## 1.11.4
 
 ### Patch Changes

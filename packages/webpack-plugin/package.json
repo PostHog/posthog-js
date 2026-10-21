@@ -1,6 +1,6 @@
 {
     "name": "@posthog/webpack-plugin",
-    "version": "1.7.2",
+    "version": "1.7.3",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
