@@ -103,6 +103,17 @@ export function compatibilityServer(settings) {
                     ),
                     'utf8'
                 )
+                if (
+                    path === '/' &&
+                    ['replay-idle', 'replay-rotation', 'replay-minimum-duration'].includes(settings.scenario)
+                ) {
+                    body = body.replace(
+                        '</head>',
+                        '<style>#action { display: block; width: 80px; height: 40px; }</style></head>'
+                    )
+                    body +=
+                        '<script>document.getElementById("action").addEventListener("mousedown", (event) => event.preventDefault())</script>'
+                }
                 if (path === '/')
                     body += `<script src="/harness.js"></script><script src="/${settings.mode === 'snippet' ? 'snippet' : 'consumer'}.js"></script>`
                 if (path === '/player') body += '<script src="/player.js"></script>'
