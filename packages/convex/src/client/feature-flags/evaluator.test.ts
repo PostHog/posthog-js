@@ -397,3 +397,23 @@ describe('LocalFeatureFlagEvaluator', () => {
     expect(await evaluator.getFeatureFlag('cohort-flag', 'user', {}, { plan: 'pro' })).toBeUndefined()
   })
 })
+
+describe('LocalFeatureFlagEvaluator regex compatibility', () => {
+  test.each(['regex', 'not_regex'])('returns an unresolved result for incompatible %s matching', async (operator) => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('regex-flag', {
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'plan', type: 'person', operator, value: '^\\p{L}+$' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        }),
+      ])
+    )
+    expect(await evaluator.getFeatureFlag('regex-flag', 'user', {}, { plan: 'é' })).toBeUndefined()
+  })
+})

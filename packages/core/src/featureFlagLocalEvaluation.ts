@@ -222,12 +222,79 @@ function exactMatchString(value: unknown): string {
   return serializeJsonValue(value)
 }
 
-function isValidRegex(regex: string): boolean {
+function getPortableRegexClasses(pattern: string): string[] | null {
+  const classes: string[] = []
+  let classStart = -1
+  for (let index = 0; index < pattern.length; index++) {
+    const character = pattern[index]
+    if (character.charCodeAt(0) > 0x7f) return null
+    if (character === '\\') {
+      const escaped = pattern[++index]
+      if (escaped === undefined) break
+      if (escaped === 'x') {
+        if (!/^[\da-f]{2}$/i.test(pattern.slice(index + 1, index + 3))) return null
+        index += 2
+      } else if (!'dDsSwWbBfnrtv\\^$.*+?()[]{}|/-'.includes(escaped) || (classStart !== -1 && escaped === 'B')) {
+        return null
+      }
+      continue
+    }
+
+    if (character === '[') {
+      if (classStart !== -1) return null
+      classStart = index
+    } else if (character === ']' && classStart !== -1) {
+      const contentStart = classStart + (pattern[classStart + 1] === '^' ? 2 : 1)
+      if (index === contentStart) return null
+      classes.push(pattern.slice(classStart, index + 1))
+      classStart = -1
+    } else if (classStart !== -1) {
+      if (['&&', '--', '~~'].includes(pattern.slice(index, index + 2))) return null
+    } else if (character === '(' && pattern[index + 1] === '?' && pattern[index + 2] !== ':') {
+      return null
+    } else if (character === '{' && !/^\{\d+(?:,\d*)?\}/.test(pattern.slice(index))) {
+      return null
+    } else if ('*+?}'.includes(character) && (pattern[index + 1] === '+' || pattern[index + 1] === '{')) {
+      return null
+    }
+  }
+  return classes
+}
+
+function matchFeatureFlagRegex(pattern: string, value: string): boolean | null {
+  if (pattern === '') return true
+
+  // Rust uses Unicode scalar semantics and additional syntax. Keep local matching to the shared ASCII subset.
+  const characterClasses = getPortableRegexClasses(pattern)
+  if (characterClasses === null) {
+    throw new InconclusiveMatchError('Regex syntax requires server evaluation')
+  }
+
+  let regex: RegExp
   try {
-    new RegExp(regex)
-    return true
+    regex = new RegExp(pattern)
+  } catch (error) {
+    if (error instanceof SyntaxError) return null
+    throw new InconclusiveMatchError('Regex compilation requires server evaluation')
+  }
+  for (const characterClass of characterClasses) {
+    try {
+      // Strict parsing rejects legacy JS ranges such as [\s-9], which the flags service does not accept.
+      new RegExp(characterClass, 'u')
+    } catch {
+      throw new InconclusiveMatchError('Regex character class syntax requires server evaluation')
+    }
+  }
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index]
+    if (character.charCodeAt(0) > 0x7f || character === '\r') {
+      throw new InconclusiveMatchError('Regex matching for Unicode or carriage returns requires server evaluation')
+    }
+  }
+  try {
+    return regex.test(value)
   } catch {
-    return false
+    throw new InconclusiveMatchError('Regex execution requires server evaluation')
   }
 }
 
@@ -438,9 +505,10 @@ export function matchFeatureFlagProperty(
     case 'not_ends_with':
       return !asciiLowercase(overrideValue).endsWith(asciiLowercase(value))
     case 'regex':
-      return isValidRegex(String(value)) && String(overrideValue).match(String(value)) !== null
-    case 'not_regex':
-      return isValidRegex(String(value)) && String(overrideValue).match(String(value)) === null
+    case 'not_regex': {
+      const matched = matchFeatureFlagRegex(String(value), String(overrideValue))
+      return matched !== null && (operator === 'regex' ? matched : !matched)
+    }
     case 'gt':
     case 'gte':
     case 'lt':
