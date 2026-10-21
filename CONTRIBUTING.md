@@ -239,6 +239,7 @@ Common package scripts are listed below. Availability and build output directori
 - `test:built` - Run dedicated built-output assertions (if available)
 - `test:rrweb` - Run vendored rrweb suites, including real-browser and built-output tests
 - `test:functional` - Run functional/integration tests (if applicable)
+- Root `test:nextjs-integration` - Build and test real Next.js 14/16 consumers, including release metadata, worker detection and browser cache compatibility. See the [fixture guide](packages/nextjs-config/tests/integration/README.md) for Chromium setup and diagnostics.
 - `package` - Create a tarball of this package that can be installed inside an example or playground project
 
 ### Using Turbo to Target Specific Packages

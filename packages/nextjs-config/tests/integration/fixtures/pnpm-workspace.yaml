@@ -1,0 +1,4 @@
+packages:
+    - next14
+    - next16
+minimumReleaseAge: 10080
