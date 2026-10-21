@@ -24,8 +24,14 @@ const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.6.0'
 // prebuilt by an older posthog-react-native keeps its older classpath, so it gets bumped.
 const POSTHOG_ANDROID_GRADLE_PLUGIN_NATIVE_SYMBOLS_VERSION = [1, 5]
 
-const resolvePostHogReactNativePackageJsonPath =
-  "[\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim()"
+const resolvePostHogGradleScript = (execute: string): string =>
+  `["node", "--print", "require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')"].${execute}.text.trim()`
+
+// Gradle runs this with the working directory of whatever started it (a daemon, or a tool launched
+// outside the project), so node has to be started from rootDir to resolve posthog-react-native.
+const resolvePostHogReactNativePackageJsonPath = resolvePostHogGradleScript('execute(null, rootDir)')
+// Written by earlier versions; kept only so a project prebuilt with it is rewritten, not given a second line.
+const legacyResolvePostHogReactNativePackageJsonPath = resolvePostHogGradleScript('execute()')
 
 const kotlinApplyPostHogScript = [
   'apply(from = File(',
@@ -107,9 +113,10 @@ const withAndroidPlugin = (config: any, skipOnConflict = false, force = false) =
       return config
     }
 
-    const buildGradle = config.modResults.contents
     const applyFrom =
       language === 'kt' ? kotlinApplyPostHogScript : `apply from: new File(${resolvePostHogReactNativePackageJsonPath})`
+    const legacyApplyFrom = `apply from: new File(${legacyResolvePostHogReactNativePackageJsonPath})`
+    const buildGradle = (config.modResults.contents as string).replace(legacyApplyFrom, applyFrom)
     const conflictLines = (
       language === 'kt'
         ? [

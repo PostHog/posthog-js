@@ -26,6 +26,7 @@ export const PostHogMCPAnalyticsEvent = {
   Custom: '$mcp_custom',
   Exception: '$exception',
   Feedback: '$mcp_feedback',
+  /** @deprecated The SDK no longer publishes `$identify`. */
   Identify: '$identify',
   Initialize: '$mcp_initialize',
   MissingCapability: '$mcp_missing_capability',

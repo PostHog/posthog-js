@@ -23,9 +23,9 @@ Supporting choices:
 ## Consequences
 
 - Clients that don't replay the header degrade to the old behavior: one generated session per request.
-- `$identify` is published at most once per session, and a token session is assumed to have been announced at `initialize` by whichever pod handled it. Known gap: an identity that only resolves *after* `initialize` on a stateless deployment gets no standalone `$identify` (person properties still land via `$set` on every event). Inherent to statelessness; accepted rather than worked around.
+- Superseded by PostHog/posthog-js#5306: the SDK no longer sends `$identify`, so no event depends on the session being announced at `initialize`. The identity reaches every event as `distinct_id`/`$set`.
 - The 2026-07-28 revision removes the header outright (servers MUST NOT mint or echo it), so this whole mechanism is legacy-only for clients on that revision — see ADR-0004. Era detection to gate it explicitly is an open follow-up.
 
 ## References
 
-- PostHog/posthog-js#4123 (tokens), #4210 (negotiated protocol version), #4144 ($identify once per session), PostHog/posthog#68635 (customer report)
+- PostHog/posthog-js#4123 (tokens), #4210 (negotiated protocol version), #4144 ($identify once per session, superseded by #5306), PostHog/posthog#68635 (customer report)

@@ -1,5 +1,42 @@
 # posthog-react-native
 
+## 4.81.5
+
+### Patch Changes
+
+- [#5253](https://github.com/PostHog/posthog-js/pull/5253) [`cc0d20e`](https://github.com/PostHog/posthog-js/commit/cc0d20e9f11749ba95dfa3e110480d5965bd16a4) Thanks [@Brian-1812](https://github.com/Brian-1812)! - Respect the survey wait period (`seenSurveyWaitPeriodInDays`), so a survey does not show if the user saw any survey within that many days
+  (2026-10-20)
+
+## 4.81.4
+
+### Patch Changes
+
+- [#5313](https://github.com/PostHog/posthog-js/pull/5313) [`1fc47eb`](https://github.com/PostHog/posthog-js/commit/1fc47eb16870d1e100beb873b70ff72afb91cecc) Thanks [@nandinitiw](https://github.com/nandinitiw)! - fix(react-native): resolve `posthog.gradle` from the Android project root, so Gradle builds started outside the project no longer fail
+  (2026-10-20)
+
+## 4.81.3
+
+### Patch Changes
+
+- [#5124](https://github.com/PostHog/posthog-js/pull/5124) [`10ec4ba`](https://github.com/PostHog/posthog-js/commit/10ec4ba84758531465707ae36caca80175e181f9) Thanks [@nandinitiw](https://github.com/nandinitiw)! - Stop session replay on `optOut()` and resume automatic replay under a new session ID on `optIn()`, unless the app stopped it with `stopSessionRecording()`
+  (2026-10-20)
+
+## 4.81.2
+
+### Patch Changes
+
+- [#5271](https://github.com/PostHog/posthog-js/pull/5271) [`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27) Thanks [@posthog](https://github.com/apps/posthog)! - Report fatal JS crashes the JS error handler did not capture, such as React render errors on iOS, through native crash capture instead of dropping them (requires updating both `posthog-react-native` and `@posthog/react-native-plugin`). Apps with `errorTracking.autocapture.nativeCrashes` on and `uncaughtExceptions` off now get every fatal JS crash reported this way.
+  (2026-10-14)
+- Updated dependencies [[`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27)]:
+  - @posthog/react-native-plugin@2.12.6
+
+## 4.81.1
+
+### Patch Changes
+
+- [#5290](https://github.com/PostHog/posthog-js/pull/5290) [`f3ca9c4`](https://github.com/PostHog/posthog-js/commit/f3ca9c48e7610cf1bdd4124fcf02e443a679be17) Thanks [@tsayin4](https://github.com/tsayin4)! - Fix fatal crashes being reported without a stack trace since 4.77.0 when a stack frame has no chunk ID.
+  (2026-10-13)
+
 ## 4.81.0
 
 ### Minor Changes

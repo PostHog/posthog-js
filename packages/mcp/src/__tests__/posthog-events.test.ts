@@ -425,7 +425,6 @@ describe('buildPostHogCaptureEvents', () => {
   it('maps MCP event types to PostHog event names', () => {
     const eventTypes = [
       [MCPAnalyticsEventType.custom, PostHogMCPAnalyticsEvent.Custom],
-      [MCPAnalyticsEventType.identify, PostHogMCPAnalyticsEvent.Identify],
       [MCPAnalyticsEventType.mcpToolsCall, PostHogMCPAnalyticsEvent.ToolCall],
       [MCPAnalyticsEventType.mcpToolsList, PostHogMCPAnalyticsEvent.ToolsList],
       [MCPAnalyticsEventType.mcpInitialize, PostHogMCPAnalyticsEvent.Initialize],

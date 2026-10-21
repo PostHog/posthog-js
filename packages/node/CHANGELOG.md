@@ -1,5 +1,31 @@
 # posthog-node
 
+## 5.56.2
+
+### Patch Changes
+
+- [#5263](https://github.com/PostHog/posthog-js/pull/5263) [`cd31356`](https://github.com/PostHog/posthog-js/commit/cd3135648ae506f5e00d044d6f7443ec1ff3f311) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow local feature flag evaluation from a shared definition cache without a secret or personal API key.
+  (2026-10-16)
+
+## 5.56.1
+
+### Patch Changes
+
+- [#5289](https://github.com/PostHog/posthog-js/pull/5289) [`e6598be`](https://github.com/PostHog/posthog-js/commit/e6598be4d3f4c09c47d4c052987fafd33fc3f59e) Thanks [@pauldambra](https://github.com/pauldambra)! - Link captured exceptions to active OpenTelemetry traces when the API is available.
+  (2026-10-14)
+
+## 5.56.0
+
+### Minor Changes
+
+- [#5291](https://github.com/PostHog/posthog-js/pull/5291) [`7c10169`](https://github.com/PostHog/posthog-js/commit/7c10169546b1fcfcfff74d05d8d80ba1913b3543) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Attach trace exemplars to metrics recorded inside sampled spans.
+  (2026-10-13)
+
+### Patch Changes
+
+- Updated dependencies [[`7c10169`](https://github.com/PostHog/posthog-js/commit/7c10169546b1fcfcfff74d05d8d80ba1913b3543)]:
+  - @posthog/core@1.59.0
+
 ## 5.55.3
 
 ### Patch Changes
