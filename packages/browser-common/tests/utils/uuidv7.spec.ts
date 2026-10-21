@@ -33,4 +33,29 @@ describe('uuidv7 utils', () => {
             expect(uuidv7()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
         })
     })
+
+    describe('a failing crypto.getRandomValues', () => {
+        afterEach(() => {
+            vi.unstubAllGlobals()
+            vi.restoreAllMocks()
+            vi.resetModules()
+        })
+
+        it('falls back to Math.random instead of throwing', async () => {
+            const failingCrypto = {
+                getRandomValues: vi.fn(() => {
+                    throw new DOMException('The operation failed for an operation-specific reason', 'OperationError')
+                }),
+            }
+            vi.stubGlobal('window', { crypto: failingCrypto })
+            vi.stubGlobal('crypto', failingCrypto)
+            vi.resetModules()
+            const fresh = await import('../../src/utils/uuidv7')
+            const mathRandom = vi.spyOn(Math, 'random')
+
+            expect(fresh.uuidv7()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+            expect(failingCrypto.getRandomValues).toHaveBeenCalled()
+            expect(mathRandom).toHaveBeenCalled()
+        })
+    })
 })
