@@ -1118,7 +1118,7 @@ export class PostHog extends PostHogCore {
    *
    * By default, PostHog has tracking enabled unless it is forcefully disabled by default using the option { defaultOptIn: false }.
    * Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called.
-   * When opting in after an opt-out, session replay restarts in a new session if it was recording when the user opted out. A recording started with `startSessionRecording()` restarts even when `enableSessionReplay` is off or a linked flag or event trigger would block replay; otherwise replay restarts only if it is still eligible. The promise resolves once session replay has been re-evaluated. A `stopSessionRecording()` call made while opted out does not prevent this restart; to keep replay stopped, call `stopSessionRecording()` before `optOut()` or after `optIn()`.
+   * When opting in after an opt-out, session replay restarts in a new session if it was recording when the user opted out. A recording started with `startSessionRecording()` restarts even when `enableSessionReplay` is off or a linked flag would block replay, but waits for a configured event trigger to fire in the new session; otherwise replay restarts only if it is still eligible. The promise resolves once session replay has been re-evaluated. A `stopSessionRecording()` call made while opted out does not prevent this restart; to keep replay stopped, call `stopSessionRecording()` before `optOut()` or after `optIn()`.
    *
    * {@label Privacy}
    *
@@ -3238,10 +3238,12 @@ export class PostHog extends PostHogCore {
     const eventTriggers = this._parseEventTriggers(cachedSessionReplayConfig['eventTriggers'])
     this._sessionReplayEventTriggers = eventTriggers
 
+    let eventTriggerPending = false
     if (eventTriggers.length > 0) {
       const activated = this._isEventTriggerActivatedForSession(super.getSessionId())
       if (!activated) {
         recordingActive = false
+        eventTriggerPending = true
       }
       this._logger.info(`Session replay event triggers configured (${eventTriggers.length}); activated: ${activated}.`)
     }
@@ -3265,10 +3267,13 @@ export class PostHog extends PostHogCore {
       return
     }
 
-    // A recording the app started bypasses the linked flag and event triggers, as a manual start does.
-    if (restoreAppRecording) {
+    // A recording the app started bypasses the linked flag, as a manual start does. Event triggers
+    // re-arm on the new session, so it waits for one to fire like auto replay.
+    if (restoreAppRecording && !eventTriggerPending) {
       const started = await this._restoreAppRecording()
-      this._sessionReplayRecordingActive = recordingActive && started
+      // A stop made during the start clears the restart flag; keep the next flags reload from
+      // undoing it, as it does for an auto recording the app stopped.
+      this._sessionReplayRecordingActive = recordingActive && (started || !this._restartSessionReplayOnOptIn)
       return
     }
 
