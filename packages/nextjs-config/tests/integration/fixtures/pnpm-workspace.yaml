@@ -1,4 +1,8 @@
 packages:
-    - next14
-    - next16
+  - next14
+  - next15
+  - next16
 minimumReleaseAge: 10080
+# Match the shipped CLI minimum; the downstream PostHog workspace also allows @posthog/* releases.
+minimumReleaseAgeExclude:
+  - '@posthog/cli@0.18.11'

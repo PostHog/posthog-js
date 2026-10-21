@@ -8,9 +8,9 @@ const resolve = withPostHogConfig(
     experimental: {
       cpus: 1,
       webpackBuildWorker: true,
-      ...(major < 16 ? { serverComponentsExternalPackages: ['posthog-node'] } : {}),
+      ...(major < 15 ? { serverComponentsExternalPackages: ['posthog-node'] } : {}),
     },
-    ...(major >= 16 ? { serverExternalPackages: ['posthog-node'] } : {}),
+    ...(major >= 15 ? { serverExternalPackages: ['posthog-node'] } : {}),
     distDir: phase === 'phase-development-server' ? '.next-dev' : '.next',
     // Do not rely on changing Next's build ID to invalidate assets.
     generateBuildId: async () => 'integration-build',

@@ -31,8 +31,8 @@ catalogs:
       specifier: ^7.27.1
       version: 7.28.5
     '@posthog/cli':
-      specifier: ~0.18.10
-      version: 0.18.10
+      specifier: ~0.18.11
+      version: 0.18.11
     '@rslib/core':
       specifier: 0.23.2
       version: 0.23.2
@@ -747,7 +747,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.18.10
+        version: 0.18.11
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
@@ -836,7 +836,7 @@ importers:
         version: 4.1.3(magicast@0.5.3)
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.18.10
+        version: 0.18.11
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -1166,7 +1166,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.18.10
+        version: 0.18.11
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
@@ -1695,7 +1695,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.18.10
+        version: 0.18.11
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -6575,8 +6575,8 @@ packages:
   '@posthog/browser-common@0.9.4':
     resolution: {integrity: sha512-QlG0WZFG9iTp9cmXTypB4cgnxBAD3GImrj9AwmA84uh8uy5vIVgVLjoTTdOAW29XL+kh/eLn/5ZtBQt2JQfR+w==}
 
-  '@posthog/cli@0.18.10':
-    resolution: {integrity: sha512-WFucXcIqUL35NkH4hVlch3TBSGRRAhjqvmh2/2z8sj+HsR7e+NUiG3QT5dy9Qs1C3hVe7uWkdNU6DKyKvONAXw==}
+  '@posthog/cli@0.18.11':
+    resolution: {integrity: sha512-DwesPjw+QdBJk9JCrPFOeKVsOc3maYytmQEgL7oMgHtZznsvvYUQfHeLdz+wfnfhCx6qFSDYSN+6jlXL71zSgw==}
     engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
 
@@ -25326,7 +25326,7 @@ snapshots:
       '@posthog/core': 1.58.0
       '@posthog/types': 1.415.2
 
-  '@posthog/cli@0.18.10':
+  '@posthog/cli@0.18.11':
     dependencies:
       detect-libc: 2.1.2
 

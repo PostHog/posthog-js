@@ -22,6 +22,7 @@ import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { compareAssets, digest, validateUploads, validateWorkers } from './assertions.mjs'
 
+const fixtures = ['next14', 'next15', 'next16']
 const directory = import.meta.dirname
 const repository = path.resolve(directory, '../../../..')
 const artifactRoot = path.join(repository, 'test-results/nextjs-integration')
@@ -154,7 +155,7 @@ async function prepare() {
   const fixtureRequire = createRequire(path.join(workspace, 'package.json'))
   const { satisfies } = fixtureRequire('semver')
   const externalDependencies = json(path.join(workspace, 'package.json')).dependencies
-  for (const name of ['next14', 'next16']) {
+  for (const name of fixtures) {
     const app = path.join(workspace, name)
     cpSync(path.join(directory, 'app'), app, { recursive: true })
     chmodSync(path.join(app, 'mock-cli.cjs'), 0o755)
@@ -417,7 +418,7 @@ async function checkFixture(name) {
 try {
   await prepare()
   browser = await chromium.launch({ headless: true })
-  for (const name of ['next14', 'next16']) await checkFixture(name)
+  for (const name of fixtures) await checkFixture(name)
   passed = true
   report(path.join(artifacts, 'summary.json'), { passed, seconds: (Date.now() - started) / 1000 })
   console.log(`Next.js integration passed in ${((Date.now() - started) / 1000).toFixed(1)}s`)
