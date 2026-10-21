@@ -4,7 +4,7 @@
     "repo": "PostHog/posthog-js",
     "item": "issue 5362",
     "url": "https://github.com/PostHog/posthog-js/issues/5362",
-    "conclusion": "Confirmed feature gap: the browser SDK has no supported hook to redact URL paths or referrers before attribution values are persisted.",
+    "conclusion": "Confirmed feature gap: the browser SDK has no supported way to redact URL paths or referrers before attribution data is persisted.",
     "labels": [
       "feature",
       "enhancement",
@@ -13,7 +13,7 @@
       "team/client-libraries"
     ],
     "closed": false,
-    "updatedAt": "2026-10-21T20:29:24.441Z"
+    "updatedAt": "2026-10-21T20:36:44.226Z"
   },
   "PostHog/posthog-js/issue/5358": {
     "key": "PostHog/posthog-js/issue/5358",
