@@ -40,6 +40,7 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
         await fs.writeFile(
             path.join(directory, 'entry.js'),
             `
+            globalThis.releaseAtStartup = globalThis.readExternalReleaseId();
             globalThis.readReleaseId = ${ErrorTracking.getInjectedReleaseId.toString()};
             globalThis.loadLazy = () => import(/* webpackChunkName: "lazy" */ './lazy.js');
         `
@@ -52,10 +53,10 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
     })
 
     async function build(
-        releaseId: string,
+        releaseId: string | undefined,
         nativeDebugIds: boolean,
         deleteAfterUpload: boolean,
-        injectReleaseId = false
+        framework = true
     ) {
         const outputPath = path.join(directory, 'dist')
         // Separate clean deployments: webpack can skip writing an already-present immutable asset.
@@ -90,7 +91,9 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
             },
             optimization: { minimize: true, runtimeChunk: { name: 'webpack' }, realContentHash: true },
             plugins: [
-                new webpack.DefinePlugin({ 'process.env.POSTHOG_RELEASE_ID': JSON.stringify(releaseId) }),
+                new webpack.DefinePlugin({
+                    'process.env.POSTHOG_RELEASE_ID': JSON.stringify(releaseId) ?? 'undefined',
+                }),
                 {
                     apply(compiler) {
                         if (!nativeDebugIds) {
@@ -99,7 +102,7 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
                         }
                     },
                 },
-                new PosthogWebpackPlugin(config, true, { injectReleaseId }),
+                new PosthogWebpackPlugin(config, true, framework ? { mode: 'runtime', releaseId } : undefined),
             ],
         })
         const files = await fs.readdir(outputPath)
@@ -115,8 +118,21 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
         return { javascript, uploadedMaps }
     }
 
-    function execute(javascript: Map<string, string>) {
-        const context = vm.createContext({ process: { env: {} }, setTimeout, clearTimeout })
+    function execute(javascript: Map<string, string>, hasProcess = true, initialReleaseId?: string) {
+        const context = vm.createContext({ setTimeout, clearTimeout })
+        if (hasProcess) context.process = { env: {} }
+        // Like a CDN SDK, this reader never passes through webpack/DefinePlugin. Load it
+        // before the runtime so the entry can verify the global is available at startup.
+        vm.runInContext(`globalThis.readExternalReleaseId = ${ErrorTracking.getInjectedReleaseId.toString()};`, context)
+        expect(context.readExternalReleaseId()).toBeUndefined()
+        if (initialReleaseId !== undefined) {
+            Object.defineProperty(context, '_posthogReleaseId', {
+                get: () => initialReleaseId,
+                set: () => {
+                    throw new Error('The host blocks global assignment')
+                },
+            })
+        }
         context.self = context
         context.document = {
             getElementsByTagName: () => [],
@@ -152,6 +168,8 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
             if (second.javascript.has(file)) expect(second.javascript.get(file)).toBe(code)
         }
         expect(repeated.javascript).toEqual(second.javascript)
+        const runtimeFile = [...first.javascript.keys()].find((file) => file.startsWith('webpack-'))!
+        expect(second.javascript.has(runtimeFile)).toBe(false)
         const lazyFile = [...first.javascript.keys()].find((file) => file.startsWith('lazy.'))!
         expect(second.javascript.get(lazyFile)).toBe(first.javascript.get(lazyFile))
         expect(second.uploadedMaps.get(lazyFile).chunk_id).toBe(first.uploadedMaps.get(lazyFile).chunk_id)
@@ -161,13 +179,17 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
             [first, 'release-one'],
             [second, 'release-two'],
         ] as const) {
-            const context = execute(buildResult.javascript)
-            expect(context.readReleaseId()).toBe(release)
-            expect(context._posthogReleaseId).toBeUndefined()
-            expect((await context.loadLazy()).default).toBe('unchanged lazy module')
-            expect(Object.values(context._posthogChunkIds)).toEqual(
-                expect.arrayContaining([...buildResult.uploadedMaps.values()].map((map) => map.chunk_id))
-            )
+            for (const hasProcess of [true, false]) {
+                const context = execute(buildResult.javascript, hasProcess)
+                expect(context.readReleaseId()).toBe(release)
+                expect(context.readExternalReleaseId()).toBe(release)
+                expect(context.releaseAtStartup).toBe(release)
+                expect(context._posthogReleaseId).toBe(release)
+                expect((await context.loadLazy()).default).toBe('unchanged lazy module')
+                expect(Object.values(context._posthogChunkIds)).toEqual(
+                    expect.arrayContaining([...buildResult.uploadedMaps.values()].map((map) => map.chunk_id))
+                )
+            }
         }
     })
 
@@ -207,7 +229,7 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
                             sourcemaps: { releaseMode: 'event', deleteAfterUpload: true },
                         }),
                         true,
-                        { injectReleaseId: !!releaseId, releaseId }
+                        { mode: 'runtime', releaseId }
                     ),
                 ],
             })
@@ -240,9 +262,31 @@ describe('build-time releases with chunk-hashed webpack runtimes (#5332)', () =>
         }
     )
 
+    it('omits runtime release metadata without resolving again when no release is available', async () => {
+        const result = await build(undefined, true, true)
+        const context = execute(result.javascript, false)
+        expect(context.readExternalReleaseId()).toBeUndefined()
+        expect(context._posthogReleaseId).toBeUndefined()
+        expect(resolveReleaseId).not.toHaveBeenCalled()
+    })
+
+    it('escapes the runtime release literal and preserves an existing global', async () => {
+        const releaseId = 'release-"\\\n'
+        const result = await build(releaseId, true, true)
+        expect(execute(result.javascript, false).readExternalReleaseId()).toBe(releaseId)
+        expect(execute(result.javascript, false, 'existing-release').readExternalReleaseId()).toBe('existing-release')
+    })
+
+    it('does not break application startup when the host blocks release assignment', async () => {
+        const result = await build('release', true, true)
+        const context = execute(result.javascript, false, '')
+        expect(context.readExternalReleaseId()).toBeUndefined()
+        expect((await context.loadLazy()).default).toBe('unchanged lazy module')
+    })
+
     it('does not change release injection for standalone webpack consumers', async () => {
         vi.mocked(resolveReleaseId).mockResolvedValue('legacy-release')
-        const result = await build('compiled-release', false, true, true)
+        const result = await build('compiled-release', false, true, false)
         expect(resolveReleaseId).toHaveBeenCalledTimes(1)
         expect(execute(result.javascript)._posthogReleaseId).toBe('legacy-release')
     })

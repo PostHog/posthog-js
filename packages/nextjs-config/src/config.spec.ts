@@ -48,6 +48,13 @@ function getPostHogPlugin(config: NextConfig, isServer: boolean): PosthogWebpack
   return webpackConfig.plugins.at(-1) as PosthogWebpackPlugin
 }
 
+function expectRuntimeRelease(releaseId: string | undefined) {
+  expect(PosthogWebpackPlugin).toHaveBeenCalledTimes(2)
+  for (const call of [1, 2]) {
+    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(call, expect.anything(), true, { mode: 'runtime', releaseId })
+  }
+}
+
 describe('withPostHogConfig webpack sourcemaps', () => {
   const originalArgv = process.argv
 
@@ -85,12 +92,7 @@ describe('withPostHogConfig webpack sourcemaps', () => {
     getPostHogPlugin(config, false)
     getPostHogPlugin(config, true)
     expect(userWebpack).toHaveBeenCalledTimes(2)
-    expect(PosthogWebpackPlugin).toHaveBeenCalledTimes(2)
-    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(1, expect.anything(), true, { injectReleaseId: false })
-    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(2, expect.anything(), true, {
-      injectReleaseId: true,
-      releaseId: 'webpack-release',
-    })
+    expectRuntimeRelease('webpack-release')
   })
 
   it.each([
@@ -108,18 +110,13 @@ describe('withPostHogConfig webpack sourcemaps', () => {
     expect(config.compiler?.runAfterProductionCompile).toBe(userHook)
     getPostHogPlugin(config, false)
     getPostHogPlugin(config, true)
-    expect(PosthogWebpackPlugin).toHaveBeenCalledTimes(2)
-    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(1, expect.anything(), true, { injectReleaseId: false })
     if (phase === 'phase-production-build') {
       expect(config.env).toEqual({ POSTHOG_RELEASE_ID: 'webpack-release' })
-      expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(2, expect.anything(), true, {
-        injectReleaseId: true,
-        releaseId: 'webpack-release',
-      })
+      expectRuntimeRelease('webpack-release')
       expect(utils.resolveReleaseId).toHaveBeenCalledTimes(1)
     } else {
       expect(config.env).toBeUndefined()
-      expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(2, expect.anything(), true, { injectReleaseId: false })
+      expectRuntimeRelease(undefined)
       expect(utils.resolveReleaseId).not.toHaveBeenCalled()
     }
   })
@@ -146,12 +143,7 @@ describe('withPostHogConfig webpack sourcemaps', () => {
     expect(first.turbopack).toBeUndefined()
     getPostHogPlugin(first, false)
     getPostHogPlugin(first, true)
-    expect(PosthogWebpackPlugin).toHaveBeenCalledTimes(2)
-    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(1, expect.anything(), true, { injectReleaseId: false })
-    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(2, expect.anything(), true, {
-      injectReleaseId: true,
-      releaseId: 'webpack-release',
-    })
+    expectRuntimeRelease('webpack-release')
     expect(process.env.POSTHOG_RELEASE_ID).toBe('')
   })
 
@@ -166,11 +158,7 @@ describe('withPostHogConfig webpack sourcemaps', () => {
     expect(utils.resolveReleaseId).not.toHaveBeenCalled()
     getPostHogPlugin(config, false)
     getPostHogPlugin(config, true)
-    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(1, expect.anything(), true, { injectReleaseId: false })
-    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(2, expect.anything(), true, {
-      injectReleaseId: true,
-      releaseId: expected,
-    })
+    expectRuntimeRelease(expected)
   })
 
   it('leaves symbol-set mode on its existing path', async () => {
@@ -185,7 +173,10 @@ describe('withPostHogConfig webpack sourcemaps', () => {
     expect(config.env).toBeUndefined()
     expect(utils.resolveReleaseId).not.toHaveBeenCalled()
     getPostHogPlugin(config, false)
-    expect(PosthogWebpackPlugin).toHaveBeenCalledWith(expect.anything(), true, { injectReleaseId: true })
+    expect(PosthogWebpackPlugin).toHaveBeenCalledWith(expect.anything(), true, {
+      mode: 'runtime',
+      releaseId: undefined,
+    })
   })
 
   it('does not resolve a release or add a plugin when source maps are disabled', async () => {
@@ -226,9 +217,7 @@ describe('withPostHogConfig webpack sourcemaps', () => {
     expect(config.env).toBeUndefined()
     getPostHogPlugin(config, false)
     getPostHogPlugin(config, true)
-    expect(PosthogWebpackPlugin).toHaveBeenCalledTimes(2)
-    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(1, expect.anything(), true, { injectReleaseId: false })
-    expect(PosthogWebpackPlugin).toHaveBeenNthCalledWith(2, expect.anything(), true, { injectReleaseId: false })
+    expectRuntimeRelease(undefined)
     if (result === 'failed') expect(warn).toHaveBeenCalled()
   })
 

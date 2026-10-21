@@ -85,7 +85,7 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
       distDir,
       webpack:
         sourceMapEnabled && !turbopackEnabled
-          ? withWebpackConfig(userWebPackConfig, resolvedConfig, buildTimeReleaseEnabled, releaseId)
+          ? withWebpackConfig(userWebPackConfig, resolvedConfig, releaseId)
           : userWebPackConfig,
       compiler:
         sourceMapEnabled && turbopackEnabled && isCompilerHookSupported
@@ -160,23 +160,15 @@ function resolveUserConfig(
 function withWebpackConfig(
   userWebpackConfig: NextConfig['webpack'],
   posthogConfig: ResolvedPluginConfig,
-  buildTimeReleaseEnabled: boolean,
   releaseId: string | undefined
 ) {
   const defaultWebpackConfig = userWebpackConfig || ((config: any) => config)
   return (config: any, options: any) => {
     const webpackConfig = defaultWebpackConfig(config, options)
     webpackConfig.plugins = webpackConfig.plugins || []
-    // Externalized server SDKs are not rewritten by Next's DefinePlugin. Keep the runtime
-    // global on server bundles, using the same release as the client without resolving again.
-    // Only server assets get this injection; immutable browser assets must not change after hashing.
-    const serverReleaseId = buildTimeReleaseEnabled && options.isServer ? releaseId : undefined
-    webpackConfig.plugins.push(
-      new PosthogWebpackPlugin(posthogConfig, true, {
-        injectReleaseId: !buildTimeReleaseEnabled || !!serverReleaseId,
-        ...(serverReleaseId ? { releaseId: serverReleaseId } : {}),
-      })
-    )
+    // CDN-loaded browser SDKs and externalized server SDKs bypass DefinePlugin. Embed the
+    // same release in both runtimes before hashing, without resolving it again or mutating assets late.
+    webpackConfig.plugins.push(new PosthogWebpackPlugin(posthogConfig, true, { mode: 'runtime', releaseId }))
     return webpackConfig
   }
 }

@@ -60,26 +60,43 @@ function webpackSupportsDebugIds(version: string | undefined): boolean {
     return major > DEBUG_IDS_MIN_MAJOR || (major === DEBUG_IDS_MIN_MAJOR && minor >= DEBUG_IDS_MIN_MINOR)
 }
 
+type ReleaseIdInjection = { mode: 'chunk' } | { mode: 'runtime'; releaseId: string | undefined }
+
+// Use the active compiler's RuntimeModule class, including Next's bundled webpack. Runtime
+// modules participate in chunk hashing and execute before application modules/external SDKs.
+function addReleaseIdRuntimeModule(compiler: webpack.Compiler, compilation: webpack.Compilation, releaseId: string) {
+    const { RuntimeModule, RuntimeGlobals } = compiler.webpack
+    class PostHogReleaseIdRuntimeModule extends RuntimeModule {
+        constructor() {
+            // RuntimeGlobals.global is initialized at STAGE_NORMAL, before this module.
+            super('posthog release id', RuntimeModule.STAGE_BASIC)
+        }
+
+        generate() {
+            // Match the chunk snippet's fail-soft behavior if the host blocks global assignment.
+            return `try { ${RuntimeGlobals.global}._posthogReleaseId = ${RuntimeGlobals.global}._posthogReleaseId || ${JSON.stringify(releaseId)}; } catch (_) {}`
+        }
+    }
+    compilation.hooks.additionalTreeRuntimeRequirements.tap('PosthogWebpackPlugin', (chunk, requirements) => {
+        requirements.add(RuntimeGlobals.global)
+        compilation.addRuntimeModule(chunk, new PostHogReleaseIdRuntimeModule())
+    })
+}
+
 export class PosthogWebpackPlugin {
     resolvedConfig: ResolvedPluginConfig
     logger: Logger
-    private readonly _injectReleaseId: boolean
-    private readonly _releaseId?: string
+    private readonly _releaseIdInjection: ReleaseIdInjection
 
     constructor(pluginConfig: PluginConfig)
-    /** @internal Frameworks can compile client release IDs and reuse the same ID for server injection. */
-    constructor(
-        pluginConfig: ResolvedPluginConfig,
-        resolved: true,
-        frameworkOptions?: { injectReleaseId?: boolean; releaseId?: string }
-    )
+    /** @internal Frameworks can embed a pre-resolved release in the runtime before hashing. */
+    constructor(pluginConfig: ResolvedPluginConfig, resolved: true, releaseIdInjection?: ReleaseIdInjection)
     constructor(
         pluginConfig: PluginConfig | ResolvedPluginConfig,
         resolved?: boolean,
-        frameworkOptions: { injectReleaseId?: boolean; releaseId?: string } = {}
+        releaseIdInjection: ReleaseIdInjection = { mode: 'chunk' }
     ) {
-        this._injectReleaseId = frameworkOptions.injectReleaseId ?? true
-        this._releaseId = frameworkOptions.releaseId
+        this._releaseIdInjection = releaseIdInjection
         this.logger = createLogger('[PostHog Webpack]')
         this.resolvedConfig = resolved
             ? (pluginConfig as ResolvedPluginConfig)
@@ -95,7 +112,7 @@ export class PosthogWebpackPlugin {
             // without the option we fall back to content-derived ids, which are equally
             // stable — just not shared with other tooling.
             const eventReleaseMode = this.resolvedConfig.sourcemaps.releaseMode === 'event'
-            const injectReleaseId = eventReleaseMode && this._injectReleaseId
+            const injectReleaseId = eventReleaseMode && this._releaseIdInjection.mode === 'chunk'
             new compiler.webpack.SourceMapDevToolPlugin({
                 filename: '[file].map',
                 noSources: false,
@@ -105,6 +122,13 @@ export class PosthogWebpackPlugin {
             }).apply(compiler)
 
             compiler.hooks.compilation.tap('PosthogWebpackPlugin', (compilation) => {
+                if (
+                    eventReleaseMode &&
+                    this._releaseIdInjection.mode === 'runtime' &&
+                    this._releaseIdInjection.releaseId
+                ) {
+                    addReleaseIdRuntimeModule(compiler, compilation, this._releaseIdInjection.releaseId)
+                }
                 compilation.hooks.processAssets.tapPromise(
                     {
                         name: 'PosthogWebpackPlugin',
@@ -151,8 +175,7 @@ export class PosthogWebpackPlugin {
                                         continue
                                     }
                                     const releaseId = injectReleaseId
-                                        ? (this._releaseId ??
-                                          (await (releaseIdPromise ??= resolveReleaseId(this.resolvedConfig))))
+                                        ? await (releaseIdPromise ??= resolveReleaseId(this.resolvedConfig))
                                         : undefined
                                     if (injectReleaseId && !releaseId && !warnedAboutMissingRelease) {
                                         warnedAboutMissingRelease = true
