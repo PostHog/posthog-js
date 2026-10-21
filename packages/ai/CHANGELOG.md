@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.14.4
+
+### Patch Changes
+
+- [#5352](https://github.com/PostHog/posthog-js/pull/5352) [`dd58d50`](https://github.com/PostHog/posthog-js/commit/dd58d504da2b27df36363ecf742191348988fb46) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix: Use the cumulative input and cache token counts from Anthropic's final `message_delta` when streaming with server tools.
+  (2026-10-21)
+
 ## 8.14.3
 
 ### Patch Changes
