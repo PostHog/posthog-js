@@ -324,6 +324,9 @@ export class PostHog extends PostHogCore {
   // Set when a manual start is attempted with consent, cleared by stopSessionRecording() and
   // optOut(), so the opt-in evaluation leaves a recording the app started alone.
   private _sessionReplayStartedByApp: boolean = false
+  // Whether the app had started a recording when the user opted out. Opt-in brings that recording
+  // back whatever gates auto replay, as long as it was still recording then.
+  private _sessionReplayStartedByAppAtOptOut: boolean = false
   private _manualRecordingStartRequest?: ManualRecordingStartRequest
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
   private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
@@ -1115,7 +1118,7 @@ export class PostHog extends PostHogCore {
    *
    * By default, PostHog has tracking enabled unless it is forcefully disabled by default using the option { defaultOptIn: false }.
    * Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called.
-   * When opting in after an opt-out, events captured from then on use a new session if replay was recording when the user opted out and is still eligible. The promise resolves once session replay has been re-evaluated.
+   * When opting in after an opt-out, session replay restarts in a new session if it was recording when the user opted out. A recording started with `startSessionRecording()` restarts even when `enableSessionReplay` is off or a linked flag or event trigger would block replay; otherwise replay restarts only if it is still eligible. The promise resolves once session replay has been re-evaluated.
    *
    * {@label Privacy}
    *
@@ -1139,12 +1142,11 @@ export class PostHog extends PostHogCore {
       if (
         !this.optedOut &&
         this._restartSessionReplayOnOptIn &&
-        // With replay disabled, only a recording the app started can have been running at opt-out.
-        (this._isEnableSessionReplay()
-          ? this._isSessionReplayLinkedFlagActive(
+        (this._sessionReplayStartedByAppAtOptOut ||
+          (this._isEnableSessionReplay() &&
+            this._isSessionReplayLinkedFlagActive(
               (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType }
-            )
-          : this._sessionReplayNativeInitialized)
+            )))
       ) {
         try {
           this._rotateReplaySession()
@@ -1204,6 +1206,9 @@ export class PostHog extends PostHogCore {
     const wasOptedOut = this.optedOut
     // Consent must be durable. See reset()/identify().
     const coreOptOut = super.optOut()
+    if (!wasOptedOut) {
+      this._sessionReplayStartedByAppAtOptOut = this._sessionReplayStartedByApp
+    }
     this._sessionReplayStartedByApp = false
     // An evaluation already queued may stop the recorder first; it takes the read before stopping.
     if (this._isInitialized && !wasOptedOut) {
@@ -3168,8 +3173,9 @@ export class PostHog extends PostHogCore {
 
   private async _evaluateAndStartSessionReplayInternal(
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>,
-    // Set for the evaluation after the user opts back in (optIn() or reset()): stops a recorder
-    // that posthog-ios optIn() restarted unless the app started one since.
+    // Set for the evaluation after the user opts back in (optIn() or reset()): restores a recording
+    // the app started before opt-out, or stops a recorder posthog-ios optIn() restarted unless the
+    // app started one since.
     freshSession: boolean = false
   ): Promise<void> {
     const options = this._sessionReplayOptions
@@ -3186,29 +3192,35 @@ export class PostHog extends PostHogCore {
       await this._readSessionReplayStateAtOptOut()
     }
 
+    // Opt-in brings back a recording the app started, on the session optIn() rotated to, unless
+    // the app has started one since.
+    const restoreAppRecording =
+      freshSession &&
+      !this.optedOut &&
+      this._restartSessionReplayOnOptIn &&
+      this._sessionReplayStartedByAppAtOptOut &&
+      !this._sessionReplayStartedByApp
+
     if (!this._isEnableSessionReplay()) {
       this._logger.info('Session replay is not enabled.')
       // Replay off — disarm event triggers so the capture hook stays inert.
       this._sessionReplayEventTriggers = []
-      // Opt-out ends any recording, including one the app started by hand. Opt-in brings that
-      // recording back on the session optIn() rotated to; otherwise it stops the recorder
-      // posthog-ios optIn() restarts when it reinstalls its integrations, unless the app has
-      // started one since.
-      if (
+      if (restoreAppRecording) {
+        await this._restoreAppRecording()
+      } else if (
+        // Opt-out ends any recording, including one the app started by hand. Opt-in stops the
+        // recorder posthog-ios optIn() restarts when it reinstalls its integrations, unless the
+        // app has started one since.
         this._sessionReplayNativeInitialized &&
         (this.optedOut || (freshSession && !this._sessionReplayStartedByApp))
       ) {
-        if (freshSession && !this.optedOut && this._restartSessionReplayOnOptIn) {
-          await this._startSessionRecording(true)
-        } else {
-          await this._stopSessionRecording()
-        }
+        await this._stopSessionRecording()
       }
       if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
       const request = this._manualRecordingStartRequest
-      if (request?.pending) {
+      if (request?.pending && !restoreAppRecording) {
         await this._attemptManualRecordingStart(request, true)
       }
       return
@@ -3253,6 +3265,13 @@ export class PostHog extends PostHogCore {
       return
     }
 
+    // A recording the app started bypasses the linked flag and event triggers, as a manual start does.
+    if (restoreAppRecording) {
+      const started = await this._restoreAppRecording()
+      this._sessionReplayRecordingActive = recordingActive && started
+      return
+    }
+
     // Replay wasn't recording at opt-out, so it stays stopped: undo the restart posthog-ios optIn()
     // makes when it reinstalls its integrations, unless the app has started a recording since.
     if (freshSession && !this._restartSessionReplayOnOptIn && !this._sessionReplayStartedByApp) {
@@ -3292,6 +3311,15 @@ export class PostHog extends PostHogCore {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
     }
+  }
+
+  // Runs on _sessionReplayEvalChain. Resumes on the session optIn() rotated to, and retries like
+  // a manual start.
+  private _restoreAppRecording(): Promise<boolean> {
+    this._cancelManualRecordingStart()
+    const request: ManualRecordingStartRequest = { pending: false, retryCount: 0 }
+    this._manualRecordingStartRequest = request
+    return this._attemptManualRecordingStart(request, true)
   }
 
   // Runs on _sessionReplayEvalChain.
