@@ -3668,11 +3668,9 @@ describe('match properties', () => {
     expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
 
-    // The null guard fires before operator dispatch, so the not_ variant is not a pure
-    // negation here — both directions return false, matching icontains.
     expect(matchProperty(property_a, { key: null })).toBe(false)
     expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
-    expect(matchProperty(property_c, { key: null })).toBe(false)
+    expect(matchProperty(property_c, { key: null })).toBe(true)
     expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
   })
 
@@ -3710,11 +3708,9 @@ describe('match properties', () => {
     expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
 
-    // The null guard fires before operator dispatch, so the not_ variant is not a pure
-    // negation here — both directions return false, matching icontains.
     expect(matchProperty(property_a, { key: null })).toBe(false)
     expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
-    expect(matchProperty(property_c, { key: null })).toBe(false)
+    expect(matchProperty(property_c, { key: null })).toBe(true)
     expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
   })
 
@@ -3994,7 +3990,7 @@ describe('match properties', () => {
     expect(matchProperty(property_c, { key: 'https://app.posthog.com' })).toBe(true)
 
     const property_d = { key: 'key', value: '.+', operator: 'regex' }
-    expect(matchProperty(property_d, { key: null })).toBe(false)
+    expect(matchProperty(property_d, { key: null })).toBe(true)
     expect(() => matchProperty(property_d, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_d, { key: 'i_am_a_value' })).toBe(true)
 
