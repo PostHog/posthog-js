@@ -1,4 +1,19 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    {
+      "id": "issue-5362-auto-none-no-comment-no-close-1792614444708",
+      "kind": "issue",
+      "number": 5362,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-10-21T20:27:24.708Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 39670387193,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/39670387193"
+      },
+      "attempts": 0
+    }
+  ]
 }
