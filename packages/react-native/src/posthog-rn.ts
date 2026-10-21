@@ -325,7 +325,7 @@ export class PostHog extends PostHogCore {
   // optOut(), so the opt-in evaluation leaves a recording the app started alone.
   private _sessionReplayStartedByApp: boolean = false
   // Whether the app had started a recording when the user opted out. Opt-in brings that recording
-  // back whatever gates auto replay, as long as it was still recording then.
+  // back even with replay disabled, as long as it was still recording then.
   private _sessionReplayStartedByAppAtOptOut: boolean = false
   private _manualRecordingStartRequest?: ManualRecordingStartRequest
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
@@ -1118,7 +1118,7 @@ export class PostHog extends PostHogCore {
    *
    * By default, PostHog has tracking enabled unless it is forcefully disabled by default using the option { defaultOptIn: false }.
    * Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called.
-   * When opting in after an opt-out, session replay restarts in a new session if it was recording when the user opted out. A recording started with `startSessionRecording()` restarts even when `enableSessionReplay` is off or a linked flag would block replay, but waits for a configured event trigger to fire in the new session; otherwise replay restarts only if it is still eligible. The promise resolves once session replay has been re-evaluated. A `stopSessionRecording()` call made while opted out does not prevent this restart; to keep replay stopped, call `stopSessionRecording()` before `optOut()` or after `optIn()`.
+   * When opting in after an opt-out, session replay restarts in a new session if it was recording when the user opted out. A recording started with `startSessionRecording()` restarts even when `enableSessionReplay` is off, but still needs the linked flag to be active and waits for a configured event trigger to fire in the new session; otherwise replay restarts only if it is still eligible. The promise resolves once session replay has been re-evaluated. A `stopSessionRecording()` call made while opted out does not prevent this restart; to keep replay stopped, call `stopSessionRecording()` before `optOut()` or after `optIn()`.
    *
    * {@label Privacy}
    *
@@ -1142,11 +1142,11 @@ export class PostHog extends PostHogCore {
       if (
         !this.optedOut &&
         this._restartSessionReplayOnOptIn &&
-        (this._sessionReplayStartedByAppAtOptOut ||
-          (this._isEnableSessionReplay() &&
-            this._isSessionReplayLinkedFlagActive(
+        (this._isEnableSessionReplay()
+          ? this._isSessionReplayLinkedFlagActive(
               (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType }
-            )))
+            )
+          : this._sessionReplayStartedByAppAtOptOut)
       ) {
         try {
           this._rotateReplaySession()
@@ -3229,7 +3229,8 @@ export class PostHog extends PostHogCore {
     const cachedSessionReplayConfig = (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as {
       [key: string]: JsonType
     }
-    let recordingActive = this._isSessionReplayLinkedFlagActive(cachedSessionReplayConfig)
+    const linkedFlagActive = this._isSessionReplayLinkedFlagActive(cachedSessionReplayConfig)
+    let recordingActive = linkedFlagActive
 
     // Event triggers: replay records only once the client captures an event whose name matches a
     // configured trigger, and stays active for the rest of that session. Cache the armed triggers in
@@ -3267,9 +3268,9 @@ export class PostHog extends PostHogCore {
       return
     }
 
-    // A recording the app started bypasses the linked flag, as a manual start does. Event triggers
-    // re-arm on the new session, so it waits for one to fire like auto replay.
-    if (restoreAppRecording && !eventTriggerPending) {
+    // Native refuses to start under a blocking linked flag, so only restore when it is active. Event
+    // triggers re-arm on the new session, so it waits for one to fire like auto replay.
+    if (restoreAppRecording && linkedFlagActive && !eventTriggerPending) {
       const started = await this._restoreAppRecording()
       // A stop made during the start clears the restart flag; keep the next flags reload from
       // undoing it, as it does for an auto recording the app stopped.

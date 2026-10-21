@@ -895,7 +895,7 @@ describe('PostHog RN session replay follows consent', () => {
     expect(nativeRecording).toBe(false)
   })
 
-  it('restarts a manual recording under a new session on opt-in when a linked flag blocks replay', async () => {
+  it('does not restore a manual recording on opt-in when a linked flag blocks replay', async () => {
     currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
     currentFlags = { 'replay-flag': false }
     await warmCache()
@@ -904,14 +904,36 @@ describe('PostHog RN session replay follows consent', () => {
     await posthog.ready()
     await posthog.startSessionRecording()
     expect(nativeRecording).toBe(true)
-    const sessionBeforeOptOut = posthog.getSessionId()
+    mockNativeOptInRestartsRecorder()
 
     await posthog.optOut()
-    expect(nativeRecording).toBe(false)
+    replay.startRecording.mockClear()
     await posthog.optIn()
 
-    expect(nativeRecording).toBe(true)
-    expect(posthog.getSessionId()).not.toBe(sessionBeforeOptOut)
+    expect(replay.startRecording).not.toHaveBeenCalled()
+    expect(nativeRecording).toBe(false)
+  })
+
+  it('does not restart a manual recording the linked flag held off at opt-in on a later flags reload', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': false }
+    await warmCache()
+
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    await posthog.startSessionRecording()
+    await posthog.optOut()
+    // Native refuses to start while its own linked-flag check fails.
+    replay.startRecording.mockImplementation(async () => {})
+    replay.startRecording.mockClear()
+    await posthog.optIn()
+
+    await posthog.reloadFeatureFlagsAsync()
+    // Longer than the first manual-start retry delay.
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+
+    expect(replay.startRecording).not.toHaveBeenCalled()
+    expect(nativeRecording).toBe(false)
   })
 
   it('waits for an event trigger in the new session before restoring a manual recording on opt-in', async () => {
