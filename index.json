@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/5362": {
+    "key": "PostHog/posthog-js/issue/5362",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5362",
+    "url": "https://github.com/PostHog/posthog-js/issues/5362",
+    "conclusion": "Confirmed feature gap: the browser SDK has no supported hook to redact URL paths or referrers before attribution values are persisted.",
+    "labels": [
+      "feature",
+      "enhancement",
+      "web",
+      "javascript",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-21T20:29:24.441Z"
+  },
   "PostHog/posthog-js/issue/5358": {
     "key": "PostHog/posthog-js/issue/5358",
     "repo": "PostHog/posthog-js",
@@ -2933,19 +2949,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-30T09:38:39.365Z"
-  },
-  "PostHog/posthog-js/issue/3594": {
-    "key": "PostHog/posthog-js/issue/3594",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3594",
-    "url": "https://github.com/PostHog/posthog-js/issues/3594",
-    "conclusion": "Valid toolbar/proxy routing issue; current code only uses ui_host for toolbar API params, not for loading toolbar.js.",
-    "labels": [
-      "feature/toolbar",
-      "frameworks/next-js",
-      "web"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-30T09:36:47.102Z"
   }
 }
