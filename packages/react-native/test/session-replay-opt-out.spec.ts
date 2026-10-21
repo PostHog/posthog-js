@@ -490,6 +490,42 @@ describe('PostHog RN session replay follows consent', () => {
     expect(posthog.getSessionId()).toBe(sessionBeforeOptOut)
   })
 
+  it('keeps replay stopped on opt-in when the app stopped an in-flight start right before optOut()', async () => {
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+    await posthog.stopSessionRecording()
+    const sessionBeforeOptOut = posthog.getSessionId()
+    let releaseStart: () => void = () => {}
+    replay.startRecording.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseStart = () => {
+            nativeRecording = true
+            resolve()
+          }
+        })
+    )
+    const start = posthog.startSessionRecording()
+    await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalled())
+    void posthog.stopSessionRecording()
+    const optOut = posthog.optOut()
+    releaseStart()
+    await start
+    await optOut
+    replay.startRecording.mockImplementation(async () => {
+      if (!nativeOptedOut) {
+        nativeRecording = true
+      }
+    })
+    await posthog.optIn()
+    // Give the opt-in evaluation time to run; nothing may start.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(nativeRecording).toBe(false)
+    expect(posthog.getSessionId()).toBe(sessionBeforeOptOut)
+  })
+
   it('restarts replay on opt-in when the app stopped it while opted out', async () => {
     posthog = newPostHog({ enableSessionReplay: true })
     await posthog.ready()

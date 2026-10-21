@@ -94,6 +94,7 @@ type ManualRecordingStartRequest = {
   pending: boolean
   retryCount: number
   timer?: ReturnType<typeof setTimeout>
+  cancelledByOptOut?: boolean
 }
 
 export interface PostHogOptions extends PostHogCoreOptions {
@@ -317,7 +318,8 @@ export class PostHog extends PostHogCore {
   // Whether replay was recording at opt-out, read from native, so opt-in brings back only a
   // recording that opt-out stopped.
   private _restartSessionReplayOnOptIn: boolean = true
-  // Set by optOut() until that read is taken, before whichever queued step first stops the recorder.
+  // Set by optOut() until the read is taken: by optOut()'s own queued step, or earlier by an
+  // evaluation or a start optOut() cancelled, whichever would stop the recorder first.
   private _sessionReplayOptOutReadPending: boolean = false
   // Set when a manual start is attempted with consent, cleared by stopSessionRecording() and
   // optOut(), so the opt-in evaluation leaves a recording the app started alone.
@@ -1193,6 +1195,9 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optOut(): Promise<void> {
+    if (this._manualRecordingStartRequest) {
+      this._manualRecordingStartRequest.cancelledByOptOut = true
+    }
     this._cancelManualRecordingStart()
     const wasOptedOut = this.optedOut
     // Consent must be durable. See reset()/identify().
@@ -1835,8 +1840,8 @@ export class PostHog extends PostHogCore {
     // Do not let its result revive the old request or leave its recorder running.
     if (this._manualRecordingStartRequest !== request) {
       if (started) {
-        // The start optOut() cancelled was recording, so read before stopping it.
-        if (this.optedOut) {
+        // optOut() cancelled this start after it began recording, so read before stopping it.
+        if (request.cancelledByOptOut) {
           await this._readSessionReplayStateAtOptOut()
         }
         await this._stopSessionRecording()
