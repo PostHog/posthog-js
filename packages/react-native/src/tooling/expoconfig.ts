@@ -33,6 +33,19 @@ const resolvePostHogReactNativePackageJsonPath = resolvePostHogGradleScript('exe
 // Written by earlier versions; kept only so a project prebuilt with it is rewritten, not given a second line.
 const legacyResolvePostHogReactNativePackageJsonPath = resolvePostHogGradleScript('execute()')
 
+const kotlinApplyPostHogScript = [
+  'apply(from = File(',
+  "    ProcessBuilder(\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\")",
+  '        .directory(rootDir)',
+  '        .redirectError(ProcessBuilder.Redirect.INHERIT)',
+  '        .start().let { process ->',
+  '            val scriptPath = process.inputStream.bufferedReader().use { it.readText() }.trim()',
+  '            check(process.waitFor() == 0) { "PostHog: Could not resolve posthog.gradle" }',
+  '            scriptPath',
+  '        }',
+  '))',
+].join('\n')
+
 const POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY = 'posthogReactNativeSkipOnConflict'
 const POSTHOG_ANDROID_FORCE_PROPERTY = 'posthogReactNativeForce'
 
@@ -90,18 +103,28 @@ export function buildAndroidForceGradleLine(force: boolean): string | null {
 }
 
 const androidConflictPropertyPattern = (property: string): RegExp =>
-  new RegExp(`^project\\.ext\\.${property}\\s*=\\s*(true|false)\\n?`, 'm')
+  new RegExp(`^(?:project\\.ext\\.${property}|extra\\["${property}"\\])\\s*=\\s*(true|false)\\r?\\n?`, 'm')
 
 const withAndroidPlugin = (config: any, skipOnConflict = false, force = false) => {
   return withAppBuildGradle(config, (config: any) => {
-    if (config.modResults.language !== 'groovy') {
-      console.warn('Cannot configure PostHog in the app gradle because the build.gradle is not groovy')
+    const language = config.modResults.language
+    if (language !== 'groovy' && language !== 'kt') {
+      console.warn('Cannot configure PostHog in the app gradle because its language is unsupported')
+      return config
     }
 
-    const applyFrom = `apply from: new File(${resolvePostHogReactNativePackageJsonPath})`
+    const applyFrom =
+      language === 'kt' ? kotlinApplyPostHogScript : `apply from: new File(${resolvePostHogReactNativePackageJsonPath})`
     const legacyApplyFrom = `apply from: new File(${legacyResolvePostHogReactNativePackageJsonPath})`
     const buildGradle = (config.modResults.contents as string).replace(legacyApplyFrom, applyFrom)
-    const conflictLines = [buildAndroidSkipOnConflictGradleLine(skipOnConflict), buildAndroidForceGradleLine(force)]
+    const conflictLines = (
+      language === 'kt'
+        ? [
+            skipOnConflict ? `extra["${POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY}"] = true` : null,
+            force ? `extra["${POSTHOG_ANDROID_FORCE_PROPERTY}"] = true` : null,
+          ]
+        : [buildAndroidSkipOnConflictGradleLine(skipOnConflict), buildAndroidForceGradleLine(force)]
+    )
       .filter((line): line is string => line !== null)
       .join('\n')
     const applyBlock = conflictLines ? `${conflictLines}\n${applyFrom}` : applyFrom
@@ -264,6 +287,34 @@ export function setPostHogAndroidNativeSymbolsExtension(appBuildGradle: string, 
   return contents.replace(applyPattern, `$1\n${block}`)
 }
 
+function configureKotlinNativeSymbols(appBuildGradle: string, includeSource: boolean): string {
+  const contents = removePostHogAndroidNativeSymbolsExtension(appBuildGradle)
+  const applyPattern = /^([ \t]*apply\(plugin\s*=\s*"com\.posthog\.android"\).*)$/m
+  const androidPattern = /^android\s*\{/m
+  const block = [
+    POSTHOG_NATIVE_SYMBOLS_BEGIN,
+    // Imperatively applied plugins do not provide Kotlin DSL extension accessors.
+    'extensions.getByName("posthog").withGroovyBuilder {',
+    '    setProperty("uploadNativeSymbols", true)',
+    `    setProperty("includeNativeSymbolSources", ${includeSource})`,
+    '}',
+    POSTHOG_NATIVE_SYMBOLS_END,
+  ].join('\n')
+  const alreadyApplied = /^[ \t]*id\("com\.posthog\.android"\)(?![^\r\n]*\bapply\s+false\b)/m.test(contents)
+  if ((applyPattern.test(contents) || alreadyApplied) && appBuildGradle.match(POSTHOG_NATIVE_SYMBOLS_BLOCK_PATTERN)) {
+    return appBuildGradle.replace(POSTHOG_NATIVE_SYMBOLS_BLOCK_PATTERN, `\n${block}`)
+  }
+  if (applyPattern.test(contents)) {
+    return contents.replace(applyPattern, `$1\n${block}`)
+  }
+  if (androidPattern.test(contents)) {
+    const applyLine = alreadyApplied ? '' : 'apply(plugin = "com.posthog.android")\n'
+    return contents.replace(androidPattern, `${applyLine}${block}\n\nandroid {`)
+  }
+  console.warn('PostHog: Could not find where to apply com.posthog.android in the app build.gradle.kts')
+  return appBuildGradle
+}
+
 // Expo's standard mods run their action before the previously registered action. This wrapper
 // deliberately runs its action after the rest of the project Gradle mod chain, so it can safely
 // coordinate the project classpath and app plugin edits without relying on mod-key order.
@@ -282,8 +333,10 @@ const withFinalizedProjectBuildGradle = (config: any, action: (config: any) => a
 
 const withAndroidNativeSymbolsPlugin = (config: any, includeSource: boolean) => {
   return withFinalizedProjectBuildGradle(config, async (config: any) => {
-    if (config.modResults.language !== 'groovy') {
-      console.warn('Cannot configure the PostHog Android Gradle plugin because the project build.gradle is not groovy')
+    if (!['groovy', 'kt'].includes(config.modResults.language)) {
+      console.warn(
+        'Cannot configure the PostHog Android Gradle plugin because the project gradle language is unsupported'
+      )
       return config
     }
 
@@ -300,15 +353,18 @@ const withAndroidNativeSymbolsPlugin = (config: any, includeSource: boolean) => 
     }
 
     const appBuildGradle = await AndroidConfig.Paths.getAppBuildGradleAsync(config.modRequest.projectRoot)
-    if (appBuildGradle.language !== 'groovy') {
-      console.warn('Cannot configure the PostHog Android Gradle plugin because the app build.gradle is not groovy')
+    if (!['groovy', 'kt'].includes(appBuildGradle.language)) {
+      console.warn('Cannot configure the PostHog Android Gradle plugin because the app gradle language is unsupported')
       return config
     }
 
-    const contents = setPostHogAndroidNativeSymbolsExtension(
-      applyPostHogAndroidGradlePlugin(appBuildGradle.contents),
-      includeSource
-    )
+    const contents =
+      appBuildGradle.language === 'kt'
+        ? configureKotlinNativeSymbols(appBuildGradle.contents, includeSource)
+        : setPostHogAndroidNativeSymbolsExtension(
+            applyPostHogAndroidGradlePlugin(appBuildGradle.contents),
+            includeSource
+          )
     if (contents !== appBuildGradle.contents) {
       await fs.promises.writeFile(appBuildGradle.path, contents)
     }
@@ -318,7 +374,7 @@ const withAndroidNativeSymbolsPlugin = (config: any, includeSource: boolean) => 
 
 const withoutAndroidNativeSymbolsExtension = (config: any) => {
   return withAppBuildGradle(config, (config: any) => {
-    if (config.modResults.language === 'groovy') {
+    if (['groovy', 'kt'].includes(config.modResults.language)) {
       config.modResults.contents = removePostHogAndroidNativeSymbolsExtension(config.modResults.contents)
     }
     return config
