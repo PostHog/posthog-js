@@ -17,6 +17,9 @@ const forbiddenInputs = [
 ]
 const flagsInput = /(^|\/)(feature-flags|flags)\.(m?js|ts)$/
 const logsInput = /(^|\/)(logs|console-logs|logs-config|logs-utils)\.(m?js|ts)$/
+const surveysInput =
+    /(^|\/)(surveys(?:-extension|-renderer|-storage)?|survey-event-receiver(?:-base)?|survey-action-matcher)\.(m?js|tsx?)$/
+const preactInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?preact\//
 const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
 const analyticsInput = /(^|\/)(capture-v1|analytics|analytics-delivery|lane)\.(m?js|ts)$/
 const automaticAnalyticsInput = /(^|\/)automatic-analytics\.(m?js|ts)$/
@@ -58,14 +61,16 @@ const attribution = (result, outputKeys = Object.keys(result.metafile.outputs)) 
     return [...bytes].map(([input, value]) => ({ input, bytes: value })).sort((a, b) => b.bytes - a.bytes)
 }
 
-const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowFlags = false) => {
+const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowFlags = false, allowSurveys = false) => {
     const measured = sizes(outputs)
     const inputs = [...new Set(outputKeys.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs)))]
     const forbidden = inputs.filter(
         (input) =>
-            (forbiddenInputs.some((pattern) => pattern.test(input)) && !(allowFlags && coreInput.test(input))) ||
+            (forbiddenInputs.some((pattern) => pattern.test(input)) &&
+                !(allowFlags && coreInput.test(input)) &&
+                !(allowSurveys && preactInput.test(input))) ||
             (forbidAnalytics && analyticsInput.test(input)) ||
-            (!allowFlags && (flagsInput.test(input) || logsInput.test(input)))
+            (!allowFlags && (flagsInput.test(input) || logsInput.test(input) || surveysInput.test(input)))
     )
 
     stdout.write(
@@ -83,7 +88,7 @@ const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowF
     }
 }
 
-const measureStatic = async (name, fixture, forbidAnalytics, allowFlags = false) => {
+const measureStatic = async (name, fixture, forbidAnalytics, allowFlags = false, allowSurveys = false) => {
     const result = await build({ ...buildOptions, entryPoints: [fixture] })
     const output = result.outputFiles[0]?.contents
     if (!output) {
@@ -92,10 +97,18 @@ const measureStatic = async (name, fixture, forbidAnalytics, allowFlags = false)
     if (forbidAnalytics && Object.keys(result.metafile.inputs).some((input) => automaticAnalyticsInput.test(input))) {
         throw new Error('The core bundle references automatic analytics')
     }
-    await report(name, result, [output], Object.keys(result.metafile.outputs), forbidAnalytics, allowFlags)
+    await report(
+        name,
+        result,
+        [output],
+        Object.keys(result.metafile.outputs),
+        forbidAnalytics,
+        allowFlags,
+        allowSurveys
+    )
 }
 
-const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automatic = true) => {
+const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automatic = true, allowSurveys = automatic) => {
     const outputDirectory = 'bundle-output'
     const result = await build({
         ...buildOptions,
@@ -113,21 +126,39 @@ const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automati
         throw new Error('The lazy bundle-size fixture did not produce an entry chunk')
     }
 
-    const initial = new Set([entry])
-    const pending = [entry]
-    while (pending.length > 0) {
-        const output = pending.pop()
-        for (const imported of result.metafile.outputs[output].imports) {
-            if (imported.external || imported.kind === 'dynamic-import') {
-                continue
+    const staticClosure = (entry) => {
+        const initial = new Set([entry])
+        const pending = [entry]
+        while (pending.length > 0) {
+            const output = pending.pop()
+            for (const imported of result.metafile.outputs[output].imports) {
+                if (imported.external || imported.kind === 'dynamic-import') continue
+                const key = result.metafile.outputs[imported.path]
+                    ? imported.path
+                    : posix.normalize(posix.join(dirname(output), imported.path))
+                if (!initial.has(key)) {
+                    initial.add(key)
+                    pending.push(key)
+                }
             }
-            const key = result.metafile.outputs[imported.path]
-                ? imported.path
-                : posix.normalize(posix.join(dirname(output), imported.path))
-            if (!initial.has(key)) {
-                initial.add(key)
-                pending.push(key)
-            }
+        }
+        return initial
+    }
+    const initial = staticClosure(entry)
+    const surveysOrchestration = Object.entries(result.metafile.outputs).find(([, details]) =>
+        details.entryPoint?.endsWith('/automatic-surveys.mjs')
+    )?.[0]
+    if (automatic && !surveysOrchestration) {
+        throw new Error('The root must reference the automatic surveys orchestration chunk')
+    }
+    if (surveysOrchestration) {
+        const inputs = [...staticClosure(surveysOrchestration)].flatMap((key) =>
+            Object.keys(result.metafile.outputs[key].inputs)
+        )
+        if (inputs.some((input) => preactInput.test(input) || /surveys-renderer|survey-styles/.test(input))) {
+            throw new Error(
+                'Automatic surveys orchestration must keep renderer, Preact, and CSS behind its dynamic boundary'
+            )
         }
     }
 
@@ -151,8 +182,8 @@ const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automati
     }
     await report(`${name} initial`, result, contents(initialKeys), initialKeys, true)
     const dynamicKeys = totalKeys.filter((key) => !initial.has(key))
-    await report(`${name} dynamic`, result, contents(dynamicKeys), dynamicKeys, false, true)
-    await report(`${name} total`, result, contents(totalKeys), totalKeys, false, true)
+    await report(`${name} dynamic`, result, contents(dynamicKeys), dynamicKeys, false, true, allowSurveys)
+    await report(`${name} total`, result, contents(totalKeys), totalKeys, false, true, allowSurveys)
 }
 
 await measureStatic('core', 'fixtures/minimal.ts', true)
@@ -162,4 +193,6 @@ await measureStatic('static flags', 'fixtures/static-flags.ts', true, true)
 await measureLazy('dynamic flags', 'fixtures/dynamic-flags.ts', false)
 await measureStatic('static logs', 'fixtures/static-logs.ts', true, true)
 await measureLazy('dynamic logs', 'fixtures/dynamic-logs.ts', false)
+await measureStatic('static surveys', 'fixtures/static-surveys.ts', true, true, true)
+await measureLazy('dynamic surveys', 'fixtures/dynamic-surveys.ts', false, true)
 stdout.write(`Budget status: ${COMPLIANT_BASELINE_PENDING}\n`)
