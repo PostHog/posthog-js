@@ -199,6 +199,11 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
           content.push({ type: 'text', text: choice.message.content })
         }
 
+        // A refused request carries its text in `refusal` and leaves `content` empty
+        if (choice.message.refusal) {
+          content.push({ type: 'refusal', refusal: choice.message.refusal })
+        }
+
         if (choice.message.tool_calls) {
           for (const toolCall of choice.message.tool_calls) {
             // Custom tools carry their free-form text in `custom.input`, with no `function` object.

@@ -22,6 +22,27 @@ describe('OpenAI-compatible stream accumulators', () => {
     expect(usage.outputTokens).toBeUndefined()
   })
 
+  test('chat keeps a refusal streamed in delta.refusal', () => {
+    const accumulator = new OpenAIChatStreamAccumulator()
+    const chunk = (delta: object, finishReason: string | null = null) =>
+      ({
+        id: 'chatcmpl-1',
+        model: 'gpt-4o',
+        object: 'chat.completion.chunk',
+        created: 1,
+        choices: [{ index: 0, finish_reason: finishReason, logprobs: null, delta }],
+      }) as any
+    accumulator.consume(chunk({ refusal: "I can't " }), 100)
+    accumulator.consume(chunk({ refusal: 'help with that' }), 110)
+    accumulator.consume(chunk({}, 'stop'), 120)
+
+    const result = accumulator.result()
+    expect(result.output).toEqual([
+      { role: 'assistant', content: [{ type: 'refusal', refusal: "I can't help with that" }] },
+    ])
+    expect(result.firstTokenTime).toBe(100)
+  })
+
   test('chat accumulates text, tools, stop reason, metadata, web search, and raw usage', () => {
     const accumulator = new OpenAIChatStreamAccumulator()
     accumulator.consume(
