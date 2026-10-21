@@ -1835,6 +1835,10 @@ export class PostHog extends PostHogCore {
     // Do not let its result revive the old request or leave its recorder running.
     if (this._manualRecordingStartRequest !== request) {
       if (started) {
+        // The start optOut() cancelled was recording, so read before stopping it.
+        if (this.optedOut) {
+          await this._readSessionReplayStateAtOptOut()
+        }
         await this._stopSessionRecording()
       }
       return false
@@ -1982,10 +1986,6 @@ export class PostHog extends PostHogCore {
   // Shared stop path, also called by the flags-driven evaluation.
   private async _stopSessionRecording(): Promise<boolean> {
     await this._initPromise
-    // Opt-out decides from the recorder's state, so read it before any stop.
-    if (this.optedOut) {
-      await this._readSessionReplayStateAtOptOut()
-    }
 
     if (this.isDisabled) {
       return false
