@@ -514,9 +514,21 @@ export default class MutationBuffer {
         // a node is deferred past this emission. Silent drops here historically
         // masked a shadow-DOM regression (@TueHaulund in #5244) — keeping the
         // warning around means future regressions announce themselves.
+        //
+        // Privacy guard (@marandaneto in #5244): the rrweb console-record
+        // plugin serializes any `Node` argument via its `outerHTML`
+        // (see rrweb-plugin-console-record/src/stringify.ts, the
+        // `instanceof Node` branch). Passing the raw masked node here
+        // would persist its unmasked outerHTML into a `rrweb/console@1`
+        // event when console recording is enabled. Log a sanitized
+        // descriptor instead.
+        const descriptor =
+          n && n.nodeType === Node.ELEMENT_NODE
+            ? `<${(n as Element).tagName.toLowerCase()}> (nodeType=1)`
+            : `nodeType=${n ? n.nodeType : "null"}`;
         console.warn(
           "Couldn't record new node. Couldn't find mirror id for parent or nextSibling of:",
-          n,
+          descriptor,
         );
         missingParents.add(n);
       }
