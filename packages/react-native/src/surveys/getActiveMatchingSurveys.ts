@@ -27,7 +27,7 @@ function isSurveyFlagEnabled(flagKey: string | undefined, flags: Record<string, 
   return flagKey ? !!flags[flagKey] === true : true
 }
 
-export function getActiveMatchingSurveys(
+export function activatedSurveysgetActiveMatchingSurveys(
   surveys: Survey[],
   flags: Record<string, FeatureFlagValue>,
   seenSurveys: string[],

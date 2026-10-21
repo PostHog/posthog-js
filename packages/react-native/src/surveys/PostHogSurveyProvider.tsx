@@ -224,6 +224,8 @@ export function PostHogSurveyProvider(
     if (isShown) {
       return;
     }
+    const inProgressSurveys = surveys.filter((survey: Survey) => progressStore.load(survey))
+    const inProgressSurveysSet = new Set(inProgressSurveys);
 
     const activeSurveys = getActiveMatchingSurveys(
       surveys,
@@ -231,11 +233,20 @@ export function PostHogSurveyProvider(
       seenSurveys,
       activatedSurveys,
       lastSeenSurveyDate,
+      inProgressSurveysSet,
     );
 
     const popoverSurveys = activeSurveys.filter(
       (survey: Survey) => survey.type === SurveyType.Popover,
     );
+
+    const matchingActiveSurvey = activeSurvey && activeSurveys.some((survey: Survey) => survey.id === activeSurvey.id);
+
+    if (activeSurvey && !matchingActiveSurvey) {
+      setActiveSurvey(undefined)
+    }
+
+
     const popoverSurveyQueue = sortSurveysByAppearanceDelay(popoverSurveys);
 
     if (popoverSurveyQueue.length === 0) {
