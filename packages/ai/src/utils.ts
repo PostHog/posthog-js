@@ -330,7 +330,9 @@ export const formatResponseGemini = (response: any, client?: FullAiCaptureGate):
         const content: FormattedContent = []
 
         for (const part of candidate.content.parts) {
-          if (part.text) {
+          if (part.thought === true && part.text) {
+            content.push({ type: 'reasoning', text: part.text })
+          } else if (part.text) {
             content.push({ type: 'text', text: part.text })
           } else if (part.functionCall) {
             content.push({
