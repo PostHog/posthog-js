@@ -691,16 +691,28 @@ describe('replayer', function () {
       events = ${JSON.stringify(scrollSnapContainerRealtimeEvents)};
       const { Replayer } = rrweb;
       var replayer = new Replayer(events,{showDebug:true});
+      var behaviors = {};
+      const elementPrototype = replayer.iframe.contentWindow.Element.prototype;
+      const originalScrollTo = elementPrototype.scrollTo;
+      elementPrototype.scrollTo = function (options) {
+        behaviors[this.id] = options.behavior;
+        return originalScrollTo.apply(this, arguments);
+      };
       replayer.play(0);
     `);
-    await page.waitForFunction('replayer.getCurrentTime() >= 1000');
-    await waitForRAF(page);
+    await page.waitForFunction('behaviors.snap && behaviors.plain');
+    expect(await page.evaluate('behaviors')).toEqual({
+      snap: 'instant',
+      plain: 'smooth',
+    });
     const iframe = await page.$('iframe');
     const contentDocument = await iframe!.contentFrame()!;
-    const scrollTop = (selector: string) =>
-      contentDocument!.$eval(selector, (element: Element) => element.scrollTop);
-    expect(await scrollTop('#snap')).toEqual(1320);
-    expect(await scrollTop('#plain')).toBeLessThan(1320);
+    expect(
+      await contentDocument!.$eval(
+        '#snap',
+        (element: Element) => element.scrollTop,
+      ),
+    ).toEqual(1320);
   });
 
   it('can fast forward input events', async () => {

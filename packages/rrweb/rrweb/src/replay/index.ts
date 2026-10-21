@@ -2458,9 +2458,8 @@ export class Replayer {
     if (!scroller || !view) {
       return 'smooth';
     }
-    return view.getComputedStyle(scroller).scrollSnapType === 'none'
-      ? 'smooth'
-      : 'instant';
+    const snap = view.getComputedStyle(scroller).scrollSnapType;
+    return snap && snap !== 'none' ? 'instant' : 'smooth';
   }
 
   private applyInput(d: inputData) {
