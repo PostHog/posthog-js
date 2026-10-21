@@ -717,6 +717,32 @@ describe('PostHog RN session replay follows consent', () => {
     expect(posthog.getSessionId()).not.toBe(sessionBeforeOptOut)
   })
 
+  it('restarts a manual recording waiting for an event trigger once it fires after opt-in, with replay disabled', async () => {
+    currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
+    await warmCache()
+    // Native holds the start until the trigger has fired in the current session.
+    replay.start.mockImplementation(async () => {})
+    replay.startRecording.mockImplementation(async () => {
+      const activated = posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession)
+      if (!nativeOptedOut && activated === posthog.getSessionId()) {
+        nativeRecording = true
+      }
+    })
+    posthog = newPostHog({ enableSessionReplay: false })
+    await posthog.ready()
+    await posthog.startSessionRecording()
+    expect(nativeRecording).toBe(false)
+    const sessionBeforeOptOut = posthog.getSessionId()
+
+    await posthog.optOut()
+    await posthog.optIn()
+    expect(posthog.getSessionId()).not.toBe(sessionBeforeOptOut)
+    expect(nativeRecording).toBe(false)
+
+    posthog.capture('$pageview')
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+  })
+
   it('retries a manual recording native refuses to restart on opt-in, on the opt-in session', async () => {
     posthog = newPostHog({ enableSessionReplay: false })
     await posthog.ready()

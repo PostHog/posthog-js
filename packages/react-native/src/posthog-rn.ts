@@ -3151,8 +3151,15 @@ export class PostHog extends PostHogCore {
       const restoreAppRecording =
         freshSession && !this.optedOut && this._sessionReplayWanted && !this._sessionReplayStartedByApp
       this._logger.info('Session replay is not enabled.')
-      // Replay off — disarm event triggers so the capture hook stays inert.
-      this._sessionReplayEventTriggers = []
+      // Replay off: only a recording the app wants waits on event triggers, so a matching event
+      // retries its pending start below. Otherwise disarm them so the capture hook stays inert.
+      this._sessionReplayEventTriggers = this._sessionReplayWanted
+        ? this._parseEventTriggers(
+            ((this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType })[
+              'eventTriggers'
+            ]
+          )
+        : []
       if (restoreAppRecording) {
         await this._restoreAppRecording()
       } else if (
