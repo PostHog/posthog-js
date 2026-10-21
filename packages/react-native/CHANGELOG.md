@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.81.6
+
+### Patch Changes
+
+- [#5283](https://github.com/PostHog/posthog-js/pull/5283) [`17b8cd9`](https://github.com/PostHog/posthog-js/commit/17b8cd9f371060b3a6915157269d51ba0f97fcf2) Thanks [@gauravch-code](https://github.com/gauravch-code)! - fix: Configure Android symbol and sourcemap uploads in Expo projects using Kotlin Gradle files.
+  (2026-10-21)
+- Updated dependencies [[`189da75`](https://github.com/PostHog/posthog-js/commit/189da75c7a52b319843a13405c1343565f0d4e25)]:
+  - @posthog/core@1.59.2
+
 ## 4.81.5
 
 ### Patch Changes

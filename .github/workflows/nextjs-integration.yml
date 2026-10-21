@@ -1,0 +1,93 @@
+name: Next.js integration
+
+on:
+    pull_request:
+    merge_group:
+        types: [checks_requested]
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+    group: nextjs-integration-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    affected:
+        permissions:
+            contents: read
+        uses: ./.github/workflows/check-affected.yml
+        with:
+            package-name: '@posthog/nextjs-config'
+            # Turbo follows the config package's workspace dependencies. These SDK consumers
+            # and harness/setup inputs are not all dependencies of nextjs-config itself.
+            additional-paths: |
+                packages/browser/
+                packages/browser-common/
+                packages/node/
+                packages/rrweb/
+                package.json
+                pnpm-lock.yaml
+                pnpm-workspace.yaml
+                turbo.json
+                .npmrc
+                .nvmrc
+                .github/workflows/nextjs-integration.yml
+                .github/workflows/check-affected.yml
+                .github/actions/is-affected/
+                .github/actions/setup/
+
+    integration:
+        name: Next.js release and cache regressions
+        needs: affected
+        # Skip only on an explicit unaffected result; selector failures must not hide tests.
+        if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.affected.outputs.is-affected != 'false') }}
+        runs-on: ubuntu-22.04
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+
+            - name: Cache fixture dependency downloads
+              uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                  path: ${{ runner.temp }}/nextjs-integration-pnpm
+                  key: ${{ runner.os }}-${{ runner.arch }}-nextjs-fixtures-${{ hashFiles('packages/nextjs-config/tests/integration/fixtures/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-${{ runner.arch }}-nextjs-fixtures-
+
+            - name: Read installed Playwright version
+              id: playwright
+              run: |
+                  version=$(node -p "require('./packages/browser/node_modules/@playwright/test/package.json').version")
+                  echo "version=$version" >> "$GITHUB_OUTPUT"
+
+            - name: Cache Chromium downloads
+              uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                  path: ~/.cache/ms-playwright
+                  key: ${{ runner.os }}-${{ runner.arch }}-nextjs-chromium-${{ steps.playwright.outputs.version }}
+
+            - name: Install Chromium and system dependencies
+              run: pnpm --filter posthog-js exec playwright install --with-deps chromium
+
+            - name: Run production builds and browser regressions
+              run: pnpm test:nextjs-integration
+              env:
+                  NEXTJS_INTEGRATION_STORE_DIR: ${{ runner.temp }}/nextjs-integration-pnpm
+
+            - name: Upload failure diagnostics
+              if: failure()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: nextjs-integration-failure
+                  path: test-results/nextjs-integration/
+                  retention-days: 7
+                  if-no-files-found: ignore

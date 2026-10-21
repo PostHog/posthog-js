@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 const packageDir = fileURLToPath(new URL('..', import.meta.url))
 
 for (const format of ['cjs', 'esm']) {
-  test(`${format}: resolves the package-local CLI and preserves explicit overrides`, (t) => {
+  test(`${format}: resolves the package-local CLI for webpack in parents and Next workers`, (t) => {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'posthog-next-cli-')))
     t.after(() => rmSync(root, { recursive: true, force: true }))
     const installedPackage = path.join(root, 'node_modules/@posthog/nextjs-config')
@@ -43,20 +43,34 @@ for (const format of ['cjs', 'esm']) {
         const config = await withPostHogConfig({}, {
           personalApiKey: 'phx_test',
           projectId: '1',
-          cliBinaryPath: process.argv[2],
+          cliBinaryPath: process.env.FIXTURE_CLI_BINARY || undefined,
         })('phase-production-build', { defaultConfig: {} })
         const webpack = config.webpack({ plugins: [] }, {})
+        if (config.turbopack?.debugIds || config.compiler?.runAfterProductionCompile || webpack.plugins.length !== 1) {
+          throw new Error('Expected webpack instrumentation, not the Turbopack upload hook')
+        }
         console.log(webpack.plugins.at(-1).resolvedConfig.cliBinaryPath)
       })().catch(error => { console.error(error); process.exitCode = 1 })`
     )
-    const run = (args = []) =>
-      execFileSync(process.execPath, [runner, ...args], {
+    const run = (cliBinaryPath, selection) =>
+      execFileSync(process.execPath, [runner, ...(selection === 'flag' ? ['build', '--webpack'] : [])], {
         cwd: root,
         encoding: 'utf8',
-        env: { ...process.env, WEBPACK: '1', TURBOPACK: '', PATH: workspaceBin },
+        env: {
+          ...process.env,
+          WEBPACK: selection === 'environment' ? '1' : undefined,
+          TURBOPACK: undefined,
+          NEXT_PRIVATE_WORKER: selection === 'dev-worker' ? '1' : undefined,
+          NEXT_PRIVATE_BUILD_WORKER: selection === 'build-worker' ? '1' : undefined,
+          POSTHOG_RELEASE_ID: 'fixture-release',
+          FIXTURE_CLI_BINARY: cliBinaryPath,
+          PATH: workspaceBin,
+        },
       }).trim()
 
-    assert.equal(run(), ownCliPath)
-    assert.equal(run(['custom-posthog-cli']), 'custom-posthog-cli')
+    for (const selection of ['environment', 'flag', 'dev-worker', 'build-worker']) {
+      assert.equal(run(undefined, selection), ownCliPath)
+      assert.equal(run('custom-posthog-cli', selection), 'custom-posthog-cli')
+    }
   })
 }

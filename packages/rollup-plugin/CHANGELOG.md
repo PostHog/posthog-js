@@ -1,5 +1,12 @@
 # @posthog/rollup-plugin
 
+## 1.6.2
+
+### Patch Changes
+
+- [#5351](https://github.com/PostHog/posthog-js/pull/5351) [`4182940`](https://github.com/PostHog/posthog-js/commit/4182940bf5f715bef16a0740cc9d08354040bdd8) Thanks [@hpouillot](https://github.com/hpouillot)! - Require PostHog CLI 0.18.11 or newer within the 0.18 release line.
+  (2026-10-21)
+
 ## 1.6.1
 
 ### Patch Changes
