@@ -1,8 +1,11 @@
 import { createServer } from 'node:http'
 import { once } from 'node:events'
-import { OfflineEvaluations, EvaluationAPIError } from '../../src/evaluations'
+import { Console } from 'node:console'
+import { Writable } from 'node:stream'
+import { inspect } from 'node:util'
+import { OfflineEvaluations, EvaluationAPIError, EvaluationResult } from '../../src/evaluations'
 import { Transport } from '../../src/evaluations/transport'
-import { client, ID, TIME, experimentResponse, mockFetch, reply } from './helpers'
+import { client, ID, ITEM, VERSION, TIME, experimentResponse, mockFetch, reply } from './helpers'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -118,17 +121,41 @@ it('A rejection after a lost response cannot erase uncertainty', async () => {
   expect(String(error)).not.toContain('private')
   expect(JSON.stringify(error)).not.toContain('private')
 })
-it('Error messages do not expose evaluation content', async () => {
-  mockFetch().mockResolvedValue(
-    reply({ code: 'invalid', detail: 'private prompt test-secret', errors: ['private'] }, 400)
-  )
-  const error = await client()
-    .createExperiment({ name: 'Run' })
-    .catch((e) => e)
-  expect(error.persistence).toBe('rejected')
-  expect(error.response.detail).toContain('private')
-  expect(String(error)).not.toMatch(/private|test-secret/)
-})
+it.each(['createExperiment', 'uploadResults'])(
+  'Logging errors from %s does not expose evaluation content',
+  async (operation) => {
+    const details = [{ message: 'private prompt test-secret' }]
+    mockFetch().mockResolvedValue(
+      reply({ code: 'invalid', detail: 'private prompt test-secret', errors: details }, 400)
+    )
+    const evaluations = client()
+    const pending =
+      operation === 'createExperiment'
+        ? evaluations.createExperiment({ name: 'Run' })
+        : evaluations
+            .resumeExperiment(ID)
+            .uploadResults([new EvaluationResult({ item: ITEM, scorerVersionId: VERSION, value: false })])
+    const error = await pending.catch((e) => e)
+    expect(error).toBeInstanceOf(EvaluationAPIError)
+    expect(error.persistence).toBe('rejected')
+    expect(error.errors).toEqual(details)
+    expect(error.response.detail).toContain('private')
+    expect(String(error)).not.toMatch(/private|test-secret/)
+    expect(JSON.stringify(error)).not.toMatch(/private|test-secret/)
+
+    let output = ''
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        output += chunk.toString()
+        callback()
+      },
+    })
+    new Console({ stdout: stream, stderr: stream }).error(error)
+    expect(output).toContain(error.name)
+    expect(output).not.toMatch(/private prompt|test-secret/)
+    expect(inspect(error)).not.toMatch(/private prompt|test-secret/)
+  }
+)
 it.each(['60', new Date(Date.now() + 120000).toUTCString()])(
   'A long Retry-After is not shortened: %s',
   async (header) => {
