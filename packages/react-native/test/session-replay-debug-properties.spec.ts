@@ -449,36 +449,19 @@ describe('PostHog RN session replay debug properties', () => {
 
   it('A successful build never attaches the error key', async () => {
     const client = await readyClient()
-    const replayEnabled = vi.spyOn(client, '_isEnableSessionReplay')
-    replayEnabled.mockImplementationOnce(() => {
-      throw new Error('first call only')
-    })
-
-    // The build runs twice per capture; a failure on the first call must not leak into the event.
     const { properties } = captureOne(client)
-    expect(replayEnabled.mock.calls.length).toBeGreaterThanOrEqual(2)
     expect(properties.$sdk_debug_error_capturing_properties).toBeUndefined()
     expect(properties.$recording_status).toBe('disabled')
     expect(properties.$sdk_debug_pending_queue_size).toBe(0)
-
-    expect(captureOne(client).properties.$sdk_debug_error_capturing_properties).toBeUndefined()
   })
 
-  it('does not leak a key from the first of the two per-capture calls', async () => {
+  it('builds the debug map once per capture, after the caller properties', async () => {
     const client = await readyClient()
-    const original = (client as any)._sessionReplayDebugProperties.bind(client)
-    let calls = 0
-    vi.spyOn(client as any, '_sessionReplayDebugProperties').mockImplementation(() => {
-      calls += 1
-      const built = original()
-      return calls === 1
-        ? { ...built, $sdk_debug_replay_capture_mode: 'screenshot' }
-        : { ...built, $sdk_debug_replay_capture_mode: undefined }
-    })
+    const build = vi.spyOn(client as any, '_sessionReplayDebugProperties')
 
-    const { properties } = captureOne(client, '$screen')
-    expect(calls).toBe(2)
-    expect(properties.$sdk_debug_replay_capture_mode).toBeUndefined()
+    const { properties } = captureOne(client, '$screen', { $recording_status: 'caller' })
+    expect(build).toHaveBeenCalledTimes(1)
+    expect(properties.$recording_status).toBe('disabled')
   })
 
   it('Exception event carries recording status', async () => {
@@ -1205,15 +1188,13 @@ describe('PostHog RN session replay debug properties', () => {
       expect(seen.map(carriesBundle)).toEqual([true, true])
     })
 
-    it('A property build that is not a capture never starts the window', async () => {
+    it('A property build that is not a capture carries no debug keys and never starts the window', async () => {
       const client = await readyClient()
       const built = client.getCommonEventProperties()
-      expect(built.$sdk_debug_session_start).toEqual(expect.any(Number))
-      expect(built.$sdk_debug_replay_capture_mode).toBe('screenshot')
-      expect(built.$recording_status).toBe('disabled')
+      expect(bundleKeysOf(built)).toEqual([])
+      expect(built.$recording_status).toBeUndefined()
 
       expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
-      expect(client.getCommonEventProperties().$sdk_debug_session_start).toEqual(expect.any(Number))
     })
 
     it('A capture inside before_send does not also carry the bundle', async () => {

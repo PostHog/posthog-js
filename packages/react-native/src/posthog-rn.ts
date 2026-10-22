@@ -52,7 +52,7 @@ import {
 import {
   getPlatformOS,
   getReactNativeVersion,
-getRemoteConfigBool,
+  getRemoteConfigBool,
   getRemoteConfigNumber,
   isHermes,
   isMacOS,
@@ -858,13 +858,20 @@ export class PostHog extends PostHogCore {
       ...this._appProperties,
       $screen_height: height,
       $screen_width: width,
+    }
+  }
+
+  // The replay debug keys are SDK-owned, so they are stamped after the caller's properties
+  // (matching posthog-js) rather than as common properties, which the caller can override.
+  protected mergeCommonEventProperties(properties: PostHogEventProperties): PostHogEventProperties {
+    return {
+      ...super.mergeCommonEventProperties(properties),
       ...(this._sessionReplayDebugProperties() as PostHogEventProperties),
     }
   }
 
-  // Runs twice per capture and also outside capture (flags, surveys), so it only reads state:
-  // no getSessionId() (rotates the session) and no bridge calls. Every owned key is written on
-  // each call, `undefined` when absent, so nothing leaks from the first call into the second.
+  // Runs once per capture on the hot path, so it only reads state: no getSessionId() (rotates the
+  // session) and no bridge calls. Every owned key is written on each call, `undefined` when absent.
   private _sessionReplayDebugProperties(): { [key: string]: JsonType | undefined } {
     try {
       const sessionStart = this.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
@@ -3621,7 +3628,7 @@ export class PostHog extends PostHogCore {
 
     const linkedFlagTrigger = this._linkedFlagTriggerStatus(cachedSessionReplayConfig['linkedFlag'], cachedFeatureFlags)
     this._logger.info(linkedFlagTrigger.message)
-    let recordingActive = linkedFlagTrigger.status !== 'trigger_pending'
+    const recordingActive = linkedFlagTrigger.status !== 'trigger_pending'
 
     return recordingActive
   }
