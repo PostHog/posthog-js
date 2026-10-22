@@ -444,15 +444,39 @@ class FeatureFlagsPoller {
             `[FEATURE FLAGS] Can't compute feature flag: ${flag.key} without $device_id, falling back to server evaluation`
           )
         )
-        // No condition can be checked without a bucketing value, so a cause in the definition
-        // also applies, and it outranks missing_context.
         throw new InconclusiveMatchError(
           `Can't compute feature flag: ${flag.key} without $device_id`,
-          getDefinitionUnresolvedReason(flag, evaluationContext.definitions!) ?? 'missing_context'
+          await this.getReasonWithoutBucketingValue(flag, evaluationContext)
         )
       }
       return await this.matchFeatureFlagProperties(flag, bucketingValue, personProperties, evaluationContext)
     }
+  }
+
+  // No condition can be checked without a bucketing value, so every cause in the flag applies,
+  // and a cause in the definition or a dependency outranks missing_context.
+  private async getReasonWithoutBucketingValue(
+    flag: PostHogFeatureFlag,
+    evaluationContext: FeatureFlagEvaluationContext
+  ): Promise<UnresolvedFlagReason> {
+    const definitions = evaluationContext.definitions!
+    const definitionReason = getDefinitionUnresolvedReason(flag, definitions)
+    if (definitionReason) {
+      return definitionReason
+    }
+    for (const dependency of collectFlagDependencies(flag, definitions)) {
+      try {
+        await this.evaluateFlagDependency(dependency, evaluationContext.personProperties, evaluationContext)
+      } catch (e) {
+        if (!(e instanceof InconclusiveMatchError)) {
+          throw e
+        }
+        if (e.reason === 'unresolved_dependency') {
+          return 'unresolved_dependency'
+        }
+      }
+    }
+    return 'missing_context'
   }
 
   private getBucketingValueForFlag(
@@ -1365,6 +1389,30 @@ function isUnsupportedPropertyGroup(
       ? isUnsupportedPropertyGroup(value, definitions, visitedCohortIds)
       : isUnsupportedProperty(value, definitions, visitedCohortIds)
   )
+}
+
+function collectFlagDependencies(flag: PostHogFeatureFlag, definitions: FlagEvaluationSnapshot): FlagProperty[] {
+  const dependencies: FlagProperty[] = []
+  const visitedCohortIds = new Set<string>()
+  const visit = (value: PropertyGroup | FlagProperty): void => {
+    if ('values' in value) {
+      value.values.forEach(visit)
+    } else if (value.type === 'flag') {
+      dependencies.push(value)
+    } else if (value.type === 'cohort') {
+      const cohortId = String(value.value)
+      if (cohortId in definitions.cohorts && !visitedCohortIds.has(cohortId)) {
+        visitedCohortIds.add(cohortId)
+        visit(definitions.cohorts[cohortId])
+      }
+    }
+  }
+  for (const condition of flag.filters?.groups ?? []) {
+    for (const property of condition.properties ?? []) {
+      visit(property)
+    }
+  }
+  return dependencies
 }
 
 function matchProperty(

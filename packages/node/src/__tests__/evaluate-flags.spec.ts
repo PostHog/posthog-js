@@ -1183,20 +1183,29 @@ describe('evaluateFlags', () => {
       expect(flags.unresolvedFlags).toEqual({ checkout: reason })
     })
 
+    const dependsOnContinuityFlag = {
+      key: 'continuity',
+      type: 'flag',
+      value: true,
+      operator: 'flag_evaluates_to',
+      dependency_chain: ['continuity'],
+    }
     it.each([
       ['no other cause', [], 'missing_context'],
       ['a static cohort', [{ key: 'id', type: 'cohort', value: 999 }], 'unsupported_definition'],
+      ['an unresolved dependency', [dependsOnContinuityFlag], 'unresolved_dependency'],
     ])('reports the reason for a device-id bucketed flag without a device id and %s', async (_, properties, reason) => {
       await setupWithDefinitions([
         alwaysOn('checkout', {
           bucketing_identifier: 'device_id',
           filters: { groups: [{ properties, rollout_percentage: 100 }] },
         }),
+        alwaysOn('continuity', { ensure_experience_continuity: true }),
       ])
 
       const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
 
-      expect(flags.unresolvedFlags).toEqual({ checkout: reason })
+      expect(flags.unresolvedFlags['checkout']).toBe(reason)
     })
 
     it('reports missing_context for a local cohort whose property is missing', async () => {
