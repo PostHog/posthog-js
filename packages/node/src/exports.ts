@@ -5,16 +5,13 @@ export * from './types'
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
 export type {
   EmailError,
+  EmailErrorName,
   Emails,
-  EmailTemplateFile,
-  EmailTemplateFileOptions,
-  EmailTemplateSource,
   EmailWarning,
-  NodeEmails,
+  SendEmailBase,
   SendEmailOptions,
   SendEmailResult,
-  UploadEmailTemplateOptions,
-  UploadEmailTemplateResult,
+  SendTemplateEmailOptions,
 } from './emails'
 export type {
   FlagDefinitionCacheData,

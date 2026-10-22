@@ -1,48 +1,14 @@
-import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
-import { FakeEmailsApi } from './utils/fake-emails-api'
+import { type Fault, FakeEmailsApi, refusalBody } from './utils/fake-emails-api'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
 const JANE = 'jane@example.com'
 const SECRET_KEY = 'phs_secret'
-const SEND = 'POST /api/projects/@current/messaging/send/email/'
-const UPLOAD_WELCOME = 'PUT /api/projects/@current/messaging_templates/by_key/welcome/'
-const SOURCE_VARIABLES = [
-  'GITHUB_SERVER_URL',
-  'GITHUB_REPOSITORY',
-  'GITHUB_SHA',
-  'GITHUB_WORKSPACE',
-  'CI_SERVER_HOST',
-  'CI_PROJECT_PATH',
-  'CI_COMMIT_SHA',
-  'CI_PROJECT_DIR',
-  'VERCEL_GIT_PROVIDER',
-  'VERCEL_GIT_REPO_OWNER',
-  'VERCEL_GIT_REPO_SLUG',
-  'VERCEL_GIT_COMMIT_SHA',
-  'RAILWAY_GIT_REPO_OWNER',
-  'RAILWAY_GIT_REPO_NAME',
-  'RAILWAY_GIT_COMMIT_SHA',
-]
-const DEPLOYED = '3f2c1ab9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3'
-
-const welcomeHtml = (subject: string): string =>
-  [
-    '<!doctype html>',
-    '<html>',
-    '<head>',
-    `  <title>\n    ${subject}\n  </title>`,
-    '  <meta name="preheader" content="Your account is ready &amp; waiting">',
-    '</head>',
-    '<body><p>Hi {{ variables.first_name }}</p></body>',
-    '</html>',
-    '',
-  ].join('\r\n')
+const APP_HOST = 'https://posthog.example.com'
+const TEMPLATE_ID = '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b'
+const TEMPLATE_SEND = `POST /api/projects/@current/messaging_templates/${TEMPLATE_ID}/send/`
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 describe('emails', () => {
   let api: FakeEmailsApi
@@ -50,7 +16,8 @@ describe('emails', () => {
 
   const createClient = (options: PostHogOptions = {}): PostHog => {
     const client = new PostHog('phc_project_token', {
-      host: 'http://example.com',
+      host: 'https://ingest.example.com',
+      appHost: APP_HOST,
       secretKey: SECRET_KEY,
       enableLocalEvaluation: false,
       fetch: api.fetch,
@@ -60,608 +27,330 @@ describe('emails', () => {
     return client
   }
 
-  let directory: string
+  const sendWelcome = (posthog: PostHog = createClient(), options: { maxRetries?: number } = {}) =>
+    posthog.emails.send({ to: JANE, distinctId: 'user_42', templateId: TEMPLATE_ID, ...options })
 
-  const templatePath = (relativePath: string, html = welcomeHtml('Welcome')): string =>
-    writeTemplate(relativePath, html)
-
-  const writeTemplate = (relativePath: string, html: string): string => {
-    const path = join(directory, relativePath)
-    mkdirSync(join(path, '..'), { recursive: true })
-    writeFileSync(path, html)
-    return path
-  }
-
-  const sendWelcome = (posthog: PostHog, file: string) =>
-    posthog.emails.send({
-      template: posthog.emails.templateFile(pathToFileURL(file)),
-      to: JANE,
-      data: { first_name: 'Jane' },
-    })
+  const requestLog = (): string[] => api.received.map(({ method, path }) => `${method} ${path}`)
+  const idempotencyKeys = (): string[] => api.received.map(({ headers }) => headers['idempotency-key'])
 
   beforeEach(() => {
-    api = new FakeEmailsApi({ secretKey: SECRET_KEY })
-    directory = mkdtempSync(join(tmpdir(), 'posthog-emails-'))
+    api = new FakeEmailsApi({ secretKey: SECRET_KEY, appHost: APP_HOST })
+    api.addTemplate(TEMPLATE_ID)
   })
 
   afterEach(async () => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
     await Promise.all(clients.splice(0).map((client) => client.shutdown()))
-    rmSync(directory, { recursive: true, force: true })
   })
 
-  describe('send by key', () => {
-    it('sends the published template with the data and distinct id, authenticated by the secret key', async () => {
-      await api.publish('welcome', { subject: 'Welcome, {{ variables.first_name }}', html: '<p>Hi</p>' })
-
+  describe('the template form', () => {
+    it('sends the template with its data to the recipient, as the distinct id, with the secret key', async () => {
       const result = await createClient().emails.send({
-        template: 'welcome',
         to: JANE,
-        data: { first_name: 'Jane' },
         distinctId: 'user_42',
+        templateId: TEMPLATE_ID,
+        templateData: { firstName: 'Jane' },
       })
-
-      expect(result).toEqual({ data: { id: api.delivered[0].messageId, warnings: [] }, error: null })
-      expect(api.delivered).toEqual([
-        expect.objectContaining({
-          to: JANE,
-          key: 'welcome',
-          subject: 'Welcome, {{ variables.first_name }}',
-          variables: { first_name: 'Jane' },
-          distinctId: 'user_42',
-        }),
-      ])
-      expect(api.received).toEqual([expect.objectContaining({ authorization: `Bearer ${SECRET_KEY}` })])
-    })
-
-    it.each([
-      [
-        'an unknown key, without uploading anything',
-        undefined,
-        {
-          code: 'template_not_found',
-          message: 'Refused with template_not_found.',
-          statusCode: 404,
-          docsUrl: 'https://posthog.com/docs/workflows/transactional-email-api#template_not_found',
-          field: 'template__key',
-        },
-      ],
-      [
-        'the API turned off for the project',
-        {
-          status: 404,
-          body: { type: 'invalid_request', code: 'not_found', detail: 'Endpoint not found.', attr: null },
-        },
-        { code: 'not_found', message: 'Endpoint not found.', statusCode: 404 },
-      ],
-      [
-        'a throttled send',
-        { status: 429, body: { type: 'throttled_error', code: 'throttled', detail: 'Request was throttled.' } },
-        { code: 'throttled', message: 'Request was throttled.', statusCode: 429 },
-      ],
-      [
-        'a server error with an unreadable body, without retrying',
-        { status: 500, body: '<html>oops</html>' },
-        { code: 'api_error', message: 'PostHog answered HTTP 500.', statusCode: 500 },
-      ],
-    ])('returns %s as the error', async (_, fault, error) => {
-      if (fault) {
-        api.failWhen(() => true, fault)
-      }
-
-      const result = await createClient().emails.send({ template: 'welcome', to: JANE })
-
-      expect(result).toEqual({ data: null, error })
-      expect(api.requestLog).toEqual([SEND])
-    })
-
-    it('drops warnings it cannot read instead of throwing', async () => {
-      api.failWhen(() => true, {
-        status: 202,
-        body: { message_id: 'message-1', warnings: [{ code: { toString: null }, detail: 'x' }, 'oops', null] },
-      })
-
-      const result = await createClient().emails.send({ template: 'welcome', to: JANE })
 
       expect(result).toEqual({ data: { id: 'message-1', warnings: [] }, error: null })
+      expect(api.delivered).toEqual([
+        {
+          messageId: 'message-1',
+          to: JANE,
+          templateId: TEMPLATE_ID,
+          variables: { firstName: 'Jane' },
+          distinctId: 'user_42',
+        },
+      ])
+      expect(api.received).toEqual([
+        expect.objectContaining({
+          origin: APP_HOST,
+          headers: expect.objectContaining({
+            authorization: `Bearer ${SECRET_KEY}`,
+            'content-type': 'application/json',
+            'user-agent': 'posthog-node/1.2.3',
+            'idempotency-key': expect.stringMatching(UUID_V4),
+          }),
+        }),
+      ])
+      expect(requestLog()).toEqual([TEMPLATE_SEND])
     })
 
-    it('returns a network failure without retrying, and hands the original error to the error event', async () => {
-      const networkError = new Error('getaddrinfo ENOTFOUND example.com')
-      api.failWhen(() => true, { networkError })
+    it.each([
+      ['no template data or distinct id', { to: JANE, templateId: TEMPLATE_ID }, { to: JANE }],
+      [
+        'template data and a distinct id',
+        { to: JANE, templateId: TEMPLATE_ID, templateData: { n: 1 }, distinctId: 'u' },
+        { to: JANE, message_data: { n: 1 }, identifiers: { distinct_id: 'u' } },
+      ],
+    ])('maps %s to the request body', async (_, options, body) => {
+      await createClient().emails.send(options)
+
+      expect(api.received.map((request) => request.body)).toEqual([body])
+    })
+
+    it('sends the given idempotency key, and the migration marker of the client', async () => {
+      await createClient({ migratedFrom: 'resend' }).emails.send({
+        to: JANE,
+        distinctId: 'user_42',
+        templateId: TEMPLATE_ID,
+        idempotencyKey: 'welcome:user_42',
+      })
+
+      expect(api.received[0].headers).toEqual(
+        expect.objectContaining({ 'idempotency-key': 'welcome:user_42', 'x-posthog-migrated-from': 'resend' })
+      )
+    })
+
+    it('answers a replayed idempotency key with the id of the first send, and sends one email', async () => {
       const posthog = createClient()
-      const errors: unknown[] = []
-      posthog.on('error', (error) => errors.push(error))
+      const send = () =>
+        posthog.emails.send({ to: JANE, distinctId: 'user_42', templateId: TEMPLATE_ID, idempotencyKey: 'k-1' })
 
-      const result = await posthog.emails.send({ template: 'welcome', to: JANE })
+      const first = await send()
+      const replay = await send()
 
-      expect(result).toEqual({ data: null, error: { code: 'network_error', message: 'Request failed' } })
-      expect(api.requestLog).toEqual([SEND])
-      expect(errors).toEqual([expect.objectContaining({ error: networkError })])
+      expect(replay).toEqual(first)
+      expect(api.delivered).toHaveLength(1)
+    })
+
+    it('returns the warnings of a send, and logs each one once', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const posthog = createClient()
+      posthog.debug(true)
+      api.failNext({
+        status: 202,
+        body: {
+          message_id: 'message-9',
+          warnings: [
+            { code: 'sender_unverified_soon', detail: 'The sender expires soon.', fix: 'Verify it again.' },
+            'unreadable',
+          ],
+        },
+      })
+
+      const result = await sendWelcome(posthog)
+
+      expect(result).toEqual({
+        data: {
+          id: 'message-9',
+          warnings: [{ code: 'sender_unverified_soon', message: 'The sender expires soon.', fix: 'Verify it again.' }],
+        },
+        error: null,
+      })
+      expect(warn.mock.calls.filter((call) => call.join(' ').includes('sender_unverified_soon'))).toHaveLength(1)
     })
   })
 
-  describe('refusals before any request', () => {
+  describe('errors', () => {
     it.each([
-      ['missing_secret_key', { secretKey: undefined }, () => 'welcome'],
-      ['client_disabled', { disabled: true }, () => 'welcome'],
-      ['invalid_template_key', {}, () => 'welcome email'],
-      [
-        'invalid_template_key',
-        {},
-        (posthog: PostHog) => posthog.emails.templateFile(templatePath('welcome email.html')),
-      ],
-      [
-        'template_file_unreadable',
-        {},
-        (posthog: PostHog) => posthog.emails.templateFile(join(directory, 'missing.html')),
-      ],
-      [
-        'template_missing_subject',
-        {},
-        (posthog: PostHog) => posthog.emails.templateFile(templatePath('welcome.html', '<p>No title</p>')),
-      ],
-    ])('returns %s', async (code, options: PostHogOptions, template) => {
-      const posthog = createClient(options)
+      [400, 'invalid_recipient', 'validation_error'],
+      [400, 'invalid_idempotency_key', 'validation_error'],
+      [401, 'authentication_failed', 'missing_api_key'],
+      [403, 'permission_denied', 'invalid_permission'],
+      [404, 'not_found', 'not_found'],
+      [409, 'idempotency_key_in_flight', 'concurrent_idempotent_requests'],
+      [409, 'template_outdated', 'validation_error'],
+      [409, 'template_edited_in_posthog', 'validation_error'],
+      [422, 'idempotency_key_reused', 'invalid_idempotent_request'],
+      [429, 'throttled', 'rate_limit_exceeded'],
+      [429, 'quota_limited', 'monthly_quota_exceeded'],
+      [503, 'delivery_unavailable', 'service_unavailable'],
+      [500, 'server_error', 'application_error'],
+    ])('names a %s %s answer %s, with the fields PostHog sent', async (status, code, name) => {
+      api.failNext({ status, body: refusalBody(code, 'to') }, Infinity)
 
-      const result = await posthog.emails.send({ template: template(posthog), to: JANE })
+      const result = await sendWelcome(createClient(), { maxRetries: 0 })
 
-      expect(result).toEqual({ data: null, error: expect.objectContaining({ code }) })
+      expect(result).toEqual({
+        data: null,
+        error: {
+          name,
+          code,
+          message: `Refused with ${code}.`,
+          why: `Because the fake refuses ${code}.`,
+          fix: `Fix ${code}.`,
+          statusCode: status,
+          docsUrl: `https://posthog.com/docs/workflows/transactional-email-api#${code}`,
+          field: 'to',
+        },
+      })
+    })
+
+    it.each([
+      ['an answer without a code', { status: 500, body: '<html>oops</html>' }, 'api_error', 'application_error', 500],
+      ['a 202 without a message id', { status: 202, body: { ok: true } }, 'api_error', 'application_error', 202],
+      [
+        'a network failure',
+        { networkError: new Error('ECONNRESET') },
+        'network_error',
+        'service_unavailable',
+        undefined,
+      ],
+    ] satisfies [string, Fault, string, string, number | undefined][])(
+      'returns %s as %s',
+      async (_, fault, code, name, statusCode) => {
+        api.failNext(fault, Infinity)
+
+        const result = await sendWelcome(createClient(), { maxRetries: 0 })
+
+        expect(result).toEqual({
+          data: null,
+          error: { name, code, message: expect.any(String), ...(statusCode !== undefined && { statusCode }) },
+        })
+      }
+    )
+
+    it.each([
+      ['missing_secret_key', 'missing_api_key', { secretKey: undefined }, {}],
+      ['missing_app_host', 'application_error', { appHost: undefined }, {}],
+      ['client_disabled', 'application_error', { disabled: true }, {}],
+      ['invalid_template_id', 'validation_error', {}, { templateId: '../../feature_flags' }],
+      ['invalid_idempotency_key', 'validation_error', {}, { idempotencyKey: 'has spaces' }],
+    ])('returns %s as %s without a request', async (code, name, clientOptions: PostHogOptions, sendOptions) => {
+      const result = await createClient(clientOptions).emails.send({
+        to: JANE,
+        distinctId: 'user_42',
+        templateId: TEMPLATE_ID,
+        ...sendOptions,
+      })
+
+      expect(result).toEqual({ data: null, error: expect.objectContaining({ name, code }) })
       expect(api.received).toEqual([])
     })
 
-    it('throws a TypeError for a template file that is not a file URL or an absolute .html path', () => {
-      const emails = createClient().emails
+    it('returns unexpected_error when the template data cannot be encoded', async () => {
+      const result = await createClient().emails.send({
+        to: JANE,
+        templateId: TEMPLATE_ID,
+        templateData: { count: BigInt(1) },
+      })
 
-      expect(() => emails.templateFile('emails/welcome.html')).toThrow(TypeError)
-      expect(() => emails.templateFile(new URL('https://example.com/welcome.html'))).toThrow(TypeError)
-      expect(() => emails.templateFile(join(directory, 'welcome.txt'))).toThrow(TypeError)
+      expect(result).toEqual({
+        data: null,
+        error: expect.objectContaining({ name: 'application_error', code: 'unexpected_error' }),
+      })
     })
   })
 
-  describe('send from a template file', () => {
-    it('publishes a file PostHog has never seen, then sends it, with no upload step', async () => {
-      const file = writeTemplate('emails/welcome.html', welcomeHtml('Welcome, {{ variables.first_name }}'))
-
-      const result = await sendWelcome(createClient(), file)
-
-      expect(result).toEqual({ data: { id: api.delivered[0].messageId, warnings: [] }, error: null })
-      expect(api.requestLog).toEqual([SEND, UPLOAD_WELCOME, SEND])
-      expect(api.delivered).toEqual([
-        expect.objectContaining({
-          key: 'welcome',
-          subject: 'Welcome, {{ variables.first_name }}',
-          preheader: 'Your account is ready & waiting',
-          html: welcomeHtml('Welcome, {{ variables.first_name }}'),
-          variables: { first_name: 'Jane' },
-        }),
-      ])
-      expect(api.template('welcome')).toMatchObject({ name: 'Welcome, {{ variables.first_name }}', text: undefined })
-    })
-
-    it('sends a file PostHog already holds in one request', async () => {
-      const posthog = createClient()
-      const file = writeTemplate('welcome.html', welcomeHtml('Welcome'))
-      await sendWelcome(posthog, file)
-      api.received.length = 0
-
-      await sendWelcome(posthog, file)
-
-      expect(api.requestLog).toEqual([SEND])
-      expect(api.delivered).toHaveLength(2)
-    })
-
-    it('publishes an edited file on the next send', async () => {
-      const posthog = createClient()
-      const file = writeTemplate('welcome.html', welcomeHtml('Welcome'))
-      await sendWelcome(posthog, file)
-      writeTemplate('welcome.html', welcomeHtml('Welcome aboard'))
-      api.received.length = 0
-
-      await sendWelcome(posthog, file)
-
-      expect(api.requestLog).toEqual([SEND, UPLOAD_WELCOME, SEND])
-      expect(api.delivered.map(({ subject }) => subject)).toEqual(['Welcome', 'Welcome aboard'])
-    })
-
-    it('sends the newer content when an older copy of the file sends, and warns once', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const older = createClient()
-      older.debug(true)
-      const olderFile = writeTemplate('old/welcome.html', welcomeHtml('Welcome'))
-      await sendWelcome(older, olderFile)
-      await sendWelcome(createClient(), writeTemplate('new/welcome.html', welcomeHtml('Welcome aboard')))
-      api.received.length = 0
-
-      const first = await sendWelcome(older, olderFile)
-      const second = await sendWelcome(older, olderFile)
-
-      expect(api.requestLog).toEqual([SEND, SEND])
-      expect(api.delivered.map(({ subject }) => subject)).toEqual([
-        'Welcome',
-        'Welcome aboard',
-        'Welcome aboard',
-        'Welcome aboard',
-      ])
-      expect(api.template('welcome')?.subject).toBe('Welcome aboard')
-      for (const result of [first, second]) {
-        expect(result.data?.warnings).toEqual([
-          { code: 'template_superseded', message: 'The email was sent with the template’s current content.' },
-        ])
-      }
-      expect(warn.mock.calls.filter((call) => call.join(' ').includes('"welcome"'))).toHaveLength(1)
-    })
-
-    it('never publishes content that newer content replaced while its first send was answered', async () => {
-      const older = createClient()
-      const olderFile = writeTemplate('old/welcome.html', welcomeHtml('Welcome'))
-      await sendWelcome(older, olderFile)
-      await sendWelcome(createClient(), writeTemplate('new/welcome.html', welcomeHtml('Welcome aboard')))
-      api.failWhen((request) => request.path.endsWith('/send/email/'), outdated(), 1)
-      api.received.length = 0
-
-      const result = await sendWelcome(older, olderFile)
-
-      expect(api.requestLog).toEqual([SEND, UPLOAD_WELCOME, SEND])
-      expect(api.template('welcome')?.subject).toBe('Welcome aboard')
-      expect(api.delivered.at(-1)?.subject).toBe('Welcome aboard')
-      expect(result).toEqual({
-        data: {
-          id: api.delivered.at(-1)?.messageId,
-          warnings: [
-            { code: 'template_superseded', message: 'The email was sent with the template’s current content.' },
-          ],
-        },
-        error: null,
-      })
-    })
-
-    it('returns a second template_outdated as the error', async () => {
-      const file = writeTemplate('welcome.html', welcomeHtml('Welcome'))
-      api.failWhen((request) => request.path.endsWith('/send/email/'), outdated(), 2)
-
-      const result = await sendWelcome(createClient(), file)
-
-      expect(api.requestLog).toEqual([SEND, UPLOAD_WELCOME, SEND])
-      expect(result).toEqual({
-        data: null,
-        error: expect.objectContaining({ code: 'template_outdated', statusCode: 409 }),
-      })
-      expect(api.delivered).toEqual([])
-    })
-
-    it('never uploads or sends again after a server error, whatever code its body carries', async () => {
-      const file = writeTemplate('welcome.html', welcomeHtml('Welcome'))
-      api.failWhen((request) => request.method === 'POST', { status: 503, body: outdated().body })
-
-      const result = await sendWelcome(createClient(), file)
-
-      expect(api.requestLog).toEqual([SEND])
-      expect(result.error).toMatchObject({ code: 'template_outdated', statusCode: 503 })
-    })
-
-    it.each([
-      [
-        'a commented-out title and preheader',
-        '<!-- <title>Draft</title><meta name="preheader" content="Old"> --><title>Welcome</title><meta name="preheader" content="New">',
-        { subject: 'Welcome', preheader: 'New' },
-      ],
-      [
-        'a second title, whose text holds no tags',
-        '<title>Welcome</title><title><meta name=preheader content=Wrong></title><meta name=preheader content=Right>',
-        { subject: 'Welcome', preheader: 'Right' },
-      ],
-      [
-        'a comment marker inside a quoted attribute',
-        '<meta name="preheader" content="Use <!-- marker"><title>Welcome</title>',
-        { subject: 'Welcome', preheader: 'Use <!-- marker' },
-      ],
-      [
-        'a quoted > in the preheader',
-        '<title>Welcome</title><meta content="Save > spend" name="preheader">',
-        { subject: 'Welcome', preheader: 'Save > spend' },
-      ],
-      [
-        'a file of unclosed tags, in linear time',
-        '<title>Welcome</title><meta name=preheader content=Preview>' + '<title>'.repeat(120000),
-        { subject: 'Welcome', preheader: 'Preview' },
-      ],
-      [
-        'character references in the subject',
-        '<title>Caf&#233; &amp; &#x2014; bar</title>',
-        { subject: 'Café & — bar', preheader: undefined },
-      ],
-    ])('reads the subject and preheader from %s', async (_, head, expected) => {
-      const file = writeTemplate('welcome.html', `<html><head>${head}</head><body>Hi</body></html>`)
-
-      await sendWelcome(createClient(), file)
-
-      expect(api.template('welcome')).toMatchObject(expected)
-    })
-
-    it('returns a failed upload and sends nothing', async () => {
-      const file = writeTemplate('welcome.html', welcomeHtml('Welcome'))
-      api.failWhen((request) => request.method === 'PUT', {
-        status: 400,
-        body: {
-          type: 'invalid_request',
-          code: 'sender_unavailable',
-          detail: 'This project has no verified default sender.',
-          attr: null,
-        },
-      })
-
-      const result = await sendWelcome(createClient(), file)
-
-      expect(api.requestLog).toEqual([SEND, UPLOAD_WELCOME])
-      expect(result).toEqual({
-        data: null,
-        error: { code: 'sender_unavailable', message: 'This project has no verified default sender.', statusCode: 400 },
-      })
-      expect(api.delivered).toEqual([])
-    })
-  })
-
-  describe('the source an upload carries', () => {
-    const git = (cwd: string, ...args: string[]): string =>
-      execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', ...args], {
-        cwd,
-        encoding: 'utf8',
-        env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
-      }).trim()
-
-    const checkout = (relativePath: string, remote: string): { root: string; head: string } => {
-      const root = join(directory, relativePath)
-      mkdirSync(root, { recursive: true })
-      git(root, 'init', '--quiet', '--initial-branch=main')
-      git(root, 'remote', 'add', 'origin', remote)
-      git(root, 'commit', '--quiet', '--allow-empty', '--message=first')
-      return { root, head: git(root, 'rev-parse', 'HEAD') }
+  describe('retries', () => {
+    const settle = async <T>(work: Promise<T>): Promise<T> => {
+      await vi.runAllTimersAsync()
+      return work
     }
 
-    const uploadedSource = (): Record<string, unknown> | undefined =>
-      api.received.find((request) => request.method === 'PUT')?.body.source
-
     beforeEach(() => {
-      for (const variable of SOURCE_VARIABLES) {
-        vi.stubEnv(variable, '')
-      }
-    })
-
-    afterEach(() => {
-      vi.unstubAllEnvs()
-    })
-
-    it('names the repository without credentials, the path in it and the commit, from a git checkout', async () => {
-      const { head } = checkout('app', 'https://x-access-token:ghp_secret@github.com/example/app.git')
-
-      const result = await sendWelcome(createClient(), writeTemplate('app/emails/welcome.html', welcomeHtml('Hi')))
-
-      expect(result.error).toBeNull()
-      expect(uploadedSource()).toEqual({ repository: 'github.com/example/app', path: 'emails/welcome.html', ref: head })
-      expect(JSON.stringify(api.received)).not.toContain('ghp_secret')
+      vi.useFakeTimers()
+      vi.spyOn(Math, 'random').mockReturnValue(0.5)
     })
 
     it.each([
-      [
-        'an SSH remote and a detached head',
-        'git@github.com:example/app.git',
-        (root: string) => git(root, 'checkout', '--quiet', '--detach'),
-        'github.com/example/app',
-      ],
-      [
-        'an ssh:// remote with a port, and the branch only in packed-refs',
-        'ssh://git@gitlab.example.com:2222/group/sub/app.git',
-        (root: string) => git(root, 'pack-refs', '--all'),
-        'gitlab.example.com/group/sub/app',
-      ],
-      [
-        'a quoted remote followed by a comment in the config',
-        'https://github.com/example/app.git',
-        (root: string) => {
-          const config = join(root, '.git', 'config')
-          writeFileSync(
-            config,
-            readFileSync(config, 'utf8').replace(/url = .*/, 'url = "https://github.com/example/app.git" # the app')
-          )
-        },
-        'github.com/example/app',
-      ],
-    ])('reads a checkout with %s', async (_, remote, prepare, repository) => {
-      const { root, head } = checkout('app', remote)
-      prepare(root)
+      ['a network failure', { networkError: new Error('ECONNRESET') }],
+      ['an in-flight idempotency key', { status: 409, body: refusalBody('idempotency_key_in_flight', null) }],
+      ['a throttled send', { status: 429, body: refusalBody('throttled', null) }],
+      ['an unavailable pipeline', { status: 503, body: refusalBody('delivery_unavailable', null) }],
+    ] satisfies [string, Fault][])('retry %s after 1 s and 2 s with the same key', async (_, fault) => {
+      api.failNext(fault, 2)
 
-      await sendWelcome(createClient(), writeTemplate('app/emails/welcome.html', welcomeHtml('Hi')))
+      const result = sendWelcome()
+      await vi.advanceTimersByTimeAsync(999)
+      expect(api.received).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(api.received).toHaveLength(2)
+      await vi.advanceTimersByTimeAsync(1999)
+      expect(api.received).toHaveLength(2)
 
-      expect(uploadedSource()).toEqual({ repository, path: 'emails/welcome.html', ref: head })
+      expect(await settle(result)).toEqual({ data: { id: 'message-1', warnings: [] }, error: null })
+      expect(api.received).toHaveLength(3)
+      expect(new Set(idempotencyKeys()).size).toBe(1)
     })
 
-    it('reads a worktree through its .git file, with the path inside the worktree and its own commit', async () => {
-      const { root } = checkout('app', 'https://github.com/example/app.git')
-      const worktree = join(directory, 'app-feature')
-      git(root, 'worktree', 'add', '--quiet', '-b', 'feature', worktree)
-      git(worktree, 'commit', '--quiet', '--allow-empty', '--message=second')
+    it('gives up after maxRetries and returns the last answer', async () => {
+      api.failNext({ status: 503, body: refusalBody('delivery_unavailable', null) }, Infinity)
 
-      await sendWelcome(createClient(), writeTemplate('app-feature/emails/welcome.html', welcomeHtml('Hi')))
+      const result = await settle(sendWelcome())
 
-      expect(uploadedSource()).toEqual({
-        repository: 'github.com/example/app',
-        path: 'emails/welcome.html',
-        ref: git(worktree, 'rev-parse', 'HEAD'),
-      })
+      expect(result.error).toEqual(expect.objectContaining({ code: 'delivery_unavailable' }))
+      expect(api.received).toHaveLength(3)
     })
 
     it.each([
-      [
-        'GitHub Actions',
-        { GITHUB_SERVER_URL: 'https://github.example.com', GITHUB_REPOSITORY: 'example/app', GITHUB_SHA: DEPLOYED },
-        { repository: 'github.example.com/example/app', ref: DEPLOYED },
-      ],
-      [
-        'GitLab CI',
-        { CI_SERVER_HOST: 'gitlab.example.com', CI_PROJECT_PATH: 'group/app', CI_COMMIT_SHA: DEPLOYED },
-        { repository: 'gitlab.example.com/group/app', ref: DEPLOYED },
-      ],
-      [
-        'Vercel',
-        {
-          VERCEL_GIT_PROVIDER: 'bitbucket',
-          VERCEL_GIT_REPO_OWNER: 'example',
-          VERCEL_GIT_REPO_SLUG: 'app',
-          VERCEL_GIT_COMMIT_SHA: DEPLOYED,
-        },
-        { repository: 'bitbucket.org/example/app', ref: DEPLOYED },
-      ],
-      [
-        'Railway',
-        { RAILWAY_GIT_REPO_OWNER: 'example', RAILWAY_GIT_REPO_NAME: 'app', RAILWAY_GIT_COMMIT_SHA: DEPLOYED },
-        { repository: 'github.com/example/app', ref: DEPLOYED },
-      ],
-      [
-        'GitHub Actions over GitLab CI',
-        {
-          GITHUB_SERVER_URL: 'https://github.com',
-          GITHUB_REPOSITORY: 'example/app',
-          CI_SERVER_HOST: 'gitlab.com',
-          CI_PROJECT_PATH: 'example/other',
-        },
-        { repository: 'github.com/example/app' },
-      ],
-      [
-        'nothing from a Vercel provider without a known host',
-        { VERCEL_GIT_PROVIDER: 'other', VERCEL_GIT_REPO_OWNER: 'example', VERCEL_GIT_REPO_SLUG: 'app' },
-        {},
-      ],
-      [
-        'nothing from a Vercel provider named like an object property',
-        { VERCEL_GIT_PROVIDER: 'constructor', VERCEL_GIT_REPO_OWNER: 'example', VERCEL_GIT_REPO_SLUG: 'app' },
-        {},
-      ],
-      [
-        'nothing from a repository too long to store',
-        { VERCEL_GIT_PROVIDER: 'github', VERCEL_GIT_REPO_OWNER: 'example', VERCEL_GIT_REPO_SLUG: 'a'.repeat(400) },
-        {},
-      ],
-    ])('takes %s from the environment, before the checkout', async (_, variables, expected) => {
-      const { head } = checkout('app', 'https://github.com/example/checkout.git')
-      for (const [variable, value] of Object.entries(variables)) {
-        vi.stubEnv(variable, value)
-      }
+      ['the client', { maxRetries: 0 }, {}],
+      ['the send', {}, { maxRetries: 0 }],
+    ])('never retries when %s sets maxRetries to 0', async (_, clientOptions: PostHogOptions, sendOptions) => {
+      api.failNext({ status: 503, body: refusalBody('delivery_unavailable', null) }, Infinity)
 
-      await sendWelcome(createClient(), writeTemplate('app/emails/welcome.html', welcomeHtml('Hi')))
+      await settle(sendWelcome(createClient(clientOptions), sendOptions))
 
-      expect(uploadedSource()).toEqual({
-        repository: 'github.com/example/checkout',
-        path: 'emails/welcome.html',
-        ref: head,
-        ...expected,
-      })
+      expect(api.received).toHaveLength(1)
+    })
+
+    it('lets a send retry more often than the client', async () => {
+      api.failNext({ status: 503, body: refusalBody('delivery_unavailable', null) }, Infinity)
+
+      await settle(sendWelcome(createClient({ maxRetries: 0 }), { maxRetries: 3 }))
+
+      expect(api.received).toHaveLength(4)
     })
 
     it.each([
-      ['the path in GITHUB_WORKSPACE', 'GITHUB_WORKSPACE'],
-      ['the path in CI_PROJECT_DIR', 'CI_PROJECT_DIR'],
-    ])('sends %s without a checkout', async (_, variable) => {
-      vi.stubEnv(variable, directory)
+      ['a longer Retry-After', '5', 5_000],
+      ['a Retry-After over 30 s, capped', '120', 30_000],
+    ])('waits for %s', async (_, retryAfter, wait) => {
+      api.failNext({ status: 429, body: refusalBody('throttled', null), headers: { 'Retry-After': retryAfter } })
 
-      await sendWelcome(createClient(), writeTemplate('emails/welcome.html', welcomeHtml('Hi')))
-
-      expect(uploadedSource()).toEqual({ path: 'emails/welcome.html' })
-    })
-
-    it('sends only the path from the working directory when nothing names the repository', async () => {
-      const file = writeTemplate('emails/welcome.html', welcomeHtml('Hi'))
-
-      await sendWelcome(createClient(), file)
-
-      expect(uploadedSource()).toEqual({ path: file })
-    })
-
-    it('lets each part of an explicit source win, and detects the others', async () => {
-      const { head } = checkout('app', 'https://github.com/example/app.git')
-      vi.stubEnv('GITHUB_SHA', DEPLOYED)
-      const posthog = createClient()
-      const file = posthog.emails.templateFile(writeTemplate('app/emails/welcome.html', welcomeHtml('Hi')))
-
-      await posthog.emails.uploadTemplate(file, { source: { path: 'templates/welcome.html', ref: head } })
-
-      expect(uploadedSource()).toEqual({
-        repository: 'github.com/example/app',
-        path: 'templates/welcome.html',
-        ref: head,
-      })
+      const result = sendWelcome()
+      await vi.advanceTimersByTimeAsync(wait - 1)
+      expect(api.received).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(api.received).toHaveLength(2)
+      await settle(result)
     })
 
     it.each([
-      [
-        'a .git directory whose files are unreadable',
-        (dotGit: string) => {
-          mkdirSync(join(dotGit, 'config'), { recursive: true })
-          mkdirSync(join(dotGit, 'HEAD'), { recursive: true })
-        },
-      ],
-      ['a .git file that points nowhere', (dotGit: string) => writeFileSync(dotGit, 'gitdir: ./missing\n')],
-      ['a .git file that is not a link', (dotGit: string) => writeFileSync(dotGit, 'not a link\n')],
-      [
-        'a .git directory whose files are pipes nobody writes to',
-        (dotGit: string) => {
-          mkdirSync(dotGit)
-          execFileSync('mkfifo', [join(dotGit, 'config'), join(dotGit, 'HEAD')])
-        },
-      ],
-    ])('still sends from %s', async (_, makeDotGit) => {
-      mkdirSync(join(directory, 'app'))
-      makeDotGit(join(directory, 'app', '.git'))
+      [429, 'quota_limited'],
+      [409, 'template_edited_in_posthog'],
+      [400, 'invalid_recipient'],
+      [500, 'server_error'],
+    ])('never retries a %s %s answer', async (status, code) => {
+      api.failNext({ status, body: refusalBody(code, null) }, Infinity)
 
-      const result = await sendWelcome(createClient(), writeTemplate('app/emails/welcome.html', welcomeHtml('Hi')))
+      await settle(sendWelcome())
 
-      expect(result.error).toBeNull()
-      expect(uploadedSource()).toEqual({ path: 'emails/welcome.html' })
+      expect(api.received).toHaveLength(1)
     })
   })
 
-  describe('uploadTemplate', () => {
-    it('publishes replaced content on purpose, so later sends of the newer file carry the warning', async () => {
-      const posthog = createClient()
-      const olderFile = writeTemplate('old/welcome.html', welcomeHtml('Welcome'))
-      await sendWelcome(posthog, olderFile)
-      const firstHash = api.template('welcome')!.contentHash
-      const newerFile = writeTemplate('new/welcome.html', welcomeHtml('Welcome aboard'))
-      await sendWelcome(posthog, newerFile)
+  describe('the app host', () => {
+    it.each([
+      ['https://us.i.posthog.com', 'https://us.posthog.com'],
+      ['https://us.posthog.com', 'https://us.posthog.com'],
+      ['https://app.posthog.com', 'https://us.posthog.com'],
+      ['https://eu.i.posthog.com/', 'https://eu.posthog.com'],
+      ['https://eu.posthog.com', 'https://eu.posthog.com'],
+      [undefined, 'https://us.posthog.com'],
+    ])('derives the app host of PostHog Cloud host %s', async (host, appHost) => {
+      api = new FakeEmailsApi({ secretKey: SECRET_KEY, appHost })
+      api.addTemplate(TEMPLATE_ID)
 
-      const uploaded = await posthog.emails.uploadTemplate(posthog.emails.templateFile(olderFile), {
-        source: { repository: 'github.com/example/app', ref: '3f2c1ab' },
-      })
-      const sent = await sendWelcome(posthog, newerFile)
+      const result = await sendWelcome(createClient({ host, appHost: undefined }))
 
-      expect(uploaded).toEqual({
-        data: { id: api.template('welcome')!.id, key: 'welcome', result: 'updated', contentHash: firstHash },
-        error: null,
-      })
-      expect(api.template('welcome')?.source).toMatchObject({ repository: 'github.com/example/app', ref: '3f2c1ab' })
-      expect(sent.data?.warnings).toEqual([expect.objectContaining({ code: 'template_superseded' })])
-      expect(api.delivered.at(-1)?.subject).toBe('Welcome')
+      expect(result.error).toBeNull()
+      expect(api.received.map(({ origin }) => origin)).toEqual([appHost])
     })
 
-    it('uploads under the key and name given to templateFile', async () => {
-      const posthog = createClient()
-      const file = posthog.emails.templateFile(templatePath('welcome.html'), { key: 'signup', name: 'Signup' })
+    it('never sends the secret key to a host that is not PostHog Cloud', async () => {
+      const result = await sendWelcome(createClient({ host: 'https://proxy.example.com', appHost: undefined }))
 
-      const uploaded = await posthog.emails.uploadTemplate(file)
+      expect(result.error).toEqual(expect.objectContaining({ code: 'missing_app_host' }))
+      expect(api.received).toEqual([])
+    })
 
-      expect(uploaded.data).toMatchObject({ key: 'signup', result: 'created' })
-      expect(api.template('signup')).toMatchObject({ name: 'Signup', subject: 'Welcome' })
+    it('sends to the app host, not to the ingestion host', async () => {
+      await sendWelcome(createClient({ host: 'https://proxy.example.com', appHost: `${APP_HOST}/` }))
+
+      expect(api.received.map(({ origin }) => origin)).toEqual([APP_HOST])
     })
   })
 })
-
-function outdated() {
-  return {
-    status: 409,
-    body: {
-      type: 'invalid_request',
-      code: 'template_outdated',
-      detail: 'PostHog does not hold the content this hash describes, so nothing was sent.',
-      attr: 'template__hash',
-    },
-  }
-}

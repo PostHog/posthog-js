@@ -1888,7 +1888,11 @@ export abstract class PostHogCoreStateless {
       return await this.fetchWithRetry(url, options, { type: 'required', consume: readApiResponse }, retryOptions)
     } catch (error) {
       if (error instanceof PostHogFetchHttpError) {
-        return { status: error.status, body: await error.json.catch(() => undefined) }
+        return {
+          status: error.status,
+          body: await error.json.catch(() => undefined),
+          retryAfterMs: error.retryAfterMs,
+        }
       }
       throw error
     }
