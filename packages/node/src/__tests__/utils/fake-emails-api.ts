@@ -3,6 +3,7 @@ import { emailContentHash } from '@/email-content-hash'
 
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const UPLOAD_PATH = /^\/api\/projects\/@current\/messaging_templates\/by_key\/([^/]+)\/$/
+const STATUS_PATH = /^\/api\/projects\/@current\/messaging\/emails\/([^/]+)\/$/
 const DOCS_URL = 'https://posthog.com/docs/workflows/transactional-email-api'
 
 export interface ReceivedRequest {
@@ -23,6 +24,14 @@ export interface DeliveredEmail {
   text?: string
   variables?: Record<string, unknown>
   distinctId?: string
+}
+
+export interface StatusRecord {
+  id: string
+  status: string
+  created_at: string
+  status_at: string
+  reason?: string
 }
 
 interface LocalTemplate {
@@ -47,7 +56,7 @@ interface ScheduledFault {
 /**
  * An in-memory PostHog app host that speaks the send and upload routes of the transactional email API: a template by
  * id, rendered content by `template_key`, and a local template by key and content hash, which answers
- * `template_outdated` until an upload publishes that content. An idempotency key PostHog already accepted for the
+ * `template_outdated` until an upload publishes that content. It answers the status of an email it was told about. An idempotency key PostHog already accepted for the
  * same request answers the first `202` again.
  */
 export class FakeEmailsApi {
@@ -55,6 +64,7 @@ export class FakeEmailsApi {
   readonly delivered: DeliveredEmail[] = []
   private readonly templateIds = new Set<string>()
   private readonly localTemplates = new Map<string, LocalTemplate>()
+  private readonly statuses = new Map<string, StatusRecord>()
   private readonly accepted = new Map<string, { fingerprint: string; messageId: string }>()
   private readonly faults: ScheduledFault[] = []
   private nextId = 1
@@ -83,6 +93,10 @@ export class FakeEmailsApi {
 
   editInPostHog(key: string, content: { subject: string; html: string }): void {
     this.localTemplates.set(key, { ...content, contentHash: 'v1:edited', editedInPostHog: true })
+  }
+
+  recordStatus(record: StatusRecord): void {
+    this.statuses.set(record.id, record)
   }
 
   localTemplate(key: string): LocalTemplate | undefined {
@@ -118,6 +132,11 @@ export class FakeEmailsApi {
     }
     if (request.method === 'POST' && request.path === SEND_PATH) {
       return this.handleSend(request)
+    }
+    const messageId = STATUS_PATH.exec(request.path)?.[1]
+    if (request.method === 'GET' && messageId) {
+      const record = this.statuses.get(decodeURIComponent(messageId))
+      return record ? respond(200, record) : refusal(404, 'not_found', null)
     }
     return refusal(404, 'not_found', null)
   }

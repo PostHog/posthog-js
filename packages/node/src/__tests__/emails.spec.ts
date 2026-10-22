@@ -337,6 +337,95 @@ describe('emails', () => {
     })
   })
 
+  describe('get', () => {
+    const MESSAGE_ID = '0192a7c4-5e2f-7d1a-8b3c-4d5e6f708192'
+    const STATUS = `GET /api/projects/@current/messaging/emails/${MESSAGE_ID}/`
+
+    it('reads the status of an email from the app host with the secret key', async () => {
+      api.recordStatus({
+        id: MESSAGE_ID,
+        status: 'bounced',
+        created_at: '2026-10-22T08:00:00Z',
+        status_at: '2026-10-22T08:00:05Z',
+        reason: 'mailbox_full',
+      })
+
+      const result = await createClient({ migratedFrom: 'resend' }).emails.get(MESSAGE_ID)
+
+      expect(result).toEqual({
+        data: {
+          id: MESSAGE_ID,
+          status: 'bounced',
+          createdAt: '2026-10-22T08:00:00Z',
+          statusAt: '2026-10-22T08:00:05Z',
+          reason: 'mailbox_full',
+        },
+        error: null,
+      })
+      expect(requestLog()).toEqual([STATUS])
+      expect(api.received[0]).toEqual(
+        expect.objectContaining({
+          origin: APP_HOST,
+          headers: expect.objectContaining({
+            authorization: `Bearer ${SECRET_KEY}`,
+            'user-agent': 'posthog-node/1.2.3',
+            'x-posthog-migrated-from': 'resend',
+          }),
+        })
+      )
+    })
+
+    it('leaves out a reason PostHog did not give', async () => {
+      api.recordStatus({ id: MESSAGE_ID, status: 'sent', created_at: 'a', status_at: 'b' })
+
+      const result = await createClient().emails.get(MESSAGE_ID)
+
+      expect(result.data).toEqual({ id: MESSAGE_ID, status: 'sent', createdAt: 'a', statusAt: 'b' })
+    })
+
+    it.each([
+      ['an unknown or new email', undefined, 'not_found'],
+      [
+        'an unavailable pipeline',
+        { status: 503, body: refusalBody('delivery_unavailable', null) },
+        'delivery_unavailable',
+      ],
+      ['a throttled read', { status: 429, body: refusalBody('throttled', null) }, 'throttled'],
+      ['a network failure', { networkError: new Error('ECONNRESET') }, 'network_error'],
+      ['an answer without a status', { status: 200, body: { id: MESSAGE_ID } }, 'api_error'],
+    ] satisfies [string, Fault | undefined, string][])(
+      'returns %s as the error, without a retry',
+      async (_, fault, code) => {
+        if (fault) {
+          api.failNext(fault, Infinity)
+        }
+
+        const result = await createClient().emails.get(MESSAGE_ID)
+
+        expect(result).toEqual({ data: null, error: expect.objectContaining({ code }) })
+        expect(api.received).toHaveLength(1)
+      }
+    )
+
+    it.each([
+      ['missing_secret_key', { secretKey: undefined }, MESSAGE_ID],
+      ['missing_app_host', { appHost: undefined }, MESSAGE_ID],
+      ['client_disabled', { disabled: true }, MESSAGE_ID],
+      ['invalid_message_id', {}, ''],
+    ])('returns %s without a request', async (code, clientOptions: PostHogOptions, id) => {
+      const result = await createClient(clientOptions).emails.get(id)
+
+      expect(result).toEqual({ data: null, error: expect.objectContaining({ code }) })
+      expect(api.received).toEqual([])
+    })
+
+    it('reads an id with reserved characters as one path segment', async () => {
+      await createClient().emails.get('a/b?c')
+
+      expect(requestLog()).toEqual(['GET /api/projects/@current/messaging/emails/a%2Fb%3Fc/'])
+    })
+  })
+
   describe('errors', () => {
     it.each([
       [400, 'invalid_recipient', 'validation_error'],

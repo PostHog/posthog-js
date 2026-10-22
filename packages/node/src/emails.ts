@@ -3,6 +3,8 @@ import { emailContentHash } from './email-content-hash'
 
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const UPLOAD_PATH = (key: string): string => `/api/projects/@current/messaging_templates/by_key/${key}/`
+const STATUS_PATH = (messageId: string): string =>
+  `/api/projects/@current/messaging/emails/${encodeURIComponent(messageId)}/`
 
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 const CODE_ONLY_FIELDS = [
@@ -190,6 +192,34 @@ export type SendEmailResult =
   | { data: { id: string; warnings: EmailWarning[] }; error: null }
   | { data: null; error: EmailError }
 
+/** Where an email is. `sent` and later come from the email provider. */
+export type EmailStatus =
+  | 'queued'
+  | 'waiting'
+  | 'unknown'
+  | 'skipped'
+  | 'failed'
+  | 'sent'
+  | 'delivered'
+  | 'bounced'
+  | 'complained'
+
+/** The latest status PostHog knows of one email. */
+export interface EmailStatusRecord {
+  /** The `id` that `posthog.emails.send()` returned. */
+  id: string
+  status: EmailStatus
+  /** When PostHog queued the email, as an ISO 8601 timestamp. */
+  createdAt: string
+  /** When the email reached its status, as an ISO 8601 timestamp. */
+  statusAt: string
+  /** Why the email was skipped, failed or bounced, when PostHog knows. */
+  reason?: string
+}
+
+/** The result of `posthog.emails.get()`: the email's status, or the `error`. */
+export type GetEmailResult = { data: EmailStatusRecord; error: null } | { data: null; error: EmailError }
+
 /** The `posthog.emails` API: send transactional email from your server. */
 export interface Emails {
   /**
@@ -252,6 +282,25 @@ export interface Emails {
    * ```
    */
   send(options: SendEmailOptions): Promise<SendEmailResult>
+
+  /**
+   * Read the latest status of an email that `send` queued.
+   *
+   * `status` is not Resend's `last_event`: it is where the email is now, from `queued` to `delivered`, `bounced`
+   * or `complained`. A new email can take a few seconds to show up, and until then the read answers `not_found`.
+   * Never throws, and never retries: call it again later to see a newer status.
+   *
+   * Needs the `secretKey` client option, a project secret API key with the `hog_flow:read` scope.
+   *
+   * @example
+   * ```ts
+   * const { data, error } = await posthog.emails.get(sent.id)
+   * if (data?.status === 'bounced') {
+   *   console.log(`Bounced: ${data.reason}`)
+   * }
+   * ```
+   */
+  get(id: string): Promise<GetEmailResult>
 }
 
 /** @internal */
@@ -267,10 +316,10 @@ export interface EmailsApi {
   track<T>(work: Promise<T>): Promise<T>
   /** Rejects only when PostHog never answered. */
   request(
-    method: 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT',
     url: string,
     headers: Record<string, string>,
-    body: string
+    body: string | undefined
   ): Promise<PostHogApiResponse>
 }
 
@@ -278,14 +327,16 @@ type Outcome<T> = { data: T; error: null } | Failure
 type Failure = { data: null; error: EmailError }
 
 interface Delivery {
-  idempotencyKey: string
+  idempotencyKey?: string
   maxRetries: number
 }
 
+const READ_ONCE: Delivery = { maxRetries: 0 }
+
 interface ApiRequest {
-  method: 'POST' | 'PUT'
+  method: 'GET' | 'POST' | 'PUT'
   path: string
-  body: JsonType
+  body?: JsonType
 }
 
 interface Attempt {
@@ -318,7 +369,32 @@ export class PostHogEmails implements Emails {
     )
   }
 
+  get(id: string): Promise<GetEmailResult> {
+    const refusal =
+      this.clientRefusal() ??
+      (typeof id === 'string' && id
+        ? undefined
+        : failure('invalid_message_id', 'id must be the id that send returned.', { field: 'id' }))
+    if (refusal) {
+      return Promise.resolve(refusal)
+    }
+    return this.api.track(
+      this.exchange({ method: 'GET', path: STATUS_PATH(id) }, READ_ONCE)
+        .then((outcome) => (outcome.error ? outcome : statusRecord(outcome.data)))
+        .catch(unexpectedFailure)
+    )
+  }
+
   private refusalBeforeRequest(options: SendEmailOptions): Failure | undefined {
+    return (
+      this.clientRefusal() ??
+      formRefusal(options) ??
+      unknownOptionRefusal(options) ??
+      idempotencyKeyRefusal(options.idempotencyKey)
+    )
+  }
+
+  private clientRefusal(): Failure | undefined {
     if (this.api.isDisabled()) {
       return failure('client_disabled', 'The PostHog client is disabled, so nothing was sent.')
     }
@@ -338,7 +414,7 @@ export class PostHogEmails implements Emails {
           'goes to a proxy.'
       )
     }
-    return formRefusal(options) ?? unknownOptionRefusal(options) ?? idempotencyKeyRefusal(options.idempotencyKey)
+    return undefined
   }
 
   private async sendForm(options: SendEmailOptions, delivery: Delivery): Promise<SendEmailResult> {
@@ -374,7 +450,7 @@ export class PostHogEmails implements Emails {
   }
 
   private async exchange(request: ApiRequest, delivery: Delivery): Promise<Outcome<PostHogApiResponse>> {
-    const body = JSON.stringify(request.body)
+    const body = request.body === undefined ? undefined : JSON.stringify(request.body)
     for (let retry = 0; ; retry++) {
       const { outcome, retryAfterMs } = await this.attempt(request, body, delivery)
       if (retry >= delivery.maxRetries || !isRetryable(outcome)) {
@@ -384,12 +460,12 @@ export class PostHogEmails implements Emails {
     }
   }
 
-  private async attempt(request: ApiRequest, body: string, delivery: Delivery): Promise<Attempt> {
+  private async attempt(request: ApiRequest, body: string | undefined, delivery: Delivery): Promise<Attempt> {
     const headers = {
       ...this.api.headers(),
-      'Content-Type': 'application/json',
+      ...(body !== undefined && { 'Content-Type': 'application/json' }),
       Authorization: `Bearer ${this.api.secretKey()}`,
-      'Idempotency-Key': delivery.idempotencyKey,
+      ...(delivery.idempotencyKey !== undefined && { 'Idempotency-Key': delivery.idempotencyKey }),
     }
     let response: PostHogApiResponse
     try {
@@ -682,6 +758,20 @@ function apiError({ status, body }: PostHogApiResponse): EmailError {
     statusCode: status,
     ...optional('docsUrl', textOf(fields.docs_url)),
     ...optional('field', textOf(fields.attr)),
+  }
+}
+
+function statusRecord({ status, body }: PostHogApiResponse): GetEmailResult {
+  const fields = isRecord(body) ? body : {}
+  const [id, emailStatus, createdAt, statusAt] = [fields.id, fields.status, fields.created_at, fields.status_at].map(
+    textOf
+  )
+  if (!id || !emailStatus || !createdAt || !statusAt) {
+    return failure('api_error', `PostHog answered HTTP ${status} with an unexpected body.`, { statusCode: status })
+  }
+  return {
+    data: { id, status: emailStatus as EmailStatus, createdAt, statusAt, ...optional('reason', textOf(fields.reason)) },
+    error: null,
   }
 }
 

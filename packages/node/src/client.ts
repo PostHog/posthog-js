@@ -3066,10 +3066,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /** One attempt: `posthog.emails` retries on its own, with the same idempotency key. */
   private async _requestEmailsApi(
-    method: 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT',
     url: string,
     headers: Record<string, string>,
-    body: string
+    body: string | undefined
   ): Promise<PostHogApiResponse> {
     try {
       return await this.requestJson(url, { method, headers, body }, { retryCount: 0 })
