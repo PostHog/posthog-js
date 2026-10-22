@@ -2036,6 +2036,43 @@
       "example": "Record<string, string>"
     },
     {
+      "id": "CodeEmailFields",
+      "name": "CodeEmailFields",
+      "properties": [
+        {
+          "description": "A verified sender, such as `'Acme <security@acme.com>'`. Without it, the project's default sender.",
+          "type": "string",
+          "name": "from"
+        },
+        {
+          "type": "string | string[]",
+          "name": "replyTo"
+        },
+        {
+          "type": "string",
+          "name": "subject"
+        },
+        {
+          "description": "Leave it out to send rendered content: the email goes out as is, and PostHog never stores it. Pass it to send a local template: PostHog fills its `{{ variables.* }}`, and the SDK uploads the template when PostHog does not hold its content yet.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog.",
+          "type": "string",
+          "name": "templateKey"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "CodeEmailForm",
+      "name": "CodeEmailForm",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "CodeEmailFields & ({\n    html: string;\n    text?: string;\n} | {\n    html?: string;\n    text: string;\n})"
+    },
+    {
       "id": "Coercer",
       "name": "Coercer",
       "properties": [],
@@ -2113,7 +2150,7 @@
       "name": "EmailError",
       "properties": [
         {
-          "description": "PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`, `missing_app_host`, `client_disabled`, `network_error`, `api_error` for an answer without a code, `unexpected_error`, `invalid_template_id` and `invalid_idempotency_key`.",
+          "description": "PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`, `missing_app_host`, `client_disabled`, `network_error`, `api_error` for an answer without a code, `unexpected_error`, and `invalid_form`, `invalid_template_id`, `invalid_template_key` and `invalid_idempotency_key` for a send the SDK refused before any request.",
           "type": "string",
           "name": "code"
         },
@@ -4303,9 +4340,21 @@
       "path": "../core/src/utils/index.ts"
     },
     {
+      "id": "SendCodeEmailOptions",
+      "name": "SendCodeEmailOptions",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "SendEmailBase & CodeEmailForm & Without<Omit<TemplateEmailForm, 'templateData'>>"
+    },
+    {
       "id": "SendEmailBase",
       "name": "SendEmailBase",
       "properties": [
+        {
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as analytics events of the recipient. They count as analytics events. Without it, PostHog decides: on for the code form.",
+          "type": "boolean",
+          "name": "captureEngagement"
+        },
         {
           "description": "The recipient's distinct ID in your app. The email's events, such as sent, opened and clicked, land on this person and count as analytics events. Always pass it: without it, they land on a person keyed by the address.",
           "type": "string",
@@ -4332,39 +4381,9 @@
     {
       "id": "SendEmailOptions",
       "name": "SendEmailOptions",
-      "properties": [
-        {
-          "description": "The UUID of the template.",
-          "type": "string",
-          "name": "templateId"
-        },
-        {
-          "description": "Values for the template's `{{ variables.* }}`. The template can't read person properties.",
-          "type": "Record<string, unknown>",
-          "name": "templateData"
-        },
-        {
-          "description": "One recipient email address.",
-          "type": "string",
-          "name": "to"
-        },
-        {
-          "description": "The recipient's distinct ID in your app. The email's events, such as sent, opened and clicked, land on this\nperson and count as analytics events. Always pass it: without it, they land on a person keyed by the address.",
-          "type": "string",
-          "name": "distinctId"
-        },
-        {
-          "description": "Sends with a key PostHog already accepted queue nothing and return the first send's `id`. Without it, the SDK\nmakes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what\nthe email is for, such as `welcome:user_42`, and set `maxRetries: 0`.",
-          "type": "string",
-          "name": "idempotencyKey"
-        },
-        {
-          "description": "How often to retry this send. Overrides the `maxRetries` client option.",
-          "type": "number",
-          "name": "maxRetries"
-        }
-      ],
-      "path": "src/emails.ts"
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "SendTemplateEmailOptions | SendCodeEmailOptions"
     },
     {
       "id": "SendEmailResult",
@@ -4415,14 +4434,65 @@
       "name": "SendTemplateEmailOptions",
       "properties": [
         {
-          "description": "Values for the template's `{{ variables.* }}`. The template can't read person properties.",
-          "type": "Record<string, unknown>",
-          "name": "templateData"
+          "description": "One recipient email address.",
+          "type": "string",
+          "name": "to"
+        },
+        {
+          "description": "The recipient's distinct ID in your app. The email's events, such as sent, opened and clicked, land on this\nperson and count as analytics events. Always pass it: without it, they land on a person keyed by the address.",
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "description": "Sends with a key PostHog already accepted queue nothing and return the first send's `id`. Without it, the SDK\nmakes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what\nthe email is for, such as `welcome:user_42`, and set `maxRetries: 0`.",
+          "type": "string",
+          "name": "idempotencyKey"
+        },
+        {
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as analytics\nevents of the recipient. They count as analytics events. Without it, PostHog decides: on for the code form.",
+          "type": "boolean",
+          "name": "captureEngagement"
+        },
+        {
+          "description": "How often to retry this send. Overrides the `maxRetries` client option.",
+          "type": "number",
+          "name": "maxRetries"
         },
         {
           "description": "The UUID of the template.",
           "type": "string",
           "name": "templateId"
+        },
+        {
+          "description": "Values for the template's `{{ variables.* }}`. The template can't read person properties.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog.",
+          "type": "never",
+          "name": "templateKey"
+        },
+        {
+          "type": "never",
+          "name": "subject"
+        },
+        {
+          "description": "A verified sender, such as `'Acme <security@acme.com>'`. Without it, the project's default sender.",
+          "type": "never",
+          "name": "from"
+        },
+        {
+          "type": "never",
+          "name": "replyTo"
+        },
+        {
+          "type": "never",
+          "name": "html"
+        },
+        {
+          "type": "never",
+          "name": "text"
         }
       ],
       "path": "src/emails.ts"
@@ -5073,6 +5143,23 @@
       "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {
+      "id": "TemplateEmailForm",
+      "name": "TemplateEmailForm",
+      "properties": [
+        {
+          "description": "Values for the template's `{{ variables.* }}`. The template can't read person properties.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "The UUID of the template.",
+          "type": "string",
+          "name": "templateId"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
       "id": "UnsetPersonPropertiesMessage",
       "name": "UnsetPersonPropertiesMessage",
       "properties": [
@@ -5086,6 +5173,13 @@
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "Without",
+      "name": "Without",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "{\n    [K in keyof T]?: never;\n}"
     }
   ],
   "categories": [
