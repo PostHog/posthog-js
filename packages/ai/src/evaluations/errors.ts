@@ -16,15 +16,15 @@ export interface EvaluationErrorFields {
 }
 /** Native cancellation with the prepared creation fields needed for recovery. */
 export class ExperimentCreationAbortedError extends DOMException {
+  declare readonly cause: unknown
   readonly #cause: unknown
   readonly #submission: ExperimentOptions
   constructor(cause: unknown, submission: ExperimentOptions) {
     super('Offline evaluation creation was cancelled.', cause instanceof DOMException ? cause.name : 'AbortError')
     this.#cause = cause
     this.#submission = copy(submission)
-  }
-  get cause(): unknown {
-    return this.#cause
+    // Node inspects `cause` specially; an own accessor keeps it safe to log across supported versions.
+    Object.defineProperty(this, 'cause', { get: () => this.#cause, enumerable: false })
   }
   get submission(): ExperimentOptions {
     return copy(this.#submission)
@@ -32,6 +32,7 @@ export class ExperimentCreationAbortedError extends DOMException {
 }
 /** An operation did not receive a valid acknowledgment. Inspect persistence before recovery. */
 export class EvaluationAPIError extends Error {
+  declare readonly errors: unknown
   readonly status?: number
   readonly code?: string
   readonly detail?: unknown
@@ -57,10 +58,11 @@ export class EvaluationAPIError extends Error {
     this.#submission = fields.submission === undefined ? undefined : copy(fields.submission)
     // Logging an Error should not accidentally log evaluation payloads or credentials.
     for (const key of ['detail', 'response']) Object.defineProperty(this, key, { enumerable: false })
-  }
-  // Node logs an Error's own `errors` property even when it is non-enumerable.
-  get errors(): unknown {
-    return this.#errors === undefined ? undefined : copy(this.#errors)
+    // Node specially inspects array-valued `errors`; an own accessor avoids logging its contents.
+    Object.defineProperty(this, 'errors', {
+      get: () => (this.#errors === undefined ? undefined : copy(this.#errors)),
+      enumerable: false,
+    })
   }
   get submission(): ExperimentOptions | undefined {
     return this.#submission === undefined ? undefined : copy(this.#submission)
