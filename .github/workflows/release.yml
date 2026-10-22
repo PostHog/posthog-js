@@ -565,8 +565,19 @@ jobs:
 
     gate-posthog-js-publish:
         permissions: {}
-        name: Gate npm publishing on posthog-js S3
-        needs: [version-bump, notify-approval-needed, check-browser-version, build-s3-artifacts, upload-s3]
+        name: Gate npm publishing on browser CDN releases
+        needs:
+            [
+                version-bump,
+                notify-approval-needed,
+                check-browser-version,
+                build-s3-artifacts,
+                upload-s3,
+                check-browser-next-version,
+                build-browser-cdn,
+                upload-browser-cdn-immutable,
+                promote-browser-cdn,
+            ]
         runs-on: ubuntu-latest
         if: always() && needs.version-bump.outputs.commit-hash != ''
         steps:
@@ -575,12 +586,17 @@ jobs:
               with:
                   egress-policy: audit
 
-            - name: Require successful posthog-js S3 release before npm publishing
+            - name: Require successful browser CDN releases before npm publishing
               env:
                   BUILD_RESULT: ${{ needs.build-s3-artifacts.result }}
                   CHECK_RESULT: ${{ needs.check-browser-version.result }}
                   IS_NEW_VERSION: ${{ needs.check-browser-version.outputs.is-new-version }}
                   UPLOAD_RESULT: ${{ needs.upload-s3.result }}
+                  NEXT_CHECK_RESULT: ${{ needs.check-browser-next-version.result }}
+                  NEXT_IS_NEW_VERSION: ${{ needs.check-browser-next-version.outputs.is-new-version }}
+                  NEXT_BUILD_RESULT: ${{ needs.build-browser-cdn.result }}
+                  NEXT_IMMUTABLE_RESULT: ${{ needs.upload-browser-cdn-immutable.result }}
+                  NEXT_ALIAS_RESULT: ${{ needs.promote-browser-cdn.result }}
               run: |
                   set -euo pipefail
 
@@ -599,16 +615,37 @@ jobs:
                               echo "::error::Cannot publish npm packages because the posthog-js S3 upload finished with '$UPLOAD_RESULT'."
                               exit 1
                           fi
-                          echo '✓ posthog-js S3 release succeeded; all npm publishing may proceed'
+                          echo '✓ posthog-js S3 release succeeded'
                           ;;
                       false)
-                          echo '✓ posthog-js has no new version; all npm publishing may proceed without S3 work'
+                          echo '✓ posthog-js has no new version; legacy S3 work is not required'
                           ;;
                       *)
                           echo "::error::Cannot determine whether npm publishing must wait for a posthog-js S3 release (is-new-version='$IS_NEW_VERSION')."
                           exit 1
                           ;;
                   esac
+
+                  if [ "$NEXT_CHECK_RESULT" != 'success' ]; then
+                      echo "::error::Cannot publish npm packages because the @posthog/browser version check finished with '$NEXT_CHECK_RESULT'."
+                      exit 1
+                  fi
+                  case "$NEXT_IS_NEW_VERSION" in
+                      true)
+                          if [ "$NEXT_BUILD_RESULT" != 'success' ] ||
+                             [ "$NEXT_IMMUTABLE_RESULT" != 'success' ] ||
+                             [ "$NEXT_ALIAS_RESULT" != 'success' ]; then
+                              echo '::error::Cannot publish npm packages until @posthog/browser CDN build, both immutable regions, and both alias regions succeed.'
+                              exit 1
+                          fi
+                          ;;
+                      false) ;; # Private or unchanged package: no CDN work required.
+                      *)
+                          echo '::error::Cannot determine whether @posthog/browser requires CDN publication.'
+                          exit 1
+                          ;;
+                  esac
+                  echo '✓ Required browser CDN releases succeeded; all npm publishing may proceed'
 
             - name: Resolve release failure metadata
               id: release-failure-metadata
@@ -660,7 +697,7 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Blocked npm publishing for this release because the `${{ steps.release-failure-metadata.outputs.package_ref }}` S3/CDN release did not succeed. <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
+                  message: '❌ Blocked npm publishing for this release because a required browser S3/CDN release did not succeed. <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'x'
 
     publish-posthog-js:
@@ -832,6 +869,233 @@ jobs:
             - name: Fail if posthog upgrade dispatch failed
               if: ${{ steps.dispatch-posthog-upgrade.outcome == 'failure' }}
               run: exit 1
+
+    check-browser-next-version:
+        name: Check @posthog/browser version for CDN
+        needs: [version-bump]
+        runs-on: ubuntu-latest
+        if: always() && needs.version-bump.outputs.commit-hash != ''
+        permissions:
+            contents: read
+        outputs:
+            is-new-version: ${{ steps.manifest.outputs.private == 'true' && 'false' || steps.check-version.outputs.is-new-version }}
+            committed-version: ${{ steps.check-version.outputs.committed-version }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  fetch-depth: 1
+
+            - name: Check whether browser CDN publication is enabled
+              id: manifest
+              run: |
+                  set -euo pipefail
+                  is_private=$(jq -r '.private == true' packages/browser-next/package.json)
+                  echo "private=$is_private" >> "$GITHUB_OUTPUT"
+
+            - name: Check @posthog/browser version
+              id: check-version
+              if: steps.manifest.outputs.private != 'true'
+              uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2.1.1
+              with:
+                  path: packages/browser-next
+
+    build-browser-cdn:
+        name: Build @posthog/browser CDN assets
+        needs: [version-bump, check-browser-next-version]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.check-browser-next-version.result == 'success' &&
+            needs.check-browser-next-version.outputs.is-new-version == 'true'
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  fetch-depth: 1
+
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+
+            - name: Build browser CDN dependencies
+              run: pnpm turbo run build --filter='@posthog/browser^...'
+
+            - name: Build browser CDN
+              run: pnpm --filter @posthog/browser build:cdn
+
+            - name: Require CDN entry
+              run: test -s packages/browser-next/dist-cdn/posthog.js
+
+            - name: Upload browser CDN artifact
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: browser-cdn-dist
+                  path: packages/browser-next/dist-cdn/
+                  include-hidden-files: true
+                  retention-days: 1
+                  if-no-files-found: error
+
+    upload-browser-cdn-immutable:
+        name: Upload immutable @posthog/browser CDN assets (${{ matrix.region.name }})
+        needs: [version-bump, check-browser-next-version, build-browser-cdn]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.check-browser-next-version.result == 'success' &&
+            needs.check-browser-next-version.outputs.is-new-version == 'true' &&
+            needs.build-browser-cdn.result == 'success'
+        environment: 'S3 Upload'
+        permissions:
+            contents: read
+            id-token: write
+        strategy:
+            fail-fast: false
+            matrix:
+                region:
+                    - { name: us, bucket: us-assets.i.posthog.com, aws_region: us-east-1 }
+                    - { name: eu, bucket: eu-assets.i.posthog.com, aws_region: eu-central-1 }
+        steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+              with:
+                  egress-policy: audit
+
+            - name: Checkout release tooling
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  sparse-checkout: |
+                      .npmrc
+                      package.json
+                      patches
+                      pnpm-lock.yaml
+                      pnpm-workspace.yaml
+                      tooling/release
+
+            - name: Setup Node.js
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+
+            - name: Setup pnpm
+              uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+              with:
+                  cache: false
+                  install: false
+
+            - name: Install release tooling dependencies
+              run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
+
+            - name: Download browser CDN artifact
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: browser-cdn-dist
+                  path: packages/browser-next/dist-cdn
+
+            - name: Configure AWS credentials (US)
+              if: matrix.region.name == 'us'
+              uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Configure AWS credentials (EU)
+              if: matrix.region.name == 'eu'
+              uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Upload and verify immutable browser assets
+              env:
+                  BUCKET: ${{ matrix.region.bucket }}
+                  VERSION: ${{ needs.check-browser-next-version.outputs.committed-version }}
+              run: node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --immutable-only
+
+    promote-browser-cdn:
+        name: Promote @posthog/browser CDN aliases (${{ matrix.region.name }})
+        needs: [version-bump, check-browser-next-version, build-browser-cdn, upload-browser-cdn-immutable]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.check-browser-next-version.result == 'success' &&
+            needs.check-browser-next-version.outputs.is-new-version == 'true' &&
+            needs.upload-browser-cdn-immutable.result == 'success'
+        environment: 'S3 Upload'
+        permissions:
+            contents: read
+            id-token: write
+        strategy:
+            fail-fast: false
+            matrix:
+                region:
+                    - { name: us, bucket: us-assets.i.posthog.com, aws_region: us-east-1 }
+                    - { name: eu, bucket: eu-assets.i.posthog.com, aws_region: eu-central-1 }
+        steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+              with:
+                  egress-policy: audit
+
+            - name: Checkout release tooling
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  sparse-checkout: |
+                      .npmrc
+                      package.json
+                      patches
+                      pnpm-lock.yaml
+                      pnpm-workspace.yaml
+                      tooling/release
+
+            - name: Setup Node.js
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+
+            - name: Setup pnpm
+              uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+              with:
+                  cache: false
+                  install: false
+
+            - name: Install release tooling dependencies
+              run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
+
+            - name: Download browser CDN artifact
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: browser-cdn-dist
+                  path: packages/browser-next/dist-cdn
+
+            - name: Configure AWS credentials (US)
+              if: matrix.region.name == 'us'
+              uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Configure AWS credentials (EU)
+              if: matrix.region.name == 'eu'
+              uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Verify immutable assets and promote browser aliases
+              env:
+                  BUCKET: ${{ matrix.region.bucket }}
+                  VERSION: ${{ needs.check-browser-next-version.outputs.committed-version }}
+              run: node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --aliases-only
 
     check-browser-version:
         name: Check posthog-js version for S3
@@ -1509,7 +1773,15 @@ jobs:
         permissions:
             contents: read
         name: Notify Slack - Released
-        needs: [notify-approval-needed, publish, publish-posthog-js, dispatch-posthog-upgrade, upload-s3]
+        needs:
+            [
+                notify-approval-needed,
+                publish,
+                publish-posthog-js,
+                dispatch-posthog-upgrade,
+                upload-s3,
+                promote-browser-cdn,
+            ]
         runs-on: ubuntu-latest
         if: >-
             always() &&
@@ -1517,6 +1789,7 @@ jobs:
             needs.publish-posthog-js.result == 'success' &&
             needs.dispatch-posthog-upgrade.result == 'success' &&
             (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') &&
+            (needs.promote-browser-cdn.result == 'success' || needs.promote-browser-cdn.result == 'skipped') &&
             needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Audit runner egress
