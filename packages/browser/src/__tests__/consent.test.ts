@@ -219,6 +219,24 @@ describe('consentManager', () => {
             const flagCalledEvents = beforeSendMock.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
             expect(flagCalledEvents).toHaveLength(1)
         })
+
+        it('sends $feature_flag_called for a flag an older SDK version marked as reported before consent', async () => {
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
+            posthog = await createPostHog({
+                opt_out_capturing_by_default: true,
+                capture_pageview: false,
+                bootstrap: { featureFlags: { 'beta-ui': true } },
+                before_send: beforeSendMock,
+            })
+            posthog.persistence!.register({ $flag_call_reported: { 'beta-ui': ['true'] } })
+
+            posthog.getFeatureFlag('beta-ui')
+            posthog.opt_in_capturing({ captureEventName: false })
+            posthog.getFeatureFlag('beta-ui')
+
+            const flagCalledEvents = beforeSendMock.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
+            expect(flagCalledEvents).toHaveLength(1)
+        })
     })
 
     describe('reset() and consent', () => {
