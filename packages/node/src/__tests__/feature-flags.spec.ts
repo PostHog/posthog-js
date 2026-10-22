@@ -7864,7 +7864,7 @@ describe('error handling and backoff', () => {
   })
 })
 
-describe('experience continuity warning', () => {
+describe('unresolvable flag warning', () => {
   let posthog: PostHog
   let warnSpy: vi.SpyInstance
 
@@ -7988,7 +7988,7 @@ describe('experience continuity warning', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2 flag(s)'))
   })
 
-  it('does not emit warning when strictLocalEvaluation is enabled', async () => {
+  it('emits warning when strictLocalEvaluation is enabled', async () => {
     const flags = {
       flags: [
         {
@@ -8014,7 +8014,80 @@ describe('experience continuity warning', () => {
 
     await vi.runOnlyPendingTimersAsync()
 
-    // Warning should NOT be emitted because strictLocalEvaluation prevents server fallback
+    // The flag is never resolved in local-only mode either, so the warning still applies.
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('experience_continuity'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('left unresolved'))
+  })
+
+  it('warns once per flag until its definition changes', async () => {
+    const continuityFlag = {
+      id: 1,
+      name: 'Exp Cont Flag',
+      key: 'exp-cont-flag',
+      active: true,
+      ensure_experience_continuity: true,
+      filters: {
+        groups: [{ properties: [], rollout_percentage: 100 }],
+      },
+    }
+    let flags: any = { flags: [continuityFlag] }
+    mockedFetch.mockImplementation((url) => apiImplementation({ localFlags: flags })(url))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await vi.runOnlyPendingTimersAsync()
+    await posthog.reloadFeatureFlags()
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('experience_continuity'))
+
+    const halfRolloutFlag = { ...continuityFlag, filters: { groups: [{ properties: [], rollout_percentage: 50 }] } }
+    flags = { flags: [halfRolloutFlag] }
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+
+    flags = { flags: [{ ...halfRolloutFlag, active: false }] }
+    await posthog.reloadFeatureFlags()
+    flags = { flags: [halfRolloutFlag] }
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not warn about inactive experience continuity flags', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exp Cont Flag',
+          key: 'exp-cont-flag',
+          active: false,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await vi.runOnlyPendingTimersAsync()
+
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
@@ -8061,6 +8134,61 @@ describe('experience continuity warning', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 flag(s)'))
     // The context-excluded flag never takes the server-fallback path here, so it must not be named.
     expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('excluded-cont-flag'))
+  })
+
+  it('warns once about flags whose definition local evaluation does not support', async () => {
+    const flag = (
+      key: string,
+      properties: Record<string, any>[],
+      extra: Record<string, any> = {}
+    ): Record<string, any> => ({
+      id: 1,
+      name: key,
+      key,
+      active: true,
+      filters: { groups: [{ properties, rollout_percentage: 100 }] },
+      ...extra,
+    })
+    const dependsOn = (dependencyChain: string[]): Record<string, any>[] => [
+      { key: 'dep', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: dependencyChain },
+    ]
+    const flags = {
+      flags: [
+        flag('static-cohort-flag', [{ key: 'id', type: 'cohort', value: 999 }]),
+        flag('nested-static-cohort-flag', [{ key: 'id', type: 'cohort', value: 1 }]),
+        flag('missing-dependency-flag', dependsOn(['gone'])),
+        flag('circular-dependency-flag', dependsOn([])),
+        flag('unknown-group-flag', [], { filters: { aggregation_group_type_index: 9, groups: [] } }),
+        flag('unknown-operator-flag', [{ key: 'plan', type: 'person', value: 'pro', operator: 'not_a_real_operator' }]),
+        flag('invalid-semver-flag', [{ key: 'version', type: 'person', value: 'x.y', operator: 'semver_gt' }]),
+        flag('local-cohort-flag', [{ key: 'id', type: 'cohort', value: 2 }]),
+        flag('frontend-only-flag', [], { evaluation_contexts: ['frontend'] }),
+        flag('filtered-dependency-flag', dependsOn(['frontend-only-flag'])),
+      ],
+      cohorts: {
+        '1': { type: 'AND', values: [{ key: 'id', type: 'cohort', value: 999 }] },
+        '2': { type: 'AND', values: [{ key: 'plan', type: 'person', value: 'pro', operator: 'exact' }] },
+      },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      ...posthogImmediateResolveOptions,
+    })
+
+    await vi.runOnlyPendingTimersAsync()
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    const [message] = warnSpy.mock.calls[0]
+    expect(message).toContain('reason: unsupported_definition')
+    expect(message).toContain(
+      ': static-cohort-flag, nested-static-cohort-flag, missing-dependency-flag, circular-dependency-flag, ' +
+        'unknown-group-flag, unknown-operator-flag, invalid-semver-flag. '
+    )
   })
 })
 

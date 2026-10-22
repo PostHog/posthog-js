@@ -101,6 +101,17 @@ describe('PostHogSurveys', () => {
         surveys.dispose()
     })
 
+    it('replaces trigger definitions on an empty successful refresh', async () => {
+        const { client, surveys, receiver } = create({ advancedEnableSurveys: true })
+        await surveys.setup(client)
+        await new Promise<Survey[]>((resolve) => surveys.getSurveys(resolve))
+        expect(receiver.replace).toHaveBeenCalledWith([definition])
+        vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: { surveys: [] } })
+        await new Promise<Survey[]>((resolve) => surveys.getSurveys(resolve, true))
+        expect(receiver.replace).toHaveBeenLastCalledWith([])
+        surveys.dispose()
+    })
+
     it.each([true, false, [], [definition]])('uses remote surveys %j only as the renderer gate', async (remote) => {
         const { client, surveys, extensions, receiver } = create()
         await surveys.setup(client)

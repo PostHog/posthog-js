@@ -1777,6 +1777,9 @@ export class PostHog implements PostHogInterface {
         }
 
         if (!this.is_capturing()) {
+            logger.info(
+                `Event "${event_name}" was not captured because capturing is disabled (opted out or consent pending).`
+            )
             return
         }
 
@@ -1797,6 +1800,9 @@ export class PostHog implements PostHogInterface {
         // We drop bot events unless the preview flag to send bot pageviews is enabled
         // or the user has explicitly opted out of useragent filtering
         if (shouldDropBotEvent) {
+            logger.info(
+                `Event "${event_name}" was not captured because the user agent looks like a bot. Set \`opt_out_useragent_filter: true\` to capture it.`
+            )
             return
         }
 
@@ -3953,6 +3959,14 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        // conversations.reset() drops the remote config the extension was loaded with, and no new
+        // remote-config request follows a reset, so hand it the cached result again. Otherwise the
+        // widget stays unavailable until the next page load. When consent is still missing (e.g. the
+        // cookieless opt-in transition), loadIfEnabled() waits and opt_in_capturing() loads it.
+        if (this._lastRemoteConfig) {
+            this.conversations?.onRemoteConfig(this._lastRemoteConfig)
+        }
+
         // Reload feature flags for the reset user, just like identify()
         // does when the distinct_id changes.
         this.reloadFeatureFlags()
@@ -4912,6 +4926,9 @@ export class PostHog implements PostHogInterface {
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == COOKIELESS_ON_REJECT) {
             this.surveys?.loadIfEnabled()
+            // Conversations doesn't load while opted out in cookieless mode; its remote config was
+            // replayed by _reset() above (or arrived while opted out), so load it now.
+            this.conversations?.loadIfEnabled()
         }
 
         // Don't capture if captureEventName is null or false
@@ -5011,6 +5028,9 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Returns the current consent status for event tracking and data persistence.
+     *
+     * In cookieless `'always'` mode this returns `true`, because the SDK does not store data for the user. Events are
+     * still captured in this mode. To check if the SDK captures events, use `is_capturing()`.
      *
      * @example
      * ```js

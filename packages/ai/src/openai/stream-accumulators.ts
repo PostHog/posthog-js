@@ -17,6 +17,7 @@ export interface OpenAIChatStreamResult {
 /** Pure state accumulator for OpenAI-compatible Chat Completions chunks. */
 export class OpenAIChatStreamAccumulator {
   private accumulatedContent = ''
+  private accumulatedRefusal = ''
   private model?: string
   private completionId?: string
   private systemFingerprint?: string
@@ -47,6 +48,11 @@ export class OpenAIChatStreamAccumulator {
     if (choice?.delta?.content) {
       this.firstTokenTime ??= receivedAt
       this.accumulatedContent += choice.delta.content
+    }
+
+    if (choice?.delta?.refusal) {
+      this.firstTokenTime ??= receivedAt
+      this.accumulatedRefusal += choice.delta.refusal
     }
 
     if (Array.isArray(choice?.delta?.tool_calls)) {
@@ -86,6 +92,9 @@ export class OpenAIChatStreamAccumulator {
     const content: FormattedContent = []
     if (this.accumulatedContent) {
       content.push({ type: 'text', text: this.accumulatedContent })
+    }
+    if (this.accumulatedRefusal) {
+      content.push({ type: 'refusal', refusal: this.accumulatedRefusal })
     }
     for (const toolCall of this.toolCalls.values()) {
       if (toolCall.name) {

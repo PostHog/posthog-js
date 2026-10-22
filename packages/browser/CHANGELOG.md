@@ -1,5 +1,37 @@
 # posthog-js
 
+## 1.438.19
+
+### Patch Changes
+
+- [#4994](https://github.com/PostHog/posthog-js/pull/4994) [`bcd33ce`](https://github.com/PostHog/posthog-js/commit/bcd33ce0f8c9658e0e37c336ced7968960228fbd) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share autocapture across browser SDKs while preserving existing event capture behavior.
+  (2026-10-22)
+- Updated dependencies [[`bcd33ce`](https://github.com/PostHog/posthog-js/commit/bcd33ce0f8c9658e0e37c336ced7968960228fbd)]:
+  - @posthog/browser-common@0.9.9
+
+## 1.438.18
+
+### Patch Changes
+
+- [#5189](https://github.com/PostHog/posthog-js/pull/5189) [`2aacdcb`](https://github.com/PostHog/posthog-js/commit/2aacdcbe891446873859d308502b6be13f345e2a) Thanks [@posthog](https://github.com/apps/posthog)! - Log why `capture()` dropped an event (capturing disabled or a bot user agent) when `debug: true` is set
+  (2026-10-22)
+
+- [#5383](https://github.com/PostHog/posthog-js/pull/5383) [`0faf643`](https://github.com/PostHog/posthog-js/commit/0faf6430d9117f843fc1d0bb72d737cb9d15a5d0) Thanks [@sarankumar1325](https://github.com/sarankumar1325)! - Conversations: the widget now comes back after `reset()`, and after a cookieless (`on_reject`) visitor calls `opt_in_capturing()`, instead of staying unavailable until the next page load.
+  (2026-10-22)
+
+## 1.438.17
+
+### Patch Changes
+
+- [#5367](https://github.com/PostHog/posthog-js/pull/5367) [`23b287f`](https://github.com/PostHog/posthog-js/commit/23b287fb1b4fa7ecbeb9e3184292a9730718d5b9) Thanks [@sarankumar1325](https://github.com/sarankumar1325)! - Session replay records mouse movement inside same-origin iframes as mouse movement instead of touch movement, so the replay cursor stays visible.
+  (2026-10-22)
+
+- [#5348](https://github.com/PostHog/posthog-js/pull/5348) [`45f6cd6`](https://github.com/PostHog/posthog-js/commit/45f6cd6b65bc4319a0887bfd83074e1a065c0962) Thanks [@ayushjhanwar-png](https://github.com/ayushjhanwar-png)! - Keep session replay data URI filtering output valid JSON and match svg+xml and parameterised data URIs.
+  (2026-10-22)
+
+- [#5325](https://github.com/PostHog/posthog-js/pull/5325) [`21a2559`](https://github.com/PostHog/posthog-js/commit/21a2559271cde904a35311f4adc43fd924cbc025) Thanks [@Majny](https://github.com/Majny)! - Session replay no longer installs the network plugin when the client sets `session_recording.recordHeaders` and `recordBody` to `false` and turns network timing off, even if the project enables network payload capture. Previously request URLs and timings were still recorded.
+  (2026-10-22)
+
 ## 1.438.16
 
 ### Patch Changes

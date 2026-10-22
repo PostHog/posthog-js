@@ -2,6 +2,7 @@ import type { FlagsConfiguration } from './flags-options'
 import type { BrowserClient } from './browser-client'
 import type { LogsConfiguration } from './logs-options'
 import type { SurveysConfiguration } from './surveys-options'
+import type { AutocaptureConfiguration } from './autocapture-options'
 import type {
     AnalyticsConfiguration,
     AnalyticsOptions,
@@ -82,17 +83,20 @@ export interface PostHogOptions {
      * Pass `false` to retain events without automatically loading delivery.
      */
     analytics?: AnalyticsConfiguration
+    /** Automatic DOM autocapture. Pass false to omit it; an explicit extension takes precedence. */
+    autocapture?: AutocaptureConfiguration
     /** Dynamically include flags by default. Explicit extensions take precedence over this option. */
     flags?: FlagsConfiguration
-    /** Automatically load logs. False disables automatic inclusion; explicit extensions take precedence. */
+    /** Load survey orchestration dynamically; renderer waits for remote enablement or a manual call. */
     surveys?: SurveysConfiguration
+    /** Automatically load logs. False disables automatic inclusion; explicit extensions take precedence. */
     logs?: LogsConfiguration
     /** Install extensions before the factory resolves. A preinstalled analytics extension satisfies delivery. */
     extensions?: readonly Extension[]
 }
 
 /** Options for the delivery-free `@posthog/browser/core` entrypoint. */
-export type CorePostHogOptions = Omit<PostHogOptions, 'analytics' | 'flags' | 'logs' | 'surveys'>
+export type CorePostHogOptions = Omit<PostHogOptions, 'analytics' | 'flags' | 'logs' | 'surveys' | 'autocapture'>
 
 /** Capture V1's terminal verdict for one reported event. */
 export type CaptureOutcomeStatus = 'ok' | 'warning' | 'drop' | 'retry'

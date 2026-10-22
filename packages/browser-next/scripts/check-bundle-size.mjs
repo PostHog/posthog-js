@@ -16,6 +16,7 @@ const forbiddenInputs = [
     /(^|\/)node_modules\/(posthog-js|@posthog\/core|core-js|dompurify|fflate|preact|rrweb|web-vitals)\//,
 ]
 const flagsInput = /(^|\/)(feature-flags|flags)\.(m?js|ts)$/
+const autocaptureInput = /(^|\/)(autocapture|rageclick|autocapture-utils)\.(m?js|ts)$/
 const logsInput = /(^|\/)(logs|console-logs|logs-config|logs-utils)\.(m?js|ts)$/
 const surveysInput =
     /(^|\/)(surveys(?:-extension|-renderer|-storage)?|survey-event-receiver(?:-base)?|survey-action-matcher)\.(m?js|tsx?)$/
@@ -70,7 +71,11 @@ const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowF
                 !(allowFlags && coreInput.test(input)) &&
                 !(allowSurveys && preactInput.test(input))) ||
             (forbidAnalytics && analyticsInput.test(input)) ||
-            (!allowFlags && (flagsInput.test(input) || logsInput.test(input) || surveysInput.test(input)))
+            (!allowFlags &&
+                (flagsInput.test(input) ||
+                    logsInput.test(input) ||
+                    surveysInput.test(input) ||
+                    autocaptureInput.test(input)))
     )
 
     stdout.write(
@@ -186,6 +191,17 @@ const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automati
     await report(`${name} total`, result, contents(totalKeys), totalKeys, false, true, allowSurveys)
 }
 
+const surveyTypes = await build({
+    absWorkingDir: packageRoot,
+    entryPoints: ['fixtures/survey-types.ts'],
+    bundle: true,
+    format: 'esm',
+    write: false,
+})
+if (surveyTypes.outputFiles.some((file) => file.text.trim())) {
+    throw new Error('Type-only survey contracts must not retain runtime code')
+}
+
 await measureStatic('core', 'fixtures/minimal.ts', true)
 await measureStatic('eager analytics', 'fixtures/eager.ts', false)
 await measureLazy()
@@ -195,4 +211,6 @@ await measureStatic('static logs', 'fixtures/static-logs.ts', true, true)
 await measureLazy('dynamic logs', 'fixtures/dynamic-logs.ts', false)
 await measureStatic('static surveys', 'fixtures/static-surveys.ts', true, true, true)
 await measureLazy('dynamic surveys', 'fixtures/dynamic-surveys.ts', false, true)
+await measureStatic('static autocapture', 'fixtures/static-autocapture.ts', true, true)
+await measureLazy('dynamic autocapture', 'fixtures/dynamic-autocapture.ts', false)
 stdout.write(`Budget status: ${COMPLIANT_BASELINE_PENDING}\n`)

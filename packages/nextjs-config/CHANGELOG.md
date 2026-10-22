@@ -1,5 +1,15 @@
 # @posthog/nextjs-config
 
+## 1.11.6
+
+### Patch Changes
+
+- [#5386](https://github.com/PostHog/posthog-js/pull/5386) [`42bc585`](https://github.com/PostHog/posthog-js/commit/42bc585c68fade51403680b08af32f900a7b6db3) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Delete source maps when processing or uploading them fails while `sourcemaps.deleteAfterUpload` is enabled (the default), so they no longer ship in the build output; set `deleteAfterUpload: false` to keep them.
+  (2026-10-22)
+- Updated dependencies [[`23b287f`](https://github.com/PostHog/posthog-js/commit/23b287fb1b4fa7ecbeb9e3184292a9730718d5b9), [`45f6cd6`](https://github.com/PostHog/posthog-js/commit/45f6cd6b65bc4319a0887bfd83074e1a065c0962), [`21a2559`](https://github.com/PostHog/posthog-js/commit/21a2559271cde904a35311f4adc43fd924cbc025), [`42bc585`](https://github.com/PostHog/posthog-js/commit/42bc585c68fade51403680b08af32f900a7b6db3)]:
+  - posthog-js@1.438.17
+  - @posthog/webpack-plugin@1.7.4
+
 ## 1.11.5
 
 ### Patch Changes

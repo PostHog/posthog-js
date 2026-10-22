@@ -1,5 +1,24 @@
 # posthog-ai
 
+## 8.16.1
+
+### Patch Changes
+
+- [#5355](https://github.com/PostHog/posthog-js/pull/5355) [`e027825`](https://github.com/PostHog/posthog-js/commit/e027825e387902b79e84703ca32ca4afbc0446b8) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture the refusal text of OpenAI chat completions, streamed or not, in `$ai_output_choices` instead of an empty output.
+  (2026-10-22)
+
+## 8.16.0
+
+### Minor Changes
+
+- [#5360](https://github.com/PostHog/posthog-js/pull/5360) [`26e65ec`](https://github.com/PostHog/posthog-js/commit/26e65ec6abd38b6401d98a531f95733e1402f1d8) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add datasets, versioned scorers, and resumable offline evaluation uploads.
+  (2026-10-22)
+
+### Patch Changes
+
+- [#5121](https://github.com/PostHog/posthog-js/pull/5121) [`0f5d25a`](https://github.com/PostHog/posthog-js/commit/0f5d25a4356e2ac1186958bcb82cd7492e30158f) Thanks [@breken-ai](https://github.com/breken-ai)! - Failed Vercel AI SDK `generateText` calls report the same `$ai_provider` as successful ones.
+  (2026-10-22)
+
 ## 8.15.2
 
 ### Patch Changes
