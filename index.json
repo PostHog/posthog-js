@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/5369": {
+    "key": "PostHog/posthog-js/issue/5369",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5369",
+    "url": "https://github.com/PostHog/posthog-js/issues/5369",
+    "conclusion": "Confirmed: an async Conversations initialization can mutate and restart a manager after reset/destroy; opt-in after a cookieless reset also does not restore Conversations remote config.",
+    "labels": [
+      "web",
+      "javascript",
+      "team/client-libraries",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-22T00:16:14.834Z"
+  },
   "PostHog/posthog-js/issue/5364": {
     "key": "PostHog/posthog-js/issue/5364",
     "repo": "PostHog/posthog-js",
@@ -2937,19 +2952,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-07-01T09:33:45.419Z"
-  },
-  "PostHog/posthog-js/issue/2342": {
-    "key": "PostHog/posthog-js/issue/2342",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2342",
-    "url": "https://github.com/PostHog/posthog-js/issues/2342",
-    "conclusion": "Needs maintainer guidance/repro; current SDK has no awaitable init and will log repeated request failures for invalid tokens/config.",
-    "labels": [
-      "feature/flags",
-      "team/feature-flags",
-      "web"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-30T09:40:57.877Z"
   }
 }
