@@ -225,6 +225,7 @@ function exactMatchString(value: unknown): string {
 function getPortableRegexClasses(pattern: string): string[] | null {
   const classes: string[] = []
   let classStart = -1
+  let previousToken = ''
   for (let index = 0; index < pattern.length; index++) {
     const character = pattern[index]
     if (character.charCodeAt(0) > 0x7f) return null
@@ -234,9 +235,12 @@ function getPortableRegexClasses(pattern: string): string[] | null {
       if (escaped === 'x') {
         if (!/^[\da-f]{2}$/i.test(pattern.slice(index + 1, index + 3))) return null
         index += 2
-      } else if (!'dDsSwWbBfnrtv\\^$.*+?()[]{}|/-'.includes(escaped) || (classStart !== -1 && escaped === 'B')) {
+      } else if (!'dDsSwWbBfnrtv'.includes(escaped) && !/[\x20-\x2f:;=?@\x5b-\x60\x7b-\x7e]/.test(escaped)) {
         return null
       }
+      // Word boundaries can exhaust the service's backtracking limit even for short ASCII values.
+      if (classStart === -1 && 'bB'.includes(escaped)) return null
+      previousToken = 'literal'
       continue
     }
 
@@ -248,15 +252,28 @@ function getPortableRegexClasses(pattern: string): string[] | null {
       if (index === contentStart) return null
       classes.push(pattern.slice(classStart, index + 1))
       classStart = -1
+      previousToken = 'literal'
+      continue
     } else if (classStart !== -1) {
       if (['&&', '--', '~~'].includes(pattern.slice(index, index + 2))) return null
-    } else if (character === '(' && pattern[index + 1] === '?' && pattern[index + 2] !== ':') {
-      return null
-    } else if (character === '{' && !/^\{\d+(?:,\d*)?\}/.test(pattern.slice(index))) {
-      return null
+      continue
+    } else if (character === '(' && pattern[index + 1] === '?') {
+      if (pattern[index + 2] !== ':') return null
+      index += 2
+    } else if (character === '{') {
+      const repetition = /^\{(\d+)(?:,(\d*))?\}/.exec(pattern.slice(index))
+      if (
+        !repetition ||
+        ['', '|', '('].includes(previousToken) ||
+        repetition.slice(1).some((count) => Number(count) > 0xffffffff)
+      ) {
+        return null
+      }
     } else if ('*+?}'.includes(character) && (pattern[index + 1] === '+' || pattern[index + 1] === '{')) {
       return null
     }
+    if ('*+?{'.includes(character) && ['^', '$', 'empty group'].includes(previousToken)) return null
+    previousToken = character === ')' && ['(', 'empty group'].includes(previousToken) ? 'empty group' : character
   }
   return classes
 }
@@ -507,7 +524,8 @@ export function matchFeatureFlagProperty(
     case 'regex':
     case 'not_regex': {
       const matched = matchFeatureFlagRegex(String(value), String(overrideValue))
-      return matched !== null && (operator === 'regex' ? matched : !matched)
+      if (matched === null) return false
+      return operator === 'regex' ? matched : !matched
     }
     case 'gt':
     case 'gte':
