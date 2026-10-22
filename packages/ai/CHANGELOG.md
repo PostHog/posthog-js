@@ -1,5 +1,19 @@
 # posthog-ai
 
+## 8.15.0
+
+### Minor Changes
+
+- [#5091](https://github.com/PostHog/posthog-js/pull/5091) [`2192bb1`](https://github.com/PostHog/posthog-js/commit/2192bb1281508a4574c60cfd6fb6bd58ad7245b4) Thanks [@gouveags](https://github.com/gouveags)! - Trace foreground Gemini Interactions API model calls.
+  (2026-10-22)
+
+## 8.14.5
+
+### Patch Changes
+
+- [#5357](https://github.com/PostHog/posthog-js/pull/5357) [`b5e99d1`](https://github.com/PostHog/posthog-js/commit/b5e99d17464712412592b0b2de68fe2d57cbbb7c) Thanks [@shehjaddev](https://github.com/shehjaddev)! - fix: Capture Gemini thought summaries (`thinkingConfig.includeThoughts`) as `reasoning` content blocks instead of answer text, in responses, streamed output, replayed input and the ADK plugin.
+  (2026-10-22)
+
 ## 8.14.4
 
 ### Patch Changes

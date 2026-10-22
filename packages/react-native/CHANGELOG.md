@@ -1,5 +1,15 @@
 # posthog-react-native
 
+## 4.81.8
+
+### Patch Changes
+
+- [#5172](https://github.com/PostHog/posthog-js/pull/5172) [`8374fe7`](https://github.com/PostHog/posthog-js/commit/8374fe7e196aa2cd0afd7353486117b5d91623f2) Thanks [@phillram](https://github.com/phillram)! - Surveys follow the confirmation message setting from PostHog instead of always showing the screen. A confirmation message that carries only a description now shows that description.
+  (2026-10-22)
+
+- [#5347](https://github.com/PostHog/posthog-js/pull/5347) [`b2cd418`](https://github.com/PostHog/posthog-js/commit/b2cd4187ad979f57392ab073283b8bb18db742a6) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay attaching to another client's session when an app creates more than one `PostHog` client; a client for a different project no longer sends `identify()`, opt-out, push or replay calls to the native SDK, which stays with the first client's project.
+  (2026-10-22)
+
 ## 4.81.7
 
 ### Patch Changes

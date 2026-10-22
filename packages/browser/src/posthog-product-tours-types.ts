@@ -1,5 +1,5 @@
 import { PropertyMatchType } from './types'
-import { SurveyActionType, SurveyEventWithFilters } from './posthog-surveys-types'
+import { SurveyActionType, SurveyEventWithFilters } from '@posthog/browser-common'
 import type { InferredSelector } from './extensions/product-tours/element-inference'
 import { SurveyPosition } from '@posthog/core'
 import { Z_INDEX_TOURS } from './constants'

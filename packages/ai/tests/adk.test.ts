@@ -141,6 +141,43 @@ describe('PostHogADKPlugin', () => {
     expect(props.$ai_tools).toEqual([{ functionDeclarations: [{ name: 'get_weather' }] }])
   })
 
+  it('captures thought parts as reasoning in input and output', async () => {
+    const ctx = createContext()
+    await plugin.beforeModelCallback({
+      callbackContext: ctx,
+      llmRequest: createRequest({
+        contents: [
+          { role: 'user', parts: [{ text: 'Is 91 prime?' }] },
+          { role: 'model', parts: [{ text: '91 = 7 × 13.', thought: true }, { text: 'No.' }] },
+        ],
+        config: {},
+      }),
+    })
+    await plugin.afterModelCallback({
+      callbackContext: ctx,
+      llmResponse: createResponse({
+        content: { role: 'model', parts: [{ text: 'Try 17.', thought: true }, { text: 'No, 391 = 17 × 23.' }] },
+      }),
+    })
+
+    const props = capturedEvent(client).properties
+    expect(props.$ai_input[1]).toEqual({
+      role: 'assistant',
+      content: [
+        { type: 'reasoning', text: '91 = 7 × 13.' },
+        { type: 'text', text: 'No.' },
+      ],
+    })
+    expect(props.$ai_output_choices).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Try 17.' },
+          { type: 'text', text: 'No, 391 = 17 × 23.' },
+        ],
+      },
+    ])
+  })
   it('maps ADK usageMetadata onto PostHog token fields', async () => {
     const ctx = createContext()
     await plugin.beforeModelCallback({ callbackContext: ctx, llmRequest: createRequest() })

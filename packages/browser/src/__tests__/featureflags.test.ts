@@ -454,6 +454,27 @@ describe('featureflags', () => {
             expect(callOrder).toEqual(['loading', 'loaded'])
         })
 
+        it('warns when onFeatureFlags callbacks reload flags', async () => {
+            const warnSpy = vi.mocked(window.console.warn)
+            featureFlags.onFeatureFlags(() => {
+                featureFlags.reloadFeatureFlags()
+            })
+            await vi.runAllTimersAsync()
+            warnSpy.mockClear()
+
+            featureFlags.reloadFeatureFlags()
+            expect(warnSpy).not.toHaveBeenCalledWith(
+                expect.any(String),
+                expect.stringContaining('inside an onFeatureFlags callback')
+            )
+
+            featureFlags._fireFeatureFlagsCallbacks()
+            expect(warnSpy).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.stringContaining('reloadFeatureFlags() was called inside an onFeatureFlags callback')
+            )
+        })
+
         it('should not emit featureFlagsReloading if reloading is disabled', () => {
             const loadingCallback = vi.fn()
             instance.on('featureFlagsReloading', loadingCallback)
