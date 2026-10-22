@@ -5,6 +5,22 @@ import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 
 const LOADER = resolve(__dirname, '../dist/optional/OptionalReactNativeExceptionsManager.js')
+const WEB_LOADER = resolve(__dirname, '../dist/optional/OptionalReactNativeExceptionsManager.web.js')
+
+const metroDependencies = (file: string): { name: string; data: { isOptional?: boolean } }[] => {
+  // Resolve from Metro's real location so pnpm's transitive Babel dependency is available.
+  const metroRequire = createRequire(realpathSync(resolve(__dirname, '../node_modules/metro/package.json')))
+  const parser = metroRequire('@babel/parser')
+  const collectDependencies = metroRequire('./src/ModuleGraph/worker/collectDependencies.js')
+  return collectDependencies(parser.parse(readFileSync(file, 'utf8')), {
+    asyncRequireModulePath: 'metro-runtime/src/modules/asyncRequire',
+    dynamicRequires: 'reject',
+    inlineableCalls: [],
+    keepRequireNames: true,
+    allowOptionalDependencies: true,
+    unstable_allowRequireContext: false,
+  }).dependencies
+}
 
 // test:unit depends on build in Turbo. Exercise the emitted loader with Node's actual require
 // resolution, outside Vitest's module mocks.
@@ -35,20 +51,7 @@ const loadExceptionsManager = (platform: string, moduleSource?: string): unknown
 
 describe('OptionalReactNativeExceptionsManager built loader', () => {
   it('marks the ExceptionsManager deep import as optional in the emitted Metro dependency graph', () => {
-    // Resolve from Metro's real location so pnpm's transitive Babel dependency is available.
-    const metroRequire = createRequire(realpathSync(resolve(__dirname, '../node_modules/metro/package.json')))
-    const parser = metroRequire('@babel/parser')
-    const collectDependencies = metroRequire('./src/ModuleGraph/worker/collectDependencies.js')
-    const { dependencies } = collectDependencies(parser.parse(readFileSync(LOADER, 'utf8')), {
-      asyncRequireModulePath: 'metro-runtime/src/modules/asyncRequire',
-      dynamicRequires: 'reject',
-      inlineableCalls: [],
-      keepRequireNames: true,
-      allowOptionalDependencies: true,
-      unstable_allowRequireContext: false,
-    })
-
-    expect(dependencies).toEqual(
+    expect(metroDependencies(LOADER)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: 'react-native/Libraries/Core/ExceptionsManager',
@@ -56,6 +59,12 @@ describe('OptionalReactNativeExceptionsManager built loader', () => {
         }),
       ])
     )
+  })
+
+  it('keeps React Native out of the web loader dependency graph', () => {
+    // React Native 0.79 and older have no web implementation of the modules ExceptionsManager
+    // imports, so web bundling fails if Metro reaches it.
+    expect(metroDependencies(WEB_LOADER)).toEqual([])
   })
 
   it.each([
