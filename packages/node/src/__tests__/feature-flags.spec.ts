@@ -8178,6 +8178,8 @@ describe('unresolvable flag warning', () => {
         flag('missing-dependency-flag', dependsOn(['gone'])),
         flag('circular-dependency-flag', dependsOn([])),
         flag('unknown-group-flag', [], { filters: { aggregation_group_type_index: 9, groups: [] } }),
+        flag('unknown-operator-flag', [{ key: 'plan', type: 'person', value: 'pro', operator: 'not_a_real_operator' }]),
+        flag('invalid-semver-flag', [{ key: 'version', type: 'person', value: 'x.y', operator: 'semver_gt' }]),
         flag('local-cohort-flag', [{ key: 'id', type: 'cohort', value: 2 }]),
         flag('frontend-only-flag', [], { evaluation_contexts: ['frontend'] }),
         flag('filtered-dependency-flag', dependsOn(['frontend-only-flag'])),
@@ -8203,7 +8205,8 @@ describe('unresolvable flag warning', () => {
     const [message] = warnSpy.mock.calls[0]
     expect(message).toContain('reason: unsupported_definition')
     expect(message).toContain(
-      ': static-cohort-flag, nested-static-cohort-flag, missing-dependency-flag, circular-dependency-flag, unknown-group-flag. '
+      ': static-cohort-flag, nested-static-cohort-flag, missing-dependency-flag, circular-dependency-flag, ' +
+        'unknown-group-flag, unknown-operator-flag, invalid-semver-flag. '
     )
   })
 })

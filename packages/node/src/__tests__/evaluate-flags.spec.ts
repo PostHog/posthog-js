@@ -1134,9 +1134,9 @@ describe('evaluateFlags', () => {
         'unsupported_definition',
       ],
       [
-        'an unsupported exact filter and context value',
-        { properties: [{ key: 'id', type: 'person', value: [323], operator: 'exact' }] },
-        { id: 323 },
+        'an unknown operator on a missing property',
+        { properties: [{ key: 'tier', type: 'person', value: 'gold', operator: 'not_a_real_operator' }] },
+        {},
         'unsupported_definition',
       ],
       [
@@ -1183,12 +1183,20 @@ describe('evaluateFlags', () => {
       expect(flags.unresolvedFlags).toEqual({ checkout: reason })
     })
 
-    it('reports missing_context for a device-id bucketed flag without a device id', async () => {
-      await setupWithDefinitions([alwaysOn('checkout', { bucketing_identifier: 'device_id' })])
+    it.each([
+      ['no other cause', [], 'missing_context'],
+      ['a static cohort', [{ key: 'id', type: 'cohort', value: 999 }], 'unsupported_definition'],
+    ])('reports the reason for a device-id bucketed flag without a device id and %s', async (_, properties, reason) => {
+      await setupWithDefinitions([
+        alwaysOn('checkout', {
+          bucketing_identifier: 'device_id',
+          filters: { groups: [{ properties, rollout_percentage: 100 }] },
+        }),
+      ])
 
       const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
 
-      expect(flags.unresolvedFlags).toEqual({ checkout: 'missing_context' })
+      expect(flags.unresolvedFlags).toEqual({ checkout: reason })
     })
 
     it('reports missing_context for a local cohort whose property is missing', async () => {

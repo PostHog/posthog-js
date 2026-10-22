@@ -8,6 +8,7 @@ export {
   minimizeFlagCalledEventProperties,
 } from './featureFlagUtils'
 export {
+  assertFeatureFlagFilterSupported,
   getFeatureFlagHash,
   getFeatureFlagVariant,
   getFeatureFlagVariantLookupTable,

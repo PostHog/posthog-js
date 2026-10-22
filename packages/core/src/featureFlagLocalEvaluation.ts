@@ -375,10 +375,91 @@ export function relativeDateParseForFeatureFlagMatching(value: string): Date | n
   return parsedDt
 }
 
+function parseDateFilter(value: FeatureFlagPropertyValue): Date {
+  if (typeof value === 'boolean') {
+    throw new InconclusiveMatchError('Date operations cannot be performed on boolean values')
+  }
+  return relativeDateParseForFeatureFlagMatching(String(value)) ?? convertToDateTime(value)
+}
+
+/**
+ * Throws an unsupported_definition error when local evaluation cannot use the filter, whatever
+ * the context holds: an unknown operator, or a filter value that the operator cannot parse.
+ */
+export function assertFeatureFlagFilterSupported(
+  property: FeatureFlagProperty,
+  options: Pick<MatchFeatureFlagPropertyOptions, 'semverParsingPolicy'> = {}
+): void {
+  const value = property.value
+  const parsingPolicy = options.semverParsingPolicy ?? 'strict'
+  switch (property.operator || 'exact') {
+    case 'exact':
+    case 'is_not':
+      for (const item of Array.isArray(value) ? value : [value]) {
+        exactMatchString(item)
+      }
+      return
+    case 'is_set':
+    case 'is_not_set':
+    case 'icontains':
+    case 'not_icontains':
+    case 'starts_with':
+    case 'not_starts_with':
+    case 'ends_with':
+    case 'not_ends_with':
+    case 'regex':
+    case 'not_regex':
+    case 'gt':
+    case 'gte':
+    case 'lt':
+    case 'lte':
+      return
+    case 'is_date_after':
+    case 'is_date_before':
+      parseDateFilter(value)
+      return
+    case 'semver_eq':
+    case 'semver_neq':
+    case 'semver_gt':
+    case 'semver_gte':
+    case 'semver_lt':
+    case 'semver_lte':
+      parseFeatureFlagSemver(String(value), parsingPolicy)
+      return
+    case 'semver_tilde':
+      computeTildeBounds(String(value), parsingPolicy)
+      return
+    case 'semver_caret':
+      computeCaretBounds(String(value), parsingPolicy)
+      return
+    case 'semver_wildcard':
+      computeWildcardBounds(String(value), parsingPolicy)
+      return
+    default:
+      throw new InconclusiveMatchError(`Unknown operator: ${property.operator}`)
+  }
+}
+
 export function matchFeatureFlagProperty(
   property: FeatureFlagProperty,
   propertyValues: Record<string, any>,
   options: MatchFeatureFlagPropertyOptions = {}
+): boolean {
+  try {
+    return matchPropertyValue(property, propertyValues, options)
+  } catch (e) {
+    // An unusable filter outranks missing context, so check the filter before blaming the context.
+    if (e instanceof InconclusiveMatchError && e.reason === 'missing_context') {
+      assertFeatureFlagFilterSupported(property, options)
+    }
+    throw e
+  }
+}
+
+function matchPropertyValue(
+  property: FeatureFlagProperty,
+  propertyValues: Record<string, any>,
+  options: MatchFeatureFlagPropertyOptions
 ): boolean {
   const key = property.key
   const value = property.value
@@ -424,14 +505,7 @@ export function matchFeatureFlagProperty(
       return false
     }
     if (Array.isArray(target)) {
-      let actualString: string
-      try {
-        actualString = readContextValue(() => exactMatchString(actual)).toLowerCase()
-      } catch (e) {
-        // A bad filter outranks a bad context value, so check the whole filter before reporting missing_context.
-        target.forEach((item) => exactMatchString(item))
-        throw e
-      }
+      const actualString = readContextValue(() => exactMatchString(actual)).toLowerCase()
       return target.some((item) => exactMatchString(item).toLowerCase() === actualString)
     }
     const targetString = exactMatchString(target).toLowerCase()
@@ -501,11 +575,7 @@ export function matchFeatureFlagProperty(
     }
     case 'is_date_after':
     case 'is_date_before': {
-      if (typeof value === 'boolean') {
-        throw new InconclusiveMatchError('Date operations cannot be performed on boolean values')
-      }
-      let parsedDate = relativeDateParseForFeatureFlagMatching(String(value))
-      if (parsedDate == null) parsedDate = convertToDateTime(value)
+      const parsedDate = parseDateFilter(value)
       const overrideDate = readContextValue(() => convertToDateTime(overrideValue))
       return operator === 'is_date_before' ? overrideDate < parsedDate : overrideDate > parsedDate
     }

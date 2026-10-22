@@ -14,6 +14,7 @@ import type {
   UnresolvedFlagReason,
 } from '@posthog/core'
 import {
+  assertFeatureFlagFilterSupported,
   getFeatureFlagHash,
   getFeatureFlagVariant,
   getHoldoutVariant,
@@ -219,6 +220,16 @@ class FeatureFlagsPoller {
     }
   }
 
+  private currentDefinitions(): FlagEvaluationSnapshot {
+    return {
+      featureFlagsByKey: this.featureFlagsByKey,
+      groupTypeMapping: this.groupTypeMapping,
+      cohorts: this.cohorts,
+      filteredOutFlagKeys: this.filteredOutFlagKeys,
+      propertyMatchingVersion: this.propertyMatchingVersion,
+    }
+  }
+
   // Keep definitions and their matching version stable across asynchronous hashes/dependencies.
   private withEvaluationSnapshot(context: FeatureFlagEvaluationContext): FeatureFlagEvaluationContext {
     if (context.definitions) return context
@@ -226,13 +237,7 @@ class FeatureFlagsPoller {
       ...context,
       // Dependency results belong to this evaluation snapshot, never a prior invocation.
       evaluationCache: {},
-      definitions: {
-        featureFlagsByKey: this.featureFlagsByKey,
-        groupTypeMapping: this.groupTypeMapping,
-        cohorts: this.cohorts,
-        filteredOutFlagKeys: this.filteredOutFlagKeys,
-        propertyMatchingVersion: this.propertyMatchingVersion,
-      },
+      definitions: this.currentDefinitions(),
     }
   }
 
@@ -439,9 +444,11 @@ class FeatureFlagsPoller {
             `[FEATURE FLAGS] Can't compute feature flag: ${flag.key} without $device_id, falling back to server evaluation`
           )
         )
+        // No condition can be checked without a bucketing value, so a cause in the definition
+        // also applies, and it outranks missing_context.
         throw new InconclusiveMatchError(
           `Can't compute feature flag: ${flag.key} without $device_id`,
-          'missing_context'
+          getDefinitionUnresolvedReason(flag, evaluationContext.definitions!) ?? 'missing_context'
         )
       }
       return await this.matchFeatureFlagProperties(flag, bucketingValue, personProperties, evaluationContext)
@@ -729,6 +736,7 @@ class FeatureFlagsPoller {
           } else if (!Object.prototype.hasOwnProperty.call(properties, prop.key)) {
             // Same result as matchProperty for an absent key, without the cost of throwing for
             // every missing filter now that the loop no longer stops at the first one.
+            assertFeatureFlagFilterSupported(prop)
             inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
             continue
           } else {
@@ -862,8 +870,9 @@ class FeatureFlagsPoller {
     // Rebuilt from the current definitions, so a flag that is deleted or becomes resolvable is
     // forgotten and warns again if it later returns to an unresolvable definition.
     const warnedFlags = new Map<string, string>()
+    const definitions = this.currentDefinitions()
     for (const flag of flags) {
-      const reason = this.getDefinitionUnresolvedReason(flag)
+      const reason = getDefinitionUnresolvedReason(flag, definitions)
       if (!reason) {
         continue
       }
@@ -903,63 +912,12 @@ class FeatureFlagsPoller {
         : `Evaluating these flags falls back to a server request when evaluation reaches that part.`
       console.warn(
         `[PostHog] You are using local evaluation but ${unsupportedDefinitionFlags.length} flag(s) use something ` +
-          `local evaluation does not support, such as a static cohort or a missing or circular flag dependency ` +
+          `local evaluation does not support, such as a static cohort, an unknown operator, ` +
+          `or a missing or circular flag dependency ` +
           `(reason: unsupported_definition): ${unsupportedDefinitionFlags.join(', ')}. ` +
           `${consequence} To evaluate them locally, change these flags in PostHog or upgrade posthog-node.`
       )
     }
-  }
-
-  /**
-   * The unresolved reason that comes from the flag's definition alone, so it is known when
-   * definitions load. Matches the reason local evaluation reports for the same cause.
-   */
-  private getDefinitionUnresolvedReason(flag: PostHogFeatureFlag): UnresolvedFlagReason | undefined {
-    if (!flag.active) {
-      return undefined
-    }
-    if (flag.ensure_experience_continuity) {
-      return 'experience_continuity'
-    }
-    const flagFilters = flag.filters || {}
-    const aggregation = flagFilters.aggregation_group_type_index
-    if (aggregation != undefined && !this.groupTypeMapping[String(aggregation)]) {
-      return 'unsupported_definition'
-    }
-    const usesUnsupportedProperty = (flagFilters.groups || []).some((condition) =>
-      (condition.properties || []).some((property) => this.isUnsupportedProperty(property, new Set()))
-    )
-    return usesUnsupportedProperty ? 'unsupported_definition' : undefined
-  }
-
-  private isUnsupportedProperty(property: FlagProperty, visitedCohortIds: Set<string>): boolean {
-    if (property.type === 'flag') {
-      const dependencyChain = property.dependency_chain
-      if (!Array.isArray(dependencyChain) || dependencyChain.length === 0) {
-        return true
-      }
-      return dependencyChain.some((key) => !this.featureFlagsByKey[key] && !this.filteredOutFlagKeys.has(key))
-    }
-    if (property.type !== 'cohort') {
-      return false
-    }
-    const cohortId = String(property.value)
-    if (!(cohortId in this.cohorts)) {
-      return true
-    }
-    if (visitedCohortIds.has(cohortId)) {
-      return false
-    }
-    visitedCohortIds.add(cohortId)
-    return this.isUnsupportedPropertyGroup(this.cohorts[cohortId], visitedCohortIds)
-  }
-
-  private isUnsupportedPropertyGroup(group: PropertyGroup | undefined, visitedCohortIds: Set<string>): boolean {
-    return (group?.values ?? []).some((value: PropertyGroup | FlagProperty) =>
-      'values' in value
-        ? this.isUnsupportedPropertyGroup(value, visitedCohortIds)
-        : this.isUnsupportedProperty(value, visitedCohortIds)
-    )
   }
 
   /**
@@ -1334,6 +1292,79 @@ class FeatureFlagsPoller {
       }
     }
   }
+}
+
+/**
+ * The unresolved reason that comes from the flag's definition alone, so it is known when
+ * definitions load. Matches the reason local evaluation reports for the same cause.
+ */
+function getDefinitionUnresolvedReason(
+  flag: PostHogFeatureFlag,
+  definitions: FlagEvaluationSnapshot
+): UnresolvedFlagReason | undefined {
+  if (!flag.active) {
+    return undefined
+  }
+  if (flag.ensure_experience_continuity) {
+    return 'experience_continuity'
+  }
+  const flagFilters = flag.filters || {}
+  const aggregation = flagFilters.aggregation_group_type_index
+  if (aggregation != undefined && !definitions.groupTypeMapping[String(aggregation)]) {
+    return 'unsupported_definition'
+  }
+  const usesUnsupportedProperty = (flagFilters.groups || []).some((condition) =>
+    (condition.properties || []).some((property) => isUnsupportedProperty(property, definitions, new Set()))
+  )
+  return usesUnsupportedProperty ? 'unsupported_definition' : undefined
+}
+
+function isUnsupportedProperty(
+  property: FlagProperty,
+  definitions: FlagEvaluationSnapshot,
+  visitedCohortIds: Set<string>
+): boolean {
+  if (property.type === 'flag') {
+    const dependencyChain = property.dependency_chain
+    if (!Array.isArray(dependencyChain) || dependencyChain.length === 0) {
+      return true
+    }
+    return dependencyChain.some(
+      (key) => !definitions.featureFlagsByKey[key] && !definitions.filteredOutFlagKeys.has(key)
+    )
+  }
+  if (property.type !== 'cohort') {
+    try {
+      assertFeatureFlagFilterSupported(property)
+      return false
+    } catch (e) {
+      if (e instanceof InconclusiveMatchError) {
+        return true
+      }
+      throw e
+    }
+  }
+  const cohortId = String(property.value)
+  if (!(cohortId in definitions.cohorts)) {
+    return true
+  }
+  if (visitedCohortIds.has(cohortId)) {
+    return false
+  }
+  visitedCohortIds.add(cohortId)
+  return isUnsupportedPropertyGroup(definitions.cohorts[cohortId], definitions, visitedCohortIds)
+}
+
+function isUnsupportedPropertyGroup(
+  group: PropertyGroup | undefined,
+  definitions: FlagEvaluationSnapshot,
+  visitedCohortIds: Set<string>
+): boolean {
+  return (group?.values ?? []).some((value: PropertyGroup | FlagProperty) =>
+    'values' in value
+      ? isUnsupportedPropertyGroup(value, definitions, visitedCohortIds)
+      : isUnsupportedProperty(value, definitions, visitedCohortIds)
+  )
 }
 
 function matchProperty(

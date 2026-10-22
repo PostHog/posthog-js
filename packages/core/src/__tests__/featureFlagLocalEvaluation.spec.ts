@@ -244,6 +244,8 @@ describe('feature flag local evaluation primitives', () => {
 
     test.each([
       ['a missing property', property('exact', 'x'), {}, 'missing_context'],
+      ['an unknown operator and a missing property', property('unknown', 'x'), {}, 'unsupported_definition'],
+      ['an invalid semver filter and a missing property', property('semver_gt', 'x.y'), {}, 'unsupported_definition'],
       ['an unknown operator', property('unknown', 'x'), { key: 'x' }, 'unsupported_definition'],
       ['a boolean date filter', property('is_date_after', true), { key: '2025-01-01' }, 'unsupported_definition'],
       [
@@ -265,6 +267,7 @@ describe('feature flag local evaluation primitives', () => {
       ],
       ['an ambiguous context number', property('exact', '323'), { key: 323 }, 'missing_context'],
       ['an ambiguous filter number', property('exact', [323]), { key: 'x' }, 'unsupported_definition'],
+      ['an ambiguous filter and context number', property('exact', [323]), { key: 323 }, 'unsupported_definition'],
       ['a non-JSON context value', property('exact', true), { key: new Date(0) }, 'missing_context'],
     ])('reports %s', (_, prop, propertyValues, reason) => {
       expect(reasonFor(prop, propertyValues)).toBe(reason)
