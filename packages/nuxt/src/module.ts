@@ -5,8 +5,9 @@ import type { PostHogOptions } from 'posthog-node'
 import type {} from 'nuxt/app'
 import { resolveBinaryPath, spawnLocal } from '@posthog/plugin-utils'
 import { fileURLToPath } from 'node:url'
-import { dirname } from 'node:path'
+import { dirname, sep } from 'node:path'
 import { existsSync } from 'node:fs'
+import { readdir, rm } from 'node:fs/promises'
 
 const filename = fileURLToPath(import.meta.url)
 const resolvedDirname = dirname(filename)
@@ -115,6 +116,7 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     const sourcemapsConfig = options.sourcemaps
+    const deleteAfterUpload = sourcemapsConfig.deleteAfterUpload ?? true
     let publicDir: string | undefined
     let serverDir: string | undefined
 
@@ -186,6 +188,9 @@ export default defineNuxtModule<ModuleOptions>({
         publicSourcemapsUploaded = true
       } catch (error) {
         console.error('Failed to process public sourcemaps:', error)
+        // Nitro lists the maps in its public-asset manifest after this hook, so they cannot be
+        // deleted later without breaking the server (#4275). Delete them now so they don't ship.
+        if (deleteAfterUpload) await deleteSourcemaps(publicDir)
       }
     })
 
@@ -193,8 +198,7 @@ export default defineNuxtModule<ModuleOptions>({
       // We don't want to run this process during prepare and friends
       if (!isBuildProcess || !serverDir || !publicDir) return
       // Each directory is handled on its own: a failing server command must not skip the
-      // public upload, which is the only client sourcemap upload of the build when the
-      // early upload failed.
+      // public upload retry, which runs when the early upload failed and the maps were kept.
       try {
         // Nitro reports a serverDir for every build but only writes one when it builds a
         // server bundle. `ssr: false` still builds one, so read the directory on disk
@@ -207,10 +211,9 @@ export default defineNuxtModule<ModuleOptions>({
       } catch (error) {
         console.error(`Failed to process or upload server sourcemaps (${serverDir}):`, error)
       }
-      if (!publicSourcemapsUploaded) {
+      if (!publicSourcemapsUploaded && !deleteAfterUpload) {
         try {
-          // Keep the public sourcemaps on disk here: Nitro's asset manifest already lists them.
-          await cliRunner(getUploadArgs(publicDir, { ...sourcemapsConfig, deleteAfterUpload: false }))
+          await cliRunner(getUploadArgs(publicDir, sourcemapsConfig))
         } catch (error) {
           console.error(`Failed to upload public sourcemaps (${publicDir}):`, error)
         }
@@ -218,6 +221,28 @@ export default defineNuxtModule<ModuleOptions>({
     })
   },
 })
+
+async function deleteSourcemaps(directory: string) {
+  try {
+    const files = await readdir(directory, { recursive: true })
+    const fileSet = new Set(files)
+    // Like the CLI's `--delete-after` fallback, only delete maps named after a sibling file.
+    const sourcemaps = files.filter(
+      (file) => file.endsWith('.map') && fileSet.has(file.slice(0, -4)) && !file.split(sep).includes('node_modules')
+    )
+    const results = await Promise.allSettled(sourcemaps.map((file) => rm(`${directory}${sep}${file}`, { force: true })))
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`Failed to delete sourcemap (${sourcemaps[index]}):`, result.reason)
+      }
+    })
+    console.warn(
+      `Deleted ${results.filter((result) => result.status === 'fulfilled').length} public sourcemaps because the sourcemap upload failed and deleteAfterUpload is enabled.`
+    )
+  } catch (error) {
+    console.error(`Failed to delete sourcemaps (${directory}):`, error)
+  }
+}
 
 function getReleaseArgs(sourcemapsConfig: SourcemapsConfig) {
   const processOptions: string[] = []
