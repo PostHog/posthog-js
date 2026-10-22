@@ -25,6 +25,15 @@ export default defineConfig({
                 replacement: fromRoot('../browser-common/src/feature-flags.ts'),
             },
             {
+                find: '@posthog/browser-common/autocapture-config',
+                replacement: fromRoot('../browser-common/src/autocapture-config.ts'),
+            },
+            {
+                find: '@posthog/browser-common/autocapture',
+                replacement: fromRoot('../browser-common/src/autocapture.ts'),
+            },
+            { find: '@posthog/browser-common/rageclick', replacement: fromRoot('../browser-common/src/rageclick.ts') },
+            {
                 find: '@posthog/browser-common/logs-types',
                 replacement: fromRoot('../browser-common/src/logs-types.ts'),
             },
