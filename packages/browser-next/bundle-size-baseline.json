@@ -1,5 +1,5 @@
 {
-    "sourceCommit": "05044bf7deae999e443c59a91b58058ca6aaa51f",
+    "sourceCommit": "8c536fa3a5dcb0d4af76947336f5f9916f41b339",
     "packageVersion": "0.0.3",
     "nodeVersion": "24.13.0",
     "pnpmVersion": "11.7.0",
@@ -18,8 +18,8 @@
     "cdn": {
         "bundler": "@rspack/core@2.1.10",
         "command": "pnpm --filter @posthog/browser bundle-size:cdn",
-        "initial": { "minified": 44166, "gzip": 13970, "brotli": 12562 },
+        "initial": { "minified": 44207, "gzip": 13991, "brotli": 12580 },
         "deferred": { "minified": 244625, "gzip": 79665, "brotli": 70978 },
-        "total": { "minified": 288791, "gzip": 93635, "brotli": 83540 }
+        "total": { "minified": 288832, "gzip": 93656, "brotli": 83558 }
     }
 }
