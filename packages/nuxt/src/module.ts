@@ -44,6 +44,11 @@ interface SourcemapsConfig {
   logLevel?: LogLevel
   deleteAfterUpload?: boolean
   batchSize?: number
+  /**
+   * Fail the build when PostHog cannot process or upload the sourcemaps, for example because the
+   * personal API key is invalid. Defaults to `false`: the error is logged and the build continues.
+   */
+  failOnError?: boolean
 }
 
 export interface ModuleOptions {
@@ -144,6 +149,7 @@ export default defineNuxtModule<ModuleOptions>({
 
     let isBuildProcess = false
     let publicSourcemapsUploaded = false
+    let publicSourcemapsError: unknown
 
     const posthogCliRunner = () => {
       const cliBinaryPath =
@@ -187,6 +193,7 @@ export default defineNuxtModule<ModuleOptions>({
         await cliRunner(getUploadArgs(publicDir, sourcemapsConfig))
         publicSourcemapsUploaded = true
       } catch (error) {
+        publicSourcemapsError = error
         console.error('Failed to process public sourcemaps:', error)
         // Nitro lists the maps in its public-asset manifest after this hook, so they cannot be
         // deleted later without breaking the server (#4275). Delete them now so they don't ship.
@@ -199,6 +206,7 @@ export default defineNuxtModule<ModuleOptions>({
       if (!isBuildProcess || !serverDir || !publicDir) return
       // Each directory is handled on its own: a failing server command must not skip the
       // public upload retry, which runs when the early upload failed and the maps were kept.
+      let serverSourcemapsError: unknown
       try {
         // Nitro reports a serverDir for every build but only writes one when it builds a
         // server bundle. `ssr: false` still builds one, so read the directory on disk
@@ -209,14 +217,24 @@ export default defineNuxtModule<ModuleOptions>({
           await cliRunner(getUploadArgs(serverDir, sourcemapsConfig))
         }
       } catch (error) {
+        serverSourcemapsError = error
         console.error(`Failed to process or upload server sourcemaps (${serverDir}):`, error)
       }
       if (!publicSourcemapsUploaded && !deleteAfterUpload) {
         try {
           await cliRunner(getUploadArgs(publicDir, sourcemapsConfig))
+          publicSourcemapsError = undefined
         } catch (error) {
           console.error(`Failed to upload public sourcemaps (${publicDir}):`, error)
         }
+      }
+      // Thrown last, so that the server upload and the public retry still run first.
+      const sourcemapsError = serverSourcemapsError ?? publicSourcemapsError
+      if (sourcemapsConfig.failOnError && sourcemapsError) {
+        const message = sourcemapsError instanceof Error ? sourcemapsError.message : String(sourcemapsError)
+        throw new Error(`PostHog sourcemap processing failed and sourcemaps.failOnError is enabled: ${message}`, {
+          cause: sourcemapsError,
+        })
       }
     })
   },

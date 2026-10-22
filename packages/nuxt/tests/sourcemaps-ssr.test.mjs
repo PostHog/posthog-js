@@ -38,6 +38,7 @@ const executableSource = source
   .replace(/\(sourcemapsConfig: SourcemapsConfig\)/g, '(sourcemapsConfig)')
   .replace(/\(args: string\[\]\)/g, '(args)')
   .replace('(directory: string)', '(directory)')
+  .replace(/(let \w+SourcemapsError): unknown/g, '$1')
   .replace(/\): string \{/g, ') {')
   .replace(/\): boolean \{/g, ') {')
   .replace(/let (outputDir|publicDir|serverDir): string \| undefined/g, 'let $1')
@@ -212,9 +213,10 @@ async function runLifecycle({
   for (const cb of hooks['nitro:config'] || []) await cb({})
   for (const cb of hooks['build:before'] || []) await cb()
   for (const cb of hooks['nitro:build:public-assets'] || []) await cb()
-  for (const cb of hooks['close'] || []) await cb()
+  let closeError
+  for (const cb of hooks['close'] || []) await cb().catch((error) => (closeError = error))
 
-  return Object.assign(spawnCalls, { deletedFiles })
+  return Object.assign(spawnCalls, { deletedFiles, closeError })
 }
 
 function findCall(calls, op, directory) {
@@ -377,5 +379,16 @@ assert.equal(
   2,
   `failed server upload: expected the public upload retry to still run. Got: ${failedServerUploadDump}`
 )
+
+// failOnError fails the build from the close hook, after the maps were deleted and the remaining
+// uploads were attempted. Without it, the same failures leave the build passing.
+for (const failure of [{ failPublicUpload: true }, { failServerUpload: true }]) {
+  const failed = await runLifecycle({ ssr: true, ...failure, sourcemaps: { failOnError: true } })
+  const dump = JSON.stringify(failed.map((c) => c.args))
+  assert.match(String(failed.closeError), /sourcemaps\.failOnError is enabled: (public|server) upload failed/)
+  assert.ok(findCall(failed, 'upload', '/build/.output/server'), `failOnError: expected the server upload. Got: ${dump}`)
+  assert.equal(failed.deletedFiles.length, failure.failPublicUpload ? 2 : 0)
+  assert.equal((await runLifecycle({ ssr: true, ...failure })).closeError, undefined)
+}
 
 console.log('ok sourcemaps-ssr.test.mjs')
