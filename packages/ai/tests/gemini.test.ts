@@ -337,6 +337,55 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
   })
 
+  test('counts tool-use prompt tokens as input tokens', async () => {
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
+      candidates: [{ content: { parts: [{ text: 'Answer' }] }, finishReason: 'STOP' }],
+      usageMetadata: {
+        promptTokenCount: 15,
+        candidatesTokenCount: 8,
+        toolUsePromptTokenCount: 40,
+        totalTokenCount: 63,
+      },
+    })
+
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Search the web',
+      posthogDistinctId: 'test-id',
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(55)
+    expect(captureArgs[0].properties['$ai_output_tokens']).toBe(8)
+  })
+
+  test('counts tool-use prompt tokens as input tokens when streaming', async () => {
+    ;(client as any).client.models.generateContentStream = mockGenerateContentStream([
+      {
+        text: 'Answer',
+        candidates: [{ content: { parts: [{ text: 'Answer' }] }, finishReason: 'STOP' }],
+        usageMetadata: {
+          promptTokenCount: 15,
+          candidatesTokenCount: 8,
+          toolUsePromptTokenCount: 40,
+          totalTokenCount: 63,
+        },
+      },
+    ])
+
+    const stream = await client.models.generateContentStream({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Search the web',
+      posthogDistinctId: 'test-id',
+    })
+    for await (const _ of stream) {
+      // drain
+    }
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(55)
+  })
+
   test('preserves output inline data when the client enables multimodal capture', async () => {
     const base64Data = 'A'.repeat(2000)
     ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
