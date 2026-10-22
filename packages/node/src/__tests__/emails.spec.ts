@@ -408,14 +408,14 @@ describe('emails', () => {
     )
 
     it.each([
-      ['missing_secret_key', { secretKey: undefined }, MESSAGE_ID],
-      ['missing_app_host', { appHost: undefined }, MESSAGE_ID],
-      ['client_disabled', { disabled: true }, MESSAGE_ID],
-      ['invalid_message_id', {}, ''],
-    ])('returns %s without a request', async (code, clientOptions: PostHogOptions, id) => {
+      ['missing_secret_key', 'missing_api_key', { secretKey: undefined }, MESSAGE_ID],
+      ['missing_app_host', 'application_error', { appHost: undefined }, MESSAGE_ID],
+      ['client_disabled', 'application_error', { disabled: true }, MESSAGE_ID],
+      ['invalid_message_id', 'validation_error', {}, ''],
+    ])('returns %s as %s without a request', async (code, name, clientOptions: PostHogOptions, id) => {
       const result = await createClient(clientOptions).emails.get(id)
 
-      expect(result).toEqual({ data: null, error: expect.objectContaining({ code }) })
+      expect(result).toEqual({ data: null, error: expect.objectContaining({ name, code }) })
       expect(api.received).toEqual([])
     })
 

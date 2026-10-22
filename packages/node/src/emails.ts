@@ -713,6 +713,7 @@ function errorName(code: string, statusCode?: number): EmailErrorName {
     case 'invalid_template_id':
     case 'invalid_template_key':
     case 'invalid_attachment':
+    case 'invalid_message_id':
     case 'invalid_idempotency_key':
       return 'validation_error'
   }
