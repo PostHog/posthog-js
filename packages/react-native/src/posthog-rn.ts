@@ -2262,6 +2262,12 @@ export class PostHog extends PostHogCore {
       syntheticException: new Error('Synthetic Error'),
     }
 
+    const exceptionProperties = this.buildExceptionProperties(error, resolvedHint)
+    if (this._errorTracking.shouldSuppressException(exceptionProperties.$exception_list)) {
+      this._logger.info('Skipping exception capture because a suppression rule matched')
+      return null
+    }
+
     const merged: PostHogEventProperties = { ...getExceptionContext(), ...additionalProperties }
 
     // Attach the rolling exception-steps buffer (no-op if the caller already provided their own).
@@ -2272,11 +2278,7 @@ export class PostHog extends PostHogCore {
       _originatedFromCaptureException: true,
     }
 
-    this.capture(
-      '$exception',
-      { ...this.buildExceptionProperties(error, resolvedHint), ...finalAdditional },
-      captureOptions
-    )
+    this.capture('$exception', { ...exceptionProperties, ...finalAdditional }, captureOptions)
 
     const eventUuid = captureOptions.uuid ?? ''
     const timestamp = (captureOptions.timestamp ?? new Date()).toISOString()
