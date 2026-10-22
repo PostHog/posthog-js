@@ -861,17 +861,27 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  // The replay debug keys are SDK-owned, so they are stamped after the caller's properties
-  // (matching posthog-js) rather than as common properties, which the caller can override.
-  protected mergeCommonEventProperties(properties: PostHogEventProperties): PostHogEventProperties {
-    return {
-      ...super.mergeCommonEventProperties(properties),
-      ...(this._sessionReplayDebugProperties() as PostHogEventProperties),
+  // The replay debug keys are SDK-owned, so they land after the caller's properties (where
+  // posthog-js sets them too) on every enqueue path, including autocapture, which skips
+  // buildPayload. A minimal $feature_flag_called envelope stays minimal.
+  private _stampReplayDebugProperties(message: PostHogEventProperties): void {
+    const properties = (message.properties ?? {}) as { [key: string]: JsonType }
+    if (
+      message.event === '$feature_flag_called' &&
+      properties.$feature_flag_has_experiment === false &&
+      this.isMinimalFlagCalledEventsEnabled()
+    ) {
+      return
+    }
+    message.properties = {
+      ...properties,
+      ...(this._sessionReplayDebugProperties() as { [key: string]: JsonType }),
     }
   }
 
-  // Runs once per capture on the hot path, so it only reads state: no getSessionId() (rotates the
-  // session) and no bridge calls. Every owned key is written on each call, `undefined` when absent.
+  // Runs once per enqueued event on the hot path, so it only reads state: no getSessionId()
+  // (rotates the session) and no bridge calls. Every owned key is written on each call,
+  // `undefined` when absent.
   private _sessionReplayDebugProperties(): { [key: string]: JsonType | undefined } {
     try {
       const sessionStart = this.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
@@ -3638,10 +3648,12 @@ export class PostHog extends PostHogCore {
    * autocapture, lifecycle) passes through here. Chains to super first so `before_send` still runs;
    * when a surviving event's name matches an armed trigger and the session hasn't activated yet, it
    * activates replay for the session and kicks a re-evaluation that starts native recording. The
-   * trigger check never drops an event or throws into the capture path. It also gates the optional
-   * replay debug bundle to one accepted eligible event per REPLAY_DEBUG_PROPERTIES_INTERVAL_MS.
+   * trigger check never drops an event or throws into the capture path. It also stamps the replay
+   * debug keys and gates the optional bundle to one accepted eligible event per
+   * REPLAY_DEBUG_PROPERTIES_INTERVAL_MS.
    */
   protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    this._stampReplayDebugProperties(message)
     const claimedBundle = this._claimReplayDebugBundle(message)
     let accepted = false
     try {

@@ -464,6 +464,19 @@ describe('PostHog RN session replay debug properties', () => {
     expect(properties.$recording_status).toBe('disabled')
   })
 
+  it('autocapture carries the required keys even though it skips buildPayload', async () => {
+    const client = await readyClient()
+    const seen: CapturedEvent[] = []
+    client.on('autocapture', (message: CapturedEvent) => seen.push(message))
+
+    client.autocapture('touch', [], { $recording_status: 'caller' })
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0].event).toBe('$autocapture')
+    expect(seen[0].properties.$recording_status).toBe('disabled')
+    expect(seen[0].properties.$sdk_debug_pending_queue_size).toBe(0)
+  })
+
   it('Exception event carries recording status', async () => {
     const client = await readyClient()
     const seen = observe(client)
