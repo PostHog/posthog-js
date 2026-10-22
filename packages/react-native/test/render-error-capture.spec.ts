@@ -144,6 +144,22 @@ describe('React render error capture through ExceptionsManager.handleException',
     ])
   })
 
+  it('captures a fatal once when the previous handler reports it to React Native later', async () => {
+    // Sentry's global handler awaits its own flush before calling the handler it replaced.
+    previous.mockImplementation((error: unknown, isFatal?: boolean) => {
+      setTimeout(() => exceptionsManager.handleException(error, !!isFatal), 2000)
+    })
+    const tracker = vi.fn(() => Promise.resolve())
+    trackUncaughtExceptions(tracker)
+    const error = new Error('handler crash')
+
+    current(error, true)
+    await vi.advanceTimersByTimeAsync(2000)
+
+    expect(tracker.mock.calls).toEqual([[error, true]])
+    expect(handleException.mock.calls).toEqual([[error, true]])
+  })
+
   it('restores the original handleException after the last subscriber is removed', () => {
     const remove = trackUncaughtExceptions(vi.fn())
     expect(exceptionsManager.handleException).not.toBe(handleException)

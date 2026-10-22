@@ -43,9 +43,15 @@ export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => v
     // The same fatal can arrive through both hooks: the ErrorUtils handler forwards to React
     // Native's default handler, which calls ExceptionsManager.handleException. Each fatal is
     // captured once while it is in flight; a repeated report is only forwarded, once the first
-    // report has been forwarded.
+    // report has been forwarded. A previous handler can report the fatal to React Native after it
+    // returns (Sentry flushes first), so forwarded Error objects are also only forwarded again.
     const fatalsInFlight = new Map<unknown, { forwarding: boolean; forwarded: Promise<void> }>()
+    const forwardedFatals = new WeakSet<object>()
     const dispatch = (error: unknown, isFatal: boolean, forward: () => void): void => {
+      if (isFatal && typeof error === 'object' && error !== null && forwardedFatals.has(error)) {
+        forward()
+        return
+      }
       const inFlight = isFatal ? fatalsInFlight.get(error) : undefined
       if (inFlight) {
         if (inFlight.forwarding) {
@@ -63,6 +69,9 @@ export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => v
         fatalsInFlight.set(error, fatal)
         forwardFatal = () => {
           fatal.forwarding = true
+          if (typeof error === 'object' && error !== null) {
+            forwardedFatals.add(error)
+          }
           markForwarded()
           try {
             forward()
