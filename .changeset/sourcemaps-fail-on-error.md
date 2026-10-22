@@ -4,4 +4,4 @@
 '@posthog/nuxt': minor
 ---
 
-Add `sourcemaps.failOnError` to fail the build when PostHog cannot process or upload source maps, for example because the personal API key is invalid. It defaults to `false`, which keeps logging the error and passing the build.
+Add `sourcemaps.failOnError` (default `false`) to fail webpack, Next.js webpack, and Nuxt builds when PostHog cannot process or upload source maps.

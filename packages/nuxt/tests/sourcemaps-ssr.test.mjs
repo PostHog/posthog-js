@@ -71,6 +71,7 @@ function loadModule({
 } = {}) {
   const spawnCalls = []
   const deletedFiles = []
+  let publicUploadAttempts = 0
   const pluginCalls = []
   const serverPluginCalls = []
   const stubs = {
@@ -84,7 +85,7 @@ function loadModule({
     spawnLocal: async (bin, args) => {
       spawnCalls.push({ bin, args: [...args] })
       if (failPublicUpload && args.includes('upload') && args.includes(publicDir)) {
-        throw new Error('public upload failed')
+        if (failPublicUpload !== 'once' || publicUploadAttempts++ === 0) throw new Error('public upload failed')
       }
       if (failServerUpload && args.includes('upload') && args.includes(serverDir)) {
         throw new Error('server upload failed')
@@ -390,5 +391,21 @@ for (const failure of [{ failPublicUpload: true }, { failServerUpload: true }]) 
   assert.equal(failed.deletedFiles.length, failure.failPublicUpload ? 2 : 0)
   assert.equal((await runLifecycle({ ssr: true, ...failure })).closeError, undefined)
 }
+
+// With the maps kept, the close-hook retry decides: a successful retry passes the build.
+const retried = await runLifecycle({
+  ssr: true,
+  deleteAfterUpload: false,
+  failPublicUpload: 'once',
+  sourcemaps: { failOnError: true },
+})
+assert.equal(retried.closeError, undefined)
+const retryFailed = await runLifecycle({
+  ssr: true,
+  deleteAfterUpload: false,
+  failPublicUpload: true,
+  sourcemaps: { failOnError: true },
+})
+assert.match(String(retryFailed.closeError), /failOnError is enabled: public upload failed/)
 
 console.log('ok sourcemaps-ssr.test.mjs')

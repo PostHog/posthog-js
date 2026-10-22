@@ -226,17 +226,19 @@ export class PosthogWebpackPlugin {
 
         const onDone = async (stats: webpack.Stats, callback: any): Promise<void> => {
             callback = callback || (() => {})
+            // A failed `done` hook stops webpack from rebuilding, so watch builds log the error instead.
+            const failOnError = this.resolvedConfig.sourcemaps.failOnError && !compiler.watchMode
             try {
                 if (failedCompilations.has(stats.compilation)) {
                     await this.deleteSourceMapsWithoutUpload(stats.compilation, this.resolvedConfig)
-                    if (this.resolvedConfig.sourcemaps.failOnError) throw failedCompilations.get(stats.compilation)
+                    if (failOnError) throw failedCompilations.get(stats.compilation)
                 } else {
                     await this.processSourceMaps(stats.compilation, this.resolvedConfig)
                 }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : error
                 this.logger.error('Error running PostHog webpack plugin:', errorMessage)
-                if (this.resolvedConfig.sourcemaps.failOnError) {
+                if (failOnError) {
                     return callback(
                         new Error(
                             `PostHog sourcemap processing failed and sourcemaps.failOnError is enabled: ${errorMessage}`

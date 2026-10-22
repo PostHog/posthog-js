@@ -321,6 +321,32 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
         error.mockRestore()
     })
 
+    it('keeps watch builds running with failOnError when the upload fails', async () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        vi.mocked(runSourcemapCli).mockRejectedValueOnce(new Error('bad key'))
+        await fs.writeFile(path.join(directory, 'entry.js'), 'module.exports = 1\n')
+        const compiler = webpack({
+            mode: 'production',
+            context: directory,
+            entry: './entry.js',
+            output: { path: path.join(directory, 'dist') },
+            plugins: [
+                new PosthogWebpackPlugin({
+                    personalApiKey: 'dummy',
+                    projectId: '1',
+                    cliBinaryPath: 'mock-cli',
+                    sourcemaps: { releaseMode: 'symbol-set', failOnError: true },
+                }),
+            ],
+        })!
+        const buildError = await new Promise((resolve) => {
+            const watching = compiler.watch({}, (err) => watching.close(() => resolve(err)))
+        })
+        expect(runSourcemapCli).toHaveBeenCalled()
+        expect(buildError).toBeNull()
+        error.mockRestore()
+    })
+
     it('deletes all maps and preserves emitted integrity on a mid-injection failure', async () => {
         const error = vi.spyOn(console, 'error').mockImplementation(() => {})
         let originalCode: string | undefined
