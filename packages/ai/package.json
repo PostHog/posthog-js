@@ -34,6 +34,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
     "@google/genai": "2.18.0",
+    "genkit": "^1.42.0",
     "@langchain/core": "^1.2.17",
     "openai": "^6.49.0",
     "@openai/agents": "^0.8.0",
@@ -76,6 +77,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0 || ^2.18.0",
+    "genkit": "^1.0.0",
     "@langchain/core": "^1.2.3",
     "openai": "^6.48.0",
     "@opentelemetry/api": "^1.9.0",
@@ -97,6 +99,9 @@
       "optional": true
     },
     "@google/genai": {
+      "optional": true
+    },
+    "genkit": {
       "optional": true
     },
     "@langchain/core": {
@@ -187,6 +192,11 @@
       "types": "./dist/evaluations/index.d.ts",
       "import": "./dist/evaluations/index.mjs",
       "require": "./dist/evaluations/index.cjs"
+    },
+    "./genkit": {
+      "require": "./dist/genkit/index.cjs",
+      "import": "./dist/genkit/index.mjs",
+      "types": "./dist/genkit/index.d.ts"
     }
   },
   "directories": {

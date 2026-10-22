@@ -81,6 +81,21 @@ Stopping iteration finalizes the generation data received so far.
 When iterating manually, await the query's `return()` or `Symbol.asyncDispose` method before shutting down PostHog.
 The SDK's synchronous `close()` method also starts finalization; await `return()` afterward to wait for it.
 
+## Genkit
+
+`PostHogGenkitSpanProcessor` from `@posthog/ai/genkit` reads the OpenTelemetry spans that Genkit already creates.
+Pass it to Genkit's `enableTelemetry({ spanProcessors: [...] })` from `genkit/tracing`, or to your own OpenTelemetry SDK.
+
+- The root span of a trace, usually a flow, becomes an `$ai_trace`.
+- Each model call becomes an `$ai_generation`. The provider and model come from the Genkit model name, for example `vertexai/gemini-2.5-flash`.
+- Tool calls, `generate` steps and other Genkit actions become `$ai_span` events.
+
+A streamed model call gives one `$ai_generation` with the complete response.
+Model parameters include only the common sampling settings, so plugin options such as an API key are not captured.
+When `distinctId` is not set, events use the distinct ID from `client.withContext()` if there is one.
+In serverless functions, `await flushTracing()` from `genkit/tracing` before the function returns, so the PostHog client sends its queued events.
+Capture and flush failures never reach the Genkit flow. Pass `onError` to see them.
+
 ## Questions?
 
 ### [Check out our community page.](https://posthog.com/posts)
