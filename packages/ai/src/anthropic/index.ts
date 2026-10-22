@@ -222,6 +222,17 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                     ...Object.fromEntries(Object.entries(chunk.usage).filter(([, value]) => value != null)),
                   }
                   usage.outputTokens = chunk.usage.output_tokens ?? 0
+                  // With server tools the final delta reports cumulative input and cache tokens that
+                  // exceed message_start's, so keep the larger value.
+                  usage.inputTokens = Math.max(usage.inputTokens ?? 0, chunk.usage.input_tokens ?? 0)
+                  usage.cacheCreationInputTokens = Math.max(
+                    usage.cacheCreationInputTokens ?? 0,
+                    chunk.usage.cache_creation_input_tokens ?? 0
+                  )
+                  usage.cacheReadInputTokens = Math.max(
+                    usage.cacheReadInputTokens ?? 0,
+                    chunk.usage.cache_read_input_tokens ?? 0
+                  )
                   // Update web search count if present in delta
                   if (chunk.usage.server_tool_use?.web_search_requests !== undefined) {
                     usage.webSearchCount = chunk.usage.server_tool_use.web_search_requests

@@ -1,5 +1,21 @@
 # posthog-js
 
+## 1.438.14
+
+### Patch Changes
+
+- [#4992](https://github.com/PostHog/posthog-js/pull/4992) [`3b7ffc6`](https://github.com/PostHog/posthog-js/commit/3b7ffc6fe4990ff26d661f48612166e31850ef31) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share surveys across browser SDKs; calls to `getSurveys` before survey setup now invoke the callback immediately with an unavailable error. Notify all survey subscribers when survey loading fails.
+  (2026-10-22)
+- Updated dependencies [[`3b7ffc6`](https://github.com/PostHog/posthog-js/commit/3b7ffc6fe4990ff26d661f48612166e31850ef31)]:
+  - @posthog/browser-common@0.9.6
+
+## 1.438.13
+
+### Patch Changes
+
+- [#5322](https://github.com/PostHog/posthog-js/pull/5322) [`5beb414`](https://github.com/PostHog/posthog-js/commit/5beb4146c7cd05b7b00908459d1151fd723abe4f) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Flush buffered web vitals immediately using a beacon when the page is hidden or unloaded.
+  (2026-10-20)
+
 ## 1.438.12
 
 ### Patch Changes

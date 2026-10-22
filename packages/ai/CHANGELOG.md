@@ -1,5 +1,26 @@
 # posthog-ai
 
+## 8.14.5
+
+### Patch Changes
+
+- [#5357](https://github.com/PostHog/posthog-js/pull/5357) [`b5e99d1`](https://github.com/PostHog/posthog-js/commit/b5e99d17464712412592b0b2de68fe2d57cbbb7c) Thanks [@shehjaddev](https://github.com/shehjaddev)! - fix: Capture Gemini thought summaries (`thinkingConfig.includeThoughts`) as `reasoning` content blocks instead of answer text, in responses, streamed output, replayed input and the ADK plugin.
+  (2026-10-22)
+
+## 8.14.4
+
+### Patch Changes
+
+- [#5352](https://github.com/PostHog/posthog-js/pull/5352) [`dd58d50`](https://github.com/PostHog/posthog-js/commit/dd58d504da2b27df36363ecf742191348988fb46) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix: Use the cumulative input and cache token counts from Anthropic's final `message_delta` when streaming with server tools.
+  (2026-10-21)
+
+## 8.14.3
+
+### Patch Changes
+
+- [#5251](https://github.com/PostHog/posthog-js/pull/5251) [`717d2fc`](https://github.com/PostHog/posthog-js/commit/717d2fca88abbcffd81ca20839343f7f439ab952) Thanks [@yoarajota](https://github.com/yoarajota)! - Capture Chat Completions responses that contain custom tool calls instead of throwing from the wrapped `create()` call.
+  (2026-10-20)
+
 ## 8.14.2
 
 ### Patch Changes

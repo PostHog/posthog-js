@@ -55,8 +55,8 @@ jobs:
                 shell: bash
         env:
             NODE_IMAGE: node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
-            # Harness release 1.10.0; pin the published multi-platform image index.
-            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness-v2@sha256:0c7516bf9d53760b7333f17ebce5c459e69f46a5e878441226cc72abc513de45
+            # Harness release 1.16.0; pin the published multi-platform image index.
+            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness-v2@sha256:14c539d87c758a8798d3681d26e081cd156b739052d4fdefc51065f92e7cd2f2
             CAPTURE_MODE: ${{ matrix.mode }}
         steps:
             # Test the PR head or the triggering commit for push/manual runs.
@@ -91,7 +91,7 @@ jobs:
                   bash compliance/node/v2/run-compliance.sh node-compliance:local "$HARNESS_IMAGE" \
                     "$CAPTURE_MODE" "$RUNNER_TEMP/node-compliance/acceptance" acceptance \
                     2>&1 | tee "$RUNNER_TEMP/node-compliance/acceptance-run.log"
-            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               if: always()
               continue-on-error: true
               timeout-minutes: 3
@@ -115,10 +115,10 @@ jobs:
             actions: read
             pull-requests: write
         steps:
-            - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+            - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
               with:
                   egress-policy: audit
-            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               continue-on-error: true
               with:
                   pattern: node-v2-*
