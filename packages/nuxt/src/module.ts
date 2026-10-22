@@ -230,9 +230,14 @@ async function deleteSourcemaps(directory: string) {
     const sourcemaps = files.filter(
       (file) => file.endsWith('.map') && fileSet.has(file.slice(0, -4)) && !file.split(sep).includes('node_modules')
     )
-    await Promise.all(sourcemaps.map((file) => rm(`${directory}${sep}${file}`, { force: true })))
+    const results = await Promise.allSettled(sourcemaps.map((file) => rm(`${directory}${sep}${file}`, { force: true })))
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`Failed to delete sourcemap (${sourcemaps[index]}):`, result.reason)
+      }
+    })
     console.warn(
-      `Deleted ${sourcemaps.length} public sourcemaps because the sourcemap upload failed and deleteAfterUpload is enabled.`
+      `Deleted ${results.filter((result) => result.status === 'fulfilled').length} public sourcemaps because the sourcemap upload failed and deleteAfterUpload is enabled.`
     )
   } catch (error) {
     console.error(`Failed to delete sourcemaps (${directory}):`, error)

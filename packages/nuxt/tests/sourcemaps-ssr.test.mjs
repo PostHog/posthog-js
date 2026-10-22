@@ -62,6 +62,7 @@ const publicFiles = [
 function loadModule({
   failPublicUpload = false,
   failServerUpload = false,
+  failDelete,
   nuxtVersion = '4.1.2',
   existingDirs = [],
   publicDir = '/build/.output/public',
@@ -92,7 +93,11 @@ function loadModule({
     existsSync: (path) => existingDirs.includes(path),
     readdir: async (_directory, options) =>
       options?.recursive ? publicFiles : publicFiles.filter((file) => !file.includes('/')),
-    rm: async (path) => deletedFiles.push(path),
+    rm: async (path) => {
+      if (path === failDelete) throw new Error('EACCES')
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      deletedFiles.push(path)
+    },
     sep: '/',
     fileURLToPath: (u) => u,
     dirname: (p) => p,
@@ -144,6 +149,7 @@ async function runLifecycle({
   deleteAfterUpload,
   failPublicUpload = false,
   failServerUpload = false,
+  failDelete,
   serverBundleOnDisk = true,
   outputDir = '/build/.output',
   publicDir = '/build/.output/public',
@@ -153,6 +159,7 @@ async function runLifecycle({
   const { mod, spawnCalls, deletedFiles } = loadModule({
     failPublicUpload,
     failServerUpload,
+    failDelete,
     publicDir,
     serverDir,
     existingDirs: serverBundleOnDisk ? [serverDir] : [],
@@ -329,6 +336,15 @@ assert.deepEqual(failedPublicUploadCalls.deletedFiles, [
   '/build/.output/public/_nuxt/entry.js.map',
   '/build/.output/public/_nuxt/entry.css.map',
 ])
+
+// A failed deletion must not let the hook return while other deletions are still running:
+// Nitro writes its asset manifest right after it.
+const failedDeleteCalls = await runLifecycle({
+  ssr: true,
+  failPublicUpload: true,
+  failDelete: '/build/.output/public/_nuxt/entry.js.map',
+})
+assert.deepEqual(failedDeleteCalls.deletedFiles, ['/build/.output/public/_nuxt/entry.css.map'])
 
 // Without deleteAfterUpload, the maps stay and the close hook retries the upload.
 const retainedFailedCalls = await runLifecycle({ ssr: true, deleteAfterUpload: false, failPublicUpload: true })
