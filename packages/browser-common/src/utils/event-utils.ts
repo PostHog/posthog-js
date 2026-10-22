@@ -42,6 +42,7 @@ export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
     'qclid', // quora
     'sccid', // snapchat
     'oppref', // openai ads
+    'bfcid', // freebuff
     'irclid', // impact
     '_kx', // klaviyo
 ]

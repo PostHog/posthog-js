@@ -466,13 +466,7 @@ describe('evaluateFlags', () => {
 
       posthog.captureException(new Error('boom'), 'user-1', undefined, undefined, flags.onlyAccessed())
 
-      // captureException → addPendingPromise(buildEventMessage().then(msg => capture(...)))
-      // → capture itself queues async work via prepareEventMessage. The 'capture' event
-      // fires inside captureStateless before the network flush, so we just need enough
-      // microtask cycles to let the chain resolve.
-      await waitForPromises()
-      await waitForPromises()
-      await waitForPromises()
+      await posthog.flush()
 
       const exception = captures.find((m) => m.event === '$exception')
       expect(exception).toBeDefined()

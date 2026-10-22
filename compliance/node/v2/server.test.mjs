@@ -50,7 +50,7 @@ async function harness(t, options = {}) {
 
 for (const mode of ['v0', 'v1'])
     for (const format of ['cjs', 'esm']) {
-        test(`public ${format}/${mode}: identify and alias deliver literal properties after flush`, async (t) => {
+        test(`public ${format}/${mode}: identify, alias and groupIdentify deliver literal properties after flush`, async (t) => {
             const traffic = []
             const mock = createServer(async (request, response) => {
                 let body = ''
@@ -72,6 +72,7 @@ for (const mode of ['v0', 'v1'])
             const negotiation = await post('negotiate', { protocol })
             assert.ok(negotiation.supported_routes.includes('/identify'))
             assert.ok(negotiation.supported_routes.includes('/alias'))
+            assert.ok(negotiation.supported_routes.includes('/group_identify'))
             await allocate()
             await invoke('/setup', {
                 project_token: 'phc_test',
@@ -93,6 +94,16 @@ for (const mode of ['v0', 'v1'])
                 $set_once: { literal: false },
                 $anon_distinct_id: 'literal',
             }
+            const groupProperties = {
+                plan: 'pro',
+                active: false,
+                score: 0,
+                note: null,
+                preferences: { theme: 'dark' },
+                tags: ['beta', 'team'],
+                $group_type: 'literal-type',
+                $group_key: 'literal-key',
+            }
             for (const [route, args, expectedEvent, distinctId] of [
                 ['/identify', { distinct_id: 'user-123', set, disable_geoip: false }, '$identify', 'user-123'],
                 [
@@ -100,6 +111,24 @@ for (const mode of ['v0', 'v1'])
                     { distinct_id: 'anon-123', alias: 'user-123', disable_geoip: false },
                     '$create_alias',
                     'anon-123',
+                ],
+                [
+                    '/group_identify',
+                    {
+                        group_type: 'company',
+                        group_key: 'company-123',
+                        properties: groupProperties,
+                        distinct_id: 'user-123',
+                        disable_geoip: false,
+                    },
+                    '$groupidentify',
+                    'user-123',
+                ],
+                [
+                    '/group_identify',
+                    { group_type: 'company', group_key: 'company-123', distinct_id: 'user-123', disable_geoip: false },
+                    '$groupidentify',
+                    'user-123',
                 ],
             ]) {
                 const count = traffic.length
@@ -115,7 +144,82 @@ for (const mode of ['v0', 'v1'])
                 assert.equal(event.distinct_id, distinctId)
                 assert.equal(event.properties.$geoip_disable, undefined)
                 if (route === '/identify') assert.deepEqual(event.properties.$set, set)
-                else assert.equal(event.properties.alias, 'user-123')
+                else if (route === '/alias') assert.equal(event.properties.alias, 'user-123')
+                else {
+                    assert.equal(event.properties.$group_type, args.group_type)
+                    assert.equal(event.properties.$group_key, args.group_key)
+                    if (Object.hasOwn(args, 'properties'))
+                        assert.deepEqual(event.properties.$group_set, args.properties)
+                }
+            }
+            await close()
+            assert.equal(traffic.length, 4)
+        })
+
+        test(`public ${format}/${mode}: native exceptions deliver after explicit flush`, async (t) => {
+            const traffic = []
+            const mock = createServer(async (request, response) => {
+                let body = ''
+                for await (const chunk of request) body += chunk
+                traffic.push({ path: request.url, body: JSON.parse(body) })
+                response.setHeader('content-type', 'application/json')
+                response.end('{"status":1}')
+            })
+            mock.listen(0, '127.0.0.1')
+            await once(mock, 'listening')
+            t.after(
+                () =>
+                    new Promise((done) => {
+                        mock.closeAllConnections()
+                        mock.close(done)
+                    })
+            )
+            const { post, allocate, invoke, close } = await harness(t, { mode, format })
+            const negotiation = await post('negotiate', { protocol })
+            assert.ok(negotiation.supported_routes.includes('/capture_exception'))
+            await allocate()
+            await invoke('/setup', {
+                project_token: 'phc_test',
+                config: {
+                    host: `http://127.0.0.1:${mock.address().port}`,
+                    compression: 'none',
+                    flush_at: 20,
+                    flush_interval_ms: 0,
+                },
+            })
+            const properties = {
+                area: 'checkout',
+                retryable: false,
+                attempt: 0,
+                context: { operation: 'charge', codes: [1, 2], success: false },
+            }
+            for (const args of [
+                { error: { type: 'TypeError', message: 'boom' }, distinct_id: 'exception-user', properties },
+                {
+                    error: { type: 'TypeError', message: 'boom without properties' },
+                    distinct_id: 'exception-user-no-properties',
+                },
+            ]) {
+                const count = traffic.length
+                assert.deepEqual(await invoke('/capture_exception', args), { kind: 'sdk', outcome: { kind: 'void' } })
+                assert.equal(traffic.length, count)
+                assert.deepEqual(await invoke('/flush'), { kind: 'sdk', outcome: { kind: 'void' } })
+                assert.equal(traffic.length, count + 1)
+                const request = traffic.at(-1)
+                assert.ok(request.path.startsWith(mode === 'v0' ? '/batch' : '/i/v1/analytics/events'))
+                assert.equal(request.body.batch.length, 1)
+                const event = request.body.batch[0]
+                assert.equal(event.event, '$exception')
+                assert.equal(event.distinct_id, args.distinct_id)
+                const exception = event.properties.$exception_list[0]
+                assert.equal(exception.type, 'TypeError')
+                assert.equal(exception.value, args.error.message)
+                assert.equal(exception.mechanism.handled, true)
+                assert.ok(Array.isArray(exception.stacktrace.frames) && exception.stacktrace.frames.length > 0)
+                if (Object.hasOwn(args, 'properties')) {
+                    for (const [key, value] of Object.entries(properties))
+                        assert.deepEqual(event.properties[key], value)
+                }
             }
             await close()
             assert.equal(traffic.length, 2)

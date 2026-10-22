@@ -144,6 +144,45 @@ Logs includes the current URL as `url.full`. Configure `logs: { urlCapture: { pa
 
 The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits all installed extensions' flush methods, including analytics and logs. Consent denial and reset discard queued logs; later opt-in does not revive them. Shutdown awaits normal log delivery within its timeout before cleanup. On pagehide, logs attempt best-effort Beacon delivery with keepalive Fetch fallback. Console hooks and page lifecycle listeners are removed on disposal. Logs use their own `/i/v1/logs` endpoint, JSON payload, and project-token query authentication, never the analytics queue. The existing SDK `logger` remains diagnostic output; application logs use the logs extension's `captureLog()`.
 
+## Surveys
+
+Surveys orchestration loads dynamically during initialization by default. Its UI is a separate dynamic chunk: a successful remote configuration with surveys enabled loads it automatically; otherwise an explicit survey call can load it for manual use. Definitions come from a separate `/api/surveys/` request and are cached for five minutes. Client creation does not wait for the renderer or definitions.
+
+```ts
+import type { SurveysExtension } from '@posthog/browser/surveys'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    surveys: { automaticDisplay: false, requestTimeoutMs: 10_000 },
+})
+const feedback = posthog.getExtension<SurveysExtension>('surveys')
+feedback?.getSurveys((surveys, context) => {
+    if (context?.isLoaded && surveys[0]) feedback.displaySurvey(surveys[0].id)
+})
+const eligibility = await feedback?.canRenderSurvey('feedback')
+```
+
+The options are `automaticDisplay` (default `true`), `requestTimeoutMs` (default `10_000`), `prefillFromUrl` (default `false`), `overrideDisplayLanguage`, `prepareStylesheet`, and `getCurrentUrl`. `getActiveMatchingSurveys(callback, forceReload?)` applies targeting; `onSurveysLoaded(callback)` returns a disposable subscription; `cancelPendingSurvey(id)` cancels pending display. Capture consent still gates rendering and responses.
+
+Use `surveys: false` to omit automatic inclusion. An explicitly supplied instance takes precedence, including over `false`. To include orchestration, rendering, and styles statically without runtime module loading:
+
+```ts
+import { surveys } from '@posthog/browser/surveys'
+
+const feedback = surveys({ automaticDisplay: false })
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    extensions: [feedback],
+})
+feedback.displaySurvey('feedback')
+```
+
+Await client creation before using extension controls.
+
+The manual core entrypoint never loads surveys automatically. Extension lookup returns undefined when surveys is omitted or fails setup. Without a document, rendering is unavailable. Disposal removes renderer listeners, polling, pending displays, and rendered elements. Survey abandonment uses analytics' existing pagehide keepalive handoff when delivery is initialized; an analytics module still loading during pagehide cannot send it.
+
+Definitions and event activation state use the host-provided surveys KV namespace in the core persistence record. Survey interaction state—seen markers, partial answers, and abandonment markers—uses dedicated browser localStorage, independently of configured SDK persistence, including `storage: false`. Partial answers fall back to memory when localStorage writes fail; abandonment is skipped when its marker cannot be read. Client reset clears persisted extension data, runtime state, and localStorage seen markers, partial answers, and the last-seen date. Abandonment markers are retained, matching legacy survey reset behavior. Event targeting works through admitted captures; DOM-action selector targeting requires a compatible autocapture extension.
+
 ## Capture and delivery
 
 `capture()` admits an event to the queue synchronously and does not wait for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.

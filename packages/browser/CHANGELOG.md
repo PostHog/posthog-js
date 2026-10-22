@@ -1,5 +1,54 @@
 # posthog-js
 
+## 1.438.15
+
+### Patch Changes
+
+- [#5273](https://github.com/PostHog/posthog-js/pull/5273) [`d9148bb`](https://github.com/PostHog/posthog-js/commit/d9148bbf9a92807464402515aed5d628810087eb) Thanks [@posthog](https://github.com/apps/posthog)! - Warn in debug mode when `reloadFeatureFlags()` runs inside an `onFeatureFlags` callback, because cross-tab flag changes can turn it into a request loop
+  (2026-10-22)
+- Updated dependencies [[`d9148bb`](https://github.com/PostHog/posthog-js/commit/d9148bbf9a92807464402515aed5d628810087eb)]:
+  - @posthog/browser-common@0.9.7
+
+## 1.438.14
+
+### Patch Changes
+
+- [#4992](https://github.com/PostHog/posthog-js/pull/4992) [`3b7ffc6`](https://github.com/PostHog/posthog-js/commit/3b7ffc6fe4990ff26d661f48612166e31850ef31) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share surveys across browser SDKs; calls to `getSurveys` before survey setup now invoke the callback immediately with an unavailable error. Notify all survey subscribers when survey loading fails.
+  (2026-10-22)
+- Updated dependencies [[`3b7ffc6`](https://github.com/PostHog/posthog-js/commit/3b7ffc6fe4990ff26d661f48612166e31850ef31)]:
+  - @posthog/browser-common@0.9.6
+
+## 1.438.13
+
+### Patch Changes
+
+- [#5322](https://github.com/PostHog/posthog-js/pull/5322) [`5beb414`](https://github.com/PostHog/posthog-js/commit/5beb4146c7cd05b7b00908459d1151fd723abe4f) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Flush buffered web vitals immediately using a beacon when the page is hidden or unloaded.
+  (2026-10-20)
+
+## 1.438.12
+
+### Patch Changes
+
+- [#5298](https://github.com/PostHog/posthog-js/pull/5298) [`e940c92`](https://github.com/PostHog/posthog-js/commit/e940c92b9471e718375a40c5f2fdda952ce16663) Thanks [@github-actions](https://github.com/apps/github-actions)! - Prevent backward device clock changes from subtracting client rate-limit tokens.
+  (2026-10-15)
+
+## 1.438.11
+
+### Patch Changes
+
+- [#5260](https://github.com/PostHog/posthog-js/pull/5260) [`845bf99`](https://github.com/PostHog/posthog-js/commit/845bf99fe65302169e8b2b50cbcb38eacb4b122f) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP failures in Error Tracking when exception autocapture is enabled. With `posthog-js/slim`, add `ErrorTrackingExtensions` next to `WebMCPExtensions` to get these events.
+  (2026-10-15)
+
+## 1.438.10
+
+### Patch Changes
+
+- [#5300](https://github.com/PostHog/posthog-js/pull/5300) [`09d4ba2`](https://github.com/PostHog/posthog-js/commit/09d4ba28c41b7183c49e74376ea25b5e9219c2c3) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Capture the Freebuff click identifier (`bfcid`) as a campaign parameter, so it is set on events and as `$initial_bfcid` like every other ad click ID.
+  (2026-10-14)
+- Updated dependencies [[`09d4ba2`](https://github.com/PostHog/posthog-js/commit/09d4ba28c41b7183c49e74376ea25b5e9219c2c3)]:
+  - @posthog/browser-common@0.9.5
+  - @posthog/core@1.59.1
+
 ## 1.438.9
 
 ### Patch Changes

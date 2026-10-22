@@ -67,7 +67,7 @@ class RequiresServerEvaluation extends Error {
 }
 
 type FeatureFlagsPollerOptions = {
-  personalApiKey: string
+  personalApiKey?: string
   projectApiKey: string
   host: string
   pollingInterval: number | null
@@ -116,7 +116,7 @@ type ComputeFlagAndPayloadOptions = {
 
 class FeatureFlagsPoller {
   pollingInterval: number | null
-  personalApiKey: string
+  personalApiKey?: string
   projectApiKey: string
   featureFlags: Array<PostHogFeatureFlag>
   featureFlagsByKey: Record<string, PostHogFeatureFlag>
@@ -748,15 +748,19 @@ class FeatureFlagsPoller {
 
   private updateFlagState(flagData: FlagDefinitionCacheInput): void {
     const flags = this.filterFlagsByEvaluationContexts(flagData.flags)
-    this.featureFlags = flags
-    this.featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
+    const featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
       (acc, curr) => ((acc[curr.key] = curr), acc),
       {}
     )
     // Remember which definitions were dropped by context filtering so dependency evaluation can
     // treat them as false (mirroring the remote path) rather than as genuinely missing.
     const keptKeys = new Set(flags.map((flag) => flag.key))
-    this.filteredOutFlagKeys = new Set(flagData.flags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key))
+    const filteredOutFlagKeys = new Set(
+      flagData.flags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key)
+    )
+    this.featureFlags = flags
+    this.featureFlagsByKey = featureFlagsByKey
+    this.filteredOutFlagKeys = filteredOutFlagKeys
     this.groupTypeMapping = flagData.group_type_mapping ?? flagData.groupTypeMapping ?? {}
     this.cohorts = flagData.cohorts
     this.propertyMatchingVersion = flagData.property_matching_version ?? flagData.propertyMatchingVersion
@@ -901,6 +905,12 @@ class FeatureFlagsPoller {
     }
 
     try {
+      if (this.cacheProvider && !this.personalApiKey) {
+        // Cache-only readers must not acquire fetch leadership from the provider.
+        await this.loadFromCache('Loaded flags from cache (cache-only reader)')
+        return
+      }
+
       let shouldFetch = true
       if (this.cacheProvider) {
         try {
@@ -1088,6 +1098,10 @@ class FeatureFlagsPoller {
   }
 
   async _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
+    if (!this.personalApiKey) {
+      throw new ClientError('A secretKey or personalApiKey is required to fetch feature flag definitions from PostHog.')
+    }
+
     const url = `${this.host}/flags/definitions?token=${this.projectApiKey}&send_cohorts`
 
     const options = this.getPersonalApiKeyRequestOptions('GET', this.flagsEtag)

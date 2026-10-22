@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.12.6
+
+### Patch Changes
+
+- [#5271](https://github.com/PostHog/posthog-js/pull/5271) [`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27) Thanks [@posthog](https://github.com/apps/posthog)! - Report fatal JS crashes the JS error handler did not capture, such as React render errors on iOS, through native crash capture instead of dropping them (requires updating both `posthog-react-native` and `@posthog/react-native-plugin`). Apps with `errorTracking.autocapture.nativeCrashes` on and `uncaughtExceptions` off now get every fatal JS crash reported this way.
+  (2026-10-14)
+
 ## 2.12.5
 
 ### Patch Changes

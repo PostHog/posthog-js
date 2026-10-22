@@ -12,6 +12,14 @@ export interface FormattedTextContent {
 }
 
 /**
+ * Formatted reasoning content item (e.g. Gemini thought summaries)
+ */
+export interface FormattedReasoningContent {
+  type: 'reasoning'
+  text: string
+}
+
+/**
  * Formatted function/tool call content item
  */
 export interface FormattedFunctionCall {
@@ -68,6 +76,7 @@ export interface FormattedDocumentContent {
  */
 export type FormattedContentItem =
   | FormattedTextContent
+  | FormattedReasoningContent
   | FormattedFunctionCall
   | FormattedImageContent
   | FormattedAudioContent

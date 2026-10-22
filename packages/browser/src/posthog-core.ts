@@ -44,7 +44,7 @@ import {
     SurveyEventName,
     SurveyEventProperties,
     type SurveyRenderReason,
-} from './posthog-surveys-types'
+} from '@posthog/browser-common'
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
@@ -107,7 +107,7 @@ import {
     DEFAULT_DISPLAY_SURVEY_OPTIONS,
     getSurveyInteractionProperty,
     setSurveySeenOnLocalStorage,
-} from './utils/survey-utils'
+} from '@posthog/browser-common/utils/survey-utils'
 import {
     isEmptyString,
     isFunction,
@@ -2943,7 +2943,10 @@ export class PostHog implements PostHogInterface {
     /**
      * Register an event listener that runs when feature flags become available or when they change.
      * If there are flags, the listener is called immediately in addition to being called on future changes.
-     * Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser.
+     * Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser,
+     * including when another open tab of your site stores new flags.
+     * Do not call `reloadFeatureFlags()` inside this callback: each reload in one tab triggers the callback in the other tabs,
+     * which can send flag requests in a loop.
      *
      * {@label Feature flags}
      *

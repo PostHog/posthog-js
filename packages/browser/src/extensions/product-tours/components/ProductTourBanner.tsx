@@ -1,7 +1,7 @@
 import { h, ComponentChildren } from 'preact'
 import { ProductTourDisplayFrequency, ProductTourStep } from '../../../posthog-product-tours-types'
 import { getStepHtml } from '../product-tours-utils'
-import { cancelSVG } from '../../surveys/icons'
+import { cancelSVG } from '@posthog/browser-common/surveys/icons'
 
 export interface ProductTourBannerProps {
     step: ProductTourStep

@@ -142,6 +142,11 @@ export async function startServer({ consumer, mode = 'v0', format = 'cjs', host 
             'encoding_gzip',
             'flags_v2',
             'flags_getter_remote_uncached',
+            'flag_snapshot_value_scalar',
+            'flag_snapshot_payload_decoded',
+            'flag_snapshot_missing_undefined',
+            'flag_snapshot_exposure_missing_absent',
+            'flag_snapshot_enablement_default',
             'feature_flags_local_evaluation_v1',
         ],
         fixture_capabilities: ['storage.empty.v1'],
@@ -154,7 +159,12 @@ export async function startServer({ consumer, mode = 'v0', format = 'cjs', host 
         requireRequest(path === '/v2/invoke' || lossless, 'Lossy JSON number')
         if (path === '/v2/negotiate') {
             requireRequest(data.protocol === protocol, 'Unsupported protocol')
-            return { protocol, supported_routes: routes, profiles: [profile], max_timeout_ms: maxTimeout }
+            return {
+                protocol,
+                supported_routes: routes,
+                profiles: [profile],
+                max_timeout_ms: maxTimeout,
+            }
         }
         const id = identifier(data.fixture_id)
         const milliseconds = timeout(data.timeout_ms)

@@ -1,5 +1,21 @@
 # @posthog/webpack-plugin
 
+## 1.7.3
+
+### Patch Changes
+
+- [#5351](https://github.com/PostHog/posthog-js/pull/5351) [`4182940`](https://github.com/PostHog/posthog-js/commit/4182940bf5f715bef16a0740cc9d08354040bdd8) Thanks [@hpouillot](https://github.com/hpouillot)! - Require PostHog CLI 0.18.11 or newer within the 0.18 release line.
+  (2026-10-21)
+
+## 1.7.2
+
+### Patch Changes
+
+- [#5334](https://github.com/PostHog/posthog-js/pull/5334) [`0d2c39d`](https://github.com/PostHog/posthog-js/commit/0d2c39d923dd6241cc0ead320528f555ef02103d) Thanks [@hpouillot](https://github.com/hpouillot)! - Prevent stale webpack runtime caches in Next.js by compiling event release IDs before asset hashing.
+  (2026-10-21)
+- Updated dependencies [[`189da75`](https://github.com/PostHog/posthog-js/commit/189da75c7a52b319843a13405c1343565f0d4e25)]:
+  - @posthog/core@1.59.2
+
 ## 1.7.1
 
 ### Patch Changes
