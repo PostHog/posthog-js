@@ -1,3 +1,4 @@
+import { snapshotSurveysOptions } from './surveys-options'
 import { snapshotLogsOptions } from './logs-options'
 import type { Extension, PostHog, PostHogOptions } from './types'
 import { createPostHogCore } from './posthog'
@@ -66,6 +67,17 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
         }
     )
     if (logsLoading) await logsLoading
+    const surveysLoading = install(
+        'surveys',
+        (extension) => extension.name === 'surveys',
+        () => {
+            const configuration = options?.surveys
+            if (configuration === false) return
+            const snapshot = snapshotSurveysOptions(configuration)
+            return import('./automatic-surveys').then(({ surveys }) => surveys(snapshot))
+        }
+    )
+    if (surveysLoading) await surveysLoading
     const client = await createPostHogCore(options, extensions)
     for (const [label, error] of loadingErrors.reverse()) {
         client.logger.error(`Automatic ${label} loading failed`, error)
@@ -110,3 +122,12 @@ export type {
 } from './flags-options'
 
 export type { LogsOptions, LogsConfiguration, CaptureLogOptions } from './logs-options'
+
+export type {
+    SurveysOptions,
+    SurveysConfiguration,
+    Survey,
+    SurveyCallback,
+    DisplaySurveyOptions,
+    SurveyRenderReason,
+} from './surveys-options'

@@ -7,6 +7,7 @@ import vm from 'node:vm'
 import { normalize, differences, decodeReplay } from './normalize.mjs'
 import { parseOptions, selection, completeCoverage, identicalArtifacts } from './options.mjs'
 import { assertLoaderProof } from './loader-proof.mjs'
+import { MATRIX } from './golden.mjs'
 
 const context = { origin: 'http://127.0.0.1:1234', version: '1.436.1' }
 const a = '11111111-1111-4111-8111-111111111111'
@@ -272,6 +273,26 @@ test('loader options use supported historical configuration and current fallback
             assert.equal(lab.options().strict_script_versioning, comparison === 'current' ? 'fallback' : false)
             lab.scenario = 'core'
             assert.equal(lab.options().strict_script_versioning, false)
+        }
+    }
+})
+
+test('navigation scenarios enable capture batching across cores and entrypoints', () => {
+    const sandbox = { window: {}, location: { origin: 'http://fixture.test' }, addEventListener() {}, Error, Date }
+    vm.runInNewContext(readFileSync(new URL('./harness.js', import.meta.url), 'utf8'), sandbox)
+    const lab = sandbox.window.__compat
+    for (const mode of MATRIX.entrypoints) {
+        lab.mode = mode
+        for (const comparison of ['current', 'historical']) {
+            lab.comparison = comparison
+            for (const scenario of MATRIX.scenarios) {
+                lab.scenario = scenario
+                assert.equal(
+                    lab.options().request_batching,
+                    ['unload', 'replay-bounce'].includes(scenario),
+                    `${comparison}/${mode}/${scenario}`
+                )
+            }
         }
     }
 })

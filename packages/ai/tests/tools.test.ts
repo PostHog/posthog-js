@@ -259,6 +259,28 @@ describe('Tool Handling Tests', () => {
       ])
     })
 
+    it('should format thinking blocks as reasoning and skip redacted thinking', () => {
+      const response = {
+        content: [
+          { type: 'thinking', thinking: 'The user wants the weather in Paris.', signature: 'sig' },
+          { type: 'redacted_thinking', data: 'encrypted' },
+          { type: 'thinking', thinking: '', signature: 'sig' },
+          { type: 'text', text: 'It is sunny in Paris.' },
+        ],
+      }
+
+      const formatted = formatResponseAnthropic(response)
+      expect(formatted).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'The user wants the weather in Paris.' },
+            { type: 'text', text: 'It is sunny in Paris.' },
+          ],
+        },
+      ])
+    })
+
     it('should format response with only tool use', () => {
       const response = {
         content: [

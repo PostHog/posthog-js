@@ -1317,6 +1317,51 @@ describe('record', function (this: ISuite) {
     expect(serializedEvents).not.toContain('updated-private-value');
   });
 
+  it('records mouse movement inside a same-origin iframe as MouseMove', async () => {
+    await ctx.page.evaluate(async () => {
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute(
+        'style',
+        'position: absolute; top: 0; left: 0; width: 400px; height: 300px; border: 0;',
+      );
+      const loaded = new Promise<void>((resolve) => {
+        iframe.addEventListener('load', () => resolve(), { once: true });
+      });
+      iframe.srcdoc = '<body style="margin: 0; height: 300px"></body>';
+      document.body.appendChild(iframe);
+      await loaded;
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({
+        emit: (window as unknown as IWindow).emit,
+        sampling: { mousemove: true, mousemoveCallback: 0 },
+      });
+    });
+    await waitForRAF(ctx.page);
+
+    for (const [x, y] of [
+      [50, 50],
+      [120, 90],
+      [200, 150],
+    ]) {
+      await ctx.page.mouse.move(x, y);
+      await waitForRAF(ctx.page);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const moveSources = ctx.events.flatMap((e) =>
+      e.type === EventType.IncrementalSnapshot &&
+      (e.data.source === IncrementalSource.MouseMove ||
+        e.data.source === IncrementalSource.TouchMove ||
+        e.data.source === IncrementalSource.Drag)
+        ? [e.data.source]
+        : [],
+    );
+    expect(moveSources.length).toBeGreaterThan(0);
+    expect(moveSources).not.toContain(IncrementalSource.TouchMove);
+    expect(moveSources).toContain(IncrementalSource.MouseMove);
+  });
+
   it('does not observe shadow roots on blocked hosts discovered during serialization', async () => {
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;

@@ -1,5 +1,52 @@
 # posthog-js
 
+## 1.438.17
+
+### Patch Changes
+
+- [#5367](https://github.com/PostHog/posthog-js/pull/5367) [`23b287f`](https://github.com/PostHog/posthog-js/commit/23b287fb1b4fa7ecbeb9e3184292a9730718d5b9) Thanks [@sarankumar1325](https://github.com/sarankumar1325)! - Session replay records mouse movement inside same-origin iframes as mouse movement instead of touch movement, so the replay cursor stays visible.
+  (2026-10-22)
+
+- [#5348](https://github.com/PostHog/posthog-js/pull/5348) [`45f6cd6`](https://github.com/PostHog/posthog-js/commit/45f6cd6b65bc4319a0887bfd83074e1a065c0962) Thanks [@ayushjhanwar-png](https://github.com/ayushjhanwar-png)! - Keep session replay data URI filtering output valid JSON and match svg+xml and parameterised data URIs.
+  (2026-10-22)
+
+- [#5325](https://github.com/PostHog/posthog-js/pull/5325) [`21a2559`](https://github.com/PostHog/posthog-js/commit/21a2559271cde904a35311f4adc43fd924cbc025) Thanks [@Majny](https://github.com/Majny)! - Session replay no longer installs the network plugin when the client sets `session_recording.recordHeaders` and `recordBody` to `false` and turns network timing off, even if the project enables network payload capture. Previously request URLs and timings were still recorded.
+  (2026-10-22)
+
+## 1.438.16
+
+### Patch Changes
+
+- [#5370](https://github.com/PostHog/posthog-js/pull/5370) [`a50fa7a`](https://github.com/PostHog/posthog-js/commit/a50fa7aa180c9693f0efe111ead60ad82c021620) Thanks [@sarankumar1325](https://github.com/sarankumar1325)! - Conversations: a `reset()` or opt-out that happens while the widget is still loading its tickets (or a restore link) no longer brings the widget back, restarts polling, or writes the old ticket id back to storage.
+  (2026-10-22)
+
+- [#5365](https://github.com/PostHog/posthog-js/pull/5365) [`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` the next time they are read after opt in.
+  (2026-10-22)
+
+- [#5256](https://github.com/PostHog/posthog-js/pull/5256) [`e7c87fa`](https://github.com/PostHog/posthog-js/commit/e7c87fac7b9093cabe1fc39bf085c5a5786fe9a1) Thanks [@jakesciotto](https://github.com/jakesciotto)! - Session replay: a scroll on a `scroll-snap-type` container now lands instantly during real-time playback, so a sheet or carousel that a scroll reveals shows the same content in Safari as in Chrome. Scrolls on other elements still animate.
+  (2026-10-22)
+- Updated dependencies [[`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c)]:
+  - @posthog/browser-common@0.9.8
+  - @posthog/core@1.59.4
+
+## 1.438.15
+
+### Patch Changes
+
+- [#5273](https://github.com/PostHog/posthog-js/pull/5273) [`d9148bb`](https://github.com/PostHog/posthog-js/commit/d9148bbf9a92807464402515aed5d628810087eb) Thanks [@posthog](https://github.com/apps/posthog)! - Warn in debug mode when `reloadFeatureFlags()` runs inside an `onFeatureFlags` callback, because cross-tab flag changes can turn it into a request loop
+  (2026-10-22)
+- Updated dependencies [[`d9148bb`](https://github.com/PostHog/posthog-js/commit/d9148bbf9a92807464402515aed5d628810087eb)]:
+  - @posthog/browser-common@0.9.7
+
+## 1.438.14
+
+### Patch Changes
+
+- [#4992](https://github.com/PostHog/posthog-js/pull/4992) [`3b7ffc6`](https://github.com/PostHog/posthog-js/commit/3b7ffc6fe4990ff26d661f48612166e31850ef31) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share surveys across browser SDKs; calls to `getSurveys` before survey setup now invoke the callback immediately with an unavailable error. Notify all survey subscribers when survey loading fails.
+  (2026-10-22)
+- Updated dependencies [[`3b7ffc6`](https://github.com/PostHog/posthog-js/commit/3b7ffc6fe4990ff26d661f48612166e31850ef31)]:
+  - @posthog/browser-common@0.9.6
+
 ## 1.438.13
 
 ### Patch Changes
