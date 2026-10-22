@@ -15,7 +15,7 @@
     "check-types": "tsc --noEmit --project tsconfig.check.json",
     "clean": "rimraf dist",
     "test:unit": "vitest run && pnpm test:module-load",
-    "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",
+    "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs && node tests/evaluations-module-load.cjs",
     "test:gemini-consumers": "node tests/gemini-consumer-types.mjs",
     "test:cassettes": "vitest run --config harness/vitest.config.ts",
     "test:cassettes:offline": "node harness/run-offline.mjs",
@@ -182,6 +182,11 @@
       "require": "./dist/claude-agent-sdk/index.cjs",
       "import": "./dist/claude-agent-sdk/index.mjs",
       "types": "./dist/claude-agent-sdk/index.d.ts"
+    },
+    "./evaluations": {
+      "types": "./dist/evaluations/index.d.ts",
+      "import": "./dist/evaluations/index.mjs",
+      "require": "./dist/evaluations/index.cjs"
     }
   },
   "directories": {
