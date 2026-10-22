@@ -214,7 +214,7 @@ export class PosthogWebpackPlugin {
                                 }
                             }
                         } catch (error) {
-                            // Match the existing fail-soft upload hook; never delete maps for a
+                            // Match the existing fail-soft upload hook; never upload maps for a
                             // compilation whose injection/release resolution did not complete.
                             failedCompilations.add(compilation)
                             this.logger.error('Error injecting PostHog chunk ids:', error)
@@ -227,7 +227,9 @@ export class PosthogWebpackPlugin {
         const onDone = async (stats: webpack.Stats, callback: any): Promise<void> => {
             callback = callback || (() => {})
             try {
-                if (!failedCompilations.has(stats.compilation)) {
+                if (failedCompilations.has(stats.compilation)) {
+                    await this.deleteSourceMapsWithoutUpload(stats.compilation, this.resolvedConfig)
+                } else {
                     await this.processSourceMaps(stats.compilation, this.resolvedConfig)
                 }
             } catch (error) {
@@ -269,7 +271,12 @@ export class PosthogWebpackPlugin {
 
         if (filePaths.length > 0) {
             // Files are final: `process` and `--delete-after` rewrite JS and invalidate SRI.
-            await runSourcemapCli(config, { filePaths, command: 'upload' })
+            try {
+                await runSourcemapCli(config, { filePaths, command: 'upload' })
+            } catch (error) {
+                await this.deleteSourceMapsWithoutUpload(compilation, config)
+                throw error
+            }
         }
 
         if (config.sourcemaps.deleteAfterUpload) {
@@ -285,6 +292,40 @@ export class PosthogWebpackPlugin {
                 }
             })
         }
+    }
+
+    // A failed upload must not ship the original sources that deleteAfterUpload promises to remove.
+    private async deleteSourceMapsWithoutUpload(
+        compilation: webpack.Compilation,
+        config: ResolvedPluginConfig
+    ): Promise<void> {
+        if (!config.sourcemaps.deleteAfterUpload) return
+
+        const outputDirectory = compilation.outputOptions.path
+        const sourceMaps = [
+            ...Array.from(compilation.chunks).flatMap((chunk) =>
+                Array.from(chunk.files)
+                    .filter((file) => JS_CHUNK_REGEX.test(file))
+                    .map((file) => `${file}.map`)
+            ),
+            ...compilation
+                .getAssets()
+                .filter((asset) => asset.name.endsWith('.css.map'))
+                .map((asset) => asset.name),
+        ].map((file) => path.resolve(outputDirectory, file))
+        if (sourceMaps.length === 0) return
+
+        this.logger.warn('PostHog sourcemaps were not uploaded; deleting them because deleteAfterUpload is enabled.')
+        const results = await Promise.allSettled(sourceMaps.map((file) => fs.rm(file, { force: true })))
+        results.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                this.logger.error(
+                    'PostHog sourcemaps were not uploaded, and failed to delete source map:',
+                    sourceMaps[index],
+                    result.reason
+                )
+            }
+        })
     }
 
     private async deleteCssSourceMaps(compilation: webpack.Compilation, outputDirectory: string): Promise<void> {
