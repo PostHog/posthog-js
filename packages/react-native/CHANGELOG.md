@@ -1,5 +1,68 @@
 # posthog-react-native
 
+## 4.81.8
+
+### Patch Changes
+
+- [#5172](https://github.com/PostHog/posthog-js/pull/5172) [`8374fe7`](https://github.com/PostHog/posthog-js/commit/8374fe7e196aa2cd0afd7353486117b5d91623f2) Thanks [@phillram](https://github.com/phillram)! - Surveys follow the confirmation message setting from PostHog instead of always showing the screen. A confirmation message that carries only a description now shows that description.
+  (2026-10-22)
+
+- [#5347](https://github.com/PostHog/posthog-js/pull/5347) [`b2cd418`](https://github.com/PostHog/posthog-js/commit/b2cd4187ad979f57392ab073283b8bb18db742a6) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay attaching to another client's session when an app creates more than one `PostHog` client; a client for a different project no longer sends `identify()`, opt-out, push or replay calls to the native SDK, which stays with the first client's project.
+  (2026-10-22)
+
+## 4.81.7
+
+### Patch Changes
+
+- [#5336](https://github.com/PostHog/posthog-js/pull/5336) [`1a4ea26`](https://github.com/PostHog/posthog-js/commit/1a4ea26501f67dbecccc31e5eeed663483e11049) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Restart session replay on `optIn()` only if it was recording at `optOut()`, matching posthog-ios. A `stopSessionRecording()` call made while opted out no longer keeps replay stopped on `optIn()`; stop it before `optOut()` or after `optIn()` instead
+  (2026-10-21)
+
+## 4.81.6
+
+### Patch Changes
+
+- [#5283](https://github.com/PostHog/posthog-js/pull/5283) [`17b8cd9`](https://github.com/PostHog/posthog-js/commit/17b8cd9f371060b3a6915157269d51ba0f97fcf2) Thanks [@gauravch-code](https://github.com/gauravch-code)! - fix: Configure Android symbol and sourcemap uploads in Expo projects using Kotlin Gradle files.
+  (2026-10-21)
+- Updated dependencies [[`189da75`](https://github.com/PostHog/posthog-js/commit/189da75c7a52b319843a13405c1343565f0d4e25)]:
+  - @posthog/core@1.59.2
+
+## 4.81.5
+
+### Patch Changes
+
+- [#5253](https://github.com/PostHog/posthog-js/pull/5253) [`cc0d20e`](https://github.com/PostHog/posthog-js/commit/cc0d20e9f11749ba95dfa3e110480d5965bd16a4) Thanks [@Brian-1812](https://github.com/Brian-1812)! - Respect the survey wait period (`seenSurveyWaitPeriodInDays`), so a survey does not show if the user saw any survey within that many days
+  (2026-10-20)
+
+## 4.81.4
+
+### Patch Changes
+
+- [#5313](https://github.com/PostHog/posthog-js/pull/5313) [`1fc47eb`](https://github.com/PostHog/posthog-js/commit/1fc47eb16870d1e100beb873b70ff72afb91cecc) Thanks [@nandinitiw](https://github.com/nandinitiw)! - fix(react-native): resolve `posthog.gradle` from the Android project root, so Gradle builds started outside the project no longer fail
+  (2026-10-20)
+
+## 4.81.3
+
+### Patch Changes
+
+- [#5124](https://github.com/PostHog/posthog-js/pull/5124) [`10ec4ba`](https://github.com/PostHog/posthog-js/commit/10ec4ba84758531465707ae36caca80175e181f9) Thanks [@nandinitiw](https://github.com/nandinitiw)! - Stop session replay on `optOut()` and resume automatic replay under a new session ID on `optIn()`, unless the app stopped it with `stopSessionRecording()`
+  (2026-10-20)
+
+## 4.81.2
+
+### Patch Changes
+
+- [#5271](https://github.com/PostHog/posthog-js/pull/5271) [`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27) Thanks [@posthog](https://github.com/apps/posthog)! - Report fatal JS crashes the JS error handler did not capture, such as React render errors on iOS, through native crash capture instead of dropping them (requires updating both `posthog-react-native` and `@posthog/react-native-plugin`). Apps with `errorTracking.autocapture.nativeCrashes` on and `uncaughtExceptions` off now get every fatal JS crash reported this way.
+  (2026-10-14)
+- Updated dependencies [[`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27)]:
+  - @posthog/react-native-plugin@2.12.6
+
+## 4.81.1
+
+### Patch Changes
+
+- [#5290](https://github.com/PostHog/posthog-js/pull/5290) [`f3ca9c4`](https://github.com/PostHog/posthog-js/commit/f3ca9c48e7610cf1bdd4124fcf02e443a679be17) Thanks [@tsayin4](https://github.com/tsayin4)! - Fix fatal crashes being reported without a stack trace since 4.77.0 when a stack frame has no chunk ID.
+  (2026-10-13)
+
 ## 4.81.0
 
 ### Minor Changes

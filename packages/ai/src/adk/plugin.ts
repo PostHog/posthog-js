@@ -695,7 +695,9 @@ function formatContent(content: Content, client: PostHog): FormattedMessage {
     if (part == null) {
       continue
     }
-    if (part.text) {
+    if (part.thought === true && part.text) {
+      blocks.push({ type: 'reasoning', text: String(part.text) })
+    } else if (part.text) {
       blocks.push({ type: 'text', text: String(part.text) })
     } else if (part.functionCall) {
       blocks.push({

@@ -1,5 +1,37 @@
 # posthog-node
 
+## 5.56.4
+
+### Patch Changes
+
+- [#5350](https://github.com/PostHog/posthog-js/pull/5350) [`17260e5`](https://github.com/PostHog/posthog-js/commit/17260e501d6ae4b2fae17a2822c6a2f6d4addfe4) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back from local flag evaluation when a required property value is undefined.
+  (2026-10-21)
+- Updated dependencies [[`17260e5`](https://github.com/PostHog/posthog-js/commit/17260e501d6ae4b2fae17a2822c6a2f6d4addfe4)]:
+  - @posthog/core@1.59.3
+
+## 5.56.3
+
+### Patch Changes
+
+- [#5307](https://github.com/PostHog/posthog-js/pull/5307) [`189da75`](https://github.com/PostHog/posthog-js/commit/189da75c7a52b319843a13405c1343565f0d4e25) Thanks [@quotentiroler](https://github.com/quotentiroler)! - Local flag evaluation now matches a null property with string operators like the flags service, so negated operators such as `not_icontains` match instead of failing.
+  (2026-10-21)
+- Updated dependencies [[`189da75`](https://github.com/PostHog/posthog-js/commit/189da75c7a52b319843a13405c1343565f0d4e25)]:
+  - @posthog/core@1.59.2
+
+## 5.56.2
+
+### Patch Changes
+
+- [#5263](https://github.com/PostHog/posthog-js/pull/5263) [`cd31356`](https://github.com/PostHog/posthog-js/commit/cd3135648ae506f5e00d044d6f7443ec1ff3f311) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow local feature flag evaluation from a shared definition cache without a secret or personal API key.
+  (2026-10-16)
+
+## 5.56.1
+
+### Patch Changes
+
+- [#5289](https://github.com/PostHog/posthog-js/pull/5289) [`e6598be`](https://github.com/PostHog/posthog-js/commit/e6598be4d3f4c09c47d4c052987fafd33fc3f59e) Thanks [@pauldambra](https://github.com/pauldambra)! - Link captured exceptions to active OpenTelemetry traces when the API is available.
+  (2026-10-14)
+
 ## 5.56.0
 
 ### Minor Changes

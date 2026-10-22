@@ -1,5 +1,26 @@
 # @posthog/core
 
+## 1.59.3
+
+### Patch Changes
+
+- [#5350](https://github.com/PostHog/posthog-js/pull/5350) [`17260e5`](https://github.com/PostHog/posthog-js/commit/17260e501d6ae4b2fae17a2822c6a2f6d4addfe4) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back from local flag evaluation when a required property value is undefined.
+  (2026-10-21)
+
+## 1.59.2
+
+### Patch Changes
+
+- [#5307](https://github.com/PostHog/posthog-js/pull/5307) [`189da75`](https://github.com/PostHog/posthog-js/commit/189da75c7a52b319843a13405c1343565f0d4e25) Thanks [@quotentiroler](https://github.com/quotentiroler)! - Local flag evaluation now matches a null property with string operators like the flags service, so negated operators such as `not_icontains` match instead of failing.
+  (2026-10-21)
+
+## 1.59.1
+
+### Patch Changes
+
+- [#5300](https://github.com/PostHog/posthog-js/pull/5300) [`09d4ba2`](https://github.com/PostHog/posthog-js/commit/09d4ba28c41b7183c49e74376ea25b5e9219c2c3) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Capture the Freebuff click identifier (`bfcid`) as a campaign parameter, so it is set on events and as `$initial_bfcid` like every other ad click ID.
+  (2026-10-14)
+
 ## 1.59.0
 
 ### Minor Changes

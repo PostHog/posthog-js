@@ -5,11 +5,17 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
 import { geminiPath, geminiStreamChunks, validateGeminiJSON } from './gemini-protocol.ts'
+import {
+  geminiInteractionsPath,
+  geminiInteractionStreamChunks,
+  validateGeminiInteractionJSON,
+} from './gemini-interactions-protocol.ts'
 import { openaiJson, openaiStream, safeJson } from './openai-protocol.ts'
 
 const MAX_BYTES = 8 * 1024 * 1024
 const MAX_REQUEST_BYTES = 1024 * 1024
 const TIMEOUT_MS = 15_000
+const GEMINI_INTERACTIONS_TIMEOUT_MS = 60_000
 const requestHeaders = ['content-type', 'anthropic-version', 'anthropic-beta'] as const
 const credentialHeaders = ['authorization', 'x-api-key', 'x-goog-api-key', 'cookie'] as const
 const responseContentTypes = [
@@ -236,6 +242,7 @@ function checkRoute(method: string | undefined, path: string, source: Provenance
   if (url.origin !== 'http://127.0.0.1' || url.hash) throw new Error('Unexpected cassette request route')
   if ((source === 'anthropic' || source === 'synthetic') && method === 'POST' && path === '/v1/messages') return
   if ((source === 'gemini' || source === 'synthetic') && method === 'POST' && geminiPath.test(path)) return
+  if ((source === 'gemini' || source === 'synthetic') && method === 'POST' && path === geminiInteractionsPath) return
   if (source === 'anthropic' || source === 'gemini') throw new Error('Unexpected cassette request route')
   if (
     method === 'POST' &&
@@ -331,6 +338,7 @@ function responseBody(
 ): Interaction['response']['body'] {
   const path = request.path
   const gemini = geminiPath.test(path)
+  const geminiInteraction = path === geminiInteractionsPath
   const fields = Array.isArray(request.body.fields) ? request.body.fields : []
   const field = (name: string) => fields.find((item) => Array.isArray(item) && item[0] === name)?.[1]
   const streaming = gemini
@@ -348,10 +356,17 @@ function responseBody(
           ? streamChunks(text, secrets)
           : gemini
             ? geminiStreamChunks(text, (frame) => safeJson(frame, safe), safe)
-            : openaiStream(text, path, safe),
+            : geminiInteraction
+              ? geminiInteractionStreamChunks(text, (frame) => safeJson(frame, safe), safe)
+              : openaiStream(text, path, safe),
     }
   if (path === '/v1/messages') throw new CassetteFailure('response')
   if (contentType === 'application/json') {
+    if (geminiInteraction) {
+      const value = safeJson(text, safe)
+      validateGeminiInteractionJSON(value, safe)
+      return { kind: 'json', value }
+    }
     if (!gemini) return { kind: 'json', value: openaiJson(text, path, safe) }
     const value = safeJson(text, safe)
     validateGeminiJSON(path, value, safe)
@@ -371,12 +386,27 @@ function serializedBody(body: Interaction['response']['body']): string[] {
 
 async function writeChunk(response: ServerResponse, chunk: string, signal: AbortSignal): Promise<void> {
   signal.throwIfAborted()
-  if (!response.write(chunk)) await once(response, 'drain', { signal })
+  if (response.destroyed) return
+  if (!response.write(chunk)) {
+    const wait = new AbortController()
+    const abort = () => wait.abort()
+    signal.addEventListener('abort', abort, { once: true })
+    try {
+      await Promise.race([
+        once(response, 'drain', { signal: wait.signal }),
+        once(response, 'close', { signal: wait.signal }),
+      ])
+    } finally {
+      wait.abort()
+      signal.removeEventListener('abort', abort)
+    }
+  }
 }
 
 async function serve(
   handle: (request: IncomingMessage, response: ServerResponse, signal: AbortSignal) => Promise<void>,
-  verify: () => Promise<void>
+  verify: () => Promise<void>,
+  keepRecordingAfterClientClose = false
 ) {
   const active = new Set<Promise<void>>()
   const controllers = new Set<AbortController>()
@@ -394,14 +424,17 @@ async function serve(
     }
     const controller = new AbortController()
     controllers.add(controller)
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+    const timer = setTimeout(
+      () => controller.abort(),
+      request.url === geminiInteractionsPath ? GEMINI_INTERACTIONS_TIMEOUT_MS : TIMEOUT_MS
+    )
     const abort = () => {
       request.destroy()
       response.destroy()
     }
     controller.signal.addEventListener('abort', abort, { once: true })
     const disconnected = () => {
-      if (!response.writableFinished) controller.abort()
+      if (!response.writableFinished && !keepRecordingAfterClientClose) controller.abort()
     }
     response.on('close', disconnected)
     const task = handle(request, response, controller.signal)
@@ -629,6 +662,7 @@ export async function startRecorder(options: {
       } finally {
         await rm(temporary, { force: true })
       }
-    }
+    },
+    true
   )
 }

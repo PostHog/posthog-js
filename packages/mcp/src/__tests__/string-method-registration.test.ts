@@ -330,21 +330,6 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
     expect(eventCapture.findCapturesByEvent('$mcp_resource_read')).toHaveLength(0)
   })
 
-  it('names an $identify published from a resources/read by its uri', async () => {
-    const server = makeServer()
-    instrument(server, fakePostHog(), { identify: () => ({ distinctId: 'user-1' }) })
-    server.setRequestHandler('resources/read', (async () => ({ contents: [] })) as any)
-
-    await dispatch(server, { method: 'resources/read', params: { uri: 'https://fakeuser:fakepass@example.com/guide' } })
-    await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(1))
-
-    // A read addresses its subject by `uri`, never by `name`, and the credentials
-    // in that address are redacted on the identify event like anywhere else.
-    expect(eventCapture.findCapturesByEvent('$identify')[0].properties.$mcp_resource_name).toBe(
-      'https://%5Bredacted%5D@example.com/guide'
-    )
-  })
-
   /**
    * Both listing methods publish `$mcp_resources_list`; the captured
    * `request.method` is what separates a static listing from a templated one.

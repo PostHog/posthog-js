@@ -13,6 +13,8 @@ import {
     deploymentFilename,
 } from './golden.mjs'
 
+const matrixCellCount =
+    MATRIX.coreFamilies.length * MATRIX.entrypoints.length * MATRIX.browsers.length * MATRIX.scenarios.length
 const errorMessage = 'this.instance._shouldDisableFlags is not a function'
 const digest = `sha256-${'a'.repeat(64)}`
 const filenames = MATRIX.coreFamilies.flatMap((family) =>
@@ -133,8 +135,8 @@ test('buildGoldens routes every required tuple to six stable deployment files', 
     const input = fixture()
     const result = buildGoldens(input)
     assert.equal(result.coverage, 'full')
-    assert.equal(result.cellCount, 306)
-    assert.deepEqual(result.functionalCoverage, { 'fully-ready': 306 })
+    assert.equal(result.cellCount, matrixCellCount)
+    assert.deepEqual(result.functionalCoverage, { 'fully-ready': matrixCellCount })
     assert.equal(result.repeats, 2)
     assert.deepEqual(Object.keys(result.files), filenames)
     let cells = 0
@@ -174,7 +176,7 @@ test('buildGoldens routes every required tuple to six stable deployment files', 
             assert.equal(text, `${JSON.stringify(deployment, null, 4)}\n`)
         }
     }
-    assert.equal(cells, 306)
+    assert.equal(cells, matrixCellCount)
 })
 
 test('buildGoldens ignores arrival/key order but preserves normalized observations and ordered arrays', () => {
@@ -601,8 +603,8 @@ test('compareGoldens reports a small semantic API change at its deployment/brows
     const space = await seed(t)
     assert.deepEqual(await compareGoldens(space.directory, fixture()), {
         coverage: 'full',
-        cellCount: 306,
-        functionalCoverage: { 'fully-ready': 306 },
+        cellCount: matrixCellCount,
+        functionalCoverage: { 'fully-ready': matrixCellCount },
         repeats: 2,
         matched: true,
         differenceCount: 0,
@@ -794,8 +796,8 @@ test('updateGoldens explicitly bootstraps and replaces the whole six-file set', 
     const first = await updateGoldens(space.directory, input)
     assert.deepEqual(first, {
         coverage: 'full',
-        cellCount: 306,
-        functionalCoverage: { 'fully-ready': 306 },
+        cellCount: matrixCellCount,
+        functionalCoverage: { 'fully-ready': matrixCellCount },
         repeats: 2,
         updated: true,
     })

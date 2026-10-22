@@ -167,6 +167,30 @@ it.each([
 )
 
 it.each(['generateContent', 'generateContentStream'] as const)(
+  'built Gemini %s counts tool-use prompt tokens as input tokens',
+  async (operation) => {
+    const toolUsage = {
+      promptTokenCount: 11,
+      candidatesTokenCount: 3,
+      toolUsePromptTokenCount: 40,
+      totalTokenCount: 54,
+    }
+    const body = {
+      candidates: [
+        { index: 0, content: { role: 'model', parts: [{ text: 'Grounded answer.' }] }, finishReason: 'STOP' },
+      ],
+      usageMetadata: toolUsage,
+    }
+    const { event } = await runSynthetic(
+      operation,
+      { model, contents: 'Search the web.', config: { tools: [{ googleSearch: {} }] } },
+      operation === 'generateContentStream' ? [body] : body
+    )
+    expect(event.properties).toMatchObject({ $ai_input_tokens: 51, $ai_output_tokens: 3, $ai_usage: toolUsage })
+  }
+)
+
+it.each(['generateContent', 'generateContentStream'] as const)(
   'built Gemini %s preserves function calls and tool telemetry',
   async (operation) => {
     const call = { name: 'weather', args: { city: 'Paris' } }

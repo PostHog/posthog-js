@@ -7,7 +7,7 @@ It documents the **current state** only. The reasoning behind architectural deci
 ## TL;DR
 
 - `instrument(server, posthog, options?)` wraps an MCP server, intercepts request handlers, and pushes structured events through a small in-memory pipeline into PostHog via the host's `posthog-node` client (`posthog.capture()`). It returns an `McpAnalytics` handle.
-- Every SDK-owned PostHog **event name** is `$`-prefixed (`$mcp_tool_call`, `$mcp_initialize`, `$identify`, …) per the PostHog naming convention. (Custom events you emit via `analytics.capture()` keep your own verbatim name — they're customer events, not SDK-owned.)
+- Every SDK-owned PostHog **event name** is `$`-prefixed (`$mcp_tool_call`, `$mcp_initialize`, …) per the PostHog naming convention. (Custom events you emit via `analytics.capture()` keep your own verbatim name — they're customer events, not SDK-owned.)
 - Every PostHog **property key** is also `$`-prefixed (`$mcp_tool_name`, `$mcp_intent`, `$mcp_duration_ms`, …) so MCP keys never collide with PostHog autocapture, web analytics, or other product events.
 - `$session_id` ties one MCP connection to one PostHog session. `distinct_id` falls back through `identified user → session id → "anonymous"`.
 - Tool calls additionally emit a sibling `$exception` event whenever a tool errors (unless `enableExceptionAutocapture: false`).
@@ -47,7 +47,7 @@ Both converge on the same internal `McpEvent` shape (`src/types.ts`) and funnel 
 ```
 client → MCP server → tools/call wrapper (instrument-highlevel.ts) → captureToolCall (instrumentation.ts)
   ├─ prepareToolCallEvent         ← build McpEvent, resolve session
-  ├─ handleIdentify               ← resolves identity; $identify at most once per session (§4)
+  ├─ handleIdentify               ← resolves identity (§4)
   ├─ applyResolvedMetadata        ← runs eventProperties callback
   ├─ resolveToolCallIntent        ← context arg OR intentFallback callback
   ├─ execute(request, extra)      ← run the wrapped tool handler
@@ -233,14 +233,9 @@ Keep user and request data on individual events, because a shared client can ser
   - **Degradation**: clients that don't replay the header fall back to the pre-token behavior — a generated session per request.
 - **MCP 2026-07-28 (stateless revision)**: the revision removes `initialize` and the `Mcp-Session-Id` header, so the token machinery is legacy-only there. The session anchor is the agent-carried `conversation_id` (source 1 above), and client name/version + protocol version travel in every request's `params._meta` (`src/extensions/client-identity.ts`), stamped per-event so concurrent requests can't cross-attribute. `$mcp_initialize` is no longer a universal session anchor — anchor analysis on the first `$mcp_tool_call`. Era detection (suppressing the header for these clients) is an open follow-up. See ADR-0004.
 - **Custom dispatchers**: `PostHogMCP` uses the same conversation-first rule. `prepareToolCall` accepts an optional carried session, validates or mints the conversation handle, and derives the session id. `prepareToolResult` adds a newly minted handle to compatible results. If no result channel can deliver a new handle, capture keeps the derived session id but omits `$mcp_conversation_id`.
-- **`distinct_id`** (`posthog-events.ts`): `identifyActorGivenId || sessionId || "anonymous"`. Pre-identify events are session-scoped; once `options.identify()` returns a user, subsequent events attribute to that user and PostHog's standard identity merge takes over.
+- **`distinct_id`** (`posthog-events.ts`): `identifyActorGivenId || sessionId || "anonymous"`. Pre-identify events are session-scoped; once `options.identify()` returns a user, subsequent events attribute to that user. The SDK does not merge the earlier session-scoped events into that person.
 - **Person processing**: events for sessions with **no resolved identity** carry `$process_person_profile: false`, so anonymous MCP sessions don't each mint a throwaway person profile (the distinct id is just the session id). Once an identity is resolved, person processing stays on so `$set` lands on a real person.
-- **`$identify` event** (`handleIdentify`, `src/extensions/internal.ts`): `options.identify()` is resolved on **every** request (that's what stamps `distinct_id`/`$set`), but the standalone `$identify` event is published **at most once per session**. It fires when either:
-  - the identity **materially changed** vs. the one cached for this session, or
-  - the identity is **first-seen** for this server instance _and_ the session wasn't already announced at `initialize` (i.e. not a token session replaying past its handshake).
-
-  "First-seen" is decided by an `IdentityCache` (bounded LRU, max 1000 entries) keyed by session id and **per-server** (one instance per server's tracking data via the `WeakMap`) — which a stateless pod resets on every request. So on a token session, a first-seen identity on a non-`initialize` request is treated as already announced at the handshake and suppressed. On stateless deployments this means an identity that only resolves after `initialize`, or changes mid-session, gets no standalone `$identify`; person properties still land, because every event carries `distinct_id`/`$set`. Accepted as inherent to statelessness — see ADR-0003's consequences. To drop `$identify` entirely, return `null` from `beforeSend` for `event === '$identify'`.
-
+- **No `$identify` event** (`handleIdentify`, `src/extensions/internal.ts`): `options.identify()` is resolved on **every** request and merged into an `IdentityCache` (bounded LRU, max 1000 entries) keyed by session id and **per-server**. The result stamps `distinct_id`/`$set` onto each event. The SDK publishes no standalone `$identify`: it would carry no `$anon_distinct_id`, so ingestion would merge no person.
 - **Groups (`$groups`)**: if `options.identify()` returns a `groups?: Record<string, string>` field (groupType → groupKey), it is stamped onto every event for that session as `$groups`. Callers never hand-write the `$groups` dollar-key themselves — they just return `groups` from `identify`.
 - **Person properties (`$set`)**: the `properties` object returned from `options.identify()` is written verbatim to `$set` (same as posthog-node's `identify({ distinctId, properties })`). Put `name`/`email`/etc in there.
 
@@ -260,7 +255,6 @@ All events are emitted by `buildPostHogCaptureEvents`. The main event name is co
 | `$mcp_prompts_list`       | Client lists prompts                                                                        | —                                                                                                                                                                                                                                                                               |
 | `$mcp_prompt_get`         | Prompt fetched                                                                              | `$mcp_resource_name` (= prompt name)                                                                                                                                                                                                                                            |
 | _(your event name)_       | `analytics.capture({ event, properties })`                                                  | A customer event sent under the verbatim `event` name (not `$`-prefixed). Carries `$session_id`, `distinct_id`, server/client metadata, plus whatever you pass in `properties`                                                                                                  |
-| `$identify`               | Once per session: `initialize`, or the identity appears/changes on a long-lived server (§4) | `$set` populated                                                                                                                                                                                                                                                                |
 | `$exception`              | Sibling to any errored event (unless `enableExceptionAutocapture: false`)                   | `$exception_list`, `$exception_level` (standard `@posthog/core` error-tracking shape)                                                                                                                                                                                           |
 
 ## 6. Property catalog
@@ -434,14 +428,14 @@ The previous version of this SDK lived in a separate repo and depended on `posth
 | `posthogOptions` option              | Forwarded to `posthog-node`                                     | Removed — configure the `posthog-node` client you pass in directly                                     |
 | `eventTags` callback                 | Constrained string map; spread flat on events                   | Removed — fold all metadata into `eventProperties`                                                     |
 | `~/posthog-mcp-analytics.log`        | SDK wrote to the user's home directory                          | Removed; pass `logger?: (msg: string) => void` if you want to capture internal logs                    |
-| PostHog event names                  | Plain (`mcp_tool_call`, `mcp_custom`, `posthog_identify`, …)    | SDK events `$`-prefixed (`$mcp_tool_call`, `$identify`, …); `capture()` events keep your verbatim name |
+| PostHog event names                  | Plain (`mcp_tool_call`, `mcp_custom`, `posthog_identify`, …)    | SDK events `$`-prefixed (`$mcp_tool_call`, …); `capture()` events keep your verbatim name              |
 | `POSTHOG_MCP_ANALYTICS_HOST` env var | Read at `instrument()` time                                     | Removed; pass `host` directly                                                                          |
 | Session id source                    | `uuidv4` via `node:crypto`                                      | `uuidv7` from `@posthog/core`                                                                          |
 
 ### Insight migration checklist
 
 1. `event = 'mcp_tool_call'` → `event = '$mcp_tool_call'` (same for every other `mcp_*` event).
-2. `event = 'posthog_identify'` → `event = '$identify'`.
+2. Drop filters on `posthog_identify`. The SDK no longer sends an identify event; person properties arrive as `$set` on every event.
 3. Replace `properties.$mcp_source = 'posthog_mcp_analytics'` filters with `event LIKE '$mcp_%'` if you want a broader funnel.
 4. Drop any filters on customer tags — fold them into `eventProperties`.
 

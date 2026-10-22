@@ -8,14 +8,9 @@ import type {
   MCPAnalyticsData,
   MCPRequestLike,
   MCPServerLike,
-  McpEvent,
   SessionInfo,
   UserIdentity,
 } from '../types'
-import { MCPAnalyticsEventType } from './event-types'
-import { captureEvent } from './capture'
-import { stampClientIdentity } from './client-identity'
-import { stampTransportIdentity } from './transport-identity'
 
 /**
  * Bounded LRU cache, capped at `maxSize` entries so a long-lived server cannot
@@ -75,36 +70,6 @@ export function setServerTrackingData(server: MCPServerLike, data: MCPAnalyticsD
   _serverTracking.set(server, data)
 }
 
-export function areIdentitiesEqual(a: UserIdentity, b: UserIdentity): boolean {
-  if (a.distinctId !== b.distinctId) {
-    return false
-  }
-  if (JSON.stringify(a.groups ?? {}) !== JSON.stringify(b.groups ?? {})) {
-    return false
-  }
-
-  const aProps = a.properties || {}
-  const bProps = b.properties || {}
-
-  const aKeys = Object.keys(aProps)
-  const bKeys = Object.keys(bProps)
-
-  if (aKeys.length !== bKeys.length) {
-    return false
-  }
-
-  for (const key of aKeys) {
-    if (!(key in bProps)) {
-      return false
-    }
-    if (JSON.stringify(aProps[key]) !== JSON.stringify(bProps[key])) {
-      return false
-    }
-  }
-
-  return true
-}
-
 export function mergeIdentities(previous: UserIdentity | undefined, next: UserIdentity): UserIdentity {
   if (!previous) {
     return next
@@ -121,70 +86,29 @@ export function mergeIdentities(previous: UserIdentity | undefined, next: UserId
 }
 
 /**
- * Resolves the optional `identify` callback on every request (the resolved
- * identity is what stamps `distinct_id`/`$set` onto events), but publishes the
- * `$identify` event at most once per session: at `initialize`, when a
- * long-lived server first sees the identity, or when it materially changes.
+ * Resolves the optional `identify` callback on every request and caches the
+ * merged identity per session. The caller stamps it onto each event as
+ * `distinct_id`/`$set`, so no standalone `$identify` event is needed: without
+ * an `$anon_distinct_id` it would not merge any person in ingestion.
  */
 export async function handleIdentify(
-  server: MCPServerLike,
   data: MCPAnalyticsData,
   sessionId: string,
   request: MCPRequestLike,
-  requestAttribution: SessionInfo,
-  extra?: CompatibleRequestHandlerExtra,
-  /**
-   * True when this session id came from an agent-carried `conversation_id`
-   * rather than the transport. Such a session is brand new and was never
-   * announced at `initialize`, whatever `data.sessionSource` still says about
-   * the connection.
-   */
-  sessionFromConversation = false
+  extra?: CompatibleRequestHandlerExtra
 ): Promise<UserIdentity | undefined> {
   const identityBeforeRequest = data.identifiedSessions.get(sessionId)
-  const sessionSourceBeforeIdentify = data.sessionSource
   if (!data.options.identify) {
     return identityBeforeRequest
   }
-
-  const identifyEvent: McpEvent = {
-    sessionId,
-    resourceName: getRequestResourceName(request),
-    eventType: MCPAnalyticsEventType.identify,
-    parameters: { request, extra },
-    timestamp: new Date(),
-  }
-  stampClientIdentity(identifyEvent, request, extra, server)
-  stampTransportIdentity(identifyEvent, extra)
 
   try {
     const identityResult =
       typeof data.options.identify === 'function' ? await data.options.identify(request, extra) : data.options.identify
 
     if (identityResult) {
-      const previousIdentity = data.identifiedSessions.get(sessionId)
-      const mergedIdentity = mergeIdentities(previousIdentity, identityResult)
-      // "First seen" means new to this instance's cache — which on a stateless
-      // pod (fresh instrument() per request) is every request. A token session
-      // was already announced by whichever pod handled `initialize`, so only the
-      // handshake, or a genuine change a long-lived server observed, publishes
-      // $identify. Every event still carries distinct_id/$set regardless, so
-      // person properties are never lost. Known accepted gap (ADR-0003): an
-      // identity resolving only after `initialize` on a token session gets no
-      // standalone $identify, so its pre-identify events aren't aliased onto
-      // the user.
-      const changed = previousIdentity !== undefined && !areIdentitiesEqual(previousIdentity, mergedIdentity)
-      const firstSeen = previousIdentity === undefined
-      const announcedAtInitialize =
-        !sessionFromConversation && sessionSourceBeforeIdentify === 'token' && request.method !== 'initialize'
-      const shouldPublish = changed || (firstSeen && !announcedAtInitialize)
-
+      const mergedIdentity = mergeIdentities(data.identifiedSessions.get(sessionId), identityResult)
       data.identifiedSessions.set(sessionId, mergedIdentity)
-
-      if (shouldPublish) {
-        data.logger(`Identified session ${sessionId}`)
-        captureEvent(server, identifyEvent, data.logger, withIdentity(requestAttribution, mergedIdentity))
-      }
       return mergedIdentity
     }
 
@@ -225,28 +149,4 @@ export async function resolveEventProperties(
     data.logger(`eventProperties callback error: ${e}`)
     return null
   }
-}
-
-/**
- * Names what a request is about, for `$identify`. `resources/read` addresses its
- * subject by `uri` rather than `name`, so an identify published from a read used
- * to report `Unknown`.
- */
-function getRequestResourceName(request: unknown): string {
-  if (!request || typeof request !== 'object' || !('params' in request)) {
-    return 'Unknown'
-  }
-
-  const params = request.params
-  if (!params || typeof params !== 'object') {
-    return 'Unknown'
-  }
-
-  for (const key of ['name', 'uri'] as const) {
-    const value = (params as Record<string, unknown>)[key]
-    if (typeof value === 'string') {
-      return value
-    }
-  }
-  return 'Unknown'
 }
