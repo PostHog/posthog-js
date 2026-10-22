@@ -57,7 +57,7 @@ Stable releases publish byte-identical trees at:
 - `/static/browser/<exact-package-version>/` with `Cache-Control: public, max-age=31536000, immutable`;
 - `/static/browser/<major>/` with `Cache-Control: public, max-age=300`.
 
-Prereleases publish and verify only the exact-version tree; their alias phases perform verification without alias writes. No top-level aliases are published for this package. The uploader never writes legacy `/static/array.js`, `/static/<legacy-version>/`, or `/static/<legacy-major>/` paths. Old hashed chunks are retained during future major-alias updates so cached entries can still resolve their dependencies. Alias dependencies are uploaded and verified before replacing `posthog.js`. Alias promotion is not atomic across objects or regions, and no CDN cache purge occurs.
+Prereleases publish and verify only the exact-version tree; their alias phases perform verification without alias writes. No top-level aliases are published for this package. The uploader never writes legacy `/static/array.js`, `/static/<legacy-version>/`, or `/static/<legacy-major>/` paths. Old hashed chunks are retained during future major-alias updates so cached entries can still resolve their dependencies. In both immutable and alias phases, dependencies are uploaded and verified before publishing `posthog.js`. Alias promotion is not atomic across objects or regions, and no CDN cache purge occurs.
 
 The two explicit CLI phases are:
 
@@ -67,7 +67,7 @@ node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --immutab
 node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --aliases-only
 ```
 
-Both use the shared SHA-256/HTTP-metadata checks, conditional immutable writes, bounded concurrency, and retry policy described below. Alias-only mode re-verifies every immutable asset before writing any alias. Keep the original `browser-cdn-dist` artifact for retries; do not rebuild changing bytes into an existing immutable version. This command does not support forced overwrite. The manual recovery workflow below remains specific to `posthog-js`, not `@posthog/browser`.
+Both use the shared SHA-256/HTTP-metadata checks, conditional immutable writes, bounded concurrency, and retry policy described below. Alias-only mode re-verifies every immutable asset before writing any alias. The workflow retains the original `browser-cdn-dist` artifact for a 30-day retry window; use it rather than rebuilding changing bytes into an existing immutable version. If that artifact is no longer available, prepare a new package version instead of rebuilding into the previous immutable path. This command does not support forced overwrite. The manual recovery workflow below remains specific to `posthog-js`, not `@posthog/browser`.
 
 **Deployment prerequisite:** before enabling public releases, infrastructure owners must confirm that both existing asset-bucket OIDC roles can HEAD/GET and conditionally PUT the new `static/browser/` prefix with the existing checksum/tagging requirements, and that both asset CDNs route and serve that prefix with the uploaded MIME/cache metadata. Local offline tests do not establish IAM authorization, CDN routing, or public availability.
 

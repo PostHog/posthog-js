@@ -139,6 +139,7 @@ test('browser CDN builds once from the version commit and transfers the entire a
     assert.match(build, /test -s packages\/browser-next\/dist-cdn\/posthog.js/)
     assert.match(build, /path: packages\/browser-next\/dist-cdn\/\n/)
     assert.match(build, /include-hidden-files: true/)
+    assert.match(build, /retention-days: 30/)
     assert.doesNotMatch(build, /matrix:|toolbar/)
     for (const id of ['upload-browser-cdn-immutable', 'promote-browser-cdn']) {
         const upload = job(release, id)
