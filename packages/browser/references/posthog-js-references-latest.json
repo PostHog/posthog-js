@@ -1061,7 +1061,7 @@
         {
           "category": "Privacy",
           "description": "Checks if the user has opted out of data capturing.",
-          "details": "Returns the current consent status for event tracking and data persistence.",
+          "details": "Returns the current consent status for event tracking and data persistence.\nIn cookieless `'always'` mode this returns `true`, because the SDK does not store data for the user. Events are still captured in this mode. To check if the SDK captures events, use `is_capturing()`.",
           "id": "has_opted_out_capturing",
           "showDocs": true,
           "title": "has_opted_out_capturing",
