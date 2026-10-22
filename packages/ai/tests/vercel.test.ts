@@ -779,6 +779,34 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       )
     })
 
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])(
+      'should report the same provider for failed and successful calls in %s models',
+      async (_version, createModel) => {
+        // Real AI SDK providers namespace the provider id by API, e.g. `openai.chat` or
+        // `anthropic.messages`. Successful calls report the leading segment.
+        const baseModel = createModel('gpt-4')
+        ;(baseModel as { provider: string }).provider = 'openai.chat'
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+        })
+
+        await simulateGenerateText({ model, prompt: 'What is 9 + 10?' })
+
+        baseModel.doGenerate = vi.fn().mockRejectedValue(new Error('API Error'))
+        await expect(simulateGenerateText({ model, prompt: 'What is 9 + 10?' })).rejects.toThrow('API Error')
+
+        const calls = (mockPostHogClient.capture as vi.Mock).mock.calls
+        expect(calls).toHaveLength(2)
+        expect(calls[0][0].properties.$ai_is_error).toBeUndefined()
+        expect(calls[0][0].properties.$ai_provider).toBe('openai')
+        expect(calls[1][0].properties.$ai_is_error).toBe(true)
+        expect(calls[1][0].properties.$ai_provider).toBe('openai')
+      }
+    )
+
     it.each(['v2', 'v3'] as const)(
       'should capture in-band error chunks with partial output in %s streams',
       async (version) => {

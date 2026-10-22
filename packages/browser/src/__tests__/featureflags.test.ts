@@ -189,6 +189,7 @@ describe('featureflags', () => {
             unregister: (key) => instance.persistence.unregister(key),
             get_property: (key) => instance.persistence.props[key],
             capture: () => {},
+            is_capturing: () => true,
             flagsEndpointWasHit: false,
             _send_request: vi.fn().mockImplementation(({ callback }) =>
                 callback({
@@ -452,6 +453,27 @@ describe('featureflags', () => {
             await vi.runAllTimersAsync()
 
             expect(callOrder).toEqual(['loading', 'loaded'])
+        })
+
+        it('warns when onFeatureFlags callbacks reload flags', async () => {
+            const warnSpy = vi.mocked(window.console.warn)
+            featureFlags.onFeatureFlags(() => {
+                featureFlags.reloadFeatureFlags()
+            })
+            await vi.runAllTimersAsync()
+            warnSpy.mockClear()
+
+            featureFlags.reloadFeatureFlags()
+            expect(warnSpy).not.toHaveBeenCalledWith(
+                expect.any(String),
+                expect.stringContaining('inside an onFeatureFlags callback')
+            )
+
+            featureFlags._fireFeatureFlagsCallbacks()
+            expect(warnSpy).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.stringContaining('reloadFeatureFlags() was called inside an onFeatureFlags callback')
+            )
         })
 
         it('should not emit featureFlagsReloading if reloading is disabled', () => {

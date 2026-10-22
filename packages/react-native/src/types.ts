@@ -154,7 +154,7 @@ export interface PostHogCustomAppProperties {
   $timezone?: string | null
   /** Whether the app is running on an emulator/simulator */
   $is_emulator?: boolean | null
-  /** React Native version like "0.79.6" */
+  /** React Native version like "0.79.6". Not set by default: the SDK sends it only on `Application Installed` and `Application Updated` */
   $react_native_version?: string | null | undefined
 }
 

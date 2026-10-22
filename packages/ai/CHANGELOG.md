@@ -1,5 +1,96 @@
 # posthog-ai
 
+## 8.16.0
+
+### Minor Changes
+
+- [#5360](https://github.com/PostHog/posthog-js/pull/5360) [`26e65ec`](https://github.com/PostHog/posthog-js/commit/26e65ec6abd38b6401d98a531f95733e1402f1d8) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add datasets, versioned scorers, and resumable offline evaluation uploads.
+  (2026-10-22)
+
+### Patch Changes
+
+- [#5121](https://github.com/PostHog/posthog-js/pull/5121) [`0f5d25a`](https://github.com/PostHog/posthog-js/commit/0f5d25a4356e2ac1186958bcb82cd7492e30158f) Thanks [@breken-ai](https://github.com/breken-ai)! - Failed Vercel AI SDK `generateText` calls report the same `$ai_provider` as successful ones.
+  (2026-10-22)
+
+## 8.15.2
+
+### Patch Changes
+
+- [#5368](https://github.com/PostHog/posthog-js/pull/5368) [`3e46e4c`](https://github.com/PostHog/posthog-js/commit/3e46e4c90673e0fee73cd74a013afa340011a47c) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Count Gemini tool-use prompt tokens in the captured input tokens.
+  (2026-10-22)
+
+## 8.15.1
+
+### Patch Changes
+
+- [#5375](https://github.com/PostHog/posthog-js/pull/5375) [`def5ab4`](https://github.com/PostHog/posthog-js/commit/def5ab411d75338849ebb9ee0a9d2c1af7e8c8ed) Thanks [@shehjaddev](https://github.com/shehjaddev)! - fix: Capture Anthropic extended thinking blocks as `reasoning` content in captured output, streamed and not, and start time to first token at the first thinking delta.
+  (2026-10-22)
+
+## 8.15.0
+
+### Minor Changes
+
+- [#5091](https://github.com/PostHog/posthog-js/pull/5091) [`2192bb1`](https://github.com/PostHog/posthog-js/commit/2192bb1281508a4574c60cfd6fb6bd58ad7245b4) Thanks [@gouveags](https://github.com/gouveags)! - Trace foreground Gemini Interactions API model calls.
+  (2026-10-22)
+
+## 8.14.5
+
+### Patch Changes
+
+- [#5357](https://github.com/PostHog/posthog-js/pull/5357) [`b5e99d1`](https://github.com/PostHog/posthog-js/commit/b5e99d17464712412592b0b2de68fe2d57cbbb7c) Thanks [@shehjaddev](https://github.com/shehjaddev)! - fix: Capture Gemini thought summaries (`thinkingConfig.includeThoughts`) as `reasoning` content blocks instead of answer text, in responses, streamed output, replayed input and the ADK plugin.
+  (2026-10-22)
+
+## 8.14.4
+
+### Patch Changes
+
+- [#5352](https://github.com/PostHog/posthog-js/pull/5352) [`dd58d50`](https://github.com/PostHog/posthog-js/commit/dd58d504da2b27df36363ecf742191348988fb46) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix: Use the cumulative input and cache token counts from Anthropic's final `message_delta` when streaming with server tools.
+  (2026-10-21)
+
+## 8.14.3
+
+### Patch Changes
+
+- [#5251](https://github.com/PostHog/posthog-js/pull/5251) [`717d2fc`](https://github.com/PostHog/posthog-js/commit/717d2fca88abbcffd81ca20839343f7f439ab952) Thanks [@yoarajota](https://github.com/yoarajota)! - Capture Chat Completions responses that contain custom tool calls instead of throwing from the wrapped `create()` call.
+  (2026-10-20)
+
+## 8.14.2
+
+### Patch Changes
+
+- [#5155](https://github.com/PostHog/posthog-js/pull/5155) [`a9d29f1`](https://github.com/PostHog/posthog-js/commit/a9d29f1d7500340d02f94769b7a0e635a1fedddc) Thanks [@gouveags](https://github.com/gouveags)! - Normalize AI tool-result capture and redact binary content while preserving existing provider limits.
+  (2026-10-19)
+
+## 8.14.1
+
+### Patch Changes
+
+- [#5305](https://github.com/PostHog/posthog-js/pull/5305) [`7319620`](https://github.com/PostHog/posthog-js/commit/73196206fa975dcefb8db023330c7f3629ba52d0) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <0.135.0`, so installs can pick 0.134.0, the first version with OpenTelemetry tracing.
+  (2026-10-15)
+
+## 8.14.0
+
+### Minor Changes
+
+- [#5299](https://github.com/PostHog/posthog-js/pull/5299) [`7587be3`](https://github.com/PostHog/posthog-js/commit/7587be3705abcc5db80ee9fa5cd875f6869fbf9c) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Add per-request PostHog context to AI spans through the PostHogSpanProcessor client option.
+  (2026-10-14)
+
+## 8.13.7
+
+### Patch Changes
+
+- [#5266](https://github.com/PostHog/posthog-js/pull/5266) [`411d364`](https://github.com/PostHog/posthog-js/commit/411d3646a511e7aea77ca9bc27add1c2a42bdddb) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `prompts.get()` now makes one request when several callers ask for the same prompt at once, instead of one request per caller. Prompt fetches also time out after 10 seconds instead of hanging on a stalled connection, and `PromptFetchError` is exported so callers can tell a timeout or server error from a missing prompt.
+  (2026-10-14)
+- Updated dependencies [[`e6598be`](https://github.com/PostHog/posthog-js/commit/e6598be4d3f4c09c47d4c052987fafd33fc3f59e)]:
+  - posthog-node@5.56.1
+
+## 8.13.6
+
+### Patch Changes
+
+- [#5286](https://github.com/PostHog/posthog-js/pull/5286) [`4f739c6`](https://github.com/PostHog/posthog-js/commit/4f739c6ee8890798f6f9c8a09499f86f3c7a0c8f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <0.134.0`.
+  (2026-10-13)
+
 ## 8.13.5
 
 ### Patch Changes

@@ -2,6 +2,8 @@ import { localRemoteConfig } from './helpers'
 import type { Mock } from 'vitest'
 
 import { analytics } from '../src/analytics'
+import type { AnalyticsExtension, AnalyticsMessage } from '../src/analytics-internal'
+import { CAPTURE_V1_TEARDOWN_BUDGET_BYTES } from '../src/capture-v1'
 import { createPostHog, type BrowserFetch } from '../src/core'
 
 interface MutableNavigator {
@@ -118,6 +120,69 @@ describe('browser-next analytics lifecycle', () => {
         expect(teardown.batch.map(({ uuid }) => uuid)).toEqual(['active-uuid', 'queued-uuid'])
         posthog.optOut()
         await posthog.dispose()
+    })
+
+    it('shares outstanding keepalive bytes across direct unload calls and pagehide', async () => {
+        const bodies: string[] = []
+        const pending: Array<(response: Response) => void> = []
+        const fetch: BrowserFetch = (_input, init) => {
+            bodies.push(String(init?.body))
+            return new Promise<Response>((resolve) => pending.push(resolve))
+        }
+        const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch,
+            extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
+        })
+        try {
+            posthog.capture('buffered', { value: 'x'.repeat(20_000) })
+            posthog.capture('first', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
+            posthog.capture('second', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
+            events.dispatchEvent(new Event('pagehide'))
+            expect(bodies).toHaveLength(1)
+            expect(
+                bodies.reduce((total, body) => total + new TextEncoder().encode(body).length, 0)
+            ).toBeLessThanOrEqual(CAPTURE_V1_TEARDOWN_BUDGET_BYTES)
+            pending.shift()!(new Response(''))
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            events.dispatchEvent(new Event('pagehide'))
+            expect(bodies).toHaveLength(2)
+            expect(JSON.parse(bodies[1]!).batch.map(({ event }: AnalyticsMessage) => event)).toEqual(['buffered'])
+        } finally {
+            for (const resolve of pending) resolve(new Response(''))
+            await posthog.shutdown(0)
+        }
+    })
+
+    it('includes unload captures from pre-teardown subscribers in the queued handoff', async () => {
+        const requests: Array<{ batch: AnalyticsMessage[] }> = []
+        const fetch: BrowserFetch = async (_input, init) => {
+            requests.push(JSON.parse(String(init?.body)))
+            return new Response('{}')
+        }
+        const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch,
+            extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
+        })
+        try {
+            posthog.capture('buffered')
+            posthog.getExtension<AnalyticsExtension>('analytics')!.onBeforeTeardown!(() => {
+                posthog.capture('abandonment', { answer: 'partial' }, { delivery: 'unload' })
+            })
+            events.dispatchEvent(new Event('pagehide'))
+            expect(requests.map(({ batch }) => batch.map(({ event }) => event))).toEqual([['buffered', 'abandonment']])
+        } finally {
+            await posthog.shutdown(0)
+        }
     })
 
     it('uses unload only when pagehide is unavailable', async () => {

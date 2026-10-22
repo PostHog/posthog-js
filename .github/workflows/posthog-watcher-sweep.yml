@@ -31,7 +31,7 @@ jobs:
         runs-on: ubuntu-24.04
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
               with:
                 egress-policy: audit
 
@@ -51,7 +51,7 @@ jobs:
                   sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Sweep issues
-              uses: PostHog/posthog-watcher-action@1c47c46c8cd9647f6c146bb56fd436ae45387279
+              uses: PostHog/posthog-watcher-action@41f5037922febee549746e8b0c50892c92b59f84
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: sweep

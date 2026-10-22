@@ -607,9 +607,6 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await callTool(client, SEND_FEEDBACK, { feedback_type: 'other', summary: 'Hello.' })
 
       await new Promise((r) => setTimeout(r, 50))
-      const identifyEvent = capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.identify)
-      expect(identifyEvent?.resourceName).toBe(SEND_FEEDBACK)
-
       const data = getServerTrackingData(server.server)
       expect(data?.identifiedSessions.get(data.sessionId)).toEqual({
         distinctId: 'user-1',

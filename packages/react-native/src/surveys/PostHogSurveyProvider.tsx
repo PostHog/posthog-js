@@ -224,73 +224,89 @@ export function PostHogSurveyProvider(
     if (isShown) {
       return;
     }
-    const inProgressSurveys = surveys.filter((survey: Survey) => progressStore.load(survey))
-    const inProgressSurveysSet = new Set(inProgressSurveys);
-
+    const inProgressSurveys = new Set(
+      surveys
+        .filter((survey) => progressStore.load(survey))
+        .map(getSurveyIterationKey),
+    );
     const activeSurveys = getActiveMatchingSurveys(
       surveys,
       flags ?? {},
       seenSurveys,
       activatedSurveys,
+      inProgressSurveys,
       lastSeenSurveyDate,
-      inProgressSurveysSet,
     );
+    const popoverSurveys = activeSurveys
+      .filter((survey) => survey.type === SurveyType.Popover)
+      .sort((a, b) => {
+        // Resume an existing response before starting a new survey, then prefer the shortest delay.
+        const progressPriority =
+          Number(inProgressSurveys.has(getSurveyIterationKey(b))) -
+          Number(inProgressSurveys.has(getSurveyIterationKey(a)));
+        return (
+          progressPriority ||
+          (a.appearance?.surveyPopupDelaySeconds ?? 0) -
+            (b.appearance?.surveyPopupDelaySeconds ?? 0)
+        );
+      });
 
-    const popoverSurveys = activeSurveys.filter(
-      (survey: Survey) => survey.type === SurveyType.Popover,
-    );
-
-    const matchingActiveSurvey = activeSurvey && activeSurveys.some((survey: Survey) => survey.id === activeSurvey.id);
-
-    if (activeSurvey && !matchingActiveSurvey) {
-      setActiveSurvey(undefined)
-    }
-
-
-    const popoverSurveyQueue = sortSurveysByAppearanceDelay(popoverSurveys);
-
-    if (popoverSurveyQueue.length === 0) {
-      setActiveSurvey(undefined);
+    // Keep an eligible armed survey, including one whose delay has already elapsed.
+    if (
+      activeSurvey &&
+      popoverSurveys.some((survey) => survey.id === activeSurvey.id)
+    ) {
       return;
     }
 
-    const nextSurvey = popoverSurveyQueue[0];
+    // An ineligible armed survey must not be presented while its replacement waits.
+    setActiveSurvey(undefined);
+    const nextSurvey = popoverSurveys[0];
+    if (!nextSurvey) return;
+
     const delaySeconds = nextSurvey.appearance?.surveyPopupDelaySeconds ?? 0;
-    // The default in PostHog is 0 seconds
 
     if (delaySeconds <= 0) {
       setActiveSurvey(nextSurvey);
       return;
     }
 
-    const timeoutId = setTimeout(() => {
+    const surveyActivationTimeoutId = setTimeout(() => {
+      if (!canCaptureSurvey(posthog)) return;
+
       const currentActiveSurveys = getActiveMatchingSurveys(
         surveys,
         flags ?? {},
         seenSurveys,
         activatedSurveys,
+        new Set(
+          surveys
+            .filter((survey) => progressStore.load(survey))
+            .map(getSurveyIterationKey),
+        ),
         lastSeenSurveyDate,
       );
 
-      const currentActiveSurvey = currentActiveSurveys.some(
-        (s) => s.id === nextSurvey.id,
+      const nextSurveyEligible = currentActiveSurveys.some(
+        (survey: Survey) => survey.id === nextSurvey.id,
       );
 
-      if (currentActiveSurvey) {
+      if (nextSurveyEligible) {
         setActiveSurvey(nextSurvey);
       }
     }, delaySeconds * 1000);
 
-    return () => {
-      clearTimeout(timeoutId);
-    };
+    return () => clearTimeout(surveyActivationTimeoutId);
   }, [
     activeSurvey,
     flags,
     surveys,
     seenSurveys,
-    activatedSurveys,
     lastSeenSurveyDate,
+    activatedSurveys,
+    isReady,
+    posthog,
+    progressStore,
   ]);
 
   const translatedActiveSurvey = useMemo(() => {
@@ -447,13 +463,5 @@ export function PostHogSurveyProvider(
         )}
       </FeedbackSurveyContext.Provider>
     </ActiveSurveyContext.Provider>
-  );
-}
-
-export function sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
-  return [...surveys].sort(
-    (a, b) =>
-      (a.appearance?.surveyPopupDelaySeconds ?? 0) -
-      (b.appearance?.surveyPopupDelaySeconds ?? 0),
   );
 }

@@ -37,6 +37,7 @@ const providers = [
   'openai-agents',
   'adk',
   'claude-agent-sdk',
+  'evaluations',
 ]
 
 export default defineConfig([

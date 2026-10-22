@@ -315,6 +315,7 @@ export class PostHogFeatureFlags implements Extension {
     private _reloadingDisabled: boolean = false
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer: ReturnType<typeof setTimeout> | undefined
+    private _firingFeatureFlagsCallbacks: boolean = false
     private _flagsLoadedFromRemote: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
     private _consecutiveStatusZeroFailures: number = 0
@@ -924,6 +925,13 @@ export class PostHogFeatureFlags implements Extension {
             return
         }
 
+        if (this._firingFeatureFlagsCallbacks) {
+            this._logger.warn(
+                'reloadFeatureFlags() was called inside an onFeatureFlags callback. ' +
+                    'This callback also runs when flags change in other tabs, so this can cause a request loop.'
+            )
+        }
+
         if (this._requestInFlight) {
             // Record the queued reload before the debounce fires so the in-flight response
             // cannot clear identity state needed by the next request.
@@ -1331,7 +1339,7 @@ export class PostHogFeatureFlags implements Extension {
         let sessionIdToPersist: string | undefined
         // When session-scoped dedup is enabled, reset the reported flags whenever the session changes.
         if (this._config.deduplicateCallsPerSession) {
-            const currentSessionId = this._client?.session.sessionId
+            const currentSessionId = this._client?.session?.sessionId
             const storedSessionId = this._prop(FLAG_CALL_REPORTED_SESSION_ID)
             if (currentSessionId && currentSessionId !== storedSessionId) {
                 flagCallReported = {}
@@ -1340,7 +1348,16 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         if (options.send_event || !('send_event' in options)) {
-            if (!(key in flagCallReported) || !flagCallReported[key]!.includes(flagReportValue)) {
+            const canCapture = this._client?.canCapture
+            // Older SDK versions marked flags as reported while capture was off, but the client dropped the event.
+            // Clear those marks so the exposure is sent after consent is granted.
+            if (!canCapture && Object.keys(flagCallReported).length > 0) {
+                flagCallReported = {}
+                this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
+            }
+            // The client drops the event while capture is off, so marking the flag as reported would suppress the
+            // exposure after consent is granted.
+            if (canCapture && !flagCallReported[key]?.includes(flagReportValue)) {
                 if (isArray(flagCallReported[key])) {
                     flagCallReported[key].push(flagReportValue)
                 } else {
@@ -1858,6 +1875,8 @@ export class PostHogFeatureFlags implements Extension {
     _fireFeatureFlagsCallbacks(errorsLoading?: boolean): void {
         this._rebuildEventProperties()
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
+        const wasFiring = this._firingFeatureFlagsCallbacks
+        this._firingFeatureFlagsCallbacks = true
         this.featureFlagEventHandlers.forEach((handler) => {
             // Isolate each handler: a user-provided onFeatureFlags callback that throws must not
             // break the callback chain (preventing later handlers from firing) or surface as a
@@ -1870,6 +1889,7 @@ export class PostHogFeatureFlags implements Extension {
                 this._logger.error('Error while running feature flags callback', error)
             }
         })
+        this._firingFeatureFlagsCallbacks = wasFiring
     }
 
     /**

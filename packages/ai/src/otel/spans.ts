@@ -1,4 +1,5 @@
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
+import type { Attributes } from '@opentelemetry/api'
+import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base'
 
 const AI_SPAN_PREFIXES = ['gen_ai.', 'llm.', 'ai.', 'traceloop.'] as const
 
@@ -15,4 +16,12 @@ export function isAISpan(span: ReadableSpan): boolean {
     return Object.keys(attributes).some((key) => AI_SPAN_PREFIXES.some((prefix) => key.startsWith(prefix)))
   }
   return false
+}
+
+/** Copies rather than mutates: the span is shared across every registered processor/exporter. */
+export function withAttributes(span: ReadableSpan, attributes: Attributes, events?: TimedEvent[]): ReadableSpan {
+  return Object.create(span, {
+    attributes: { value: attributes, enumerable: true, configurable: true },
+    ...(events ? { events: { value: events, enumerable: true, configurable: true } } : {}),
+  })
 }
