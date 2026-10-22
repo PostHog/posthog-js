@@ -1,6 +1,8 @@
 import type { PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
+import { emailContentHash } from '@/email-content-hash'
 
-const TEMPLATE_SEND_PATH = /^\/api\/projects\/@current\/messaging_templates\/([^/]+)\/send\/$/
+const SEND_PATH = '/api/projects/@current/messaging/send/email/'
+const UPLOAD_PATH = /^\/api\/projects\/@current\/messaging_templates\/by_key\/([^/]+)\/$/
 const DOCS_URL = 'https://posthog.com/docs/workflows/transactional-email-api'
 
 export interface ReceivedRequest {
@@ -14,9 +16,21 @@ export interface ReceivedRequest {
 export interface DeliveredEmail {
   messageId: string
   to: string
-  templateId: string
-  variables: Record<string, unknown>
+  /** The template id, the local template's key, or the rendered content's `template_key`. */
+  template: string
+  subject?: string
+  html?: string
+  text?: string
+  variables?: Record<string, unknown>
   distinctId?: string
+}
+
+interface LocalTemplate {
+  subject: string
+  html: string
+  text?: string
+  contentHash: string
+  editedInPostHog: boolean
 }
 
 export type Fault =
@@ -31,13 +45,16 @@ interface ScheduledFault {
 }
 
 /**
- * An in-memory PostHog app host that speaks the template send route of the transactional email API, with its
- * idempotency rule: a key PostHog already accepted for the same request answers the first `202` again.
+ * An in-memory PostHog app host that speaks the send and upload routes of the transactional email API: a template by
+ * id, rendered content by `template_key`, and a local template by key and content hash, which answers
+ * `template_outdated` until an upload publishes that content. An idempotency key PostHog already accepted for the
+ * same request answers the first `202` again.
  */
 export class FakeEmailsApi {
   readonly received: ReceivedRequest[] = []
   readonly delivered: DeliveredEmail[] = []
   private readonly templateIds = new Set<string>()
+  private readonly localTemplates = new Map<string, LocalTemplate>()
   private readonly accepted = new Map<string, { fingerprint: string; messageId: string }>()
   private readonly faults: ScheduledFault[] = []
   private nextId = 1
@@ -52,7 +69,7 @@ export class FakeEmailsApi {
       throw fault.networkError
     }
     if (fault && 'bodyBreaksOff' in fault) {
-      return breakOff(this.handle(request), fault.bodyBreaksOff)
+      return breakOff(await this.handle(request), fault.bodyBreaksOff)
     }
     if (fault) {
       return respond(fault.status, fault.body, fault.headers)
@@ -62,6 +79,14 @@ export class FakeEmailsApi {
 
   addTemplate(id: string): void {
     this.templateIds.add(id)
+  }
+
+  editInPostHog(key: string, content: { subject: string; html: string }): void {
+    this.localTemplates.set(key, { ...content, contentHash: 'v1:edited', editedInPostHog: true })
+  }
+
+  localTemplate(key: string): LocalTemplate | undefined {
+    return this.localTemplates.get(key)
   }
 
   failWhen(matches: (request: ReceivedRequest) => boolean, fault: Fault, times = Infinity): void {
@@ -80,44 +105,77 @@ export class FakeEmailsApi {
     return scheduled?.fault
   }
 
-  private handle(request: ReceivedRequest): PostHogFetchResponse {
+  private async handle(request: ReceivedRequest): Promise<PostHogFetchResponse> {
     if (request.origin !== this.options.appHost) {
       return respond(404, '<html>Not the app host</html>')
     }
     if (request.headers.authorization !== `Bearer ${this.options.secretKey}`) {
       return refusal(401, 'authentication_failed', null)
     }
-    const templateId = TEMPLATE_SEND_PATH.exec(request.path)?.[1]
-    if (request.method === 'POST' && templateId) {
-      return this.handleTemplateSend(decodeURIComponent(templateId), request)
+    const uploadKey = UPLOAD_PATH.exec(request.path)?.[1]
+    if (request.method === 'PUT' && uploadKey) {
+      return this.handleUpload(decodeURIComponent(uploadKey), request.body)
+    }
+    if (request.method === 'POST' && request.path === SEND_PATH) {
+      return this.handleSend(request)
     }
     return refusal(404, 'not_found', null)
   }
 
-  private handleTemplateSend(templateId: string, { headers, body }: ReceivedRequest): PostHogFetchResponse {
-    if (!this.templateIds.has(templateId)) {
-      return refusal(404, 'not_found', null)
+  private async handleUpload(key: string, body: Record<string, any>): Promise<PostHogFetchResponse> {
+    const existing = this.localTemplates.get(key)
+    if (existing?.editedInPostHog && body.if_code_managed === true) {
+      return refusal(409, 'template_edited_in_posthog', null)
+    }
+    const { subject, html, text } = body
+    const contentHash = await emailContentHash({ subject, html, text })
+    this.localTemplates.set(key, { subject, html, text, contentHash, editedInPostHog: false })
+    return respond(existing ? 200 : 201, { key, result: existing ? 'updated' : 'created', content_hash: contentHash })
+  }
+
+  private handleSend({ headers, body }: ReceivedRequest): PostHogFetchResponse {
+    const refused = this.refusalOf(body)
+    if (refused) {
+      return refused
     }
     const key = headers['idempotency-key']
-    const fingerprint = JSON.stringify([templateId, body])
+    const fingerprint = JSON.stringify(body)
     const earlier = key === undefined ? undefined : this.accepted.get(key)
     if (earlier) {
       return earlier.fingerprint === fingerprint
-        ? respond(202, { message_id: earlier.messageId, replayed: true })
+        ? respond(202, { message_id: earlier.messageId, replayed: true, warnings: [] })
         : refusal(422, 'idempotency_key_reused', null)
     }
     const messageId = `message-${this.nextId++}`
     if (key !== undefined) {
       this.accepted.set(key, { fingerprint, messageId })
     }
-    this.delivered.push({
-      messageId,
-      to: body.to,
-      templateId,
-      variables: body.message_data ?? {},
-      distinctId: body.identifiers?.distinct_id,
-    })
-    return respond(202, { message_id: messageId, replayed: false })
+    this.delivered.push({ messageId, to: body.to, distinctId: body.identifiers?.distinct_id, ...this.contentOf(body) })
+    return respond(202, { message_id: messageId, replayed: false, warnings: [] })
+  }
+
+  private refusalOf(body: Record<string, any>): PostHogFetchResponse | undefined {
+    const { id, key, hash } = body.template ?? {}
+    if (id !== undefined && !this.templateIds.has(id)) {
+      return refusal(404, 'template_not_found', 'template__id')
+    }
+    const local = key === undefined ? undefined : this.localTemplates.get(key)
+    if (key !== undefined && (!local || (hash !== undefined && hash !== local.contentHash))) {
+      return refusal(409, 'template_outdated', local ? 'template__hash' : 'template__key')
+    }
+    return undefined
+  }
+
+  private contentOf(body: Record<string, any>): Omit<DeliveredEmail, 'messageId' | 'to' | 'distinctId'> {
+    const { id, key } = body.template ?? {}
+    if (id !== undefined) {
+      return { template: id, variables: body.message_data ?? {} }
+    }
+    if (key !== undefined) {
+      const { subject, html, text } = this.localTemplates.get(key)!
+      return { template: key, subject, html, text, variables: body.message_data ?? {} }
+    }
+    return { template: body.template_key, subject: body.subject, html: body.html, text: body.text }
   }
 }
 

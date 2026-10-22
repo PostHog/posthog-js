@@ -746,7 +746,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }),
       warn: (message) => this._logger.warn(message),
       track: (work) => this.addPendingPromise(work),
-      request: (url, headers, body) => this._requestEmailsApi(url, headers, body),
+      request: (method, url, headers, body) => this._requestEmailsApi(method, url, headers, body),
     })
     return this._emails
   }
@@ -3066,12 +3066,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /** One attempt: `posthog.emails` retries on its own, with the same idempotency key. */
   private async _requestEmailsApi(
+    method: 'POST' | 'PUT',
     url: string,
     headers: Record<string, string>,
     body: string
   ): Promise<PostHogApiResponse> {
     try {
-      return await this.requestJson(url, { method: 'POST', headers, body }, { retryCount: 0 })
+      return await this.requestJson(url, { method, headers, body }, { retryCount: 0 })
     } catch (error) {
       this._events.emit('error', error)
       throw new Error(isTimeout(error) ? `Request timed out after ${this.requestTimeout}ms` : requestFailure(error))

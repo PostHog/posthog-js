@@ -1,10 +1,26 @@
 import { isValidUUID, type JsonType, type PostHogApiResponse } from '@posthog/core'
+import { emailContentHash } from './email-content-hash'
 
-const TEMPLATE_SEND_PATH = (templateId: string): string =>
-  `/api/projects/@current/messaging_templates/${templateId}/send/`
+const SEND_PATH = '/api/projects/@current/messaging/send/email/'
+const UPLOAD_PATH = (key: string): string => `/api/projects/@current/messaging_templates/by_key/${key}/`
 
+const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
-const SEND_OPTIONS = new Set(['to', 'distinctId', 'idempotencyKey', 'maxRetries', 'templateId', 'templateData'])
+const SEND_OPTIONS = new Set([
+  'to',
+  'distinctId',
+  'idempotencyKey',
+  'captureEngagement',
+  'maxRetries',
+  'templateId',
+  'templateKey',
+  'templateData',
+  'from',
+  'replyTo',
+  'subject',
+  'html',
+  'text',
+])
 const DEFAULT_MAX_RETRIES = 2
 const FIRST_RETRY_DELAY_MS = 1_000
 const MAX_RETRY_DELAY_MS = 30_000
@@ -26,20 +42,51 @@ export interface SendEmailBase {
    * `maxRetries: 0`.
    */
   idempotencyKey?: string
+  /**
+   * Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as analytics
+   * events of the recipient. They count as analytics events. Without it, PostHog decides: on for the code form.
+   */
+  captureEngagement?: boolean
   /** How often to retry this send, a whole number from 0. Overrides the `maxRetries` client option. */
   maxRetries?: number
 }
 
 /** A template made in PostHog, sent by its id. */
-export interface SendTemplateEmailOptions extends SendEmailBase {
+export interface TemplateEmailForm {
   /** The UUID of the template. */
   templateId: string
   /** Values for the template's `{{ variables.* }}`. The template can't read person properties. */
   templateData?: Record<string, unknown>
 }
 
-/** One email to send with `posthog.emails.send()`. */
-export type SendEmailOptions = SendTemplateEmailOptions
+interface CodeEmailFields {
+  /** Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog. */
+  templateKey: string
+  subject: string
+  /** A verified sender, such as `'Acme <security@acme.com>'`. Without it, the project's default sender. */
+  from?: string
+  replyTo?: string | string[]
+  /**
+   * Leave it out to send rendered content: the email goes out as is, and PostHog never stores it. Pass it to send a
+   * local template: PostHog fills its `{{ variables.* }}`, and the SDK uploads the template when PostHog does not hold
+   * its content yet.
+   */
+  templateData?: Record<string, unknown>
+}
+
+/** Email content from your code, named by a key. Needs `html`, `text` or both; PostHog derives a missing `text`. */
+export type CodeEmailForm = CodeEmailFields & ({ html: string; text?: string } | { html?: string; text: string })
+
+type Without<T> = { [K in keyof T]?: never }
+
+export type SendTemplateEmailOptions = SendEmailBase &
+  TemplateEmailForm &
+  Without<Omit<CodeEmailFields, 'templateData'> & { html: string; text: string }>
+
+export type SendCodeEmailOptions = SendEmailBase & CodeEmailForm & Without<Omit<TemplateEmailForm, 'templateData'>>
+
+/** One email to send with `posthog.emails.send()`, in exactly one form. */
+export type SendEmailOptions = SendTemplateEmailOptions | SendCodeEmailOptions
 
 /** Something to know about a queued email. */
 export interface EmailWarning {
@@ -58,9 +105,9 @@ export interface EmailError {
   name: EmailErrorName
   /**
    * PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`,
-   * `missing_app_host`, `client_disabled`, `client_closed`, `network_error`, `api_error` for an answer without a code,
-   * `unexpected_error`, and `invalid_form`, `invalid_template_id` and `invalid_idempotency_key` for a send the SDK
-   * refused before any request.
+   * `missing_app_host`, `client_disabled`, `client_closed`, `network_error`, `api_error` for an answer without a
+   * code, `unexpected_error`, and `invalid_form`, `invalid_template_id`, `invalid_template_key` and
+   * `invalid_idempotency_key` for a send the SDK refused before any request.
    */
   code: string
   message: string
@@ -106,7 +153,7 @@ export interface Emails {
    * Needs the `secretKey` client option, a project secret API key (`phs_`) with the `hog_flow:write` scope. When the
    * key can't read feature flags, also set `enableLocalEvaluation: false`, or the client polls flag definitions with it.
    *
-   * @example
+   * @example A template made in PostHog, by its id
    * ```ts
    * const { data, error } = await posthog.emails.send({
    *   to: 'jane@example.com',
@@ -114,6 +161,29 @@ export interface Emails {
    *   templateId: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b',
    *   templateData: { firstName: 'Jane' },
    *   idempotencyKey: `welcome:${user.id}`,
+   * })
+   * ```
+   *
+   * @example Rendered content, such as React Email rendered to HTML in your app
+   * ```ts
+   * await posthog.emails.send({
+   *   to: 'jane@example.com',
+   *   distinctId: user.id,
+   *   templateKey: 'password-reset',
+   *   subject: 'Reset your password',
+   *   html: await render(<PasswordReset url={url} />),
+   * })
+   * ```
+   *
+   * @example A local template: your code holds it, PostHog fills in the variables
+   * ```ts
+   * await posthog.emails.send({
+   *   to: 'jane@example.com',
+   *   distinctId: user.id,
+   *   templateKey: 'welcome',
+   *   subject: 'Welcome, {{ variables.name }}',
+   *   html: welcomeHtml,
+   *   templateData: { name: 'Jane' },
    * })
    * ```
    */
@@ -132,20 +202,30 @@ export interface EmailsApi {
   warn(message: string): void
   track<T>(work: Promise<T>): Promise<T>
   /** Rejects only when PostHog never answered. */
-  request(url: string, headers: Record<string, string>, body: string): Promise<PostHogApiResponse>
+  request(
+    method: 'POST' | 'PUT',
+    url: string,
+    headers: Record<string, string>,
+    body: string
+  ): Promise<PostHogApiResponse>
 }
 
+type Outcome<T> = { data: T; error: null } | Failure
 type Failure = { data: null; error: EmailError }
 
-interface PreparedSend {
-  path: string
-  body: JsonType
+interface Delivery {
   idempotencyKey: string
   maxRetries: number
 }
 
+interface ApiRequest {
+  method: 'POST' | 'PUT'
+  path: string
+  body: JsonType
+}
+
 interface Attempt {
-  result: SendEmailResult
+  outcome: Outcome<PostHogApiResponse>
   retryAfterMs?: number
 }
 
@@ -155,17 +235,26 @@ export class PostHogEmails implements Emails {
 
   send(options: SendEmailOptions): Promise<SendEmailResult> {
     if (!isRecord(options)) {
-      return Promise.resolve(failure('invalid_form', 'send needs an options object with to and templateId.'))
+      return Promise.resolve(
+        failure('invalid_form', 'send needs an options object with to, and templateId or templateKey.')
+      )
     }
     const refusal = this.refusalBeforeRequest(options)
     if (refusal) {
       return Promise.resolve(refusal)
     }
-    return this.api.track(this.deliver(this.prepare(options)).catch(unexpectedFailure))
+    const delivery = {
+      idempotencyKey: options.idempotencyKey ?? crypto.randomUUID(),
+      maxRetries: retryCount(options.maxRetries) ?? retryCount(this.api.maxRetries()) ?? DEFAULT_MAX_RETRIES,
+    }
+    return this.api.track(
+      this.sendForm(options, delivery)
+        .then((result) => this.logWarnings(result))
+        .catch(unexpectedFailure)
+    )
   }
 
   private refusalBeforeRequest(options: SendEmailOptions): Failure | undefined {
-    const { templateId, idempotencyKey } = options
     if (this.api.isDisabled()) {
       return failure('client_disabled', 'The PostHog client is disabled, so nothing was sent.')
     }
@@ -185,68 +274,67 @@ export class PostHogEmails implements Emails {
           'goes to a proxy.'
       )
     }
-    if (!isValidUUID(templateId)) {
-      return failure('invalid_template_id', 'templateId must be the UUID of a template.', { field: 'templateId' })
-    }
-    const unknownOption = unknownOptionRefusal(options)
-    if (unknownOption) {
-      return unknownOption
-    }
-    if (idempotencyKey !== undefined && !isIdempotencyKey(idempotencyKey)) {
-      return failure(
-        'invalid_idempotency_key',
-        'idempotencyKey must be 1 to 255 visible ASCII characters, with no spaces.',
-        { field: 'idempotencyKey' }
-      )
-    }
-    return undefined
+    return formRefusal(options) ?? unknownOptionRefusal(options) ?? idempotencyKeyRefusal(options.idempotencyKey)
   }
 
-  private prepare({
-    to,
-    distinctId,
-    idempotencyKey,
-    maxRetries,
-    templateId,
-    templateData,
-  }: SendEmailOptions): PreparedSend {
-    return {
-      path: TEMPLATE_SEND_PATH(templateId),
-      body: {
-        to,
-        ...(templateData !== undefined && { message_data: templateData as JsonType }),
-        ...(distinctId !== undefined && { identifiers: { distinct_id: distinctId } }),
-      },
-      idempotencyKey: idempotencyKey ?? crypto.randomUUID(),
-      maxRetries: retryCount(maxRetries) ?? retryCount(this.api.maxRetries()) ?? DEFAULT_MAX_RETRIES,
+  private sendForm(options: SendEmailOptions, delivery: Delivery): Promise<SendEmailResult> {
+    if (isTemplateForm(options)) {
+      return this.post(templateBody(options), delivery)
     }
+    if (options.templateData === undefined) {
+      return this.post(renderedContentBody(options), delivery)
+    }
+    return this.sendLocalTemplate(options, delivery)
   }
 
-  private async deliver(send: PreparedSend): Promise<SendEmailResult> {
-    const body = JSON.stringify(send.body)
+  /** Sends the content's hash, and uploads the content only when PostHog does not hold it. */
+  private async sendLocalTemplate(options: SendCodeEmailOptions, delivery: Delivery): Promise<SendEmailResult> {
+    const content = { subject: options.subject, html: options.html, text: options.text }
+    const body = localTemplateBody(options, await emailContentHash(content))
+    const sent = await this.post(body, delivery)
+    if (!isOutdated(sent)) {
+      return sent
+    }
+    const uploaded = await this.exchange(
+      { method: 'PUT', path: UPLOAD_PATH(options.templateKey), body: uploadBody(options.templateKey, content) },
+      delivery
+    )
+    return uploaded.error ? uploaded : this.post(body, delivery)
+  }
+
+  private async post(body: JsonType, delivery: Delivery): Promise<SendEmailResult> {
+    const outcome = await this.exchange({ method: 'POST', path: SEND_PATH, body }, delivery)
+    return outcome.error ? outcome : queuedEmail(outcome.data)
+  }
+
+  private async exchange(request: ApiRequest, delivery: Delivery): Promise<Outcome<PostHogApiResponse>> {
+    const body = JSON.stringify(request.body)
     for (let retry = 0; ; retry++) {
-      const { result, retryAfterMs } = await this.attempt(send, body)
-      if (retry >= send.maxRetries || !isRetryable(result)) {
-        return this.logWarnings(result)
+      const { outcome, retryAfterMs } = await this.attempt(request, body, delivery)
+      if (retry >= delivery.maxRetries || !isRetryable(outcome)) {
+        return outcome
       }
       await sleep(retryDelayMs(retry, retryAfterMs))
     }
   }
 
-  private async attempt(send: PreparedSend, body: string): Promise<Attempt> {
+  private async attempt(request: ApiRequest, body: string, delivery: Delivery): Promise<Attempt> {
     const headers = {
       ...this.api.headers(),
       'Content-Type': 'application/json',
       Authorization: `Bearer ${this.api.secretKey()}`,
-      'Idempotency-Key': send.idempotencyKey,
+      'Idempotency-Key': delivery.idempotencyKey,
     }
     let response: PostHogApiResponse
     try {
-      response = await this.api.request(`${this.api.appHost()}${send.path}`, headers, body)
+      response = await this.api.request(request.method, `${this.api.appHost()}${request.path}`, headers, body)
     } catch (error) {
-      return { result: failure('network_error', error instanceof Error ? error.message : 'Request failed') }
+      return { outcome: failure('network_error', error instanceof Error ? error.message : 'Request failed') }
     }
-    return { result: sendResult(response), retryAfterMs: response.retryAfterMs }
+    const outcome = isSuccess(response.status)
+      ? { data: response, error: null }
+      : { data: null, error: apiError(response) }
+    return { outcome, retryAfterMs: response.retryAfterMs }
   }
 
   private logWarnings(result: SendEmailResult): SendEmailResult {
@@ -257,18 +345,109 @@ export class PostHogEmails implements Emails {
   }
 }
 
-function sendResult(response: PostHogApiResponse): SendEmailResult {
-  const { status, body } = response
-  if (!isSuccess(status)) {
-    return { data: null, error: apiError(response) }
+function isTemplateForm(options: SendEmailOptions): options is SendTemplateEmailOptions {
+  return options.templateId !== undefined
+}
+
+function formRefusal(options: SendEmailOptions): Failure | undefined {
+  if ((options.templateId === undefined) === (options.templateKey === undefined)) {
+    return failure('invalid_form', 'Send either templateId, or templateKey with subject and html or text.')
   }
+  if (isTemplateForm(options)) {
+    return isValidUUID(options.templateId)
+      ? undefined
+      : failure('invalid_template_id', 'templateId must be the UUID of a template.', { field: 'templateId' })
+  }
+  if (typeof options.templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(options.templateKey)) {
+    return failure(
+      'invalid_template_key',
+      'templateKey can only have letters, digits, hyphens (-) and underscores (_), at most 400.',
+      { field: 'templateKey' }
+    )
+  }
+  return undefined
+}
+
+function idempotencyKeyRefusal(idempotencyKey: string | undefined): Failure | undefined {
+  if (idempotencyKey === undefined || isIdempotencyKey(idempotencyKey)) {
+    return undefined
+  }
+  return failure(
+    'invalid_idempotency_key',
+    'idempotencyKey must be 1 to 255 visible ASCII characters, with no spaces.',
+    {
+      field: 'idempotencyKey',
+    }
+  )
+}
+
+function templateBody(options: SendTemplateEmailOptions): JsonType {
+  return {
+    template: { id: options.templateId },
+    ...recipientFields(options),
+    ...templateDataField(options.templateData),
+  }
+}
+
+function renderedContentBody(options: SendCodeEmailOptions): JsonType {
+  return {
+    template_key: options.templateKey,
+    subject: options.subject,
+    ...definedFields({ html: options.html, text: options.text }),
+    ...recipientFields(options),
+    ...senderFields(options),
+  }
+}
+
+function localTemplateBody(options: SendCodeEmailOptions, hash: string): JsonType {
+  return {
+    template: { key: options.templateKey, hash },
+    ...recipientFields(options),
+    ...templateDataField(options.templateData),
+    ...senderFields(options),
+  }
+}
+
+function uploadBody(key: string, content: { subject: string; html?: string; text?: string }): JsonType {
+  return { name: key, ...definedFields(content), if_code_managed: true, if_not_superseded: true }
+}
+
+function recipientFields({ to, distinctId, captureEngagement }: SendEmailBase): Record<string, JsonType> {
+  return {
+    to,
+    ...(distinctId !== undefined && { identifiers: { distinct_id: distinctId } }),
+    ...(captureEngagement !== undefined && { capture_engagement: captureEngagement }),
+  }
+}
+
+function senderFields({ from, replyTo }: SendCodeEmailOptions): Record<string, JsonType> {
+  return {
+    ...(from !== undefined && { from }),
+    ...(replyTo !== undefined && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
+  }
+}
+
+function templateDataField(templateData: Record<string, unknown> | undefined): Record<string, JsonType> {
+  return templateData === undefined ? {} : { message_data: templateData as JsonType }
+}
+
+function definedFields(fields: Record<string, string | undefined>): Record<string, string> {
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) as Record<string, string>
+}
+
+/** PostHog does not hold this local template's content, so nothing was sent and an upload fixes it. */
+function isOutdated({ error }: SendEmailResult): boolean {
+  return error?.statusCode === 409 && error.code === 'template_outdated'
+}
+
+function queuedEmail({ status, body }: PostHogApiResponse): SendEmailResult {
   if (!isRecord(body) || typeof body.message_id !== 'string') {
     return failure('api_error', `PostHog answered HTTP ${status} with an unexpected body.`, { statusCode: status })
   }
   return { data: { id: body.message_id, warnings: warningsOf(body.warnings) }, error: null }
 }
 
-function isRetryable({ error }: SendEmailResult): boolean {
+function isRetryable({ error }: Outcome<PostHogApiResponse>): boolean {
   switch (error?.name) {
     case 'concurrent_idempotent_requests':
     case 'rate_limit_exceeded':
@@ -316,6 +495,7 @@ function errorName(code: string, statusCode?: number): EmailErrorName {
       return 'service_unavailable'
     case 'invalid_form':
     case 'invalid_template_id':
+    case 'invalid_template_key':
     case 'invalid_idempotency_key':
       return 'validation_error'
   }
