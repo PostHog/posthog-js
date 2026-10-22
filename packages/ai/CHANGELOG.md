@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.15.1
+
+### Patch Changes
+
+- [#5375](https://github.com/PostHog/posthog-js/pull/5375) [`def5ab4`](https://github.com/PostHog/posthog-js/commit/def5ab411d75338849ebb9ee0a9d2c1af7e8c8ed) Thanks [@shehjaddev](https://github.com/shehjaddev)! - fix: Capture Anthropic extended thinking blocks as `reasoning` content in captured output, streamed and not, and start time to first token at the first thinking delta.
+  (2026-10-22)
+
 ## 8.15.0
 
 ### Minor Changes
