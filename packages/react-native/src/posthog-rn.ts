@@ -976,8 +976,15 @@ export class PostHog extends PostHogCore {
         const generation = this._nativeSessionReplayDebugGeneration
         try {
           const map = await plugin.getSessionReplayDebugProperties?.()
-          if (generation === this._nativeSessionReplayDebugGeneration) {
-            this._nativeSessionReplayDebugProperties = isObject(map) ? (map as { [key: string]: JsonType }) : undefined
+          // A map without a status (Android before the integration exists, or after a failed
+          // read) keeps the cached one, so it can't erase a provisional start or stop. The
+          // capture-path interval keeps retrying until native answers.
+          if (
+            generation === this._nativeSessionReplayDebugGeneration &&
+            isObject(map) &&
+            typeof map['$recording_status'] === 'string'
+          ) {
+            this._nativeSessionReplayDebugProperties = map as { [key: string]: JsonType }
           }
         } finally {
           // A failed read is throttled like a successful one, or every capture past the

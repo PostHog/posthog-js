@@ -957,6 +957,21 @@ describe('PostHog RN session replay debug properties', () => {
     expect(captureOne(client, 'refreshed').properties.$recording_status).toBe('active')
   })
 
+  it('a native map without a status does not erase the provisional status of a manual start', async () => {
+    const client = await readyClient()
+    pluginMock.isEnabled.mockResolvedValue(true)
+    await client.startSessionRecording()
+    await waitForNativeChain(client)
+
+    expect(captureOne(client, 'after start').properties.$recording_status).toBe('active')
+
+    nativeDebugMap = { $recording_status: 'buffering' }
+    advanceClock(6_000)
+    captureOne(client, 'retry')
+    await waitForNativeChain(client)
+    expect(captureOne(client, 'native answered').properties.$recording_status).toBe('buffering')
+  })
+
   it('a manual start with replay off still reports the required trigger statuses', async () => {
     const client = await readyClient()
     expect(captureOne(client, 'before start').properties.$sdk_debug_replay_event_trigger_status).toBeUndefined()
