@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.59.4
+
+### Patch Changes
+
+- [#5365](https://github.com/PostHog/posthog-js/pull/5365) [`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` the next time they are read after opt in.
+  (2026-10-22)
+
 ## 1.59.3
 
 ### Patch Changes

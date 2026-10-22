@@ -1,5 +1,20 @@
 # posthog-react-native
 
+## 4.81.9
+
+### Patch Changes
+
+- [#5365](https://github.com/PostHog/posthog-js/pull/5365) [`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` the next time they are read after opt in.
+  (2026-10-22)
+
+- [#5294](https://github.com/PostHog/posthog-js/pull/5294) [`ff7aa53`](https://github.com/PostHog/posthog-js/commit/ff7aa5362be7f3399ed2b9a957cf0ef63b811967) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix events missing `$os_name` and `$os_version` in apps that use neither `expo-device` nor `react-native-device-info`.
+  (2026-10-22)
+
+- [#5293](https://github.com/PostHog/posthog-js/pull/5293) [`b4dfdff`](https://github.com/PostHog/posthog-js/commit/b4dfdffcae30e9aa29666e5807ec2c422c763229) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix React render errors that crash the app not being captured on React Native 0.78 and newer when `errorTracking.autocapture.uncaughtExceptions` is enabled.
+  (2026-10-22)
+- Updated dependencies [[`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c)]:
+  - @posthog/core@1.59.4
+
 ## 4.81.8
 
 ### Patch Changes
