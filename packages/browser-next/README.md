@@ -49,7 +49,7 @@ The CDN build supports a plain external classic script in ordinary, `async`, or 
 ></script>
 ```
 
-The first response embeds the client core. Optional implementations load through native bundler-generated script chunks relative to that script's directory, including when assets and the page have different origins. Publish the entire `dist-cdn` tree together, keeping hashed chunks available during alias updates. Query parameters and fragments are not forwarded to chunk URLs. The asset host is not the ingestion host: the SDK's US ingestion default still applies. Set `apiHost` explicitly for EU ingestion or a proxy, URL-encoding its value, for example `&amp;apiHost=https%3A%2F%2Feu.i.posthog.com` in HTML.
+The first response embeds the client core. Optional implementations load through native bundler-generated script chunks relative to that script's directory, including when assets and the page have different origins. Publish the entire `dist-cdn` tree together, keeping hashed chunks available during alias updates. Query parameters and fragments are not forwarded to chunk URLs. When the installing script has a CSP nonce, deferred chunk scripts inherit it. The asset host is not the ingestion host: the SDK's US ingestion default still applies. Set `apiHost` explicitly for EU ingestion or a proxy, URL-encoding its value, for example `&amp;apiHost=https%3A%2F%2Feu.i.posthog.com` in HTML.
 
 Only these query options are supported; omitted options use the existing factory defaults:
 

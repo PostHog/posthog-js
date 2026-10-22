@@ -72,24 +72,39 @@ export function buildBrowserAssetUploadPlans(
     }
 }
 
+async function uploadEntryLast(
+    bucket: string,
+    uploads: PlannedAssetUpload[],
+    entryKey: string,
+    label: string,
+    options: { ifNoneMatch?: string } = {}
+): Promise<void> {
+    const dependencies = uploads.filter((asset) => asset.key !== entryKey)
+    const entry = uploads.filter((asset) => asset.key === entryKey)
+    await uploadReleaseAssets(bucket, dependencies, `${label} dependencies`, options)
+    await verifyUploadedAssets(bucket, dependencies, `${label} dependencies`)
+    await uploadReleaseAssets(bucket, entry, `${label} entry`, options)
+    await verifyUploadedAssets(bucket, entry, `${label} entry`)
+}
+
 export async function uploadBrowserS3(bucket: string, version: string, phase: 'immutable' | 'aliases'): Promise<void> {
     const plans = buildBrowserAssetUploadPlans(version, await collectBrowserAssets())
     if (phase === 'immutable') {
         await assertCanUploadImmutableAssets(bucket, plans.immutable, false)
-        await uploadReleaseAssets(bucket, plans.immutable, 'immutable browser assets', { ifNoneMatch: '*' })
+        await uploadEntryLast(bucket, plans.immutable, `static/browser/${version}/posthog.js`, 'immutable browser', {
+            ifNoneMatch: '*',
+        })
+        return
     }
     // The workflow supplies the cross-region barrier; every regional promotion
     // also rechecks its entire immutable tree from the original build artifact.
     await verifyUploadedAssets(bucket, plans.immutable, 'immutable browser assets')
-    if (phase === 'aliases') {
-        // Keep historical chunks for cached loaders. Publish dependencies before
-        // the entry, so a newly served entry never races its own chunk uploads.
-        const entryKey = `static/browser/${parseSemver(version)!.major}/posthog.js`
-        const chunks = plans.majorAlias.filter((asset) => asset.key !== entryKey)
-        const entry = plans.majorAlias.filter((asset) => asset.key === entryKey)
-        await uploadReleaseAssets(bucket, chunks, 'browser major-alias dependencies')
-        await verifyUploadedAssets(bucket, chunks, 'browser major-alias dependencies')
-        await uploadReleaseAssets(bucket, entry, 'browser major-alias entry')
-        await verifyUploadedAssets(bucket, entry, 'browser major-alias entry')
-    }
+    // Keep historical chunks for cached loaders and never expose a new entry
+    // before all of its dependencies have been uploaded and verified.
+    await uploadEntryLast(
+        bucket,
+        plans.majorAlias,
+        `static/browser/${parseSemver(version)!.major}/posthog.js`,
+        'browser major-alias'
+    )
 }

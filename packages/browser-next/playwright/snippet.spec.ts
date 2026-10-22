@@ -81,6 +81,13 @@ for (const mode of ['sync', 'async', 'defer']) {
     })
 }
 
+test('a nonce-only CSP permits deferred chunks and real Capture V1 delivery', async ({ page }) => {
+    await page.goto(`${location()}&csp=true`)
+    await expect.poll(() => page.evaluate(() => window.snippetEvidence)).toMatchObject({ readyCount: 1, flushed: true })
+    expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'snippet_early' })])
+    expect((await assetRequests()).some((request) => request.path.includes('/chunks/'))).toBe(true)
+})
+
 test('core is embedded in the first response; disabled products do not request chunks before capture', async ({
     page,
 }) => {

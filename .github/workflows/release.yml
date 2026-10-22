@@ -938,7 +938,7 @@ jobs:
                   name: browser-cdn-dist
                   path: packages/browser-next/dist-cdn/
                   include-hidden-files: true
-                  retention-days: 1
+                  retention-days: 30
                   if-no-files-found: error
 
     upload-browser-cdn-immutable:

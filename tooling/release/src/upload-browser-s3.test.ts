@@ -125,6 +125,10 @@ test('real browser CLI verifies every immutable dependency before aliases and re
     assert.equal(s3.objects.size, Object.keys(files).length)
     assert.ok(s3.requests.every((r) => r.key.startsWith(`/assets/static/browser/${version}/`)))
     assert.ok(s3.requests.filter((r) => r.method === 'PUT').every((r) => r.headers['if-none-match'] === '*'))
+    assert.equal(
+        s3.requests.filter((r) => r.method === 'PUT').at(-1)?.key,
+        `/assets/static/browser/${version}/posthog.js`
+    )
     const corrupt = s3.objects.get(`/assets/static/browser/${version}/chunks/nested/surveys-def.js`)!
     const original = { ...corrupt }
     corrupt.checksum = createHash('sha256').update('wrong').digest('base64')
@@ -166,6 +170,10 @@ test('browser CLI resumes partial immutable uploads without rewriting matching a
     const completed = [...s3.objects.keys()]
     assert.ok(completed.length > 0)
     assert.ok(completed.every((key) => key.startsWith(`/assets/static/browser/${version}/`)))
+    assert.ok(
+        !completed.includes(`/assets/static/browser/${version}/posthog.js`),
+        'failed dependencies must not expose the immutable entry'
+    )
     s3.hooks.before = undefined
     s3.requests.length = 0
     const resumed = await s3.run()
