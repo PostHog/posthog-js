@@ -995,14 +995,13 @@ export class PostHog extends PostHogCore {
   }
 
   // `disabled` is re-read too while replay is on: native re-samples on its own session
-  // rotation and can start recording without any JS-visible event.
+  // rotation and can start recording without any JS-visible event. So is a map without a
+  // status, which Android returns when the read fails or replay is not set up yet.
   private _refreshStaleNativeStatus(): void {
     const status = this._nativeSessionReplayDebugProperties?.['$recording_status']
     const replayOn = this._isEnableSessionReplay() && this._sessionReplayNativeInitialized
-    if (
-      (status === 'buffering' || status === 'active' || (status === 'disabled' && replayOn)) &&
-      Date.now() - this._nativeSessionReplayDebugRefreshedAt >= NATIVE_REPLAY_STATUS_REFRESH_INTERVAL_MS
-    ) {
+    const stale = status === 'buffering' || status === 'active' || replayOn
+    if (stale && Date.now() - this._nativeSessionReplayDebugRefreshedAt >= NATIVE_REPLAY_STATUS_REFRESH_INTERVAL_MS) {
       this._refreshNativeSessionReplayDebugProperties()
     }
   }

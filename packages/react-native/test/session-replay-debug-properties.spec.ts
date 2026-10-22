@@ -957,6 +957,26 @@ describe('PostHog RN session replay debug properties', () => {
     expect(captureOne(client, 'refreshed').properties.$recording_status).toBe('active')
   })
 
+  it('a native map without a status is re-read from the capture path while replay is on', async () => {
+    nativeDebugMap = {}
+    const client = await readyClient({ enableSessionReplay: true })
+    await reloadAndSettle(client)
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    nativeDebugMap = { $recording_status: 'active', $sdk_debug_replay_internal_buffer_length: 3 }
+    captureOne(client, 'inside the interval')
+    await waitForNativeChain(client)
+    expect(pluginMock.getSessionReplayDebugProperties).not.toHaveBeenCalled()
+
+    advanceClock(6_000)
+    captureOne(client, 'after the interval')
+    await waitForNativeChain(client)
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalledTimes(1)
+    const refreshed = captureOne(client, 'refreshed').properties
+    expect(refreshed.$recording_status).toBe('active')
+    expect(refreshed.$sdk_debug_replay_internal_buffer_length).toBe(3)
+  })
+
   it('a failed native read is throttled like a successful one', async () => {
     nativeDebugMap = { $recording_status: 'active' }
     const client = await readyClient({ enableSessionReplay: true })
