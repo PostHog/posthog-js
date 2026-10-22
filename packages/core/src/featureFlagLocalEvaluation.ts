@@ -222,6 +222,9 @@ function exactMatchString(value: unknown): string {
   return serializeJsonValue(value)
 }
 
+// Both engines treat escaped spaces and ASCII punctuation as literals, except Rust's \< and \> word boundaries.
+const LITERAL_ESCAPED_PUNCTUATION = /[\x20-\x2f:;=?@\x5b-\x60\x7b-\x7e]/
+
 function getPortableRegexClasses(pattern: string): string[] | null {
   const classes: string[] = []
   let classStart = -1
@@ -235,7 +238,7 @@ function getPortableRegexClasses(pattern: string): string[] | null {
       if (escaped === 'x') {
         if (!/^[\da-f]{2}$/i.test(pattern.slice(index + 1, index + 3))) return null
         index += 2
-      } else if (!'dDsSwWbBfnrtv'.includes(escaped) && !/[\x20-\x2f:;=?@\x5b-\x60\x7b-\x7e]/.test(escaped)) {
+      } else if (!'dDsSwWbBfnrtv'.includes(escaped) && !LITERAL_ESCAPED_PUNCTUATION.test(escaped)) {
         return null
       }
       // Word boundaries can exhaust the service's backtracking limit even for short ASCII values.
@@ -261,6 +264,8 @@ function getPortableRegexClasses(pattern: string): string[] | null {
       if (pattern[index + 2] !== ':') return null
       index += 2
     } else if (character === '{') {
+      // Rust reads `{n}` with nothing before it as literal text. JavaScript rejects it.
+      // The flags service rejects repetition counts above 4,294,967,295. JavaScript accepts them.
       const repetition = /^\{(\d+)(?:,(\d*))?\}/.exec(pattern.slice(index))
       if (
         !repetition ||
@@ -272,6 +277,8 @@ function getPortableRegexClasses(pattern: string): string[] | null {
     } else if ('*+?}'.includes(character) && (pattern[index + 1] === '+' || pattern[index + 1] === '{')) {
       return null
     }
+    // JavaScript rejects a repeated anchor such as `^?`. Rust accepts it.
+    // Rust rejects a repeated empty group such as `(?:)*`. JavaScript accepts it.
     if ('*+?{'.includes(character) && ['^', '$', 'empty group'].includes(previousToken)) return null
     previousToken = character === ')' && ['(', 'empty group'].includes(previousToken) ? 'empty group' : character
   }
