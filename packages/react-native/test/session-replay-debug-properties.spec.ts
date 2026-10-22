@@ -957,6 +957,19 @@ describe('PostHog RN session replay debug properties', () => {
     expect(captureOne(client, 'refreshed').properties.$recording_status).toBe('active')
   })
 
+  it('a manual start with replay off still reports the required trigger statuses', async () => {
+    const client = await readyClient()
+    expect(captureOne(client, 'before start').properties.$sdk_debug_replay_event_trigger_status).toBeUndefined()
+
+    pluginMock.isEnabled.mockResolvedValue(true)
+    await client.startSessionRecording()
+    await waitForNativeChain(client)
+
+    const { properties } = captureOne(client, 'after start')
+    expect(properties.$sdk_debug_replay_event_trigger_status).toBe('trigger_disabled')
+    expect(properties.$sdk_debug_replay_linked_flag_trigger_status).toBe('trigger_disabled')
+  })
+
   it('a native map without a status is re-read from the capture path while replay is on', async () => {
     nativeDebugMap = {}
     const client = await readyClient({ enableSessionReplay: true })

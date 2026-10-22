@@ -888,7 +888,9 @@ export class PostHog extends PostHogCore {
       const hasSessionStart = typeof sessionStart === 'number' && sessionStart > 0
       const platformOS = getPlatformOS()
       const hasNativeReplay = !!OptionalReactNativePlugin && (platformOS === 'ios' || platformOS === 'android')
-      const replayEnabled = this._isEnableSessionReplay()
+      // A manual startSessionRecording() brings native replay up without the option, so the
+      // trigger keys follow the initialized state as well.
+      const replayEnabled = this._isEnableSessionReplay() || this._sessionReplayNativeInitialized
       // Native's replay state is authoritative once known; JS only knows whether it asked
       // native to start. Trigger and capture-mode keys stay JS-owned even when native has a map.
       const cached = this._nativeSessionReplayDebugProperties
