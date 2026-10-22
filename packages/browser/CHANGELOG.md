@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.438.18
+
+### Patch Changes
+
+- [#5189](https://github.com/PostHog/posthog-js/pull/5189) [`2aacdcb`](https://github.com/PostHog/posthog-js/commit/2aacdcbe891446873859d308502b6be13f345e2a) Thanks [@posthog](https://github.com/apps/posthog)! - Log why `capture()` dropped an event (capturing disabled or a bot user agent) when `debug: true` is set
+  (2026-10-22)
+
+- [#5383](https://github.com/PostHog/posthog-js/pull/5383) [`0faf643`](https://github.com/PostHog/posthog-js/commit/0faf6430d9117f843fc1d0bb72d737cb9d15a5d0) Thanks [@sarankumar1325](https://github.com/sarankumar1325)! - Conversations: the widget now comes back after `reset()`, and after a cookieless (`on_reject`) visitor calls `opt_in_capturing()`, instead of staying unavailable until the next page load.
+  (2026-10-22)
+
 ## 1.438.17
 
 ### Patch Changes
