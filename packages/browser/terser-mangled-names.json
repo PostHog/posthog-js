@@ -245,6 +245,7 @@
         "_finishSetup",
         "_fireFeatureFlagsCallbacks",
         "_firesAt",
+        "_firingFeatureFlagsCallbacks",
         "_flagListenerCleanup",
         "_flagToExperiments",
         "_flagsLoadedFromRemote",
