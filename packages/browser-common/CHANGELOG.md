@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.9.6
+
+### Patch Changes
+
+- [#4992](https://github.com/PostHog/posthog-js/pull/4992) [`3b7ffc6`](https://github.com/PostHog/posthog-js/commit/3b7ffc6fe4990ff26d661f48612166e31850ef31) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share surveys across browser SDKs; calls to `getSurveys` before survey setup now invoke the callback immediately with an unavailable error. Notify all survey subscribers when survey loading fails.
+  (2026-10-22)
+
 ## 0.9.5
 
 ### Patch Changes
