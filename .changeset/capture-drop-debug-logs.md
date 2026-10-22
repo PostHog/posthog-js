@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Log the reason in debug mode when `capture()` drops an event because capturing is disabled or the user agent looks like a bot, and clarify the `has_opted_out_capturing()` docs for cookieless 'always' mode.
+Log why `capture()` dropped an event (capturing disabled or a bot user agent) when `debug: true` is set

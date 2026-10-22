@@ -5019,7 +5019,7 @@ export class PostHog implements PostHogInterface {
      * Returns the current consent status for event tracking and data persistence.
      *
      * In cookieless `'always'` mode this returns `true`, because the SDK does not store data for the user. Events are
-     * still captured in this mode. To check if the SDK captures events, use {@link is_capturing}.
+     * still captured in this mode. To check if the SDK captures events, use `is_capturing()`.
      *
      * @example
      * ```js
