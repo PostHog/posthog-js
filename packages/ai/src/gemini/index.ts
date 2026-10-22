@@ -29,6 +29,7 @@ import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessa
 import { isObject, isString } from '../typeGuards'
 import { formatToolResult } from '../toolResult'
 import { mapGeminiUsage } from './usage'
+import { WrappedInteractions } from './interactions'
 
 /** Append streamed text to the last block of the same type, or start a new one. */
 function appendStreamedText(content: FormattedContent, type: 'text' | 'reasoning', text: string): void {
@@ -64,12 +65,14 @@ export class PostHogGoogleGenAI {
   private readonly phClient: PostHog
   private readonly client: GoogleGenAI
   public models: WrappedModels
+  public interactions: WrappedInteractions
 
   constructor(config: MonitoringGeminiConfig) {
     const { posthog, ...geminiConfig } = config
     this.phClient = posthog
     this.client = new GoogleGenAI(geminiConfig)
     this.models = new WrappedModels(this.client, this.phClient)
+    this.interactions = new WrappedInteractions(this.client, this.phClient)
   }
 }
 
