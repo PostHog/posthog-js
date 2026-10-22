@@ -1,6 +1,10 @@
 # @posthog/browser
 
-An experimental PostHog client for modern browsers.
+An experimental PostHog client for modern browsers. The API is not yet stable.
+
+```sh
+npm install @posthog/browser
+```
 
 The client installs one analytics extension with a bounded in-memory buffer during initialization. By default, the first successfully admitted event lazily loads its queue scheduling and Capture Analytics V1 delivery machinery. Consent-denied, bot-filtered, and rejected events do not load delivery. Feature flags, logs, surveys orchestration, and autocapture dynamically load during initialization by default; their capture and display behavior retains its own consent and remote-configuration gates. Survey rendering is a further deferred chunk.
 
@@ -250,6 +254,15 @@ Session and window IDs are created on the first successfully admitted capture. R
 
 A compact in-memory token bucket admits 10 events per second with a burst of 100 and emits a bypassed aggregate ingestion warning when a runaway loop first reaches the limit. `shutdown(timeoutMs)` stops new work, makes one bounded normal flush attempt, removes timers and lifecycle listeners, and is idempotent. `dispose()` uses the same shutdown path.
 
-This package is private while the API and capture behavior remain experimental.
+## Package validation
+
+From the repository root, build and test the packed package in an isolated installed consumer:
+
+```sh
+pnpm turbo run build --filter=@posthog/browser --filter=@posthog-tooling/sdk-mock-server
+node packages/browser-next/scripts/check-package-consumer.mjs
+```
+
+The check validates the tarball inventory, public dependencies, all exported entrypoints in ESM and CommonJS, strict consumer declarations, and Capture V1 delivery to the local mock server. Its temporary consumer uses local tarballs for PostHog workspace dependencies and retains the repository's dependency cooldown.
 
 See [Bundle architecture](./ARCHITECTURE.md) for package boundaries, tree-shaking rules, and bundle review.
