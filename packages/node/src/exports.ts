@@ -4,14 +4,17 @@ export * from './types'
 
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
 export type {
+  CodeEmailForm,
   EmailError,
   EmailErrorName,
   Emails,
   EmailWarning,
+  SendCodeEmailOptions,
   SendEmailBase,
   SendEmailOptions,
   SendEmailResult,
   SendTemplateEmailOptions,
+  TemplateEmailForm,
 } from './emails'
 export type {
   FlagDefinitionCacheData,
