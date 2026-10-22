@@ -5,9 +5,11 @@ export * from './types'
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
 export type {
   CodeEmailForm,
+  EmailAttachment,
   EmailError,
   EmailErrorName,
   Emails,
+  EmailTag,
   EmailWarning,
   SendCodeEmailOptions,
   SendEmailBase,
