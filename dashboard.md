@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5382](https://github.com/PostHog/posthog-js/issues/5382) | Confirmed browser SDK lifecycle bug: Conversations loses its cached remote configuration on reset and is not reconfigured when consent or identity state is restored. | web, team/client-libraries, bug |  | no | 2026-10-22T15:10:30.507Z |
 | PostHog/posthog-js | [issue 5374](https://github.com/PostHog/posthog-js/issues/5374) | Confirmed bundle-hygiene enhancement: the modern browser bundles include IE11-only global polyfills from uuidv7. | enhancement, feature, web, javascript, team/client-libraries |  | no | 2026-10-22T06:52:01.706Z |
 | PostHog/posthog-js | [issue 5369](https://github.com/PostHog/posthog-js/issues/5369) | Confirmed: an async Conversations initialization can mutate and restart a manager after reset/destroy; opt-in after a cookieless reset also does not restore Conversations remote config. | web, javascript, team/client-libraries, bug |  | no | 2026-10-22T00:16:14.834Z |
 | PostHog/posthog-js | [issue 5364](https://github.com/PostHog/posthog-js/issues/5364) | Confirmed: same-origin iframe mouse and drag events are classified against constructors from the top-level realm, causing them to be recorded as touch movement. | web, feature/replay, team/client-libraries, bug |  | no | 2026-10-21T20:59:24.541Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 4051](https://github.com/PostHog/posthog-js/issues/4051) | Valid feature tracking issue; keep open and labeled for feature flags. | enhancement, feature/flags, team/feature-flags |  | no | 2026-07-01T20:57:56.770Z |
 | PostHog/posthog-js | [issue 4046](https://github.com/PostHog/posthog-js/issues/4046) | Valid feature request; current code confirms the Convex flag refresh loop is not gated before scheduling. | enhancement, feature, feature/flags, team/feature-flags |  | no | 2026-07-01T13:38:03.572Z |
 | PostHog/posthog-js | [issue 3595](https://github.com/PostHog/posthog-js/issues/3595) | Valid feature request; current SDK typings do not provide project-specific feature flag key/variant safety. | enhancement, feature/flags, team/feature-flags, node, web |  | no | 2026-07-01T09:36:48.807Z |
-| PostHog/posthog-js | [issue 2623](https://github.com/PostHog/posthog-js/issues/2623) | Valid feature flag persistence bug with a plausible SDK-side race around identify-triggered flag reloads. | feature/flags, team/feature-flags, web |  | no | 2026-07-01T09:35:43.950Z |
