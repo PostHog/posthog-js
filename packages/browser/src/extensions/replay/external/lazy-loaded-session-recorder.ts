@@ -818,10 +818,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             recordHeaders: this._instance.config.session_recording?.recordHeaders,
             recordBody: this._instance.config.session_recording?.recordBody,
         }
+        // an explicit client `false` wins, as in buildNetworkRequestOptions. Otherwise a remote `true` still
+        // installs the plugin, and its performance observer records request urls even with network timing off
         const headersEnabled =
-            networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
+            networkPayloadCapture_client_side.recordHeaders !== false &&
+            (networkPayloadCapture_client_side.recordHeaders || networkPayloadCapture_server_side?.recordHeaders)
         const bodyEnabled =
-            networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
+            networkPayloadCapture_client_side.recordBody !== false &&
+            (networkPayloadCapture_client_side.recordBody || networkPayloadCapture_server_side?.recordBody)
         const clientNetworkTiming = networkTimingFromConfig(this._instance.config.capture_performance)
         const serverNetworkTiming = networkTimingFromConfig(networkPayloadCapture_server_side?.capturePerformance)
         const networkTimingEnabled = !!(isBoolean(clientNetworkTiming) ? clientNetworkTiming : serverNetworkTiming)
