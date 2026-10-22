@@ -251,6 +251,18 @@ describe('emails', () => {
       expect(api.localTemplate('welcome')?.html).toBe('<p>Hi again</p>')
     })
 
+    it('sends a local template to the recipient it was called with, even when the caller reuses the options', async () => {
+      const posthog = createClient()
+      const options = { to: JANE, ...welcome, templateData: { name: 'Jane' } }
+
+      const toJane = posthog.emails.send(options)
+      options.to = 'bob@example.com'
+      const toBob = posthog.emails.send(options)
+      await Promise.all([toJane, toBob])
+
+      expect(api.delivered.map(({ to }) => to).sort()).toEqual(['bob@example.com', JANE])
+    })
+
     it('returns the refusal of a key edited in PostHog, and sends nothing', async () => {
       api.editInPostHog('welcome', { subject: 'Edited', html: '<p>Edited</p>' })
 
