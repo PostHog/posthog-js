@@ -1,4 +1,4 @@
-import { getSurveyResponseKey } from '@/extensions/surveys/surveys-extension-utils'
+import { getSurveyResponseKey } from '@posthog/browser-common/surveys/surveys-extension-utils'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
@@ -19,6 +19,15 @@ const openTextQuestion = {
 }
 
 test.describe('surveys - feedback widget', () => {
+    test.afterEach(async ({ page }) => {
+        const submissions = (await page.capturedEvents()).filter((event) => event.event === 'survey sent')
+        for (const submission of submissions) {
+            expect(submission.properties.$survey_submission_id).toMatch(
+                /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+            )
+        }
+    })
+
     test('captures survey shown and sent events', async ({ page, context }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({

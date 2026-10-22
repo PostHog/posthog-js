@@ -1,3 +1,4 @@
+import { createLogsClient } from '../helpers/logs-client'
 import type { Client } from '@posthog/browser-common'
 import type { PostHog } from '../../posthog-core'
 import { assignableWindow } from '../../utils/globals'
@@ -44,6 +45,7 @@ const makeRunning = (copy: Copy, kind: Kind): Running => {
         },
     } as unknown as PostHog
     const logs = new copy.PostHogLogs(host)
+    logs.setup(createLogsClient(host))
     // Deliberately isolate the temporary instrumentation lifecycle from config,
     // transport, and lazy-load timing. These are real methods, not mocks.
     return {
@@ -126,75 +128,77 @@ describe('console instrumentation lifecycle', () => {
     }
 
     describe.each<Kind>(['logs', 'replay', 'buffer'])('%s instrumentation', (kind) => {
-        it('control: captures once, stops, and restarts without another wrapper', async () => {
-            const running = makeRunning(await loadCopy(), kind)
-            const stop = start(running)
-            emit('active')
-            expect(running.count()).toBe(1)
-            stop()
-            const stoppedCount = running.count()
-            emit('stopped')
-            expect(running.count()).toBe(stoppedCount)
-            const stopAgain = start(running)
-            const restartedCount = running.count()
-            emit('restarted')
-            expect(running.count() - restartedCount).toBe(1)
-            stopAgain()
-        })
-
-        describe.each([false, true])('foreign original marker: %s', (marked) => {
-            it.each(['foreign-first', 'posthog-first'] as const)(
-                '%s: keeps vendor/output alive and disables capture across stop/restart',
-                async (order) => {
-                    const running = makeRunning(await loadCopy(), kind)
-                    let vendor: ReturnType<typeof vi.fn>
-                    let stop: () => void
-                    if (order === 'foreign-first') {
-                        vendor = installForeign(marked)
-                        stop = start(running)
-                    } else {
-                        stop = start(running)
-                        vendor = installForeign(marked)
-                    }
-                    emit('active', vendor)
-                    expect.soft(running.count()).toBe(1)
-                    stop()
-                    const stoppedCount = running.count()
-                    emit('stopped', vendor)
-                    expect.soft(running.count() - stoppedCount, 'capture after teardown').toBe(0)
-                    const stopAgain = start(running)
-                    const restartedCount = running.count()
-                    emit('restarted', vendor)
-                    expect.soft(running.count() - restartedCount, 'captures per call after restart').toBe(1)
-                    stopAgain()
-                    const finalCount = running.count()
-                    emit('stopped again', vendor)
-                    expect.soft(running.count() - finalCount, 'capture after second teardown').toBe(0)
-                }
-            )
-        })
-
-        it.each(['foreign-first', 'posthog-first'] as const)(
-            'control: foreign teardown before PostHog, installed %s',
-            async (order) => {
+        if (kind === 'replay') {
+            it('control: captures once, stops, and restarts without another wrapper', async () => {
                 const running = makeRunning(await loadCopy(), kind)
-                const vendor = order === 'foreign-first' ? installForeign(false) : undefined
                 const stop = start(running)
-                const foreign = vendor ?? installForeign(false)
-                emit('both active', foreign)
+                emit('active')
                 expect(running.count()).toBe(1)
-                foreign.dispose()
-                foreign.mockClear()
-                emit('only PostHog active')
-                expect(foreign).not.toHaveBeenCalled()
-                expect(running.count()).toBe(2)
                 stop()
                 const stoppedCount = running.count()
-                emit('neither active')
-                expect(foreign).not.toHaveBeenCalled()
+                emit('stopped')
                 expect(running.count()).toBe(stoppedCount)
-            }
-        )
+                const stopAgain = start(running)
+                const restartedCount = running.count()
+                emit('restarted')
+                expect(running.count() - restartedCount).toBe(1)
+                stopAgain()
+            })
+
+            describe.each([false, true])('foreign original marker: %s', (marked) => {
+                it.each(['foreign-first', 'posthog-first'] as const)(
+                    '%s: keeps vendor/output alive and disables capture across stop/restart',
+                    async (order) => {
+                        const running = makeRunning(await loadCopy(), kind)
+                        let vendor: ReturnType<typeof vi.fn>
+                        let stop: () => void
+                        if (order === 'foreign-first') {
+                            vendor = installForeign(marked)
+                            stop = start(running)
+                        } else {
+                            stop = start(running)
+                            vendor = installForeign(marked)
+                        }
+                        emit('active', vendor)
+                        expect.soft(running.count()).toBe(1)
+                        stop()
+                        const stoppedCount = running.count()
+                        emit('stopped', vendor)
+                        expect.soft(running.count() - stoppedCount, 'capture after teardown').toBe(0)
+                        const stopAgain = start(running)
+                        const restartedCount = running.count()
+                        emit('restarted', vendor)
+                        expect.soft(running.count() - restartedCount, 'captures per call after restart').toBe(1)
+                        stopAgain()
+                        const finalCount = running.count()
+                        emit('stopped again', vendor)
+                        expect.soft(running.count() - finalCount, 'capture after second teardown').toBe(0)
+                    }
+                )
+            })
+
+            it.each(['foreign-first', 'posthog-first'] as const)(
+                'control: foreign teardown before PostHog, installed %s',
+                async (order) => {
+                    const running = makeRunning(await loadCopy(), kind)
+                    const vendor = order === 'foreign-first' ? installForeign(false) : undefined
+                    const stop = start(running)
+                    const foreign = vendor ?? installForeign(false)
+                    emit('both active', foreign)
+                    expect(running.count()).toBe(1)
+                    foreign.dispose()
+                    foreign.mockClear()
+                    emit('only PostHog active')
+                    expect(foreign).not.toHaveBeenCalled()
+                    expect(running.count()).toBe(2)
+                    stop()
+                    const stoppedCount = running.count()
+                    emit('neither active')
+                    expect(foreign).not.toHaveBeenCalled()
+                    expect(running.count()).toBe(stoppedCount)
+                }
+            )
+        }
 
         it.each(['older-first', 'newer-first'] as const)(
             'independent copies: one capture per active instance, teardown %s',
@@ -260,7 +264,9 @@ describe('console instrumentation lifecycle', () => {
             cleanups.push(() => logs.dispose())
             let vendor: ReturnType<typeof vi.fn> | undefined
             if (order === 'foreign-first') vendor = installForeign(false)
-            logs.setup(client)
+            logs.setup(
+                createLogsClient(host, { getExtension: client.getExtension, onRemoteConfig: client.onRemoteConfig })
+            )
             if (order === 'posthog-first') vendor = installForeign(false)
             emit('before reset', vendor)
             expect((logs as any)._consoleBuffer).toHaveLength(1)

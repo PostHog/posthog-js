@@ -263,9 +263,11 @@ describe('evaluateFlags', () => {
       const flags = await posthog.evaluateFlags('user-1')
       expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
       expect(flags.getFlagPayload('missing-flag')).toBeUndefined()
+      expect(flags.onlyAccessed().keys).toEqual([])
 
       await waitForPromises()
       expect(captures.filter((m) => m.event === '$feature_flag_called')).toHaveLength(0)
+      expect(mockedFetch.mock.calls.filter(([url]) => String(url).includes('/flags/'))).toHaveLength(1)
     })
 
     it('uses distinctId from context when not passed explicitly', async () => {
@@ -273,6 +275,8 @@ describe('evaluateFlags', () => {
 
       expect(flags).toBeInstanceOf(FeatureFlagEvaluations)
       expect(flags.keys.sort()).toEqual(['boolean-flag', 'disabled-flag', 'variant-flag'])
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(mockedFetch.mock.calls[0][1]!.body as string).distinct_id).toBe('context-user')
     })
 
     it('forwards flagKeys to the /flags request to scope the evaluation', async () => {
@@ -462,13 +466,7 @@ describe('evaluateFlags', () => {
 
       posthog.captureException(new Error('boom'), 'user-1', undefined, undefined, flags.onlyAccessed())
 
-      // captureException → addPendingPromise(buildEventMessage().then(msg => capture(...)))
-      // → capture itself queues async work via prepareEventMessage. The 'capture' event
-      // fires inside captureStateless before the network flush, so we just need enough
-      // microtask cycles to let the chain resolve.
-      await waitForPromises()
-      await waitForPromises()
-      await waitForPromises()
+      await posthog.flush()
 
       const exception = captures.find((m) => m.event === '$exception')
       expect(exception).toBeDefined()

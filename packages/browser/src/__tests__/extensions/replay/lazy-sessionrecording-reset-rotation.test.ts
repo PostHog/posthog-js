@@ -2,6 +2,31 @@
 
 import '../../helpers/native-gzip-polyfill'
 
+const compressionControl = vi.hoisted(() => ({
+    gate: undefined as Promise<void> | undefined,
+    release: undefined as (() => void) | undefined,
+    pending: new Set<Promise<unknown>>(),
+}))
+vi.mock('@posthog/core', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@posthog/core')>()
+    return {
+        ...actual,
+        gzipCompress: (...args: Parameters<typeof actual.gzipCompress>) => {
+            const gate = compressionControl.gate
+            const pending = (async () => {
+                if (gate) await gate
+                return actual.gzipCompress(...args)
+            })()
+            compressionControl.pending.add(pending)
+            void pending.then(
+                () => compressionControl.pending.delete(pending),
+                () => compressionControl.pending.delete(pending)
+            )
+            return pending
+        },
+    }
+})
+
 import { waitFor } from '@testing-library/dom'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
 import { PostHog } from '../../../posthog-core'
@@ -26,10 +51,39 @@ describe('real-core reset rotation', () => {
     let _emit: any
     let recordCalls = 0
     let captured: { event: string; properties: any }[] = []
+    const instances = new Set<PostHog>()
+    const recorders = new Set<LazyLoadedSessionRecording>()
+    let previousExtensions: typeof assignableWindow.__PosthogExtensions__
+    const holdCompression = () => {
+        compressionControl.gate = new Promise<void>((resolve) => {
+            compressionControl.release = resolve
+        })
+    }
+    beforeEach(() => {
+        previousExtensions = assignableWindow.__PosthogExtensions__
+        instances.clear()
+        recorders.clear()
+        _emit = undefined
+    })
+    afterEach(async () => {
+        try {
+            await drain()
+        } finally {
+            for (const instance of instances) {
+                instance.sessionRecording?.dispose({ discardBufferedEvents: true })
+                instance.sessionManager?.destroy()
+                await instance.shutdown()
+            }
+            assignableWindow.__PosthogExtensions__ = previousExtensions
+            vi.restoreAllMocks()
+            _emit = undefined
+        }
+    })
 
     const installFakeRRweb = (): void => {
         recordCalls = 0
-        assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+        holdCompression()
+        assignableWindow.__PosthogExtensions__ = {}
         assignableWindow.__PosthogExtensions__.rrwebPlugins = { getRecordConsolePlugin: vi.fn() } as any
         assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn((_ph: any, _path: any, cb: any) => {
             assignableWindow.__PosthogExtensions__!.rrweb = {
@@ -66,16 +120,32 @@ describe('real-core reset rotation', () => {
             record.addCustomEvent = vi.fn((tag: string, payload: any) => {
                 _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
             })
-            assignableWindow.__PosthogExtensions__!.initSessionRecording = (ph: any, visible: any) =>
-                new LazyLoadedSessionRecording(ph, visible)
+            assignableWindow.__PosthogExtensions__!.initSessionRecording = (ph: any, visible: any) => {
+                instances.add(ph)
+                const recorder = new LazyLoadedSessionRecording(ph, visible)
+                recorders.add(recorder)
+                return recorder
+            }
             cb()
         })
     }
 
-    const drain = async (turns = 10): Promise<void> => {
-        for (let i = 0; i < turns; i++) {
-            await new Promise((resolve) => setTimeout(resolve, 10))
+    const drain = async (): Promise<void> => {
+        compressionControl.release?.()
+        compressionControl.release = undefined
+        compressionControl.gate = undefined
+        for (let pass = 0; pass < 20; pass++) {
+            await Promise.all([
+                ...compressionControl.pending,
+                ...[...recorders].map((recorder) => recorder['_compressionQueue']),
+            ])
+            if (
+                compressionControl.pending.size === 0 &&
+                [...recorders].every((recorder) => recorder['_queuedCompressionEvents'] === 0)
+            )
+                return
         }
+        throw new Error('compression queue did not settle')
     }
 
     it('attributes post-rotation snapshots to the new session across a real reset() + identify()', async () => {
@@ -103,9 +173,10 @@ describe('real-core reset rotation', () => {
 
         _emit(mouse())
         _emit(mutation())
-        await drain(3)
-
-        const rotatedAt = Date.now()
+        await drain()
+        holdCompression()
+        const rotatedAt = Date.now() + 1
+        vi.spyOn(Date, 'now').mockReturnValue(rotatedAt)
         posthog.reset()
         posthog.identify('user-after-logout')
 
@@ -190,6 +261,7 @@ describe('real-core reset rotation', () => {
         const oldSession = snapshots.filter((c) => c.properties.$session_id === firstSessionId)
         expect(oldSession.length).toBeGreaterThan(0)
         expect(oldSession.map((c) => c.properties.distinct_id)).toEqual(oldSession.map(() => firstDistinctId))
+        expect(snapshots.filter((c) => c.properties.$session_id === posthog.get_session_id()).length).toBeGreaterThan(0)
         expect(
             snapshots
                 .filter((c) => c.properties.$session_id === posthog.get_session_id())
@@ -210,7 +282,7 @@ describe('real-core reset rotation', () => {
             {
                 disable_session_recording: false,
                 advanced_disable_flags: true,
-                opt_out_capturing_persistence_type: 'memory',
+                opt_out_capturing_persistence_type: 'localStorage',
                 session_recording: { compress_events: true },
                 before_send: (cr: any) => {
                     if (cr) {
@@ -300,7 +372,8 @@ describe('real-core reset rotation', () => {
 
         _emit(mouse())
         _emit(mutation())
-        await drain(3)
+        await drain()
+        holdCompression()
 
         // idle: a non-interactive event dated past the idle threshold, then a wake
         const idleAt = Date.now() + 6 * 60 * 1000
@@ -384,7 +457,7 @@ describe('real-core reset rotation', () => {
             if (i > 0 && lazyRecorder['_queuedCompressionEvents'] === 0) {
                 queueEmptied = true
             }
-            await new Promise((resolve) => setTimeout(resolve, 2))
+            await Promise.resolve()
         }
         expect(queueEmptied).toBe(false)
 

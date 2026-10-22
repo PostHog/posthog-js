@@ -86,6 +86,7 @@ export type {
     NetworkMetricsRequest,
     NetworkMetricsResponse,
     CapturePageviewOptions,
+    WebMCPCaptureConfig,
     PostHogConfig,
 } from './posthog-config'
 
@@ -135,6 +136,7 @@ export type {
     BeforeSendMetricFn,
     Metrics,
     OtlpNumberDataPoint,
+    OtlpExemplar,
     OtlpHistogramDataPoint,
     OtlpMetric,
     OtlpMetricsPayload,

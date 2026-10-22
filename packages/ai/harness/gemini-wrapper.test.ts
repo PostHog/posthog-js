@@ -167,6 +167,30 @@ it.each([
 )
 
 it.each(['generateContent', 'generateContentStream'] as const)(
+  'built Gemini %s counts tool-use prompt tokens as input tokens',
+  async (operation) => {
+    const toolUsage = {
+      promptTokenCount: 11,
+      candidatesTokenCount: 3,
+      toolUsePromptTokenCount: 40,
+      totalTokenCount: 54,
+    }
+    const body = {
+      candidates: [
+        { index: 0, content: { role: 'model', parts: [{ text: 'Grounded answer.' }] }, finishReason: 'STOP' },
+      ],
+      usageMetadata: toolUsage,
+    }
+    const { event } = await runSynthetic(
+      operation,
+      { model, contents: 'Search the web.', config: { tools: [{ googleSearch: {} }] } },
+      operation === 'generateContentStream' ? [body] : body
+    )
+    expect(event.properties).toMatchObject({ $ai_input_tokens: 51, $ai_output_tokens: 3, $ai_usage: toolUsage })
+  }
+)
+
+it.each(['generateContent', 'generateContentStream'] as const)(
   'built Gemini %s preserves function calls and tool telemetry',
   async (operation) => {
     const call = { name: 'weather', args: { city: 'Paris' } }
@@ -216,6 +240,80 @@ it.each(['generateContent', 'generateContentStream'] as const)(
       },
     ])
     expect(event.properties.$ai_stop_reason).toBe('STOP')
+  }
+)
+
+it.each(['generateContent', 'generateContentStream'] as const)(
+  'built Gemini %s captures tool-call history without changing the provider request',
+  async (operation) => {
+    const contents = [
+      { role: 'user', parts: [{ text: 'Weather in Paris?' }] },
+      { role: 'model', parts: [{ functionCall: { id: 'call_1', name: 'weather', args: { city: 'Paris' } } }] },
+      {
+        role: 'user',
+        parts: [{ functionResponse: { id: 'call_1', name: 'weather', response: { temperature: 21 } } }],
+      },
+    ]
+    const response = {
+      candidates: [{ content: { role: 'model', parts: [{ text: 'It is 21°C.' }] }, finishReason: 'STOP' }],
+      usageMetadata: usage,
+    }
+    const { event } = await runSynthetic(
+      operation,
+      { model, contents },
+      operation === 'generateContentStream' ? [response] : response
+    )
+
+    expect(event.properties.$ai_input).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'Weather in Paris?' }] },
+      {
+        role: 'model',
+        content: [{ type: 'function', id: 'call_1', function: { name: 'weather', arguments: { city: 'Paris' } } }],
+      },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call_1', content: { temperature: 21 } }] },
+    ])
+  }
+)
+
+it.each(['generateContent', 'generateContentStream'] as const)(
+  'built Gemini %s captures a function response with only media parts',
+  async (operation) => {
+    const contents = [
+      {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              id: 'call_2',
+              name: 'read_image',
+              parts: [{ inlineData: { mimeType: 'image/png', data: 'U0hPUlQgQklOQVJZ' } }],
+            },
+          },
+        ],
+      },
+    ]
+    const response = {
+      candidates: [{ content: { role: 'model', parts: [{ text: 'Image received.' }] }, finishReason: 'STOP' }],
+      usageMetadata: usage,
+    }
+    const { event } = await runSynthetic(
+      operation,
+      { model, contents },
+      operation === 'generateContentStream' ? [response] : response
+    )
+
+    expect(event.properties.$ai_input).toEqual([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'call_2',
+            content: { parts: [{ inlineData: { mimeType: 'image/png', data: '[base64 image/png redacted]' } }] },
+          },
+        ],
+      },
+    ])
   }
 )
 

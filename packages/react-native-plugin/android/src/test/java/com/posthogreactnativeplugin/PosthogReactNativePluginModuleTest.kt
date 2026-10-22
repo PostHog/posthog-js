@@ -1,6 +1,7 @@
 package com.posthogreactnativeplugin
 
 import com.facebook.react.bridge.JavaOnlyMap
+import com.posthog.PostHogEvent
 import com.posthog.android.PostHogAndroidConfig
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
@@ -159,5 +160,150 @@ class PosthogReactNativePluginModuleTest {
     for (value in listOf("", "not-a-date", "2026-09-22", "2026-09-22T10:11:12Z", "2026-13-45T99:99:99.999Z")) {
       assertNull("expected $value to be rejected", parseIso8601(value))
     }
+  }
+
+  private fun nativeExceptionEvent(name: String = "\$exception") =
+    PostHogEvent(
+      name,
+      "distinct-id",
+      properties =
+        mutableMapOf(
+          "\$process_person_profile" to false,
+          "\$is_identified" to false,
+          "\$recording_status" to "active",
+        ),
+    )
+
+  @Test
+  fun `JS fatal capture keeps the person processing values JS decided`() {
+    val jsProperties =
+      mapOf<String, Any>(
+        "\$process_person_profile" to true,
+        "\$is_identified" to true,
+        "\$recording_status" to "disabled",
+      )
+
+    val event =
+      withJsFatalCaptureProperties(jsProperties) {
+        restoreJsFatalCaptureProperties(nativeExceptionEvent())
+      }
+
+    assertEquals(true, event.properties!!["\$process_person_profile"])
+    assertEquals(true, event.properties!!["\$is_identified"])
+    // Only the person keys are JS's; everything else keeps the native SDK's precedence.
+    assertEquals("active", event.properties!!["\$recording_status"])
+  }
+
+  @Test
+  fun `JS fatal capture drops person processing values JS set to null`() {
+    // Mirrors `ReadableMap.toHashMap()`, whose values can be null despite the cast.
+    @Suppress("UNCHECKED_CAST")
+    val jsProperties = mapOf("\$process_person_profile" to null, "\$is_identified" to true) as Map<String, Any>
+
+    val event =
+      withJsFatalCaptureProperties(jsProperties) {
+        restoreJsFatalCaptureProperties(nativeExceptionEvent())
+      }
+
+    assertFalse(event.properties!!.containsKey("\$process_person_profile"))
+    assertEquals(true, event.properties!!["\$is_identified"])
+  }
+
+  @Test
+  fun `events outside the JS fatal capture keep native person processing values`() {
+    val jsProperties = mapOf<String, Any>("\$process_person_profile" to true, "\$is_identified" to true)
+
+    withJsFatalCaptureProperties(jsProperties) {}
+    val afterCapture = restoreJsFatalCaptureProperties(nativeExceptionEvent())
+    val otherEvent =
+      withJsFatalCaptureProperties(jsProperties) {
+        restoreJsFatalCaptureProperties(nativeExceptionEvent("other event"))
+      }
+
+    for (event in listOf(afterCapture, otherEvent)) {
+      assertEquals(false, event.properties!!["\$process_person_profile"])
+      assertEquals(false, event.properties!!["\$is_identified"])
+    }
+  }
+
+  private fun javascriptCrashEvent(message: String = "Error: boom, stack:\nfoo@1:2") =
+    PostHogEvent(
+      "\$exception",
+      "distinct-id",
+      properties =
+        mutableMapOf(
+          "\$exception_list" to
+            listOf(
+              mapOf("type" to "JavascriptException", "module" to "com.facebook.react.common", "value" to message),
+            ),
+        ),
+    )
+
+  @Test
+  fun `native JavascriptException is kept when the JS layer did not see the crash`() {
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+  }
+
+  @Test
+  fun `native JavascriptException is dropped once after the JS layer saw the crash`() {
+    markJsFatalHandled("Error: boom")
+
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+  }
+
+  @Test
+  fun `a marked fatal that never crashed does not hide a later different crash`() {
+    markJsFatalHandled("Error: recovered")
+
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: render crash\n\nThis error is located at:\n    at App")))
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: recovered, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `a recovered fatal without a message does not hide a later render crash`() {
+    markJsFatalHandled("Error: ")
+
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: render crash\n\nThis error is located at:\n    at App")))
+  }
+
+  @Test
+  fun `a fatal without a message is dropped as a duplicate`() {
+    markJsFatalHandled("Error: ")
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: , js engine: hermes, stack:\nfoo@1:2")))
+
+    markJsFatalHandled("")
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent(", js engine: hermes, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `a short marker does not match a report whose message only starts with it`() {
+    markJsFatalHandled("1")
+
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("10 apples, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `a truncated marker matches the start of a longer message`() {
+    val message = "Error: " + "x".repeat(73)
+    markJsFatalHandled(message)
+
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent(message + "yz, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `the first of two fatals marked before the crash is dropped`() {
+    markJsFatalHandled("Error: first")
+    markJsFatalHandled("Error: second")
+
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: first, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `the JS crash marker is not consumed by other exceptions`() {
+    markJsFatalHandled("Error: boom")
+
+    assertNotNull(dropJsHandledFatalCrash(nativeExceptionEvent()))
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
   }
 }

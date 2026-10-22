@@ -202,12 +202,15 @@ describe('PostHog traces', () => {
     })
 
     it('encodes timestamps as nanosecond strings', async () => {
-      posthog.startSpan('checkout').end()
+      vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'))
+      const checkout = posthog.startSpan('checkout')
+      await vi.advanceTimersByTimeAsync(123)
+      checkout.end()
       await flushTraces()
 
       const [span] = sentSpans()
-      expect(typeof span.startTimeUnixNano).toBe('string')
-      expect(Number(span.endTimeUnixNano)).toBeGreaterThanOrEqual(Number(span.startTimeUnixNano))
+      expect(span.startTimeUnixNano).toBe('1735689600000000000')
+      expect(span.endTimeUnixNano).toBe('1735689600123000000')
     })
 
     it('encodes integer attributes as stringified int64', async () => {

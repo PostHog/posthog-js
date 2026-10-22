@@ -160,6 +160,9 @@ export const formatResponseAnthropic = (response: any): FormattedMessage[] => {
   for (const choice of response.content ?? []) {
     if (choice?.type === 'text' && choice?.text) {
       content.push({ type: 'text', text: choice.text })
+    } else if (choice?.type === 'thinking' && choice?.thinking) {
+      // redacted_thinking blocks only carry encrypted data, so they are not captured
+      content.push({ type: 'reasoning', text: choice.thinking })
     } else if (choice?.type === 'tool_use' && choice?.name && choice?.id) {
       content.push({
         type: 'function',
@@ -201,12 +204,17 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
 
         if (choice.message.tool_calls) {
           for (const toolCall of choice.message.tool_calls) {
+            // Custom tools carry their free-form text in `custom.input`, with no `function` object.
+            const call = toolCall.type === 'custom' ? toolCall.custom : toolCall.function
+            if (!call) {
+              continue
+            }
             content.push({
               type: 'function',
               id: toolCall.id,
               function: {
-                name: toolCall.function.name,
-                arguments: toolCall.function.arguments,
+                name: call.name,
+                arguments: toolCall.type === 'custom' ? call.input : call.arguments,
               },
             })
           }
@@ -325,7 +333,9 @@ export const formatResponseGemini = (response: any, client?: FullAiCaptureGate):
         const content: FormattedContent = []
 
         for (const part of candidate.content.parts) {
-          if (part.text) {
+          if (part.thought === true && part.text) {
+            content.push({ type: 'reasoning', text: part.text })
+          } else if (part.text) {
             content.push({ type: 'text', text: part.text })
           } else if (part.functionCall) {
             content.push({
@@ -376,8 +386,11 @@ export const mergeSystemPrompt = (params: MessageCreateParams & MonitoringParams
   return params.messages
 }
 
+export const isPrivacyModeEnabled = (client: PostHog, privacyMode: boolean): boolean =>
+  Boolean((client as any).privacy_mode || privacyMode)
+
 export const withPrivacyMode = (client: PostHog, privacyMode: boolean, input: any): any => {
-  return (client as any).privacy_mode || privacyMode ? null : input
+  return isPrivacyModeEnabled(client, privacyMode) ? null : input
 }
 
 function toSafeString(input: unknown): string {

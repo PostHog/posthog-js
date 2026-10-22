@@ -1,3 +1,4 @@
+import { localRemoteConfig } from './helpers'
 import { analytics } from '../src/analytics'
 import { createPostHog } from '../src/core'
 import type { CaptureV1Event } from '../src/capture-v1'
@@ -35,6 +36,7 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
     ])('omits null object members from %s without changing the input', async (_name, properties, expected) => {
         const received: CaptureV1Event[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -61,8 +63,8 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
                 event: 'Nullable Properties',
                 uuid: 'nullable-uuid',
                 distinct_id: posthog.distinctId,
-                session_id: posthog.session.sessionId,
-                window_id: posthog.session.windowId,
+                session_id: posthog.session!.sessionId,
+                window_id: posthog.session!.windowId,
             })
             const { $device_id, $groups, ...custom } = received[0]!.properties
             expect($device_id).toBe(posthog.deviceId)
@@ -78,6 +80,7 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
     it('cleans properties introduced by dynamic enrichment and toJSON', async () => {
         const received: CaptureV1Event[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,

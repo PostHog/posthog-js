@@ -164,7 +164,7 @@ export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | 
  */
 export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
 
-export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
+export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 
 export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
   persistence?: 'memory'
@@ -211,11 +211,12 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   traces?: TracesConfig
   /**
-   * Credential that enables local feature flag evaluation and remote config.
+   * Credential for fetching local feature flag definitions and decrypting remote config.
    *
    * Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).
-   * When provided, the client can evaluate feature flags locally and decrypt remote
-   * config payloads via `getRemoteConfigPayload`. Prefer this over the deprecated
+   * Local evaluation can also use definitions from `flagDefinitionCacheProvider` without
+   * this credential. Remote config payload decryption via `getRemoteConfigPayload`
+   * still requires it. Prefer this over the deprecated
    * `personalApiKey` option; when both are set, `secretKey` takes precedence.
    *
    * @example
@@ -230,12 +231,17 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
   personalApiKey?: string
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
-  // The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
-  featureFlagsPollingInterval?: number
-  // Maximum size of cache that deduplicates $feature_flag_called calls per user.
+  /**
+   * The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
+   * Set to null to disable automatic polling. Definitions are still loaded on initialization;
+   * call reloadFeatureFlags() to refresh them manually. Until refreshed, local evaluation uses the last loaded definitions.
+   */
+  featureFlagsPollingInterval?: number | null
+  // Maximum number of distinct ids held in the cache that deduplicates $feature_flag_called calls
+  // per user. When the cache is full the least recently used distinct ids are evicted.
   maxCacheSize?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
-  // Whether to enable feature flag polling for local evaluation by default. Defaults to true when secretKey is provided.
+  // Whether to enable local evaluation and definition polling. Defaults to true when a secretKey, personalApiKey, or flagDefinitionCacheProvider is provided.
   // We recommend setting this to false if you are only using the secretKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
   /**
@@ -243,6 +249,11 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    *
    * Allows custom caching strategies (Redis, database, etc.) for flag definitions
    * in multi-worker environments. If not provided, defaults to in-memory cache.
+   *
+   * Without a secretKey or personalApiKey, this instance only reads cached definitions on
+   * each refresh; it does not call shouldFetchFlagDefinitions or publish definitions.
+   * With a credential, it uses the provider's fetch decision to coordinate fetching
+   * fresh definitions from PostHog and publishing them to the cache.
    *
    * This enables distributed coordination where only one worker fetches flags while
    * others use cached data, reducing API calls and improving performance.
@@ -256,7 +267,6 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * }
    *
    * const client = new PostHog('api-key', {
-   *   personalApiKey: 'personal-key',
    *   flagDefinitionCacheProvider: new RedisCacheProvider(redis)
    * })
    * ```
@@ -622,8 +632,8 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param options: dict with optional parameters below
    * @param groups optional - what groups are currently active (group analytics). Required if the flag depends on groups.
-   * @param personProperties optional - what person properties are known. Used to compute flags locally, if personalApiKey is present.
-   * @param groupProperties optional - what group properties are known. Used to compute flags locally, if personalApiKey is present.
+   * @param personProperties optional - what person properties are known. Used to compute flags locally when definitions are available.
+   * @param groupProperties optional - what group properties are known. Used to compute flags locally when definitions are available.
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
@@ -653,8 +663,8 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param options: dict with optional parameters below
    * @param groups optional - what groups are currently active (group analytics). Required if the flag depends on groups.
-   * @param personProperties optional - what person properties are known. Used to compute flags locally, if personalApiKey is present.
-   * @param groupProperties optional - what group properties are known. Used to compute flags locally, if personalApiKey is present.
+   * @param personProperties optional - what person properties are known. Used to compute flags locally when definitions are available.
+   * @param groupProperties optional - what group properties are known. Used to compute flags locally when definitions are available.
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *

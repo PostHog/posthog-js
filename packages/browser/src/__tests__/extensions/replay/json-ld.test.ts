@@ -190,27 +190,30 @@ describe('JSON-LD replay capture', () => {
         }
     )
 
-    it.each([[], ['id', 'class']])('keeps @id when attributeFilter %j still records id', (attributeFilter) => {
-        document.body.innerHTML = '<div id="product-id"></div>'
-        document.body.append(
-            jsonLdScript({
+    it.each([{ attributeFilter: [] }, { attributeFilter: ['id', 'class'] }])(
+        'keeps @id when attributeFilter $attributeFilter still records id',
+        ({ attributeFilter }) => {
+            document.body.innerHTML = '<div id="product-id"></div>'
+            document.body.append(
+                jsonLdScript({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    '@id': '#product-id',
+                })
+            )
+            const emit = vi.fn(() => true)
+            const capture = startJsonLdCapture(document, MutationObserver, { attributeFilter, emit })
+
+            capture.scan()
+
+            expect(emit).toHaveBeenCalledWith({
                 '@context': 'https://schema.org',
                 '@type': 'Product',
-                '@id': '#product-id',
+                '@id': 'product-id',
             })
-        )
-        const emit = vi.fn(() => true)
-        const capture = startJsonLdCapture(document, MutationObserver, { attributeFilter, emit })
-
-        capture.scan()
-
-        expect(emit).toHaveBeenCalledWith({
-            '@context': 'https://schema.org',
-            '@type': 'Product',
-            '@id': 'product-id',
-        })
-        capture.stop()
-    })
+            capture.stop()
+        }
+    )
 
     it('emits initial, added, and changed JSON-LD without duplicates', async () => {
         const emit = vi.fn(() => true)
@@ -313,9 +316,11 @@ describe('JSON-LD replay capture', () => {
             getCaptureState: () => enabled,
         })
 
+        capture.scan()
         expect(emit).not.toHaveBeenCalled()
         enabled = true
         capture.scan()
+        expect(emit).toHaveBeenCalledTimes(1)
         expect(emit).toHaveBeenCalledWith({
             '@context': 'https://schema.org',
             '@type': 'Product',

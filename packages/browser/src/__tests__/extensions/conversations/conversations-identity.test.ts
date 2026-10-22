@@ -58,16 +58,9 @@ describe('Conversations Identity Verification', () => {
             } as any,
             get_distinct_id: vi.fn().mockReturnValue('test-distinct-id'),
             on: vi.fn().mockReturnValue(vi.fn()),
-            setIdentity: vi.fn((distinctId: string, hash: string) => {
-                mockPostHog.config.identity_distinct_id = distinctId
-                mockPostHog.config.identity_hash = hash
-                ;(mockPostHog as any).conversations?._onIdentityChanged()
-            }),
-            clearIdentity: vi.fn(() => {
-                delete mockPostHog.config.identity_distinct_id
-                delete mockPostHog.config.identity_hash
-                ;(mockPostHog as any).conversations?._onIdentityCleared()
-            }),
+            setIdentity: PostHog.prototype.setIdentity,
+            clearIdentity: PostHog.prototype.clearIdentity,
+            alias: vi.fn(),
         })
 
         assignableWindow.__PosthogExtensions__ = {
@@ -116,7 +109,13 @@ describe('Conversations Identity Verification', () => {
 
             loadConversations()
 
-            expect(assignableWindow.__PosthogExtensions__!.initConversations).toHaveBeenCalled()
+            expect(assignableWindow.__PosthogExtensions__!.initConversations).toHaveBeenCalledWith(
+                remoteConfig.conversations,
+                mockPostHog
+            )
+            const passedInstance = vi.mocked(assignableWindow.__PosthogExtensions__!.initConversations).mock.calls[0][1]
+            expect(passedInstance.config.identity_distinct_id).toBe('user_123')
+            expect(passedInstance.config.identity_hash).toBe('a1b2c3d4')
         })
     })
 
@@ -158,7 +157,13 @@ describe('Conversations Identity Verification', () => {
 
             loadConversations()
 
-            expect(assignableWindow.__PosthogExtensions__!.initConversations).toHaveBeenCalled()
+            expect(assignableWindow.__PosthogExtensions__!.initConversations).toHaveBeenCalledWith(
+                remoteConfig.conversations,
+                mockPostHog
+            )
+            const passedInstance = vi.mocked(assignableWindow.__PosthogExtensions__!.initConversations).mock.calls[0][1]
+            expect(passedInstance.config.identity_distinct_id).toBe('user_123')
+            expect(passedInstance.config.identity_hash).toBe('a1b2c3d4')
             expect(mockPostHog.config.identity_distinct_id).toBe('user_123')
         })
 

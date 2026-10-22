@@ -1,4 +1,4 @@
-import { PostHog, type PostHogOptions } from 'posthog-node'
+import { PostHog, type EventMessage, type PostHogOptions } from 'posthog-node'
 
 import type {
   FeedbackCaptureData,
@@ -39,6 +39,7 @@ import {
   isContextEnabled,
   type ContextInjectableTool,
 } from './context-parameters'
+import { PostHogMCPAnalyticsProperty } from './constants'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { normalizeHeaderString } from './headers'
@@ -54,6 +55,7 @@ import {
 import { McpEventSink } from './sink'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { deriveSessionIdFromConversation } from './session'
+import { validateServerBuild } from './server-build'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
 
 /**
@@ -61,6 +63,12 @@ import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
  * MCP-specific knobs.
  */
 export interface PostHogMCPOptions extends PostHogOptions {
+  /**
+   * Exact server build identifier → `$mcp_server_build`. Use an immutable
+   * deployment value such as a Git commit SHA or container image digest. The
+   * value must contain 1 to 256 characters.
+   */
+  serverBuild?: string
   /**
    * Name of the virtual "report a missing capability" tool injected by
    * {@link PostHogMCP.prepareToolList} and detected by
@@ -151,9 +159,11 @@ export class PostHogMCP extends PostHog {
   readonly #feedbackOptions: CollectFeedbackOptions | undefined
   readonly #captureModel: MCPAnalyticsOptions['captureModel']
   readonly #enableConversationId: boolean
+  readonly #serverBuild: string | undefined
   readonly #analyticsParameterOwnership = new Map<string, AnalyticsParameterOwnership>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
+    const serverBuild = validateServerBuild(options.serverBuild)
     super(apiKey, options)
     this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
     this.#feedbackOptions = resolveCollectFeedbackOptions(options.collectFeedback)
@@ -167,11 +177,21 @@ export class PostHogMCP extends PostHog {
     }
     this.#captureModel = options.captureModel
     this.#enableConversationId = options.enableConversationId ?? true
+    this.#serverBuild = serverBuild
     applyMcpLibIdentity(this)
   }
 
   get #feedbackToolName(): string {
     return this.#feedbackOptions?.toolName ?? SEND_FEEDBACK_TOOL_NAME
+  }
+
+  /** Add the configured build to SDK events and custom events captured through this client. */
+  override capture(event: EventMessage): void {
+    super.capture(this.#withServerBuild(event))
+  }
+
+  override captureImmediate(event: EventMessage): Promise<void> {
+    return super.captureImmediate(this.#withServerBuild(event))
   }
 
   /** Capture a tool invocation. Emits `$mcp_tool_call` (+ an `$exception` sibling on error). */
@@ -485,9 +505,24 @@ export class PostHogMCP extends PostHog {
    * must not break the host request.
    */
   #emit(event: McpEvent): void {
+    event.serverBuild = this.#serverBuild
     void this.#sink
       .capture(event, { enableExceptionAutocapture: this.options.enableExceptionAutocapture ?? true })
       .catch((error) => log(`Warning: PostHogMCP failed to capture event - ${error}`))
+  }
+
+  #withServerBuild(event: EventMessage): EventMessage {
+    if (!this.#serverBuild) {
+      return event
+    }
+    return {
+      ...event,
+      properties: {
+        ...event.properties,
+        [PostHogMCPAnalyticsProperty.ServerBuild]:
+          event.properties?.[PostHogMCPAnalyticsProperty.ServerBuild] ?? this.#serverBuild,
+      },
+    }
   }
 }
 

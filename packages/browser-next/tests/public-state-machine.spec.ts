@@ -1,3 +1,4 @@
+import { localRemoteConfig } from './helpers'
 import { analytics } from '../src/analytics'
 import { createAnalyticsExtension } from '../src/analytics-buffer'
 import { createAnalyticsDelivery } from '../src/analytics-delivery'
@@ -31,6 +32,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
         })
         const cleanup = vi.fn(async () => {})
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage,
@@ -106,6 +108,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const createDelivery = vi.fn(createAnalyticsDelivery)
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -137,6 +140,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
             .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 503 }))
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,

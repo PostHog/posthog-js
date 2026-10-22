@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Replay stylesheet fixture</title>
+        <style id="css-vars">
+            :root {
+                --spacing: 32px;
+                --bottom: 48px;
+            }
+            .css-probe {
+                padding: var(--spacing);
+                padding-bottom: var(--bottom);
+            }
+        </style>
+        <style id="cssom">
+            .css-probe {
+                color: rgb(20, 30, 40);
+            }
+        </style>
+        <script>
+            document.querySelector('#cssom').sheet.insertRule('.css-probe { border-top: 3px solid rgb(50, 60, 70); }')
+        </script>
+    </head>
+    <body>
+        <main>
+            <button id="action">Action</button><input id="masked" type="password" value="secret-password" />
+            <span class="ph-mask">private-compat-text</span>
+            <p id="change">Original</p>
+            <div id="css-probe" class="css-probe">Styled content</div>
+        </main>
+    </body>
+</html>

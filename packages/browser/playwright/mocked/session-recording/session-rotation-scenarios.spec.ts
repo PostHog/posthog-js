@@ -53,14 +53,12 @@ async function simulateFrozenTabIdle(page: Page): Promise<void> {
     })
 }
 
+test.beforeEach(async ({ page }) => {
+    await page.clock.install()
+})
+
 async function triggerForcedIdleTimeout(page: Page): Promise<void> {
-    await page.evaluate(() => {
-        const ph = (window as WindowWithPostHog).posthog
-        const sessionManager = ph?.sessionManager as any
-        const oldSessionId = ph?.get_session_id()
-        sessionManager.resetSessionId()
-        sessionManager._eventEmitter?.emit?.('forcedIdleReset', { idleSessionId: oldSessionId })
-    })
+    await page.clock.fastForward(35 * 60 * 1000)
 }
 
 async function getSessionId(page: Page): Promise<string> {
@@ -186,22 +184,30 @@ test.describe('Session rotation scenarios', () => {
 
         await triggerForcedIdleTimeout(page)
 
-        const isStopped = await page.evaluate(() => {
-            return (window as WindowWithPostHog).posthog?.sessionRecording?.status === 'disabled'
+        const started = await page.evaluate(() => {
+            return (window as WindowWithPostHog).posthog?.sessionRecording?.started
         })
-        expect(isStopped).toBe(false)
+        expect(started).toBe(false)
 
         await page.resetCapturedEvents()
 
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
             action: async () => {
+                await page.evaluate(() => (window as WindowWithPostHog).posthog?.capture('activity_after_idle'))
                 await page.locator('[data-cy-input]').type('activity after forced idle!')
             },
         })
 
         const newSessionId = await getSessionId(page)
         expect(newSessionId).not.toEqual(initialSessionId)
+        await expect
+            .poll(async () =>
+                (await page.capturedEvents()).some(
+                    (event) => event.event === '$snapshot' && event.properties.$session_id === newSessionId
+                )
+            )
+            .toBe(true)
 
         const capturedEvents = await page.capturedEvents()
         const snapshots = capturedEvents.filter((e) => e.event === '$snapshot')

@@ -1,3 +1,5 @@
+import { getTimezone } from './timezone'
+export { getTimezone } from './timezone'
 import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
 import { isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
 import type { Properties } from '@posthog/types'
@@ -39,6 +41,8 @@ export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
     'epik', // pinterest
     'qclid', // quora
     'sccid', // snapchat
+    'oppref', // openai ads
+    'bfcid', // freebuff
     'irclid', // impact
     '_kx', // klaviyo
 ]
@@ -264,14 +268,6 @@ export function getInitialPersonPropsFromInfo(
         props[`$initial_${stripLeadingDollar(key)}`] = val
     })
     return props
-}
-
-export function getTimezone(): string | undefined {
-    try {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone
-    } catch {
-        return undefined
-    }
 }
 
 export function getTimezoneOffset(): number | undefined {

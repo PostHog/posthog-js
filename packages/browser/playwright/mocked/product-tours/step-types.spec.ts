@@ -40,6 +40,17 @@ test.describe('product tours - step types and positioning', () => {
                     Math.abs(tooltipBox!.y + tooltipBox!.height - targetBox!.y)
                 )
                 expect(closestEdgeDistance).toBeLessThan(50)
+                const gapX = Math.max(
+                    targetBox!.x - (tooltipBox!.x + tooltipBox!.width),
+                    tooltipBox!.x - (targetBox!.x + targetBox!.width),
+                    0
+                )
+                const gapY = Math.max(
+                    targetBox!.y - (tooltipBox!.y + tooltipBox!.height),
+                    tooltipBox!.y - (targetBox!.y + targetBox!.height),
+                    0
+                )
+                expect(Math.hypot(gapX, gapY)).toBeLessThan(50)
             })
 
             test(`progressionTrigger: click - clicking spotlight advances tour - ${label}`, async ({
@@ -115,6 +126,14 @@ test.describe('product tours - step types and positioning', () => {
 
                 const spotlight = tourContainer(page, 'spotlight-tour').locator('.ph-tour-spotlight')
                 await expect(spotlight).toBeVisible()
+                const target = await page.locator('#tour-target').boundingBox()
+                const highlight = await spotlight.boundingBox()
+                expect(target).not.toBeNull()
+                expect(highlight).not.toBeNull()
+                expect(highlight!.x).toBeCloseTo(target!.x - 8, 0)
+                expect(highlight!.y).toBeCloseTo(target!.y - 8, 0)
+                expect(highlight!.width).toBeCloseTo(target!.width + 16, 0)
+                expect(highlight!.height).toBeCloseTo(target!.height + 16, 0)
             })
         })
     }
@@ -153,8 +172,11 @@ test.describe('product tours - step types and positioning', () => {
             await expect(tooltip).toBeVisible({ timeout: 5000 })
 
             await expect(container.locator('.ph-tour-click-overlay')).not.toBeVisible()
-
+            await page.mouse.click(10, 10)
             await expect(tooltip).toBeVisible()
+            expect(
+                await page.evaluate((key) => localStorage.getItem(key), tourDismissedKey('no-dismiss-outside'))
+            ).toBeNull()
         })
 
         test('showOverlay: true shows dark overlay background', async ({ page, context }) => {
@@ -173,6 +195,10 @@ test.describe('product tours - step types and positioning', () => {
                 return getComputedStyle(tourContainer).getPropertyValue('--ph-tour-overlay-color')
             })
             expect(overlayColor.trim()).toContain('rgba(0, 0, 0')
+            await expect(tourContainer(page, 'with-overlay').locator('.ph-tour-modal-overlay')).toHaveCSS(
+                'background-color',
+                'rgba(0, 0, 0, 0.5)'
+            )
         })
 
         test('showOverlay: false shows transparent overlay', async ({ page, context }) => {
@@ -191,6 +217,10 @@ test.describe('product tours - step types and positioning', () => {
                 return getComputedStyle(tourContainer).getPropertyValue('--ph-tour-overlay-color')
             })
             expect(overlayColor.trim()).toBe('transparent')
+            await expect(tourContainer(page, 'no-overlay').locator('.ph-tour-modal-overlay')).toHaveCSS(
+                'background-color',
+                'rgba(0, 0, 0, 0)'
+            )
         })
     })
 
@@ -213,6 +243,7 @@ test.describe('product tours - step types and positioning', () => {
             const tooltipCenterX = tooltipBox!.x + tooltipBox!.width / 2
             const viewportCenterX = viewport!.width / 2
             expect(Math.abs(tooltipCenterX - viewportCenterX)).toBeLessThan(50)
+            expect(Math.abs(tooltipBox!.y + tooltipBox!.height / 2 - viewport!.height / 2)).toBeLessThan(50)
         })
 
         test('modal does not show spotlight', async ({ page, context }) => {

@@ -221,51 +221,63 @@ describe('flags v2', () => {
     let posthog: PostHog
     describe.each([
       {
+        case: 'HTTP error response',
+        status: 400,
+        json: vi.fn().mockResolvedValue({ error: 'error response' }),
+        expectedError: 'unknown_error',
+      },
+      {
         case: 'JSON error response',
-        mock: apiImplementationV4({
-          status: 400,
-          json: () => Promise.resolve({ error: 'error response' }),
-        }),
+        status: 200,
+        json: vi.fn().mockResolvedValue({ error: 'error response' }),
+        expectedError: 'flag_missing',
       },
       {
         case: 'undefined response',
-        mock: apiImplementationV4({
-          status: 400,
-          json: () => Promise.resolve(undefined),
-        }),
+        status: 200,
+        json: vi.fn().mockResolvedValue(undefined),
+        expectedError: 'unknown_error',
       },
       {
         case: 'null response',
-        mock: apiImplementationV4({
-          status: 400,
-          json: () => Promise.resolve(null),
-        }),
+        status: 200,
+        json: vi.fn().mockResolvedValue(null),
+        expectedError: 'unknown_error',
       },
       {
         case: 'empty response',
-        mock: apiImplementationV4({
-          status: 400,
-          json: () => Promise.resolve({}),
-        }),
+        status: 200,
+        json: vi.fn().mockResolvedValue({}),
+        expectedError: 'flag_missing',
       },
       {
         case: 'network error',
-        mock: () => Promise.reject(new Error('Network error')),
+        status: undefined,
+        json: vi.fn(),
+        expectedError: 'unknown_error',
       },
       {
         case: 'invalid JSON',
-        mock: apiImplementationV4({
-          status: 500,
-          json: () => Promise.reject(new Error('Invalid JSON')),
-        }),
+        status: 200,
+        json: vi.fn().mockRejectedValue(new Error('Invalid JSON')),
+        expectedError: 'unknown_error',
       },
-    ])('when $case', ({ mock }) => {
+    ])('when $case', ({ status, json, expectedError }) => {
       beforeEach(() => {
         posthog = new PostHog('TEST_API_KEY', {
           host: 'http://example.com',
           ...posthogImmediateResolveOptions,
         })
-        mockedFetch.mockImplementation(mock)
+        mockedFetch.mockImplementation(
+          status === undefined
+            ? () => Promise.reject(new Error('Network error'))
+            : apiImplementationV4({ status, json })
+        )
+      })
+
+      afterEach(async () => {
+        expect(json).toHaveBeenCalledTimes(status === 200 ? 1 : 0)
+        await posthog.shutdown()
       })
 
       it('getFeatureFlag returns undefined', async () => {
@@ -291,7 +303,7 @@ describe('flags v2', () => {
         })
       })
 
-      it('captures event with $feature_flag_error=unknown_error', async () => {
+      it('captures event with the response-specific $feature_flag_error', async () => {
         let capturedMessage: any
         posthog.on('capture', (message) => {
           capturedMessage = message
@@ -301,7 +313,7 @@ describe('flags v2', () => {
         await waitForPromises()
         expect(capturedMessage).toBeDefined()
         expect(capturedMessage.event).toBe('$feature_flag_called')
-        expect(capturedMessage.properties.$feature_flag_error).toBe('unknown_error')
+        expect(capturedMessage.properties.$feature_flag_error).toBe(expectedError)
       })
     })
   })
@@ -1009,11 +1021,31 @@ describe('getFeatureFlagResult', () => {
   })
 
   it('returns undefined when flag is overridden to undefined (simulates missing flag)', async () => {
-    mockedFetch.mockImplementation(apiImplementationV4({ flags: {}, errorsWhileComputingFlags: false }))
+    mockedFetch.mockImplementation(
+      apiImplementationV4({
+        flags: {
+          'undefined-override-flag': {
+            key: 'undefined-override-flag',
+            enabled: true,
+            variant: undefined,
+            reason: undefined,
+            metadata: { id: 1, version: 1, payload: '{"discount": 15}', description: undefined },
+          },
+        },
+        errorsWhileComputingFlags: false,
+      })
+    )
 
     const posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
       ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlagResult('undefined-override-flag', 'some-distinct-id')).toEqual({
+      key: 'undefined-override-flag',
+      enabled: true,
+      variant: undefined,
+      payload: { discount: 15 },
     })
 
     posthog.overrideFeatureFlags({
@@ -1140,7 +1172,8 @@ describe('getFeatureFlagResult', () => {
       })
       expect(result?.variant).toBeDefined()
       expect(['control', 'test']).toContain(result?.variant)
-      expect(result?.payload).toBeDefined()
+      const payloads = { control: { version: 'control' }, test: { version: 'test' } }
+      expect(result?.payload).toEqual(payloads[result!.variant as keyof typeof payloads])
 
       await posthog.shutdown()
     })

@@ -47,7 +47,7 @@ export default {
             host: env.POSTHOG_HOST,
             secretKey: env.POSTHOG_SECRET_KEY,
             enableLocalEvaluation: true,
-            featureFlagsPollingInterval: undefined, // Disable polling in scheduled job
+            featureFlagsPollingInterval: null, // Disable polling in scheduled job
             flagDefinitionCacheProvider: cache,
         })
 

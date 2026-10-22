@@ -19,6 +19,7 @@ import scrollModalRevealedOnSeekEvents from './events/scroll-modal-revealed-on-s
 import scrollDocumentInitialOffsetEvents from './events/scroll-document-initial-offset';
 import silkSheetRevealBrokenEvents from './events/silk-sheet-reveal-broken';
 import silkSheetRevealFixedEvents from './events/silk-sheet-reveal-fixed';
+import scrollSnapContainerRealtimeEvents from './events/scroll-snap-container-realtime';
 import inputEvents from './events/input';
 import iframeEvents from './events/iframe';
 import selectionEvents from './events/selection';
@@ -40,6 +41,10 @@ import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
 import hugeAddMutationEvents from './events/huge-add-mutation';
 import hugeAddMutationDialogEvents from './events/huge-add-mutation-dialog';
+import hugeAddCssomRulesEvents, {
+  HEAD_ID,
+  DIV_ID,
+} from './events/huge-add-cssom-rules';
 import svgXlinkHrefEvents from './events/svg-xlink-href';
 import inputAutocompleteMutationEvents from './events/input-autocomplete-mutation';
 import readdNodeSubtreeSwapEvents from './events/readd-node-subtree-swap';
@@ -681,6 +686,35 @@ describe('replayer', function () {
     ).toEqual(787);
   });
 
+  it('lands a real-time scroll instantly on a scroll-snap container and keeps it smooth elsewhere', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(scrollSnapContainerRealtimeEvents)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      var behaviors = {};
+      const elementPrototype = replayer.iframe.contentWindow.Element.prototype;
+      const originalScrollTo = elementPrototype.scrollTo;
+      elementPrototype.scrollTo = function (options) {
+        behaviors[this.id] = options.behavior;
+        return originalScrollTo.apply(this, arguments);
+      };
+      replayer.play(0);
+    `);
+    await page.waitForFunction('behaviors.snap && behaviors.plain');
+    expect(await page.evaluate('behaviors')).toEqual({
+      snap: 'instant',
+      plain: 'smooth',
+    });
+    const iframe = await page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    expect(
+      await contentDocument!.$eval(
+        '#snap',
+        (element: Element) => element.scrollTop,
+      ),
+    ).toEqual(1320);
+  });
+
   it('can fast forward input events', async () => {
     await page.evaluate(`
       events = ${JSON.stringify(inputEvents)};
@@ -1040,6 +1074,41 @@ describe('replayer', function () {
       bodyOrder: ['root', 'c-span', 'd-span'],
     });
   });
+
+  it.each([
+    ['<head>', HEAD_ID],
+    ['a body <div>', DIV_ID],
+  ])(
+    'keeps CSSOM rules when a huge add batch lands in %s',
+    async (_, batchParentId) => {
+      await page.evaluate(
+        `events = ${JSON.stringify(hugeAddCssomRulesEvents(batchParentId))}`,
+      );
+      const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const rules = (id) =>
+          Array.from(doc.getElementById(id).sheet.cssRules, (r) => r.cssText);
+        return {
+          metaCount: doc.getElementsByTagName('meta').length,
+          head: rules('head-style').map((r) => r.split(' ')[0]),
+          div: rules('div-style'),
+          paddingLeft: getComputedStyle(doc.getElementById('padded'))
+            .paddingLeft,
+        };
+      })()
+    `);
+      expect(result).toEqual({
+        metaCount: 1100,
+        head: ['.from-6', '.padded'],
+        div: ['.from-11 { color: red; }'],
+        paddingLeft: '7px',
+      });
+    },
+  );
 
   it('opens a modal dialog added inside a huge add mutation', async () => {
     await page.evaluate(

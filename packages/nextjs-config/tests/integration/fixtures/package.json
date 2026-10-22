@@ -1,0 +1,19 @@
+{
+  "name": "posthog-nextjs-integration-fixtures",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "dependencies": {
+    "@posthog/cli": "0.18.11",
+    "core-js": "3.49.0",
+    "cross-spawn": "7.0.6",
+    "dompurify": "3.4.13",
+    "fflate": "0.4.8",
+    "preact": "10.29.3",
+    "query-selector-shadow-dom": "1.0.1",
+    "semver": "7.8.5",
+    "web-vitals": "6.2.1",
+    "web-vitals-soft-navs": "npm:web-vitals@6.2.1",
+    "webpack": "5.108.1",
+    "posthog-js-minimum": "npm:posthog-js@1.438.5"
+  }
+}

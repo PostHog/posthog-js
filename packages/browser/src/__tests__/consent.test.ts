@@ -1,7 +1,8 @@
+import type { Mock as VitestMock } from 'vitest'
 import { clearLoggerMocks } from './helpers/mock-logger'
 
 import { PostHog } from '../posthog-core'
-import { defaultPostHog } from './helpers/posthog-instance'
+import { defaultPostHog, requirePostHogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import { isNull } from '@posthog/core'
@@ -24,13 +25,14 @@ function deleteAllCookies() {
     }
 }
 
-// periodically flakes because of unexpected console logging
-vi.setConfig({ retry: 3 })
-
 describe('consentManager', () => {
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
         const posthog = await new Promise<PostHog>((resolve) =>
-            defaultPostHog().init('testtoken', { ...config, loaded: (posthog) => resolve(posthog) }, uuidv7())!
+            defaultPostHog().init(
+                'testtoken',
+                { ...config, loaded: (posthog) => resolve(requirePostHogInstance(posthog)) },
+                uuidv7()
+            )!
         )
         return posthog
     }
@@ -196,6 +198,47 @@ describe('consentManager', () => {
         })
     })
 
+    describe('feature flag exposures before consent', () => {
+        it.each([
+            ['opt_in_capturing()', (ph: PostHog) => ph.opt_in_capturing({ captureEventName: false })],
+            // Consent written by another tab or a consent manager sharing the consent cookie
+            ['consent storage', (ph: PostHog) => ph.consent.optInOut(true)],
+        ])('sends $feature_flag_called for a flag read before consent is granted via %s', async (_, grantConsent) => {
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
+            posthog = await createPostHog({
+                opt_out_capturing_by_default: true,
+                capture_pageview: false,
+                bootstrap: { featureFlags: { 'beta-ui': true } },
+                before_send: beforeSendMock,
+            })
+
+            posthog.getFeatureFlag('beta-ui')
+            grantConsent(posthog)
+            posthog.getFeatureFlag('beta-ui')
+
+            const flagCalledEvents = beforeSendMock.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
+            expect(flagCalledEvents).toHaveLength(1)
+        })
+
+        it('sends $feature_flag_called for a flag an older SDK version marked as reported before consent', async () => {
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
+            posthog = await createPostHog({
+                opt_out_capturing_by_default: true,
+                capture_pageview: false,
+                bootstrap: { featureFlags: { 'beta-ui': true } },
+                before_send: beforeSendMock,
+            })
+            posthog.persistence!.register({ $flag_call_reported: { 'beta-ui': ['true'] } })
+
+            posthog.getFeatureFlag('beta-ui')
+            posthog.opt_in_capturing({ captureEventName: false })
+            posthog.getFeatureFlag('beta-ui')
+
+            const flagCalledEvents = beforeSendMock.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
+            expect(flagCalledEvents).toHaveLength(1)
+        })
+    })
+
     describe('reset() and consent', () => {
         it('warns when a caller directly resets after opting in and capturing changes from on to off', async () => {
             const beforeSendMock = vi.fn().mockImplementation((e) => e)
@@ -232,7 +275,7 @@ describe('consentManager', () => {
                 } else {
                     posthog.opt_out_capturing()
                 }
-                ;(console.warn as vi.Mock).mockClear()
+                ;(console.warn as VitestMock).mockClear()
 
                 if (endsOptedIn) {
                     posthog.opt_in_capturing({ captureEventName: false })
@@ -283,7 +326,7 @@ describe('consentManager', () => {
         it.each(['always', 'on_reject'] as const)('does not warn in cookieless %s mode', async (cookieless_mode) => {
             posthog = await createPostHog({ cookieless_mode, opt_out_capturing_by_default: true })
             posthog.opt_in_capturing({ captureEventName: false })
-            ;(console.warn as vi.Mock).mockClear()
+            ;(console.warn as VitestMock).mockClear()
 
             posthog.reset()
 
@@ -483,7 +526,7 @@ describe('consent storage when no browser storage is available', () => {
                     'testtoken',
                     {
                         opt_out_capturing_persistence_type: persistenceType,
-                        loaded: (posthog) => resolve(posthog),
+                        loaded: (posthog) => resolve(requirePostHogInstance(posthog)),
                     },
                     uuidv7()
                 )!

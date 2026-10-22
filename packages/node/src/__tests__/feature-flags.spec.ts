@@ -28,72 +28,57 @@ describe('local evaluation', () => {
     await posthog.shutdown()
   })
 
-  it('evaluates person properties with undefined property values', async () => {
-    const flags = {
-      flags: [
-        {
-          id: 1,
-          name: 'Beta Feature',
-          key: 'person-flag',
-          active: true,
-          filters: {
-            groups: [
-              {
-                variant: null,
-                properties: [
-                  {
-                    key: 'latestBuildVersion',
-                    type: 'person',
-                    value: '.+',
-                    operator: 'regex',
-                  },
-                  {
-                    key: 'latestBuildVersionMajor',
-                    type: 'person',
-                    value: '23',
-                    operator: 'gt',
-                  },
-                  {
-                    key: 'latestBuildVersionMinor',
-                    type: 'person',
-                    value: '31',
-                    operator: 'gt',
-                  },
-                  {
-                    key: 'latestBuildVersionPatch',
-                    type: 'person',
-                    value: '0',
-                    operator: 'gt',
-                  },
-                ],
-                rollout_percentage: 100,
-              },
-            ],
+  it.each(['not_icontains', 'not_starts_with', 'not_ends_with', 'not_regex', 'is_not', 'regex', 'gt'])(
+    'falls back remotely for undefined with %s unless local-only evaluation is requested',
+    async (operator) => {
+      const flags = {
+        flags: [
+          {
+            id: 1,
+            name: 'Beta Feature',
+            key: 'person-flag',
+            active: true,
+            filters: {
+              groups: [
+                {
+                  properties: [{ key: 'latestBuildVersion', type: 'person', value: '23', operator }],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
           },
-        },
-      ],
-    }
-    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+        ],
+      }
+      mockedFetch.mockImplementation(
+        apiImplementation({ localFlags: flags, decideFlags: { 'person-flag': 'server-fallback' } })
+      )
 
-    posthog = new PostHog('TEST_API_KEY', {
-      host: 'http://example.com',
-      personalApiKey: 'TEST_PERSONAL_API_KEY',
-      ...posthogImmediateResolveOptions,
-    })
-
-    expect(
-      await posthog.getFeatureFlag('person-flag', 'some-distinct-id', {
-        personProperties: {
-          latestBuildVersion: undefined,
-          latestBuildVersionMajor: undefined,
-          latestBuildVersionMinor: undefined,
-          latestBuildVersionPatch: undefined,
-        },
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
       })
-    ).toEqual(false)
+      const personProperties = { latestBuildVersion: undefined, retained: 'value', explicitNull: null }
 
-    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-  })
+      expect(
+        await posthog.getFeatureFlag('person-flag', 'some-distinct-id', {
+          personProperties,
+          onlyEvaluateLocally: true,
+        })
+      ).toBeUndefined()
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+
+      expect(await posthog.getFeatureFlag('person-flag', 'some-distinct-id', { personProperties })).toEqual(
+        'server-fallback'
+      )
+      const flagsCalls = mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')
+      expect(flagsCalls).toHaveLength(1)
+      const requestBody = JSON.parse(flagsCalls[0][1]?.body as string)
+      expect(requestBody.person_properties).toEqual({ retained: 'value', explicitNull: null })
+      expect(requestBody.person_properties).not.toHaveProperty('latestBuildVersion')
+    }
+  )
 
   it('evaluates numeric person properties with comparison operators', async () => {
     const flags = {
@@ -810,7 +795,7 @@ describe('local evaluation', () => {
           bucketing_identifier: null,
           active: true,
           filters: {
-            groups: [{ properties: [], rollout_percentage: 100 }],
+            groups: [{ properties: [], rollout_percentage: 50 }],
           },
         },
         {
@@ -820,7 +805,7 @@ describe('local evaluation', () => {
           bucketing_identifier: '',
           active: true,
           filters: {
-            groups: [{ properties: [], rollout_percentage: 100 }],
+            groups: [{ properties: [], rollout_percentage: 50 }],
           },
         },
       ],
@@ -834,8 +819,10 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    expect(await posthog.getFeatureFlag('null-bucketing-identifier-flag', 'some-distinct-id')).toEqual(true)
-    expect(await posthog.getFeatureFlag('empty-bucketing-identifier-flag', 'some-distinct-id')).toEqual(true)
+    for (const key of ['null-bucketing-identifier-flag', 'empty-bucketing-identifier-flag']) {
+      expect(await posthog.getFeatureFlag(key, 'user-2')).toBe(true)
+      expect(await posthog.getFeatureFlag(key, 'user-0')).toBe(false)
+    }
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
@@ -2907,7 +2894,7 @@ describe('local evaluation', () => {
           filters: {
             groups: [
               {
-                properties: [],
+                properties: [{ key: 'id', value: 999, type: 'cohort' }],
                 rollout_percentage: 100,
                 variant: 'variant-a',
               },
@@ -3081,7 +3068,7 @@ describe('local evaluation', () => {
           filters: {
             groups: [
               {
-                properties: [{ key: 'plan', value: 'pro', operator: 'exact', type: 'person' }],
+                properties: [{ key: 'subscription', value: 'paid', operator: 'exact', type: 'person' }],
                 rollout_percentage: 100,
               },
             ],
@@ -3122,14 +3109,14 @@ describe('local evaluation', () => {
 
     expect(
       await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
-        personProperties: { plan: 'pro' },
+        personProperties: { plan: 'pro', subscription: 'paid' },
         onlyEvaluateLocally: true,
       })
     ).toBe(true)
 
     expect(
       await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
-        personProperties: { plan: 'free' },
+        personProperties: { plan: 'pro', subscription: 'free' },
         onlyEvaluateLocally: true,
       })
     ).toBe(false)
@@ -3480,36 +3467,37 @@ describe('getFeatureFlag', () => {
       personalApiKey: 'TEST_PERSONAL_API_KEY',
       ...posthogImmediateResolveOptions,
     })
-    let capturedMessage: any
-    posthog.on('capture', (message) => {
-      capturedMessage = message
-    })
+    try {
+      const captured = new Promise<any>((resolve) => posthog.on('capture', resolve))
 
-    expect(
-      await posthog.getFeatureFlag('complex-flag', 'some-distinct-id', {
-        personProperties: {
-          region: 'USA',
-        } as unknown as Record<string, string>,
+      expect(
+        await posthog.getFeatureFlag('complex-flag', 'some-distinct-id', {
+          personProperties: {
+            region: 'USA',
+          } as unknown as Record<string, string>,
+        })
+      ).toEqual(true)
+
+      const capturedMessage = await captured
+
+      expect(capturedMessage).toMatchObject({
+        distinct_id: 'some-distinct-id',
+        event: '$feature_flag_called',
+        properties: {
+          '$feature/complex-flag': true,
+          $feature_flag: 'complex-flag',
+          $feature_flag_response: true,
+          $lib: posthog.getLibraryId(),
+          $lib_version: posthog.getLibraryVersion(),
+          locally_evaluated: true,
+        },
       })
-    ).toEqual(true)
 
-    await waitForPromises()
-
-    expect(capturedMessage).toMatchObject({
-      distinct_id: 'some-distinct-id',
-      event: '$feature_flag_called',
-      properties: {
-        '$feature/complex-flag': true,
-        $feature_flag: 'complex-flag',
-        $feature_flag_response: true,
-        $lib: posthog.getLibraryId(),
-        $lib_version: posthog.getLibraryVersion(),
-        locally_evaluated: true,
-      },
-    })
-
-    expect(capturedMessage.properties).not.toHaveProperty('$active_feature_flags')
-    expect(capturedMessage.properties).not.toHaveProperty('$feature/simple-flag')
+      expect(capturedMessage.properties).not.toHaveProperty('$active_feature_flags')
+      expect(capturedMessage.properties).not.toHaveProperty('$feature/simple-flag')
+    } finally {
+      await posthog.shutdown()
+    }
   })
 
   it('should include $feature_flag_id and $feature_flag_reason for locally evaluated flags', async () => {
@@ -3565,7 +3553,7 @@ describe('match properties', () => {
 
     expect(matchProperty(property_a, { key: 'value2' })).toBe(false)
     expect(matchProperty(property_a, { key: '' })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
@@ -3591,7 +3579,7 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'value' })).toBe(false)
     expect(matchProperty(property_a, { key: 'value2' })).toBe(true)
     expect(matchProperty(property_a, { key: '' })).toBe(true)
-    expect(matchProperty(property_a, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
@@ -3604,7 +3592,7 @@ describe('match properties', () => {
     expect(matchProperty(property_c, { key: 'value4' })).toBe(true)
     expect(matchProperty(property_c, { key: 'value5' })).toBe(true)
     expect(matchProperty(property_c, { key: '' })).toBe(true)
-    expect(matchProperty(property_c, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
 
     expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
   })
@@ -3631,7 +3619,7 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: '343tfvalUe5' })).toBe(true)
 
     expect(matchProperty(property_a, { key: '' })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: 1234 })).toBe(false)
     expect(matchProperty(property_a, { key: '1234' })).toBe(false)
 
@@ -3680,12 +3668,10 @@ describe('match properties', () => {
     expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
 
-    // The null guard fires before operator dispatch, so the not_ variant is not a pure
-    // negation here — both directions return false, matching icontains.
     expect(matchProperty(property_a, { key: null })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
-    expect(matchProperty(property_c, { key: null })).toBe(false)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
+    expect(matchProperty(property_c, { key: null })).toBe(true)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
   })
 
   it('with operator ends_with', () => {
@@ -3722,12 +3708,10 @@ describe('match properties', () => {
     expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
 
-    // The null guard fires before operator dispatch, so the not_ variant is not a pure
-    // negation here — both directions return false, matching icontains.
     expect(matchProperty(property_a, { key: null })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
-    expect(matchProperty(property_c, { key: null })).toBe(false)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
+    expect(matchProperty(property_c, { key: null })).toBe(true)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
   })
 
   it('with operator regex', () => {
@@ -3739,7 +3723,7 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'valuecom' })).toBe(false)
     expect(matchProperty(property_a, { key: 'valuecom' })).toBe(false)
     expect(matchProperty(property_a, { key: '.com343tfvalue5' })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: '' })).toBe(false)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
@@ -3935,7 +3919,7 @@ describe('match properties', () => {
   it('null or undefined property value', () => {
     const property_a = { key: 'key', value: 'null', operator: 'is_not' }
     expect(matchProperty(property_a, { key: null })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: 'null' })).toBe(false)
     expect(matchProperty(property_a, { key: 'nul' })).toBe(true)
 
@@ -3947,37 +3931,37 @@ describe('match properties', () => {
 
     const property_c = { key: 'key', value: 'undefined', operator: 'icontains' }
     expect(matchProperty(property_c, { key: null })).toBe(false)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_c, { key: 'lol' })).toBe(false)
 
     const property_d = { key: 'key', value: 'undefined', operator: 'regex' }
     expect(matchProperty(property_d, { key: null })).toBe(false)
-    expect(matchProperty(property_d, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_d, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_e = { key: 'key', value: 1, operator: 'gt' }
     expect(matchProperty(property_e, { key: null })).toBe(false)
-    expect(matchProperty(property_e, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_e, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_f = { key: 'key', value: 1, operator: 'lt' }
     expect(matchProperty(property_f, { key: null })).toBe(false)
-    expect(matchProperty(property_f, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_f, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_g = { key: 'key', value: 'xyz', operator: 'gte' }
     expect(matchProperty(property_g, { key: null })).toBe(false)
-    expect(matchProperty(property_g, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_g, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_h = { key: 'key', value: 'Oo', operator: 'lte' }
     expect(matchProperty(property_h, { key: null })).toBe(false)
-    expect(matchProperty(property_h, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_h_lower = { key: 'key', value: 'oo', operator: 'lte' }
     expect(matchProperty(property_h_lower, { key: null })).toBe(false)
-    expect(matchProperty(property_h_lower, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h_lower, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_i = { key: 'key', value: '2022-05-01', operator: 'is_date_before' }
 
     expect(matchProperty(property_i, { key: null })).toBe(false)
-    expect(matchProperty(property_i, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_i, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_j = { key: 'key', value: '2022-05-01', operator: 'is_date_after' }
     expect(matchProperty(property_j, { key: null })).toBe(false)
@@ -3989,7 +3973,7 @@ describe('match properties', () => {
   it('null or undefined override value', () => {
     const property_a = { key: 'key', value: 'ab', operator: 'is_not' }
     expect(matchProperty(property_a, { key: null })).toBe(true)
-    expect(matchProperty(property_a, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: 'null' })).toBe(true)
     expect(matchProperty(property_a, { key: 'nul' })).toBe(true)
 
@@ -4001,44 +3985,44 @@ describe('match properties', () => {
 
     const property_c = { key: 'key', value: 'app.posthog.com', operator: 'icontains' }
     expect(matchProperty(property_c, { key: null })).toBe(false)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_c, { key: 'lol' })).toBe(false)
     expect(matchProperty(property_c, { key: 'https://app.posthog.com' })).toBe(true)
 
     const property_d = { key: 'key', value: '.+', operator: 'regex' }
-    expect(matchProperty(property_d, { key: null })).toBe(false)
-    expect(matchProperty(property_d, { key: undefined })).toBe(false)
+    expect(matchProperty(property_d, { key: null })).toBe(true)
+    expect(() => matchProperty(property_d, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_d, { key: 'i_am_a_value' })).toBe(true)
 
     const property_e = { key: 'key', value: 1, operator: 'gt' }
     expect(matchProperty(property_e, { key: null })).toBe(false)
-    expect(matchProperty(property_e, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_e, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_e, { key: 1 })).toBe(false)
     expect(matchProperty(property_e, { key: 2 })).toBe(true)
 
     const property_f = { key: 'key', value: 1, operator: 'lt' }
     expect(matchProperty(property_f, { key: null })).toBe(false)
-    expect(matchProperty(property_f, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_f, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_f, { key: 0 })).toBe(true)
 
     const property_g = { key: 'key', value: 'xyz', operator: 'gte' }
     expect(matchProperty(property_g, { key: null })).toBe(false)
-    expect(matchProperty(property_g, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_g, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_g, { key: 'xyz' })).toBe(true)
 
     const property_h = { key: 'key', value: 'Oo', operator: 'lte' }
     expect(matchProperty(property_h, { key: null })).toBe(false)
-    expect(matchProperty(property_h, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_h, { key: 'Oo' })).toBe(true)
 
     const property_h_lower = { key: 'key', value: 'oo', operator: 'lte' }
     expect(matchProperty(property_h_lower, { key: null })).toBe(false)
-    expect(matchProperty(property_h_lower, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h_lower, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_h_lower, { key: 'oo' })).toBe(true)
 
     const property_i = { key: 'key', value: '2022-05-01', operator: 'is_date_before' }
     expect(matchProperty(property_i, { key: null })).toBe(false)
-    expect(matchProperty(property_i, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_i, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_j = { key: 'key', value: '2022-05-01', operator: 'is_date_after' }
     expect(matchProperty(property_j, { key: null })).toBe(false)
@@ -4470,10 +4454,10 @@ describe('semver operators', () => {
       )
     })
 
-    it('returns false for undefined property value', () => {
-      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: undefined })).toBe(
-        false
-      )
+    it('throws InconclusiveMatchError for undefined property value', () => {
+      expect(() =>
+        matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: undefined })
+      ).toThrow(InconclusiveMatchError)
     })
 
     it('throws InconclusiveMatchError for invalid override value', () => {
@@ -4664,7 +4648,7 @@ describe('consistency tests', () => {
     await posthog.shutdown()
   })
 
-  it('is consistent for simple flags', () => {
+  it('is consistent for simple flags', async () => {
     const flags = {
       flags: [
         {
@@ -5690,11 +5674,11 @@ describe('consistency tests', () => {
       true,
     ]
 
-    results.forEach(async (result, index) => {
+    for (const [index, result] of results.entries()) {
       const distinctId = `distinct_id_${index}`
       const value = await posthog.isFeatureEnabled('simple-flag', distinctId)
-      expect(value).toBe(result)
-    })
+      expect(value, distinctId).toBe(result)
+    }
   })
 
   it('is consistent for multivariate flags', async () => {
@@ -6732,21 +6716,32 @@ describe('consistency tests', () => {
       'first-variant',
     ]
 
-    results.forEach(async (result, index) => {
+    for (const [index, result] of results.entries()) {
       const distinctId = `distinct_id_${index}`
       const value = await posthog.getFeatureFlag('multivariate-flag', distinctId)
-      expect(value).toBe(result)
-    })
+      expect(value, distinctId).toBe(result)
+    }
   })
 })
 
 describe('quota limiting', () => {
   it('should clear local flags when quota limited', async () => {
     const consoleSpy = vi.spyOn(console, 'warn')
-
     mockedFetch.mockImplementation(
       apiImplementation({
-        localFlagsStatus: 402,
+        localFlags: {
+          flags: [
+            {
+              id: 1,
+              key: 'quota-flag',
+              active: true,
+              filters: {
+                groups: [{ properties: [], rollout_percentage: 100 }],
+                payloads: { true: 'quota-payload' },
+              },
+            },
+          ],
+        },
       })
     )
 
@@ -6756,23 +6751,33 @@ describe('quota limiting', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Enable debug mode to see the messages
-    posthog.debug(true)
+    try {
+      posthog.debug(true)
+      await posthog.reloadFeatureFlags()
+      expect(await posthog.getAllFlagsAndPayloads('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+        featureFlags: { 'quota-flag': true },
+        featureFlagPayloads: { 'quota-flag': 'quota-payload' },
+      })
 
-    // Force a reload and wait for it to complete
-    await posthog.reloadFeatureFlags()
+      mockedFetch.mockImplementation(apiImplementation({ localFlagsStatus: 402 }))
+      await posthog.reloadFeatureFlags()
 
-    // locally evaluate the flags
-    const res = await posthog.getAllFlagsAndPayloads('distinct-id', { onlyEvaluateLocally: true })
-
-    // expect the flags to be cleared and for the debug message to be logged
-    expect(res.featureFlags).toEqual({})
-    expect(res.featureFlagPayloads).toEqual({})
-    expect(consoleSpy).toHaveBeenCalledWith(
-      '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all local flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
-    )
-
-    consoleSpy.mockRestore()
+      expect(await posthog.getAllFlagsAndPayloads('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+        featureFlags: {},
+        featureFlagPayloads: {},
+      })
+      expect(await posthog.getFeatureFlag('quota-flag', 'distinct-id', { onlyEvaluateLocally: true })).toBeUndefined()
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all local flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
+      )
+    } finally {
+      try {
+        await posthog.shutdown()
+      } finally {
+        consoleSpy.mockRestore()
+      }
+    }
   })
 })
 
@@ -6798,9 +6803,13 @@ describe('fetch context handling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await posthog.reloadFeatureFlags()
-    expect(mockFetch).toHaveBeenCalled()
-    expect(fetchContext).toBeUndefined()
+    try {
+      await posthog.reloadFeatureFlags()
+      expect(mockFetch).toHaveBeenCalled()
+      expect(fetchContext).toBeUndefined()
+    } finally {
+      await posthog.shutdown()
+    }
   })
 })
 
@@ -6973,13 +6982,18 @@ describe('feature flag definition request timeout', () => {
       ...posthogImmediateResolveOptions,
     })
 
+    await posthog.reloadFeatureFlags()
+    expect(fetchDefinitions).toHaveBeenCalledTimes(1)
+
     const response = await (posthog as any).featureFlagsPoller._requestFeatureFlagDefinitions()
 
+    expect(fetchDefinitions).toHaveBeenCalledTimes(2)
+    expect(signals[1]).not.toBe(signals[0])
     expect(response.body).toBe(body)
     await expect(response.text()).resolves.toBe('response body')
     await vi.advanceTimersByTimeAsync(10)
 
-    expect(signals[0].aborted).toBe(false)
+    expect(signals[1].aborted).toBe(false)
   })
 
   it.each([304, 500])('clears the request timer for a %i response without consuming its body', async (status) => {
@@ -7231,64 +7245,59 @@ describe('ETag support for local evaluation polling', () => {
   })
 
   it('resets backoff on 304 response', async () => {
-    let callCount = 0
     const mockFetch = vi.fn(() => {
-      callCount++
-      if (callCount === 1) {
-        // First call: return full response
-        return Promise.resolve({
-          status: 200,
-          text: () => Promise.resolve('ok'),
-          json: () =>
-            Promise.resolve({
-              flags: [
-                {
-                  id: 1,
-                  key: 'test-flag',
-                  active: true,
-                  filters: {
-                    groups: [{ rollout_percentage: 100 }],
-                  },
-                },
-              ],
-              group_type_mapping: {},
-              cohorts: {},
-            }),
-          headers: {
-            get: (name: string) => (name === 'ETag' ? '"test-etag"' : null),
-          },
-        })
-      } else {
-        // Subsequent calls: return 304
-        return Promise.resolve({
-          status: 304,
-          text: () => Promise.resolve(''),
-          json: () => Promise.reject(new Error('No body on 304')),
-          headers: {
-            get: () => null,
-          },
-        })
-      }
+      const call = mockFetch.mock.calls.length
+      const status = call === 2 || call === 5 ? 401 : call === 1 ? 200 : 304
+      return Promise.resolve({
+        status,
+        text: () => Promise.resolve(''),
+        json: () =>
+          Promise.resolve({
+            flags: [
+              {
+                id: 1,
+                key: 'test-flag',
+                active: true,
+                filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+              },
+            ],
+            group_type_mapping: {},
+            cohorts: {},
+          }),
+        headers: { get: () => '"test-etag"' },
+      })
     })
 
     posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
       personalApiKey: 'TEST_PERSONAL_API_KEY',
       fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      sendFeatureFlagEvent: false,
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait deterministically for the constructor-started load to finish.
     await posthog.reloadFeatureFlags()
-
-    // Multiple 304 responses should not cause any issues
-    await posthog.reloadFeatureFlags()
-    await posthog.reloadFeatureFlags()
-
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1)
     expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(await posthog.getFeatureFlag('test-flag', 'user', { onlyEvaluateLocally: true })).toBe(true)
 
-    // Flags should still work locally
-    expect((posthog as any).featureFlagsPoller.featureFlagsByKey['test-flag']?.active).toBe(true)
+    // Recovery restores the base cadence; another failure starts at the first backoff step.
+    await vi.advanceTimersByTimeAsync(999)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(4)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(6)
   })
 
   it('updates ETag when server sends new ETag with 304 response', async () => {
@@ -7367,6 +7376,77 @@ describe('local evaluation poll scheduling', () => {
     vi.useRealTimers()
     await posthog.shutdown(100).catch(() => undefined)
     vi.useFakeTimers()
+  })
+
+  it('loads and manually refreshes local definitions without scheduling polls when the interval is null', async () => {
+    let enabled = true
+    const mockFetch = vi.fn(async () => ({
+      status: 200,
+      json: async () => ({
+        flags: [{ id: 1, key: 'manual-flag', active: enabled, filters: { groups: [{}] } }],
+        group_type_mapping: {},
+        cohorts: {},
+      }),
+      headers: { get: () => null },
+    }))
+    posthog = new PostHog('TEST_API_KEY', {
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: null,
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Join the initial load started by the constructor.
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(
+      await posthog.getFeatureFlag('manual-flag', 'user', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      })
+    ).toBe(true)
+
+    enabled = false
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(
+      await posthog.getFeatureFlag('manual-flag', 'user', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      })
+    ).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('keeps on-demand error backoff without scheduling polls when the interval is null', async () => {
+    const mockFetch = vi.fn(async () => ({
+      status: 429,
+      headers: { get: () => null },
+    }))
+    posthog = new PostHog('TEST_API_KEY', {
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: null,
+      ...posthogImmediateResolveOptions,
+    })
+    posthog.on('error', () => undefined)
+
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    await posthog.getFeatureFlag('manual-flag', 'user', {
+      onlyEvaluateLocally: true,
+      sendFeatureFlagEvents: false,
+    })
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('schedules the next poll after a slow fetch completes', async () => {
@@ -7566,14 +7646,9 @@ describe('error handling and backoff', () => {
   })
 
   it('should allow on-demand fetches after backoff period expires', async () => {
-    // Use real timers for this test to avoid vi.useFakeTimers() resetting Date.now mock
-    vi.useRealTimers()
-
     let fetchCallCount = 0
     // Track time to simulate time passing
     let mockTime = Date.now()
-    const originalDateNow = Date.now
-    Date.now = () => mockTime
 
     const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
@@ -7613,27 +7688,21 @@ describe('error handling and backoff', () => {
     // Advance mock time past the exponential backoff period
     // After first 401: backOffCount=1, interval = min(60000, 1000 * 2^1) = 2000ms
     mockTime += 2001
+    vi.setSystemTime(mockTime)
 
     // Now on-demand fetch should be allowed (backoff expired based on Date.now())
     await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
 
     // fetchCallCount should be 2 (on-demand fetch was allowed after backoff expired)
     expect(fetchCallCount).toBe(2)
-
-    // Restore Date.now and fake timers
-    Date.now = originalDateNow
-    vi.useFakeTimers()
   })
 
   it('should increase backoff intervals exponentially (2s → 4s → 8s)', async () => {
     // Verifies exponential backoff: interval = min(60s, baseInterval * 2^backoffCount)
     // With baseInterval=1000ms: 2000ms → 4000ms → 8000ms
-    vi.useRealTimers()
 
     let fetchCallCount = 0
     let mockTime = Date.now()
-    const originalDateNow = Date.now
-    Date.now = () => mockTime
 
     const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
@@ -7661,68 +7730,56 @@ describe('error handling and backoff', () => {
 
     // Advance past 2s backoff, trigger second error
     mockTime += 2001
+    vi.setSystemTime(mockTime)
     await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // backoff now = 4s
 
     // 2s is NOT enough anymore
     mockTime += 2001
+    vi.setSystemTime(mockTime)
     await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // Still blocked
 
     // 4s total is enough
     mockTime += 2000
+    vi.setSystemTime(mockTime)
     await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(3) // backoff now = 8s
 
     // 4s is NOT enough anymore
     mockTime += 4001
+    vi.setSystemTime(mockTime)
     await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(3) // Still blocked
 
     // 8s total is enough
     mockTime += 4000
+    vi.setSystemTime(mockTime)
     await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(4) // Exponential backoff verified!
-
-    Date.now = originalDateNow
-    vi.useFakeTimers()
   })
 
   it('should clear backoff after successful response', async () => {
-    let fetchCallCount = 0
-    const mockFetch = vi.fn((url: string) => {
-      if ((url as string).includes('flags/definitions')) {
-        fetchCallCount++
-        if (fetchCallCount === 1) {
-          // First fetch: return 401 to trigger backoff
-          return Promise.resolve({
-            status: 401,
-            text: () => Promise.resolve('Unauthorized'),
-            json: () => Promise.resolve({ error: 'Invalid API key' }),
-            headers: {
-              get: () => null,
-            },
-          })
-        } else {
-          // Subsequent fetches: return 200 success
-          return Promise.resolve({
-            status: 200,
-            json: () =>
-              Promise.resolve({
-                flags: [{ id: 1, key: 'test-flag', active: true, filters: { groups: [] } }],
-                group_type_mapping: {},
-                cohorts: {},
-              }),
-            headers: {
-              get: () => null,
-            },
-          })
-        }
-      }
+    const mockFetch = vi.fn(() => {
+      const call = mockFetch.mock.calls.length
+      const status = call === 2 || call === 5 ? 401 : 200
       return Promise.resolve({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
+        status,
+        text: () => Promise.resolve(''),
+        json: () =>
+          Promise.resolve({
+            flags: [
+              {
+                id: 1,
+                key: 'test-flag',
+                active: true,
+                filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+              },
+            ],
+            group_type_mapping: {},
+            cohorts: {},
+          }),
+        headers: { get: () => '"test-etag"' },
       })
     })
 
@@ -7730,24 +7787,32 @@ describe('error handling and backoff', () => {
       host: 'http://example.com',
       personalApiKey: 'TEST_PERSONAL_API_KEY',
       fetch: mockFetch,
-      featureFlagsPollingInterval: 30000,
+      featureFlagsPollingInterval: 1000,
+      sendFeatureFlagEvent: false,
       ...posthogImmediateResolveOptions,
     })
 
     await posthog.reloadFeatureFlags()
-    expect(fetchCallCount).toBe(1) // Initial 401
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(await posthog.getFeatureFlag('test-flag', 'user', { onlyEvaluateLocally: true })).toBe(true)
 
-    // Use reloadFeatureFlags to trigger a retry (uses forceReload=true, bypasses backoff)
-    await posthog.reloadFeatureFlags()
-    expect(fetchCallCount).toBe(2) // Retry succeeded with 200
-
-    // Now on-demand fetch should work immediately (backoff cleared by 200 response)
-    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
-
-    // The getFeatureFlag call should not trigger another fetch because
-    // loadedSuccessfullyOnce is now true (flags loaded successfully)
-    // This verifies the backoff was cleared and normal operation resumed
-    expect(fetchCallCount).toBe(2)
+    // Recovery restores the base cadence; another failure starts at the first backoff step.
+    await vi.advanceTimersByTimeAsync(999)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(4)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(6)
   })
 
   it('should allow reloadFeatureFlags() to bypass backoff', async () => {
@@ -8158,7 +8223,7 @@ describe('strictLocalEvaluation option', () => {
     expect(event.properties.$feature_flag_evaluated_at).toBeLessThanOrEqual(afterCall)
   })
 
-  it('tracks flag definitions loaded timestamp', async () => {
+  it('updates flag definitions loaded timestamp after a successful reload', async () => {
     const flags = {
       flags: [
         {
@@ -8178,18 +8243,26 @@ describe('strictLocalEvaluation option', () => {
     posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
       personalApiKey: 'TEST_PERSONAL_API_KEY',
-      sendFeatureFlagEvent: true, // Explicitly enable feature flag events
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for flags to load
-    await vi.runOnlyPendingTimersAsync()
+    await posthog.reloadFeatureFlags()
 
     // Check that flag definitions loaded timestamp is available
     const flagDefinitionsLoadedAt = posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()
     expect(flagDefinitionsLoadedAt).toBeDefined()
     expect(typeof flagDefinitionsLoadedAt).toBe('number')
     expect(flagDefinitionsLoadedAt).toBeGreaterThan(0)
+
+    const originalTime = Date.now()
+    const reloadedAt = originalTime + 1000
+    try {
+      vi.setSystemTime(reloadedAt)
+      await posthog.reloadFeatureFlags()
+      expect(posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()).toBe(reloadedAt)
+    } finally {
+      vi.setSystemTime(originalTime)
+    }
   })
 })
 
@@ -8303,8 +8376,6 @@ describe('mixed targeting local evaluation', () => {
   })
 
   it('rollout uses group bucketing for group conditions and distinct_id for person conditions', async () => {
-    // A group condition with low rollout on one group key and high rollout on a person condition.
-    // The group condition should hash on the group key, not the distinct_id.
     const flag = {
       id: 1,
       name: 'Rollout Flag',
@@ -8315,8 +8386,13 @@ describe('mixed targeting local evaluation', () => {
         groups: [
           {
             aggregation_group_type_index: 0,
-            properties: [],
-            rollout_percentage: 100,
+            properties: [{ key: 'target', operator: 'exact', value: 'group', type: 'group', group_type_index: 0 }],
+            rollout_percentage: 50,
+          },
+          {
+            aggregation_group_type_index: null,
+            properties: [{ key: 'target', operator: 'exact', value: 'person', type: 'person' }],
+            rollout_percentage: 50,
           },
         ],
       },
@@ -8333,14 +8409,25 @@ describe('mixed targeting local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // With rollout 100%, matches deterministically regardless of hashing — but calling with the group
-    // passed should resolve locally, proving the group bucketing path is taken.
-    expect(
-      await posthog.getFeatureFlag('rollout-flag', 'any-distinct-id', {
-        groups: { company: 'acme' },
-        groupProperties: { company: {} },
-      })
-    ).toEqual(true)
+    for (const [distinctId, groupKey, groupExpected, personExpected] of [
+      ['user-0', 'user-1', true, false],
+      ['user-1', 'user-0', false, true],
+    ] as const) {
+      expect(
+        await posthog.getFeatureFlag('rollout-flag', distinctId, {
+          groups: { company: groupKey },
+          groupProperties: { company: { target: 'group' } },
+          personProperties: { target: 'neither' },
+        })
+      ).toBe(groupExpected)
+      expect(
+        await posthog.getFeatureFlag('rollout-flag', distinctId, {
+          groups: { company: groupKey },
+          groupProperties: { company: { target: 'neither' } },
+          personProperties: { target: 'person' },
+        })
+      ).toBe(personExpected)
+    }
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 })

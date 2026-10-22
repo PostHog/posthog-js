@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import type { Mock as VitestMock } from 'vitest'
 import {
     Autocapture,
     autocapturePropertiesForElement,
@@ -11,7 +12,7 @@ import {
     DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS,
     shouldCaptureDomEvent,
 } from '@posthog/browser-common/utils/autocapture-utils'
-import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
+import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig, RemoteConfigResult } from '../types'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { PostHog } from '../posthog-core'
 import type { AutocaptureConfigSource } from '../autocapture-config'
@@ -20,6 +21,7 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { isUndefined } from '@posthog/core'
+import { makeMouseEvent } from './helpers/mouse-event'
 
 // JS DOM doesn't have ClipboardEvent, so we need to mock it
 // see https://github.com/jsdom/jsdom/issues/1568
@@ -42,10 +44,6 @@ const simulateClick = function (el: Node) {
     triggerMouseEvent(el, 'click')
 }
 
-export function makeMouseEvent(partialEvent: Partial<MouseEvent>) {
-    return { type: 'click', timeStamp: Date.now(), ...partialEvent } as unknown as MouseEvent
-}
-
 export function makeCopyEvent(partialEvent: Partial<ClipboardEvent>) {
     return { type: 'copy', ...partialEvent } as unknown as ClipboardEvent
 }
@@ -64,10 +62,11 @@ function setWindowTextSelection(s: string): void {
 
 describe('Autocapture system', () => {
     const originalWindowLocation = window!.location
+    const originalGetSelection = window!.getSelection
 
     let autocapture: Autocapture
     let posthog: PostHog
-    let beforeSendMock: vi.Mock
+    let beforeSendMock: VitestMock
 
     beforeEach(async () => {
         vi.spyOn(window!.console, 'log').mockImplementation(() => {})
@@ -95,6 +94,7 @@ describe('Autocapture system', () => {
     })
 
     afterEach(() => {
+        window!.getSelection = originalGetSelection
         document.getElementsByTagName('html')[0].innerHTML = ''
 
         Object.defineProperty(window, 'location', {
@@ -243,11 +243,19 @@ describe('Autocapture system', () => {
 
             extension.setup(client)
             expect(extension['_initialized']).toBe(true)
+            const button = document.createElement('button')
+            document.body.appendChild(button)
+            simulateClick(button)
+            expect(captureEvent).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledTimes(1)
+            captureEvent.mockClear()
+            capture.mockClear()
             extension.dispose()
             extension.dispose()
 
             remoteConfigHandler?.({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
-            simulateClick(document.createElement('button'))
+            simulateClick(button)
+            button.remove()
             document.dispatchEvent(new Event('copy', { bubbles: true }))
 
             expect(initialize).not.toHaveBeenCalled()
@@ -314,27 +322,35 @@ describe('Autocapture system', () => {
         })
 
         it('should not collect input value', () => {
+            input.setAttribute('value', 'private-input-value')
             const props = getPropertiesFromElement(input, false, false, undefined)
 
-            expect(props['value']).toBeUndefined()
+            expect(props).not.toHaveProperty('attr__value')
+            expect(JSON.stringify(props)).not.toContain('private-input-value')
         })
 
         it('should strip element value with class "ph-sensitive"', () => {
+            sensitiveInput.setAttribute('value', 'private-sensitive-value')
             const props = getPropertiesFromElement(sensitiveInput, false, false, undefined)
 
-            expect(props['value']).toBeUndefined()
+            expect(props).not.toHaveProperty('attr__value')
+            expect(JSON.stringify(props)).not.toContain('private-sensitive-value')
         })
 
         it('should strip hidden element value', () => {
+            hidden.setAttribute('value', 'private-hidden-value')
             const props = getPropertiesFromElement(hidden, false, false, undefined)
 
-            expect(props['value']).toBeUndefined()
+            expect(props).not.toHaveProperty('attr__value')
+            expect(JSON.stringify(props)).not.toContain('private-hidden-value')
         })
 
         it('should strip password element value', () => {
+            password.setAttribute('value', 'private-password-value')
             const props = getPropertiesFromElement(password, false, false, undefined)
 
-            expect(props['value']).toBeUndefined()
+            expect(props).not.toHaveProperty('attr__value')
+            expect(JSON.stringify(props)).not.toContain('private-password-value')
         })
 
         it('should contain nth-of-type', () => {
@@ -353,11 +369,13 @@ describe('Autocapture system', () => {
             const angularDiv = document.createElement('div')
             angularDiv.setAttribute('_ngcontent-dpm-c448', '')
             angularDiv.setAttribute('_nghost-dpm-c448', '')
+            angularDiv.setAttribute('data-allowed', 'visible')
 
             const props = getPropertiesFromElement(angularDiv, false, false, undefined)
 
-            expect(props['_ngcontent-dpm-c448']).toBeUndefined()
-            expect(props['_nghost-dpm-c448']).toBeUndefined()
+            expect(props['attr___ngcontent-dpm-c448']).toBeUndefined()
+            expect(props['attr___nghost-dpm-c448']).toBeUndefined()
+            expect(props['attr__data-allowed']).toBe('visible')
         })
 
         it('should filter element attributes based on the ignorelist', () => {
@@ -729,9 +747,15 @@ describe('Autocapture system', () => {
         })
 
         describe('rageclick suppression for intentional repeated clicks', () => {
-            const rageClickThreeTimes = (el: Element): string[] => {
+            const buttonWithText = (text: string): HTMLButtonElement => {
+                const el = document.createElement('button')
+                el.textContent = text
+                return el
+            }
+
+            const rageClickThreeTimes = (el: Element, root: Element = el): string[] => {
                 autocapture['rageclicks'].clicks = []
-                document.body.appendChild(el)
+                document.body.appendChild(root)
                 const fakeEvent = makeMouseEvent({ target: el, clientX: 5, clientY: 5 })
                 Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
                 autocapture['_captureEvent'](fakeEvent)
@@ -739,7 +763,7 @@ describe('Autocapture system', () => {
                 autocapture['_captureEvent'](fakeEvent)
                 const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
                 beforeSendMock.mockClear()
-                document.body.removeChild(el)
+                document.body.removeChild(root)
                 return captured
             }
 
@@ -784,7 +808,11 @@ describe('Autocapture system', () => {
                 it.each(['true', ''])('rapid clicks on contenteditable="%s" do not capture $rageclick', (value) => {
                     const el = document.createElement('div')
                     el.setAttribute('contenteditable', value)
+                    el.style.cursor = 'pointer'
 
+                    posthog.config.rageclick = { ignore_text_selection: false }
+                    expect(rageClickThreeTimes(el)).toContain('$rageclick')
+                    posthog.config.rageclick = { ignore_text_selection: true }
                     expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
                 })
             })
@@ -793,12 +821,6 @@ describe('Autocapture system', () => {
                 beforeEach(() => {
                     posthog.config.rageclick = { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS }
                 })
-
-                const buttonWithText = (text: string): HTMLButtonElement => {
-                    const el = document.createElement('button')
-                    el.textContent = text
-                    return el
-                }
 
                 it.each(['+', '-', '−', '–', '>', '<'])(
                     'rapid clicks on a "%s" stepper/nav button do not capture $rageclick',
@@ -820,12 +842,6 @@ describe('Autocapture system', () => {
                     posthog.config.rageclick = { content_ignorelist: true }
                 })
 
-                const buttonWithText = (text: string): HTMLButtonElement => {
-                    const el = document.createElement('button')
-                    el.textContent = text
-                    return el
-                }
-
                 it.each(['>', '<', 'next', 'previous', 'prev'])(
                     'rapid clicks on a "%s" button do not capture $rageclick (exact symbol/word match)',
                     (text) => {
@@ -839,6 +855,371 @@ describe('Autocapture system', () => {
                         expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
                     }
                 )
+            })
+
+            describe.each([
+                { content_ignorelist: true },
+                { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS },
+            ] as PostHogConfig['rageclick'][])('pager controls with rageclick config %s', (rageclickConfig) => {
+                beforeEach(() => {
+                    posthog.config.rageclick = rageclickConfig
+                })
+
+                it.each(['Previous page', 'Next page', 'Next slide', 'Prev item', 'Go to previous'])(
+                    'rapid clicks on a "%s" button do not capture $rageclick',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
+                    }
+                )
+
+                it.each(['→', '←', '›', '‹', '»', '«', '▶', '◀', '❯', '❮'])(
+                    'rapid clicks on a "%s" arrow glyph button do not capture $rageclick',
+                    (glyph) => {
+                        expect(rageClickThreeTimes(buttonWithText(glyph))).not.toContain('$rageclick')
+                    }
+                )
+
+                it('rapid clicks on an icon-only control with a pager aria-label do not capture $rageclick', () => {
+                    const el = document.createElement('button')
+                    el.setAttribute('aria-label', 'Previous item')
+
+                    expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
+                })
+
+                it('rapid clicks on a button whose label sits in a child span do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const icon = document.createElement('span')
+                    icon.setAttribute('aria-hidden', 'true')
+                    const label = document.createElement('span')
+                    label.textContent = 'Next slide'
+                    button.appendChild(icon)
+                    button.appendChild(label)
+
+                    expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                })
+
+                it('rapid clicks on a labelled icon inside an unlabelled button do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                    icon.setAttribute('aria-label', 'Next slide')
+                    button.appendChild(icon)
+
+                    expect(rageClickThreeTimes(icon, button)).not.toContain('$rageclick')
+                })
+
+                // getSafeText joins text nodes with no space, see https://github.com/PostHog/posthog-js/issues/5211
+                it.fails('rapid clicks on a button whose label is split by an inline icon do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    button.appendChild(document.createTextNode('Next '))
+                    button.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+                    button.appendChild(document.createTextNode(' page'))
+
+                    expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                })
+
+                // getSafeText joins text nodes with no space, see https://github.com/PostHog/posthog-js/issues/5211
+                it.fails('rapid clicks on a button whose child span label is split by an inline icon do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const label = document.createElement('span')
+                    label.appendChild(document.createTextNode('Next '))
+                    label.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+                    label.appendChild(document.createTextNode(' page'))
+                    button.appendChild(label)
+
+                    expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                })
+
+                it('rapid clicks on a button whose split label only contains a keyword as a substring still capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    button.appendChild(document.createTextNode('Preview '))
+                    button.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+                    button.appendChild(document.createTextNode(' mode'))
+
+                    expect(rageClickThreeTimes(button)).toContain('$rageclick')
+                })
+
+                it('rapid clicks on an arrow glyph span inside an icon-only button do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const glyph = document.createElement('span')
+                    glyph.textContent = '→'
+                    button.appendChild(glyph)
+
+                    expect(rageClickThreeTimes(glyph, button)).not.toContain('$rageclick')
+                })
+
+                it('rapid clicks on a button inside a labelled region still capture $rageclick', () => {
+                    const region = document.createElement('div')
+                    region.setAttribute('aria-label', 'Next featured items')
+                    const button = document.createElement('button')
+                    button.textContent = 'Buy now'
+                    region.appendChild(button)
+
+                    expect(rageClickThreeTimes(button, region)).toContain('$rageclick')
+                })
+
+                it('rapid clicks on an arrow glyph beside link text still capture $rageclick, whichever descendant is clicked', () => {
+                    const link = document.createElement('a')
+                    link.appendChild(document.createTextNode('Get started '))
+                    const glyph = document.createElement('span')
+                    glyph.textContent = '→'
+                    link.appendChild(glyph)
+
+                    expect(rageClickThreeTimes(glyph, link)).toContain('$rageclick')
+                    expect(rageClickThreeTimes(link)).toContain('$rageclick')
+                })
+
+                describe('control label reflects the control regardless of which descendant was clicked', () => {
+                    it('rapid clicks on a link with a glyph beside bold text still capture $rageclick, whichever descendant is clicked', () => {
+                        const link = document.createElement('a')
+                        link.setAttribute('href', '#')
+                        const strong = document.createElement('strong')
+                        strong.textContent = 'Get started'
+                        const glyph = document.createElement('span')
+                        glyph.textContent = '→'
+                        link.appendChild(strong)
+                        link.appendChild(glyph)
+
+                        expect(rageClickThreeTimes(glyph, link)).toContain('$rageclick')
+                        expect(rageClickThreeTimes(strong, link)).toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button whose only content is a glyph span do not capture $rageclick, whichever descendant is clicked', () => {
+                        const button = document.createElement('button')
+                        const glyph = document.createElement('span')
+                        glyph.textContent = '→'
+                        button.appendChild(glyph)
+
+                        expect(rageClickThreeTimes(glyph, button)).not.toContain('$rageclick')
+                        expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button whose only label is an svg aria-label do not capture $rageclick, whichever descendant is clicked', () => {
+                        const button = document.createElement('button')
+                        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                        svg.setAttribute('aria-label', 'Next')
+                        button.appendChild(svg)
+
+                        expect(rageClickThreeTimes(svg, button)).not.toContain('$rageclick')
+                        expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button still capture $rageclick when the only matching keyword text sits inside a sensitive descendant', () => {
+                        const button = document.createElement('button')
+                        const sensitive = document.createElement('span')
+                        sensitive.className = 'ph-sensitive'
+                        const nested = document.createElement('em')
+                        nested.textContent = 'Next'
+                        sensitive.appendChild(nested)
+                        button.appendChild(sensitive)
+                        button.appendChild(document.createTextNode('Pay'))
+
+                        expect(rageClickThreeTimes(nested, button)).toContain('$rageclick')
+                        expect(rageClickThreeTimes(button)).toContain('$rageclick')
+                    })
+                })
+
+                it('rapid clicks on a decorative icon aria-label inside a text link still capture $rageclick', () => {
+                    const link = document.createElement('a')
+                    link.appendChild(document.createTextNode('Get started '))
+                    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                    icon.setAttribute('aria-label', 'next arrow icon')
+                    link.appendChild(icon)
+
+                    expect(rageClickThreeTimes(icon, link)).toContain('$rageclick')
+                })
+
+                it('rapid clicks on an icon inside a button whose own aria-label does not match still capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    button.setAttribute('aria-label', 'Buy now')
+                    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                    icon.setAttribute('aria-label', 'next')
+                    button.appendChild(icon)
+
+                    expect(rageClickThreeTimes(icon, button)).toContain('$rageclick')
+                })
+
+                it('rapid clicks on a div inside a button labelled "Next slide" do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const div = document.createElement('div')
+                    div.textContent = 'Next slide'
+                    button.appendChild(div)
+
+                    expect(rageClickThreeTimes(div, button)).not.toContain('$rageclick')
+                })
+
+                it('rapid clicks on a strong tag inside an anchor labelled "Next" do not capture $rageclick', () => {
+                    const link = document.createElement('a')
+                    const strong = document.createElement('strong')
+                    strong.textContent = 'Next'
+                    link.appendChild(strong)
+
+                    expect(rageClickThreeTimes(strong, link)).not.toContain('$rageclick')
+                })
+
+                it('rapid clicks on a span under a div inside a button labelled "Next" do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const wrapper = document.createElement('div')
+                    const label = document.createElement('span')
+                    label.textContent = 'Next'
+                    wrapper.appendChild(label)
+                    button.appendChild(wrapper)
+                    expect(rageClickThreeTimes(label, button)).not.toContain('$rageclick')
+                })
+
+                it.each(['Add to cart', 'Submit', 'a → b', 'Preview'])(
+                    'rapid clicks on a "%s" button still capture $rageclick',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
+                    }
+                )
+
+                it('rapid clicks on an icon inside a cursor:pointer div labelled "Next slide" do not capture $rageclick', () => {
+                    // cursor inherits in a real browser, so the icon computes pointer too
+                    const div = document.createElement('div')
+                    div.style.cursor = 'pointer'
+                    div.setAttribute('aria-label', 'Next slide')
+                    const icon = document.createElement('i')
+                    icon.style.cursor = 'pointer'
+                    div.appendChild(icon)
+
+                    expect(rageClickThreeTimes(icon, div)).not.toContain('$rageclick')
+                })
+
+                it.each(['span', 'p', 'strong'])(
+                    "rapid clicks on an unlabelled sibling icon inside a cursor:pointer div read the label from the div's nested %s do not capture $rageclick",
+                    (labelTag) => {
+                        // the clicked icon carries no label of its own, so the walk continues past it to the div
+                        const div = document.createElement('div')
+                        div.style.cursor = 'pointer'
+                        const label = document.createElement(labelTag)
+                        label.textContent = 'Next'
+                        const icon = document.createElement('i')
+                        icon.style.cursor = 'pointer'
+                        div.appendChild(label)
+                        div.appendChild(icon)
+
+                        expect(rageClickThreeTimes(icon, div)).not.toContain('$rageclick')
+                    }
+                )
+
+                it('rapid clicks on a button inside a cursor:pointer labelled region still capture $rageclick (tag control wins)', () => {
+                    const region = document.createElement('div')
+                    region.style.cursor = 'pointer'
+                    region.setAttribute('aria-label', 'Next featured items')
+                    const button = document.createElement('button')
+                    button.textContent = 'Buy now'
+                    region.appendChild(button)
+
+                    expect(rageClickThreeTimes(button, region)).toContain('$rageclick')
+                })
+
+                it('rapid clicks on an icon nested under two labelled cursor:pointer wrappers match the nearest label, not the outer card', () => {
+                    const card = document.createElement('div')
+                    card.style.cursor = 'pointer'
+                    card.setAttribute('aria-label', 'Featured deals')
+                    const next = document.createElement('div')
+                    next.style.cursor = 'pointer'
+                    next.setAttribute('aria-label', 'Next slide')
+                    const icon = document.createElement('i')
+                    icon.style.cursor = 'pointer'
+                    next.appendChild(icon)
+                    card.appendChild(next)
+
+                    expect(rageClickThreeTimes(icon, card)).not.toContain('$rageclick')
+                })
+
+                it('rapid clicks on an icon nested under two labelled cursor:pointer wrappers ignore the outer card label', () => {
+                    const card = document.createElement('div')
+                    card.style.cursor = 'pointer'
+                    card.setAttribute('aria-label', 'Next steps')
+                    const buyNow = document.createElement('div')
+                    buyNow.style.cursor = 'pointer'
+                    buyNow.setAttribute('aria-label', 'Buy now')
+                    const icon = document.createElement('i')
+                    icon.style.cursor = 'pointer'
+                    buyNow.appendChild(icon)
+                    card.appendChild(buyNow)
+
+                    expect(rageClickThreeTimes(icon, card)).toContain('$rageclick')
+                })
+            })
+
+            it('the legacy boolean rageclick: true keeps capturing pager controls', () => {
+                posthog.config.rageclick = true
+                const el = document.createElement('button')
+                el.textContent = 'Previous page'
+
+                expect(rageClickThreeTimes(el)).toContain('$rageclick')
+            })
+
+            describe('when content_ignorelist is a custom array', () => {
+                beforeEach(() => {
+                    posthog.config.rageclick = { content_ignorelist: ['load'] }
+                })
+
+                it('a custom keyword that is not a shipped default still matches as a substring', () => {
+                    const el = document.createElement('button')
+                    el.textContent = 'Download'
+
+                    expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
+                })
+
+                it('a shipped default keyword no longer matches as a substring in a custom array', () => {
+                    posthog.config.rageclick = { content_ignorelist: ['prev'] }
+                    const el = document.createElement('button')
+                    el.textContent = 'Preview'
+
+                    expect(rageClickThreeTimes(el)).toContain('$rageclick')
+                })
+
+                it.each(['constructor', '__proto__'])(
+                    'a custom "%s" keyword suppresses a matching label',
+                    (keyword) => {
+                        posthog.config.rageclick = { content_ignorelist: [keyword] }
+
+                        expect(rageClickThreeTimes(buttonWithText(keyword))).not.toContain('$rageclick')
+                    }
+                )
+
+                it.each(['constructor', '__proto__'])(
+                    'a custom "%s" keyword keeps every click and the rageclick on a non-matching label',
+                    (keyword) => {
+                        posthog.config.rageclick = { content_ignorelist: [keyword] }
+
+                        const captured = rageClickThreeTimes(buttonWithText('Buy now'))
+                        expect(captured).toContain('$rageclick')
+                        expect(captured.filter((event) => event === '$autocapture')).toHaveLength(3)
+                    }
+                )
+            })
+
+            describe('when a custom array copies the defaults and adds to them', () => {
+                beforeEach(() => {
+                    posthog.config.rageclick = {
+                        content_ignorelist: [...DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, 'load more'],
+                    }
+                })
+
+                it.each(['next', '→', 'load more'])(
+                    'rapid clicks on a "%s" button do not capture $rageclick',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
+                    }
+                )
+
+                it('rapid clicks on a "Preview" button still capture $rageclick', () => {
+                    expect(rageClickThreeTimes(buttonWithText('Preview'))).toContain('$rageclick')
+                })
+
+                it('a list past the cap still disables content filtering', () => {
+                    const pastTheCap = Array.from(
+                        { length: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS.length + 11 },
+                        (_, index) => `keyword-${index}`
+                    )
+                    posthog.config.rageclick = { content_ignorelist: [...pastTheCap, 'next'] }
+
+                    expect(rageClickThreeTimes(buttonWithText('next'))).toContain('$rageclick')
+                })
             })
 
             it.each([true, { content_ignorelist: true }] as PostHogConfig['rageclick'][])(
@@ -1033,7 +1414,7 @@ describe('Autocapture system', () => {
                         const paragraph = document.createElement('p')
                         paragraph.innerText = 'detached'
                         fragment.appendChild(paragraph)
-                        return { target: paragraph }
+                        return { target: paragraph, cleanup: () => paragraph.remove() }
                     },
                     selectedText: 'detached',
                 },
@@ -1217,14 +1598,11 @@ describe('Autocapture system', () => {
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
 
-            document.querySelectorAll = function () {
-                return [elTarget] as unknown as NodeListOf<Element>
-            }
-
-            autocapture.setElementSelectors(new Set<string>(['#primary_button']))
+            autocapture.setElementSelectors(new Set<string>(['#primary_button', '#nonmatching_button']))
             const elGrandparent = document.createElement('a')
             elGrandparent.setAttribute('href', 'https://test.com')
             elGrandparent.appendChild(elParent)
+            document.body.appendChild(elGrandparent)
             autocapture['_captureEvent'](
                 makeMouseEvent({
                     target: elTarget,
@@ -1232,7 +1610,7 @@ describe('Autocapture system', () => {
             )
 
             const props = beforeSendMock.mock.calls[0][0].properties
-            expect(props['$element_selectors']).toContain('#primary_button')
+            expect(props['$element_selectors']).toEqual(['#primary_button'])
             expect(props['$elements'][0]).toHaveProperty('attr__href', 'https://test.com')
             expect(props['$external_click_url']).toEqual('https://test.com')
         })
@@ -1279,27 +1657,37 @@ describe('Autocapture system', () => {
             const elGrandparent = document.createElement('input')
             elGrandparent.appendChild(elParent)
             elGrandparent.setAttribute('type', 'password')
+            elGrandparent.setAttribute('href', 'https://private.example/password-secret')
             autocapture['_captureEvent'](
                 makeMouseEvent({
                     target: elTarget,
                 })
             )
-            expect(beforeSendMock.mock.calls[0][0].properties).not.toHaveProperty('attr__href')
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            const props = beforeSendMock.mock.calls[0][0].properties
+            expect(props['$elements'].every((element) => !('attr__href' in element))).toBe(true)
+            expect(props['$external_click_url']).toBeUndefined()
+            expect(JSON.stringify(props)).not.toContain('password-secret')
         })
 
         it('does not capture href attribute values from hidden elements', () => {
             const elTarget = document.createElement('span')
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
-            const elGrandparent = document.createElement('a')
+            const elGrandparent = document.createElement('input')
             elGrandparent.appendChild(elParent)
             elGrandparent.setAttribute('type', 'hidden')
+            elGrandparent.setAttribute('href', 'https://private.example/hidden-secret')
             autocapture['_captureEvent'](
                 makeMouseEvent({
                     target: elTarget,
                 })
             )
-            expect(beforeSendMock.mock.calls[0][0].properties['$elements'][0]).not.toHaveProperty('attr__href')
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            const props = beforeSendMock.mock.calls[0][0].properties
+            expect(props['$elements'].every((element) => !('attr__href' in element))).toBe(true)
+            expect(props['$external_click_url']).toBeUndefined()
+            expect(JSON.stringify(props)).not.toContain('hidden-secret')
         })
 
         it('does not capture href attribute values that look like credit card numbers', () => {
@@ -1398,48 +1786,22 @@ describe('Autocapture system', () => {
             expect(props3).not.toHaveProperty('$el_text')
         })
 
-        it('does not capture sensitive text content', () => {
-            // ^ valid credit card and social security numbers
-            document.body.innerHTML = `
-      <div>
-        <button id='button1'> Why 123-58-1321 hello there</button>
-      </div>
-      <button id='button2'>
-        4111111111111111
-        Why hello there
-      </button>
-      <button id='button3'>
-        Why hello there
-        5105-1051-0510-5100
-      </button>
-      `
-            const button1 = document.getElementById('button1')
-            const button2 = document.getElementById('button2')
-            const button3 = document.getElementById('button3')
+        it.each([
+            ['SSN', '123-58-1321', 'Why 123-58-1321 hello there'],
+            ['Visa', '4111111111111111', '4111111111111111 Why hello there'],
+            ['Mastercard', '5105-1051-0510-5100', 'Why hello there 5105-1051-0510-5100'],
+        ])('does not capture sensitive %s text content', (_, sensitiveText, text) => {
+            const button = document.createElement('button')
+            button.textContent = text
+            document.body.appendChild(button)
 
-            const e1 = makeMouseEvent({
-                target: button1,
-            })
-            autocapture['_captureEvent'](e1)
-            const props1 = beforeSendMock.mock.calls[0][0].properties
-            expect(props1['$elements'][0]).toHaveProperty('$el_text')
-            expect(props1['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
+            autocapture['_captureEvent'](makeMouseEvent({ target: button }))
 
-            const e2 = makeMouseEvent({
-                target: button2,
-            })
-            autocapture['_captureEvent'](e2)
-            const props2 = beforeSendMock.mock.calls[0][0].properties
-            expect(props2['$elements'][0]).toHaveProperty('$el_text')
-            expect(props2['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
-
-            const e3 = makeMouseEvent({
-                target: button3,
-            })
-            autocapture['_captureEvent'](e3)
-            const props3 = beforeSendMock.mock.calls[0][0].properties
-            expect(props3['$elements'][0]).toHaveProperty('$el_text')
-            expect(props3['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            const event = beforeSendMock.mock.calls[0][0]
+            expect(event.properties['$elements'][0]['$el_text']).toBe('Why hello there')
+            expect(event.properties['$el_text']).toBe('Why hello there')
+            expect(JSON.stringify(event)).not.toContain(sensitiveText)
         })
 
         it('should capture a submit event with form field props', () => {
@@ -1658,7 +2020,7 @@ describe('Autocapture system', () => {
             expect(autocapture.isEnabled).toBe(true)
         })
 
-        it('should be enabled before the flags response if flags is disabled', () => {
+        it('retains server-enabled autocapture when flags are subsequently disabled', () => {
             posthog.config.advanced_disable_flags = true
             expect(autocapture.isEnabled).toBe(true)
         })
@@ -1668,7 +2030,7 @@ describe('Autocapture system', () => {
             expect(autocapture.isEnabled).toBe(false)
         })
 
-        it('should be disabled before the flags response if client side opted out', () => {
+        it('honors client-side opt-out after server-enabled remote config', () => {
             posthog.config.autocapture = false
             expect(autocapture.isEnabled).toBe(false)
         })
