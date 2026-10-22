@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.15.2
+
+### Patch Changes
+
+- [#5368](https://github.com/PostHog/posthog-js/pull/5368) [`3e46e4c`](https://github.com/PostHog/posthog-js/commit/3e46e4c90673e0fee73cd74a013afa340011a47c) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Count Gemini tool-use prompt tokens in the captured input tokens.
+  (2026-10-22)
+
 ## 8.15.1
 
 ### Patch Changes
