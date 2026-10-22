@@ -35,12 +35,7 @@ import {
   updateFlagValue,
 } from './featureFlagUtils'
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
-import {
-  applyCallerFeatureFlagOverrides,
-  maybeAdd,
-  PostHogCoreStateless,
-  QuotaLimitedFeature,
-} from './posthog-core-stateless'
+import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
 import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString, getEventUuid } from './utils'
 import { EventHint } from './error-tracking'
@@ -233,15 +228,22 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   private enrichProperties(properties?: PostHogEventProperties): PostHogEventProperties {
     const userProperties = properties || {}
-    const enriched: PostHogEventProperties = {
+    return {
       ...this.props, // Persisted properties first
       ...this.sessionProps, // Followed by session properties
-      ...userProperties, // Followed by user specified properties
-      ...this.getCommonEventProperties(), // Followed by FF props
+      ...this.getCommonEventProperties(), // Followed by SDK context and FF props
+      ...userProperties, // User specified properties win over all of the above
       $session_id: this.getSessionId(),
     }
-    applyCallerFeatureFlagOverrides(enriched, userProperties)
-    return enriched
+  }
+
+  // enrichProperties already merged the common properties under the caller's, so only fill in
+  // the ones that are missing instead of overriding the caller.
+  protected mergeCommonEventProperties(properties: PostHogEventProperties): PostHogEventProperties {
+    return {
+      ...this.getCommonEventProperties(),
+      ...properties,
+    }
   }
 
   /**

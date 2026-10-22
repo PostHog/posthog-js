@@ -15,13 +15,8 @@ as a token carrying the session id and client name/version. Clients replay the h
 every request, so any pod keeps `$session_id` and `$mcp_client_name`/`$mcp_client_version`
 stable with no server-side store.
 
-A standalone `$identify` event fires **at most once per session** — at `initialize` (or, on a
-long-lived server, when the identity first appears or materially changes). Tool calls on other
-pods reuse the identity to stamp `distinct_id`/`$set` on every event **without** re-publishing
-`$identify`, so person **properties** are never lost. (Edge case: if identity isn't resolvable
-until _after_ `initialize`, the first `$identify` is suppressed too, so pre-identify anonymous
-events aren't aliased onto the user — see `docs/ARCHITECTURE.md` §4.) To drop `$identify`
-entirely, return `null` from `beforeSend` when `event === '$identify'`.
+The SDK publishes no standalone `$identify` event. The `identify` callback runs on every request,
+on any pod, and stamps `distinct_id` and `$set` onto each event it sends.
 
 ### Streamable HTTP: set `enableJsonResponse: true`
 
@@ -134,6 +129,22 @@ What matters is instance lifetime, not statelessness. A server that is stateless
 (`sessionIdGenerator: undefined`) but keeps one long-lived server object learns ownership from the
 first `tools/list` and keeps it, so none of the above applies to it.
 
+An extra key is not free for a tool that validates strictly (a `.strict()` Zod object, or
+`additionalProperties: false` enforced by the handler): it rejects the call. A low-level server that
+can look up its own tools can resolve ownership without a listing. Return the tool's input schema
+as registered, before PostHog preparation, and the SDK strips the arguments it owns on every
+instance. It never strips a parameter that the returned schema declares. Returning `undefined`
+keeps the behavior above.
+
+```ts
+instrument(server, posthog, {
+  resolveOriginalTool: (toolName) => {
+    const tool = myToolRegistry.get(toolName)
+    return tool ? { inputSchema: tool.inputSchema } : undefined
+  },
+})
+```
+
 The consequence worth knowing: if **your own** tool declares a parameter named `context` and the SDK
 cannot tell that it is yours, its value is recorded as `$mcp_intent`. It never leaves your project,
 and it is capped at 2048 characters. Two ways out, both one line:
@@ -221,7 +232,12 @@ open where the SDK cannot tell who declared it, stripping it requires proof that
   that descriptor itself, so what it declares is known without a listing.
 - Instrumenting a low-level `Server` learns ownership while serving `tools/list`. A fresh instance
   that never served one — `createMcpHandler`, or `@rekog/mcp-nest` in its stateless mode — has no
-  answer, so it records `llm_model` as the self-reported model and strips nothing. A tool that
+  answer, so it records `llm_model` as the self-reported model and strips nothing, unless
+  `resolveOriginalTool` supplies the tool's schema (see `$mcp_intent` above). Return the schema as
+  your `tools/list` advertises it: ownership follows the same rule as a served listing, and a
+  listing served on the instance wins. A Zod schema is read the way the MCP SDK advertises it, so a
+  union, record or refined object lists as an empty object, gains the injected fields and has them
+  stripped; a host that lists its own JSON Schema (an `anyOf`, say) returns that schema. A tool that
   declares its own `llm_model` on such an instance is therefore recorded under `$mcp_llm_model`
   until a listing says otherwise; `captureModel: false` or dropping the property in `beforeSend`
   are the escapes. The SDK never replays your listing handler on the call path to find out.

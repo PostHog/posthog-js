@@ -1,5 +1,42 @@
 # @posthog/nextjs-config
 
+## 1.11.5
+
+### Patch Changes
+
+- [#5351](https://github.com/PostHog/posthog-js/pull/5351) [`4182940`](https://github.com/PostHog/posthog-js/commit/4182940bf5f715bef16a0740cc9d08354040bdd8) Thanks [@hpouillot](https://github.com/hpouillot)! - Require PostHog CLI 0.18.11 or newer within the 0.18 release line.
+  (2026-10-21)
+- Updated dependencies [[`4182940`](https://github.com/PostHog/posthog-js/commit/4182940bf5f715bef16a0740cc9d08354040bdd8)]:
+  - @posthog/webpack-plugin@1.7.3
+
+## 1.11.4
+
+### Patch Changes
+
+- [#5334](https://github.com/PostHog/posthog-js/pull/5334) [`0d2c39d`](https://github.com/PostHog/posthog-js/commit/0d2c39d923dd6241cc0ead320528f555ef02103d) Thanks [@hpouillot](https://github.com/hpouillot)! - Correctly instrument Next.js 16 builds using --webpack instead of treating them as Turbopack builds.
+  (2026-10-21)
+
+- [#5334](https://github.com/PostHog/posthog-js/pull/5334) [`0d2c39d`](https://github.com/PostHog/posthog-js/commit/0d2c39d923dd6241cc0ead320528f555ef02103d) Thanks [@hpouillot](https://github.com/hpouillot)! - Prevent stale webpack runtime caches in Next.js by compiling event release IDs before asset hashing.
+  (2026-10-21)
+- Updated dependencies [[`0d2c39d`](https://github.com/PostHog/posthog-js/commit/0d2c39d923dd6241cc0ead320528f555ef02103d)]:
+  - @posthog/webpack-plugin@1.7.2
+
+## 1.11.3
+
+### Patch Changes
+
+- [#5282](https://github.com/PostHog/posthog-js/pull/5282) [`9b7ef84`](https://github.com/PostHog/posthog-js/commit/9b7ef8478b7380dfa41c22cbeae2552caf88bdeb) Thanks [@marandaneto](https://github.com/marandaneto)! - Use the package’s own PostHog CLI to prevent sourcemap upload failures when an older CLI is installed elsewhere in a monorepo.
+  (2026-10-13)
+
+## 1.11.2
+
+### Patch Changes
+
+- [#5202](https://github.com/PostHog/posthog-js/pull/5202) [`7199f24`](https://github.com/PostHog/posthog-js/commit/7199f24296f458af1094fdf8a432ad108685fa28) Thanks [@hpouillot](https://github.com/hpouillot)! - Support immutable Next.js 16 Turbopack sourcemaps without rewriting build assets, and require a compatible posthog-js runtime for native debug and release IDs.
+  (2026-10-09)
+- Updated dependencies [[`7199f24`](https://github.com/PostHog/posthog-js/commit/7199f24296f458af1094fdf8a432ad108685fa28)]:
+  - @posthog/plugin-utils@2.0.1
+
 ## 1.11.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@posthog/mcp",
-  "version": "0.21.4",
+  "version": "0.23.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -35,7 +35,8 @@
   "files": [
     "src",
     "dist",
-    "!src/__tests__"
+    "!src/__tests__",
+    "!src/**/*.spec.md"
   ],
   "license": "MIT",
   "author": {
@@ -53,7 +54,7 @@
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
     "@modelcontextprotocol/node": "^2.0.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@nestjs/common": "^11.1.27",
     "@nestjs/core": "^11.1.27",

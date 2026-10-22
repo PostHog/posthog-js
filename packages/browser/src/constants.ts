@@ -59,23 +59,7 @@ export const SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX = '$posthog_sr_group_
 export const SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX = '$posthog_sr_group_sampling_'
 export const SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP = '$debug_first_full_snapshot_timestamp'
 export const SESSION_RECORDING_FLUSHED_SIZE = '$sess_rec_flush_size'
-export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
-export const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
-export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
-export const PERSISTENCE_FEATURE_FLAG_DETAILS = '$feature_flag_details'
-export const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
-export const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
-export const PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS = '$minimal_flag_called_events'
-export const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
-export const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
-export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
-export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 export const GROUPS = '$groups'
-export const SURVEYS = '$surveys'
-export const SURVEYS_LOADED_AT = '$surveys_loaded_at'
-export const SURVEYS_ACTIVATED = '$surveys_activated'
-export const SURVEYS_ACTIVATED_SESSION = '$surveys_activated_session'
-export const SURVEYS_ACTIVATED_TIMESTAMPS = '$surveys_activated_timestamps'
 export const PRODUCT_TOURS = 'ph_product_tours'
 export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
 export const PRODUCT_TOURS_ACTIVATED_SESSION = '$product_tours_activated_session'
@@ -84,10 +68,6 @@ export const CONVERSATIONS_LEGACY_WIDGET_SESSION_ID = '$conversations_widget_ses
 export const CONVERSATIONS_LEGACY_TICKET_ID = '$conversations_ticket_id'
 export const CONVERSATIONS_LEGACY_WIDGET_STATE = '$conversations_widget_state'
 export const CONVERSATIONS_LEGACY_USER_TRAITS = '$conversations_user_traits'
-export const FLAG_CALL_REPORTED = '$flag_call_reported'
-export const FLAG_CALL_REPORTED_SESSION_ID = '$flag_call_reported_session_id'
-export const PERSISTENCE_FEATURE_FLAG_ERRORS = '$feature_flag_errors'
-export const PERSISTENCE_FEATURE_FLAG_EVALUATED_AT = '$feature_flag_evaluated_at'
 export const USER_STATE = '$user_state'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
 export const CAPTURE_RATE_LIMIT = '$capture_rate_limit'
@@ -124,15 +104,16 @@ export const SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED = '$sdk_debug_rrweb_start_at
 export const SESSION_RECORDING_START_REASON = '$session_recording_start_reason'
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
-// How long the cached `$surveys` definitions are considered fresh. After this, the next
-// `getSurveys` call serves the cache immediately but kicks off a background refresh so
-// server-side changes (e.g. a survey switched from popover to API) propagate to a
-// long-lived tab without needing a page reload.
-export const SURVEYS_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
-// After a failed background refresh we back off for the same window as the cache TTL before
-// trying again. Aliased to make the shared duration intentional rather than coincidental.
-export const SURVEYS_REFRESH_BACKOFF_MS = SURVEYS_CACHE_TTL_MS
-export const LOAD_EXT_NOT_FOUND = 'PostHog loadExternalDependency extension not found.'
+export {
+    SURVEYS,
+    SURVEYS_ACTIVATED,
+    SURVEYS_ACTIVATED_SESSION,
+    SURVEYS_ACTIVATED_TIMESTAMPS,
+    SURVEYS_LOADED_AT,
+    SURVEYS_CACHE_TTL_MS,
+    SURVEYS_REFRESH_BACKOFF_MS,
+    LOAD_EXT_NOT_FOUND,
+} from '@posthog/browser-common/surveys-config'
 
 /* EVENT NAMES - interned to reduce bundle size */
 /* COOKIELESS MODE VALUES */
@@ -147,7 +128,6 @@ export const USER_STATE_IDENTIFIED = 'identified'
 export const PERSON_PROFILES_IDENTIFIED_ONLY = 'identified_only' as const
 
 /* DOM EVENT NAMES - interned to reduce bundle size */
-export const DOM_EVENT_VISIBILITYCHANGE = 'visibilitychange'
 export const DOM_EVENT_BEFOREUNLOAD = 'beforeunload'
 
 export const EVENT_PAGEVIEW = '$pageview'
@@ -159,3 +139,22 @@ export const EVENT_GROUPIDENTIFY = '$groupidentify'
 export const Z_INDEX_TOURS = 2147483646
 export const Z_INDEX_SURVEYS = 2147483645
 export const Z_INDEX_CONVERSATIONS = 2147483644
+
+export {
+    PERSISTENCE_EARLY_ACCESS_FEATURES,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
+    ENABLED_FEATURE_FLAGS,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
+    FLAG_CALL_REPORTED,
+    FLAG_CALL_REPORTED_SESSION_ID,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
+    PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
+    DOM_EVENT_VISIBILITYCHANGE,
+} from '@posthog/browser-common/constants'

@@ -40,6 +40,9 @@ export type NetworkData = {
     isInitial?: boolean
 }
 
+// Internal recorder option, not a user-facing network capture setting. Missing means legacy ordering.
+type NetworkPluginOptions = NetworkRecordOptions & { captureFetchSynchronously?: boolean }
+
 type networkCallback = (data: NetworkData) => void
 
 const isNavigationTiming = (entry: PerformanceEntry): entry is PerformanceNavigationTiming =>
@@ -804,7 +807,9 @@ async function _tryReadResponseBody({
     return _readBody(r, options)
 }
 
-function initFetchObserver(
+// Preserve the pre-#5200 wrapper unless the private init option explicitly opts in.
+// Keep this path unchanged: publishing a new unversioned recorder must not opt customers in.
+function initLegacyFetchObserver(
     cb: networkCallback,
     win: IWindow,
     options: Required<NetworkRecordOptions>
@@ -924,12 +929,179 @@ function initFetchObserver(
     }
 }
 
+function initFetchObserver(
+    cb: networkCallback,
+    win: IWindow,
+    options: Required<NetworkRecordOptions>
+): listenerHandler {
+    if (!options.initiatorTypes.includes('fetch')) {
+        return () => {
+            //
+        }
+    }
+    const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
+    const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
+
+    // oxlint-disable-next-line typescript/ban-ts-comment
+    // @ts-ignore
+    const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {
+        return function (url: URL | RequestInfo, init?: RequestInit | undefined) {
+            // Constructing the capture Request happens _before_ we delegate to the original fetch, so
+            // if it throws (e.g. a URL/method the host application would have handled) we must not let
+            // that exception escape and misattribute a failure to session replay. Degrade gracefully and
+            // let the original request still proceed.
+            let req: Request
+            try {
+                // check IE earlier than this, we only initialize if Request is present
+                req = new Request(url, init)
+            } catch (e) {
+                logger.error('Failed to instrument fetch for network capture', e)
+                try {
+                    // oxlint-disable-next-line compat/compat
+                    return Promise.resolve(originalFetch(url, init))
+                } catch (fetchError) {
+                    // oxlint-disable-next-line compat/compat
+                    return new Promise((_resolve, reject) => reject(fetchError))
+                }
+            }
+            const networkRequest: Partial<CapturedNetworkRequest> = {}
+            let start: number | undefined
+            let end: number | undefined
+
+            // Start body capture without awaiting it. The host fetch must be invoked in the application's
+            // synchronous call stack so a native rejection retains the application call site.
+            // Body capture must reach req.clone() before its first yield: downstream fetch can consume req
+            // immediately for Request inputs, making any later clone fail.
+            const requestCapture = (async () => {
+                try {
+                    const requestHeaders: Headers = {}
+                    req.headers.forEach((value: string, header: string | number) => {
+                        requestHeaders[header] = value
+                    })
+                    if (recordRequestHeaders) {
+                        networkRequest.requestHeaders = requestHeaders
+                    }
+                    // Check the caller-supplied body, not req.body: Request normalizes all non-null bodies
+                    // to a ReadableStream, but only an original ReadableStream would be locked by req.clone().text().
+                    const requestBodyIsReadableStream = isReadableStreamBody(init?.body)
+                    if (
+                        !requestBodyIsReadableStream &&
+                        shouldRecordBody({
+                            type: 'request',
+                            headers: requestHeaders,
+                            url,
+                            recordBody: options.recordBody,
+                        })
+                    ) {
+                        networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
+                    }
+                } catch (e) {
+                    logger.error('Failed to record fetch request for network capture', e)
+                }
+            })()
+
+            const captureResponse = async (res: Response): Promise<void> => {
+                try {
+                    const responseHeaders: Headers = {}
+                    res.headers.forEach((value: string, header: string | number) => {
+                        responseHeaders[header] = value
+                    })
+                    if (recordResponseHeaders) {
+                        networkRequest.responseHeaders = responseHeaders
+                    }
+                    if (
+                        shouldRecordBody({
+                            type: 'response',
+                            headers: responseHeaders,
+                            url,
+                            recordBody: options.recordBody,
+                        })
+                    ) {
+                        networkRequest.responseBody = await _tryReadResponseBody({ r: res, options, url })
+                    }
+                } catch (e) {
+                    logger.error('Failed to record fetch response for network capture', e)
+                }
+            }
+
+            const captureTiming = (res?: Response): Promise<void> =>
+                getRequestPerformanceEntry(win, 'fetch', req.url, start, end).then((entry) => {
+                    const requests = prepareRequest(win, {
+                        entry,
+                        method: req.method,
+                        status: res?.status,
+                        networkRequest,
+                        start,
+                        end,
+                        url: req.url,
+                        initiatorType: 'fetch',
+                    })
+                    cb({ requests })
+                })
+
+            try {
+                start = win.performance.now()
+            } catch {
+                // Missing timing data must not prevent the host fetch.
+            }
+            let fetchPromise: Promise<Response>
+            try {
+                // Use `req` for recording metadata/body only. For fetch(url, init), do not pass this internally-created
+                // Request downstream: it exposes request.body as a ReadableStream, and wrappers that forward that body
+                // can trigger Safari's "ReadableStream uploading is not supported" error. For fetch(Request), we must
+                // pass the cloned Request because constructing `req` may consume the original Request body.
+                fetchPromise = isRequest(url) ? originalFetch(req) : originalFetch(url, init)
+            } catch (e) {
+                // The previous async wrapper converted synchronous downstream throws into rejected promises.
+                // oxlint-disable-next-line compat/compat
+                fetchPromise = new Promise((_resolve, reject) => reject(e))
+            }
+
+            // Attach both handlers immediately so a fast rejection is always observed while request body capture
+            // finishes. Calling the host fetch above without first yielding preserves the application's call site.
+            // oxlint-disable-next-line compat/compat
+            const fetchResult = Promise.resolve(fetchPromise).then(
+                (response) => {
+                    try {
+                        end = win.performance.now()
+                    } catch {
+                        // Missing timing data must not affect the response.
+                    }
+                    return { status: 'fulfilled' as const, response }
+                },
+                (error) => ({ status: 'rejected' as const, error })
+            )
+
+            return (async () => {
+                let response: Response | undefined
+                try {
+                    await requestCapture
+                    const result = await fetchResult
+                    if (result.status === 'rejected') {
+                        throw result.error
+                    }
+                    response = result.response
+                    await captureResponse(response)
+                    return response
+                } finally {
+                    void captureTiming(response).catch(() => {
+                        // Recording failures must never affect the host fetch or create unhandled rejections.
+                    })
+                }
+            })()
+        }
+    })
+    return () => {
+        restorePatch()
+    }
+}
+
 let initialisedHandler: listenerHandler | null = null
 
 function initNetworkObserver(
     callback: networkCallback,
     win: IWindow, // top window or in an iframe
-    options: NetworkRecordOptions
+    options: NetworkPluginOptions
 ): listenerHandler {
     if (!('performance' in win)) {
         return () => {
@@ -946,7 +1118,7 @@ function initNetworkObserver(
 
     const networkOptions = (
         options ? Object.assign({}, defaultNetworkOptions, options) : defaultNetworkOptions
-    ) as Required<NetworkRecordOptions>
+    ) as Required<NetworkRecordOptions> & NetworkPluginOptions
 
     let active = true
     let maskingFailureLogged = false
@@ -1012,7 +1184,10 @@ function initNetworkObserver(
     let fetchObserver: listenerHandler = () => {}
     if (wrapsNetworkPrimitives) {
         xhrObserver = initXhrObserver(cb, win, networkOptions)
-        fetchObserver = initFetchObserver(cb, win, networkOptions)
+        fetchObserver =
+            networkOptions.captureFetchSynchronously === true
+                ? initFetchObserver(cb, win, networkOptions)
+                : initLegacyFetchObserver(cb, win, networkOptions)
     }
 
     initialisedHandler = () => {
@@ -1032,7 +1207,7 @@ export const NETWORK_PLUGIN_NAME = 'rrweb/network@1'
 // TODO how should this be typed?
 // oxlint-disable-next-line typescript/ban-ts-comment
 // @ts-ignore
-export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordPlugin = (options) => {
+export const getRecordNetworkPlugin: (options?: NetworkPluginOptions) => RecordPlugin = (options) => {
     return {
         name: NETWORK_PLUGIN_NAME,
         observer: initNetworkObserver,

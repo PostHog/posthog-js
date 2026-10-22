@@ -174,6 +174,22 @@ describe('RetryQueue', () => {
         ])
     })
 
+    it('strips batch callbacks on unload without stripping single-event callbacks', () => {
+        const batchCallback = vi.fn()
+        const singleCallback = vi.fn()
+        mockTransport.mockImplementation(({ callback }) => callback?.({ statusCode: 503 }))
+        retryQueue.retriableRequest({ url: '/e', data: [{ event: 'batched' }], callback: batchCallback })
+        retryQueue.retriableRequest({ url: '/e', data: { event: 'single' }, callback: singleCallback })
+        mockTransport.mockReset()
+
+        retryQueue.unload()
+
+        expect(mockTransport).toHaveBeenCalledTimes(2)
+        expect(mockTransport.mock.calls[0][0].callback).toBeUndefined()
+        expect(mockTransport.mock.calls[1][0].callback).toBe(singleCallback)
+        expect(mockTransport.mock.calls.every(([request]) => request.transport === 'sendBeacon')).toBe(true)
+    })
+
     it('enqueues requests when offline and flushes immediately when online again', () => {
         retryQueue['_areWeOnline'] = false
         expect(retryQueue['_areWeOnline']).toEqual(false)

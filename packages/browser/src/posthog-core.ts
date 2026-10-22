@@ -34,6 +34,7 @@ import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-commo
 import { getCookieValue } from '@posthog/browser-common/utils/cookie-utils'
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
+import { WebMCP } from './extensions/webmcp'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
 import { PageViewManager } from './page-view'
 import { PostHogPersistence } from './posthog-persistence'
@@ -43,7 +44,7 @@ import {
     SurveyEventName,
     SurveyEventProperties,
     type SurveyRenderReason,
-} from './posthog-surveys-types'
+} from '@posthog/browser-common'
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
@@ -106,7 +107,7 @@ import {
     DEFAULT_DISPLAY_SURVEY_OPTIONS,
     getSurveyInteractionProperty,
     setSurveySeenOnLocalStorage,
-} from './utils/survey-utils'
+} from '@posthog/browser-common/utils/survey-utils'
 import {
     isEmptyString,
     isFunction,
@@ -326,6 +327,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
+    __preview_replay_sync_fetch: false, // Opt-in: preserve application stacks for recorded fetches
     __preview_external_dependency_versioned_paths: false,
     __preview_cookie_wins_on_conflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
@@ -507,6 +509,7 @@ export class PostHog implements PostHogInterface {
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
     productTours?: PostHogProductTours
+    webMCP?: WebMCP
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -541,6 +544,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensions: Extension[] = []
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
+    private _extensionInitTimeout: ReturnType<typeof setTimeout> | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
     private _replayDebugPropertiesPaused = false
     private _hasStableInitialDistinctId = false
@@ -971,7 +975,8 @@ export class PostHog implements PostHogInterface {
             // This reduces main thread blocking during init
             // while keeping critical path (persistence, sessions, capture) synchronous
             logger.info('Deferring extension initialization to improve startup performance')
-            setTimeout(() => {
+            this._extensionInitTimeout = setTimeout(() => {
+                this._extensionInitTimeout = undefined
                 this._initExtensions(startInCookielessMode)
             }, 0)
         } else {
@@ -1136,15 +1141,18 @@ export class PostHog implements PostHogInterface {
 
     private _enrollExtension(extension: Extension | BrowserCommonExtension, initTasks: Array<() => void>): void {
         if (this._isSharedExtension(extension)) {
-            initTasks.push(
-                () =>
-                    void this._getBrowserClientAdapter()
-                        .add(extension)
-                        .catch(() => extension.dispose?.())
-                        .catch((error) => {
-                            logger.error(`Failed to dispose browser extension "${extension.name}"`, error)
-                        })
-            )
+            initTasks.push(async () => {
+                try {
+                    await extension.setup(this._getBrowserClientAdapter())
+                } catch (error) {
+                    logger.error(`Failed to set up extension "${extension.name}"`, error)
+                    try {
+                        await extension.dispose?.()
+                    } catch (cleanupError) {
+                        logger.error(`Failed to dispose extension "${extension.name}"`, cleanupError)
+                    }
+                }
+            })
         } else {
             this._extensions.push(extension)
         }
@@ -1166,7 +1174,26 @@ export class PostHog implements PostHogInterface {
                 this._featureFlagsReloadingUnsubscribe = this.featureFlags.onReloading(() => {
                     this._internalEventEmitter.emit('featureFlagsReloading', true)
                 })
-                void this._getBrowserClientAdapter().add(this.featureFlags)
+                const featureFlags = this.featureFlags
+                void (async () => {
+                    try {
+                        await featureFlags.setup(this._getBrowserClientAdapter())
+                    } catch (error) {
+                        logger.error('Failed to set up feature flags', error)
+                        const unsubscribe = this._featureFlagsReloadingUnsubscribe
+                        this._featureFlagsReloadingUnsubscribe = undefined
+                        try {
+                            unsubscribe?.()
+                        } catch (cleanupError) {
+                            logger.error('Failed to unsubscribe feature flag reloading', cleanupError)
+                        }
+                        try {
+                            await featureFlags.dispose()
+                        } catch (cleanupError) {
+                            logger.error('Failed to dispose feature flags', cleanupError)
+                        }
+                    }
+                })()
             }
         } else {
             this.featureFlags.initialize?.()
@@ -1240,6 +1267,9 @@ export class PostHog implements PostHogInterface {
         if (ext.experiments) {
             this._extensions.push((this.experiments = this.experiments ?? new ext.experiments(this)))
         }
+        if (ext.webMCP) {
+            this._extensions.push((this.webMCP = this.webMCP ?? new ext.webMCP(this)))
+        }
 
         this._extensions.forEach((extension) => {
             if (!extension.initialize) return
@@ -1273,7 +1303,8 @@ export class PostHog implements PostHogInterface {
                 // Check if we've exceeded our time budget
                 if (elapsed >= TIME_BUDGET_MS && queue.length > 0) {
                     // Yield to browser, then continue processing
-                    setTimeout(() => {
+                    this._extensionInitTimeout = setTimeout(() => {
+                        this._extensionInitTimeout = undefined
                         this._processInitTaskQueue(queue, initStartTime)
                     }, 0)
                     return
@@ -1351,7 +1382,7 @@ export class PostHog implements PostHogInterface {
                 : PERSON_PROFILES_IDENTIFIED_ONLY,
         })
 
-        this._browserClientAdapter?.handleRemoteConfig(result)
+        this._internalEventEmitter.emit('extensionsRemoteConfig', result)
 
         // Every legacy extension receives the canonical result and handles failures itself.
         this._extensions.forEach((ext) => ext.onRemoteConfig?.(result))
@@ -2024,12 +2055,7 @@ export class PostHog implements PostHogInterface {
 
         // NB an options object without a `_batchKey` also skips the queue, so most calls that pass
         // options are unbatched already and `send_instantly` changes nothing for them
-        if (
-            this.config.request_batching &&
-            (!options || options?._batchKey) &&
-            !options?.send_instantly &&
-            !metaIdentifiersToConfirm.length
-        ) {
+        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
             this._requestQueue.enqueue(requestOptions)
         } else {
             let transportOverride: QueuedRequestWithOptions['transport']
@@ -3963,23 +3989,39 @@ export class PostHog implements PostHogInterface {
         }
 
         this._isShutdown = true
-        this._getBrowserClientAdapter().dispose()
-        this.sessionRecording?.dispose()
+        clearTimeout(this._extensionInitTimeout)
+        this._extensionInitTimeout = undefined
+        const unsubscribe = this._featureFlagsReloadingUnsubscribe
+        this._featureFlagsReloadingUnsubscribe = undefined
 
-        // Best-effort flush of anything still queued, mirroring page-unload teardown
-        // so no buffered events are silently dropped when teardown is explicit.
-        this.logs?.flushLogs('sendBeacon')
-        void this.metrics?.flush('sendBeacon')
-        this.metrics?.dispose()
-        this._requestQueue?.unload()
-        this._retryQueue?.unload()
-        try {
-            this.featureFlags?.destroy()
-        } catch (error) {
-            logger.error('Error while destroying feature flags', error)
+        // Flush buffered events before releasing their resources. Each cleanup is
+        // independent so a failure cannot leave the remaining subscriptions installed.
+        for (const cleanup of [
+            () => this.sessionRecording?.dispose(),
+            () => this.logs?.flushLogs('sendBeacon'),
+            () => this.metrics?.flush('sendBeacon'),
+            () => this.metrics?.dispose(),
+            () => this.logs?.dispose(),
+            () => this.surveys?.dispose(),
+            () => this.autocapture?.dispose(),
+            () => unsubscribe?.(),
+            () => this._requestQueue?.unload(),
+            () => this._retryQueue?.unload(),
+            () => this.featureFlags?.destroy(),
+            () => this.persistence?.destroy(),
+            () => this.sessionPersistence?.destroy(),
+        ]) {
+            try {
+                const result = cleanup() as unknown
+                if (result && isFunction((result as PromiseLike<void>).then)) {
+                    void (result as PromiseLike<void>).then(undefined, (error) => {
+                        logger.error('Error during shutdown', error)
+                    })
+                }
+            } catch (error) {
+                logger.error('Error during shutdown', error)
+            }
         }
-        this.persistence?.destroy()
-        this.sessionPersistence?.destroy()
     }
 
     /**
@@ -4267,6 +4309,7 @@ export class PostHog implements PostHogInterface {
             this.exceptionObserver?.onConfigChange()
             this.exceptions?.onConfigChange()
             this.metrics?.onConfigChange()
+            this.webMCP?.startIfEnabled()
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.tracingHeaders?.startIfEnabledOrStop()

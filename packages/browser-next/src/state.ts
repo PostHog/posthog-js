@@ -3,7 +3,7 @@ import type { KeyValueStore, SessionContext } from '@posthog/browser-common'
 import { createId } from './id'
 import type { NewSessionReason, StorageLike } from './types'
 
-type ConsentState = 'implicit' | 'granted' | 'denied'
+export type ConsentState = 'implicit' | 'granted' | 'denied'
 
 type StoredValue = [read: boolean, value: unknown]
 
@@ -374,15 +374,15 @@ export class BrowserState {
         return { ...this._state.groups }
     }
 
-    get session(): SessionContext {
+    get session(): SessionContext | undefined {
         const session = this._state.session
-        return session && this._windowId
-            ? {
-                  sessionId: session.sessionId,
-                  windowId: this._windowId,
-                  sessionStartTimestamp: session.sessionStartTimestamp,
-              }
-            : { sessionId: '', windowId: '', sessionStartTimestamp: 0 }
+        if (!session || !this._windowId) return undefined
+        return {
+            sessionId: session.sessionId,
+            windowId: this._windowId,
+            sessionStartTimestamp: session.sessionStartTimestamp,
+            lastActivityTimestamp: session.lastActivityTimestamp,
+        }
     }
 
     get consent(): ConsentState {
@@ -449,6 +449,7 @@ export class BrowserState {
                 sessionId: preparedSession.sessionId,
                 windowId: window.windowId,
                 sessionStartTimestamp: preparedSession.sessionStartTimestamp,
+                lastActivityTimestamp: preparedSession.lastActivityTimestamp,
             },
             session: preparedSession,
             reason,
@@ -830,14 +831,6 @@ export class BrowserState {
             return [true, this._storage.getItem(key)]
         } catch {
             return [false, null]
-        }
-    }
-
-    private _remove(key: string): void {
-        try {
-            this._storage?.removeItem(key)
-        } catch {
-            // The in-memory state is already clear.
         }
     }
 }

@@ -26,7 +26,8 @@ export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin &
   setPushIdentityProvider?: (provider: PostHogPushIdentityProvider) => void
   reset?: (distinctId: string, anonymousId: string) => Promise<void>
   captureFatalException?: (distinctId: string, timestamp: string, properties: { [key: string]: any }) => Promise<void>
-  getSessionReplayDebugProperties?: () => Promise<{ [key: string]: any }>
+  getSessionReplayDebugProperties?: () => Promise<{ [key: string]: any }>;
+  markFatalExceptionHandled?: (message: string) => Promise<void>
 }
 
 export type OptionalPluginLoaders = {
@@ -34,6 +35,8 @@ export type OptionalPluginLoaders = {
   loadPrimaryVersion: () => string | undefined
   loadLegacy: () => PostHogReactNativePluginExtended
 }
+
+let legacyPluginWarned = false
 
 export const resolveOptionalPlugin = (
   platformOS: string,
@@ -58,6 +61,15 @@ export const resolveOptionalPlugin = (
       try {
         plugin = loaders ? loaders.loadLegacy() : require('posthog-react-native-session-replay')
       } catch {}
+
+      // Always visible (not gated on debug): it resolves at import, before any client or logger exists.
+      if (plugin && !legacyPluginWarned) {
+        legacyPluginWarned = true
+        console.warn(
+          '[PostHog] posthog-react-native-session-replay is deprecated and no longer receives native SDK updates. ' +
+            'Replace it with @posthog/react-native-plugin.'
+        )
+      }
     }
   }
 
