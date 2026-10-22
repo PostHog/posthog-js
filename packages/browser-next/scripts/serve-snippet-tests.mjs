@@ -51,9 +51,19 @@ const backend = createMockServer({
             request.url.searchParams.get('occupied') === 'true'
                 ? '<script>window.posthog = { legacy: true }</script>'
                 : ''
+        const nonceOnly = request.url.searchParams.get('csp') === 'true'
+        const body = html.replace('<!-- snippet-tags -->', occupied + tags)
         return {
-            body: html.replace('<!-- snippet-tags -->', occupied + tags),
-            headers: { 'Content-Type': 'text/html' },
+            body: nonceOnly ? body.replaceAll('<script', '<script nonce="snippet-fixture"') : body,
+            headers: {
+                'Content-Type': 'text/html',
+                ...(nonceOnly
+                    ? {
+                          'Content-Security-Policy':
+                              "default-src 'none'; script-src 'nonce-snippet-fixture'; connect-src 'self'",
+                      }
+                    : {}),
+            },
         }
     },
 })
