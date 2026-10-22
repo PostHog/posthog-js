@@ -1,0 +1,25 @@
+{
+    "sourceCommit": "05044bf7deae999e443c59a91b58058ca6aaa51f",
+    "packageVersion": "0.0.3",
+    "nodeVersion": "24.13.0",
+    "pnpmVersion": "11.7.0",
+    "compression": {
+        "gzipLevel": 9,
+        "brotliQuality": 11,
+        "aggregation": "Sum independently compressed JavaScript files; exclude source maps."
+    },
+    "npm": {
+        "bundler": "esbuild@0.25.12",
+        "command": "pnpm --filter @posthog/browser bundle-size",
+        "core": { "minified": 37746, "gzip": 11532, "brotli": 10392 },
+        "lazyInitial": { "minified": 39852, "gzip": 12749, "brotli": 11466 },
+        "lazyTotal": { "minified": 276298, "gzip": 91984, "brotli": 81949 }
+    },
+    "cdn": {
+        "bundler": "@rspack/core@2.1.10",
+        "command": "pnpm --filter @posthog/browser bundle-size:cdn",
+        "initial": { "minified": 44166, "gzip": 13970, "brotli": 12562 },
+        "deferred": { "minified": 244625, "gzip": 79665, "brotli": 70978 },
+        "total": { "minified": 288791, "gzip": 93635, "brotli": 83540 }
+    }
+}

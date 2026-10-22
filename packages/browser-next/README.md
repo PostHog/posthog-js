@@ -314,4 +314,6 @@ node packages/browser-next/scripts/check-package-consumer.mjs
 
 The check validates the tarball inventory, public dependencies, all exported entrypoints in ESM and CommonJS, strict consumer declarations, and Capture V1 delivery to the local mock server. Its temporary consumer uses local tarballs for PostHog workspace dependencies and retains the repository's dependency cooldown.
 
+Repository reference measurements are recorded in `packages/browser-next/bundle-size-baseline.json`, including the source commit, package/tool versions, compression settings, and reproduction commands. Initial and total sizes describe different loading boundaries; deferred totals include all available features, not only features activated on a particular page.
+
 See [Bundle architecture](./ARCHITECTURE.md) for package boundaries, tree-shaking rules, and bundle review.
