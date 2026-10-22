@@ -248,7 +248,7 @@ export class PostHogEmails implements Emails {
       maxRetries: retryCount(options.maxRetries) ?? retryCount(this.api.maxRetries()) ?? DEFAULT_MAX_RETRIES,
     }
     return this.api.track(
-      this.sendForm(options, delivery)
+      this.sendForm({ ...options }, delivery)
         .then((result) => this.logWarnings(result))
         .catch(unexpectedFailure)
     )
