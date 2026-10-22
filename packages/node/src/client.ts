@@ -13,6 +13,7 @@ import {
   PostHogCaptureOptions,
   PostHogApiResponse,
   PostHogCoreStateless,
+  removeTrailingSlash,
   PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
@@ -79,7 +80,7 @@ import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routi
 import { V1CaptureSender } from './capture-v1/sender'
 import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
-import { type Emails, PostHogEmails, type TemplateFiles } from './emails'
+import { type Emails, PostHogEmails } from './emails'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -122,6 +123,23 @@ function normalizePersonalApiKey(value?: unknown): string | undefined {
 function normalizeHost(value?: unknown): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || DEFAULT_NODE_HOST
+}
+
+const CLOUD_APP_HOSTS: Record<string, string> = {
+  'us.i.posthog.com': 'https://us.posthog.com',
+  'us.posthog.com': 'https://us.posthog.com',
+  'app.posthog.com': 'https://us.posthog.com',
+  'eu.i.posthog.com': 'https://eu.posthog.com',
+  'eu.posthog.com': 'https://eu.posthog.com',
+}
+
+function cloudAppHost(host: string): string | undefined {
+  try {
+    const url = new URL(host)
+    return url.protocol === 'https:' && url.port === '' ? CLOUD_APP_HOSTS[url.hostname] : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function isTimeout(error: unknown): boolean {
@@ -680,36 +698,35 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * The `posthog.emails` API: send transactional email from a template uploaded to PostHog, by its key.
-   * Needs the `secretKey` client option.
+   * The `posthog.emails` API: send transactional email from your server. Needs the `secretKey` client option.
    *
    * @example
    * ```ts
-   * const { data, error } = await client.emails.send({ template: 'welcome', to: 'jane@example.com' })
+   * const { data, error } = await client.emails.send({
+   *   to: 'jane@example.com',
+   *   distinctId: user.id,
+   *   templateId: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b',
+   * })
    * ```
    *
    * {@label Emails}
    */
   public get emails(): Emails {
-    this._emails ??= this.createEmails()
+    this._emails ??= new PostHogEmails({
+      isDisabled: () => this.disabled,
+      secretKey: () => this.options.personalApiKey,
+      appHost: () => (this.options.appHost ? removeTrailingSlash(this.options.appHost) : cloudAppHost(this.host)),
+      maxRetries: () => this.options.maxRetries ?? 2,
+      headers: () => ({
+        ...this.getCustomHeaders(),
+        'User-Agent': this.getCustomUserAgent(),
+        ...(this.options.migratedFrom && { 'X-PostHog-Migrated-From': this.options.migratedFrom }),
+      }),
+      warn: (message) => this._logger.warn(message),
+      track: (work) => this.addPendingPromise(work),
+      request: (url, headers, body) => this._requestEmailsApi(url, headers, body),
+    })
     return this._emails
-  }
-
-  /**
-   * Builds the `emails` API. The Node entrypoint passes file system access, so it can send template files.
-   * @internal
-   */
-  protected createEmails(templateFiles?: TemplateFiles): PostHogEmails {
-    return new PostHogEmails(
-      {
-        isDisabled: () => this.disabled,
-        hasSecretKey: () => this.options.personalApiKey !== undefined,
-        warn: (message) => this._logger.warn(message),
-        track: (work) => this.addPendingPromise(work),
-        request: (method, path, body) => this._requestWithSecretKey(method, path, body),
-      },
-      templateFiles
-    )
   }
 
   /**
@@ -3024,26 +3041,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  /** One attempt, never retried: an email send that timed out or failed on the server may still have queued. */
-  private async _requestWithSecretKey(
-    method: 'POST' | 'PUT',
-    path: string,
-    body: JsonType
+  /** One attempt: `posthog.emails` retries on its own, with the same idempotency key. */
+  private async _requestEmailsApi(
+    url: string,
+    headers: Record<string, string>,
+    body: string
   ): Promise<PostHogApiResponse> {
     try {
-      return await this.requestJson(
-        `${this.host}${path}`,
-        {
-          method,
-          headers: {
-            ...this.getCustomHeaders(),
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.options.personalApiKey}`,
-          },
-          body: JSON.stringify(body),
-        },
-        { retryCount: 0 }
-      )
+      return await this.requestJson(url, { method: 'POST', headers, body }, { retryCount: 0 })
     } catch (error) {
       this._events.emit('error', error)
       throw new Error(isTimeout(error) ? `Request timed out after ${this.requestTimeout}ms` : 'Request failed')

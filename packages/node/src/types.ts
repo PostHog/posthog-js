@@ -231,6 +231,16 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   personalApiKey?: string
   /**
+   * The PostHog app host that `posthog.emails` sends to with the `secretKey`, such as `https://posthog.example.com`
+   * for a self-hosted instance. Derived when `host` is PostHog Cloud. Any other `host` may be a reverse proxy, so
+   * `emails` calls fail with `missing_app_host` until you set it, and the secret key never goes to the proxy.
+   */
+  appHost?: string
+  /** How often `posthog.emails` retries a send that PostHog did not queue. Defaults to 2. `0` turns retries off. */
+  maxRetries?: number
+  /** The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request. */
+  migratedFrom?: string
+  /**
    * Redact prompts, outputs and error details from every event that the PostHog AI
    * integrations (`@posthog/ai`) capture with this client. Per-call privacy settings
    * can only add redaction. Defaults to false.
@@ -906,8 +916,8 @@ export interface IPostHog {
   readonly metrics: Metrics
 
   /**
-   * @description The `posthog.emails` API: send transactional email from a template, by its key or, in Node.js,
-   * from an HTML template file. Needs the `secretKey` client option.
+   * @description The `posthog.emails` API: send transactional email from your server. Needs the `secretKey` client
+   * option.
    */
   readonly emails: Emails
 

@@ -1,40 +1,25 @@
 import type { PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
-import { type EmailContent, emailContentHash } from '@/email-content-hash'
 
-const UPLOAD_PATH = /^\/api\/projects\/@current\/messaging_templates\/by_key\/([^/]+)\/$/
-const SEND_PATH = '/api/projects/@current/messaging/send/email/'
-const KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
+const TEMPLATE_SEND_PATH = /^\/api\/projects\/@current\/messaging_templates\/([^/]+)\/send\/$/
 const DOCS_URL = 'https://posthog.com/docs/workflows/transactional-email-api'
-const PUBLISHED_PARTS = ['subject', 'preheader', 'html', 'text'] as const
 
 export interface ReceivedRequest {
   method: string
+  origin: string
   path: string
-  authorization: string | null
+  headers: Record<string, string>
   body: Record<string, any>
-}
-
-export interface PublishedTemplate extends EmailContent {
-  id: string
-  key: string
-  name: string
-  contentHash: string
-  supersededHashes: string[]
-  source: { repository?: string; path?: string; ref?: string }
 }
 
 export interface DeliveredEmail {
   messageId: string
   to: string
-  key: string
-  subject?: string
-  preheader?: string
-  html?: string
+  templateId: string
   variables: Record<string, unknown>
   distinctId?: string
 }
 
-export type Fault = { status: number; body?: unknown } | { networkError: Error }
+export type Fault = { status: number; body?: unknown; headers?: Record<string, string> } | { networkError: Error }
 
 interface ScheduledFault {
   matches: (request: ReceivedRequest) => boolean
@@ -43,19 +28,18 @@ interface ScheduledFault {
 }
 
 /**
- * An in-memory PostHog that speaks the upload and send routes of the transactional email API, including the
- * content hash rule: a current or absent hash sends, a superseded hash sends the current content with a warning,
- * and a hash PostHog never published answers `template_outdated`. An upload with `if_not_superseded` of replaced
- * content changes nothing and answers `superseded`.
+ * An in-memory PostHog app host that speaks the template send route of the transactional email API, with its
+ * idempotency rule: a key PostHog already accepted for the same request answers the first `202` again.
  */
 export class FakeEmailsApi {
   readonly received: ReceivedRequest[] = []
   readonly delivered: DeliveredEmail[] = []
-  private readonly templates = new Map<string, PublishedTemplate>()
+  private readonly templateIds = new Set<string>()
+  private readonly accepted = new Map<string, { fingerprint: string; messageId: string }>()
   private readonly faults: ScheduledFault[] = []
   private nextId = 1
 
-  constructor(private readonly options: { secretKey: string }) {}
+  constructor(private readonly options: { secretKey: string; appHost: string }) {}
 
   readonly fetch = async (url: string, init: PostHogFetchOptions): Promise<PostHogFetchResponse> => {
     const request = await describe(new Request(url, init as RequestInit))
@@ -65,26 +49,21 @@ export class FakeEmailsApi {
       throw fault.networkError
     }
     if (fault) {
-      return respond(fault.status, fault.body)
+      return respond(fault.status, fault.body, fault.headers)
     }
     return this.handle(request)
   }
 
-  async publish(key: string, content: EmailContent & { name?: string }): Promise<PublishedTemplate> {
-    await this.upload(key, { name: key, ...content })
-    return this.template(key)!
-  }
-
-  template(key: string): PublishedTemplate | undefined {
-    return this.templates.get(key)
+  addTemplate(id: string): void {
+    this.templateIds.add(id)
   }
 
   failWhen(matches: (request: ReceivedRequest) => boolean, fault: Fault, times = Infinity): void {
     this.faults.push({ matches, fault, remaining: times })
   }
 
-  get requestLog(): string[] {
-    return this.received.map(({ method, path }) => `${method} ${path}`)
+  failNext(fault: Fault, times = 1): void {
+    this.failWhen(() => true, fault, times)
   }
 
   private takeFault(request: ReceivedRequest): Fault | undefined {
@@ -95,142 +74,76 @@ export class FakeEmailsApi {
     return scheduled?.fault
   }
 
-  private async handle(request: ReceivedRequest): Promise<PostHogFetchResponse> {
-    if (request.authorization !== `Bearer ${this.options.secretKey}`) {
-      return respond(401, {
-        type: 'authentication_error',
-        code: 'authentication_failed',
-        detail: 'Project secret API key is invalid.',
-        attr: null,
-      })
+  private handle(request: ReceivedRequest): PostHogFetchResponse {
+    if (request.origin !== this.options.appHost) {
+      return respond(404, '<html>Not the app host</html>')
     }
-    const uploadKey = UPLOAD_PATH.exec(request.path)?.[1]
-    if (request.method === 'PUT' && uploadKey) {
-      return this.handleUpload(decodeURIComponent(uploadKey), request.body)
+    if (request.headers.authorization !== `Bearer ${this.options.secretKey}`) {
+      return refusal(401, 'authentication_failed', null)
     }
-    if (request.method === 'POST' && request.path === SEND_PATH) {
-      return this.handleSend(request.body)
+    const templateId = TEMPLATE_SEND_PATH.exec(request.path)?.[1]
+    if (request.method === 'POST' && templateId) {
+      return this.handleTemplateSend(decodeURIComponent(templateId), request)
     }
-    return respond(404, { type: 'invalid_request', code: 'not_found', detail: 'Endpoint not found.', attr: null })
+    return refusal(404, 'not_found', null)
   }
 
-  private async handleUpload(key: string, body: Record<string, any>): Promise<PostHogFetchResponse> {
-    if (!KEY_PATTERN.test(key)) {
-      return refusal(400, 'invalid_template_key', 'key')
+  private handleTemplateSend(templateId: string, { headers, body }: ReceivedRequest): PostHogFetchResponse {
+    if (!this.templateIds.has(templateId)) {
+      return refusal(404, 'not_found', null)
     }
-    for (const field of ['name', 'subject', 'html']) {
-      if (typeof body[field] !== 'string' || body[field] === '') {
-        return refusal(400, 'invalid_request', field)
-      }
-    }
-    const { template, result } = await this.upload(key, body)
-    return respond(result === 'created' ? 201 : 200, {
-      id: template.id,
-      key,
-      result,
-      content_hash: template.contentHash,
-      managed_by: 'code',
-      source: template.source,
-      transactional_hog_flow_id: `flow-${template.id}`,
-    })
-  }
-
-  private async upload(
-    key: string,
-    body: Record<string, any>
-  ): Promise<{ template: PublishedTemplate; result: 'created' | 'updated' | 'unchanged' | 'superseded' }> {
-    const content: EmailContent = { subject: body.subject, preheader: body.preheader, html: body.html, text: body.text }
-    const contentHash = await emailContentHash(content)
-    const existing = this.templates.get(key)
-    if (body.if_not_superseded === true && existing?.supersededHashes.includes(contentHash)) {
-      return { template: existing, result: 'superseded' }
-    }
-    const source = { ...existing?.source, ...body.source }
-    if (!existing) {
-      const template = { id: `template-${this.nextId++}`, key, name: body.name, ...content, contentHash, source }
-      this.templates.set(key, { ...template, supersededHashes: [] })
-      return { template: this.templates.get(key)!, result: 'created' }
-    }
-    if (
-      existing.name === body.name &&
-      PUBLISHED_PARTS.every((part) => (existing[part] ?? '') === (content[part] ?? ''))
-    ) {
-      existing.source = source
-      return { template: existing, result: 'unchanged' }
-    }
-    const supersededHashes = [existing.contentHash, ...existing.supersededHashes].filter(
-      (hash, index, hashes) => hash !== contentHash && hashes.indexOf(hash) === index
-    )
-    const template = { ...existing, name: body.name, ...content, contentHash, supersededHashes, source }
-    this.templates.set(key, template)
-    return { template, result: 'updated' }
-  }
-
-  private handleSend(body: Record<string, any>): PostHogFetchResponse {
-    const { key, hash } = body.template ?? {}
-    if (typeof key !== 'string') {
-      return refusal(400, 'invalid_request', 'template')
-    }
-    if (!KEY_PATTERN.test(key)) {
-      return refusal(400, 'invalid_template_key', 'template__key')
-    }
-    const template = this.templates.get(key)
-    if (!template) {
-      return refusal(404, 'template_not_found', 'template__key')
-    }
-    if (hash !== undefined && hash !== template.contentHash && !template.supersededHashes.includes(hash)) {
-      return refusal(409, 'template_outdated', 'template__hash')
+    const key = headers['idempotency-key']
+    const fingerprint = JSON.stringify([templateId, body])
+    const earlier = key === undefined ? undefined : this.accepted.get(key)
+    if (earlier) {
+      return earlier.fingerprint === fingerprint
+        ? respond(202, { message_id: earlier.messageId, replayed: true })
+        : refusal(422, 'idempotency_key_reused', null)
     }
     const messageId = `message-${this.nextId++}`
+    if (key !== undefined) {
+      this.accepted.set(key, { fingerprint, messageId })
+    }
     this.delivered.push({
       messageId,
       to: body.to,
-      key,
-      subject: template.subject,
-      preheader: template.preheader,
-      html: template.html,
+      templateId,
       variables: body.message_data ?? {},
       distinctId: body.identifiers?.distinct_id,
     })
-    const superseded = hash !== undefined && hash !== template.contentHash
-    return respond(202, {
-      message_id: messageId,
-      warnings: superseded
-        ? [
-            {
-              code: 'template_superseded',
-              detail: 'The email was sent with the template’s current content.',
-              fix: 'Deploy the newer file, or upload your file to publish it again.',
-            },
-          ]
-        : [],
-    })
+    return respond(202, { message_id: messageId, replayed: false })
   }
 }
 
 async function describe(request: Request): Promise<ReceivedRequest> {
   const text = await request.text()
+  const url = new URL(request.url)
   return {
     method: request.method,
-    path: new URL(request.url).pathname,
-    authorization: request.headers.get('Authorization'),
+    origin: url.origin,
+    path: url.pathname,
+    headers: Object.fromEntries(request.headers.entries()),
     body: text ? JSON.parse(text) : {},
   }
 }
 
-function refusal(status: number, code: string, attr: string): PostHogFetchResponse {
-  return respond(status, {
+export function refusal(status: number, code: string, attr: string | null): PostHogFetchResponse {
+  return respond(status, refusalBody(code, attr))
+}
+
+export function refusalBody(code: string, attr: string | null): Record<string, unknown> {
+  return {
     type: 'invalid_request',
     code,
     detail: `Refused with ${code}.`,
     attr,
-    why: 'Because the fake says so.',
-    fix: 'Fix it.',
+    why: `Because the fake refuses ${code}.`,
+    fix: `Fix ${code}.`,
     docs_url: `${DOCS_URL}#${code}`,
-  })
+  }
 }
 
-function respond(status: number, body: unknown): PostHogFetchResponse {
+function respond(status: number, body: unknown, headers: Record<string, string> = {}): PostHogFetchResponse {
   const text = typeof body === 'string' ? body : JSON.stringify(body ?? '')
-  return new Response(text, { status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(text, { status, headers: { 'Content-Type': 'application/json', ...headers } })
 }

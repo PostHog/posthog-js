@@ -339,6 +339,8 @@ export type PostHogFetchResponse = {
 export type PostHogApiResponse = {
   status: number
   body: unknown
+  /** The answer's `Retry-After` in milliseconds, when it sent a usable one. */
+  retryAfterMs?: number
 }
 
 export type PostHogQueueItem = {
