@@ -756,6 +756,8 @@ describe('PostHog RN session replay follows consent', () => {
   it.each([false, true])(
     'waits for an event trigger in the new session before restoring a manual recording with replay disabled (native restarts the recorder on opt-in: %s)',
     async (nativeRestartsRecorder) => {
+      // The native mock ignores event triggers, like the real native SDKs do for React Native, so only
+      // the JS side can hold the restore. Don't make the mock trigger-aware: that would hide this gate.
       currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
       await warmCache()
       posthog = newPostHog({ enableSessionReplay: false })
