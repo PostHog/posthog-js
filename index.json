@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/5374": {
+    "key": "PostHog/posthog-js/issue/5374",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5374",
+    "url": "https://github.com/PostHog/posthog-js/issues/5374",
+    "conclusion": "Confirmed bundle-hygiene enhancement: the modern browser bundles include IE11-only global polyfills from uuidv7.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "web",
+      "javascript",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-22T06:52:01.706Z"
+  },
   "PostHog/posthog-js/issue/5369": {
     "key": "PostHog/posthog-js/issue/5369",
     "repo": "PostHog/posthog-js",
@@ -2937,20 +2953,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-07-01T09:35:43.950Z"
-  },
-  "PostHog/posthog-js/issue/2335": {
-    "key": "PostHog/posthog-js/issue/2335",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2335",
-    "url": "https://github.com/PostHog/posthog-js/issues/2335",
-    "conclusion": "Valid feature request; current Node local-evaluation cache does not cover remote config payloads.",
-    "labels": [
-      "enhancement",
-      "feature/flags",
-      "team/feature-flags",
-      "node"
-    ],
-    "closed": false,
-    "updatedAt": "2026-07-01T09:33:45.419Z"
   }
 }
