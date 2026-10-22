@@ -490,6 +490,7 @@
         "_lazyLoadAndStart",
         "_lazyLoadedDeadClicksAutocapture",
         "_lazyLoadedSessionRecording",
+        "_lifecycleGeneration",
         "_linkedFlagMatching",
         "_listenForReconnect",
         "_listenToReloadWindow",
