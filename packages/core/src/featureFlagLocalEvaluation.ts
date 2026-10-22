@@ -424,7 +424,14 @@ export function matchFeatureFlagProperty(
       return false
     }
     if (Array.isArray(target)) {
-      const actualString = readContextValue(() => exactMatchString(actual)).toLowerCase()
+      let actualString: string
+      try {
+        actualString = readContextValue(() => exactMatchString(actual)).toLowerCase()
+      } catch (e) {
+        // A bad filter outranks a bad context value, so check the whole filter before reporting missing_context.
+        target.forEach((item) => exactMatchString(item))
+        throw e
+      }
       return target.some((item) => exactMatchString(item).toLowerCase() === actualString)
     }
     const targetString = exactMatchString(target).toLowerCase()

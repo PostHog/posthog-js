@@ -1134,6 +1134,12 @@ describe('evaluateFlags', () => {
         'unsupported_definition',
       ],
       [
+        'an unsupported exact filter and context value',
+        { properties: [{ key: 'id', type: 'person', value: [323], operator: 'exact' }] },
+        { id: 323 },
+        'unsupported_definition',
+      ],
+      [
         'a context value the evaluator cannot use',
         { properties: [{ key: 'version', type: 'person', value: '1.2.3', operator: 'semver_gt' }] },
         { version: 'not-semver' },
