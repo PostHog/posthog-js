@@ -10,7 +10,15 @@ describe('emailContentHash', () => {
       content: { subject: 'Grüße', preheader: 'Vorschau', html: '<p>ä</p>', text: 'ä' },
       hash: 'v1:75cf6fc3189ca26f60da672d29a1d4c89c7db3dd458df3a550a34a4d2a92c149',
     },
-  ])('matches the spec test vector $hash', async ({ content, hash }) => {
+    {
+      content: {
+        subject: 'Welcome, {{ variables.first_name }}',
+        html: '<p>Hi {{ variables.first_name }}</p>',
+        text: '\r\n\r',
+      },
+      hash: 'v1:8112876ee1b2dd7327f571b04b546ed057bfff5a904d9f0ae507b6a449ab6453',
+    },
+  ])('matches the content_hash v1 test vector of the server: $hash', async ({ content, hash }) => {
     expect(await emailContentHash(content)).toBe(hash)
   })
 
