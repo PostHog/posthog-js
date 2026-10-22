@@ -221,6 +221,14 @@ describe('withPostHogConfig webpack sourcemaps', () => {
     if (result === 'failed') expect(warn).toHaveBeenCalled()
   })
 
+  it('fails the build when release resolution fails with failOnError', async () => {
+    vi.mocked(utils.resolveReleaseId).mockRejectedValue(new Error('offline'))
+
+    await expect(
+      resolveNextConfig({}, { ...pluginConfig, sourcemaps: { ...pluginConfig.sourcemaps, failOnError: true } })
+    ).rejects.toThrow('offline')
+  })
+
   it('deletes server sourcemaps and excludes them from output file tracing', async () => {
     const config = await resolveNextConfig({})
 

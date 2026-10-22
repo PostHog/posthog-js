@@ -104,7 +104,7 @@ export class PosthogWebpackPlugin {
     }
 
     apply(compiler: webpack.Compiler): void {
-        const failedCompilations = new WeakSet<webpack.Compilation>()
+        const failedCompilations = new WeakMap<webpack.Compilation, unknown>()
         if (this.resolvedConfig.sourcemaps.enabled) {
             // In event release mode webpack stamps an ECMA-426 debug id into each chunk at
             // compile time, and we adopt it as the chunk id instead of deriving another,
@@ -216,7 +216,7 @@ export class PosthogWebpackPlugin {
                         } catch (error) {
                             // Match the existing fail-soft upload hook; never upload maps for a
                             // compilation whose injection/release resolution did not complete.
-                            failedCompilations.add(compilation)
+                            failedCompilations.set(compilation, error)
                             this.logger.error('Error injecting PostHog chunk ids:', error)
                         }
                     }
@@ -229,12 +229,20 @@ export class PosthogWebpackPlugin {
             try {
                 if (failedCompilations.has(stats.compilation)) {
                     await this.deleteSourceMapsWithoutUpload(stats.compilation, this.resolvedConfig)
+                    if (this.resolvedConfig.sourcemaps.failOnError) throw failedCompilations.get(stats.compilation)
                 } else {
                     await this.processSourceMaps(stats.compilation, this.resolvedConfig)
                 }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : error
                 this.logger.error('Error running PostHog webpack plugin:', errorMessage)
+                if (this.resolvedConfig.sourcemaps.failOnError) {
+                    return callback(
+                        new Error(
+                            `PostHog sourcemap processing failed and sourcemaps.failOnError is enabled: ${errorMessage}`
+                        )
+                    )
+                }
             }
             return callback()
         }

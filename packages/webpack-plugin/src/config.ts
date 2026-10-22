@@ -5,18 +5,31 @@ import {
     ResolveConfigOptions,
 } from '@posthog/plugin-utils'
 
-// Re-export types for backward compatibility — consumers importing from @posthog/webpack-plugin
-// will continue to get the same types.
-export type PluginConfig = CorePluginConfig
-export type ResolvedPluginConfig = CoreResolvedPluginConfig
+export type PluginConfig = CorePluginConfig & {
+    sourcemaps?: CorePluginConfig['sourcemaps'] & {
+        /**
+         * Fail the build when PostHog cannot process or upload the sourcemaps, for example because the
+         * personal API key is invalid. Defaults to `false`: the error is logged and the build continues.
+         */
+        failOnError?: boolean
+    }
+}
+
+export type ResolvedPluginConfig = CoreResolvedPluginConfig & {
+    sourcemaps: CoreResolvedPluginConfig['sourcemaps'] & { failOnError: boolean }
+}
 
 /**
  * Resolve plugin config with webpack-specific defaults.
  * Defaults sourcemaps.enabled to `true`, matching the other PostHog bundler plugins.
  */
 export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveConfigOptions): ResolvedPluginConfig {
-    return coreResolveConfig(options, {
+    const resolved = coreResolveConfig(options, {
         cwd: __dirname,
         ...resolveOptions,
     })
+    return {
+        ...resolved,
+        sourcemaps: { ...resolved.sourcemaps, failOnError: options.sourcemaps?.failOnError ?? false },
+    }
 }

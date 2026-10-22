@@ -52,7 +52,8 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
         deleteAfterUpload: boolean,
         releaseMode: 'event' | 'symbol-set',
         extra: webpack.Configuration = {},
-        runs = 1
+        runs = 1,
+        failOnError = false
     ) {
         await fs.writeFile(
             path.join(directory, 'entry.js'),
@@ -90,7 +91,7 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
                     personalApiKey: 'dummy',
                     projectId: '1',
                     cliBinaryPath: 'mock-cli',
-                    sourcemaps: { deleteAfterUpload, releaseMode },
+                    sourcemaps: { deleteAfterUpload, releaseMode, failOnError },
                 }),
                 {
                     apply(compiler) {
@@ -301,6 +302,20 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
         expect(uploads).toHaveLength(1)
         expect(uploads[0].map.chunk_id).toBeTruthy()
         // deleteAfterUpload removes the failed compilation's maps too, so none ship.
+        const files = await fs.readdir(path.join(directory, 'dist'))
+        expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(0)
+        error.mockRestore()
+    })
+
+    it.each([
+        ['release resolution', 'event', () => vi.mocked(resolveReleaseId).mockRejectedValueOnce(new Error('bad key'))],
+        ['upload', 'symbol-set', () => vi.mocked(runSourcemapCli).mockRejectedValueOnce(new Error('bad key'))],
+    ] as const)('fails the build with failOnError when %s fails, after deleting maps', async (_, releaseMode, fail) => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        fail()
+        await expect(build(true, releaseMode, {}, 1, true)).rejects.toThrow(
+            'PostHog sourcemap processing failed and sourcemaps.failOnError is enabled: bad key'
+        )
         const files = await fs.readdir(path.join(directory, 'dist'))
         expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(0)
         error.mockRestore()
