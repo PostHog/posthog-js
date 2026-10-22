@@ -261,8 +261,14 @@ export class PostHogPersistence {
     /**
      * @param {PostHogConfig} config initial PostHog configuration
      * @param {boolean=} isDisabled should persistence be disabled (e.g. because of consent management)
+     * @param {boolean=} allowDisabledRead restore stored state read-only during disabled initialization
      */
-    constructor(config: PostHogConfig, isDisabled?: boolean, ownsSplitStorage: boolean = true) {
+    constructor(
+        config: PostHogConfig,
+        isDisabled?: boolean,
+        ownsSplitStorage: boolean = true,
+        allowDisabledRead: boolean = !config.cookieless_mode
+    ) {
         this._config = config
         this._ownsSplitStorage = ownsSplitStorage
         this.props = {}
@@ -272,8 +278,8 @@ export class PostHogPersistence {
         this._storage = this._buildStorage(config)
         this._splitStorage = this._resolveSplitStorage(config)
         // Retain identity before disabled initialization clears storage, without migration writes.
-        // Cookieless identities must remain isolated from stored cookie identities.
-        this.load(!config.cookieless_mode)
+        // Core permits this read while consent is pending, but not for cookieless tracking.
+        this.load(allowDisabledRead)
         // Preserve only values for which load() selected a fresher source than
         // the current storage entry. Ordinary loaded values remain mergeable.
         this._markLoadedCrossTabFeatureFlagChangesPending()

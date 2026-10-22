@@ -9,6 +9,7 @@ import { PostHogCustomAppProperties, PostHogCustomStorage } from './types'
 import { OptionalReactNativeLocalize } from './optional/OptionalReactNativeLocalize'
 import { OptionalExpoFileSystemLegacy } from './optional/OptionalExpoFileSystemLegacy'
 import { detectDeviceType } from '@posthog/core'
+import { Platform } from 'react-native'
 
 const getDeviceType = (): string => {
   let deviceType = 'Mobile'
@@ -76,6 +77,10 @@ export const getAppProperties = (): PostHogCustomAppProperties => {
     properties.$is_emulator = OptionalReactNativeDeviceInfo.isEmulatorSync()
   }
 
+  if (!properties.$os_name) {
+    Object.assign(properties, getPlatformOSProperties())
+  }
+
   if (OptionalExpoLocalization) {
     // expo-localization >= 14 use functions to get these results, older versions use JS getters
     // https://github.com/expo/expo/blob/sdk-54/packages/expo-localization/CHANGELOG.md#1400--2022-10-25
@@ -129,6 +134,25 @@ export const getAppProperties = (): PostHogCustomAppProperties => {
   }
 
   return properties
+}
+
+type PlatformConstants = { Release?: string; systemName?: string }
+
+// Reads the OS from React Native's own Platform module, matching what posthog-android and posthog-ios report.
+const getPlatformOSProperties = (): Pick<PostHogCustomAppProperties, '$os_name' | '$os_version'> => {
+  try {
+    const os = getPlatformOS()
+    const constants = (Platform as { constants?: PlatformConstants }).constants
+    const version = Platform.Version !== undefined ? String(Platform.Version) : undefined
+    if (os === 'android') {
+      // Platform.Version is the API level on Android; Release is the user-facing OS version
+      return { $os_name: 'Android', $os_version: constants?.Release ?? version }
+    }
+    if (os === 'ios') {
+      return { $os_name: constants?.systemName ?? 'iOS', $os_version: version }
+    }
+  } catch {}
+  return {}
 }
 
 // react-native-device-info returns 'unknown' if the property is not available (Web target)

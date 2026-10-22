@@ -50,7 +50,8 @@ export class RequestQueue {
             ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
         ]
         sortedRequests.map((req) => {
-            this._sendRequestSafely(req, 'sendBeacon')
+            // A split beacon's fallback can acknowledge only part of the batch. Keep identifiers pending on unload.
+            this._sendRequestSafely({ ...req, callback: undefined }, 'sendBeacon')
         })
     }
 
@@ -65,13 +66,17 @@ export class RequestQueue {
         }
         this._flushTimeout = setTimeout(() => {
             this._clearFlushTimeout()
-            if (this._queue.length > 0) {
-                const requests = this._formatQueue()
-                for (const key in requests) {
-                    this._sendRequestSafely(requests[key])
-                }
-            }
+            this._flush()
         }, this._flushTimeoutMs)
+    }
+
+    private _flush(): void {
+        if (this._queue.length > 0) {
+            const requests = this._formatQueue()
+            for (const key in requests) {
+                this._sendRequestSafely(requests[key])
+            }
+        }
     }
 
     private _sendRequestSafely(
@@ -92,16 +97,33 @@ export class RequestQueue {
 
     private _formatQueue(): Record<string, QueuedRequestWithOptions> {
         const requests: Record<string, QueuedRequestWithOptions> = {}
+        const callbacks: Record<string, NonNullable<QueuedRequestWithOptions['callback']>[]> = {}
         each(this._queue, (request: QueuedRequestWithOptions) => {
             const req = request
             const key = ((req ? req.batchKey : null) || req.url) + (req.batchGroup ? `:${req.batchGroup}` : '')
             if (isUndefined(requests[key])) {
                 // TODO: What about this -it seems to batch data into an array - do we always want that?
-                requests[key] = { ...req, data: [] }
+                // Drop notifications are opt-in per request, not inherited from the first event in a batch.
+                requests[key] = { ...req, data: [], callback: undefined, fireCallbackOnDrop: undefined }
+                callbacks[key] = []
             }
 
             requests[key].data?.push(req.data)
+            if (req.callback) {
+                callbacks[key].push(req.callback)
+            }
         })
+
+        for (const key in callbacks) {
+            const batchCallbacks = callbacks[key]
+            if (batchCallbacks.length) {
+                requests[key].callback = (response) => {
+                    for (const callback of batchCallbacks) {
+                        callback(response)
+                    }
+                }
+            }
+        }
 
         this._queue = []
         return requests

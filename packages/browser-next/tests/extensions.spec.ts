@@ -1,4 +1,7 @@
+import { createRemoteConfigFetch } from './helpers'
+import { localRemoteConfig } from './helpers'
 import type { Client, ExtensionToken } from '@posthog/browser-common'
+import type { BrowserClient, ConsentChangeInfo } from '../src/browser-client'
 
 import { analytics as createAnalytics } from '../src/analytics'
 import { createPostHog, type Extension, type RemoteConfig } from '../src/core'
@@ -35,6 +38,69 @@ const flagExtension = (events: string[]): FlagCapability => {
 }
 
 describe('@posthog/browser extensions', () => {
+    it('notifies extensions of consent changes without replaying initial state', async () => {
+        const changes: ConsentChangeInfo[] = []
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            remoteConfig: localRemoteConfig,
+            extensions: [
+                {
+                    name: 'consent-observer',
+                    setup(client: BrowserClient) {
+                        client.onConsentChange((change) => changes.push(change))
+                    },
+                },
+            ],
+        })
+        expect(changes).toEqual([])
+        posthog.optOut()
+        posthog.optIn()
+        expect(changes).toEqual([
+            { current: 'denied', previous: 'implicit' },
+            { current: 'granted', previous: 'denied' },
+        ])
+        await posthog.shutdown()
+    })
+
+    it('exposes session notifications through the shared client', async () => {
+        const listener = vi.fn()
+        let subscription: { dispose(): void } | undefined
+        const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            capturePageview: false,
+            fetch: createFetch([]),
+            extensions: [
+                analytics(),
+                {
+                    name: 'session-consumer',
+                    setup(client) {
+                        subscription = client.onSession(listener)
+                    },
+                },
+            ],
+        })
+        expect(subscription).toBeDefined()
+        expect(listener).not.toHaveBeenCalled()
+        await posthog.capture('first')
+        expect(listener).not.toHaveBeenCalled()
+        await posthog.reset()
+        await posthog.capture('new-session')
+        expect(listener).toHaveBeenCalledWith(posthog.session!.sessionId)
+        expect(listener).toHaveBeenCalledTimes(1)
+        await posthog.capture('same-session')
+        expect(listener).toHaveBeenCalledTimes(1)
+        subscription!.dispose()
+        await posthog.reset()
+        await posthog.capture('unsubscribed')
+        expect(listener).toHaveBeenCalledTimes(1)
+        await posthog.dispose()
+    })
+
     it('installs an extension and exposes its capability', async () => {
         const requests: SentRequest[] = []
         const events: string[] = []
@@ -42,6 +108,7 @@ describe('@posthog/browser extensions', () => {
         let extensionCanCapture: boolean | undefined
         let flagFromExtension: string | undefined
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -202,10 +269,16 @@ describe('@posthog/browser extensions', () => {
         expect(Object.isFrozen(client?.initialPersonProperties.initial)).toBe(true)
         expect(client?.canCapture).toBe(true)
 
+        expect(client?.isOptedOut).toBe(false)
+        expect(posthog.isOptedOut).toBe(false)
         posthog.optOut()
         expect(client?.deviceId).toBe(initialAnonymousId)
+        expect(client?.isOptedOut).toBe(true)
+        expect(posthog.isOptedOut).toBe(true)
         expect(client?.canCapture).toBe(false)
         posthog.optIn()
+        expect(client?.isOptedOut).toBe(false)
+        expect(posthog.isOptedOut).toBe(false)
         expect(client?.canCapture).toBe(true)
         const postConsentAnonymousId = posthog.anonymousId
         expect(client?.deviceId).toBe(postConsentAnonymousId)
@@ -215,7 +288,7 @@ describe('@posthog/browser extensions', () => {
         expect(client?.deviceId).toBe(postConsentAnonymousId)
     })
 
-    it('runs extensions and remote config while gating analytics outputs', async () => {
+    it('runs extensions and fetches remote config while opted out, but gates analytics outputs', async () => {
         const deniedRequests: SentRequest[] = []
         let deniedClient: Client | undefined
         const deniedSetup = vi.fn(async (client: Client) => {
@@ -224,21 +297,20 @@ describe('@posthog/browser extensions', () => {
             await client.capture('denied-output')
             await client.sendRequest('/flags/')
         })
-        const remoteConfigLoader = vi.fn(async () => createRemoteConfig())
+        const configResponse = vi.fn(async () => createRemoteConfig())
         const denied = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: createFetch(deniedRequests),
+            fetch: createRemoteConfigFetch(configResponse, createFetch(deniedRequests)),
             optOutByDefault: true,
-            remoteConfigLoader,
             extensions: [analytics(), { name: 'denied', setup: deniedSetup }],
         })
 
         await expect(denied.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         expect(deniedSetup).toHaveBeenCalledTimes(1)
         expect(denied.getExtension('denied')).toBeDefined()
-        expect(remoteConfigLoader).toHaveBeenCalledTimes(1)
+        expect(configResponse).toHaveBeenCalledTimes(1)
         expect(deniedClient?.kv.get('private')).toBe(true)
         expect(deniedRequests).toHaveLength(0)
 
@@ -246,11 +318,14 @@ describe('@posthog/browser extensions', () => {
         denied.optIn()
         expect(denied.hasOptedOut()).toBe(false)
         await new Promise((resolve) => globalThis.setTimeout(resolve, 0))
-        expect(remoteConfigLoader).toHaveBeenCalledTimes(1)
+        expect(configResponse).toHaveBeenCalledTimes(1)
         await deniedClient?.capture('allowed-output')
         await denied.flush()
         expect(deniedRequests).toHaveLength(1)
+        await denied.dispose()
+    })
 
+    it('runs extensions and exposes inline remote config for bots while blocking network outputs', async () => {
         const blockedRequests: SentRequest[] = []
         const blockedSetup = vi.fn(async (client: Client) => {
             await client.capture('bot-output')
@@ -261,14 +336,15 @@ describe('@posthog/browser extensions', () => {
             storage: false,
             navigator: { userAgent: 'Googlebot/2.1' },
             fetch: createFetch(blockedRequests),
-            remoteConfigLoader: async () => ({ supportedCompression: [] }) as never,
+            remoteConfig: createRemoteConfig(),
             extensions: [{ name: 'blocked', setup: blockedSetup }],
         })
         await expect(blocked.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
-        await expect(blocked.getRemoteConfig()).resolves.toEqual({ supportedCompression: [] })
+        await expect(blocked.getRemoteConfig()).resolves.toEqual(createRemoteConfig())
         expect(blockedSetup).toHaveBeenCalledTimes(1)
         expect(blocked.getExtension('blocked')).toBeDefined()
         expect(blockedRequests).toHaveLength(0)
+        await blocked.dispose()
     })
 
     it('returns remote configuration completed after denial', async () => {
@@ -280,8 +356,7 @@ describe('@posthog/browser extensions', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: () => remoteConfig,
+            fetch: createRemoteConfigFetch(() => remoteConfig),
         })
         const configResult = posthog.getRemoteConfig()
 
@@ -304,6 +379,7 @@ describe('@posthog/browser extensions', () => {
         }
 
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -378,6 +454,7 @@ describe('@posthog/browser extensions', () => {
         }
 
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -439,6 +516,7 @@ describe('@posthog/browser extensions', () => {
             },
         }
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,

@@ -150,6 +150,7 @@ describe('Session Props Manager', () => {
             $referrer: 'http://referrer.example.com/referrer',
             $referring_domain: 'referrer.example.com',
             _kx: null,
+            bfcid: null,
             dclid: null,
             epik: null,
             fbclid: null,

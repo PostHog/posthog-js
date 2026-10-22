@@ -8,6 +8,7 @@ export {
   minimizeFlagCalledEventProperties,
 } from './featureFlagUtils'
 export {
+  assertFeatureFlagFilterSupported,
   getFeatureFlagHash,
   getFeatureFlagVariant,
   getFeatureFlagVariantLookupTable,
@@ -26,6 +27,7 @@ export type {
   FeatureFlagVariant,
   FeatureFlagVariantLookupEntry,
   MatchFeatureFlagPropertyOptions,
+  UnresolvedFlagReason,
 } from './featureFlagLocalEvaluation'
 export {
   gzipCompress,
@@ -110,6 +112,7 @@ export { uuidv7 } from './vendor/uuidv7'
 export * from './cookie'
 export * from './posthog-core'
 export * from './posthog-core-stateless'
+export * from './privacy'
 export * from './tracing-headers'
 export * from './types'
 export { getValidationError, getLengthFromRules, getRequirementsHint } from './surveys/validation'

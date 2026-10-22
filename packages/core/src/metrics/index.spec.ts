@@ -203,6 +203,81 @@ describe('PostHogMetrics', () => {
     })
   })
 
+  describe('exemplars', () => {
+    const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
+    const SPAN_ID = '00f067aa0ba902b7'
+    const withActiveSpan = (traceparent: string | null): any =>
+      createMockInstance({ getActiveSpan: () => ({ traceparent: () => traceparent }) })
+
+    const dataPoints = (instance: any): any[] =>
+      sentMetrics(instance).map((m) => (m.sum ?? m.gauge ?? m.histogram)!.dataPoints[0])
+
+    it('stamps every metric type with the last sample recorded inside a sampled span', async () => {
+      const instance = withActiveSpan(`00-${TRACE_ID}-${SPAN_ID}-01`)
+      const metrics = createMetrics(undefined, instance)
+      metrics.count('c', 1)
+      metrics.count('c', 4)
+      metrics.gauge('g', 7)
+      metrics.histogram('h', 12)
+      await metrics.flush()
+
+      const points = dataPoints(instance)
+      expect(points.map((p) => p.exemplars)).toEqual(
+        [4, 7, 12].map((value) => [
+          {
+            filteredAttributes: [],
+            timeUnixNano: expect.stringMatching(/^\d+$/),
+            asDouble: value,
+            traceId: TRACE_ID,
+            spanId: SPAN_ID,
+          },
+        ])
+      )
+    })
+
+    it.each([
+      ['no getActiveSpan on the host', createMockInstance],
+      ['no active span', () => createMockInstance({ getActiveSpan: () => null })],
+      ['an unsampled span', () => withActiveSpan(`00-${TRACE_ID}-${SPAN_ID}-00`)],
+      ['a span with no traceparent', () => withActiveSpan(null)],
+      [
+        'a throwing host',
+        () =>
+          createMockInstance({
+            getActiveSpan: () => {
+              throw new Error('boom')
+            },
+          }),
+      ],
+    ])('records the sample without an exemplar for %s', async (_, makeInstance) => {
+      const instance = makeInstance()
+      const metrics = createMetrics(undefined, instance)
+      metrics.count('c', 2)
+      await metrics.flush()
+
+      const [point] = dataPoints(instance)
+      expect(point.asDouble).toBe(2)
+      expect(point).not.toHaveProperty('exemplars')
+    })
+
+    it('keeps the exemplar of a window merged back after a failed flush', async () => {
+      const instance = withActiveSpan(`00-${TRACE_ID}-${SPAN_ID}-01`)
+      instance._sendMetricsBatch
+        .mockResolvedValueOnce({ kind: 'retry-later', error: new Error('503') })
+        .mockResolvedValue({ kind: 'ok' })
+      const metrics = createMetrics(undefined, instance)
+      metrics.count('c', 1)
+      await metrics.flush()
+      instance.getActiveSpan = () => null
+      metrics.count('c', 2)
+      await metrics.flush()
+
+      const point = dataPoints(instance)[1]
+      expect(point.asDouble).toBe(3)
+      expect(point.exemplars[0]).toMatchObject({ traceId: TRACE_ID, spanId: SPAN_ID, asDouble: 1 })
+    })
+  })
+
   describe('resource attributes', () => {
     it('attaches service.name, sdk identity, and user resource attributes', async () => {
       const metrics = createMetrics({

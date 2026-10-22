@@ -1339,7 +1339,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Register an event listener that runs when feature flags become available or when they change. If there are flags, the listener is called immediately in addition to being called on future changes. Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser.",
+          "description": "Register an event listener that runs when feature flags become available or when they change. If there are flags, the listener is called immediately in addition to being called on future changes. Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser, including when another open tab of your site stores new flags. Do not call `reloadFeatureFlags()` inside this callback: each reload in one tab triggers the callback in the other tabs, which can send flag requests in a loop.",
           "details": null,
           "id": "onFeatureFlags",
           "showDocs": true,
@@ -2555,7 +2555,7 @@
       "id": "DisplaySurveyOptions",
       "name": "DisplaySurveyOptions",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "DisplaySurveyPopoverOptions | DisplaySurveyInlineOptions"
     },
     {
@@ -2582,13 +2582,13 @@
           "name": "skipShownEvent"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "DisplaySurveyType",
       "name": "DisplaySurveyType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof DisplaySurveyType)[keyof typeof DisplaySurveyType]"
     },
     {
@@ -2677,7 +2677,7 @@
           "name": "requestId"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/feature-flags.d.ts"
     },
     {
       "id": "FlagVariant",
@@ -3026,7 +3026,7 @@
           "name": "autocapture"
         },
         {
-          "description": "Determines whether PostHog should capture rage clicks.\n\nBy default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.\nWhen `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`.\nWhen `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.",
+          "description": "Determines whether PostHog should capture rage clicks.\n\nBy default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.\nWhen `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`, which also ignores repeat-click\ncontrols such as pagination arrows and pagers (see `content_ignorelist`).\nWhen `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.",
           "type": "boolean | RageclickConfig",
           "name": "rageclick"
         },
@@ -3523,6 +3523,11 @@
           "description": "Determines whether to capture dead clicks.\n\nby default dead clicks are ignored on elements that match a `ph-no-capture` or `ph-no-deadclick` css class on the element or a parent",
           "type": "boolean | DeadClicksAutoCaptureConfig",
           "name": "capture_dead_clicks"
+        },
+        {
+          "description": "Captures WebMCP tool calls as `$mcp_tool_call` events.\nSet this option to `true` to capture intent and model metadata. Use an object to disable either field.\nPostHog wraps tools registered after the SDK initializes. Tool inputs and outputs are not captured.\nMetadata options are applied when each tool registers. Changing them does not update registered schemas;\nre-register the tool to apply the new options.",
+          "type": "boolean | WebMCPCaptureConfig",
+          "name": "capture_webmcp"
         },
         {
           "description": "Determines whether to capture exceptions.",
@@ -5466,7 +5471,7 @@
       "id": "SurveyCallback",
       "name": "SurveyCallback",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(surveys: Survey[], context?: {\n    isLoaded: boolean;\n    error?: string;\n}) => void"
     },
     {
@@ -5491,7 +5496,7 @@
           "name": "prefillFromUrl"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyElement",
@@ -5546,34 +5551,34 @@
           "name": "text"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyEventName",
       "name": "SurveyEventName",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyEventName)[keyof typeof SurveyEventName]"
     },
     {
       "id": "SurveyEventProperties",
       "name": "SurveyEventProperties",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyEventProperties)[keyof typeof SurveyEventProperties]"
     },
     {
       "id": "SurveyEventType",
       "name": "SurveyEventType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyEventType)[keyof typeof SurveyEventType]"
     },
     {
       "id": "SurveyPosition",
       "name": "SurveyPosition",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyPosition)[keyof typeof SurveyPosition]"
     },
     {
@@ -5587,7 +5592,7 @@
       "id": "SurveyQuestionBranchingType",
       "name": "SurveyQuestionBranchingType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]"
     },
     {
@@ -5601,41 +5606,41 @@
       "id": "SurveyQuestionType",
       "name": "SurveyQuestionType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]"
     },
     {
       "id": "SurveyResponseValue",
       "name": "SurveyResponseValue",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveySchedule",
       "name": "SurveySchedule",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveySchedule)[keyof typeof SurveySchedule]"
     },
     {
       "id": "SurveyTabPosition",
       "name": "SurveyTabPosition",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyTabPosition)[keyof typeof SurveyTabPosition]"
     },
     {
       "id": "SurveyType",
       "name": "SurveyType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyType)[keyof typeof SurveyType]"
     },
     {
       "id": "SurveyWidgetType",
       "name": "SurveyWidgetType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {

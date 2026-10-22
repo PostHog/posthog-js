@@ -51,3 +51,20 @@ export function isWindows(): boolean {
 }
 
 export const isHermes = () => !!GLOBAL_OBJ.HermesInternal
+
+type ReactNativeVersion = { major: number; minor: number; patch: number; prerelease?: number | string | null }
+
+/** React Native version like "0.79.6" or "0.80.0-rc.2", or undefined where Platform.constants doesn't report it (e.g. web) */
+export function getReactNativeVersion(): string | undefined {
+  try {
+    const version = (Platform as { constants?: { reactNativeVersion?: ReactNativeVersion } }).constants
+      ?.reactNativeVersion
+    if (!version || typeof version.major !== 'number') {
+      return undefined
+    }
+    const { major, minor, patch, prerelease } = version
+    return `${major}.${minor}.${patch}${prerelease != null ? `-${prerelease}` : ''}`
+  } catch {
+    return undefined
+  }
+}

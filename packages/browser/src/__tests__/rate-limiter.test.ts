@@ -69,6 +69,32 @@ describe('Rate Limiter', () => {
             })
         })
 
+        it('does not subtract tokens when the clock moves backward', () => {
+            expect(rateLimiter.clientRateLimitContext()).toEqual({
+                isRateLimited: false,
+                remainingTokens: 99,
+            })
+
+            moveTimeForward(-143_000)
+
+            expect(rateLimiter.clientRateLimitContext()).toEqual({
+                isRateLimited: false,
+                remainingTokens: 98,
+            })
+
+            moveTimeForward(143_000)
+            expect(rateLimiter.clientRateLimitContext(true)).toEqual({
+                isRateLimited: false,
+                remainingTokens: 98,
+            })
+
+            moveTimeForward(100)
+            expect(rateLimiter.clientRateLimitContext(true)).toEqual({
+                isRateLimited: false,
+                remainingTokens: 99,
+            })
+        })
+
         it('adds tokens if time has passed ', () => {
             range(50).forEach(() => {
                 expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)

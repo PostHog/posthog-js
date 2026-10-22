@@ -1,5 +1,26 @@
 # @posthog/react-native-plugin
 
+## 2.12.6
+
+### Patch Changes
+
+- [#5271](https://github.com/PostHog/posthog-js/pull/5271) [`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27) Thanks [@posthog](https://github.com/apps/posthog)! - Report fatal JS crashes the JS error handler did not capture, such as React render errors on iOS, through native crash capture instead of dropping them (requires updating both `posthog-react-native` and `@posthog/react-native-plugin`). Apps with `errorTracking.autocapture.nativeCrashes` on and `uncaughtExceptions` off now get every fatal JS crash reported this way.
+  (2026-10-14)
+
+## 2.12.5
+
+### Patch Changes
+
+- [#5207](https://github.com/PostHog/posthog-js/pull/5207) [`f047084`](https://github.com/PostHog/posthog-js/commit/f047084f816817a1b2a5646886d56bbe4c02b5e5) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Require posthog-android 3.71.6, which keeps replay uploads separate when the session or distinct ID changes and fixes corrupt gzip request bodies on Android.
+  (2026-10-05)
+
+## 2.12.4
+
+### Patch Changes
+
+- [#5193](https://github.com/PostHog/posthog-js/pull/5193) [`e4672b6`](https://github.com/PostHog/posthog-js/commit/e4672b6602b8f03bdf0f81571e5eded63899b985) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Require posthog-ios 3.88.2 to fix replay attribution across session and identity changes and a camera-picker replay crash.
+  (2026-10-02)
+
 ## 2.12.3
 
 ### Patch Changes
