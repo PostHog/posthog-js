@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.16.1
+
+### Patch Changes
+
+- [#5355](https://github.com/PostHog/posthog-js/pull/5355) [`e027825`](https://github.com/PostHog/posthog-js/commit/e027825e387902b79e84703ca32ca4afbc0446b8) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture the refusal text of OpenAI chat completions, streamed or not, in `$ai_output_choices` instead of an empty output.
+  (2026-10-22)
+
 ## 8.16.0
 
 ### Minor Changes
