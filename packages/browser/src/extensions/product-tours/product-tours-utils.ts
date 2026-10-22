@@ -12,7 +12,11 @@ import {
 import { findElement } from './element-inference'
 import { prepareStylesheet } from '@posthog/browser-common/utils/stylesheet-loader'
 import { document as _document, window as _window } from '@posthog/browser-common/utils/globals'
-import { getFontFamily, getContrastingTextColor, hexToRgba } from '../surveys/surveys-extension-utils'
+import {
+    getFontFamily,
+    getContrastingTextColor,
+    hexToRgba,
+} from '@posthog/browser-common/surveys/surveys-extension-utils'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { localStore } from '../../storage'
 import { LAST_SEEN_TOUR_DATE_KEY_PREFIX } from './constants'

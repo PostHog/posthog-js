@@ -81,12 +81,22 @@ export interface Metrics {
 // OTLP wire format types (ExportMetricsServiceRequest, JSON encoding)
 // ============================================================================
 
+/** A sampled measurement linked to the span it was recorded in. IDs are lowercase hex. */
+export interface OtlpExemplar {
+    filteredAttributes: OtlpKeyValue[]
+    timeUnixNano: string
+    asDouble: number
+    traceId: string
+    spanId: string
+}
+
 export interface OtlpNumberDataPoint {
     attributes: OtlpKeyValue[]
     /** Unix nanos as a decimal string (uint64 doesn't fit in JS Number). */
     timeUnixNano: string
     startTimeUnixNano?: string
     asDouble: number
+    exemplars?: OtlpExemplar[]
 }
 
 export interface OtlpHistogramDataPoint {
@@ -100,6 +110,7 @@ export interface OtlpHistogramDataPoint {
     max: number
     bucketCounts: number[]
     explicitBounds: number[]
+    exemplars?: OtlpExemplar[]
 }
 
 /** AGGREGATION_TEMPORALITY_DELTA — each data point covers one flush window. */

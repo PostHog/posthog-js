@@ -291,6 +291,24 @@ describe('PostHog React Native', () => {
     await posthog2.shutdown()
   })
 
+  it('should let captured properties override native app properties', async () => {
+    posthog = new PostHog('test-token', {
+      customAppProperties: { $app_version: '1.0.0' },
+      flushInterval: 0,
+    })
+    const onCapture = vi.fn()
+    posthog.on('capture', onCapture)
+
+    posthog.capture('custom-event', { $app_version: '2.0.0' })
+
+    await waitForExpect(200, () => {
+      expect(onCapture.mock.calls[0][0]).toMatchObject({
+        event: 'custom-event',
+        properties: { $app_version: '2.0.0' },
+      })
+    })
+  })
+
   describe('$screen_width and $screen_height', () => {
     const originalOS = Platform.OS
 

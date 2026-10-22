@@ -184,14 +184,15 @@ function initMoveObserver({
           id: mirror.getId(target as Node),
           timeOffset: nowTimestamp() - timeBaseline,
         });
-        // it is possible DragEvent is undefined even on devices
-        // that support event 'drag'
+        // Classify by event type rather than with `instanceof`: events from a
+        // same-origin iframe are created by the iframe window's constructors,
+        // so `instanceof MouseEvent` against this window's constructor fails.
         wrappedCb(
-          typeof DragEvent !== 'undefined' && evt instanceof DragEvent
+          evt.type === 'drag'
             ? IncrementalSource.Drag
-            : evt instanceof MouseEvent
-            ? IncrementalSource.MouseMove
-            : IncrementalSource.TouchMove,
+            : evt.type === 'touchmove'
+            ? IncrementalSource.TouchMove
+            : IncrementalSource.MouseMove,
         );
       }),
       threshold,

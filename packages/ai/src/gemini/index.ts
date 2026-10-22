@@ -1,3 +1,4 @@
+import { isFullAiCaptureEnabled } from '../captureAiEvent'
 import {
   GoogleGenAI,
   GenerateContentResponse as GeminiResponse,
@@ -16,20 +17,42 @@ import {
   extractPosthogParams,
   toContentString,
   withPrivacyMode,
-  buildInlineDataBlock,
-  getModelParams,
   truncate,
   utf8ByteLength,
+  isPrivacyModeEnabled,
+  buildInlineDataBlock,
+  getModelParams,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
-import { isFullAiCaptureEnabled } from '../captureAiEvent'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
-import { isString } from '../typeGuards'
+import { isObject, isString } from '../typeGuards'
+import { formatToolResult } from '../toolResult'
 import { mapGeminiUsage } from './usage'
+import { WrappedInteractions } from './interactions'
+
+/** Append streamed text to the last block of the same type, or start a new one. */
+function appendStreamedText(content: FormattedContent, type: 'text' | 'reasoning', text: string): void {
+  for (let i = content.length - 1; i >= 0; i--) {
+    const item = content[i]
+    if (item.type === type) {
+      item.text += text
+      return
+    }
+  }
+  content.push({ type, text })
+}
 
 interface MonitoringGeminiConfig extends GoogleGenAIOptions {
   posthog: PostHog
+}
+
+const TOOL_RESULT_MAX_BYTES = 5000
+
+function geminiFunctionResponseContent(response: { response?: unknown; parts?: unknown }): unknown {
+  return response.parts !== undefined
+    ? { ...(response.response !== undefined && { response: response.response }), parts: response.parts }
+    : (response.response ?? {})
 }
 
 interface FormattedGeminiFunctionResponse {
@@ -38,18 +61,18 @@ interface FormattedGeminiFunctionResponse {
   content: unknown
 }
 
-const TOOL_RESULT_MAX_BYTES = 5000
-
 export class PostHogGoogleGenAI {
   private readonly phClient: PostHog
   private readonly client: GoogleGenAI
   public models: WrappedModels
+  public interactions: WrappedInteractions
 
   constructor(config: MonitoringGeminiConfig) {
     const { posthog, ...geminiConfig } = config
     this.phClient = posthog
     this.client = new GoogleGenAI(geminiConfig)
     this.models = new WrappedModels(this.client, this.phClient)
+    this.interactions = new WrappedInteractions(this.client, this.phClient)
   }
 }
 
@@ -78,7 +101,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams),
+        input: this.formatInputForPostHog(geminiParams, posthogParams.privacyMode),
         output: formatResponseGemini(response, this.phClient),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -96,7 +119,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams),
+        input: this.formatInputForPostHog(geminiParams, posthogParams.privacyMode),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -135,22 +158,18 @@ export class WrappedModels {
           usage.webSearchCount = chunkWebSearchCount
         }
 
+        // chunk.text skips thought parts, so read thought summaries from the
+        // first candidate's parts (the candidate chunk.text reads). Gemini
+        // streams thoughts before the answer, so record them first.
+        for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+          if (part.thought === true && part.text) {
+            appendStreamedText(accumulatedContent, 'reasoning', part.text)
+          }
+        }
+
         // Handle text content
         if (chunk.text) {
-          // Find if we already have a text item to append to
-          let lastTextItem: FormattedContentItem | undefined
-          for (let i = accumulatedContent.length - 1; i >= 0; i--) {
-            if (accumulatedContent[i].type === 'text') {
-              lastTextItem = accumulatedContent[i]
-              break
-            }
-          }
-
-          if (lastTextItem && lastTextItem.type === 'text') {
-            lastTextItem.text += chunk.text
-          } else {
-            accumulatedContent.push({ type: 'text', text: chunk.text })
-          }
+          appendStreamedText(accumulatedContent, 'text', chunk.text)
         }
 
         // Track finish reason from candidates
@@ -199,7 +218,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams),
+        input: this.formatInputForPostHog(geminiParams, posthogParams.privacyMode),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -225,7 +244,7 @@ export class WrappedModels {
           ...posthogParams,
           model: geminiParams.model,
           provider: 'gemini',
-          input: this.formatInputForPostHog(geminiParams),
+          input: this.formatInputForPostHog(geminiParams, posthogParams.privacyMode),
           output,
           latency,
           timeToFirstToken,
@@ -294,8 +313,19 @@ export class WrappedModels {
     const blocks: Array<FormattedContentItem | FormattedGeminiFunctionResponse> = []
 
     for (const part of parts) {
+      // Thought summaries (thinkingConfig.includeThoughts) replayed from a prior model turn
+      if (
+        part &&
+        typeof part === 'object' &&
+        'thought' in part &&
+        part.thought === true &&
+        'text' in part &&
+        part.text
+      ) {
+        blocks.push({ type: 'reasoning', text: String(part.text) })
+      }
       // Handle dict/object with text field
-      if (part && typeof part === 'object' && 'text' in part && part.text) {
+      else if (part && typeof part === 'object' && 'text' in part && part.text) {
         blocks.push({ type: 'text', text: String(part.text) })
       }
       // Handle string parts
@@ -319,35 +349,17 @@ export class WrappedModels {
       } else if (part && typeof part === 'object' && 'functionResponse' in part) {
         const functionResponse = (part as Part).functionResponse
         if (functionResponse?.name) {
-          const content =
-            functionResponse.parts !== undefined
-              ? {
-                  ...(functionResponse.response !== undefined && { response: functionResponse.response }),
-                  parts: functionResponse.parts,
-                }
-              : (functionResponse.response ?? {})
+          const content = geminiFunctionResponseContent(functionResponse)
           blocks.push({
             type: 'tool_result',
             ...(functionResponse.id != null && { tool_use_id: functionResponse.id }),
-            content: this.boundToolResult(content),
+            content,
           })
         }
       }
     }
 
     return blocks
-  }
-
-  private boundToolResult(content: unknown): unknown {
-    if (isFullAiCaptureEnabled(this.phClient)) return content
-    try {
-      const serialized = JSON.stringify(content)
-      return utf8ByteLength(serialized) > TOOL_RESULT_MAX_BYTES
-        ? truncate(serialized, undefined, TOOL_RESULT_MAX_BYTES)
-        : content
-    } catch {
-      return '[Unserializable tool result]'
-    }
   }
 
   private formatInput(contents: unknown): FormattedMessage[] {
@@ -443,21 +455,69 @@ export class WrappedModels {
     return null
   }
 
-  private formatInputForPostHog(params: GenerateContentParameters): FormattedMessage[] {
-    const sanitized = sanitizeGemini(params.contents, this.phClient)
-    const messages = this.formatInput(sanitized)
+  private boundToolResult(content: unknown): unknown {
+    const normalized = formatToolResult(content, this.phClient, Infinity)
+    if (isFullAiCaptureEnabled(this.phClient)) return normalized
+    const serialized = JSON.stringify(normalized)
+    return serialized !== undefined && utf8ByteLength(serialized) > TOOL_RESULT_MAX_BYTES
+      ? truncate(serialized, undefined, TOOL_RESULT_MAX_BYTES)
+      : normalized
+  }
 
-    const systemInstruction = this.extractSystemInstruction(params)
+  private formatInputForPostHog(params: GenerateContentParameters, privacyMode: boolean): unknown {
+    try {
+      if (isPrivacyModeEnabled(this.phClient, privacyMode)) return null
 
-    if (systemInstruction) {
-      const hasSystemMessage = messages.some((msg: FormattedMessage) => msg.role === 'system')
-
-      if (!hasSystemMessage) {
+      const preparePart = (part: unknown): unknown => {
+        if (!isObject(part) || !Object.hasOwn(part, 'functionResponse') || !isObject(part.functionResponse)) return part
+        const response = part.functionResponse
+        const hasParts = response.parts !== undefined
+        const hasResponse = Object.hasOwn(response, 'response')
+        if (!hasParts && !hasResponse) return part
+        const formatted = this.boundToolResult(geminiFunctionResponseContent(response))
+        const prepared = { ...response }
+        if (hasParts && isObject(formatted)) {
+          if (hasResponse) prepared.response = formatted.response
+          prepared.parts = formatted.parts
+        } else {
+          // An oversized combined payload can be a marked preview instead of
+          // an object. Keep that marker as result content, never spread a string.
+          prepared.response = formatted
+          if (hasParts) delete prepared.parts
+        }
+        return { ...part, functionResponse: prepared }
+      }
+      const prepareContent = (content: unknown): unknown => {
+        const part = preparePart(content)
+        if (!isObject(part)) return part
+        const originalParts = Object.hasOwn(part, 'parts') ? part.parts : undefined
+        const originalContent = Object.hasOwn(part, 'content') ? part.content : undefined
+        const parts = Array.isArray(originalParts) ? originalParts.map(preparePart) : undefined
+        const blocks = Array.isArray(originalContent) ? originalContent.map(preparePart) : undefined
+        const partsChanged = parts?.some((value, index) => value !== (originalParts as unknown[])[index])
+        const contentChanged = blocks?.some((value, index) => value !== (originalContent as unknown[])[index])
+        if (!partsChanged && !contentChanged) return part
+        return {
+          ...part,
+          ...(partsChanged && { parts }),
+          ...(contentChanged && { content: blocks }),
+        }
+      }
+      const contents = Array.isArray(params.contents)
+        ? params.contents.map(prepareContent)
+        : prepareContent(params.contents)
+      // Bound typed tool results before the existing whole-input redactor.
+      // Keep redaction before fallback JSON serialization for single Content/Part inputs.
+      const sanitized = sanitizeGemini(contents, this.phClient)
+      const messages = this.formatInput(sanitized)
+      const systemInstruction = this.extractSystemInstruction(params)
+      if (systemInstruction && !messages.some((message) => message.role === 'system')) {
         return [{ role: 'system', content: systemInstruction }, ...messages]
       }
+      return messages
+    } catch {
+      return '[Unserializable]'
     }
-
-    return messages
   }
 }
 

@@ -4,13 +4,16 @@ import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
 import {
     AllExtensions,
+    ErrorTrackingExtensions,
     FeatureFlagsExtensions,
     LogsExtensions,
     SurveysExtensions,
+    WebMCPExtensions,
 } from '../extensions/extension-bundles'
 import { BrowserAutocapture } from '../browser-autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { FeatureFlagsExtension } from '../extension-tokens'
+import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -202,6 +205,49 @@ describe('__extensionClasses enrollment', () => {
         )
     })
 
+    it.each([
+        ['only the WebMCP bundle', WebMCPExtensions, false],
+        ['the WebMCP and error tracking bundles', { ...WebMCPExtensions, ...ErrorTrackingExtensions }, true],
+    ])('captures failed WebMCP calls with %s', async (_, extensionClasses, capturesException) => {
+        PostHog.__defaultExtensionClasses = {}
+        const registerTool = vi.fn()
+        let posthog: PostHog | undefined
+
+        Object.defineProperty(document, 'modelContext', {
+            configurable: true,
+            value: { registerTool },
+        })
+
+        try {
+            posthog = await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                __extensionClasses: extensionClasses,
+                capture_webmcp: true,
+                capture_exceptions: true,
+                capture_pageview: false,
+            })
+            const capture = vi.spyOn(posthog, 'capture')
+            const errorResult = { isError: true, content: [{ type: 'text', text: 'tool failed' }] }
+
+            ;(document as any).modelContext.registerTool({
+                name: 'failing_tool',
+                execute: () => errorResult,
+            })
+            const registeredTool = registerTool.mock.calls[0][0]
+
+            expect(registeredTool.execute()).toBe(errorResult)
+            expect(capture).toHaveBeenCalledWith(
+                '$mcp_tool_call',
+                expect.objectContaining({ $mcp_tool_name: 'failing_tool', $mcp_is_error: true }),
+                expect.any(Object)
+            )
+            expect(capture.mock.calls.some(([event]) => event === '$exception')).toBe(capturesException)
+        } finally {
+            await posthog?.shutdown()
+            Reflect.deleteProperty(document, 'modelContext')
+        }
+    })
+
     it('preserves the PostHog constructor and initialize contract for custom logs classes', async () => {
         PostHog.__defaultExtensionClasses = {}
         const initialize = vi.fn()
@@ -273,16 +319,18 @@ describe('__extensionClasses enrollment', () => {
             throw disposeError
         })
         const loggerError = vi.spyOn(logger, 'error').mockImplementation(() => {})
-        vi.spyOn(posthog._getBrowserClientAdapter(), 'add').mockRejectedValue(new Error('enrollment failed'))
+        const setup = vi.fn(() => {
+            throw new Error('setup failed')
+        })
         const initTasks: Array<() => void> = []
 
-        posthog['_enrollExtension']({ name: 'logs', setup: vi.fn(), dispose } as any, initTasks)
+        posthog['_enrollExtension']({ name: 'logs', setup, dispose } as any, initTasks)
         initTasks[0]?.()
 
         await vi.waitFor(() => {
             expect(dispose).toHaveBeenCalledTimes(1)
         })
-        expect(loggerError).toHaveBeenCalledWith('Failed to dispose browser extension "logs"', disposeError)
+        expect(loggerError).toHaveBeenCalledWith('Failed to dispose extension "logs"', disposeError)
     })
 
     it('bundles logs through the shared lifecycle', () => {
@@ -374,6 +422,10 @@ describe('__extensionClasses enrollment', () => {
 
             expect(posthog.featureFlags).toBeInstanceOf(PostHogFeatureFlags)
             expect(posthog.getExtension(FeatureFlagsExtension)).toBe(posthog.featureFlags)
+            expect(posthog.getExtension(FeatureFlagsCommonExtension)).toBe(posthog.featureFlags)
+            expect(posthog._getBrowserClientAdapter().getExtension(FeatureFlagsCommonExtension)).toBe(
+                posthog.featureFlags
+            )
             expect(beforeInitCallback).toHaveBeenCalledTimes(1)
             expect(beforeInitCallback).toHaveBeenLastCalledWith(true)
 
@@ -446,8 +498,7 @@ describe('__extensionClasses enrollment', () => {
     it('keeps one reloading bridge when feature flags are enrolled repeatedly', () => {
         PostHog.__defaultExtensionClasses = FeatureFlagsExtensions
         const posthog = new PostHog()
-        const add = vi.fn().mockResolvedValue(undefined)
-        posthog._getBrowserClientAdapter = vi.fn().mockReturnValue({ add }) as any
+        const setup = vi.spyOn(posthog.featureFlags, 'setup').mockImplementation(() => {})
 
         const enrollFeatureFlags = () => (posthog as any)._enrollFeatureFlags()
         enrollFeatureFlags()
@@ -459,7 +510,7 @@ describe('__extensionClasses enrollment', () => {
 
         expect(callback).toHaveBeenCalledTimes(1)
         expect(callback).toHaveBeenCalledWith(true)
-        expect(add).toHaveBeenCalledTimes(1)
+        expect(setup).toHaveBeenCalledTimes(1)
         posthog.featureFlags.reset()
     })
 

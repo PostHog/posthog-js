@@ -8,6 +8,7 @@ export {
   minimizeFlagCalledEventProperties,
 } from './featureFlagUtils'
 export {
+  assertFeatureFlagFilterSupported,
   getFeatureFlagHash,
   getFeatureFlagVariant,
   getFeatureFlagVariantLookupTable,
@@ -26,6 +27,7 @@ export type {
   FeatureFlagVariant,
   FeatureFlagVariantLookupEntry,
   MatchFeatureFlagPropertyOptions,
+  UnresolvedFlagReason,
 } from './featureFlagLocalEvaluation'
 export {
   gzipCompress,

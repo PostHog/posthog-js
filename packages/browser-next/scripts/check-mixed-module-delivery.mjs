@@ -1,9 +1,31 @@
 import process from 'node:process'
 /* global globalThis */
 import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
+import assert from 'node:assert/strict'
+
+const commonRequire = createRequire(new URL('../../browser-common/package.json', import.meta.url))
+const { Features, transform } = commonRequire('lightningcss')
+const expectedSurveyStyles = transform({
+    filename: 'survey.css',
+    code: readFileSync(new URL('../../browser-common/src/surveys/survey.css', import.meta.url)),
+    minify: true,
+    include: Features.Nesting | Features.MediaQueries,
+}).code.toString()
+for (const format of ['js', 'mjs']) {
+    const { surveyStyles } = await import(
+        new URL(`../../browser-common/dist/surveys/survey-styles.${format}`, import.meta.url)
+    )
+    assert.equal(
+        surveyStyles,
+        expectedSurveyStyles,
+        `${format} survey CSS must preserve legacy compatibility transforms`
+    )
+}
 
 const guardedGlobals = [
     'addEventListener',
+    'crypto',
     'document',
     'fetch',
     'localStorage',
@@ -33,19 +55,32 @@ for (const name of guardedGlobals) {
 }
 
 let createPostHog
+let createEsmPostHog
 let createCorePostHog
 let analytics
 let flags
+let logs
+let commonJsLogs
 let commonJsFlags
+let FeatureFlagsCommonExtension
+let surveys
+let commonJsSurveys
 try {
     const require = createRequire(import.meta.url)
+    ;({ FeatureFlagsCommonExtension } = await import('@posthog/browser-common/extension-tokens'))
+    if (require('@posthog/browser-common/extension-tokens').FeatureFlagsCommonExtension !== FeatureFlagsCommonExtension)
+        throw new Error('Common feature flags token differs between module formats')
     ;({ createPostHog } = require('@posthog/browser'))
     ;({ createPostHog: createCorePostHog } = require('@posthog/browser/core'))
     ;({ analytics } = await import('@posthog/browser/analytics'))
-    await import('@posthog/browser')
+    ;({ createPostHog: createEsmPostHog } = await import('@posthog/browser'))
     await import('@posthog/browser/core')
     ;({ flags } = await import('@posthog/browser/flags'))
     ;({ flags: commonJsFlags } = require('@posthog/browser/flags'))
+    ;({ logs } = await import('@posthog/browser/logs'))
+    ;({ logs: commonJsLogs } = require('@posthog/browser/logs'))
+    ;({ surveys } = await import('@posthog/browser/surveys'))
+    ;({ surveys: commonJsSurveys } = require('@posthog/browser/surveys'))
 } finally {
     for (const [name, descriptor] of descriptors) {
         if (descriptor) {
@@ -156,3 +191,103 @@ for (const createFlags of [flags, commonJsFlags]) {
     await client.dispose()
 }
 process.stdout.write('Pure CommonJS/ESM flags entrypoints and mixed-module lifecycle passed\n')
+
+for (const createLogs of [logs, commonJsLogs]) {
+    const requests = []
+    const logger = createLogs()
+    const client = await createCorePostHog({
+        projectToken: 'ph_test',
+        storage: false,
+        navigator: false,
+        capturePageview: false,
+        remoteConfig: {
+            supportedCompression: [],
+            toolbarParams: {},
+            toolbarVersion: 'toolbar',
+            isAuthenticated: false,
+            siteApps: [],
+        },
+        extensions: [logger],
+        fetch: async (url, init) => {
+            requests.push({ url, body: JSON.parse(init.body) })
+            return new Response('{}')
+        },
+    })
+    logger.captureLog({ body: 'mixed logs' })
+    await client.shutdown()
+    if (
+        requests.length !== 1 ||
+        !String(requests[0].url).includes('/i/v1/logs?token=ph_test') ||
+        requests[0].body.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue !== 'mixed logs'
+    ) {
+        throw new Error('Mixed-module logs did not flush its OTLP record on shutdown')
+    }
+}
+process.stdout.write('Pure CommonJS/ESM logs entrypoints and mixed-module logs lifecycle passed\n')
+
+for (const create of [createPostHog, createEsmPostHog]) {
+    let lookupShared
+    let lookupFacade
+    const client = await create({
+        projectToken: 'ph_lookup',
+        storage: false,
+        navigator: false,
+        fetch: false,
+        analytics: false,
+        logs: false,
+        capturePageview: false,
+        flags: { featureFlagEvaluation: false, bootstrap: { featureFlags: { lookup: 'shared' } } },
+        extensions: [
+            {
+                name: 'consumer',
+                setup(value) {
+                    lookupShared = () => value.getExtension(FeatureFlagsCommonExtension)
+                    lookupFacade = () => value.getExtension('featureFlags')
+                },
+            },
+        ],
+    })
+    const facade = client.getExtension('featureFlags')
+    const shared = lookupShared()
+    if (
+        !shared ||
+        shared === facade ||
+        lookupFacade() !== facade ||
+        client.getExtension(FeatureFlagsCommonExtension) !== shared ||
+        facade.getFeatureFlag('lookup')?.variant !== 'shared' ||
+        shared.getFeatureFlag('lookup') !== 'shared'
+    )
+        throw new Error('Dynamic flags did not resolve SDK and common tokens consistently')
+    facade.updateFlags({ lookup: 'updated' })
+    if (shared.getFeatureFlag('lookup') !== 'updated' || (await shared.reloadFeatureFlagsAsync()).status !== 'skipped')
+        throw new Error('Dynamic flags shared lookup did not use the live implementation')
+    client.reset()
+    if (shared.getFeatureFlag('lookup') !== undefined) throw new Error('Dynamic flags shared state survived reset')
+    await client.dispose()
+    if (
+        lookupShared() !== undefined ||
+        lookupFacade() !== undefined ||
+        client.getExtension(FeatureFlagsCommonExtension) !== undefined ||
+        client.getExtension('featureFlags') !== undefined
+    )
+        throw new Error('Dynamic flags lookup survived disposal')
+}
+process.stdout.write('Built CommonJS/ESM dynamic flags public/shared lookup, async reload, reset and disposal passed\n')
+
+for (const factory of [surveys, commonJsSurveys]) {
+    const client = await createCorePostHog({
+        projectToken: 'ph_surveys_test',
+        storage: false,
+        navigator: false,
+        fetch: false,
+        capturePageview: false,
+        extensions: [factory({ automaticDisplay: false })],
+    })
+    const extension = client.getExtension('surveys')
+    const result = await new Promise((resolve) => extension.getSurveys(resolve))
+    if (result.length !== 0 || (await extension.canRenderSurvey('missing')).visible) {
+        throw new Error('Mixed-module surveys must return unavailable results without a document')
+    }
+    await client.dispose()
+}
+process.stdout.write('Pure CommonJS/ESM surveys entrypoints and SSR lifecycle passed\n')

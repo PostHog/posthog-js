@@ -27,13 +27,24 @@ function isSurveyFlagEnabled(flagKey: string | undefined, flags: Record<string, 
   return flagKey ? !!flags[flagKey] === true : true
 }
 
-export function activatedSurveysgetActiveMatchingSurveys(
+// Same rule as hasPeriodPassed in @posthog/browser-common, so every SDK agrees on the boundary day
+function hasPeriodPassed(periodDays?: number, lastSeenDate?: Date): boolean {
+  if (!periodDays || !lastSeenDate) {
+    return true
+  }
+
+  const diffMs = Math.abs(Date.now() - lastSeenDate.getTime())
+  const diffDays = Math.ceil(diffMs / (1000 * 3600 * 24))
+  return diffDays > periodDays
+}
+
+export function getActiveMatchingSurveys(
   surveys: Survey[],
   flags: Record<string, FeatureFlagValue>,
   seenSurveys: string[],
   activatedSurveys: ReadonlySet<string>,
-  lastSeenSurveyDate: Date | undefined,
-  inProgressSurveys: ReadonlySet<string> = new Set()
+  inProgressSurveys: ReadonlySet<string> = new Set(),
+  lastSeenSurveyDate?: Date
 ): Survey[] {
   return surveys.filter((survey: Survey) => {
     const hasProgress = inProgressSurveys.has(getSurveyIterationKey(survey))
@@ -51,18 +62,8 @@ export function activatedSurveysgetActiveMatchingSurveys(
       return false
     }
 
-    const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
-
-    if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
-      const today = new Date()
-      const diff = Math.abs(today.getTime() - lastSeenSurveyDate.getTime())
-      const daysSinceSurveySeen = Math.ceil(diff / (1000 * 3600 * 24))
-
-      const waitPeriodActive = daysSinceSurveySeen < surveyWaitPeriodInDays
-
-      if (waitPeriodActive) {
-        return false
-      }
+    if (!hasPeriodPassed(survey.conditions?.seenSurveyWaitPeriodInDays, lastSeenSurveyDate)) {
+      return false
     }
 
     // Skip surveys with URL or CSS selector conditions (not supported in React Native)

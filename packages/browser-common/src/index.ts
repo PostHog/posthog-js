@@ -1,9 +1,23 @@
+export {
+    SurveyEventType,
+    SurveyWidgetType,
+    SurveyPosition,
+    SurveyTabPosition,
+    SurveyType,
+    SurveyQuestionType,
+    SurveyQuestionBranchingType,
+    SurveySchedule,
+    SurveyEventName,
+    SurveyEventProperties,
+    DisplaySurveyType,
+} from './survey-constants'
 /**
  * Public surface for browser extensions shared across PostHog JavaScript SDK
  * clients.
  */
 export type { Extension } from './extension'
 export type { ExtensionToken } from './token'
+export { FeatureFlagsCommonExtension } from './extension-tokens'
 export * from './types'
 export { createDisposable, type Disposable } from './disposable'
 export type { Listener } from './pubsub'

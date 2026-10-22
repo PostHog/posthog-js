@@ -9,7 +9,6 @@ import { MCPAnalyticsEventType } from './event-types'
 
 const BUILT_IN_EVENT_NAME_BY_TYPE = {
   [MCPAnalyticsEventType.custom]: PostHogMCPAnalyticsEvent.Custom,
-  [MCPAnalyticsEventType.identify]: PostHogMCPAnalyticsEvent.Identify,
   [MCPAnalyticsEventType.mcpFeedback]: PostHogMCPAnalyticsEvent.Feedback,
   [MCPAnalyticsEventType.mcpMissingCapability]: PostHogMCPAnalyticsEvent.MissingCapability,
   [MCPAnalyticsEventType.mcpInitialize]: PostHogMCPAnalyticsEvent.Initialize,
@@ -60,6 +59,7 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
   const timestamp = getTimestamp(event)
 
   const properties: Record<string, unknown> = {
+    [PostHogMCPAnalyticsProperty.Interface]: 'mcp',
     [PostHogMCPAnalyticsProperty.Source]: POSTHOG_MCP_ANALYTICS_SOURCE,
   }
   addSessionIdProperty(event, properties)
@@ -230,7 +230,9 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   const distinctId = getDistinctId(event)
   const timestamp = getTimestamp(event)
 
-  const properties: Record<string, unknown> = {}
+  const properties: Record<string, unknown> = {
+    [PostHogMCPAnalyticsProperty.Interface]: 'mcp',
+  }
   addSessionIdProperty(event, properties)
   addConversationIdProperty(event, properties)
   addPersonProcessingProperty(event, properties)

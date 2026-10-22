@@ -7,11 +7,17 @@ export const routes = [
     '/capture_ai',
     '/identify',
     '/alias',
+    '/group_identify',
+    '/capture_exception',
+    '/evaluate_flags/read',
     '/flush',
     '/get_feature_flag',
     '/reload_feature_flags',
 ]
-export const failure = (kind, code, message) => ({ kind: 'harness', failure: { kind, code, message } })
+export const failure = (kind, code, message) => ({
+    kind: 'harness',
+    failure: { kind, code, message },
+})
 class BindingGap extends Error {
     constructor(kind, code, message) {
         super(message)
@@ -34,6 +40,8 @@ const configFields = {
     disable_geoip: 'disableGeoip',
     historical_migration: 'historicalMigration',
     secret_key: 'secretKey',
+    disabled: 'disabled',
+    feature_flags_request_max_retries: 'featureFlagsRequestMaxRetries',
 }
 const captureFields = {
     event: 'event',
@@ -52,6 +60,14 @@ const flagFields = {
     only_evaluate_locally: 'onlyEvaluateLocally',
     send_event: 'sendFeatureFlagEvents',
     disable_geoip: 'disableGeoip',
+}
+const evaluationFields = {
+    groups: 'groups',
+    person_properties: 'personProperties',
+    group_properties: 'groupProperties',
+    only_evaluate_locally: 'onlyEvaluateLocally',
+    disable_geoip: 'disableGeoip',
+    flag_keys: 'flagKeys',
 }
 const sendFlagFields = {
     only_evaluate_locally: 'onlyEvaluateLocally',
@@ -162,6 +178,50 @@ export function classify(value, nativeVoid = false) {
         blocked('native-non-json-result', 'Native result has no selected lossless JSON representation')
     return { kind: 'value', value }
 }
+function validateReads(reads, path) {
+    if (!Array.isArray(reads)) blocked('snapshot-read-fixture', 'Expected an ordered read array')
+    for (const read of reads) {
+        if (!object(read)) blocked('snapshot-read-fixture', 'Expected a read object')
+        if (read.method === 'only' || read.method === 'only_accessed') {
+            checkKeys(read, read.method === 'only' ? ['method', 'keys', 'reads'] : ['method', 'reads'], path)
+            validateReads(read.reads, `${path}/${read.method}`)
+        } else if (['get_flag', 'get_flag_payload', 'is_enabled', 'keys'].includes(read.method)) {
+            checkKeys(
+                read,
+                read.method === 'keys'
+                    ? ['method']
+                    : read.method === 'is_enabled'
+                      ? ['method', 'key', 'options']
+                      : ['method', 'key'],
+                path
+            )
+            if (own(read, 'options')) rename(read.options, { default_value: 'defaultValue' }, `${path}/options`)
+        } else unsupported(`${path}/method/${read.method}`)
+    }
+}
+async function snapshotReads(snapshot, reads) {
+    const results = []
+    for (const read of reads) {
+        let result
+        if (read.method === 'only' || read.method === 'only_accessed') {
+            const child = read.method === 'only' ? snapshot.only(read.keys) : snapshot.onlyAccessed()
+            result = await snapshotReads(child, read.reads)
+        } else if (read.method === 'keys') result = snapshot.keys
+        else {
+            const name = {
+                is_enabled: 'isEnabled',
+                get_flag: 'getFlag',
+                get_flag_payload: 'getFlagPayload',
+            }[read.method]
+            const parameters = own(read, 'key') || own(read, 'options') ? [read.key] : []
+            if (own(read, 'options'))
+                parameters.push(rename(read.options, { default_value: 'defaultValue' }, '/evaluate_flags/read/options'))
+            result = await snapshot[name](...parameters)
+        }
+        results.push(classify(result))
+    }
+    return { results }
+}
 export class Binding {
     constructor(PostHog, captureMode = 'v0') {
         this.PostHog = PostHog
@@ -206,7 +266,11 @@ export class Binding {
             } else if (route === '/identify') {
                 const mapped = rename(
                     args,
-                    { distinct_id: 'distinctId', set: 'properties', disable_geoip: 'disableGeoip' },
+                    {
+                        distinct_id: 'distinctId',
+                        set: 'properties',
+                        disable_geoip: 'disableGeoip',
+                    },
                     route
                 )
                 // `set` contains literal user properties, including any reserved-looking keys.
@@ -214,8 +278,48 @@ export class Binding {
                 result = this.client.identify(mapped)
             } else if (route === '/alias') {
                 result = this.client.alias(
-                    rename(args, { distinct_id: 'distinctId', alias: 'alias', disable_geoip: 'disableGeoip' }, route)
+                    rename(
+                        args,
+                        {
+                            distinct_id: 'distinctId',
+                            alias: 'alias',
+                            disable_geoip: 'disableGeoip',
+                        },
+                        route
+                    )
                 )
+            } else if (route === '/group_identify') {
+                result = this.client.groupIdentify(
+                    rename(
+                        args,
+                        {
+                            group_type: 'groupType',
+                            group_key: 'groupKey',
+                            properties: 'properties',
+                            distinct_id: 'distinctId',
+                            disable_geoip: 'disableGeoip',
+                        },
+                        route
+                    )
+                )
+            } else if (route === '/capture_exception') {
+                checkKeys(args, ['error', 'distinct_id', 'properties'], route)
+                if (!object(args.error)) blocked('exception-fixture', 'Expected a native exception descriptor')
+                checkKeys(args.error, ['type', 'message'], `${route}/error`)
+                if (args.error.type !== 'TypeError' || typeof args.error.message !== 'string')
+                    blocked('exception-fixture', 'Native fixture requires TypeError and a string message')
+                const parameters = [new TypeError(args.error.message)]
+                if (own(args, 'distinct_id') || own(args, 'properties')) parameters.push(args.distinct_id)
+                if (own(args, 'properties')) parameters.push(args.properties)
+                result = this.client.captureException(...parameters)
+            } else if (route === '/evaluate_flags/read') {
+                checkKeys(args, ['distinct_id', 'options', 'reads'], route)
+                validateReads(args.reads, route)
+                const parameters = []
+                if (own(args, 'distinct_id')) parameters.push(args.distinct_id)
+                if (own(args, 'options')) parameters.push(rename(args.options, evaluationFields, `${route}/options`))
+                const snapshot = await this.client.evaluateFlags(...parameters)
+                result = await snapshotReads(snapshot, args.reads)
             } else if (route === '/flush') {
                 checkKeys(args, [], route)
                 result = await this.client.flush()
@@ -245,6 +349,8 @@ export class Binding {
                     route === '/capture' ||
                         route === '/identify' ||
                         route === '/alias' ||
+                        route === '/group_identify' ||
+                        route === '/capture_exception' ||
                         route === '/flush' ||
                         route === '/reload_feature_flags'
                 ),
@@ -258,7 +364,10 @@ export class Binding {
                 id = randomUUID()
                 this.exceptions.set(error, id)
             }
-            return { kind: 'sdk', outcome: { kind: 'thrown', error: { kind: 'exception', id } } }
+            return {
+                kind: 'sdk',
+                outcome: { kind: 'thrown', error: { kind: 'exception', id } },
+            }
         }
     }
 }

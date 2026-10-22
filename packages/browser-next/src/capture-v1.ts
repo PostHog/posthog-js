@@ -99,6 +99,7 @@ interface CaptureV1BatchesResult extends CaptureV1Result {
 
 interface CaptureV1TeardownOptions {
     maxBytes?: number
+    budget?: { remaining: number }
     now?: () => number
     generateRequestId?: () => string
     canContinue?: () => boolean
@@ -312,9 +313,9 @@ const compressWithDeadline = async (
     }
 }
 
-const cancelResponseBody = (response: Response | undefined): void => {
+const cancelResponseBody = async (response: Response | undefined): Promise<void> => {
     try {
-        void response?.body?.cancel().catch(() => {})
+        await response?.body?.cancel()
     } catch {
         // Cancellation is best-effort for late or timed-out responses.
     }
@@ -874,6 +875,7 @@ export const sendCaptureV1TeardownBatches = (
     }
 
     for (let index = 0; index < prepared.length && canContinue(options.canContinue);) {
+        remaining = Math.min(remaining, options.budget?.remaining ?? remaining)
         const createdAt = isoNow(now)
         const batch: PreparedCaptureV1Event[] = []
         let body = serializeEnvelope(createdAt, batch)
@@ -914,6 +916,11 @@ export const sendCaptureV1TeardownBatches = (
             'PostHog-Request-Id': requestId,
             'PostHog-Request-Timestamp': isoNow(now),
         }
+        const budget = options.budget
+        if (budget) budget.remaining -= bodyBytes
+        const release = () => {
+            if (budget) budget.remaining += bodyBytes
+        }
         try {
             const request = fetch(`${runtime[0].api}/i/v1/analytics/events`, {
                 method: 'POST',
@@ -922,14 +929,17 @@ export const sendCaptureV1TeardownBatches = (
                 body,
                 keepalive: true,
             })
-            void Promise.resolve(request).then(cancelResponseBody, (error) => {
-                try {
-                    options.onError?.(error)
-                } catch {
-                    // Reporting must not affect teardown.
-                }
-            })
+            void Promise.resolve(request)
+                .then(cancelResponseBody, (error) => {
+                    try {
+                        options.onError?.(error)
+                    } catch {
+                        // Reporting must not affect teardown.
+                    }
+                })
+                .then(release, release)
         } catch (error) {
+            release()
             try {
                 options.onError?.(error)
             } catch {
