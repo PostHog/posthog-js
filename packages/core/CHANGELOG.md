@@ -1,5 +1,16 @@
 # @posthog/core
 
+## 1.60.0
+
+### Minor Changes
+
+- [#5234](https://github.com/PostHog/posthog-js/pull/5234) [`1991b99`](https://github.com/PostHog/posthog-js/commit/1991b9962749653599d03b54d160368dbfc8009b) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - feat: report flags local evaluation could not resolve on `evaluateFlags()` snapshots via `unresolvedFlags`, tag reads of them with `local_evaluation_inconclusive`, and warn once about flags whose definition local evaluation does not support
+
+  Behavior changes:
+  - A condition with a filter local evaluation cannot check and a filter that does not match now resolves locally as no match, instead of falling back to a server request or staying unresolved.
+  - `$feature_flag_called` events from snapshot reads report `local_evaluation_inconclusive` instead of `flag_missing` for these flags.
+  - The load-time warning now also logs with `strictLocalEvaluation: true`. (2026-10-22)
+
 ## 1.59.4
 
 ### Patch Changes
