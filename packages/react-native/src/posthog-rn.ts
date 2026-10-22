@@ -972,10 +972,17 @@ export class PostHog extends PostHogCore {
         started = true
         this._nativeSessionReplayDebugRefreshQueued = false
         const generation = this._nativeSessionReplayDebugGeneration
-        const map = await plugin.getSessionReplayDebugProperties?.()
-        if (generation === this._nativeSessionReplayDebugGeneration) {
-          this._nativeSessionReplayDebugProperties = isObject(map) ? (map as { [key: string]: JsonType }) : undefined
-          this._nativeSessionReplayDebugRefreshedAt = Date.now()
+        try {
+          const map = await plugin.getSessionReplayDebugProperties?.()
+          if (generation === this._nativeSessionReplayDebugGeneration) {
+            this._nativeSessionReplayDebugProperties = isObject(map) ? (map as { [key: string]: JsonType }) : undefined
+          }
+        } finally {
+          // A failed read is throttled like a successful one, or every capture past the
+          // interval would hit the bridge again while native is down.
+          if (generation === this._nativeSessionReplayDebugGeneration) {
+            this._nativeSessionReplayDebugRefreshedAt = Date.now()
+          }
         }
       },
       false

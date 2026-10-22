@@ -957,6 +957,28 @@ describe('PostHog RN session replay debug properties', () => {
     expect(captureOne(client, 'refreshed').properties.$recording_status).toBe('active')
   })
 
+  it('a failed native read is throttled like a successful one', async () => {
+    nativeDebugMap = { $recording_status: 'active' }
+    const client = await readyClient({ enableSessionReplay: true })
+    await reloadAndSettle(client)
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+    pluginMock.getSessionReplayDebugProperties.mockRejectedValue(new Error('bridge down'))
+
+    advanceClock(6_000)
+    captureOne(client, 'first retry')
+    await waitForNativeChain(client)
+    captureOne(client, 'inside the interval')
+    captureOne(client, 'still inside')
+    await waitForNativeChain(client)
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalledTimes(1)
+    expect(captureOne(client, 'keeps the last map').properties.$recording_status).toBe('active')
+
+    advanceClock(6_000)
+    captureOne(client, 'next interval')
+    await waitForNativeChain(client)
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalledTimes(2)
+  })
+
   it('a disabled map is not re-read from the capture path while replay is off', async () => {
     nativeDebugMap = { $recording_status: 'disabled' }
     const client = await readyClient()
