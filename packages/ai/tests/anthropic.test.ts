@@ -679,6 +679,7 @@ describe('PostHogAnthropic', () => {
         {
           role: 'assistant',
           content: [
+            { type: 'reasoning', text: 'Use the tool.' },
             { type: 'text', text: 'Checking.' },
             {
               type: 'function',
@@ -688,6 +689,84 @@ describe('PostHogAnthropic', () => {
           ],
         },
       ])
+    })
+
+    it('should capture streamed thinking as reasoning and time the first token from it', async () => {
+      const chunks: MockStreamChunk[] = [
+        {
+          type: 'message_start',
+          message: { id: 'msg_test_123', type: 'message', role: 'assistant', usage: { input_tokens: 20 } as any },
+        },
+        { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } as any },
+        { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'The user ' } as any },
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: 'wants a greeting.' } as any,
+        },
+        { type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: 'sig' } as any },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'content_block_start', index: 1, content_block: { type: 'redacted_thinking', data: 'enc' } as any },
+        { type: 'content_block_stop', index: 1 },
+        // display: 'omitted' streams only a signature
+        { type: 'content_block_start', index: 2, content_block: { type: 'thinking', thinking: '' } as any },
+        { type: 'content_block_delta', index: 2, delta: { type: 'signature_delta', signature: 'sig' } as any },
+        { type: 'content_block_stop', index: 2 },
+        { type: 'content_block_start', index: 3, content_block: { type: 'text', text: '' } as any },
+        { type: 'content_block_delta', index: 3, delta: { type: 'text_delta', text: 'Hello!' } },
+        { type: 'content_block_stop', index: 3 },
+        {
+          type: 'message_delta',
+          delta: { type: 'stop_reason', stop_reason: 'end_turn' },
+          usage: { output_tokens: 10 },
+        },
+        { type: 'message_stop' },
+      ]
+      vi.useFakeTimers({ toFake: ['Date'] })
+      try {
+        ;(AnthropicOriginal.Messages.prototype.create as unknown as vi.Mock).mockImplementation(() =>
+          Promise.resolve({
+            async *[Symbol.asyncIterator]() {
+              for (const chunk of chunks) {
+                // The answer starts 5s after thinking does
+                if (chunk.type === 'content_block_start' && chunk.index === 3) {
+                  vi.setSystemTime(Date.now() + 5000)
+                }
+                yield chunk
+              }
+            },
+          })
+        )
+
+        const stream = await client.messages.create({
+          model: 'claude-sonnet-4-5',
+          messages: [{ role: 'user', content: 'Say hello' }],
+          max_tokens: 2048,
+          thinking: { type: 'enabled', budget_tokens: 1024 },
+          stream: true,
+          posthogDistinctId: 'test-user-123',
+        })
+
+        for await (const _chunk of stream) {
+          // Consume the stream so the monitoring branch sees every block.
+        }
+        await waitForAsyncCapture()
+      } finally {
+        vi.useRealTimers()
+      }
+
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      const { properties } = captureArgs[0]
+      expect(properties['$ai_output_choices']).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'The user wants a greeting.' },
+            { type: 'text', text: 'Hello!' },
+          ],
+        },
+      ])
+      expect(properties['$ai_time_to_first_token']).toBeLessThan(5)
     })
   })
 

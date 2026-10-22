@@ -10,7 +10,13 @@ import {
   isPrivacyModeEnabled,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
-import type { FormattedContentItem, FormattedTextContent, FormattedFunctionCall, FormattedMessage } from '../types'
+import type {
+  FormattedContentItem,
+  FormattedTextContent,
+  FormattedReasoningContent,
+  FormattedFunctionCall,
+  FormattedMessage,
+} from '../types'
 
 type MessageCreateParamsNonStreaming = AnthropicOriginal.Messages.MessageCreateParamsNonStreaming
 type MessageCreateParamsStreaming = AnthropicOriginal.Messages.MessageCreateParamsStreaming
@@ -107,10 +113,11 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
       const wrappedPromise = parentPromise.then((value) => {
         let accumulatedContent = ''
         const contentBlocks: FormattedContentItem[] = []
-        // Keyed by the stream's block index: thinking and server-tool blocks never enter
-        // contentBlocks, so a position in that array does not match the index events carry.
+        // Keyed by the stream's block index: redacted thinking and server-tool blocks never
+        // enter contentBlocks, so a position in that array does not match the index events carry.
         const toolsInProgress: Map<number, ToolInProgress> = new Map()
         let currentTextBlock: FormattedTextContent | null = null
+        let currentReasoningBlock: FormattedReasoningContent | null = null
         let firstTokenTime: number | undefined
         let stopReason: string | undefined
 
@@ -142,6 +149,14 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                     }
 
                     contentBlocks.push(currentTextBlock)
+                  } else if (chunk.content_block?.type === 'thinking') {
+                    currentReasoningBlock = {
+                      type: 'reasoning',
+                      text: chunk.content_block.thinking ?? '',
+                    }
+
+                    contentBlocks.push(currentReasoningBlock)
+                    currentTextBlock = null
                   } else if (chunk.content_block?.type === 'tool_use') {
                     if (firstTokenTime === undefined) {
                       firstTokenTime = Date.now()
@@ -184,6 +199,17 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                   }
                 }
 
+                // Handle thinking delta events
+                if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'thinking_delta') {
+                  if (firstTokenTime === undefined) {
+                    firstTokenTime = Date.now()
+                  }
+
+                  if (currentReasoningBlock) {
+                    currentReasoningBlock.text += chunk.delta.thinking
+                  }
+                }
+
                 // Handle tool input delta events
                 if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'input_json_delta') {
                   const tool = toolsInProgress.get(chunk.index)
@@ -195,6 +221,12 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 // Handle content block stop events
                 if (chunk.type === 'content_block_stop') {
                   currentTextBlock = null
+
+                  // Thinking with display: 'omitted' streams only a signature, so drop the empty block
+                  if (currentReasoningBlock && !currentReasoningBlock.text) {
+                    contentBlocks.splice(contentBlocks.indexOf(currentReasoningBlock), 1)
+                  }
+                  currentReasoningBlock = null
 
                   // Parse accumulated tool input
                   const tool = toolsInProgress.get(chunk.index)
