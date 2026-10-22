@@ -766,6 +766,7 @@
         "_reset",
         "_resetConversationState",
         "_resetCounter",
+        "_resetGeneration",
         "_resetIdleTimer",
         "_resetSampling",
         "_resolveSplitStorage",
