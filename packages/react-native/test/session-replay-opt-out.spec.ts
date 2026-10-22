@@ -897,6 +897,29 @@ describe('PostHog RN session replay follows consent', () => {
     }
   })
 
+  it.each([false, true])(
+    'keeps the session reset() was told to keep when it restores replay (enableSessionReplay: %s)',
+    async (enableSessionReplay) => {
+      posthog = newPostHog({ enableSessionReplay })
+      await posthog.ready()
+      await posthog.startSessionRecording()
+      const session = posthog.getSessionId()
+      await posthog.optOut()
+      replay.startSession.mockClear()
+
+      // The timestamps are kept too, or the kept id would already be expired.
+      posthog.reset([
+        PostHogPersistedProperty.SessionId,
+        PostHogPersistedProperty.SessionLastTimestamp,
+        PostHogPersistedProperty.SessionStartTimestamp,
+      ])
+      await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+
+      expect(replay.startSession).not.toHaveBeenCalled()
+      expect(posthog.getSessionId()).toBe(session)
+    }
+  )
+
   it('keeps the session on opt-in after a manual start on macOS, where it is a no-op', async () => {
     const previousOS = Platform.OS
     Platform.OS = 'macos'

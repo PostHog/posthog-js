@@ -932,10 +932,11 @@ export class PostHog extends PostHogCore {
         this.getPersistedProperty(PostHogPersistedProperty.PushRegistered) === true
       )
     }
-    // super.reset() started a new session; move native onto it before replay restarts, as optIn() does.
+    // Move native onto the session super.reset() left before replay restarts. Not a rotation:
+    // propertiesToKeep may have kept the session.
     if (this._isInitialized && wasOptedOut && !this.optedOut && this._sessionReplayWanted) {
       try {
-        this._rotateReplaySession()
+        this._syncNativeSession()
       } catch (e) {
         this._logger.error(`Failed to rotate sessionId: ${e}.`)
       }
@@ -1867,6 +1868,18 @@ export class PostHog extends PostHogCore {
           await this._attemptManualRecordingStart(request, true)
         })
     }, delay)
+  }
+
+  private _syncNativeSession(): void {
+    if (!OptionalReactNativePlugin) {
+      return
+    }
+    const sessionId = super.getSessionId()
+    if (sessionId === this._currentSessionId) {
+      return
+    }
+    this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
+    this._currentSessionId = sessionId
   }
 
   private _rotateReplaySession(): void {
