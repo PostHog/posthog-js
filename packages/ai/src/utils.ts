@@ -1,4 +1,3 @@
-import { PostHog } from 'posthog-node'
 import type OpenAIOrignal from 'openai'
 import type AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ResponseCreateParamsWithTools } from 'openai/lib/ResponsesParser'
@@ -10,9 +9,12 @@ import type {
   FormattedDocumentContent,
 } from './types'
 import { v4 as uuidv4 } from 'uuid'
-import { isString } from './typeGuards'
+import { isObject, isString } from './typeGuards'
 import { redactBase64DataUrl } from './sanitization'
 import { isFullAiCaptureEnabled, type FullAiCaptureGate } from './captureAiEvent'
+import { isPrivacyModeEnabled, type PrivacyModeGate } from './privacyMode'
+
+export { isPrivacyModeEnabled }
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -383,10 +385,7 @@ export const mergeSystemPrompt = (params: MessageCreateParams & MonitoringParams
   return params.messages
 }
 
-export const isPrivacyModeEnabled = (client: PostHog, privacyMode: boolean): boolean =>
-  Boolean((client as any).privacy_mode || privacyMode)
-
-export const withPrivacyMode = (client: PostHog, privacyMode: boolean, input: any): any => {
+export const withPrivacyMode = (client: PrivacyModeGate, privacyMode: boolean, input: any): any => {
   return isPrivacyModeEnabled(client, privacyMode) ? null : input
 }
 
@@ -582,6 +581,27 @@ export const extractAvailableToolCalls = (provider: string, params: any): unknow
   }
 
   return null
+}
+
+const MCP_CREDENTIAL_FIELDS = ['headers', 'authorization']
+
+/** Hides the credentials of remote MCP tool definitions; everything else is kept as sent. */
+export function redactMcpToolCredentials(tools: unknown): unknown {
+  if (!Array.isArray(tools)) {
+    return tools
+  }
+  return tools.map((tool: unknown) => {
+    if (!isObject(tool) || tool.type !== 'mcp') {
+      return tool
+    }
+    const redacted: Record<string, unknown> = { ...tool }
+    for (const field of MCP_CREDENTIAL_FIELDS) {
+      if (field in redacted) {
+        redacted[field] = '[REDACTED]'
+      }
+    }
+    return redacted
+  })
 }
 
 export enum AIEvent {

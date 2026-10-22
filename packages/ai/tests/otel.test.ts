@@ -168,4 +168,47 @@ describe('PostHogTraceExporter AI span filtering', () => {
     const exported = getSuperExport().mock.calls[0][0] as ReadableSpan[]
     expect(exported[0].attributes['gen_ai.prompt']).toBe('[base64 image/png redacted]')
   })
+
+  it.each([
+    ['drops', true],
+    ['keeps', false],
+  ])('%s content attributes when privacyMode is %s', (_verb, privacyMode) => {
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN, privacyMode })
+    const content = {
+      'ai.prompt': 'CANARY_7f3a',
+      'ai.response.toolCalls': 'CANARY_7f3a',
+      'ai.toolCall.args': 'CANARY_7f3a',
+      'gen_ai.output.messages': 'CANARY_7f3a',
+      'gen_ai.system_instructions': 'CANARY_7f3a',
+      'gen_ai.completion.0.content': 'CANARY_7f3a',
+      'llm.input_messages.0.message.content': 'CANARY_7f3a',
+      'traceloop.entity.input': 'CANARY_7f3a',
+      'exception.message': 'CANARY_7f3a',
+    }
+    const providerMetadata = JSON.stringify({
+      gateway: { cost: '0.0012' },
+      google: { groundingMetadata: { webSearchQueries: ['CANARY_7f3a'] } },
+    })
+
+    exporter.export(
+      [
+        makeSpan('ai.streamText.doStream', {
+          ...content,
+          'ai.response.providerMetadata': providerMetadata,
+          'gen_ai.usage.output_tokens': 7,
+        }),
+      ],
+      vi.fn()
+    )
+
+    const exported = getSuperExport().mock.calls[0][0] as ReadableSpan[]
+    expect(exported[0].attributes).toEqual(
+      privacyMode
+        ? {
+            'ai.response.providerMetadata': JSON.stringify({ gateway: { cost: '0.0012' } }),
+            'gen_ai.usage.output_tokens': 7,
+          }
+        : { ...content, 'ai.response.providerMetadata': providerMetadata, 'gen_ai.usage.output_tokens': 7 }
+    )
+  })
 })

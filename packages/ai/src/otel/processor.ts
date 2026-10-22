@@ -3,6 +3,8 @@ import type { Context } from '@opentelemetry/api'
 import { BatchSpanProcessor, type SpanProcessor, type ReadableSpan, type Span } from '@opentelemetry/sdk-trace-base'
 
 import { redactSpan } from './redact'
+import { stripContent } from './privacy'
+import { isPrivacyModeEnabled, type PrivacyModeGate } from '../privacyMode'
 import { captureContext, withRequestContext, type CapturedContext, type PostHogContextSource } from './requestContext'
 import { isAISpan } from './spans'
 import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
@@ -39,7 +41,13 @@ export interface PostHogSpanProcessorOptions {
    * so mutating a context object while a span is open shows up in the export.
    * Must be the same posthog-node instance you call `withContext` or `enterContext` on.
    */
-  client?: PostHogContextSource
+  client?: PostHogContextSource & PrivacyModeGate
+
+  /**
+   * Drop prompts, outputs, tool arguments and results, and error messages from exported spans.
+   * Also on when the `client` was created with `privacyMode: true`. Defaults to false.
+   */
+  privacyMode?: boolean
 
   /**
    * @internal Injected processor for testing — bypasses exporter creation.
@@ -102,7 +110,8 @@ class NoopSpanProcessor implements SpanProcessor {
  */
 export class PostHogSpanProcessor implements SpanProcessor {
   private readonly inner: SpanProcessor
-  private readonly client?: PostHogContextSource
+  private readonly client?: PostHogContextSource & PrivacyModeGate
+  private readonly privacyMode: boolean = false
   private readonly capturedContexts = new WeakMap<ReadableSpan, CapturedContext>()
 
   constructor(options: PostHogSpanProcessorOptions) {
@@ -113,6 +122,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
       return
     }
     this.client = options.client
+    this.privacyMode = options.privacyMode === true
 
     if (options._spanProcessor) {
       this.inner = options._spanProcessor
@@ -144,7 +154,9 @@ export class PostHogSpanProcessor implements SpanProcessor {
     this.capturedContexts.delete(span)
     if (isAISpan(span)) {
       warnIfPostHogAiGatewayOtelAttributes(span.attributes)
-      this.inner.onEnd(redactSpan(captured ? withRequestContext(span, captured) : span))
+      const contextual = captured ? withRequestContext(span, captured) : span
+      const shareable = isPrivacyModeEnabled(this.client, this.privacyMode) ? stripContent(contextual) : contextual
+      this.inner.onEnd(redactSpan(shareable))
     }
   }
 

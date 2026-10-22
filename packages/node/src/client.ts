@@ -159,6 +159,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _v1Sender?: V1CaptureSender
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
+  /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
+  public readonly privacyMode: boolean
   private _aiCaptureRouteActive = false
 
   // Feature flag overrides for local testing/development
@@ -244,6 +246,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.options = normalizedOptions
     this.captureMode = resolveCaptureMode()
     this.enableFullAiCapture = normalizedOptions.enableFullAiCapture === true
+    this.privacyMode = normalizedOptions.privacyMode === true
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =

@@ -361,6 +361,26 @@ describe('captureAiGeneration', () => {
     )
   })
 
+  it.each([false, true])('redacts remote MCP tool credentials with privacyMode %s', async (privacyMode) => {
+    const client = buildClient()
+    const mcpTool = {
+      type: 'mcp',
+      server_label: 'docs',
+      server_url: 'https://mcp.example.com',
+      headers: { Authorization: 'Bearer secret' },
+      authorization: 'secret',
+    }
+    const functionTool = { type: 'function', function: { name: 'lookup', parameters: {} } }
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, privacyMode, tools: [mcpTool, functionTool] })
+
+    expect(lastCaptureProperties(client).$ai_tools).toEqual([
+      { ...mcpTool, headers: '[REDACTED]', authorization: '[REDACTED]' },
+      functionTool,
+    ])
+    expect(mcpTool.authorization).toBe('secret')
+  })
+
   it('mutates the original error in place when autocapture is enabled, so callers can re-throw safely', async () => {
     const client = buildClient({ enableExceptionAutocapture: true })
     const error = new Error('boom')

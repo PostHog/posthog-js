@@ -229,6 +229,11 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * @deprecated Use `secretKey` instead.
    */
   personalApiKey?: string
+  /**
+   * Redact prompts, outputs and error details from every event that the PostHog AI
+   * integrations (`@posthog/ai`) capture with this client. Per-call privacy settings
+   * can only add redaction. Defaults to false.
+   */
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
   /**

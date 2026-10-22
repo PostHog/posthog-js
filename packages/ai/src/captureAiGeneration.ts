@@ -3,8 +3,15 @@ import { v4 as uuidv4 } from 'uuid'
 import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
-import { stringifyError } from './serializeError'
-import { AIEvent, CostOverride, getTokensSource, hasTokenOverrides, isPrivacyModeEnabled } from './utils'
+import { formatAiError } from './serializeError'
+import {
+  AIEvent,
+  CostOverride,
+  getTokensSource,
+  hasTokenOverrides,
+  isPrivacyModeEnabled,
+  redactMcpToolCredentials,
+} from './utils'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
 import { captureAiEvent, captureAiEventImmediate } from './captureAiEvent'
 
@@ -144,7 +151,9 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       }
 
       let exceptionId: string | undefined
-      if (client.options?.enableExceptionAutocapture) {
+      // The exception's message and stack can echo the prompt. The wrapper rethrows, so the
+      // app's own error handling still sees the error.
+      if (client.options?.enableExceptionAutocapture && !shouldRedact) {
         exceptionId = uuidv7()
         client.captureException(options.error, undefined, { $ai_trace_id: traceId }, exceptionId)
         if (typeof options.error === 'object') {
@@ -154,7 +163,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
 
       errorData = {
         $ai_is_error: true,
-        $ai_error: stringifyError(options.error),
+        $ai_error: formatAiError(options.error, shouldRedact),
         $exception_event_id: exceptionId,
       }
     }
@@ -223,7 +232,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       $ai_tokens_source: getTokensSource(options.properties),
       ...(options.distinctId ? {} : { $process_person_profile: false }),
       ...(options.stopReason ? { $ai_stop_reason: options.stopReason } : {}),
-      ...(options.tools ? { $ai_tools: options.tools } : {}),
+      ...(options.tools ? { $ai_tools: redactMcpToolCredentials(options.tools) } : {}),
       ...(options.completionId ? { $ai_completion_id: options.completionId } : {}),
       ...(options.providerMetadata && Object.keys(options.providerMetadata).length > 0
         ? { $ai_provider_metadata: options.providerMetadata }
