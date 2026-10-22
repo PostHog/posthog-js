@@ -94,6 +94,8 @@ type ManualRecordingStartRequest = {
   pending: boolean
   retryCount: number
   timer?: ReturnType<typeof setTimeout>
+  // Set for the opt-in restore: holds the start until an event trigger fires in the current session.
+  awaitEventTrigger?: boolean
 }
 
 export interface PostHogOptions extends PostHogCoreOptions {
@@ -929,6 +931,14 @@ export class PostHog extends PostHogCore {
         // would leave Workflows targeting the pre-reset identity.
         this.getPersistedProperty(PostHogPersistedProperty.PushRegistered) === true
       )
+    }
+    // super.reset() started a new session; move native onto it before replay restarts, as optIn() does.
+    if (this._isInitialized && wasOptedOut && !this.optedOut && this._sessionReplayWanted) {
+      try {
+        this._rotateReplaySession()
+      } catch (e) {
+        this._logger.error(`Failed to rotate sessionId: ${e}.`)
+      }
     }
     // super.reset() cleared the persisted opt-out, but native keeps its own copy and would
     // stay opted out for the rest of the process.
@@ -1770,8 +1780,8 @@ export class PostHog extends PostHogCore {
    */
   async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
     this._cancelManualRecordingStart()
-    // A call made while opted out does not change what opt-in restores.
-    if (!this.optedOut) {
+    // A call made while opted out does not change what opt-in restores. On macOS it's a no-op.
+    if (!this.optedOut && !isMacOS()) {
       this._sessionReplayWanted = true
     }
     const request: ManualRecordingStartRequest = { pending: false, retryCount: 0 }
@@ -1801,6 +1811,20 @@ export class PostHog extends PostHogCore {
     }
     if (this.isDisabled || this.optedOut) {
       this._cancelManualRecordingStart()
+      return false
+    }
+    // Native doesn't match event triggers for React Native, so the restore waits here. A matching
+    // event re-evaluates replay, which retries this pending request.
+    if (
+      request.awaitEventTrigger &&
+      this._sessionReplayEventTriggers.length > 0 &&
+      !this._isEventTriggerActivatedForSession(super.getSessionId())
+    ) {
+      request.pending = true
+      // posthog-ios optIn() restarts the recorder by itself.
+      if (this._sessionReplayNativeInitialized) {
+        await this._stopSessionRecording()
+      }
       return false
     }
     this._sessionReplayStartedByApp = true
@@ -3265,11 +3289,11 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  // Runs on _sessionReplayEvalChain. Resumes the current session, which the opt-in already rotated,
-  // and retries like a manual start.
+  // Runs on _sessionReplayEvalChain. Resumes the current session, which optIn() or reset() already
+  // rotated, waits for an event trigger in that session, and retries like a manual start.
   private _restoreAppRecording(): Promise<boolean> {
     this._cancelManualRecordingStart()
-    const request: ManualRecordingStartRequest = { pending: false, retryCount: 0 }
+    const request: ManualRecordingStartRequest = { pending: false, retryCount: 0, awaitEventTrigger: true }
     this._manualRecordingStartRequest = request
     return this._attemptManualRecordingStart(request, true)
   }
