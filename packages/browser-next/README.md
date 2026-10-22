@@ -2,6 +2,8 @@
 
 An experimental PostHog client for modern browsers.
 
+Moving from `posthog-js`? See the [draft migration guide](./MIGRATION.md) for public API call-site changes and remaining gaps.
+
 The client installs one analytics extension with a bounded in-memory buffer during initialization. By default, the first successfully admitted event lazily loads its queue scheduling and Capture Analytics V1 delivery machinery. Consent-denied, bot-filtered, and rejected events do not load delivery.
 
 ```ts
