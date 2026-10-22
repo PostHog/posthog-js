@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.438.17
+
+### Patch Changes
+
+- [#5367](https://github.com/PostHog/posthog-js/pull/5367) [`23b287f`](https://github.com/PostHog/posthog-js/commit/23b287fb1b4fa7ecbeb9e3184292a9730718d5b9) Thanks [@sarankumar1325](https://github.com/sarankumar1325)! - Session replay records mouse movement inside same-origin iframes as mouse movement instead of touch movement, so the replay cursor stays visible.
+  (2026-10-22)
+
+- [#5348](https://github.com/PostHog/posthog-js/pull/5348) [`45f6cd6`](https://github.com/PostHog/posthog-js/commit/45f6cd6b65bc4319a0887bfd83074e1a065c0962) Thanks [@ayushjhanwar-png](https://github.com/ayushjhanwar-png)! - Keep session replay data URI filtering output valid JSON and match svg+xml and parameterised data URIs.
+  (2026-10-22)
+
+- [#5325](https://github.com/PostHog/posthog-js/pull/5325) [`21a2559`](https://github.com/PostHog/posthog-js/commit/21a2559271cde904a35311f4adc43fd924cbc025) Thanks [@Majny](https://github.com/Majny)! - Session replay no longer installs the network plugin when the client sets `session_recording.recordHeaders` and `recordBody` to `false` and turns network timing off, even if the project enables network payload capture. Previously request URLs and timings were still recorded.
+  (2026-10-22)
+
 ## 1.438.16
 
 ### Patch Changes
