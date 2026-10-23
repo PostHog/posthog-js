@@ -10,18 +10,7 @@
 
 import { isNumber, isUndefined } from '@posthog/core'
 
-if (!Math.trunc) {
-    Math.trunc = function (v) {
-        return v < 0 ? Math.ceil(v) : Math.floor(v)
-    }
-}
-
-// polyfill for IE11
-if (!Number.isInteger) {
-    Number.isInteger = function (value) {
-        return isNumber(value) && isFinite(value) && Math.floor(value) === value
-    }
-}
+// Math.trunc and Number.isInteger are polyfilled for IE11 in the array.full.es5 entrypoint only
 
 /** Represents a UUID as a 16-byte byte array. */
 export class UUID {

@@ -10,9 +10,7 @@
     },
     "sideEffects": [
         "./dist/utils/*-polyfill.js",
-        "./dist/utils/*-polyfill.mjs",
-        "./dist/utils/uuidv7.js",
-        "./dist/utils/uuidv7.mjs"
+        "./dist/utils/*-polyfill.mjs"
     ],
     "files": [
         "dist",
