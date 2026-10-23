@@ -21,7 +21,7 @@ Keep each changeset description to one short, user-facing line, similar to a PR 
 Changes to `.changeset/` on `main` trigger the [`Release` workflow](https://github.com/PostHog/posthog-js/actions/workflows/release.yml). It can also be started through workflow dispatch. The workflow:
 
 1. Waits for approval and creates the version-bump commit on `main`.
-2. If the version of the `posthog-js` browser package changed, builds and uploads its immutable browser and toolbar assets to the US and EU S3 buckets. Only after both regions verify successfully does a second phase promote the major-version and compatibility aliases, using the same build artifacts.
+2. For each changed public browser package, builds and uploads immutable assets to the US and EU S3 buckets. `posthog-js` includes regional toolbar assets; `@posthog/browser` has a separate, toolbar-independent build. Each package promotes its aliases from the same build artifacts only after both regions verify its immutable assets.
 3. Publishes the changed packages to npm.
 4. Creates package tags and GitHub releases.
 5. Dispatches downstream dependency upgrades and reports the result in Slack.
@@ -36,9 +36,9 @@ The browser S3 release happens before npm publishing. When `posthog-js` changes,
 - successfully uploading and verifying immutable assets in both the US and EU S3 buckets; and
 - successfully promoting and verifying aliases in both regions (prereleases verify immutable assets but do not write aliases).
 
-If any of that work fails, no package from the coordinated npm release is published. If `posthog-js` did not change, the S3 jobs are skipped and npm publishing proceeds normally.
+If any of that work fails, no package from the coordinated npm release is published. If `posthog-js` did not change, its S3 jobs are skipped; the separate `@posthog/browser` gate still applies.
 
-A stable browser release uploads:
+A stable `posthog-js` release uploads:
 
 - immutable versioned assets under `/static/<version>/`;
 - mutable major-version aliases under `/static/<major>/`; and
@@ -46,15 +46,38 @@ A stable browser release uploads:
 
 Prerelease versions receive only immutable versioned assets. The workflow does not purge CDN caches. Mutable aliases use `Cache-Control: public, max-age=300`, so they can continue serving cached bytes for up to five minutes. Versioned assets use `Cache-Control: public, max-age=31536000, immutable`.
 
+### `@posthog/browser` S3 gate
+
+While `packages/browser-next/package.json` is private, its version check and S3 uploads are skipped. Once public, a new version must complete both regional immutable uploads and alias phases before its npm publication. Failed or indeterminate version checks block publication of this package.
+
+The workflow builds `pnpm --filter @posthog/browser build:cdn` once from the pinned Changesets version-bump commit, after building workspace dependencies. Both regions and phases consume the same `posthog-browser-dist` artifact, containing `posthog.js`, deferred chunks, and source maps.
+
+Stable releases publish byte-identical trees at:
+
+- `/static/browser/<exact-package-version>/` with `Cache-Control: public, max-age=31536000, immutable`;
+- `/static/browser/<major>/` with `Cache-Control: public, max-age=300`.
+
+Prereleases publish only the exact-version tree. Dependencies are uploaded and verified before `posthog.js` in both phases. Historical hashed chunks are retained for cached entries. Alias promotion is not atomic across objects or regions and does not purge CDN caches.
+
+```sh
+node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --immutable-only
+# After immutable uploads succeed in both US and EU:
+node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --aliases-only
+```
+
+Both phases use the shared checksum, metadata, conditional-write, concurrency, and retry helpers below. Alias promotion re-verifies immutable assets. Keep the original artifact for retries; it is retained for 30 days. If it is unavailable, publish a new version rather than rebuilding into an immutable path. The manual recovery workflow below applies to `posthog-js`.
+
+**Deployment prerequisite:** confirm both asset-bucket OIDC roles can HEAD/GET and conditionally PUT the `static/browser/` prefix, and both asset CDNs serve it with the uploaded MIME/cache metadata. Local tests do not establish IAM authorization or public availability.
+
 ### Retry and resume behavior
 
 S3 operations run with at most eight assets in flight per job. Each PUT uses a replayable buffer and the AWS SDK's standard retry strategy (exponential backoff with jitter, at most four attempts). Started operations drain before a failed phase exits; subsequent phases do not start on failure.
 
 A retry checks existing immutable objects against the local artifact's SHA-256, length, content type, cache control, and absence of content encoding. Identical objects are skipped, missing objects are uploaded with `If-None-Match: *`, and conflicting objects fail without overwriting. Older objects without a full-object SHA-256 are downloaded and hashed; ETag is not treated as a content checksum. Permission and lookup failures are not treated as missing objects. A conditional-write conflict after a lost acknowledgement is accepted only after verifying the existing object matches.
 
-Keep the original SDK and regional toolbar artifacts when retrying. A rebuild from the same commit is not necessarily byte-identical, and a different toolbar revision must not silently replace immutable assets. Only explicitly approved recovery may force replacement of conflicting objects.
+For `posthog-js`, keep the original SDK and regional toolbar artifacts when retrying. A rebuild from the same commit is not necessarily byte-identical, and a different toolbar revision must not silently replace immutable assets. Only explicitly approved recovery may force replacement of conflicting objects.
 
-The CLI retains its combined upload mode for compatibility. Workflows use `upload-s3 <bucket> <version> --immutable-only`, followed by `--aliases-only` behind a cross-region barrier. Alias-only mode re-verifies the complete immutable set before writing aliases and cannot be combined with `--force-overwrite` or `--immutable-only`. No compressed asset format, public path, or cache lifetime changes are introduced.
+The `posthog-js` CLI retains its combined upload mode for compatibility. Workflows use `upload-s3 <bucket> <version> --immutable-only`, followed by `--aliases-only` behind a cross-region barrier. Alias-only mode re-verifies the complete immutable set before writing aliases and cannot be combined with `--force-overwrite` or `--immutable-only`. No compressed asset format, public path, or cache lifetime changes are introduced.
 
 PostHoggers can join [`#alerts-posthog-js`](https://posthog.slack.com/archives/C07HTMN9X47) for release workflow failure notifications.
 
