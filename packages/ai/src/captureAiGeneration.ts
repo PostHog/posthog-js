@@ -151,11 +151,14 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       }
 
       let exceptionId: string | undefined
-      // The exception's message and stack can echo the prompt. The wrapper rethrows, so the
-      // app's own error handling still sees the error.
-      if (client.options?.enableExceptionAutocapture && !shouldRedact) {
-        exceptionId = uuidv7()
-        client.captureException(options.error, undefined, { $ai_trace_id: traceId }, exceptionId)
+      if (client.options?.enableExceptionAutocapture) {
+        // The exception's message and stack can echo the prompt. The wrapper rethrows, so the
+        // app's own error handling still sees the error. The marker still applies under privacy
+        // so the global and framework handlers skip the rethrown error too.
+        if (!shouldRedact) {
+          exceptionId = uuidv7()
+          client.captureException(options.error, undefined, { $ai_trace_id: traceId }, exceptionId)
+        }
         if (typeof options.error === 'object') {
           ;(options.error as CoreErrorTracking.PreviouslyCapturedError).__posthog_previously_captured_error = true
         }

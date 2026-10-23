@@ -43,6 +43,11 @@ const CONTENT_ATTRIBUTES = new Set([
   // OpenInference
   'input.value',
   'output.value',
+  'llm.function_call',
+  'llm.prompt_template.template',
+  'llm.prompt_template.variables',
+  // Holds request parameters such as Responses `instructions`.
+  'llm.invocation_parameters',
   // Errors
   'exception.message',
   'exception.stacktrace',
@@ -56,7 +61,10 @@ const CONTENT_ATTRIBUTE_PREFIXES = [
   'llm.completions.',
   'llm.input_messages.',
   'llm.output_messages.',
+  'llm.choices.',
 ]
+
+const OPENINFERENCE_EMBEDDING_TEXT = /^embedding\.embeddings\.\d+\.embedding\.text$/
 
 // GenAI semantic convention span events (`gen_ai.user.message`, `gen_ai.choice`, ...) carry
 // message content under generic keys such as `content`.
@@ -65,7 +73,9 @@ const CONTENT_EVENT_PREFIX = 'gen_ai.'
 const PROVIDER_METADATA_ATTRIBUTE = 'ai.response.providerMetadata'
 
 const isContentAttribute = (key: string): boolean =>
-  CONTENT_ATTRIBUTES.has(key) || CONTENT_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix))
+  CONTENT_ATTRIBUTES.has(key) ||
+  CONTENT_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix)) ||
+  OPENINFERENCE_EMBEDDING_TEXT.test(key)
 
 // Provider metadata can carry content, such as Google grounding search queries. Ingestion only
 // reads the Vercel AI Gateway cost from it.

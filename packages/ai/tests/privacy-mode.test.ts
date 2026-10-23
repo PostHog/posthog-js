@@ -118,9 +118,11 @@ async function runOpenAI(client: PostHog): Promise<void> {
     })
   )
   const failing = new PostHogOpenAI({ apiKey: 'sk-test', maxRetries: 0, posthog: client })
-  await ignoreRejection(() =>
-    failing.chat.completions.create({ model: 'gpt-4o-mini', messages: openAIMessages, tools: [lookupTool] })
-  )
+  const rethrown = await failing.chat.completions
+    .create({ model: 'gpt-4o-mini', messages: openAIMessages, tools: [lookupTool] })
+    .catch((error: unknown) => error)
+  // Express, NestJS and the global handlers route the rethrown error through captureException.
+  client.captureException(rethrown)
   await ignoreRejection(() =>
     failing.responses.create({
       model: 'gpt-4o-mini',

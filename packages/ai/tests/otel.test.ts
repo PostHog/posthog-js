@@ -182,6 +182,11 @@ describe('PostHogTraceExporter AI span filtering', () => {
       'gen_ai.system_instructions': 'CANARY_7f3a',
       'gen_ai.completion.0.content': 'CANARY_7f3a',
       'llm.input_messages.0.message.content': 'CANARY_7f3a',
+      'llm.choices.0.completion.text': 'CANARY_7f3a',
+      'llm.function_call': 'CANARY_7f3a',
+      'llm.prompt_template.variables': 'CANARY_7f3a',
+      'llm.invocation_parameters': 'CANARY_7f3a',
+      'embedding.embeddings.0.embedding.text': 'CANARY_7f3a',
       'traceloop.entity.input': 'CANARY_7f3a',
       'exception.message': 'CANARY_7f3a',
     }
