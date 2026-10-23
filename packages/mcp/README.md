@@ -201,6 +201,9 @@ calls keep their sessions and client identity.
 instrument(server, posthog, { captureInitialize: false })
 ```
 
+Set `captureToolsList: false` to stop sending `$mcp_tools_list`. Nothing else changes: tools keep
+their injected arguments, and the virtual tools stay listed.
+
 ### Identifying the deployed server build
 
 MCP advertises a server version, but it does not define an exact build identifier. Pass an immutable
