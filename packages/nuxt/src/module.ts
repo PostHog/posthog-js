@@ -71,7 +71,7 @@ export interface PostHogCommon {
   debug?: boolean
 }
 
-export type PostHogServerConfig = PostHogOptions
+export type PostHogServerConfig = PostHogOptions & { requestContext?: boolean }
 export type PostHogClientConfig = Partial<PostHogConfig>
 
 export default defineNuxtModule<ModuleOptions>({
