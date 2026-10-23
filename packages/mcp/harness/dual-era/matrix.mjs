@@ -63,8 +63,8 @@ const V1_ROWS = [
 // The two longlived rows are the control — one server for the whole process on
 // NodeStreamableHTTPServerTransport. That transport tops out at 2025-11-25, so
 // there is no longlived 2026 row, and on the legacy era the server mints an
-// Mcp-Session-Id (ADR-0009), so these rows expect our token where the
-// per-request rows expect no header at all.
+// Mcp-Session-Id (ADR-0009), so these rows expect an opaque transport id where
+// the per-request rows expect no header at all.
 const V2_ROWS = [
   ['v2  high  2025  conv=off', 'v2.mjs', { LEVEL: 'high' }, '2025', 'off'],
   ['v2  high  2025  conv=on', 'v2.mjs', { LEVEL: 'high' }, '2025', 'on'],
@@ -74,8 +74,15 @@ const V2_ROWS = [
   ['v2  low   2025  conv=on', 'v2.mjs', { LEVEL: 'low' }, '2025', 'on'],
   ['v2  low   2026  conv=off', 'v2.mjs', { LEVEL: 'low' }, '2026', 'off'],
   ['v2  low   2026  conv=on', 'v2.mjs', { LEVEL: 'low' }, '2026', 'on'],
-  ['v2  high  longlived  2025', 'v2.mjs', { LEVEL: 'high', MODE: 'longlived' }, '2025', 'off', 'token'],
-  ['v2  low   longlived  2025', 'v2.mjs', { LEVEL: 'low', MODE: 'longlived' }, '2025', 'off', 'token'],
+  [
+    'v2  high  longlived  2025',
+    'v2.mjs',
+    { LEVEL: 'high', MODE: 'longlived', STATEFUL: '1' },
+    '2025',
+    'off',
+    'present',
+  ],
+  ['v2  low   longlived  2025', 'v2.mjs', { LEVEL: 'low', MODE: 'longlived', STATEFUL: '1' }, '2025', 'off', 'present'],
 ]
 const ROWS = MAJOR === 'v1' ? V1_ROWS : MAJOR === 'v2' ? V2_ROWS : [...V1_ROWS, null, ...V2_ROWS]
 
@@ -202,6 +209,21 @@ async function checkAlive(file, env, lane) {
   const modern = lane === '2026'
   let ok = false
   try {
+    let sessionId
+    if (env.STATEFUL === '1') {
+      const init = await fetch(`http://localhost:${port}/mcp`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 0,
+          method: 'initialize',
+          params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'p', version: '1' } },
+        }),
+      })
+      sessionId = init.headers.get('mcp-session-id')
+      await init.text()
+    }
     const res = await fetch(`http://localhost:${port}/mcp`, {
       method: 'POST',
       headers: {
@@ -209,6 +231,7 @@ async function checkAlive(file, env, lane) {
         accept: 'application/json, text/event-stream',
         'mcp-protocol-version': modern ? '2026-07-28' : '2025-11-25',
         ...(modern ? { 'mcp-method': 'tools/list' } : {}),
+        ...(sessionId ? { 'mcp-session-id': sessionId } : {}),
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
