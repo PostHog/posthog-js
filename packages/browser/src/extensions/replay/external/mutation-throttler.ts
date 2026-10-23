@@ -11,6 +11,18 @@ import { logger } from '@posthog/browser-common/utils/logger'
 export const DEFAULT_MUTATION_BYTES_REFILL_RATE = 25 * 1024
 export const DEFAULT_MUTATION_RESYNC_INTERVAL_MS = 5 * 60 * 1000
 
+// An `adds` payload this large is a whole subtree being re-serialized, not an
+// ordinary DOM change. Well above what a virtualized list or a calendar grid
+// produces, so ordinary churn never reaches the repeat guard below.
+export const DEFAULT_OVERSIZED_ADD_BYTES = 1024 * 1024
+// Oversized adds allowed before repeats start being dropped. One-off large
+// subtree adds (a route change, a lazily mounted widget) stay in the recording;
+// a rebuild loop stops after it has spent them.
+export const DEFAULT_OVERSIZED_ADD_BUDGET = 3
+
+const numberOr = (value: number | undefined, fallback: number, min: number): number =>
+    isNumber(value) && Number.isFinite(value) && value >= min ? value : fallback
+
 export class MutationThrottler {
     private _loggedTracker: Record<string, boolean> = {}
     private _rateLimiter: BucketedRateLimiter<number>
@@ -22,6 +34,10 @@ export class MutationThrottler {
     private _resyncIntervalMs: number
     private _resyncTimer: ReturnType<typeof setTimeout> | undefined
     private _lastResyncAt = -Infinity
+    private _oversizedAddBytes: number
+    private _oversizedAddBudgetSize: number
+    private _oversizedAddTokens: number
+    private _lastOversizedAddRefill: number = Date.now()
 
     constructor(
         private readonly _rrweb: rrwebRecord,
@@ -30,6 +46,8 @@ export class MutationThrottler {
             refillRate?: number
             bytesBucketSize?: number
             bytesRefillRate?: number
+            oversizedAddBytes?: number
+            oversizedAddBudget?: number
             resyncIntervalMs?: number
             onBlockedNode?: (id: number, node: Node | null) => void
             onDroppedAttributeMutations?: (count: number) => void
@@ -49,13 +67,12 @@ export class MutationThrottler {
         this._bytesRefillRate = this._options.bytesRefillRate ?? DEFAULT_MUTATION_BYTES_REFILL_RATE
         this._byteBudgetDisabled = !Number.isFinite(this._bytesBucketSize) || this._bytesBucketSize <= 0
         this._byteTokens = this._bytesBucketSize
-        const resyncIntervalMs = this._options.resyncIntervalMs
+        this._oversizedAddBytes = numberOr(this._options.oversizedAddBytes, DEFAULT_OVERSIZED_ADD_BYTES, 1)
+        this._oversizedAddBudgetSize = numberOr(this._options.oversizedAddBudget, DEFAULT_OVERSIZED_ADD_BUDGET, 0)
+        this._oversizedAddTokens = this._oversizedAddBudgetSize
         // guard against 0 (the "scheduled snapshots disabled" config value) and other
         // non-positive values: a zero cooldown would take a full snapshot per dropped mutation
-        this._resyncIntervalMs =
-            isNumber(resyncIntervalMs) && Number.isFinite(resyncIntervalMs) && resyncIntervalMs > 0
-                ? resyncIntervalMs
-                : DEFAULT_MUTATION_RESYNC_INTERVAL_MS
+        this._resyncIntervalMs = numberOr(this._options.resyncIntervalMs, DEFAULT_MUTATION_RESYNC_INTERVAL_MS, 1)
     }
 
     private _refillByteBudget = () => {
@@ -70,6 +87,18 @@ export class MutationThrottler {
             this._byteTokens + (elapsedMs / 1000) * this._bytesRefillRate
         )
         this._lastByteRefill = now
+    }
+
+    // One token back per resync interval, so a page that rebuilds a big subtree
+    // forever keeps paying for at most one of those payloads per interval.
+    private _refillOversizedAddBudget = () => {
+        const now = Date.now()
+        const intervals = Math.floor((now - this._lastOversizedAddRefill) / this._resyncIntervalMs)
+        if (intervals <= 0) {
+            return
+        }
+        this._oversizedAddTokens = Math.min(this._oversizedAddBudgetSize, this._oversizedAddTokens + intervals)
+        this._lastOversizedAddRefill += intervals * this._resyncIntervalMs
     }
 
     private _onNodeRateLimited = (key: number) => {
@@ -150,6 +179,18 @@ export class MutationThrottler {
         }
 
         if (this._byteBudgetDisabled) {
+            // With the byte budget off nothing bounds a page that re-creates a large
+            // same-origin subtree - an embedded viewer's iframe, a heavy widget - which
+            // re-serializes all of it on every rebuild, then stringifies and compresses
+            // the result. Drop only the repeats, so a one-off large add still reaches
+            // the player. The byte budget subsumes this when it is on, and measuring
+            // the payload twice would itself cost a walk of the added subtree.
+            const oversizedAddBytes = this._repeatedOversizedAddBytes(data)
+            if (oversizedAddBytes > 0) {
+                this._options.onDroppedOversizedMutation?.(oversizedAddBytes)
+                this._scheduleResync()
+                return
+            }
             return event
         }
 
@@ -163,6 +204,24 @@ export class MutationThrottler {
         this._byteTokens -= eventBytes
 
         return event
+    }
+
+    // Bytes in an `adds` payload large enough to be a whole subtree re-serialized,
+    // once the budget for those has run out. 0 when this batch is within budget.
+    private _repeatedOversizedAddBytes = (data: Partial<mutationCallbackParam>): number => {
+        if (!data.adds?.length) {
+            return 0
+        }
+        const addsBytes = estimateCompressedEventSize(data.adds)
+        if (addsBytes <= this._oversizedAddBytes) {
+            return 0
+        }
+        this._refillOversizedAddBudget()
+        if (this._oversizedAddTokens <= 0) {
+            return addsBytes
+        }
+        this._oversizedAddTokens -= 1
+        return 0
     }
 
     // A dropped mutation leaves the player's DOM stale until the next full snapshot. Ask for
@@ -198,6 +257,8 @@ export class MutationThrottler {
         this.reset()
         this._byteTokens = this._bytesBucketSize
         this._lastByteRefill = Date.now()
+        this._oversizedAddTokens = this._oversizedAddBudgetSize
+        this._lastOversizedAddRefill = Date.now()
         this._lastResyncAt = -Infinity
     }
 }

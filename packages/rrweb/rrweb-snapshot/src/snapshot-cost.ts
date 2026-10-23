@@ -148,9 +148,10 @@ let startGeneration = 0;
 let inProgress: SnapshotCost = emptyCost();
 let lastCost: SnapshotCost | null = null;
 
-// null means "no budget in effect" - the incremental mutation path never opens a
-// tracking scope, so stylesheet inlining there stays unbounded as before.
 let stylesheetBudgetRules: number | null = null;
+// A mutation window opens its own tracking scope for the budget alone; its cost
+// must not become `lastCost`, which reports the slowest full snapshot.
+let windowIsSnapshot = true;
 let deferredStylesheetLinks: HTMLLinkElement[] = [];
 // the count survives `takeDeferredStylesheetLinks()`, which drains the array
 // before the tracking window closes
@@ -177,11 +178,15 @@ const positiveOrNull = (n: number | null | undefined) =>
  * different sheets from load to load. Rule count is a stable proxy - `cssText` cost
  * is roughly uniform per rule - and keeps the emitted event stream deterministic.
  */
-export function beginSnapshotCostTracking(budgetRules?: number | null): void {
+export function beginSnapshotCostTracking(
+  budgetRules?: number | null,
+  options?: { isSnapshot?: boolean },
+): void {
   trackingDepth += 1;
   if (trackingDepth > 1) {
     return;
   }
+  windowIsSnapshot = options?.isSnapshot !== false;
   inProgress = emptyCost();
   deferredStylesheetLinks = [];
   deferredLinkCount = 0;
@@ -203,6 +208,7 @@ export function endSnapshotCostTracking(): SnapshotCost {
   deferredStylesheetStats.deferredCount += deferredLinkCount;
   stylesheetBudgetRules = null;
   if (
+    !windowIsSnapshot ||
     discardImplausibleDurationSample(inProgress.durationMs, startGeneration)
   ) {
     // only the timing is bogus: the deferral tally above counts real events,
@@ -211,6 +217,11 @@ export function endSnapshotCostTracking(): SnapshotCost {
   }
   lastCost = inProgress;
   return lastCost;
+}
+
+/** True while any tracking scope - snapshot or mutation - is open. */
+export function isSnapshotCostTrackingActive(): boolean {
+  return trackingDepth > 0;
 }
 
 /** Cost of the most recent completed `snapshot()`, or null if none has run. */
@@ -312,10 +323,10 @@ export function recordStylesheetCost(ms: number): void {
 }
 
 /**
- * Whether inlining `sheet` would take this snapshot past its stylesheet budget.
- * Always false when no budget is configured or no snapshot is in progress, i.e.
- * the incremental mutation path is never capped. Guards run before the rule
- * count so the unbudgeted paths never pay the walk over the sheet's rules.
+ * Whether inlining `sheet` would take the open window past its stylesheet budget.
+ * Always false when no budget is configured or no window is open. Guards run
+ * before the rule count so the unbudgeted paths never pay the walk over the
+ * sheet's rules.
  */
 export function shouldDeferStylesheetInlining(
   sheet: CSSStyleSheet | null | undefined,
@@ -442,6 +453,7 @@ export function resetSnapshotCostState(): void {
   inProgress = emptyCost();
   lastCost = null;
   stylesheetBudgetRules = null;
+  windowIsSnapshot = true;
   deferredStylesheetLinks = [];
   deferredLinkCount = 0;
   nonDeferrableDepth = 0;
