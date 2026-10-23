@@ -876,6 +876,54 @@ describe('ConversationsManager', () => {
             }
         })
 
+        it.each([
+            {
+                case: 'a JSON error body',
+                response: { statusCode: 400, text: '{"detail":"Message is too long"}' },
+                message: 'Message is too long',
+                status: 400,
+            },
+            {
+                case: 'a non-JSON body',
+                response: { statusCode: 502, text: '<html>Bad Gateway</html>' },
+                message: 'Failed to send message',
+                status: 502,
+            },
+            {
+                case: 'a non-string error field',
+                response: { statusCode: 400, text: '{"detail":["invalid"]}' },
+                message: 'Failed to send message',
+                status: 400,
+            },
+        ])(
+            'should keep the HTTP status and read the server reason for $case',
+            async ({ response, message, status }) => {
+                ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                    options.callback(response)
+                })
+                const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+                try {
+                    await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({ kind: 'http', message, status })
+                } finally {
+                    errorSpy.mockRestore()
+                }
+            }
+        )
+
+        it('should keep the HTTP status on rate limit errors', async () => {
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 429 })
+            })
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+            try {
+                await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({ kind: 'rate_limit', status: 429 })
+            } finally {
+                warnSpy.mockRestore()
+            }
+        })
+
         it('should log and reject with a handled HTTP error for a server failure', async () => {
             ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
                 options.callback({ statusCode: 500, json: { detail: 'Server unavailable' } })

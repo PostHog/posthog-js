@@ -1,5 +1,5 @@
 import { render, h } from 'preact'
-import { isNumber, isNull, stripUrlHash } from '@posthog/core'
+import { isNumber, isNull, isString, stripUrlHash } from '@posthog/core'
 import {
     ConversationsRemoteConfig,
     ConversationsWidgetState,
@@ -36,6 +36,15 @@ import type { RequestResponse } from '@posthog/types'
 
 const logger = createLogger('[ConversationsManager]')
 
+const parseJsonBody = (text: string | undefined): Record<string, any> | undefined => {
+    try {
+        const parsed = JSON.parse(text as string)
+        return parsed && typeof parsed === 'object' ? parsed : undefined
+    } catch {
+        return undefined
+    }
+}
+
 const createConversationsRequestError = (
     response: RequestResponse,
     operation: string,
@@ -67,14 +76,21 @@ const createConversationsRequestError = (
                 logger.error(fallbackMessage, { status: response.statusCode })
             }
         }
-        return createConversationsError('rate_limit', 'Too many requests. Please wait before trying again.')
+        return createConversationsError(
+            'rate_limit',
+            'Too many requests. Please wait before trying again.',
+            response.statusCode
+        )
     }
 
-    const message = response.json?.error || response.json?.detail || response.json?.message || fallbackMessage
+    // `_send_request` only parses JSON for 200 responses, so read the error body ourselves.
+    const body = response.json ?? parseJsonBody(response.text)
+    const serverMessage = body?.error || body?.detail || body?.message
+    const message = isString(serverMessage) && serverMessage ? serverMessage : fallbackMessage
     if (logFailure) {
         logger.error(fallbackMessage, { status: response.statusCode })
     }
-    return createConversationsError('http', message)
+    return createConversationsError('http', message, response.statusCode)
 }
 
 const createInvalidConversationsResponseError = (operation: string, logFailure: boolean = true): Error => {
