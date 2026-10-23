@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.82.0
+
+### Minor Changes
+
+- [#5101](https://github.com/PostHog/posthog-js/pull/5101) [`997d4ff`](https://github.com/PostHog/posthog-js/commit/997d4ff074b9919121b274b614bd0e34628d8316) Thanks [@ioannisj](https://github.com/ioannisj)! - Attach `$recording_status` and the replay trigger and buffer `$sdk_debug_*` properties to every captured event, and the rest of the session replay debug properties to SDK events at most once every 30 seconds, reading the native replay state (`buffering`, hold reason, buffer length) from `@posthog/react-native-plugin` 2.12.0 or newer
+  (2026-10-23)
+
+### Patch Changes
+
+- Updated dependencies [[`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d)]:
+  - @posthog/core@1.60.1
+
 ## 4.81.10
 
 ### Patch Changes

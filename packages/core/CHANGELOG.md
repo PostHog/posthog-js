@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.60.1
+
+### Patch Changes
+
+- [#5354](https://github.com/PostHog/posthog-js/pull/5354) [`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back instead of returning inconsistent local regex flag results for Unicode and advanced patterns.
+  (2026-10-23)
+
 ## 1.60.0
 
 ### Minor Changes
