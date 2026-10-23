@@ -2113,7 +2113,7 @@
       "name": "EmailError",
       "properties": [
         {
-          "description": "The API's error code, such as `template_not_found`, or one of the SDK's own: `missing_secret_key`, `client_disabled`, `network_error`, `invalid_template_key`, `template_file_unreadable`, `template_missing_subject`, `api_error` for an answer PostHog gave without a code, and `unexpected_error`.",
+          "description": "PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`, `missing_app_host`, `client_disabled`, `network_error`, `api_error` for an answer without a code, `unexpected_error`, `invalid_template_id` and `invalid_idempotency_key`.",
           "type": "string",
           "name": "code"
         },
@@ -2123,87 +2123,48 @@
           "name": "docsUrl"
         },
         {
-          "description": "The request field the error is about, such as `template__key`.",
+          "description": "The request field the error is about.",
           "type": "string",
           "name": "field"
+        },
+        {
+          "description": "What to change so the email sends.",
+          "type": "string",
+          "name": "fix"
         },
         {
           "type": "string",
           "name": "message"
         },
         {
+          "description": "`validation_error`, `missing_api_key`, `invalid_permission`, `not_found`, `concurrent_idempotent_requests`, `invalid_idempotent_request`, `rate_limit_exceeded`, `monthly_quota_exceeded`, `service_unavailable` or `application_error`.",
+          "type": "EmailErrorName",
+          "name": "name"
+        },
+        {
           "description": "The HTTP status, when PostHog answered.",
           "type": "number",
           "name": "statusCode"
+        },
+        {
+          "description": "Why PostHog refused the email.",
+          "type": "string",
+          "name": "why"
         }
       ],
       "path": "src/emails.ts"
+    },
+    {
+      "id": "EmailErrorName",
+      "name": "EmailErrorName",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "\"validation_error\" | \"missing_api_key\" | \"invalid_permission\" | \"not_found\" | \"concurrent_idempotent_requests\" | \"invalid_idempotent_request\" | \"rate_limit_exceeded\" | \"monthly_quota_exceeded\" | \"service_unavailable\" | \"application_error\""
     },
     {
       "id": "Emails",
       "name": "Emails",
       "properties": [],
-      "path": "src/emails.ts"
-    },
-    {
-      "id": "EmailTemplateFile",
-      "name": "EmailTemplateFile",
-      "properties": [
-        {
-          "description": "The template's key in PostHog: the file name without `.html`, unless you gave one.",
-          "type": "string",
-          "name": "key"
-        },
-        {
-          "description": "The template's name in PostHog. Defaults to the subject.",
-          "type": "string",
-          "name": "name"
-        },
-        {
-          "description": "Absolute path of the `.html` file.",
-          "type": "string",
-          "name": "path"
-        }
-      ],
-      "path": "src/emails.ts"
-    },
-    {
-      "id": "EmailTemplateFileOptions",
-      "name": "EmailTemplateFileOptions",
-      "properties": [
-        {
-          "description": "The template's key in PostHog. Defaults to the file name without `.html`.",
-          "type": "string",
-          "name": "key"
-        },
-        {
-          "description": "The template's name in the PostHog template library. Defaults to the subject.",
-          "type": "string",
-          "name": "name"
-        }
-      ],
-      "path": "src/emails.ts"
-    },
-    {
-      "id": "EmailTemplateSource",
-      "name": "EmailTemplateSource",
-      "properties": [
-        {
-          "description": "Path of the file in the repository. Detected relative to the checkout's root, then to `GITHUB_WORKSPACE` or `CI_PROJECT_DIR` when the file is inside it, then to the working directory.",
-          "type": "string",
-          "name": "path"
-        },
-        {
-          "description": "Commit or branch the file is uploaded from. Detected from `GITHUB_SHA`, `CI_COMMIT_SHA`, `VERCEL_GIT_COMMIT_SHA` or `RAILWAY_GIT_COMMIT_SHA`, then the commit the checkout's `HEAD` points to.",
-          "type": "string",
-          "name": "ref"
-        },
-        {
-          "description": "Host and path of the repository, such as `github.com/example/app`. Detected from `GITHUB_SERVER_URL` and `GITHUB_REPOSITORY` (GitHub Actions), `CI_SERVER_HOST` and `CI_PROJECT_PATH` (GitLab CI), `VERCEL_GIT_PROVIDER`, `VERCEL_GIT_REPO_OWNER` and `VERCEL_GIT_REPO_SLUG` (Vercel), `RAILWAY_GIT_REPO_OWNER` and `RAILWAY_GIT_REPO_NAME` (Railway, on `github.com`), then the checkout's `origin` remote.",
-          "type": "string",
-          "name": "repository"
-        }
-      ],
       "path": "src/emails.ts"
     },
     {
@@ -2213,6 +2174,10 @@
         {
           "type": "string",
           "name": "code"
+        },
+        {
+          "type": "string",
+          "name": "fix"
         },
         {
           "type": "string",
@@ -2781,7 +2746,7 @@
       "name": "IPostHog",
       "properties": [
         {
-          "description": "The `posthog.emails` API: send transactional email from a template, by its key or, in Node.js, from an HTML template file. Needs the `secretKey` client option.",
+          "description": "The `posthog.emails` API: send transactional email from your server. Needs the `secretKey` client option.",
           "type": "Emails",
           "name": "emails"
         },
@@ -3025,12 +2990,6 @@
       "path": "../core/src/types.ts"
     },
     {
-      "id": "NodeEmails",
-      "name": "NodeEmails",
-      "properties": [],
-      "path": "src/emails.ts"
-    },
-    {
       "id": "ObjectLike",
       "name": "ObjectLike",
       "properties": [],
@@ -3118,6 +3077,11 @@
         {
           "type": "unknown",
           "name": "body"
+        },
+        {
+          "description": "The answer's `Retry-After` in milliseconds, when it sent a usable one.",
+          "type": "number",
+          "name": "retryAfterMs"
         }
       ],
       "path": "../core/src/types.ts"
@@ -3866,6 +3830,21 @@
           "releaseTag": "deprecated"
         },
         {
+          "description": "The PostHog app host that `posthog.emails` sends to with the `secretKey`, such as `https://posthog.example.com`\nfor a self-hosted instance. Derived when `host` is PostHog Cloud. Any other `host` may be a reverse proxy, so\n`emails` calls fail with `missing_app_host` until you set it, and the secret key never goes to the proxy.",
+          "type": "string",
+          "name": "appHost"
+        },
+        {
+          "description": "How often `posthog.emails` retries a send that PostHog did not queue. Defaults to 2. `0` turns retries off.",
+          "type": "number",
+          "name": "maxRetries"
+        },
+        {
+          "description": "The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request.",
+          "type": "string",
+          "name": "migratedFrom"
+        },
+        {
           "description": "Redact prompts, outputs and error details from every event that the PostHog AI\nintegrations (`@posthog/ai`) capture with this client. Per-call privacy settings\ncan only add redaction. Defaults to false.",
           "type": "boolean",
           "name": "privacyMode"
@@ -4325,28 +4304,65 @@
       "path": "../core/src/utils/index.ts"
     },
     {
-      "id": "SendEmailOptions",
-      "name": "SendEmailOptions",
+      "id": "SendEmailBase",
+      "name": "SendEmailBase",
       "properties": [
         {
-          "description": "Values for the template, read as `{{ variables.* }}`. The template can't read person properties, so pass everything it needs here.",
-          "type": "Record<string, unknown>",
-          "name": "data"
-        },
-        {
-          "description": "The distinct ID of the recipient's person, to attribute the send and its delivery events. It never loads person properties.",
+          "description": "The recipient's distinct ID in your app. The email's events, such as sent, opened and clicked, land on this person and count as analytics events. Always pass it: without it, they land on a person keyed by the address.",
           "type": "string",
           "name": "distinctId"
         },
         {
-          "description": "The key of a template uploaded to PostHog, such as `'welcome'`, or a template file from `posthog.emails.templateFile()`.",
-          "type": "string | EmailTemplateFile",
-          "name": "template"
+          "description": "Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's workflow was paused or the default sender changed. A deleted or changed template, or a project with no default sender, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what the email is for, such as `welcome:user_42`, and set `maxRetries: 0`.",
+          "type": "string",
+          "name": "idempotencyKey"
         },
         {
-          "description": "The recipient's email address.",
+          "description": "How often to retry this send. Overrides the `maxRetries` client option.",
+          "type": "number",
+          "name": "maxRetries"
+        },
+        {
+          "description": "One recipient email address.",
           "type": "string",
           "name": "to"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "SendEmailOptions",
+      "name": "SendEmailOptions",
+      "properties": [
+        {
+          "description": "The UUID of the template.",
+          "type": "string",
+          "name": "templateId"
+        },
+        {
+          "description": "Values for the template's `{{ variables.* }}`. The template can't read person properties.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "One recipient email address.",
+          "type": "string",
+          "name": "to"
+        },
+        {
+          "description": "The recipient's distinct ID in your app. The email's events, such as sent, opened and clicked, land on this\nperson and count as analytics events. Always pass it: without it, they land on a person keyed by the address.",
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "description": "Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's\nworkflow was paused or the default sender changed. A deleted or changed template, or a project with no default\nsender, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what\nthe email is for, such as `welcome:user_42`, and set `maxRetries: 0`.",
+          "type": "string",
+          "name": "idempotencyKey"
+        },
+        {
+          "description": "How often to retry this send. Overrides the `maxRetries` client option.",
+          "type": "number",
+          "name": "maxRetries"
         }
       ],
       "path": "src/emails.ts"
@@ -4394,6 +4410,23 @@
       "properties": [],
       "path": "../core/src/metrics/types.ts",
       "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
+      "id": "SendTemplateEmailOptions",
+      "name": "SendTemplateEmailOptions",
+      "properties": [
+        {
+          "description": "Values for the template's `{{ variables.* }}`. The template can't read person properties.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "The UUID of the template.",
+          "type": "string",
+          "name": "templateId"
+        }
+      ],
+      "path": "src/emails.ts"
     },
     {
       "id": "SendTracesBatchOutcome",
@@ -5061,24 +5094,6 @@
         }
       ],
       "path": "src/types.ts"
-    },
-    {
-      "id": "UploadEmailTemplateOptions",
-      "name": "UploadEmailTemplateOptions",
-      "properties": [
-        {
-          "type": "EmailTemplateSource",
-          "name": "source"
-        }
-      ],
-      "path": "src/emails.ts"
-    },
-    {
-      "id": "UploadEmailTemplateResult",
-      "name": "UploadEmailTemplateResult",
-      "properties": [],
-      "path": "src/emails.ts",
-      "example": "{\n    data: {\n        id: string;\n        key: string;\n        result: 'created' | 'updated' | 'unchanged';\n        contentHash: string;\n    };\n    error: null;\n} | {\n    data: null;\n    error: EmailError;\n}"
     }
   ],
   "categories": [
