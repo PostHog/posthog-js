@@ -1,7 +1,7 @@
 import { embed, embedMany } from 'ai'
 import type { PostHog } from 'posthog-node'
 import { captureAiGeneration, type CaptureAiGenerationOptions } from '../captureAiGeneration'
-import { AIEvent, extractPosthogParams, withPrivacyMode, type MonitoringParams } from '../utils'
+import { AIEvent, extractPosthogParams, type MonitoringParams } from '../utils'
 import { extractBaseURL, extractProvider } from './middleware'
 
 type EmbedParams = Parameters<typeof embed>[0]
@@ -38,7 +38,7 @@ const traceEmbedding = async <P extends { model: EmbeddingModel }, R extends { u
     eventType: AIEvent.Embedding,
     model: modelId,
     provider,
-    input: withPrivacyMode(posthog, posthogParams.privacyMode, input),
+    input,
     output: null,
     baseURL,
     properties: {
