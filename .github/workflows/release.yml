@@ -1092,7 +1092,7 @@ jobs:
 
     gate-posthog-browser-publish:
         name: Gate @posthog/browser npm publishing on S3
-        needs: [version-bump, check-posthog-browser-version, upload-posthog-browser-s3]
+        needs: [version-bump, notify-approval-needed, check-posthog-browser-version, upload-posthog-browser-s3]
         runs-on: ubuntu-latest
         if: always() && needs.version-bump.outputs.commit-hash != ''
         permissions: {}
@@ -1121,6 +1121,17 @@ jobs:
                           exit 1
                           ;;
                   esac
+
+            - name: Notify Slack - @posthog/browser S3 failed
+              if: failure()
+              continue-on-error: true
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ Blocked `@posthog/browser` npm publication because its S3 release did not succeed. <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>'
+                  emoji_reaction: 'x'
 
     check-browser-version:
         name: Check posthog-js version for S3
