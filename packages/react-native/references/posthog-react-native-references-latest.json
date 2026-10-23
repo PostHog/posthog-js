@@ -4170,7 +4170,7 @@
           "name": "markFatalExceptionHandled"
         },
         {
-          "type": "() => Promise<PostHogReactNativePluginMap>",
+          "type": "(() => Promise<PostHogReactNativePluginMap>) & (() => Promise<{ [key: string]: any; }>)",
           "name": "getSessionReplayDebugProperties"
         },
         {
