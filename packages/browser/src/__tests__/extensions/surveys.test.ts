@@ -2331,6 +2331,61 @@ describe('SurveyManager', () => {
             expect(mockPostHog.capture).not.toHaveBeenCalledWith('survey sent', expect.anything())
         })
 
+        it.each(['URL', 'initial responses'])(
+            'does not skip a rejected required rating when another %s prefill is valid',
+            (source) => {
+                const survey: Survey = {
+                    id: 'mixed-prefill-survey',
+                    name: 'Mixed Prefill Survey',
+                    type: SurveyType.Popover,
+                    enable_partial_responses: true,
+                    questions: [
+                        {
+                            id: 'required-rating',
+                            type: SurveyQuestionType.Rating,
+                            question: 'How satisfied are you?',
+                            scale: 5,
+                            display: 'emoji',
+                            lowerBoundLabel: 'Not satisfied',
+                            upperBoundLabel: 'Very satisfied',
+                            optional: false,
+                            skipSubmitButton: true,
+                        },
+                        {
+                            id: 'choice',
+                            type: SurveyQuestionType.SingleChoice,
+                            question: 'Would you recommend us?',
+                            choices: ['Yes', 'No'],
+                            skipSubmitButton: true,
+                        },
+                    ],
+                    appearance: {},
+                    conditions: null,
+                    start_date: '2021-01-01T00:00:00.000Z',
+                    end_date: null,
+                    current_iteration: null,
+                    current_iteration_start_date: null,
+                    feature_flag_keys: [],
+                    linked_flag_key: null,
+                    targeting_flag_key: null,
+                    internal_targeting_flag_key: null,
+                }
+
+                window.location.search = '?q0=0&q1=1'
+                const completed =
+                    source === 'URL'
+                        ? (surveyManager as any)._handleUrlPrefill(survey)
+                        : (surveyManager as any)._handleInitialResponses(survey, { 0: 0, 1: 1 })
+
+                expect(completed).toBe(false)
+                expect(mockPostHog.capture).not.toHaveBeenCalledWith('survey sent', expect.anything())
+                const progress = JSON.parse(localStorage.getItem(`${SURVEY_IN_PROGRESS_PREFIX}${survey.id}`)!)
+                expect(progress.lastQuestionIndex).toBe(0)
+                expect(progress.visitedIndices).toEqual([])
+                expect(progress.responses).toEqual({ $survey_response_choice: 'No' })
+            }
+        )
+
         it('should include caller-provided properties in the auto-submitted prefill event', () => {
             const survey: Survey = {
                 id: 'prefill-survey-props',

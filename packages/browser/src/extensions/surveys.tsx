@@ -770,7 +770,12 @@ export class SurveyManager {
             const submissionId = uuidv7()
 
             // calculate which question to start at based on prefilled questions
-            const prefilledIndices = Object.keys(prefillParams).map((k) => parseInt(k, 10))
+            const prefilledIndices = Object.keys(prefillParams)
+                .map((k) => parseInt(k, 10))
+                .filter((index) => {
+                    const question = survey.questions[index]
+                    return question?.id && !isUndefined(responses[getSurveyResponseKey(question.id)])
+                })
             const { startQuestionIndex, skippedResponses, skippedIndices } = calculatePrefillStartIndex(
                 survey,
                 prefilledIndices,
