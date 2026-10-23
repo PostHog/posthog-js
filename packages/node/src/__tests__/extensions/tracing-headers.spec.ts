@@ -1,4 +1,9 @@
-import { getPostHogTracingHeaderValues, sanitizeTracingHeaderValue } from '@/extensions/tracing-headers'
+import {
+  getPostHogCookieReadOptions,
+  getPostHogCookieValues,
+  getPostHogTracingHeaderValues,
+  sanitizeTracingHeaderValue,
+} from '@/extensions/tracing-headers'
 
 describe('tracing headers', () => {
   describe('sanitizeTracingHeaderValue', () => {
@@ -58,6 +63,131 @@ describe('tracing headers', () => {
       ['returns empty object for missing headers', undefined, {}],
     ])('%s', (_name, headers, expected) => {
       expect(getPostHogTracingHeaderValues(headers)).toEqual(expected)
+    })
+
+    it('uses the posthog-js cookie only when no tracing header is present', () => {
+      const now = Date.now()
+      const cookie = `other=1; ph_token_posthog=${encodeURIComponent(
+        JSON.stringify({
+          distinct_id: 'user-from-cookie',
+          $user_state: 'identified',
+          $sesid: [now, 'cookie-session', now],
+        })
+      )}`
+
+      expect(getPostHogTracingHeaderValues({ cookie }, { apiKey: 'token' })).toEqual({
+        sessionId: 'cookie-session',
+        distinctId: 'user-from-cookie',
+      })
+      expect(
+        getPostHogTracingHeaderValues({ 'x-posthog-distinct-id': 'user-from-header', cookie }, { apiKey: 'token' })
+      ).toEqual({
+        distinctId: 'user-from-header',
+      })
+      expect(getPostHogTracingHeaderValues({ cookie })).toEqual({})
+    })
+  })
+
+  describe('getPostHogCookieReadOptions', () => {
+    it.each([
+      ['off by default', undefined, null],
+      ['off when false', false, null],
+      ['on when true', true, { apiKey: 'token' }],
+      [
+        'on with a custom idle timeout',
+        { sessionIdleTimeoutSeconds: 3600 },
+        { apiKey: 'token', sessionIdleTimeoutSeconds: 3600 },
+      ],
+    ])('%s', (_name, readPostHogCookie, expected) => {
+      expect(getPostHogCookieReadOptions({ apiKey: 'token', options: { readPostHogCookie } })).toEqual(expected)
+    })
+
+    it.each([
+      ['uses the custom timeout', 3600, 45, 'session'],
+      ['treats a zero timeout as the 30 minute default', 0, 20, 'session'],
+      ['clamps a timeout under 60 seconds to 60 seconds', 30, 0.75, 'session'],
+      ['clamps a timeout over 10 hours to 10 hours', 86400, 11 * 60, undefined],
+    ])('%s', (_name, sessionIdleTimeoutSeconds, idleMinutes, expectedSessionId) => {
+      const now = Date.now()
+      const lastActivity = now - idleMinutes * 60 * 1000
+      const cookie = `ph_token_posthog=${encodeURIComponent(
+        JSON.stringify({ distinct_id: 'anon', $sesid: [lastActivity, 'session', lastActivity] })
+      )}`
+      expect(getPostHogTracingHeaderValues({ cookie }, { apiKey: 'token', sessionIdleTimeoutSeconds }).sessionId).toBe(
+        expectedSessionId
+      )
+    })
+  })
+
+  describe('getPostHogCookieValues', () => {
+    const now = 1_700_000_000_000
+    const minute = 60 * 1000
+    const cookieFor = (value: unknown, apiKey: string = 'token'): string =>
+      `ph_${apiKey}_posthog=${encodeURIComponent(JSON.stringify({ $user_state: 'identified', ...(value as object) }))}`
+
+    it.each([
+      [
+        'live session',
+        cookieFor({ distinct_id: 'anon', $sesid: [now - minute, 'session', now - minute] }),
+        { sessionId: 'session', distinctId: 'anon' },
+      ],
+      [
+        'drops a session past the idle timeout',
+        cookieFor({ distinct_id: 'anon', $sesid: [now - 31 * minute, 'session', now - 31 * minute] }),
+        { distinctId: 'anon' },
+      ],
+      [
+        'drops a session past the length cap',
+        cookieFor({ distinct_id: 'anon', $sesid: [now - minute, 'session', now - 25 * 60 * minute] }),
+        { distinctId: 'anon' },
+      ],
+      [
+        'drops a session with future timestamps',
+        cookieFor({ distinct_id: 'anon', $sesid: [now + 40 * minute, 'session', now - minute] }),
+        { distinctId: 'anon' },
+      ],
+      [
+        'returns only the session for an anonymous visitor',
+        cookieFor({ distinct_id: 'anon', $user_state: 'anonymous', $sesid: [now, 'session', now] }),
+        { sessionId: 'session' },
+      ],
+      [
+        'accepts the older two-item session',
+        cookieFor({ distinct_id: 'anon', $sesid: [now - minute, 'session'] }),
+        { sessionId: 'session', distinctId: 'anon' },
+      ],
+      ['ignores a cookie for another project', cookieFor({ distinct_id: 'anon' }, 'other'), {}],
+      [
+        'ignores the cookie when the visitor opted out',
+        `${cookieFor({ distinct_id: 'anon', $sesid: [now, 'session', now] })}; __ph_opt_in_out_token=0`,
+        {},
+      ],
+      ['ignores a malformed cookie', 'ph_token_posthog=%7Bnot-json', {}],
+      ['returns empty object without a cookie header', undefined, {}],
+    ])('%s', (_name, cookieHeader, expected) => {
+      expect(getPostHogCookieValues(cookieHeader, 'token', now)).toEqual(expected)
+    })
+
+    it('treats a visitor with no consent cookie as opted out when opt-out is the default', () => {
+      const cookie = cookieFor({ distinct_id: 'anon', $sesid: [now, 'session', now] })
+      expect(getPostHogCookieValues(cookie, 'token', now, 30 * minute, true)).toEqual({})
+      expect(getPostHogCookieValues(`${cookie}; __ph_opt_in_out_token=1`, 'token', now, 30 * minute, true)).toEqual({
+        sessionId: 'session',
+        distinctId: 'anon',
+      })
+    })
+
+    it('keeps a session idle past 30 minutes when the idle timeout is longer', () => {
+      const cookie = cookieFor({ distinct_id: 'anon', $sesid: [now - 45 * minute, 'session', now - 45 * minute] })
+      expect(getPostHogCookieValues(cookie, 'token', now, 60 * minute)).toEqual({
+        sessionId: 'session',
+        distinctId: 'anon',
+      })
+    })
+
+    it('reads the cookie name posthog-js derives from a token with + / =', () => {
+      const cookie = cookieFor({ distinct_id: 'anon', $sesid: [now, 'session', now] }, 'aPLbSLcEQ')
+      expect(getPostHogCookieValues(cookie, 'a+b/c=', now)).toEqual({ sessionId: 'session', distinctId: 'anon' })
     })
   })
 })
