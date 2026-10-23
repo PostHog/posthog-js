@@ -168,6 +168,20 @@ test('both @posthog/browser immutable regions are required before its aliases an
     assert.ok(dependencies(job(release, 'gate-posthog-browser-publish')).includes('upload-posthog-browser-s3'))
 })
 
+test('@posthog/browser S3 gate reports failures to the release approval thread', () => {
+    const gate = job(release, 'gate-posthog-browser-publish')
+    assert.ok(dependencies(gate).includes('notify-approval-needed'))
+    for (const required of [
+        'if: failure()',
+        'continue-on-error: true',
+        'actions/slack-thread-reply@',
+        'thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}',
+        "message: '❌ Blocked `@posthog/browser` npm publication because its S3 release did not succeed.",
+    ]) {
+        assert.ok(gate.includes(required), `Missing failure notification configuration: ${required}`)
+    }
+})
+
 test('@posthog/browser npm gate rejects failed checks and incomplete S3 releases', () => {
     const gate = job(release, 'gate-posthog-browser-publish')
     const script = gate.match(/ {14}run: \|\n((?: {18}.*\n|\n)+)/)?.[1]
