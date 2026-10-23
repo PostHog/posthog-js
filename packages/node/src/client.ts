@@ -149,11 +149,21 @@ function isTimeout(error: unknown): boolean {
 function requestFailure(error: unknown): string {
   const reasons: string[] = []
   let reason = isPostHogFetchNetworkError(error) ? error.error : error
-  while (reason instanceof Error && reasons.length < 3) {
-    reasons.push(reason.message)
+  for (let depth = 0; reason instanceof Error && depth < 3; depth++) {
+    reasons.push(describeError(reason))
     reason = reason.cause
   }
-  return ['Request failed', ...reasons].join(': ')
+  return ['Request failed', ...reasons.filter(Boolean)].join(': ')
+}
+
+function describeError(error: Error): string {
+  if (error.message || !(error instanceof AggregateError)) {
+    return error.message
+  }
+  return error.errors
+    .filter((inner): inner is Error => inner instanceof Error)
+    .map((inner) => inner.message)
+    .join(', ')
 }
 
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {

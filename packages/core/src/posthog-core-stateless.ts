@@ -41,6 +41,7 @@ import {
   createLogger,
   getEventUuid,
   safeJsonStringify,
+  trySafe,
 } from './utils'
 import { parseRetryAfterMs } from './utils/retry-after'
 import { uuidv7 } from './vendor/uuidv7'
@@ -158,15 +159,8 @@ type SuccessfulWriteResponseHandling = {
 }
 
 async function readApiResponse(response: PostHogFetchResponse): Promise<PostHogApiResponse> {
-  return { status: response.status, body: parseJsonOrUndefined(await response.text()) }
-}
-
-function parseJsonOrUndefined(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
+  const text = await response.text()
+  return { status: response.status, body: trySafe(() => JSON.parse(text)) }
 }
 
 export const maybeAdd = (key: string, value: JsonType | undefined): Record<string, JsonType> =>

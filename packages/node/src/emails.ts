@@ -4,6 +4,7 @@ const TEMPLATE_SEND_PATH = (templateId: string): string =>
   `/api/projects/@current/messaging_templates/${templateId}/send/`
 
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
+const SEND_OPTIONS = new Set(['to', 'distinctId', 'idempotencyKey', 'maxRetries', 'templateId', 'templateData'])
 const DEFAULT_MAX_RETRIES = 2
 const FIRST_RETRY_DELAY_MS = 1_000
 const MAX_RETRY_DELAY_MS = 30_000
@@ -162,7 +163,8 @@ export class PostHogEmails implements Emails {
     return this.api.track(this.deliver(this.prepare(options)).catch(unexpectedFailure))
   }
 
-  private refusalBeforeRequest({ templateId, idempotencyKey }: SendEmailOptions): Failure | undefined {
+  private refusalBeforeRequest(options: SendEmailOptions): Failure | undefined {
+    const { templateId, idempotencyKey } = options
     if (this.api.isDisabled()) {
       return failure('client_disabled', 'The PostHog client is disabled, so nothing was sent.')
     }
@@ -181,6 +183,10 @@ export class PostHogEmails implements Emails {
     }
     if (!isValidUUID(templateId)) {
       return failure('invalid_template_id', 'templateId must be the UUID of a template.', { field: 'templateId' })
+    }
+    const unknownOption = unknownOptionRefusal(options)
+    if (unknownOption) {
+      return unknownOption
     }
     if (idempotencyKey !== undefined && !isIdempotencyKey(idempotencyKey)) {
       return failure(
@@ -268,6 +274,16 @@ function isRetryable({ error }: SendEmailResult): boolean {
     default:
       return false
   }
+}
+
+function unknownOptionRefusal(options: SendEmailOptions): Failure | undefined {
+  const field = Object.entries(options).find(([name, value]) => value !== undefined && !SEND_OPTIONS.has(name))?.[0]
+  if (field === undefined) {
+    return undefined
+  }
+  return failure('invalid_form', `send doesn't take ${field}, so it sent nothing. Remove ${field} and send again.`, {
+    field,
+  })
 }
 
 function isIdempotencyKey(value: unknown): boolean {

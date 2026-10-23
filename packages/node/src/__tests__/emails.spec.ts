@@ -1,4 +1,5 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
+import type { SendEmailOptions } from '@/emails'
 import { type Fault, FakeEmailsApi, refusalBody } from './utils/fake-emails-api'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
@@ -204,6 +205,21 @@ describe('emails', () => {
         'Request failed: getaddrinfo ENOTFOUND posthog.example.com',
         undefined,
       ],
+      [
+        'a refused connection to a host with two addresses',
+        {
+          networkError: new TypeError('fetch failed', {
+            cause: new AggregateError([
+              new Error('connect ECONNREFUSED ::1:8000'),
+              new Error('connect ECONNREFUSED 127.0.0.1:8000'),
+            ]),
+          }),
+        },
+        'network_error',
+        'service_unavailable',
+        'Request failed: fetch failed: connect ECONNREFUSED ::1:8000, connect ECONNREFUSED 127.0.0.1:8000',
+        undefined,
+      ],
     ] satisfies [string, Fault, string, string, string, number | undefined][])(
       'returns %s as %s',
       async (_, fault, code, name, message, statusCode) => {
@@ -234,6 +250,19 @@ describe('emails', () => {
       })
 
       expect(result).toEqual({ data: null, error: expect.objectContaining({ name, code }) })
+      expect(api.received).toEqual([])
+    })
+
+    it('returns invalid_form for an option it does not take, such as Resend scheduledAt, without a request', async () => {
+      const result = await createClient().emails.send({
+        to: JANE,
+        templateId: TEMPLATE_ID,
+        scheduledAt: 'in 1 hour',
+      } as SendEmailOptions)
+
+      expect(result.error).toEqual(
+        expect.objectContaining({ name: 'validation_error', code: 'invalid_form', field: 'scheduledAt' })
+      )
       expect(api.received).toEqual([])
     })
 
