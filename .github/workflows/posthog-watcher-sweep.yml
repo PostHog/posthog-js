@@ -60,6 +60,7 @@ jobs:
                   labels: '*'
                   allow-fix: 'true'
                   allow-close: 'true'
+                  allow-close-own-prs: 'true'
                   allow-security-ai: 'true'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
