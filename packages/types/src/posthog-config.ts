@@ -2048,9 +2048,14 @@ export interface PostHogConfig {
     advanced_disable_feature_flags: boolean
 
     /**
-     * Stops from firing feature flag requests on first page load.
-     * Only requests feature flags when user identity or properties are updated,
-     * or you manually request for flags to be loaded.
+     * Stops the feature flag request on first page load.
+     * After the first load, flags still load when user identity or properties change,
+     * when you call `reloadFeatureFlags()`, and on the background refresh timer.
+     *
+     * This option does not stop the background refresh. The refresh runs every five minutes by
+     * default (see `remote_config_refresh_interval_ms`), and each refresh is a billable feature
+     * flag request. To load flags only on identity or property changes, or when you reload them
+     * yourself, also set `remote_config_refresh_interval_ms: 0`.
      *
      * @default false
      */
