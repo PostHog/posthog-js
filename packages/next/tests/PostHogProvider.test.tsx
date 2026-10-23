@@ -1,3 +1,4 @@
+import { isUndefined } from '@posthog/core'
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { cookies } from 'next/headers.js'
@@ -25,7 +26,7 @@ vi.mock('../src/server/clientCache.node', () => ({
 }))
 
 // in test, just call the function directly (no caching)
-;(React as any).cache = (fn: Function) => fn
+;(React as any).cache = (fn: (...args: unknown[]) => unknown) => fn
 
 describe('PostHogProvider', () => {
     const originalEnv = process.env
@@ -255,7 +256,6 @@ describe('PostHogProvider', () => {
             $device_id: 'device_xyz',
             $user_state: 'identified',
         })
-        const anonymousCookieValue = JSON.stringify({ distinct_id: 'device_xyz', $device_id: 'device_xyz' })
 
         function setupCookieMock(cookieValue: string) {
             vi.mocked(cookies).mockResolvedValue({
@@ -543,7 +543,7 @@ describe('PostHogProvider', () => {
             vi.mocked(cookies).mockResolvedValue({
                 get: vi.fn((name: string) => {
                     const value = cookieValues[name]
-                    return value !== undefined ? { name, value } : undefined
+                    return isUndefined(value) ? undefined : { name, value }
                 }),
             })
         }
