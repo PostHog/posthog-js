@@ -192,7 +192,7 @@ describe('Surveys: back button', () => {
                 ],
             }
 
-            render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
+            render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
             fireEvent.input(screen.getByRole('textbox'), { target: { value: 'first answer' } })
             fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
