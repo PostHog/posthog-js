@@ -160,7 +160,7 @@ jobs:
                   environment: 'NPM Release'
 
             - name: Notify Slack - Approval Rejected
-              if: failure() && steps.guard.outcome == 'failure'
+              if: failure() && steps.guard.outcome == 'failure' && steps.guard.outputs.violations_mrkdwn != ''
               continue-on-error: true # Don't block the failure report if Slack notification fails
               uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
               with:
@@ -169,6 +169,17 @@ jobs:
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
                   message: '🚫 Approval by ${{ steps.guard.outputs.violations_mrkdwn }} rejected: authors and mergers of the released PRs cannot approve. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|Re-run the failed jobs> and have someone else approve.'
                   emoji_reaction: 'no_entry'
+
+            - name: Notify Slack - Approval Guard Failed
+              if: failure() && steps.guard.outcome == 'failure' && steps.guard.outputs.violations_mrkdwn == ''
+              continue-on-error: true # Don't block the failure report if Slack notification fails
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '⚠️ The release approval guard could not run, so the release stopped before the version bump. Check the <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|job log> and re-run the failed jobs.'
+                  emoji_reaction: 'warning'
 
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
