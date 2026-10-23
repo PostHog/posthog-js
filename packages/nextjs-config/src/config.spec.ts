@@ -212,7 +212,10 @@ describe('withPostHogConfig webpack sourcemaps', () => {
     if (result === 'failed') vi.mocked(utils.resolveReleaseId).mockRejectedValue(new Error('offline'))
     else vi.mocked(utils.resolveReleaseId).mockResolvedValue(undefined)
 
-    const config = await resolveNextConfig({})
+    const config = await resolveNextConfig(
+      {},
+      { ...pluginConfig, sourcemaps: { ...pluginConfig.sourcemaps, failOnError: false } }
+    )
 
     expect(config.env).toBeUndefined()
     getPostHogPlugin(config, false)
@@ -221,12 +224,10 @@ describe('withPostHogConfig webpack sourcemaps', () => {
     if (result === 'failed') expect(warn).toHaveBeenCalled()
   })
 
-  it('fails the build when release resolution fails with failOnError', async () => {
+  it('fails the build by default when release resolution fails', async () => {
     vi.mocked(utils.resolveReleaseId).mockRejectedValue(new Error('offline'))
 
-    await expect(
-      resolveNextConfig({}, { ...pluginConfig, sourcemaps: { ...pluginConfig.sourcemaps, failOnError: true } })
-    ).rejects.toThrow('offline')
+    await expect(resolveNextConfig({})).rejects.toThrow('offline')
   })
 
   it('deletes server sourcemaps and excludes them from output file tracing', async () => {

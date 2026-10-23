@@ -9,7 +9,7 @@ export type PluginConfig = CorePluginConfig & {
     sourcemaps?: CorePluginConfig['sourcemaps'] & {
         /**
          * Fail the build when PostHog cannot process or upload the sourcemaps, for example because the
-         * personal API key is invalid. Defaults to `false`: the error is logged and the build continues.
+         * personal API key is invalid. Defaults to `true`; set it to `false` to log the error and continue the build.
          * Watch builds (`webpack --watch`, dev servers, `next dev`) always log the error and keep running.
          * In `@posthog/nextjs-config` this applies to webpack builds; Turbopack builds fail on these errors either way.
          */
@@ -32,6 +32,6 @@ export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveCon
     })
     return {
         ...resolved,
-        sourcemaps: { ...resolved.sourcemaps, failOnError: options.sourcemaps?.failOnError ?? false },
+        sourcemaps: { ...resolved.sourcemaps, failOnError: options.sourcemaps?.failOnError ?? true },
     }
 }

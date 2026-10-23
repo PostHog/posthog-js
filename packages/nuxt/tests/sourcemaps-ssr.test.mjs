@@ -399,19 +399,22 @@ assert.equal(
   `failed server upload: expected the public upload retry to still run. Got: ${failedServerUploadDump}`
 )
 
-// failOnError fails the build from the close hook, after the maps were deleted and the remaining
-// uploads were attempted. Without it, the same failures leave the build passing.
+// By default the build fails once the close hooks have run, after the maps were deleted and the
+// remaining uploads were attempted. With failOnError: false, the same failures leave the build passing.
 for (const failure of [{ failPublicUpload: true }, { failServerUpload: true }]) {
-  const failed = await runLifecycle({ ssr: true, ...failure, sourcemaps: { failOnError: true } })
+  const failed = await runLifecycle({ ssr: true, ...failure })
   const dump = JSON.stringify(failed.map((c) => c.args))
-  assert.match(String(failed.closeError), /sourcemaps\.failOnError is enabled: (public|server) upload failed/)
-  assert.ok(failed.laterCloseHookRan, 'failOnError: expected later close hooks to run before the build fails')
-  assert.ok(
-    findCall(failed, 'upload', '/build/.output/server'),
-    `failOnError: expected the server upload. Got: ${dump}`
+  assert.match(
+    String(failed.closeError),
+    /set sourcemaps\.failOnError to false to continue the build\): (public|server) upload failed/
   )
+  assert.ok(failed.laterCloseHookRan, 'expected later close hooks to run before the build fails')
+  assert.ok(findCall(failed, 'upload', '/build/.output/server'), `expected the server upload. Got: ${dump}`)
   assert.equal(failed.deletedFiles.length, failure.failPublicUpload ? 2 : 0)
-  assert.equal((await runLifecycle({ ssr: true, ...failure })).closeError, undefined)
+  assert.equal(
+    (await runLifecycle({ ssr: true, ...failure, sourcemaps: { failOnError: false } })).closeError,
+    undefined
+  )
 }
 
 // With the maps kept, the close-hook retry decides: a successful retry passes the build.
@@ -419,15 +422,13 @@ const retried = await runLifecycle({
   ssr: true,
   deleteAfterUpload: false,
   failPublicUpload: 'once',
-  sourcemaps: { failOnError: true },
 })
 assert.equal(retried.closeError, undefined)
 const retryFailed = await runLifecycle({
   ssr: true,
   deleteAfterUpload: false,
   failPublicUpload: true,
-  sourcemaps: { failOnError: true },
 })
-assert.match(String(retryFailed.closeError), /failOnError is enabled: public upload failed/)
+assert.match(String(retryFailed.closeError), /continue the build\): public upload failed/)
 
 console.log('ok sourcemaps-ssr.test.mjs')

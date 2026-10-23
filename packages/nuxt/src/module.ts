@@ -46,7 +46,7 @@ interface SourcemapsConfig {
   batchSize?: number
   /**
    * Fail the build when PostHog cannot process or upload the sourcemaps, for example because the
-   * personal API key is invalid. Defaults to `false`: the error is logged and the build continues.
+   * personal API key is invalid. Defaults to `true`; set it to `false` to log the error and continue the build.
    */
   failOnError?: boolean
 }
@@ -232,7 +232,7 @@ export default defineNuxtModule<ModuleOptions>({
       sourcemapsError = serverSourcemapsError ?? publicSourcemapsError
     })
 
-    if (sourcemapsConfig.failOnError) {
+    if (sourcemapsConfig.failOnError ?? true) {
       // A throwing close hook skips the close hooks after it, such as the one that disposes Nitro's
       // storage, so the build fails once every close hook has run.
       nuxt.hooks.afterEach((event: { name: string }) => {
@@ -240,9 +240,12 @@ export default defineNuxtModule<ModuleOptions>({
         const error = sourcemapsError
         sourcemapsError = undefined
         const message = error instanceof Error ? error.message : String(error)
-        throw new Error(`PostHog sourcemap processing failed and sourcemaps.failOnError is enabled: ${message}`, {
-          cause: error,
-        })
+        throw new Error(
+          `PostHog sourcemap processing failed (set sourcemaps.failOnError to false to continue the build): ${message}`,
+          {
+            cause: error,
+          }
+        )
       })
     }
   },

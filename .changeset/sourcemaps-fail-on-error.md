@@ -4,4 +4,4 @@
 '@posthog/nuxt': minor
 ---
 
-Add `sourcemaps.failOnError` (default `false`) to fail webpack, Next.js webpack, and Nuxt builds when PostHog cannot process or upload source maps.
+Fail webpack, Next.js webpack, and Nuxt builds when PostHog cannot process or upload source maps; set `sourcemaps.failOnError: false` to log the error and continue the build instead.

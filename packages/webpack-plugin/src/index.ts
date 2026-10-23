@@ -241,7 +241,7 @@ export class PosthogWebpackPlugin {
                 if (failOnError) {
                     return callback(
                         new Error(
-                            `PostHog sourcemap processing failed and sourcemaps.failOnError is enabled: ${errorMessage}`
+                            `PostHog sourcemap processing failed (set sourcemaps.failOnError to false to continue the build): ${errorMessage}`
                         )
                     )
                 }
