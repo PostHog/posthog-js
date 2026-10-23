@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react'
 import { act, fireEvent, render, cleanup, waitFor } from '@testing-library/react'
-import { Survey, SurveyType } from '@posthog/core'
+import { PostHogPersistedProperty, Survey, SurveyQuestionType, SurveyType } from '@posthog/core'
 
 // Minimal react-native shim — the full preset pulls in TurboModule code that
 // explodes under jsdom. The provider itself renders no RN primitives, but its
@@ -16,8 +16,15 @@ vi.mock('react-native', async () => {
     Modal: Box,
     Text: Box,
     Platform: { OS: 'android', select: (o: any) => o.android ?? o.default },
-    StyleSheet: { create: (s: any) => s, flatten: (s: any) => s, absoluteFill: {} },
-    Appearance: { getColorScheme: () => 'light', addChangeListener: () => ({ remove: vi.fn() }) },
+    StyleSheet: {
+      create: (s: any) => s,
+      flatten: (s: any) => s,
+      absoluteFill: {},
+    },
+    Appearance: {
+      getColorScheme: () => 'light',
+      addChangeListener: () => ({ remove: vi.fn() }),
+    },
     useColorScheme: () => 'light',
     useWindowDimensions: () => ({ width: 375, height: 800 }),
   }
@@ -36,6 +43,7 @@ vi.mock('../src/surveys/components/SurveyModal', async () => {
       }, [])
       return R.createElement('div', {
         'data-testid': 'survey-modal',
+        'data-survey-id': props.survey.id,
         onClick: () => props.onClose(false, {}), // simulate a dismiss (not submitted)
       })
     },
@@ -51,12 +59,16 @@ vi.mock('../src/surveys/components/Surveys', () => ({
 // Skip translation resolution — irrelevant to presentation gating.
 vi.mock('../src/surveys/survey-translations', () => ({
   detectUserLanguage: () => null,
-  applySurveyTranslationForUser: (survey: Survey) => ({ survey, language: null }),
+  applySurveyTranslationForUser: (survey: Survey) => ({
+    survey,
+    language: null,
+  }),
 }))
 
 let mockClient: any
 vi.mock('../src/hooks/usePostHog', () => ({ usePostHog: () => mockClient }))
 
+import { createSurveyProgress, SurveyProgressStore } from '../src/surveys/survey-progress'
 import { PostHogSurveyProvider } from '../src/surveys/PostHogSurveyProvider'
 import { sendSurveyShownEvent, dismissedSurveyEvent } from '../src/surveys/components/Surveys'
 
@@ -74,17 +86,21 @@ const popoverSurvey: Survey = {
   conditions: undefined,
 } as unknown as Survey
 
-const makeClient = (surveys: Survey[] = [popoverSurvey]) => ({
-  ready: vi.fn(() => Promise.resolve()),
-  _onSurveysReady: vi.fn(() => Promise.resolve()),
-  getSurveys: vi.fn(() => Promise.resolve(surveys)),
-  getFeatureFlags: vi.fn(() => ({})),
-  onFeatureFlags: vi.fn(() => () => {}),
-  getPersistedProperty: vi.fn(() => undefined),
-  setPersistedProperty: vi.fn(),
-  capture: vi.fn(),
-  on: vi.fn(() => () => {}),
-})
+const makeClient = (surveys: Survey[] = [popoverSurvey]) => {
+  const storage = new Map<string, unknown>([[PostHogPersistedProperty.Surveys, surveys]])
+  return {
+    apiKey: 'test-project',
+    ready: vi.fn(() => Promise.resolve()),
+    _onSurveysReady: vi.fn(() => Promise.resolve()),
+    getSurveys: vi.fn(() => Promise.resolve(surveys)),
+    getFeatureFlags: vi.fn(() => ({})),
+    onFeatureFlags: vi.fn(() => () => {}),
+    getPersistedProperty: vi.fn((key: string) => storage.get(key)),
+    setPersistedProperty: vi.fn((key: string, value: unknown) => storage.set(key, value)),
+    capture: vi.fn(),
+    on: vi.fn(() => () => {}),
+  }
+}
 
 const renderProvider = (autoPresentSurveys?: boolean) =>
   render(
@@ -95,7 +111,7 @@ const renderProvider = (autoPresentSurveys?: boolean) =>
 
 // The provider loads surveys via a real-promise chain; the shared vi config
 // enables fake timers globally, which deadlocks async act()/waitFor(). This file
-// drives no timer-based logic (the modal is stubbed), so real timers are safe.
+// uses real timers for the original gating tests; delay tests below use their own fake-timer helper.
 const flush = async () => {
   await act(async () => {
     await new Promise((r) => setTimeout(r, 0))
@@ -182,7 +198,11 @@ describe('PostHogSurveyProvider — autoPresentSurveys gating', () => {
   it('re-validates a deferred survey: does not present one that became ineligible mid-deferral', async () => {
     let flags: Record<string, any> = { f1: true }
     let flagCb: ((f: any) => void) | undefined
-    const flaggedSurvey = { ...popoverSurvey, id: 's-flag', linked_flag_key: 'f1' } as unknown as Survey
+    const flaggedSurvey = {
+      ...popoverSurvey,
+      id: 's-flag',
+      linked_flag_key: 'f1',
+    } as unknown as Survey
     mockClient = {
       ...makeClient([flaggedSurvey]),
       getFeatureFlags: vi.fn(() => flags),
@@ -294,5 +314,174 @@ describe('PostHogSurveyProvider — seenSurveyWaitPeriodInDays', () => {
 
     expect(sendSurveyShownEvent).not.toHaveBeenCalledWith(expect.objectContaining({ id: 's-wait' }), mockClient, null)
     expect(queryByTestId('survey-modal')).toBeNull()
+  })
+})
+
+describe('PostHogSurveyProvider — popup delay', () => {
+  const delayedSurvey = (id: string, delay?: number): Survey => ({
+    ...popoverSurvey,
+    id,
+    appearance: { surveyPopupDelaySeconds: delay },
+  })
+  const loadSurveys = async () => {
+    // Flush the provider's readiness promises without advancing the appearance delay.
+    await act(async () => {})
+  }
+  const advance = async (ms: number) => {
+    await act(async () => {
+      vi.advanceTimersByTime(ms)
+    })
+  }
+  const setFlags = (flags: Record<string, boolean>) => {
+    const callback = mockClient.onFeatureFlags.mock.calls[0][0]
+    act(() => callback(flags))
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockClient = makeClient()
+  })
+  afterEach(() => {
+    cleanup()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  it.each([undefined, 0, -1])('shows immediately for delay %s', async (delay) => {
+    mockClient = makeClient([delayedSurvey('immediate', delay)])
+    const view = renderProvider()
+    await loadSurveys()
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('immediate')
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits the full delay and chooses the shortest delay without mutating the definitions', async () => {
+    const surveys = [delayedSurvey('slow', 10), delayedSurvey('fast', 2)]
+    mockClient = makeClient(surveys)
+    const view = renderProvider()
+    await loadSurveys()
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    await advance(1999)
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+    await advance(1)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('fast')
+    expect(surveys.map((survey) => survey.id)).toEqual(['slow', 'fast'])
+  })
+
+  it('cancels a pending survey when its targeting flag turns off', async () => {
+    mockClient = makeClient([{ ...delayedSurvey('flagged', 5), targeting_flag_key: 'eligible' }])
+    mockClient.getFeatureFlags.mockReturnValue({ eligible: true })
+    const view = renderProvider()
+    await loadSurveys()
+    await advance(2000)
+    setFlags({ eligible: false })
+    await advance(5000)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+  })
+
+  it('clears an ineligible armed survey before waiting for its replacement', async () => {
+    mockClient = makeClient([
+      { ...delayedSurvey('old', 1), targeting_flag_key: 'old-eligible' },
+      delayedSurvey('replacement', 5),
+    ])
+    mockClient.getFeatureFlags.mockReturnValue({ 'old-eligible': true })
+    const view = renderProvider(false)
+    await loadSurveys()
+    await advance(1000)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+
+    setFlags({ 'old-eligible': false })
+    view.rerender(
+      <PostHogSurveyProvider client={mockClient} autoPresentSurveys={true}>
+        <div />
+      </PostHogSurveyProvider>
+    )
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    await advance(4999)
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+    await advance(1)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('replacement')
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+    expect(sendSurveyShownEvent).toHaveBeenCalledWith(expect.objectContaining({ id: 'replacement' }), mockClient, null)
+  })
+
+  it('preserves an eligible armed survey when another candidate becomes eligible', async () => {
+    mockClient = makeClient([
+      delayedSurvey('armed', 1),
+      { ...delayedSurvey('new', 0), targeting_flag_key: 'new-eligible' },
+    ])
+    const view = renderProvider(false)
+    await loadSurveys()
+    await advance(1000)
+    setFlags({ 'new-eligible': true })
+    view.rerender(
+      <PostHogSurveyProvider client={mockClient} autoPresentSurveys={true}>
+        <div />
+      </PostHogSurveyProvider>
+    )
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('armed')
+  })
+
+  it('does not interrupt a shown survey when its targeting flag turns off', async () => {
+    mockClient = makeClient([
+      { ...delayedSurvey('shown', 1), targeting_flag_key: 'eligible' },
+      delayedSurvey('replacement', 5),
+    ])
+    mockClient.getFeatureFlags.mockReturnValue({ eligible: true })
+    const view = renderProvider()
+    await loadSurveys()
+    await advance(1000)
+    setFlags({ eligible: false })
+    await advance(5000)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('shown')
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([0, 5])('resumes saved event-targeted progress before a new zero-delay survey (delay=%s)', async (delay) => {
+    const resumed: Survey = {
+      ...delayedSurvey('resumed', delay),
+      internal_targeting_flag_key: 'consumed',
+      conditions: { events: { values: [{ name: 'trigger' }] } },
+      questions: [{ id: 'q1', type: SurveyQuestionType.Open, question: 'Feedback?' }],
+    }
+    mockClient = makeClient([delayedSurvey('new', 0), resumed])
+    const progress = createSurveyProgress(resumed)
+    new SurveyProgressStore(mockClient).save(resumed, progress)
+    const view = renderProvider()
+    await loadSurveys()
+    if (delay > 0) {
+      await advance(delay * 1000 - 1)
+      expect(view.queryByTestId('survey-modal')).toBeNull()
+      await advance(1)
+    }
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('resumed')
+    expect(mockClient.capture).not.toHaveBeenCalled()
+  })
+
+  it('does not schedule a delayed survey during its cooldown', async () => {
+    const survey = { ...delayedSurvey('cooldown', 5), conditions: { seenSurveyWaitPeriodInDays: 1 } }
+    mockClient = makeClient([survey])
+    mockClient.setPersistedProperty(
+      PostHogPersistedProperty.SurveyLastSeenDate,
+      new Date(Date.now() - 60000).toISOString()
+    )
+    const view = renderProvider()
+    await loadSurveys()
+    await advance(5000)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+  })
+
+  it('cancels the appearance timer on unmount', async () => {
+    mockClient = makeClient([delayedSurvey('pending', 5)])
+    const view = renderProvider()
+    await loadSurveys()
+    expect(vi.getTimerCount()).toBeGreaterThan(0)
+    view.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+    await advance(5000)
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
   })
 })
