@@ -806,7 +806,7 @@ export async function handleListToolsRequest(
     event.error = captureException('No tools were sent to MCP client.')
     event.isError = true
     event.duration = Date.now() - startTime.getTime()
-    captureEvent(server, event, data.logger, requestAttribution)
+    captureToolsListEvent(server, event, data.logger, requestAttribution)
     return response
   }
 
@@ -814,8 +814,16 @@ export async function handleListToolsRequest(
   event.listedToolNames = collectListedToolNames(tools)
   event.isError = false
   event.duration = Date.now() - startTime.getTime()
-  captureEvent(server, event, data.logger, requestAttribution)
+  captureToolsListEvent(server, event, data.logger, requestAttribution)
   return response
+}
+
+/** Sends `$mcp_tools_list` unless the host set `sendToolsListEvent: false`. */
+function captureToolsListEvent(...args: Parameters<typeof captureEvent>): void {
+  if (getServerTrackingData(args[0])?.options.sendToolsListEvent === false) {
+    return
+  }
+  captureEvent(...args)
 }
 
 function cacheToolAnalyticsParameterOwnership(
@@ -957,7 +965,7 @@ async function getTracedToolsList(
     event.error = captureException(error)
     event.isError = true
     event.duration = event.timestamp ? Date.now() - event.timestamp.getTime() : 0
-    captureEvent(server, event, logger, requestAttribution)
+    captureToolsListEvent(server, event, logger, requestAttribution)
     throw error
   }
 }
