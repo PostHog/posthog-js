@@ -10,6 +10,7 @@ import {
     createChunkIdComment,
     determineChunkIdFromSource,
 } from '@posthog/plugin-utils'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import MagicString from 'magic-string'
@@ -85,8 +86,21 @@ function joinAddons(...addons: (string | undefined)[]): string {
     return addons.filter(Boolean).join('\n')
 }
 
+// Resolve the CLI this package depends on. Isolated installs (Bun, pnpm) do not link a transitive
+// dependency's binary into the consumer's node_modules/.bin, so a search from the cwd can miss it.
+function resolveOwnCliPath(): string | undefined {
+    try {
+        return createRequire(import.meta.url).resolve('@posthog/cli/run-posthog-cli.js')
+    } catch {
+        return undefined
+    }
+}
+
 export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions): Plugin {
-    const posthogOptions = resolveConfig(userOptions)
+    const posthogOptions = resolveConfig({
+        ...userOptions,
+        cliBinaryPath: userOptions.cliBinaryPath ?? resolveOwnCliPath(),
+    })
     const eventReleaseMode = posthogOptions.sourcemaps.releaseMode === 'event'
 
     // Resolved once per build and shared by every output, so all chunks of one build carry the
