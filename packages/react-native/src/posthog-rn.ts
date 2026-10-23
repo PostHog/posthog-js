@@ -3127,7 +3127,7 @@ export class PostHog extends PostHogCore {
         }
         nativeSessionOwner = this
         if (!(await OptionalReactNativePlugin.isEnabled())) {
-          await OptionalReactNativePlugin.start(
+          await OptionalReactNativePlugin.start?.(
             String(sessionId),
             sdkOptions,
             sdkReplayConfig,
