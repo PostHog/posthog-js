@@ -1,5 +1,21 @@
 # @posthog/browser-common
 
+## 0.9.9
+
+### Patch Changes
+
+- [#4994](https://github.com/PostHog/posthog-js/pull/4994) [`bcd33ce`](https://github.com/PostHog/posthog-js/commit/bcd33ce0f8c9658e0e37c336ced7968960228fbd) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share autocapture across browser SDKs while preserving existing event capture behavior.
+  (2026-10-22)
+
+## 0.9.8
+
+### Patch Changes
+
+- [#5365](https://github.com/PostHog/posthog-js/pull/5365) [`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` the next time they are read after opt in.
+  (2026-10-22)
+- Updated dependencies [[`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c)]:
+  - @posthog/core@1.59.4
+
 ## 0.9.7
 
 ### Patch Changes

@@ -293,11 +293,7 @@ export class PostHogSurveys implements Extension {
             return
         }
         this._surveyManager = generateSurveysFn(isSurveysEnabled)
-        this._surveyEventReceiver = new SurveyEventReceiver(
-            this._client!,
-            this,
-            this._notifyActiveMatchingSurveyCallbacks
-        )
+        this._surveyEventReceiver = this._createEventReceiver(this._client!, this._notifyActiveMatchingSurveyCallbacks)
         const cachedSurveys = this._client?.kv.get<Survey[]>(SURVEYS)
         if (cachedSurveys) {
             this._registerEventOrActionBasedSurveys(cachedSurveys)
@@ -308,6 +304,10 @@ export class PostHogSurveys implements Extension {
         this._startActiveMatchingSurveyConditions()
         this._notifyActiveMatchingSurveyCallbacks()
         this._notifySurveyCallbacks({ isLoaded: true })
+    }
+
+    protected _createEventReceiver(client: Client, onActivationChanged?: () => void): SurveyEventReceiver {
+        return new SurveyEventReceiver(client, this, undefined, onActivationChanged)
     }
 
     /** Helper to handle errors during survey loading */
@@ -458,7 +458,11 @@ export class PostHogSurveys implements Extension {
         )
         // Survey API responses and the cached definition set are complete snapshots. Replacing the
         // receiver registry removes triggers that were deleted or changed by a definitions refresh.
-        this._surveyEventReceiver?.replace(eventOrActionBasedSurveys)
+        this._registerSurveyTriggers(eventOrActionBasedSurveys)
+    }
+
+    protected _registerSurveyTriggers(surveys: Survey[]): void {
+        this._surveyEventReceiver?.replace(surveys)
     }
 
     /**

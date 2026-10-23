@@ -137,6 +137,92 @@ describe(`SessionRecording utility functions`, () => {
                 size: 14,
             })
         })
+
+        const threeMBSvgURI = threeMBImageURI.replace('data:image/jpeg;', 'data:image/svg+xml;')
+        const threeMBPngWithParamsURI = threeMBImageURI.replace('data:image/jpeg;', 'data:image/png;charset=utf-8;')
+        const threeMBFontURI = threeMBAudioURI.replace('data:audio/wav;', 'data:font/woff2;')
+        const expectFiltered = (data: unknown, expected: unknown) => {
+            expect(ensureMaxMessageSize(data as eventWithTime)).toEqual({
+                event: expected,
+                size: JSON.stringify(expected).length,
+            })
+        }
+
+        it(`should keep the event valid JSON when replacing data urls inside quoted CSS url()`, () => {
+            const data = {
+                text: 'metadata: unchanged',
+                attributes: [
+                    { node: { attributes: { style: `background-image: url("${threeMBImageURI}")` } } },
+                    { node: { textContent: `.a { background: url('${threeMBImageURI}') no-repeat; }` } },
+                ],
+            }
+
+            expectFiltered(data, {
+                text: 'metadata: unchanged',
+                attributes: [
+                    { node: { attributes: { style: `background-image: url("${replacementImageURI}")` } } },
+                    { node: { textContent: `.a { background: url('${replacementImageURI}') no-repeat; }` } },
+                ],
+            })
+        })
+
+        it(`should replace image/svg+xml data urls, including the same one repeated`, () => {
+            const data = {
+                attributes: [
+                    { node: { attributes: { src: threeMBSvgURI } } },
+                    { node: { attributes: { src: threeMBSvgURI } } },
+                ],
+            }
+
+            expectFiltered(data, {
+                attributes: [
+                    { node: { attributes: { src: replacementImageURI } } },
+                    { node: { attributes: { src: replacementImageURI } } },
+                ],
+            })
+        })
+
+        it(`should replace image data urls whose mime type has parameters`, () => {
+            const utf8SvgURI = 'data:image/svg+xml;charset=utf-8,' + '%3Csvg%3E%3C%2Fsvg%3E'.repeat(150000)
+            const data = {
+                attributes: [
+                    { node: { attributes: { src: threeMBPngWithParamsURI } } },
+                    { node: { attributes: { style: `background: url("${utf8SvgURI}")` } } },
+                ],
+            }
+
+            expectFiltered(data, {
+                attributes: [
+                    { node: { attributes: { src: replacementImageURI } } },
+                    { node: { attributes: { style: `background: url("${replacementImageURI}")` } } },
+                ],
+            })
+        })
+
+        it(`should remove non-image data urls such as fonts inside stylesheets`, () => {
+            const fontFace = (uri: string) => `@font-face { src: url("${uri}") format("woff2"); }`
+            const data = {
+                attributes: [
+                    { node: { textContent: fontFace(threeMBFontURI) } },
+                    { node: { textContent: fontFace(threeMBFontURI) } },
+                ],
+            }
+
+            expectFiltered(data, {
+                attributes: [{ node: { textContent: fontFace('') } }, { node: { textContent: fontFace('') } }],
+            })
+        })
+
+        it(`should not touch quoted, svg or parameterised data urls under 5mb`, () => {
+            const data = {
+                attributes: [
+                    { node: { attributes: { style: `background: url("data:image/svg+xml;utf8,%3Csvg%3E")` } } },
+                    { node: { attributes: { src: 'data:image/png;charset=utf-8;base64,iVBORw0KGgo=' } } },
+                ],
+            }
+
+            expectFiltered(data, data)
+        })
     })
 
     describe(`truncateLargeConsoleLogs`, () => {

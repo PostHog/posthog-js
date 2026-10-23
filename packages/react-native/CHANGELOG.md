@@ -1,5 +1,27 @@
 # posthog-react-native
 
+## 4.81.10
+
+### Patch Changes
+
+- [#5363](https://github.com/PostHog/posthog-js/pull/5363) [`c77206c`](https://github.com/PostHog/posthog-js/commit/c77206c35cdc41f8adef0acd79d2f612ec8e157c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Restart session replay in a new session when `optIn()` or `reset()` clears an opt-out and the app wanted replay on (`enableSessionReplay` or `startSessionRecording()`, with no `stopSessionRecording()` since), including a manual recording made with `enableSessionReplay` off and replay that was waiting for the linked flag, sampling or an event trigger; to keep replay stopped, call `stopSessionRecording()` before `optOut()` or after `optIn()`.
+  (2026-10-22)
+
+## 4.81.9
+
+### Patch Changes
+
+- [#5365](https://github.com/PostHog/posthog-js/pull/5365) [`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` the next time they are read after opt in.
+  (2026-10-22)
+
+- [#5294](https://github.com/PostHog/posthog-js/pull/5294) [`ff7aa53`](https://github.com/PostHog/posthog-js/commit/ff7aa5362be7f3399ed2b9a957cf0ef63b811967) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix events missing `$os_name` and `$os_version` in apps that use neither `expo-device` nor `react-native-device-info`.
+  (2026-10-22)
+
+- [#5293](https://github.com/PostHog/posthog-js/pull/5293) [`b4dfdff`](https://github.com/PostHog/posthog-js/commit/b4dfdffcae30e9aa29666e5807ec2c422c763229) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix React render errors that crash the app not being captured on React Native 0.78 and newer when `errorTracking.autocapture.uncaughtExceptions` is enabled.
+  (2026-10-22)
+- Updated dependencies [[`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c)]:
+  - @posthog/core@1.59.4
+
 ## 4.81.8
 
 ### Patch Changes

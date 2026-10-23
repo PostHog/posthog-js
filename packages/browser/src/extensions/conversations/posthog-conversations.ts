@@ -41,6 +41,9 @@ export class PostHogConversations implements Extension {
     // A boolean rather than the message: only the fact of failure is read, and this class lands in the
     // non-lazy bundle. The message is already logged at the point of failure.
     private _loadFailed: boolean = false
+    // Bumped by reset() so a bundle load that started before the reset doesn't finish
+    // initialization against the post-reset state.
+    private _resetGeneration: number = 0
 
     constructor(private _instance: PostHog) {}
 
@@ -81,6 +84,7 @@ export class PostHogConversations implements Extension {
         // If not loaded, there's nothing to reset anyway
         this._conversationsManager?.reset()
         this._conversationsManager = null
+        this._resetGeneration++
 
         // Reset local state
         this._isConversationsEnabled = undefined
@@ -152,7 +156,15 @@ export class PostHogConversations implements Extension {
             }
 
             // Load the conversations bundle
+            const generation = this._resetGeneration
             loadExternalDependency(this._instance, 'conversations', (err) => {
+                if (generation !== this._resetGeneration) {
+                    // reset() ran while the bundle was loading: start over from the current state
+                    // (which may have a fresh remote config, or none yet).
+                    this._isInitializing = false
+                    this.loadIfEnabled()
+                    return
+                }
                 if (err || !phExtensions.initConversations) {
                     this._handleLoadError('Could not load conversations script', err)
                 } else {

@@ -1,5 +1,12 @@
 # @posthog/nuxt
 
+## 1.7.93
+
+### Patch Changes
+
+- [#5391](https://github.com/PostHog/posthog-js/pull/5391) [`9166d01`](https://github.com/PostHog/posthog-js/commit/9166d01c0f85d731076ae9a6595d8c158512e3b4) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Delete public source maps when processing or uploading them fails while `sourcemaps.deleteAfterUpload` is enabled (the default), so they no longer ship in the build output; set `deleteAfterUpload: false` to keep them and retry the upload at the end of the build.
+  (2026-10-23)
+
 ## 1.7.92
 
 ### Patch Changes

@@ -7,7 +7,9 @@ export function mapGeminiUsage(
   additionalUsage: Pick<TokenUsage, 'webSearchCount'> = {}
 ): TokenUsage {
   return {
-    inputTokens: metadata?.promptTokenCount ?? 0,
+    // Tool-use prompt tokens (built-in tools such as Google Search or URL context)
+    // are billed as input but reported outside promptTokenCount.
+    inputTokens: (metadata?.promptTokenCount ?? 0) + (metadata?.toolUsePromptTokenCount ?? 0),
     outputTokens: metadata?.candidatesTokenCount ?? 0,
     reasoningTokens: metadata?.thoughtsTokenCount ?? 0,
     cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
