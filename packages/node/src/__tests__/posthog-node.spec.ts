@@ -2272,7 +2272,15 @@ describe('PostHog Node.js', () => {
     })
 
     describe('sendFeatureFlags with enhanced API', () => {
+      let digestSpy: vi.SpyInstance
+
       beforeEach(() => {
+        // Keep hashing slower than the fixed timer waits so they cannot hide unfinished enrichment.
+        const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle)
+        digestSpy = vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(async (...args) => {
+          await waitWithRealTimers(50)
+          return digest(...args)
+        })
         const mockDecideFlags = {
           'basic-flag': true,
           'person-property-flag': false,
@@ -2350,6 +2358,10 @@ describe('PostHog Node.js', () => {
         )
       })
 
+      afterEach(() => {
+        digestSpy.mockRestore()
+      })
+
       it('should work with explicit personProperties in sendFeatureFlags options', async () => {
         posthog = new PostHog('TEST_API_KEY', {
           host: 'http://example.com',
@@ -2376,7 +2388,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2422,7 +2434,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2473,7 +2485,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         // Should not make any remote calls for flags
         expect(mockedFetch).not.toHaveBeenCalledWith(
@@ -2527,7 +2539,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         // Should make remote calls for flags
         expect(mockedFetch).toHaveBeenCalledWith(
@@ -2569,7 +2581,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2652,7 +2664,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
