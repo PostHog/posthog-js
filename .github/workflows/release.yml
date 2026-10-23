@@ -117,10 +117,11 @@ jobs:
     notify-approval-needed:
         permissions:
             contents: read
+            pull-requests: read # lets the shared workflow list the PRs in the push and name excluded approvers
         name: Notify Slack - Approval Needed
         needs: check-changesets
         if: needs.check-changesets.outputs.has-changesets == 'true'
-        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@5ba5d24966f2c416ca792654638e4ce6f19f545b
+        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@f0431489d137b9e7474fc428cf176e4c668cc4a2
         with:
             slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
             slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
@@ -153,9 +154,32 @@ jobs:
                   egress-policy: audit
 
             - name: Block approval by the authors of the released PRs
-              uses: PostHog/.github/.github/actions/release-approval-guard@68f2906c222a22652292c6120028c196db916c3f # main
+              id: guard
+              uses: PostHog/.github/.github/actions/release-approval-guard@f0431489d137b9e7474fc428cf176e4c668cc4a2 # main
               with:
                   environment: 'NPM Release'
+
+            - name: Notify Slack - Approval Rejected
+              if: failure() && steps.guard.outcome == 'failure' && steps.guard.outputs.violations_mrkdwn != ''
+              continue-on-error: true # Don't block the failure report if Slack notification fails
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '🚫 Approval by ${{ steps.guard.outputs.violations_mrkdwn }} rejected: authors and mergers of the released PRs cannot approve. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|Re-run the failed jobs> and have someone else approve.'
+                  emoji_reaction: 'no_entry'
+
+            - name: Notify Slack - Approval Guard Failed
+              if: failure() && steps.guard.outcome == 'failure' && steps.guard.outputs.violations_mrkdwn == ''
+              continue-on-error: true # Don't block the failure report if Slack notification fails
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '⚠️ The release approval guard could not run, so the release stopped before the version bump. Check the <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|job log> and re-run the failed jobs.'
+                  emoji_reaction: 'warning'
 
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
