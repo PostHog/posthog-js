@@ -75,6 +75,7 @@ import { ContextData, ContextOptions, IPostHogContext } from './extensions/conte
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
 import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routing'
 import { V1CaptureSender } from './capture-v1/sender'
+import { ANALYTICS_CAPTURE_ENDPOINT } from './capture-v1/types'
 import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
 
@@ -607,6 +608,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._v1Sender = new V1CaptureSender(
         {
           host: this.host,
+          path: ANALYTICS_CAPTURE_ENDPOINT,
           apiKey: this.apiKey,
           libraryId: this.getLibraryId(),
           libraryVersion: this.getLibraryVersion(),

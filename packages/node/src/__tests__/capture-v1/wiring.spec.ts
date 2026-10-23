@@ -1,7 +1,6 @@
 import { gunzipSync } from 'node:zlib'
 
-import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
-import { CaptureV1Error } from '@/capture-v1/errors'
+import { CaptureError, PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { v1Response } from '../utils'
 import { V1_URL, V1WiringHarness, v0Response, waitForFlushTimer } from '../utils/v1-wiring'
 
@@ -208,7 +207,7 @@ describe('capture v1 wiring (Node SDK)', () => {
   })
 
   describe('v1 mode - error surfacing', () => {
-    it('emits a CaptureV1Error on the error channel when the server drops an event', async () => {
+    it('emits an exported CaptureError naming the analytics lane when the server drops an event', async () => {
       mockedFetch.mockImplementation((url, options) => {
         if ((url as string).includes('/i/v1/analytics/events')) {
           const body = JSON.parse((options as any).body)
@@ -229,8 +228,9 @@ describe('capture v1 wiring (Node SDK)', () => {
       await waitForFlushTimer()
 
       expect(errors).toHaveLength(1)
-      const error = errors[0] as CaptureV1Error
-      expect(error).toBeInstanceOf(CaptureV1Error)
+      const error = errors[0] as CaptureError
+      expect(error).toBeInstanceOf(CaptureError)
+      expect(error.endpoint).toBe('/i/v1/analytics/events')
       expect(error.drops[0].details).toBe('billing')
     })
   })

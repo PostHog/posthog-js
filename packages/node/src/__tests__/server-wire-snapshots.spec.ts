@@ -75,6 +75,7 @@ describe('server wire snapshots', () => {
     const sender = new V1CaptureSender(
       {
         host: 'https://us.example.test',
+        path: '/i/v1/analytics/events',
         apiKey: 'phc_capture_secret',
         libraryId: 'posthog-node',
         libraryVersion: '1.2.3',
