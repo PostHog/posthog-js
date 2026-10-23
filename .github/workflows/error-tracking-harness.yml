@@ -2,7 +2,7 @@ name: Error tracking harness
 
 # Builds the sourcemap plugins from this checkout and runs them through PostHog/error-tracking-harness:
 # real posthog-cli releases, real bundlers, a mock PostHog, and an app whose exceptions must resolve.
-# The image is pinned by digest; bumping it is a one-line change below.
+# The image is public and pinned by digest; bumping it is a one-line change below.
 
 on:
     pull_request:
@@ -48,7 +48,6 @@ jobs:
         continue-on-error: true
         permissions:
             contents: read
-            packages: read
         env:
             # Digest of PostHog/error-tracking-harness at 93cb3fe7f842. Printed by its Image workflow.
             HARNESS_IMAGE: ghcr.io/posthog/error-tracking-harness@sha256:b0d8096f75394463402081cf4463755b770c1ab6214bdf3bf41c39db43da5a25
@@ -58,13 +57,6 @@ jobs:
               uses: ./.github/actions/setup
               with:
                   build: false
-            # A public package needs no login; a private one needs this plus read access granted
-            # to this repository in the package's settings.
-            - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-              with:
-                  registry: ghcr.io
-                  username: ${{ github.actor }}
-                  password: ${{ secrets.GITHUB_TOKEN }}
             - name: Pack the plugins and run the harness
               run: tooling/error-tracking-harness/run-ci.sh "$RUNNER_TEMP/error-tracking-harness"
             - name: Report
