@@ -494,6 +494,12 @@ class FeatureFlagsPoller {
             const depResult = await this.computeFlagValueLocally(depFlag, evaluationContext)
             evaluationCache[depFlagKey] = depResult
           } catch (error) {
+            if (
+              error instanceof InconclusiveMatchError &&
+              Symbol.for('posthog.requiresServerRegexEvaluation') in error
+            ) {
+              throw error
+            }
             throw new InconclusiveMatchError(
               `Error evaluating flag dependency '${depFlagKey}' for flag '${targetFlagKey}': ${error}`
             )
@@ -553,9 +559,12 @@ class FeatureFlagsPoller {
     const earlyExitEnabled = flagFilters.early_exit ?? false
     const { groups, groupProperties } = evaluationContext
     let isInconclusive = false
+    let regexError: InconclusiveMatchError | undefined
+    const deferredRegexValues = new Set<FeatureFlagValue>()
     let result = undefined
 
     for (const condition of flagConditions) {
+      let effectiveBucketingValue = bucketingValue
       try {
         // Per-condition aggregation overrides only when the condition explicitly
         // sets its own aggregation_group_type_index (mixed targeting).
@@ -566,7 +575,6 @@ class FeatureFlagsPoller {
             : flagAggregation
 
         let effectiveProperties = properties
-        let effectiveBucketingValue = bucketingValue
 
         // Mixed-override path: condition-level aggregation differs from flag-level.
         // This assumes flag-level aggregation is null/undefined for mixed flags.
@@ -623,6 +631,16 @@ class FeatureFlagsPoller {
           // Evaluation error (bad regex, invalid date, missing property, etc.)
           // Track that we had an inconclusive match, but try other conditions
           isInconclusive = true
+          if (Symbol.for('posthog.requiresServerRegexEvaluation') in e) {
+            regexError = e
+            const variants = flagFilters.multivariate?.variants || []
+            const override = condition.variant
+            deferredRegexValues.add(
+              override && variants.some((variant) => variant.key === override)
+                ? override
+                : (await this.getMatchingVariant(flag, effectiveBucketingValue)) || true
+            )
+          }
         } else {
           throw e
         }
@@ -630,8 +648,11 @@ class FeatureFlagsPoller {
     }
 
     if (result !== undefined) {
+      // A later match cannot choose a different value while an earlier regex rule is unresolved.
+      if (regexError && [...deferredRegexValues].some((value) => value !== result)) throw regexError
       return result
     } else if (isInconclusive) {
+      if (regexError) throw regexError
       // Had evaluation errors and no successful match - can't determine locally
       throw new InconclusiveMatchError("Can't determine if feature flag is enabled or not with given properties")
     }
@@ -1244,6 +1265,7 @@ async function matchPropertyGroup(
   }
 
   let errorMatchingLocally = false
+  let regexError: InconclusiveMatchError | undefined
 
   if ('values' in properties[0]) {
     // a nested property group
@@ -1276,6 +1298,7 @@ async function matchPropertyGroup(
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
           errorMatchingLocally = true
+          if (Symbol.for('posthog.requiresServerRegexEvaluation') in err) regexError = err
         } else {
           throw err
         }
@@ -1283,6 +1306,7 @@ async function matchPropertyGroup(
     }
 
     if (errorMatchingLocally) {
+      if (regexError) throw regexError
       throw new InconclusiveMatchError("Can't match cohort without a given cohort property value")
     }
     // if we get here, all matched in AND case, or none matched in OR case
@@ -1339,6 +1363,7 @@ async function matchPropertyGroup(
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
           errorMatchingLocally = true
+          if (Symbol.for('posthog.requiresServerRegexEvaluation') in err) regexError = err
         } else {
           throw err
         }
@@ -1346,6 +1371,7 @@ async function matchPropertyGroup(
     }
 
     if (errorMatchingLocally) {
+      if (regexError) throw regexError
       throw new InconclusiveMatchError("can't match cohort without a given cohort property value")
     }
 

@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest'
 import { LocalFeatureFlagEvaluator } from './evaluator.js'
-import type { FlagDefinitions, PostHogFeatureFlag } from './types.js'
+import type { FlagDefinitions, PostHogFeatureFlag, FlagProperty, PropertyGroup } from './types.js'
 
 function definitions(flags: PostHogFeatureFlag[], extra: Partial<FlagDefinitions> = {}): FlagDefinitions {
   return {
@@ -77,6 +77,156 @@ describe('LocalFeatureFlagEvaluator', () => {
       ])
     )
     expect(await evaluator.getFeatureFlag('mv', 'user')).toBe('pink')
+  })
+
+  test.each(['regex', 'not_regex'])('preserves an earlier deferred %s variant before a catch-all', async (operator) => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('regex-variant', {
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'name', type: 'person', operator, value: operator === 'regex' ? '.*' : '^never$' }],
+                variant: 'a',
+              },
+              { properties: [], variant: 'b' },
+            ],
+            multivariate: {
+              variants: [
+                { key: 'a', rollout_percentage: 50 },
+                { key: 'b', rollout_percentage: 50 },
+              ],
+            },
+          },
+        }),
+      ])
+    )
+    expect(await evaluator.getFeatureFlag('regex-variant', 'user', {}, { name: 'café' })).toBeUndefined()
+  })
+
+  const regexProperty = { key: 'name', type: 'person', operator: 'regex', value: '.*' }
+  const variants = [
+    { key: 'a', rollout_percentage: 100 },
+    { key: 'b', rollout_percentage: 0 },
+  ]
+
+  test.each([
+    {
+      name: 'definitive regex miss',
+      first: { ...regexProperty, value: '^never$' },
+      properties: { name: 'ascii' },
+      multivariate: true,
+      later: 'b',
+      expected: 'b',
+    },
+    {
+      name: 'generic missing property',
+      first: { ...regexProperty, key: 'missing', operator: 'exact' },
+      properties: { name: 'café' },
+      multivariate: true,
+      later: 'b',
+      expected: 'b',
+    },
+    {
+      name: 'missing regex context',
+      first: { ...regexProperty, key: 'missing' },
+      properties: { name: 'café' },
+      multivariate: true,
+      later: 'b',
+      expected: 'b',
+    },
+    {
+      name: 'independent Boolean match',
+      first: regexProperty,
+      properties: { name: 'café' },
+      multivariate: false,
+      later: undefined,
+      expected: true,
+    },
+    {
+      name: 'same variant match',
+      first: regexProperty,
+      properties: { name: 'café' },
+      multivariate: true,
+      later: 'a',
+      expected: 'a',
+    },
+    {
+      name: 'definitive first match',
+      first: regexProperty,
+      properties: { name: 'ascii' },
+      multivariate: true,
+      later: 'b',
+      expected: 'a',
+    },
+    {
+      name: 'shared-invalid regex',
+      first: { ...regexProperty, value: '[' },
+      properties: { name: 'ascii' },
+      multivariate: true,
+      later: 'b',
+      expected: 'b',
+    },
+  ])('keeps $name local', async ({ first, properties, multivariate, later, expected }) => {
+    const filters = {
+      groups: [
+        { properties: [first], variant: multivariate ? 'a' : undefined },
+        { properties: [], variant: later },
+      ],
+      multivariate: multivariate ? { variants } : undefined,
+    }
+    const evaluator = new LocalFeatureFlagEvaluator(definitions([makeFlag('regex-variant', { filters })]))
+    expect(await evaluator.getFeatureFlag('regex-variant', 'user', {}, properties)).toBe(expected)
+  })
+
+  test.each(['cohort', 'nested cohort', 'dependency'])(
+    'preserves deferred regex variant identity through %s',
+    async (source) => {
+      const cohorts: Record<string, PropertyGroup> = {
+        inner: { type: 'AND', values: [regexProperty, { key: 'missing', value: 'x' }] },
+        outer: { type: 'AND', values: [{ type: 'OR', values: [{ key: 'cohort', type: 'cohort', value: 'inner' }] }] },
+      }
+      const first: FlagProperty =
+        source === 'dependency'
+          ? { key: 'dependency', type: 'flag', value: true, dependency_chain: ['dependency'] }
+          : { key: 'cohort', type: 'cohort', value: source === 'cohort' ? 'inner' : 'outer' }
+      const filters = {
+        groups: [
+          { properties: [first], variant: 'a' },
+          { properties: [], variant: 'b' },
+        ],
+        multivariate: { variants },
+      }
+      const evaluator = new LocalFeatureFlagEvaluator(
+        definitions(
+          [
+            makeFlag('regex-variant', { filters }),
+            makeFlag('dependency', { filters: { groups: [{ properties: [regexProperty] }] } }),
+          ],
+          { cohorts }
+        )
+      )
+      expect(await evaluator.getFeatureFlag('regex-variant', 'user', {}, { name: 'café' })).toBeUndefined()
+    }
+  )
+
+  test.each([
+    { type: 'AND' as const, value: 'no', expected: 'b' },
+    { type: 'OR' as const, value: 'yes', expected: 'a' },
+  ])('keeps an independently decisive $type cohort local', async ({ type, value, expected }) => {
+    const cohorts: Record<string, PropertyGroup> = {
+      decisive: { type, values: [regexProperty, { key: 'control', value, operator: 'exact' }] },
+    }
+    const filters = {
+      groups: [
+        { properties: [{ key: 'cohort', type: 'cohort', value: 'decisive' }], variant: 'a' },
+        { properties: [], variant: 'b' },
+      ],
+      multivariate: { variants },
+    }
+    const properties = { name: 'café', control: 'yes' }
+    const evaluator = new LocalFeatureFlagEvaluator(definitions([makeFlag('regex-variant', { filters })], { cohorts }))
+    expect(await evaluator.getFeatureFlag('regex-variant', 'user', {}, properties)).toBe(expected)
   })
 
   test('returns undefined when flag requires experience continuity', async () => {

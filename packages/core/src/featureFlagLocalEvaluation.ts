@@ -285,13 +285,20 @@ function getPortableRegexClasses(pattern: string): string[] | null {
   return classes
 }
 
+// Adapters must preserve regex uncertainty across variant rules without changing missing-context fallback.
+function regexRequiresServerEvaluation(message: string): InconclusiveMatchError {
+  const error = new InconclusiveMatchError(message)
+  Object.defineProperty(error, Symbol.for('posthog.requiresServerRegexEvaluation'), { value: true })
+  return error
+}
+
 function matchFeatureFlagRegex(pattern: string, value: string): boolean | null {
   if (pattern === '') return true
 
   // Rust uses Unicode scalar semantics and additional syntax. Keep local matching to the shared ASCII subset.
   const characterClasses = getPortableRegexClasses(pattern)
   if (characterClasses === null) {
-    throw new InconclusiveMatchError('Regex syntax requires server evaluation')
+    throw regexRequiresServerEvaluation('Regex syntax requires server evaluation')
   }
 
   let regex: RegExp
@@ -299,26 +306,26 @@ function matchFeatureFlagRegex(pattern: string, value: string): boolean | null {
     regex = new RegExp(pattern)
   } catch (error) {
     if (error instanceof SyntaxError) return null
-    throw new InconclusiveMatchError('Regex compilation requires server evaluation')
+    throw regexRequiresServerEvaluation('Regex compilation requires server evaluation')
   }
   for (const characterClass of characterClasses) {
     try {
       // Strict parsing rejects legacy JS ranges such as [\s-9], which the flags service does not accept.
       new RegExp(characterClass, 'u')
     } catch {
-      throw new InconclusiveMatchError('Regex character class syntax requires server evaluation')
+      throw regexRequiresServerEvaluation('Regex character class syntax requires server evaluation')
     }
   }
   for (let index = 0; index < value.length; index++) {
     const character = value[index]
     if (character.charCodeAt(0) > 0x7f || character === '\r') {
-      throw new InconclusiveMatchError('Regex matching for Unicode or carriage returns requires server evaluation')
+      throw regexRequiresServerEvaluation('Regex matching for Unicode or carriage returns requires server evaluation')
     }
   }
   try {
     return regex.test(value)
   } catch {
-    throw new InconclusiveMatchError('Regex execution requires server evaluation')
+    throw regexRequiresServerEvaluation('Regex execution requires server evaluation')
   }
 }
 
