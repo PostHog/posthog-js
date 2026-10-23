@@ -150,6 +150,7 @@ export default defineNuxtModule<ModuleOptions>({
     let isBuildProcess = false
     let publicSourcemapsUploaded = false
     let publicSourcemapsError: unknown
+    let sourcemapsError: unknown
 
     const posthogCliRunner = () => {
       const cliBinaryPath =
@@ -228,15 +229,22 @@ export default defineNuxtModule<ModuleOptions>({
           console.error(`Failed to upload public sourcemaps (${publicDir}):`, error)
         }
       }
-      // Thrown last, so that the server upload and the public retry still run first.
-      const sourcemapsError = serverSourcemapsError ?? publicSourcemapsError
-      if (sourcemapsConfig.failOnError && sourcemapsError) {
-        const message = sourcemapsError instanceof Error ? sourcemapsError.message : String(sourcemapsError)
-        throw new Error(`PostHog sourcemap processing failed and sourcemaps.failOnError is enabled: ${message}`, {
-          cause: sourcemapsError,
-        })
-      }
+      sourcemapsError = serverSourcemapsError ?? publicSourcemapsError
     })
+
+    if (sourcemapsConfig.failOnError) {
+      // A throwing close hook skips the close hooks after it, such as the one that disposes Nitro's
+      // storage, so the build fails once every close hook has run.
+      nuxt.hooks.afterEach((event: { name: string }) => {
+        if (event.name !== 'close' || !sourcemapsError) return
+        const error = sourcemapsError
+        sourcemapsError = undefined
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(`PostHog sourcemap processing failed and sourcemaps.failOnError is enabled: ${message}`, {
+          cause: error,
+        })
+      })
+    }
   },
 })
 

@@ -38,7 +38,8 @@ const executableSource = source
   .replace(/\(sourcemapsConfig: SourcemapsConfig\)/g, '(sourcemapsConfig)')
   .replace(/\(args: string\[\]\)/g, '(args)')
   .replace('(directory: string)', '(directory)')
-  .replace(/(let \w+SourcemapsError): unknown/g, '$1')
+  .replace(/(let \w*[sS]ourcemapsError): unknown/g, '$1')
+  .replace('(event: { name: string })', '(event)')
   .replace(/\): string \{/g, ') {')
   .replace(/\): boolean \{/g, ') {')
   .replace(/let (outputDir|publicDir|serverDir): string \| undefined/g, 'let $1')
@@ -167,6 +168,7 @@ async function runLifecycle({
     existingDirs: serverBundleOnDisk ? [serverDir] : [],
   })
   const hooks = {}
+  const afterEachHooks = []
   const nuxt = {
     options: {
       dev: false,
@@ -177,6 +179,7 @@ async function runLifecycle({
     hook(name, cb) {
       ;(hooks[name] ||= []).push(cb)
     },
+    hooks: { afterEach: (cb) => afterEachHooks.push(cb) },
   }
 
   await mod.setup(
@@ -214,10 +217,25 @@ async function runLifecycle({
   for (const cb of hooks['nitro:config'] || []) await cb({})
   for (const cb of hooks['build:before'] || []) await cb()
   for (const cb of hooks['nitro:build:public-assets'] || []) await cb()
+  // Registered after the module, like Nitro's close forwarding. Like hookable, a throwing close
+  // hook stops the hooks after it, and afterEach callbacks run once the whole chain settles.
+  let laterCloseHookRan = false
+  nuxt.hook('close', async () => {
+    laterCloseHookRan = true
+  })
   let closeError
-  for (const cb of hooks['close'] || []) await cb().catch((error) => (closeError = error))
+  try {
+    for (const cb of hooks['close'] || []) await cb()
+  } catch (error) {
+    closeError = error
+  }
+  try {
+    for (const cb of afterEachHooks) cb({ name: 'close' })
+  } catch (error) {
+    closeError ??= error
+  }
 
-  return Object.assign(spawnCalls, { deletedFiles, closeError })
+  return Object.assign(spawnCalls, { deletedFiles, closeError, laterCloseHookRan })
 }
 
 function findCall(calls, op, directory) {
@@ -387,7 +405,11 @@ for (const failure of [{ failPublicUpload: true }, { failServerUpload: true }]) 
   const failed = await runLifecycle({ ssr: true, ...failure, sourcemaps: { failOnError: true } })
   const dump = JSON.stringify(failed.map((c) => c.args))
   assert.match(String(failed.closeError), /sourcemaps\.failOnError is enabled: (public|server) upload failed/)
-  assert.ok(findCall(failed, 'upload', '/build/.output/server'), `failOnError: expected the server upload. Got: ${dump}`)
+  assert.ok(failed.laterCloseHookRan, 'failOnError: expected later close hooks to run before the build fails')
+  assert.ok(
+    findCall(failed, 'upload', '/build/.output/server'),
+    `failOnError: expected the server upload. Got: ${dump}`
+  )
   assert.equal(failed.deletedFiles.length, failure.failPublicUpload ? 2 : 0)
   assert.equal((await runLifecycle({ ssr: true, ...failure })).closeError, undefined)
 }
