@@ -1,5 +1,59 @@
 # posthog-ai
 
+## 8.16.1
+
+### Patch Changes
+
+- [#5355](https://github.com/PostHog/posthog-js/pull/5355) [`e027825`](https://github.com/PostHog/posthog-js/commit/e027825e387902b79e84703ca32ca4afbc0446b8) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture the refusal text of OpenAI chat completions, streamed or not, in `$ai_output_choices` instead of an empty output.
+  (2026-10-22)
+
+## 8.16.0
+
+### Minor Changes
+
+- [#5360](https://github.com/PostHog/posthog-js/pull/5360) [`26e65ec`](https://github.com/PostHog/posthog-js/commit/26e65ec6abd38b6401d98a531f95733e1402f1d8) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add datasets, versioned scorers, and resumable offline evaluation uploads.
+  (2026-10-22)
+
+### Patch Changes
+
+- [#5121](https://github.com/PostHog/posthog-js/pull/5121) [`0f5d25a`](https://github.com/PostHog/posthog-js/commit/0f5d25a4356e2ac1186958bcb82cd7492e30158f) Thanks [@breken-ai](https://github.com/breken-ai)! - Failed Vercel AI SDK `generateText` calls report the same `$ai_provider` as successful ones.
+  (2026-10-22)
+
+## 8.15.2
+
+### Patch Changes
+
+- [#5368](https://github.com/PostHog/posthog-js/pull/5368) [`3e46e4c`](https://github.com/PostHog/posthog-js/commit/3e46e4c90673e0fee73cd74a013afa340011a47c) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Count Gemini tool-use prompt tokens in the captured input tokens.
+  (2026-10-22)
+
+## 8.15.1
+
+### Patch Changes
+
+- [#5375](https://github.com/PostHog/posthog-js/pull/5375) [`def5ab4`](https://github.com/PostHog/posthog-js/commit/def5ab411d75338849ebb9ee0a9d2c1af7e8c8ed) Thanks [@shehjaddev](https://github.com/shehjaddev)! - fix: Capture Anthropic extended thinking blocks as `reasoning` content in captured output, streamed and not, and start time to first token at the first thinking delta.
+  (2026-10-22)
+
+## 8.15.0
+
+### Minor Changes
+
+- [#5091](https://github.com/PostHog/posthog-js/pull/5091) [`2192bb1`](https://github.com/PostHog/posthog-js/commit/2192bb1281508a4574c60cfd6fb6bd58ad7245b4) Thanks [@gouveags](https://github.com/gouveags)! - Trace foreground Gemini Interactions API model calls.
+  (2026-10-22)
+
+## 8.14.5
+
+### Patch Changes
+
+- [#5357](https://github.com/PostHog/posthog-js/pull/5357) [`b5e99d1`](https://github.com/PostHog/posthog-js/commit/b5e99d17464712412592b0b2de68fe2d57cbbb7c) Thanks [@shehjaddev](https://github.com/shehjaddev)! - fix: Capture Gemini thought summaries (`thinkingConfig.includeThoughts`) as `reasoning` content blocks instead of answer text, in responses, streamed output, replayed input and the ADK plugin.
+  (2026-10-22)
+
+## 8.14.4
+
+### Patch Changes
+
+- [#5352](https://github.com/PostHog/posthog-js/pull/5352) [`dd58d50`](https://github.com/PostHog/posthog-js/commit/dd58d504da2b27df36363ecf742191348988fb46) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix: Use the cumulative input and cache token counts from Anthropic's final `message_delta` when streaming with server tools.
+  (2026-10-21)
+
 ## 8.14.3
 
 ### Patch Changes

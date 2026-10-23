@@ -186,6 +186,16 @@ describe('Tool Handling Tests', () => {
       ])
     })
 
+    it('should keep the refusal of a refused request', () => {
+      const response = {
+        choices: [{ message: { role: 'assistant', content: null, refusal: "I can't help with that" } }],
+      }
+
+      expect(formatResponseOpenAI(response)).toEqual([
+        { role: 'assistant', content: [{ type: 'refusal', refusal: "I can't help with that" }] },
+      ])
+    })
+
     it('should format response with only tool calls', () => {
       const response = {
         choices: [
@@ -254,6 +264,28 @@ describe('Tool Handling Tests', () => {
                 arguments: { location: 'Paris' },
               },
             },
+          ],
+        },
+      ])
+    })
+
+    it('should format thinking blocks as reasoning and skip redacted thinking', () => {
+      const response = {
+        content: [
+          { type: 'thinking', thinking: 'The user wants the weather in Paris.', signature: 'sig' },
+          { type: 'redacted_thinking', data: 'encrypted' },
+          { type: 'thinking', thinking: '', signature: 'sig' },
+          { type: 'text', text: 'It is sunny in Paris.' },
+        ],
+      }
+
+      const formatted = formatResponseAnthropic(response)
+      expect(formatted).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'The user wants the weather in Paris.' },
+            { type: 'text', text: 'It is sunny in Paris.' },
           ],
         },
       ])

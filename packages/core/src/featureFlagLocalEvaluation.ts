@@ -29,18 +29,57 @@ export type FeatureFlagVariantLookupEntry = {
   key: string
 }
 
-const NULL_VALUES_ALLOWED_OPERATORS = ['is_not', 'is_set']
+// String operators match null as the string "null", like the flags service.
+const NULL_VALUES_ALLOWED_OPERATORS = [
+  'exact',
+  'is_not',
+  'icontains',
+  'not_icontains',
+  'starts_with',
+  'not_starts_with',
+  'ends_with',
+  'not_ends_with',
+  'regex',
+  'not_regex',
+]
 
 // This value is intentionally larger than Number.MAX_SAFE_INTEGER. Changing its rounding changes
 // existing rollout and variant assignments.
 // oxlint-disable-next-line no-loss-of-precision
 const LONG_SCALE = 0xfffffffffffffff
 
+/**
+ * Why local evaluation could not resolve a flag. `experience_continuity` and
+ * `unsupported_definition` come from the flag's definition, `missing_context` from the
+ * evaluation call, and `unresolved_dependency` from a flag the definition depends on.
+ */
+export type UnresolvedFlagReason =
+  | 'experience_continuity'
+  | 'unsupported_definition'
+  | 'missing_context'
+  | 'unresolved_dependency'
+
 export class InconclusiveMatchError extends Error {
-  constructor(message: string) {
+  readonly reason: UnresolvedFlagReason
+
+  constructor(message: string, reason: UnresolvedFlagReason = 'unsupported_definition') {
     super(message)
     this.name = this.constructor.name
+    this.reason = reason
     Object.setPrototypeOf(this, InconclusiveMatchError.prototype)
+  }
+}
+
+// Values read from the evaluation call rather than the flag definition: failing to use one
+// is a missing-context cause, not an unsupported definition.
+function readContextValue<T>(read: () => T): T {
+  try {
+    return read()
+  } catch (e) {
+    if (e instanceof InconclusiveMatchError) {
+      throw new InconclusiveMatchError(e.message, 'missing_context')
+    }
+    throw e
   }
 }
 
@@ -348,10 +387,91 @@ export function relativeDateParseForFeatureFlagMatching(value: string): Date | n
   return parsedDt
 }
 
+function parseDateFilter(value: FeatureFlagPropertyValue): Date {
+  if (typeof value === 'boolean') {
+    throw new InconclusiveMatchError('Date operations cannot be performed on boolean values')
+  }
+  return relativeDateParseForFeatureFlagMatching(String(value)) ?? convertToDateTime(value)
+}
+
+/**
+ * Throws an unsupported_definition error when local evaluation cannot use the filter, whatever
+ * the context holds: an unknown operator, or a filter value that the operator cannot parse.
+ */
+export function assertFeatureFlagFilterSupported(
+  property: FeatureFlagProperty,
+  options: Pick<MatchFeatureFlagPropertyOptions, 'semverParsingPolicy'> = {}
+): void {
+  const value = property.value
+  const parsingPolicy = options.semverParsingPolicy ?? 'strict'
+  switch (property.operator || 'exact') {
+    case 'exact':
+    case 'is_not':
+      for (const item of Array.isArray(value) ? value : [value]) {
+        exactMatchString(item)
+      }
+      return
+    case 'is_set':
+    case 'is_not_set':
+    case 'icontains':
+    case 'not_icontains':
+    case 'starts_with':
+    case 'not_starts_with':
+    case 'ends_with':
+    case 'not_ends_with':
+    case 'regex':
+    case 'not_regex':
+    case 'gt':
+    case 'gte':
+    case 'lt':
+    case 'lte':
+      return
+    case 'is_date_after':
+    case 'is_date_before':
+      parseDateFilter(value)
+      return
+    case 'semver_eq':
+    case 'semver_neq':
+    case 'semver_gt':
+    case 'semver_gte':
+    case 'semver_lt':
+    case 'semver_lte':
+      parseFeatureFlagSemver(String(value), parsingPolicy)
+      return
+    case 'semver_tilde':
+      computeTildeBounds(String(value), parsingPolicy)
+      return
+    case 'semver_caret':
+      computeCaretBounds(String(value), parsingPolicy)
+      return
+    case 'semver_wildcard':
+      computeWildcardBounds(String(value), parsingPolicy)
+      return
+    default:
+      throw new InconclusiveMatchError(`Unknown operator: ${property.operator}`)
+  }
+}
+
 export function matchFeatureFlagProperty(
   property: FeatureFlagProperty,
   propertyValues: Record<string, any>,
   options: MatchFeatureFlagPropertyOptions = {}
+): boolean {
+  try {
+    return matchPropertyValue(property, propertyValues, options)
+  } catch (e) {
+    // An unusable filter outranks missing context, so check the filter before blaming the context.
+    if (e instanceof InconclusiveMatchError && e.reason === 'missing_context') {
+      assertFeatureFlagFilterSupported(property, options)
+    }
+    throw e
+  }
+}
+
+function matchPropertyValue(
+  property: FeatureFlagProperty,
+  propertyValues: Record<string, any>,
+  options: MatchFeatureFlagPropertyOptions
 ): boolean {
   const key = property.key
   const value = property.value
@@ -360,7 +480,7 @@ export function matchFeatureFlagProperty(
 
   const hasProperty = Object.prototype.hasOwnProperty.call(propertyValues, key)
   if (!hasProperty) {
-    throw new InconclusiveMatchError(`Property ${key} not found in propertyValues`)
+    throw new InconclusiveMatchError(`Property ${key} not found in propertyValues`, 'missing_context')
   } else if (operator === 'is_not_set') {
     return false
   } else if (operator === 'is_set') {
@@ -370,14 +490,10 @@ export function matchFeatureFlagProperty(
   const overrideValue = propertyValues[key]
   if (overrideValue === undefined) {
     options.warnFunction?.(`Property ${key} cannot have a value of undefined with the ${operator} operator`)
-    return operator === 'is_not'
+    // Undefined is omitted from JSON; partial local context cannot establish a remote value.
+    throw new InconclusiveMatchError(`Property ${key} is undefined in propertyValues`)
   }
-  if (
-    overrideValue === null &&
-    !NULL_VALUES_ALLOWED_OPERATORS.includes(operator) &&
-    operator !== 'exact' &&
-    operator !== 'is_not'
-  ) {
+  if (overrideValue === null && !NULL_VALUES_ALLOWED_OPERATORS.includes(operator)) {
     options.warnFunction?.(`Property ${key} cannot have a value of null with the ${operator} operator`)
     return false
   }
@@ -387,20 +503,21 @@ export function matchFeatureFlagProperty(
       (options.propertyMatchingVersion !== 2 && isTruthyOrFalsyPropertyValue(target)) ||
       (Array.isArray(target) && target.length === 0)
     ) {
-      assertJsonRepresentable(actual)
+      readContextValue(() => assertJsonRepresentable(actual))
       return isTruthyPropertyValue(target) === isTruthyPropertyValue(actual)
     }
     // Neither integer nor integral-float spelling can equal a boolean-like filter. This
     // mismatch is conclusive without weakening the numeric ambiguity fallback below.
     if (options.propertyMatchingVersion === 2 && typeof actual === 'number' && isTruthyOrFalsyPropertyValue(target)) {
-      assertJsonRepresentable(actual)
+      readContextValue(() => assertJsonRepresentable(actual))
       return false
     }
     if (Array.isArray(target)) {
-      const actualString = exactMatchString(actual).toLowerCase()
+      const actualString = readContextValue(() => exactMatchString(actual)).toLowerCase()
       return target.some((item) => exactMatchString(item).toLowerCase() === actualString)
     }
-    return exactMatchString(target).toLowerCase() === exactMatchString(actual).toLowerCase()
+    const targetString = exactMatchString(target).toLowerCase()
+    return targetString === readContextValue(() => exactMatchString(actual)).toLowerCase()
   }
 
   const compare = (lhs: any, rhs: any, comparisonOperator: string): boolean => {
@@ -409,6 +526,20 @@ export function matchFeatureFlagProperty(
     if (comparisonOperator === 'lt') return lhs < rhs
     if (comparisonOperator === 'lte') return lhs <= rhs
     throw new Error(`Invalid operator: ${comparisonOperator}`)
+  }
+
+  // Lazy, because only the semver operators may parse either side.
+  const parseContextSemver = (): SemverTuple =>
+    readContextValue(() => parseFeatureFlagSemver(String(overrideValue), parsingPolicy))
+  // Parses the filter before the context, so a bad filter reports unsupported_definition even
+  // when the context value is bad too.
+  const compareContextSemverToFilter = (): number => {
+    const filterParsed = parseFeatureFlagSemver(String(value), parsingPolicy)
+    return compareSemverTuples(parseContextSemver(), filterParsed)
+  }
+  const isContextSemverWithin = ({ lower, upper }: { lower: SemverTuple; upper: SemverTuple }): boolean => {
+    const overrideParsed = parseContextSemver()
+    return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
   }
 
   switch (operator) {
@@ -452,71 +583,28 @@ export function matchFeatureFlagProperty(
     }
     case 'is_date_after':
     case 'is_date_before': {
-      if (typeof value === 'boolean') {
-        throw new InconclusiveMatchError('Date operations cannot be performed on boolean values')
-      }
-      let parsedDate = relativeDateParseForFeatureFlagMatching(String(value))
-      if (parsedDate == null) parsedDate = convertToDateTime(value)
-      const overrideDate = convertToDateTime(overrideValue)
+      const parsedDate = parseDateFilter(value)
+      const overrideDate = readContextValue(() => convertToDateTime(overrideValue))
       return operator === 'is_date_before' ? overrideDate < parsedDate : overrideDate > parsedDate
     }
     case 'semver_eq':
-      return (
-        compareSemverTuples(
-          parseFeatureFlagSemver(String(overrideValue), parsingPolicy),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) === 0
-      )
+      return compareContextSemverToFilter() === 0
     case 'semver_neq':
-      return (
-        compareSemverTuples(
-          parseFeatureFlagSemver(String(overrideValue), parsingPolicy),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) !== 0
-      )
+      return compareContextSemverToFilter() !== 0
     case 'semver_gt':
-      return (
-        compareSemverTuples(
-          parseFeatureFlagSemver(String(overrideValue), parsingPolicy),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) > 0
-      )
+      return compareContextSemverToFilter() > 0
     case 'semver_gte':
-      return (
-        compareSemverTuples(
-          parseFeatureFlagSemver(String(overrideValue), parsingPolicy),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) >= 0
-      )
+      return compareContextSemverToFilter() >= 0
     case 'semver_lt':
-      return (
-        compareSemverTuples(
-          parseFeatureFlagSemver(String(overrideValue), parsingPolicy),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) < 0
-      )
+      return compareContextSemverToFilter() < 0
     case 'semver_lte':
-      return (
-        compareSemverTuples(
-          parseFeatureFlagSemver(String(overrideValue), parsingPolicy),
-          parseFeatureFlagSemver(String(value), parsingPolicy)
-        ) <= 0
-      )
-    case 'semver_tilde': {
-      const overrideParsed = parseFeatureFlagSemver(String(overrideValue), parsingPolicy)
-      const { lower, upper } = computeTildeBounds(String(value), parsingPolicy)
-      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
-    }
-    case 'semver_caret': {
-      const overrideParsed = parseFeatureFlagSemver(String(overrideValue), parsingPolicy)
-      const { lower, upper } = computeCaretBounds(String(value), parsingPolicy)
-      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
-    }
-    case 'semver_wildcard': {
-      const overrideParsed = parseFeatureFlagSemver(String(overrideValue), parsingPolicy)
-      const { lower, upper } = computeWildcardBounds(String(value), parsingPolicy)
-      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
-    }
+      return compareContextSemverToFilter() <= 0
+    case 'semver_tilde':
+      return isContextSemverWithin(computeTildeBounds(String(value), parsingPolicy))
+    case 'semver_caret':
+      return isContextSemverWithin(computeCaretBounds(String(value), parsingPolicy))
+    case 'semver_wildcard':
+      return isContextSemverWithin(computeWildcardBounds(String(value), parsingPolicy))
     default:
       throw new InconclusiveMatchError(`Unknown operator: ${operator}`)
   }

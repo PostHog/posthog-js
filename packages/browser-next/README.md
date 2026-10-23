@@ -2,7 +2,7 @@
 
 An experimental PostHog client for modern browsers.
 
-The client installs one analytics extension with a bounded in-memory buffer during initialization. By default, the first successfully admitted event lazily loads its queue scheduling and Capture Analytics V1 delivery machinery. Consent-denied, bot-filtered, and rejected events do not load delivery.
+The client installs one analytics extension with a bounded in-memory buffer during initialization. By default, the first successfully admitted event lazily loads its queue scheduling and Capture Analytics V1 delivery machinery. Consent-denied, bot-filtered, and rejected events do not load delivery. Feature flags, logs, surveys orchestration, and autocapture dynamically load during initialization by default; their capture and display behavior retains its own consent and remote-configuration gates. Survey rendering is a further deferred chunk.
 
 ```ts
 import { createPostHog } from '@posthog/browser'
@@ -33,6 +33,38 @@ const posthog = await createPostHog({
 ```
 
 Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no delivery dynamic-import reference. Both modes retain the analytics extension and its buffer. `getExtension('analytics')` returns the same instance before and after delivery loads; its presence alone does not indicate that delivery is available. Analytics initializes before other configured extensions so they can capture during setup. Other extensions retain their configured order.
+
+## Autocapture
+
+Autocapture loads dynamically during initialization by default. Code loading alone does not enable collection: it waits for the initial remote configuration outcome and a known server opt-in (or a retained opt-in after a failed refresh). Consent, bot filtering, and local privacy exclusions still apply. `autocapture: false` omits automatic inclusion; it does not disable another product's configuration or an explicitly supplied autocapture instance.
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    autocapture: { maskAllText: true, cssSelectorAllowlist: ['button', 'a'] },
+})
+```
+
+For static inclusion without a runtime module request:
+
+```ts
+import { autocapture } from '@posthog/browser/autocapture'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    extensions: [autocapture({ maskAllText: true })],
+})
+```
+
+An explicit instance takes precedence over the top-level option. The manual core entrypoint never imports autocapture automatically. Both paths use the same options and shared DOM implementation:
+
+- `urlAllowlist` / `urlIgnorelist` accept strings or regular expressions; `getCurrentUrl` supplies the URL used for matching. Ignore rules override allow rules.
+- `domEventAllowlist`, `elementAllowlist`, `cssSelectorAllowlist`, `cssSelectorIgnorelist`, and `elementAttributeIgnorelist` restrict capture. A custom CSS ignorelist replaces the `.ph-no-autocapture` / `[data-ph-no-autocapture]` defaults; include them explicitly to retain those exclusions. `.ph-no-capture` remains an unconditional exclusion.
+- `maskAllText` and `maskAllElementAttributes` default to false; sensitive value filtering remains active. `disableCaptureUrlHashes` defaults to true.
+- `captureCopiedText` defaults to false. Enabling it captures cut/copy/paste interactions; pasted text is never included.
+- `rageclick` accepts false, true, or an options object. Enabled by default, it ignores text-selection surfaces and navigation/stepper content (`next`, `previous`, `prev`, `>`, `<`, `+`, `-`, `−`, `–`). Options are `cssSelectorIgnorelist`, `contentIgnorelist`, `ignoreTextSelection`, `thresholdPx` (30), `clickCount` (3), and `timeoutMs` (1000). Explicit true uses these same defaults.
+
+Configuration arrays and regular expressions are snapshotted before asynchronous loading; callbacks remain callable. Disposal removes all DOM listeners. Survey selector metadata follows the same consent, masking, and exclusion checks as ordinary autocapture; it does not bypass them.
 
 ## Feature flags
 
@@ -143,6 +175,45 @@ An explicit logs extension takes precedence over the top-level option, including
 Logs includes the current URL as `url.full`. Configure `logs: { urlCapture: { path: true, search: false, hash: false } }` or pass the same `urlCapture` option to `logs()` to select which URL components are retained. These are the defaults, including for omitted fields: the origin and pathname are retained, while query parameters and fragments are removed. With `path: false`, the pathname becomes `/`. Invalid URLs are omitted. Component selection does not redact sensitive values within retained components.
 
 The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits all installed extensions' flush methods, including analytics and logs. Consent denial and reset discard queued logs; later opt-in does not revive them. Shutdown awaits normal log delivery within its timeout before cleanup. On pagehide, logs attempt best-effort Beacon delivery with keepalive Fetch fallback. Console hooks and page lifecycle listeners are removed on disposal. Logs use their own `/i/v1/logs` endpoint, JSON payload, and project-token query authentication, never the analytics queue. The existing SDK `logger` remains diagnostic output; application logs use the logs extension's `captureLog()`.
+
+## Surveys
+
+Surveys orchestration loads dynamically during initialization by default. Its UI is a separate dynamic chunk: a successful remote configuration with surveys enabled loads it automatically; otherwise an explicit survey call can load it for manual use. Definitions come from a separate `/api/surveys/` request and are cached for five minutes. Client creation does not wait for the renderer or definitions.
+
+```ts
+import type { SurveysExtension } from '@posthog/browser/surveys'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    surveys: { automaticDisplay: false, requestTimeoutMs: 10_000 },
+})
+const feedback = posthog.getExtension<SurveysExtension>('surveys')
+feedback?.getSurveys((surveys, context) => {
+    if (context?.isLoaded && surveys[0]) feedback.displaySurvey(surveys[0].id)
+})
+const eligibility = await feedback?.canRenderSurvey('feedback')
+```
+
+The options are `automaticDisplay` (default `true`), `requestTimeoutMs` (default `10_000`), `prefillFromUrl` (default `false`), `overrideDisplayLanguage`, `prepareStylesheet`, and `getCurrentUrl`. `getActiveMatchingSurveys(callback, forceReload?)` applies targeting; `onSurveysLoaded(callback)` returns a disposable subscription; `cancelPendingSurvey(id)` cancels pending display. Capture consent still gates rendering and responses.
+
+Use `surveys: false` to omit automatic inclusion. An explicitly supplied instance takes precedence, including over `false`. To include orchestration, rendering, and styles statically without runtime module loading:
+
+```ts
+import { surveys } from '@posthog/browser/surveys'
+
+const feedback = surveys({ automaticDisplay: false })
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    extensions: [feedback],
+})
+feedback.displaySurvey('feedback')
+```
+
+Await client creation before using extension controls.
+
+The manual core entrypoint never loads surveys automatically. Extension lookup returns undefined when surveys is omitted or fails setup. Without a document, rendering is unavailable. Disposal removes renderer listeners, polling, pending displays, and rendered elements. Survey abandonment uses analytics' existing pagehide keepalive handoff when delivery is initialized; an analytics module still loading during pagehide cannot send it.
+
+Definitions and event activation state use the host-provided surveys KV namespace in the core persistence record. Survey interaction state—seen markers, partial answers, and abandonment markers—uses dedicated browser localStorage, independently of configured SDK persistence, including `storage: false`. Partial answers fall back to memory when localStorage writes fail; abandonment is skipped when its marker cannot be read. Client reset clears persisted extension data, runtime state, and localStorage seen markers, partial answers, and the last-seen date. Abandonment markers are retained, matching legacy survey reset behavior. Event targeting works through admitted captures; DOM-action selector targeting uses the installed autocapture extension, including the default dynamic instance. Cached definitions hydrate their triggers without requiring a refresh. Selectors registered before autocapture setup are retained; later successful definition snapshots replace the selector set, while failed refreshes retain it. Both extension orders are supported. Matching retains the shared exact-target semantics, including SVG attribution to its enclosing control. URL-constrained actions use survey targeting context when the event has no URL; this local fallback does not add URL data to the captured event.
 
 ## Capture and delivery
 

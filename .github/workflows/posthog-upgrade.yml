@@ -156,10 +156,11 @@ jobs:
                       # Desktop is a standalone workspace with its own lockfile. semver@6.3.1 is
                       # already locked there, but its npm metadata triggers pnpm's trust downgrade
                       # check whenever the lockfile is regenerated. Keep the check for every other
-                      # dependency while allowing this existing version.
+                      # dependency while allowing this existing version. The release-age
+                      # cooldown exclusions for PostHog packages live in the desktop
+                      # workspace's own pnpm-workspace.yaml.
                       pnpm --dir products/desktop install --no-frozen-lockfile \
-                          --trust-policy-exclude='semver@6.3.1' \
-                          --config.minimum-release-age-exclude="$PACKAGE_NAME posthog-js posthog-js-lite posthog-node @posthog/*"
+                          --trust-policy-exclude='semver@6.3.1'
                   fi
 
             - name: Generate pull request details

@@ -1,5 +1,35 @@
 # @posthog/browser-common
 
+## 0.9.9
+
+### Patch Changes
+
+- [#4994](https://github.com/PostHog/posthog-js/pull/4994) [`bcd33ce`](https://github.com/PostHog/posthog-js/commit/bcd33ce0f8c9658e0e37c336ced7968960228fbd) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share autocapture across browser SDKs while preserving existing event capture behavior.
+  (2026-10-22)
+
+## 0.9.8
+
+### Patch Changes
+
+- [#5365](https://github.com/PostHog/posthog-js/pull/5365) [`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` the next time they are read after opt in.
+  (2026-10-22)
+- Updated dependencies [[`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c)]:
+  - @posthog/core@1.59.4
+
+## 0.9.7
+
+### Patch Changes
+
+- [#5273](https://github.com/PostHog/posthog-js/pull/5273) [`d9148bb`](https://github.com/PostHog/posthog-js/commit/d9148bbf9a92807464402515aed5d628810087eb) Thanks [@posthog](https://github.com/apps/posthog)! - Warn in debug mode when `reloadFeatureFlags()` runs inside an `onFeatureFlags` callback, because cross-tab flag changes can turn it into a request loop
+  (2026-10-22)
+
+## 0.9.6
+
+### Patch Changes
+
+- [#4992](https://github.com/PostHog/posthog-js/pull/4992) [`3b7ffc6`](https://github.com/PostHog/posthog-js/commit/3b7ffc6fe4990ff26d661f48612166e31850ef31) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share surveys across browser SDKs; calls to `getSurveys` before survey setup now invoke the callback immediately with an unavailable error. Notify all survey subscribers when survey loading fails.
+  (2026-10-22)
+
 ## 0.9.5
 
 ### Patch Changes

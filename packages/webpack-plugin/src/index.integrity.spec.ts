@@ -293,20 +293,20 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
         expect(uploads[0].map.chunk_id).toBe(uploads[1].map.chunk_id)
     })
 
-    it('retains maps and skips upload when release resolution fails, then recovers on rebuild', async () => {
+    it('deletes maps and skips upload when release resolution fails, then recovers on rebuild', async () => {
         const error = vi.spyOn(console, 'error').mockImplementation(() => {})
         vi.mocked(resolveReleaseId).mockRejectedValueOnce(new Error('release unavailable'))
         await build(true, 'event', {}, 2)
         expect(error).toHaveBeenCalled()
         expect(uploads).toHaveLength(1)
         expect(uploads[0].map.chunk_id).toBeTruthy()
-        // The failed compilation's map remains; only the successful rebuild's map is deleted.
+        // deleteAfterUpload removes the failed compilation's maps too, so none ship.
         const files = await fs.readdir(path.join(directory, 'dist'))
-        expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(1)
+        expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(0)
         error.mockRestore()
     })
 
-    it('retains all maps and emitted integrity on a mid-injection failure', async () => {
+    it('deletes all maps and preserves emitted integrity on a mid-injection failure', async () => {
         const error = vi.spyOn(console, 'error').mockImplementation(() => {})
         let originalCode: string | undefined
         const hashes = await build(true, 'symbol-set', {
@@ -332,7 +332,7 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
         expect(error).toHaveBeenCalled()
         expect(uploads).toHaveLength(0)
         const files = await fs.readdir(path.join(directory, 'dist'))
-        expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(2)
+        expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(0)
         for (const file of files.filter((f) => f.endsWith('.js'))) {
             const code = await fs.readFile(path.join(directory, 'dist', file), 'utf8')
             expect(hash(code)).toBe(hashes.get(file))

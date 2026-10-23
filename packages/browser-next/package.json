@@ -43,6 +43,16 @@
             "types": "./dist/logs.d.ts",
             "import": "./dist/logs.mjs",
             "require": "./dist/logs.js"
+        },
+        "./surveys": {
+            "types": "./dist/surveys.d.ts",
+            "require": "./dist/surveys.js",
+            "import": "./dist/surveys.mjs"
+        },
+        "./autocapture": {
+            "types": "./dist/autocapture.d.ts",
+            "require": "./dist/autocapture.js",
+            "import": "./dist/autocapture.mjs"
         }
     },
     "scripts": {

@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createMockServer, buildConfigResponse } from '@posthog-tooling/sdk-mock-server'
 import { interactionScenarios } from './interaction-cases.mjs'
+import { replayMinimumDurationMs } from './replay-cases.mjs'
+import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
 
 export const survey = {
     id: 'compat-survey',
@@ -38,31 +40,39 @@ export function observations(server) {
 }
 
 export function compatibilityServer(settings) {
-    const surveysEnabled = ['surveys', 'extension-failure', 'delayed-loading', 'version-fallback'].includes(
-        settings.scenario
-    )
+    const surveysEnabled = [
+        'surveys',
+        'surveys-auto',
+        'extension-failure',
+        'delayed-loading',
+        'version-fallback',
+    ].includes(settings.scenario)
     let flagSequence = 0
     const server = createMockServer({
         barriers: ['config', 'flags', 'extensions', 'surveys', ...(settings.mode === 'snippet' ? ['core'] : [])],
         state: {
-            sessionReplayEnabled: settings.scenario === 'replay',
+            sessionReplayEnabled: settings.scenario.startsWith('replay'),
+            minimumDurationMilliseconds:
+                settings.scenario === 'replay-minimum-duration' ? replayMinimumDurationMs : null,
             surveysEnabled,
             surveys: [survey],
             flags: { 'compat-enabled': true, 'compat-variant': 'blue' },
             projectToken: 'phc_COMPAT',
             configOverrides: {
                 supportedCompression: [],
-                capturePerformance: false,
+                capturePerformance:
+                    settings.scenario === 'web-vitals'
+                        ? { web_vitals: true, web_vitals_allowed_metrics: ['FCP'] }
+                        : false,
                 captureDeadClicks: settings.scenario === 'dead-clicks',
                 heatmaps: settings.scenario === 'heatmaps',
                 errorTracking: { autocaptureExceptions: false },
                 analytics: { endpoint: '/e/' },
                 surveys: surveysEnabled ? [survey] : false,
                 logs: { captureConsoleLogs: settings.scenario === 'logs' },
-                sessionRecording:
-                    settings.scenario === 'replay'
-                        ? { endpoint: '/s/', consoleLogRecordingEnabled: false, recordCanvas: false }
-                        : false,
+                sessionRecording: settings.scenario.startsWith('replay')
+                    ? { endpoint: '/s/', consoleLogRecordingEnabled: false, recordCanvas: false }
+                    : false,
             },
         },
         respond(endpoint, _request, response, state) {
@@ -80,6 +90,9 @@ export function compatibilityServer(settings) {
         },
         async adapter(request, context) {
             const path = request.path
+            const networkSample = replayNetworkCases.find((sample) => path === `${replayNetworkPath}/${sample.name}`)
+            if (settings.scenario === 'replay' && request.method === 'POST' && networkSample)
+                return { body: networkSample.responseBody, headers: replayNetworkHeaders.response }
             if (path === '/__compat/received') return { json: observations(server) }
             if (path === '/__compat/barriers') return { json: server.barriers() }
             if (path === '/__compat/release' && request.method === 'POST') {
@@ -89,11 +102,22 @@ export function compatibilityServer(settings) {
             if (['/', '/after', '/player'].includes(path)) {
                 let body = readFileSync(
                     new URL(
-                        `./fixtures/${path === '/' && interactionScenarios.includes(settings.scenario) ? 'interactions' : 'page'}.html`,
+                        `./fixtures/${path === '/' && interactionScenarios.includes(settings.scenario) ? 'interactions' : path === '/' && settings.scenario === 'replay-css' ? 'styles' : 'page'}.html`,
                         import.meta.url
                     ),
                     'utf8'
                 )
+                if (
+                    path === '/' &&
+                    ['replay-idle', 'replay-rotation', 'replay-minimum-duration'].includes(settings.scenario)
+                ) {
+                    body = body.replace(
+                        '</head>',
+                        '<style>#action { display: block; width: 80px; height: 40px; }</style></head>'
+                    )
+                    body +=
+                        '<script>document.getElementById("action").addEventListener("mousedown", (event) => event.preventDefault())</script>'
+                }
                 if (path === '/')
                     body += `<script src="/harness.js"></script><script src="/${settings.mode === 'snippet' ? 'snippet' : 'consumer'}.js"></script>`
                 if (path === '/player') body += '<script src="/player.js"></script>'

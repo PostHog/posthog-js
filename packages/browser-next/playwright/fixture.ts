@@ -1,3 +1,8 @@
+import { autocaptureHarness } from './autocapture-fixture'
+window.autocaptureHarness = autocaptureHarness
+
+import { surveysHarness } from './surveys-fixture'
+window.surveysHarness = surveysHarness
 import { logs } from '../src/logs'
 import type { PostHog } from '../src/types'
 import { flags } from '../src/flags'

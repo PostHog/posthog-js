@@ -1,5 +1,39 @@
 # posthog-node
 
+## 5.57.0
+
+### Minor Changes
+
+- [#5234](https://github.com/PostHog/posthog-js/pull/5234) [`1991b99`](https://github.com/PostHog/posthog-js/commit/1991b9962749653599d03b54d160368dbfc8009b) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - feat: report flags local evaluation could not resolve on `evaluateFlags()` snapshots via `unresolvedFlags`, tag reads of them with `local_evaluation_inconclusive`, and warn once about flags whose definition local evaluation does not support
+
+  Behavior changes:
+  - A condition with a filter local evaluation cannot check and a filter that does not match now resolves locally as no match, instead of falling back to a server request or staying unresolved.
+  - `$feature_flag_called` events from snapshot reads report `local_evaluation_inconclusive` instead of `flag_missing` for these flags.
+  - The load-time warning now also logs with `strictLocalEvaluation: true`. (2026-10-22)
+
+### Patch Changes
+
+- Updated dependencies [[`1991b99`](https://github.com/PostHog/posthog-js/commit/1991b9962749653599d03b54d160368dbfc8009b)]:
+  - @posthog/core@1.60.0
+
+## 5.56.4
+
+### Patch Changes
+
+- [#5350](https://github.com/PostHog/posthog-js/pull/5350) [`17260e5`](https://github.com/PostHog/posthog-js/commit/17260e501d6ae4b2fae17a2822c6a2f6d4addfe4) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back from local flag evaluation when a required property value is undefined.
+  (2026-10-21)
+- Updated dependencies [[`17260e5`](https://github.com/PostHog/posthog-js/commit/17260e501d6ae4b2fae17a2822c6a2f6d4addfe4)]:
+  - @posthog/core@1.59.3
+
+## 5.56.3
+
+### Patch Changes
+
+- [#5307](https://github.com/PostHog/posthog-js/pull/5307) [`189da75`](https://github.com/PostHog/posthog-js/commit/189da75c7a52b319843a13405c1343565f0d4e25) Thanks [@quotentiroler](https://github.com/quotentiroler)! - Local flag evaluation now matches a null property with string operators like the flags service, so negated operators such as `not_icontains` match instead of failing.
+  (2026-10-21)
+- Updated dependencies [[`189da75`](https://github.com/PostHog/posthog-js/commit/189da75c7a52b319843a13405c1343565f0d4e25)]:
+  - @posthog/core@1.59.2
+
 ## 5.56.2
 
 ### Patch Changes

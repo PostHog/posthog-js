@@ -119,20 +119,18 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
 
     let size = estimateStringBytes(stringifiedData)
     if (size > MAX_MESSAGE_SIZE) {
-        // Regex that matches the pattern for a dataURI with the shape 'data:{mime type};{encoding},{data}'. It:
+        // Regex that matches the pattern for a dataURI with the shape 'data:{mime type}[;{param}[={value}]]*,{data}'. It:
         // 1) Checks if the pattern starts with 'data:' (potentially, not at the start of the string)
-        // 2) Extracts the mime type of the data uri in the first group
-        // 3) Determines when the data URI ends.Depending on if it's used in the src tag or css, it can end with a ) or "
-        const dataURIRegex = /data:([\w/\-.]+);(\w+),([^)"]*)/gim
-        const matches = stringifiedData.matchAll(dataURIRegex)
+        // 2) Extracts the mime type of the data uri in the first group (e.g. image/svg+xml)
+        // 3) Allows any number of parameters, e.g. ';base64', ';charset=utf-8;base64' or none
+        // 4) Determines when the data URI ends. It is matched against JSON text, so it must never consume
+        //    a " or \ (a quote inside a string is escaped as \", and consuming part of an escape would
+        //    produce invalid JSON). It also stops at ), ' and whitespace, which end a URI in css or srcset.
+        const dataURIRegex = /data:([\w/\-.+]+)(?:;[\w\-.+]+(?:=[\w\-.+%]+)?)*,[^)"'\s\\]*/gim
         const unfilteredStringifiedData = stringifiedData
-        for (const match of matches) {
-            if (match[1].toLocaleLowerCase().slice(0, 6) === 'image/') {
-                stringifiedData = stringifiedData.replace(match[0], replacementImageURI)
-            } else {
-                stringifiedData = stringifiedData.replace(match[0], '')
-            }
-        }
+        stringifiedData = stringifiedData.replace(dataURIRegex, (_match: string, mimeType: string) =>
+            mimeType.toLocaleLowerCase().slice(0, 6) === 'image/' ? replacementImageURI : ''
+        )
         if (stringifiedData !== unfilteredStringifiedData) {
             size = estimateStringBytes(stringifiedData)
         }
