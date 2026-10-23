@@ -10,11 +10,10 @@ import {
   uuidv7,
 } from '@posthog/core'
 
-import { CaptureV1Error, type V1DroppedEvent } from './errors'
+import { CaptureError, type CaptureDroppedEvent, type CaptureErrorParams } from './errors'
 import { buildV1Batch } from './transform'
-import type { V1BatchResponse, V1Event } from './types'
+import type { CaptureEndpoint, V1BatchResponse, V1Event } from './types'
 
-const V1_ANALYTICS_PATH = '/i/v1/analytics/events'
 const DEFAULT_MAX_BACKOFF_MS = 30_000
 
 /** HTTP statuses the v1 backend wants retried. 429 is intentionally terminal in v1. */
@@ -22,6 +21,8 @@ const RETRYABLE_STATUSES = new Set([408, 500, 502, 503, 504])
 
 export interface V1CaptureSenderConfig {
   host: string
+  /** The capture lane this sender posts to. */
+  path: CaptureEndpoint
   apiKey: string
   /** Canonical `$lib` identity, materialized by the server from `PostHog-Sdk-Info`. */
   libraryId: string
@@ -60,15 +61,15 @@ interface V1CaptureAttempt {
 }
 
 /**
- * Sends already-normalized events to the Capture V1 endpoint
- * (`POST /i/v1/analytics/events`), owning the full attempt loop: per-event
- * partial retry, exponential backoff clamped against `Retry-After`, v1 status
- * classification, and surfacing drops / undelivered events on the error
- * channel. Used by both the batched and immediate send paths.
+ * Sends already-normalized events to one Capture V1 lane (`config.path`),
+ * owning the full attempt loop: per-event partial retry, exponential backoff
+ * clamped against `Retry-After`, v1 status classification, and surfacing drops
+ * / undelivered events on the error channel. Used by both the batched and
+ * immediate send paths.
  *
  * Never throws for a handled outcome: after exhausting its own attempt budget it
  * reports the failure via `onError` and resolves, so the caller's queue treats
- * the batch as consumed (the internal budget replaces v0's queue-level retry).
+ * the batch as consumed (the internal budget replaces the core queue-level retry).
  */
 export class V1CaptureSender {
   private readonly config: V1CaptureSenderConfig
@@ -104,8 +105,8 @@ export class V1CaptureSender {
       historicalMigration: this.config.historicalMigration,
     })
 
-    const url = `${this.config.host}${V1_ANALYTICS_PATH}`
-    const drops: V1DroppedEvent[] = []
+    const url = `${this.config.host}${this.config.path}`
+    const drops: CaptureDroppedEvent[] = []
     let pending = batch
 
     // Guard against a misconfigured budget (e.g. fetchRetryCount: -1): always make
@@ -157,7 +158,7 @@ export class V1CaptureSender {
             return this.surfacePartialDrops(requestId, drops)
           }
           if (isLastAttempt) {
-            this.onError(new CaptureV1Error({ requestId, drops, retryExhausted: retryable.map((event) => event.uuid) }))
+            this.onError(this.captureError({ requestId, drops, retryExhausted: retryable.map((event) => event.uuid) }))
             return
           }
           pending = retryable
@@ -280,7 +281,7 @@ export class V1CaptureSender {
    * a terminal failure, `retry` is returned for the next attempt, and
    * `ok`/`warning`/unknown/absent are terminal successes.
    */
-  private classify(pending: V1Event[], parsed: V1BatchResponse, drops: V1DroppedEvent[]): V1Event[] {
+  private classify(pending: V1Event[], parsed: V1BatchResponse, drops: CaptureDroppedEvent[]): V1Event[] {
     const results = parsed.results ?? {}
     const retryable: V1Event[] = []
     for (const event of pending) {
@@ -354,14 +355,23 @@ export class V1CaptureSender {
     return new Error(`Capture V1 request failed with HTTP ${status}${suffix}`)
   }
 
-  private surfaceBatchFailure(requestId: string, drops: V1DroppedEvent[], pending: V1Event[], cause: unknown): void {
-    this.onError(new CaptureV1Error({ requestId, drops, retryExhausted: pending.map((event) => event.uuid), cause }))
+  private surfaceBatchFailure(
+    requestId: string,
+    drops: CaptureDroppedEvent[],
+    pending: V1Event[],
+    cause: unknown
+  ): void {
+    this.onError(this.captureError({ requestId, drops, retryExhausted: pending.map((event) => event.uuid), cause }))
   }
 
-  private surfacePartialDrops(requestId: string, drops: V1DroppedEvent[]): void {
+  private surfacePartialDrops(requestId: string, drops: CaptureDroppedEvent[]): void {
     if (drops.length > 0) {
-      this.onError(new CaptureV1Error({ requestId, drops, retryExhausted: [] }))
+      this.onError(this.captureError({ requestId, drops, retryExhausted: [] }))
     }
+  }
+
+  private captureError(params: Omit<CaptureErrorParams, 'endpoint'>): CaptureError {
+    return new CaptureError({ endpoint: this.config.path, ...params })
   }
 
   private async cancelBody(response: PostHogFetchResponse): Promise<void> {

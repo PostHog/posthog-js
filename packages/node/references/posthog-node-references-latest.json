@@ -1992,6 +1992,59 @@
       "example": "(event: EventMessage) => EventMessage | null"
     },
     {
+      "id": "CaptureDroppedEvent",
+      "name": "CaptureDroppedEvent",
+      "properties": [
+        {
+          "type": "string",
+          "name": "details"
+        },
+        {
+          "type": "string",
+          "name": "uuid"
+        }
+      ],
+      "path": "src/capture-v1/errors.ts"
+    },
+    {
+      "id": "CaptureEndpoint",
+      "name": "CaptureEndpoint",
+      "properties": [],
+      "path": "src/capture-v1/types.ts",
+      "example": "typeof ANALYTICS_CAPTURE_ENDPOINT | typeof AI_CAPTURE_ENDPOINT"
+    },
+    {
+      "id": "CaptureErrorParams",
+      "name": "CaptureErrorParams",
+      "properties": [
+        {
+          "description": "The underlying transport/HTTP/parse failure, when the whole batch failed.",
+          "type": "unknown",
+          "name": "cause"
+        },
+        {
+          "description": "Events the server rejected outright (billing/validation).",
+          "type": "CaptureDroppedEvent[]",
+          "name": "drops"
+        },
+        {
+          "description": "The capture lane the batch was sent to.",
+          "type": "CaptureEndpoint",
+          "name": "endpoint"
+        },
+        {
+          "type": "string",
+          "name": "requestId"
+        },
+        {
+          "description": "UUIDs of events still pending `retry` after the attempt budget was exhausted, or lost to a batch-level failure.",
+          "type": "string[]",
+          "name": "retryExhausted"
+        }
+      ],
+      "path": "src/capture-v1/errors.ts"
+    },
+    {
       "id": "CaptureEvent",
       "name": "CaptureEvent",
       "properties": [

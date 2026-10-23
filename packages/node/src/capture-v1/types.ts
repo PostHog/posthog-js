@@ -1,5 +1,13 @@
 import type { PostHogEventProperties } from '@posthog/core'
 
+/** Capture lane for analytics events. */
+export const ANALYTICS_CAPTURE_ENDPOINT = '/i/v1/analytics/events'
+
+/** Capture lane for events sent through `captureAi`. */
+export const AI_CAPTURE_ENDPOINT = '/i/v1/ai/events'
+
+export type CaptureEndpoint = typeof ANALYTICS_CAPTURE_ENDPOINT | typeof AI_CAPTURE_ENDPOINT
+
 /**
  * Typed `options` object on a Capture V1 event. Legacy `$`-prefixed sentinel
  * properties are lifted here (renamed + strictly typed) by the transform.
@@ -13,7 +21,7 @@ export interface V1EventOptions {
 }
 
 /**
- * A single event in a Capture V1 batch (`POST /i/v1/analytics/events`).
+ * A single event in a Capture V1 batch.
  * `session_id`/`window_id` are promoted from the `$session_id`/`$window_id`
  * sentinels; there is no top-level `api_key`.
  */
