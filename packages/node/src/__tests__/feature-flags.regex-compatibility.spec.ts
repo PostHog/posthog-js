@@ -117,6 +117,74 @@ describe('local regex compatibility', () => {
     expect(mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')).toHaveLength(1)
   })
 
+  it.each(
+    ['regex', 'not_regex'].flatMap((operator) => [0, 50].map((rolloutPercentage) => ({ operator, rolloutPercentage })))
+  )(
+    'preserves deferred $operator early-exit exclusions at $rolloutPercentage% rollout',
+    async ({ operator, rolloutPercentage }) => {
+      const filters = {
+        early_exit: true,
+        groups: [
+          {
+            properties: [{ key: 'name', type: 'person', operator, value: operator === 'regex' ? '.*' : '^never$' }],
+            rollout_percentage: rolloutPercentage,
+          },
+          { properties: [], rollout_percentage: 100 },
+        ],
+      }
+      mockedFetch.mockImplementation(
+        apiImplementation({ localFlags: { flags: [variantFlag(filters)] }, decideFlags: { 'regex-variant': false } })
+      )
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        fetchRetryCount: 0,
+      })
+      const personProperties = { name: 'café' }
+      expect
+        .soft(await posthog.getFeatureFlag('regex-variant', 'user', { personProperties, onlyEvaluateLocally: true }))
+        .toBeUndefined()
+      const flags = await posthog.evaluateFlags('user', { personProperties, onlyEvaluateLocally: true })
+      expect.soft(flags.unresolvedFlags['regex-variant']).toBe('unsupported_definition')
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+      expect.soft(await posthog.getFeatureFlag('regex-variant', 'user', { personProperties })).toBe(false)
+      expect(mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')).toHaveLength(1)
+    }
+  )
+
+  it.each([
+    { earlyExit: true, rolloutPercentage: 100, distinctId: 'user' },
+    { earlyExit: true, rolloutPercentage: 50, distinctId: 'user-2' },
+    { earlyExit: false, rolloutPercentage: 0, distinctId: 'user' },
+    { earlyExit: undefined, rolloutPercentage: 0, distinctId: 'user' },
+  ])(
+    'keeps deferred regex local when early_exit=$earlyExit and rollout=$rolloutPercentage% for $distinctId',
+    async ({ earlyExit, rolloutPercentage, distinctId }) => {
+      const filters = {
+        early_exit: earlyExit,
+        groups: [
+          {
+            properties: [{ key: 'name', type: 'person', operator: 'regex', value: '.*' }],
+            rollout_percentage: rolloutPercentage,
+          },
+          { properties: [], rollout_percentage: 100 },
+        ],
+      }
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: { flags: [variantFlag(filters)] } }))
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        fetchRetryCount: 0,
+      })
+      const personProperties = { name: 'café' }
+      expect(
+        await posthog.getFeatureFlag('regex-variant', distinctId, { personProperties, onlyEvaluateLocally: true })
+      ).toBe(true)
+      expect(await posthog.getFeatureFlag('regex-variant', distinctId, { personProperties })).toBe(true)
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+    }
+  )
+
   const regexProperty = { key: 'name', type: 'person', operator: 'regex', value: '.*' }
   const variants = [
     { key: 'a', rollout_percentage: 100 },

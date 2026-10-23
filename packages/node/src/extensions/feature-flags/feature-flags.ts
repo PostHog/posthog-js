@@ -688,13 +688,21 @@ class FeatureFlagsPoller {
           inconclusiveReason = pickUnresolvedReason(inconclusiveReason, e.reason)
           if (Symbol.for('posthog.requiresServerRegexEvaluation') in e) {
             regexError = e
-            const variants = flagFilters.multivariate?.variants || []
-            const override = condition.variant
-            deferredRegexValues.add(
-              override && variants.some((variant) => variant.key === override)
-                ? override
-                : (await this.getMatchingVariant(flag, effectiveBucketingValue)) || true
-            )
+            if (
+              earlyExitEnabled &&
+              condition.rollout_percentage != undefined &&
+              (await getFeatureFlagHash(flag.key, effectiveBucketingValue)) > condition.rollout_percentage / 100.0
+            ) {
+              deferredRegexValues.add(false)
+            } else {
+              const variants = flagFilters.multivariate?.variants || []
+              const override = condition.variant
+              deferredRegexValues.add(
+                override && variants.some((variant) => variant.key === override)
+                  ? override
+                  : (await this.getMatchingVariant(flag, effectiveBucketingValue)) || true
+              )
+            }
           }
         } else {
           throw e
