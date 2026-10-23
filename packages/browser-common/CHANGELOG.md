@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.9.10
+
+### Patch Changes
+
+- [#5292](https://github.com/PostHog/posthog-js/pull/5292) [`d73e6c7`](https://github.com/PostHog/posthog-js/commit/d73e6c7169319105780bef7b07a93247f6126968) Thanks [@sarmah-rup](https://github.com/sarmah-rup)! - Read query params with form-encoding rules: an encoded plus (`%2B`) is kept as `+` instead of becoming a space, and values that contain `=` are no longer cut off. This fixes UTM, click ID and search keyword properties such as `utm_term=c%2B%2B`.
+  (2026-10-23)
+
 ## 0.9.9
 
 ### Patch Changes
