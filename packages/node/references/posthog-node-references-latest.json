@@ -2206,7 +2206,7 @@
       "name": "EmailError",
       "properties": [
         {
-          "description": "PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`, `missing_app_host`, `client_disabled`, `network_error`, `api_error` for an answer without a code, `unexpected_error`, and `invalid_form`, `invalid_template_id`, `invalid_template_key`, `invalid_attachment` and `invalid_idempotency_key` for a send the SDK refused before any request.",
+          "description": "PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`, `missing_app_host`, `client_disabled`, `client_closed`, `network_error`, `api_error` for an answer without a code, `unexpected_error`, and `invalid_form`, `invalid_template_id`, `invalid_template_key`, `invalid_attachment` and `invalid_idempotency_key` for a send the SDK refused before any request.",
           "type": "string",
           "name": "code"
         },

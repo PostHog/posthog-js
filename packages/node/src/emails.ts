@@ -5,7 +5,18 @@ const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const UPLOAD_PATH = (key: string): string => `/api/projects/@current/messaging_templates/by_key/${key}/`
 
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
-const CODE_ONLY_FIELDS = ['from', 'replyTo', 'subject', 'html', 'text'] as const
+const CODE_ONLY_FIELDS = [
+  'from',
+  'replyTo',
+  'subject',
+  'html',
+  'text',
+  'cc',
+  'bcc',
+  'headers',
+  'tags',
+  'attachments',
+] as const
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const SEND_OPTIONS = new Set([
   'to',
