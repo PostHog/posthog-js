@@ -74,7 +74,10 @@ interface CodeEmailFields {
   templateData?: Record<string, unknown>
 }
 
-/** Email content from your code, named by a key. Needs `html`, `text` or both; PostHog derives a missing `text`. */
+/**
+ * Email content from your code, named by a key. Needs `html`, `text` or both. PostHog derives a missing `text` from
+ * the `html`, and sends HTML with no text in it, such as a single image, without a text part.
+ */
 export type CodeEmailForm = CodeEmailFields & ({ html: string; text?: string } | { html?: string; text: string })
 
 type Without<T> = { [K in keyof T]?: never }
