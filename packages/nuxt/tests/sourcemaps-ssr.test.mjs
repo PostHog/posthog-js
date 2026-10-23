@@ -38,6 +38,8 @@ const executableSource = source
   .replace(/\(sourcemapsConfig: SourcemapsConfig\)/g, '(sourcemapsConfig)')
   .replace(/\(args: string\[\]\)/g, '(args)')
   .replace('(directory: string)', '(directory)')
+  .replace(/(let \w*[sS]ourcemapsError): unknown/g, '$1')
+  .replace('(event: { name: string })', '(event)')
   .replace(/\): string \{/g, ') {')
   .replace(/\): boolean \{/g, ') {')
   .replace(/let (outputDir|publicDir|serverDir): string \| undefined/g, 'let $1')
@@ -70,6 +72,7 @@ function loadModule({
 } = {}) {
   const spawnCalls = []
   const deletedFiles = []
+  let publicUploadAttempts = 0
   const pluginCalls = []
   const serverPluginCalls = []
   const stubs = {
@@ -83,7 +86,7 @@ function loadModule({
     spawnLocal: async (bin, args) => {
       spawnCalls.push({ bin, args: [...args] })
       if (failPublicUpload && args.includes('upload') && args.includes(publicDir)) {
-        throw new Error('public upload failed')
+        if (failPublicUpload !== 'once' || publicUploadAttempts++ === 0) throw new Error('public upload failed')
       }
       if (failServerUpload && args.includes('upload') && args.includes(serverDir)) {
         throw new Error('server upload failed')
@@ -165,6 +168,7 @@ async function runLifecycle({
     existingDirs: serverBundleOnDisk ? [serverDir] : [],
   })
   const hooks = {}
+  const afterEachHooks = []
   const nuxt = {
     options: {
       dev: false,
@@ -175,6 +179,7 @@ async function runLifecycle({
     hook(name, cb) {
       ;(hooks[name] ||= []).push(cb)
     },
+    hooks: { afterEach: (cb) => afterEachHooks.push(cb) },
   }
 
   await mod.setup(
@@ -212,9 +217,25 @@ async function runLifecycle({
   for (const cb of hooks['nitro:config'] || []) await cb({})
   for (const cb of hooks['build:before'] || []) await cb()
   for (const cb of hooks['nitro:build:public-assets'] || []) await cb()
-  for (const cb of hooks['close'] || []) await cb()
+  // Registered after the module, like Nitro's close forwarding. Like hookable, a throwing close
+  // hook stops the hooks after it, and afterEach callbacks run once the whole chain settles.
+  let laterCloseHookRan = false
+  nuxt.hook('close', async () => {
+    laterCloseHookRan = true
+  })
+  let closeError
+  try {
+    for (const cb of hooks['close'] || []) await cb()
+  } catch (error) {
+    closeError = error
+  }
+  try {
+    for (const cb of afterEachHooks) cb({ name: 'close' })
+  } catch (error) {
+    closeError ??= error
+  }
 
-  return Object.assign(spawnCalls, { deletedFiles })
+  return Object.assign(spawnCalls, { deletedFiles, closeError, laterCloseHookRan })
 }
 
 function findCall(calls, op, directory) {
@@ -377,5 +398,37 @@ assert.equal(
   2,
   `failed server upload: expected the public upload retry to still run. Got: ${failedServerUploadDump}`
 )
+
+// By default the build fails once the close hooks have run, after the maps were deleted and the
+// remaining uploads were attempted. With failOnError: false, the same failures leave the build passing.
+for (const failure of [{ failPublicUpload: true }, { failServerUpload: true }]) {
+  const failed = await runLifecycle({ ssr: true, ...failure })
+  const dump = JSON.stringify(failed.map((c) => c.args))
+  assert.match(
+    String(failed.closeError),
+    /set sourcemaps\.failOnError to false to continue the build\): (public|server) upload failed/
+  )
+  assert.ok(failed.laterCloseHookRan, 'expected later close hooks to run before the build fails')
+  assert.ok(findCall(failed, 'upload', '/build/.output/server'), `expected the server upload. Got: ${dump}`)
+  assert.equal(failed.deletedFiles.length, failure.failPublicUpload ? 2 : 0)
+  assert.equal(
+    (await runLifecycle({ ssr: true, ...failure, sourcemaps: { failOnError: false } })).closeError,
+    undefined
+  )
+}
+
+// With the maps kept, the close-hook retry decides: a successful retry passes the build.
+const retried = await runLifecycle({
+  ssr: true,
+  deleteAfterUpload: false,
+  failPublicUpload: 'once',
+})
+assert.equal(retried.closeError, undefined)
+const retryFailed = await runLifecycle({
+  ssr: true,
+  deleteAfterUpload: false,
+  failPublicUpload: true,
+})
+assert.match(String(retryFailed.closeError), /continue the build\): public upload failed/)
 
 console.log('ok sourcemaps-ssr.test.mjs')

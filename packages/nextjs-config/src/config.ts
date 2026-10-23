@@ -71,7 +71,7 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
       normalizeReleaseId(userEnv?.POSTHOG_RELEASE_ID) ?? normalizeReleaseId(process.env.POSTHOG_RELEASE_ID)
     if (!releaseId && buildTimeReleaseEnabled && phase === 'phase-production-build') {
       releaseIdPromise ??= utils.resolveReleaseId(resolvedConfig).catch((error) => {
-        if (turbopackEnabled) throw error
+        if (turbopackEnabled || resolvedConfig.sourcemaps.failOnError) throw error
         // Preserve webpack's fail-soft behavior, without falling back to late release injection.
         console.warn('[@posthog/nextjs-config] Could not resolve the release id; continuing without it.', error)
         return undefined
