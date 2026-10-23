@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.16.3
+
+### Patch Changes
+
+- [#5353](https://github.com/PostHog/posthog-js/pull/5353) [`6970c88`](https://github.com/PostHog/posthog-js/commit/6970c88fad3500e385d5d33f8f6cf30684224be5) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture streamed OpenAI-compatible tool calls that arrive without an index.
+  (2026-10-23)
+
 ## 8.16.2
 
 ### Patch Changes

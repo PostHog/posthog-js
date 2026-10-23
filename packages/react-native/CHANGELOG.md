@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.83.0
+
+### Minor Changes
+
+- [#5390](https://github.com/PostHog/posthog-js/pull/5390) [`662fd8b`](https://github.com/PostHog/posthog-js/commit/662fd8b237731d53db638dbf3b5b9871f25200fa) Thanks [@petrapresecki](https://github.com/petrapresecki)! - Error tracking drops exceptions that match the project's suppression rules, as posthog-js already does.
+  (2026-10-23)
+
 ## 4.82.0
 
 ### Minor Changes
