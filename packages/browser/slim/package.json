@@ -1,0 +1,14 @@
+{
+    "name": "posthog-js-slim",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Subpath entry point for the tree-shakeable core bundle, the smallest way to load PostHog. It inlines no extension: session replay, surveys, exception autocapture and the rest come from posthog-js/extensions and are passed through the __extensionClasses config, so a bundler keeps out every extension the site does not pass. It still installs the external script loader; use posthog-js/slim/no-external when no script may be loaded. ESM-only, like the extension bundles it composes with; consumed by bundlers via the `module` field.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js",
+        "directory": "packages/browser/slim"
+    },
+    "main": "../dist/module.slim.js",
+    "module": "../dist/module.slim.js",
+    "types": "../dist/module.slim.d.ts"
+}
