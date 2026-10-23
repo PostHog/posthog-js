@@ -1,0 +1,81 @@
+name: Error tracking harness
+
+# Builds the sourcemap plugins from this checkout and runs them through PostHog/error-tracking-harness:
+# real posthog-cli releases, real bundlers, a mock PostHog, and an app whose exceptions must resolve.
+# The image is pinned by digest; bumping it is a one-line change below.
+
+on:
+    pull_request:
+    merge_group:
+        types: [checks_requested]
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+    group: error-tracking-harness-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    affected:
+        permissions:
+            contents: read
+        uses: ./.github/workflows/check-affected.yml
+        with:
+            package-name: '@posthog/plugin-utils'
+            # The plugins and the SDK code that reads what they inject. Turbo follows plugin-utils'
+            # dependents only when they are declared dependencies, so list the rest here.
+            additional-paths: |
+                packages/webpack-plugin/
+                packages/rollup-plugin/
+                packages/nextjs-config/
+                packages/nuxt/src/
+                packages/core/src/error-tracking/
+                packages/node/src/extensions/error-tracking/
+                packages/browser/src/posthog-exceptions.ts
+                tooling/error-tracking-harness/
+                .github/workflows/error-tracking-harness.yml
+
+    harness:
+        name: Plugins against real posthog-cli releases
+        needs: affected
+        if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.affected.outputs.is-affected != 'false') }}
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        # Advisory while the matrix settles; make it required once it has been quiet for a while.
+        continue-on-error: true
+        permissions:
+            contents: read
+            packages: read
+        env:
+            # Digest of PostHog/error-tracking-harness at 93cb3fe7f842. Printed by its Image workflow.
+            HARNESS_IMAGE: ghcr.io/posthog/error-tracking-harness@sha256:b0d8096f75394463402081cf4463755b770c1ab6214bdf3bf41c39db43da5a25
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+            # A public package needs no login; a private one needs this plus read access granted
+            # to this repository in the package's settings.
+            - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+            - name: Pack the plugins and run the harness
+              run: tooling/error-tracking-harness/run-ci.sh "$RUNNER_TEMP/error-tracking-harness"
+            - name: Report
+              if: always()
+              run: |
+                  report="$RUNNER_TEMP/error-tracking-harness/report.md"
+                  if [ -f "$report" ]; then cat "$report" >> "$GITHUB_STEP_SUMMARY"; fi
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              if: failure()
+              with:
+                  name: error-tracking-harness
+                  path: ${{ runner.temp }}/error-tracking-harness
+                  retention-days: 7
+                  if-no-files-found: ignore
