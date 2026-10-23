@@ -211,6 +211,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
         'llm.prompt_template.variables',
         'llm.invocation_parameters',
         'embedding.embeddings.0.embedding.text',
+        'embedding.embeddings.0.embedding.vector',
         'retrieval.documents.0.document.content',
         'retrieval.documents.0.document.metadata',
         'reranker.query',

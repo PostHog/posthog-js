@@ -98,7 +98,7 @@ const CONTENT_ATTRIBUTE_PREFIXES = [
 
 const CONTENT_ATTRIBUTE_PATTERNS = [
   /^db\.chroma\.(query|get|delete)\.where_document$/,
-  /^embedding\.embeddings\.\d+\.embedding\.text$/,
+  /^embedding\.embeddings\.\d+\.embedding\.(text|vector)$/,
   /^retrieval\.documents\.\d+\.document\.(content|metadata)$/,
   /^reranker\.(input|output)_documents\.\d+\.document\.content$/,
   /^(input|output)\.images\.\d+\.image\.url$/,

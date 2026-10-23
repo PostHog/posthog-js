@@ -48,7 +48,9 @@ export function withoutUnparseableToolDefinitions(value: AttributeValue): Attrib
     return parseToolDefinitionJson(value) === undefined ? undefined : value
   }
   if (Array.isArray(value)) {
-    return value.filter((item) => typeof item === 'string' && parseToolDefinitionJson(item) !== undefined)
+    return value.filter(
+      (item): item is string => typeof item === 'string' && parseToolDefinitionJson(item) !== undefined
+    )
   }
   return undefined
 }
