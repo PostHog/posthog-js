@@ -4,14 +4,8 @@ import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue } from '@po
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
 import { formatAiError } from './serializeError'
-import {
-  AIEvent,
-  CostOverride,
-  getTokensSource,
-  hasTokenOverrides,
-  isPrivacyModeEnabled,
-  redactMcpToolCredentials,
-} from './utils'
+import { AIEvent, CostOverride, getTokensSource, hasTokenOverrides, isPrivacyModeEnabled } from './utils'
+import { redactMcpToolCredentials } from './mcpCredentials'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
 import { captureAiEvent, captureAiEventImmediate } from './captureAiEvent'
 

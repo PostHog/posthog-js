@@ -9,7 +9,7 @@ import type {
   FormattedDocumentContent,
 } from './types'
 import { v4 as uuidv4 } from 'uuid'
-import { isObject, isString } from './typeGuards'
+import { isString } from './typeGuards'
 import { redactBase64DataUrl } from './sanitization'
 import { isFullAiCaptureEnabled, type FullAiCaptureGate } from './captureAiEvent'
 import { isPrivacyModeEnabled, type PrivacyModeGate } from './privacyMode'
@@ -589,45 +589,6 @@ export const extractAvailableToolCalls = (provider: string, params: any): unknow
   }
 
   return null
-}
-
-const MCP_CREDENTIAL_FIELDS = ['headers', 'authorization']
-
-// Vercel AI SDK provider tools that configure a remote MCP server, keyed by their `id`.
-const MCP_PROVIDER_TOOL_IDS = new Set(['openai.mcp', 'xai.mcp', 'google.mcp_server'])
-
-const isMcpProviderTool = (tool: Record<string, unknown>): boolean =>
-  (tool.type === 'provider' || tool.type === 'provider-defined') &&
-  typeof tool.id === 'string' &&
-  MCP_PROVIDER_TOOL_IDS.has(tool.id)
-
-const withoutMcpCredentials = (config: Record<string, unknown>): Record<string, unknown> => {
-  const redacted: Record<string, unknown> = { ...config }
-  for (const field of MCP_CREDENTIAL_FIELDS) {
-    if (field in redacted) {
-      redacted[field] = '[REDACTED]'
-    }
-  }
-  return redacted
-}
-
-/** Hides the credentials of remote MCP tool definitions; everything else is kept as sent. */
-export function redactMcpToolCredentials(tools: unknown): unknown {
-  if (!Array.isArray(tools)) {
-    return tools
-  }
-  return tools.map((tool: unknown) => {
-    if (!isObject(tool)) {
-      return tool
-    }
-    if (tool.type === 'mcp') {
-      return withoutMcpCredentials(tool)
-    }
-    if (isMcpProviderTool(tool) && isObject(tool.args)) {
-      return { ...tool, args: withoutMcpCredentials(tool.args) }
-    }
-    return tool
-  })
 }
 
 export enum AIEvent {

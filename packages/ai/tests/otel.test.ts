@@ -231,13 +231,29 @@ describe('PostHogTraceExporter AI span filtering', () => {
         'exception.message',
       ].map((key) => [key, 'CANARY_7f3a'])
     )
+    const functionTool = { type: 'function', name: 'lookup' }
+    const mcpTool = { type: 'mcp', server_url: 'https://mcp.example.com', authorization: 'CANARY_7f3a' }
+    const vercelMcpTool = {
+      type: 'provider',
+      id: 'openai.mcp',
+      name: 'mcp',
+      args: { serverUrl: 'https://mcp.example.com', headers: { Authorization: 'CANARY_7f3a' } },
+    }
+    const toolDefinitions = (mcp: object, vercelMcp: object): Record<string, unknown> => ({
+      'gen_ai.tool.definitions': JSON.stringify([functionTool, mcp]),
+      'ai.prompt.tools': [JSON.stringify(functionTool), JSON.stringify(vercelMcp)],
+      'llm.tools.0.tool.json_schema': JSON.stringify(mcp),
+    })
     const metadata = {
       'gen_ai.prompt.name': 'support-reply',
       'gen_ai.prompt.version': '3',
-      'gen_ai.tool.definitions': JSON.stringify([{ type: 'function', name: 'lookup' }]),
-      'ai.prompt.tools': JSON.stringify([{ type: 'function', name: 'lookup' }]),
       'gen_ai.usage.output_tokens': 7,
     }
+    const tools = toolDefinitions(mcpTool, vercelMcpTool)
+    const redactedTools = toolDefinitions(
+      { ...mcpTool, authorization: '[REDACTED]' },
+      { ...vercelMcpTool, args: { ...vercelMcpTool.args, headers: '[REDACTED]' } }
+    )
     const providerMetadata = JSON.stringify({
       gateway: { cost: '0.0012' },
       google: { groundingMetadata: { webSearchQueries: ['CANARY_7f3a'] } },
@@ -260,6 +276,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
           ...makeSpan('ai.streamText.doStream', {
             ...content,
             ...metadata,
+            ...tools,
             'ai.response.providerMetadata': providerMetadata,
           }),
           events,
@@ -271,8 +288,12 @@ describe('PostHogTraceExporter AI span filtering', () => {
     const exported = getSuperExport().mock.calls[0][0] as ReadableSpan[]
     expect(exported[0].attributes).toEqual(
       privacyMode
-        ? { ...metadata, 'ai.response.providerMetadata': JSON.stringify({ gateway: { cost: '0.0012' } }) }
-        : { ...content, ...metadata, 'ai.response.providerMetadata': providerMetadata }
+        ? {
+            ...metadata,
+            ...redactedTools,
+            'ai.response.providerMetadata': JSON.stringify({ gateway: { cost: '0.0012' } }),
+          }
+        : { ...content, ...metadata, ...tools, 'ai.response.providerMetadata': providerMetadata }
     )
     expect(exported[0].events).toEqual(
       privacyMode ? [{ ...exceptionEvent, attributes: { 'exception.type': 'AI_APICallError' } }] : events

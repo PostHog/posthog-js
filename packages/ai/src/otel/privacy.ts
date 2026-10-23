@@ -1,6 +1,7 @@
 import type { Attributes } from '@opentelemetry/api'
 import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base'
 
+import { redactMcpToolCredentials, redactMcpToolDefinition } from '../mcpCredentials'
 import { withAttributes } from './spans'
 
 // Every attribute PostHog ingestion turns into prompt, output, tool call or error text. Ingestion
@@ -113,6 +114,11 @@ const EXCEPTION_EVENT_NAME = 'exception'
 
 const PROVIDER_METADATA_ATTRIBUTE = 'ai.response.providerMetadata'
 
+// Tool definitions stay under privacy, but instrumentations serialize remote MCP tools with their
+// credentials into them.
+const TOOL_DEFINITION_ATTRIBUTES = new Set(['gen_ai.tool.definitions', 'ai.prompt.tools'])
+const TOOL_DEFINITION_PATTERN = /^llm\.tools\.\d+\.tool\.json_schema$/
+
 const isContentAttribute = (key: string): boolean =>
   !NON_CONTENT_ATTRIBUTES.has(key) &&
   (CONTENT_ATTRIBUTES.has(key) ||
@@ -133,10 +139,50 @@ function gatewayCostOnly(value: unknown): string | undefined {
   }
 }
 
+const parseJson = (value: string): unknown => {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return undefined
+  }
+}
+
+// A value that cannot be parsed could still hold credentials, so it is dropped.
+function redactToolDefinitionJson(value: string): string | undefined {
+  const parsed = parseJson(value)
+  if (Array.isArray(parsed)) {
+    return JSON.stringify(redactMcpToolCredentials(parsed))
+  }
+  if (parsed !== null && typeof parsed === 'object') {
+    return JSON.stringify(redactMcpToolDefinition(parsed))
+  }
+  return undefined
+}
+
+function redactToolDefinitions(value: unknown): Attributes[string] {
+  if (typeof value === 'string') {
+    return redactToolDefinitionJson(value)
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      const redacted = typeof item === 'string' ? redactToolDefinitionJson(item) : undefined
+      return redacted === undefined ? [] : [redacted]
+    })
+  }
+  return undefined
+}
+
 function stripAttributes(attributes: Attributes): Attributes {
   const out: Attributes = {}
   for (const [key, value] of Object.entries(attributes)) {
     if (isContentAttribute(key)) {
+      continue
+    }
+    if (TOOL_DEFINITION_ATTRIBUTES.has(key) || TOOL_DEFINITION_PATTERN.test(key)) {
+      const definitions = redactToolDefinitions(value)
+      if (definitions !== undefined) {
+        out[key] = definitions
+      }
       continue
     }
     if (key === PROVIDER_METADATA_ATTRIBUTE) {

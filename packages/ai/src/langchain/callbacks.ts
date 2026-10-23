@@ -1,11 +1,6 @@
 import { EventMessage, PostHog } from 'posthog-node'
-import {
-  withPrivacyMode,
-  getModelParams,
-  toContentString,
-  isPrivacyModeEnabled,
-  redactMcpToolCredentials,
-} from '../utils'
+import { withPrivacyMode, getModelParams, toContentString, isPrivacyModeEnabled } from '../utils'
+import { redactMcpToolCredentials } from '../mcpCredentials'
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import { version } from '../../package.json'
 import type { Serialized } from '@langchain/core/load/serializable'
