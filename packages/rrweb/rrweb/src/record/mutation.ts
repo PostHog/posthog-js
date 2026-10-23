@@ -293,8 +293,8 @@ export default class MutationBuffer {
     // Returns true when the node has been handled for this emission (either
     // serialized successfully or deliberately skipped — e.g. blocked / not in
     // DOM). Returns false when parentId or nextId are still unresolved, so
-    // the topological-order driver below can mark its subtree as deferred
-    // instead of silently dropping the node.
+    // the topological-order driver below can mark its subtree as dropped
+    // for this emission (the pending set is cleared at the end of emit()).
     const pushAdd = (n: Node): boolean => {
       const parent = dom.parentNode(n);
       if (!parent || !inDom(n) || (parent as Element).tagName === 'TEXTAREA') {
@@ -415,7 +415,14 @@ export default class MutationBuffer {
         n,
         this.mirror,
       );
-      if ((inDroppedTree || parentWasRemoved) && !isAncestorInSet(this.movedSet, n)) {
+      // Upstream rrweb uses `isSelfOrAncestorInSet` here so a node that is
+      // itself in movedSet is never dropped even when its parent chain was
+      // removed in the same batch. We match that semantic — the previous
+      // ancestor-only check would occasionally drop a moved node whose
+      // former parent chain was torn down in the same emission.
+      const movedExempt =
+        this.movedSet.has(n) || isAncestorInSet(this.movedSet, n);
+      if ((inDroppedTree || parentWasRemoved) && !movedExempt) {
         this.droppedSet.add(n);
         this.addedSet.delete(n);
       }
@@ -452,8 +459,7 @@ export default class MutationBuffer {
         // translates ShadowRoot → host via `isShadowRoot(parent) ? getId(host)
         // : getId(parent)`, so if the host is also in addedSet we must
         // serialize the host first — otherwise its shadow children land here
-        // with an un-mirrored parent and get dropped (fixes the
-        // "should record moved shadow DOM 2" regression caught by Tue in #5244).
+        // with an un-mirrored parent and get dropped.
         // eslint-disable-next-line no-constant-condition
         while (true) {
           const parentNode = dom.parentNode(n);
@@ -510,28 +516,20 @@ export default class MutationBuffer {
       // node was actually serialized vs needing to be deferred by the caller.
       const handled = pushAdd(n);
       if (!handled) {
-        // Match upstream rrweb: surface the drop so operators can tell when
-        // a node is deferred past this emission. Silent drops here historically
-        // masked a shadow-DOM regression (@TueHaulund in #5244) — keeping the
-        // warning around means future regressions announce themselves.
-        //
-        // Privacy guard (@marandaneto in #5244): the rrweb console-record
-        // plugin serializes any `Node` argument via its `outerHTML`
-        // (see rrweb-plugin-console-record/src/stringify.ts, the
-        // `instanceof Node` branch). Passing the raw masked node here
-        // would persist its unmasked outerHTML into a `rrweb/console@1`
-        // event when console recording is enabled. Log a sanitized
-        // descriptor instead.
-        const descriptor =
-          n && n.nodeType === Node.ELEMENT_NODE
-            ? `<${(n as Element).tagName.toLowerCase()}> (nodeType=1)`
-            : `nodeType=${n ? n.nodeType : "null"}`;
-        console.warn(
-          "Couldn't record new node. Couldn't find mirror id for parent or nextSibling of:",
-          descriptor,
-        );
         missingParents.add(n);
       }
+    }
+
+    // One summary line per emit() rather than one warn per dropped node.
+    // Per-node warnings cascade through subtrees (a dropped 13k-node table
+    // mount would produce 13k lines, which the rrweb console-record plugin
+    // then persists into the replay). The count is enough signal; the
+    // bodies are omitted so no masked content leaks into console-record
+    // events via the plugin's `instanceof Node` branch.
+    if (missingParents.size > 0) {
+      console.warn(
+        `[rrweb] dropped ${missingParents.size} node(s) with unresolved parent at emit`,
+      );
     }
 
     const payload = {
