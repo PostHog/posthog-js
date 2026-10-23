@@ -170,6 +170,12 @@ export interface MCPAnalyticsOptions {
    */
   captureInitialize?: boolean
   /**
+   * Send `$mcp_tools_list` for each `tools/list`. On by default.
+   * Set to `false` to stop sending it. Nothing else changes: tools keep their
+   * injected arguments, and the virtual tools stay listed.
+   */
+  captureToolsList?: boolean
+  /**
    * Identify the calling user. Returning a non-null value sets `distinct_id` and `$set`
    * on subsequent events for the session. Object form is treated as a static identity.
    * The SDK publishes no standalone `$identify` event.
