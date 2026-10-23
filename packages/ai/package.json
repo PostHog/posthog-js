@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.18",
+    "ai": "^6.0.309",
     "@anthropic-ai/sdk": ">=0.112.3 <0.135.0",
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
@@ -82,6 +83,7 @@
     "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0 <1.0.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@ai-sdk/provider": "^2.0.0 || ^3.0.0 || ^4.0.0",
+    "ai": "^5.0.0 || ^6.0.0",
     "@openai/agents": "^0.8.0",
     "langchain": ">=1.5.5 <2.0.0",
     "posthog-node": "^5.0.0"
@@ -118,6 +120,9 @@
       "optional": true
     },
     "@ai-sdk/provider": {
+      "optional": true
+    },
+    "ai": {
       "optional": true
     },
     "@openai/agents": {
