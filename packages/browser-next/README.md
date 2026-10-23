@@ -303,17 +303,4 @@ Session and window IDs are created on the first successfully admitted capture. R
 
 A compact in-memory token bucket admits 10 events per second with a burst of 100 and emits a bypassed aggregate ingestion warning when a runaway loop first reaches the limit. `shutdown(timeoutMs)` stops new work, makes one bounded normal flush attempt, removes timers and lifecycle listeners, and is idempotent. `dispose()` uses the same shutdown path.
 
-## Package validation
-
-From the repository root, build and test the packed package in an isolated installed consumer:
-
-```sh
-pnpm turbo run build --filter=@posthog/browser --filter=@posthog-tooling/sdk-mock-server
-node packages/browser-next/scripts/check-package-consumer.mjs
-```
-
-The check validates the tarball inventory, public dependencies, all exported entrypoints in ESM and CommonJS, strict consumer declarations, and Capture V1 delivery to the local mock server. Its temporary consumer uses local tarballs for PostHog workspace dependencies and retains the repository's dependency cooldown.
-
-Repository reference measurements are recorded in `packages/browser-next/bundle-size-baseline.json`, including the source commit, package/tool versions, compression settings, and reproduction commands. Initial and total sizes describe different loading boundaries; deferred totals include all available features, not only features activated on a particular page.
-
 See [Bundle architecture](./ARCHITECTURE.md) for package boundaries, tree-shaking rules, and bundle review.
