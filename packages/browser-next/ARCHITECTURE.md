@@ -460,6 +460,12 @@ Keep `sideEffects: false` while all entry points remain import-pure. If an expli
 Do not combine all entry points into one prebuilt runtime bundle.
 The package needs preserved ES module boundaries for consumer tree shaking.
 
+### CDN-only classic entry
+
+The standalone classic-script installer lives in `snippet/`, outside Rslib's `src` glob and the npm `files` allowlist. `build:cdn` emits `dist-cdn/posthog.js` with the complete initial core graph embedded, plus optional asynchronous chunks and source maps. Rspack's automatic public path captures the executing external script's directory synchronously and removes its query and fragment before loading chunks. There is no separate client download between the initial response and core construction.
+
+This deployment artifact intentionally initializes a client; it is not an npm export and does not change the import-purity contract or `sideEffects: false`. Keep the root factory's extension setup order, override precedence, snapshots, consent, and failure isolation unchanged. The installer delegates readiness to that factory. See the [script installation guide](./README.md#classic-script-installation-draft-cdn-distribution) for query configuration, global ownership, and ready-event semantics. `bundle-size:cdn` checks the generated initial graph and reports initial/deferred artifact sizes and module attribution; `test:snippet` runs the generated classic artifacts in plain HTML against the SDK mock server.
+
 ## 12. Bundle tests
 
 Measure code as a package consumer. Build the package before each measurement.
