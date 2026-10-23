@@ -38,6 +38,7 @@ const providers = [
   'adk',
   'claude-agent-sdk',
   'evaluations',
+  'genkit',
 ]
 
 export default defineConfig([
