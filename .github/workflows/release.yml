@@ -121,11 +121,10 @@ jobs:
         name: Notify Slack - Approval Needed
         needs: check-changesets
         if: needs.check-changesets.outputs.has-changesets == 'true'
-        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@71adbfe4bf1dd9be4ab5debcb4a5b70789306d26
+        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@f0431489d137b9e7474fc428cf176e4c668cc4a2
         with:
             slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
             slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
-            guard_ref: 71adbfe4bf1dd9be4ab5debcb4a5b70789306d26
         secrets:
             slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
             posthog_project_api_key: ${{ secrets.POSTHOG_PROJECT_API_KEY }}
@@ -156,7 +155,7 @@ jobs:
 
             - name: Block approval by the authors of the released PRs
               id: guard
-              uses: PostHog/.github/.github/actions/release-approval-guard@71adbfe4bf1dd9be4ab5debcb4a5b70789306d26 # main
+              uses: PostHog/.github/.github/actions/release-approval-guard@f0431489d137b9e7474fc428cf176e4c668cc4a2 # main
               with:
                   environment: 'NPM Release'
 
