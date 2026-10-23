@@ -180,25 +180,40 @@ describe('emails', () => {
     })
 
     it.each([
-      ['an answer without a code', { status: 500, body: '<html>oops</html>' }, 'api_error', 'application_error', 500],
-      ['a 202 without a message id', { status: 202, body: { ok: true } }, 'api_error', 'application_error', 202],
+      [
+        'an answer without a code',
+        { status: 500, body: '<html>oops</html>' },
+        'api_error',
+        'application_error',
+        'PostHog answered HTTP 500.',
+        500,
+      ],
+      [
+        'a 202 without a message id',
+        { status: 202, body: { ok: true } },
+        'api_error',
+        'application_error',
+        'PostHog answered HTTP 202 with an unexpected body.',
+        202,
+      ],
       [
         'a network failure',
-        { networkError: new Error('ECONNRESET') },
+        { networkError: new Error('getaddrinfo ENOTFOUND posthog.example.com') },
         'network_error',
         'service_unavailable',
+        'Request failed: getaddrinfo ENOTFOUND posthog.example.com',
         undefined,
       ],
-    ] satisfies [string, Fault, string, string, number | undefined][])(
+    ] satisfies [string, Fault, string, string, string, number | undefined][])(
       'returns %s as %s',
-      async (_, fault, code, name, statusCode) => {
+      async (_, fault, code, name, message, statusCode) => {
         api.failNext(fault, Infinity)
 
         const result = await sendWelcome(createClient(), { maxRetries: 0 })
 
         expect(result).toEqual({
           data: null,
-          error: { name, code, message: expect.any(String), ...(statusCode !== undefined && { statusCode }) },
+          error: { name, code, message, ...(statusCode !== undefined && { statusCode }) },
         })
       }
     )
@@ -209,6 +224,7 @@ describe('emails', () => {
       ['client_disabled', 'application_error', { disabled: true }, {}],
       ['invalid_template_id', 'validation_error', {}, { templateId: '../../feature_flags' }],
       ['invalid_idempotency_key', 'validation_error', {}, { idempotencyKey: 'has spaces' }],
+      ['invalid_idempotency_key', 'validation_error', {}, { idempotencyKey: 42 as unknown as string }],
     ])('returns %s as %s without a request', async (code, name, clientOptions: PostHogOptions, sendOptions) => {
       const result = await createClient(clientOptions).emails.send({
         to: JANE,
@@ -218,6 +234,16 @@ describe('emails', () => {
       })
 
       expect(result).toEqual({ data: null, error: expect.objectContaining({ name, code }) })
+      expect(api.received).toEqual([])
+    })
+
+    it.each([undefined, null, JANE])('returns invalid_form for %s options without a request', async (options) => {
+      const result = await createClient().emails.send(options as never)
+
+      expect(result).toEqual({
+        data: null,
+        error: expect.objectContaining({ name: 'validation_error', code: 'invalid_form' }),
+      })
       expect(api.received).toEqual([])
     })
 
@@ -285,6 +311,29 @@ describe('emails', () => {
       await settle(sendWelcome(createClient(clientOptions), sendOptions))
 
       expect(api.received).toHaveLength(1)
+    })
+
+    it.each([
+      ['the client sets NaN', { maxRetries: NaN }, {}, 3],
+      ['the send sets Infinity', {}, { maxRetries: Infinity }, 3],
+      ['the send sets -1', { maxRetries: 1 }, { maxRetries: -1 }, 2],
+      ['the send sets 1.5', { maxRetries: 1 }, { maxRetries: 1.5 }, 2],
+    ])('falls back to the default when %s', async (_, clientOptions: PostHogOptions, sendOptions, attempts) => {
+      api.failNext({ status: 503, body: refusalBody('delivery_unavailable', null) }, Infinity)
+
+      await settle(sendWelcome(createClient(clientOptions), sendOptions))
+
+      expect(api.received).toHaveLength(attempts)
+    })
+
+    it('retries a 202 whose body breaks off, and returns the id of the queued email', async () => {
+      api.failNext({ bodyBreaksOff: new Error('socket hang up') })
+
+      const result = await settle(sendWelcome())
+
+      expect(result).toEqual({ data: { id: 'message-1', warnings: [] }, error: null })
+      expect(api.delivered).toHaveLength(1)
+      expect(new Set(idempotencyKeys()).size).toBe(1)
     })
 
     it('lets a send retry more often than the client', async () => {

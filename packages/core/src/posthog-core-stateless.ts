@@ -158,7 +158,15 @@ type SuccessfulWriteResponseHandling = {
 }
 
 async function readApiResponse(response: PostHogFetchResponse): Promise<PostHogApiResponse> {
-  return { status: response.status, body: await response.json().catch(() => undefined) }
+  return { status: response.status, body: parseJsonOrUndefined(await response.text()) }
+}
+
+function parseJsonOrUndefined(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }
 
 export const maybeAdd = (key: string, value: JsonType | undefined): Record<string, JsonType> =>

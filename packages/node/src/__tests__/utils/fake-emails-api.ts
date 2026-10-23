@@ -19,7 +19,10 @@ export interface DeliveredEmail {
   distinctId?: string
 }
 
-export type Fault = { status: number; body?: unknown; headers?: Record<string, string> } | { networkError: Error }
+export type Fault =
+  | { status: number; body?: unknown; headers?: Record<string, string> }
+  | { networkError: Error }
+  | { bodyBreaksOff: Error }
 
 interface ScheduledFault {
   matches: (request: ReceivedRequest) => boolean
@@ -47,6 +50,9 @@ export class FakeEmailsApi {
     const fault = this.takeFault(request)
     if (fault && 'networkError' in fault) {
       throw fault.networkError
+    }
+    if (fault && 'bodyBreaksOff' in fault) {
+      return breakOff(this.handle(request), fault.bodyBreaksOff)
     }
     if (fault) {
       return respond(fault.status, fault.body, fault.headers)
@@ -146,4 +152,10 @@ export function refusalBody(code: string, attr: string | null): Record<string, u
 function respond(status: number, body: unknown, headers: Record<string, string> = {}): PostHogFetchResponse {
   const text = typeof body === 'string' ? body : JSON.stringify(body ?? '')
   return new Response(text, { status, headers: { 'Content-Type': 'application/json', ...headers } })
+}
+
+/** The answer PostHog sent, with a body that fails while the SDK reads it. */
+function breakOff(answer: PostHogFetchResponse, error: Error): PostHogFetchResponse {
+  const body = new ReadableStream({ start: (controller) => controller.error(error) })
+  return new Response(body, { status: answer.status })
 }

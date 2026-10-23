@@ -220,6 +220,9 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * still requires it. Prefer this over the deprecated
    * `personalApiKey` option; when both are set, `secretKey` takes precedence.
    *
+   * `posthog.emails` sends with it too, which needs a project secret API key with the `hog_flow:write` scope. When
+   * that key can't read feature flags, also set `enableLocalEvaluation: false`.
+   *
    * @example
    * ```ts
    * const client = new PostHog('phc_...', { secretKey: 'phs_...' })
@@ -236,7 +239,10 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * `emails` calls fail with `missing_app_host` until you set it, and the secret key never goes to the proxy.
    */
   appHost?: string
-  /** How often `posthog.emails` retries a send that PostHog did not queue. Defaults to 2. `0` turns retries off. */
+  /**
+   * How often `posthog.emails` retries a send that PostHog did not queue, a whole number from 0. Defaults to 2. `0`
+   * turns retries off.
+   */
   maxRetries?: number
   /** The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request. */
   migratedFrom?: string

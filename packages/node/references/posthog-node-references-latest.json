@@ -2113,7 +2113,7 @@
       "name": "EmailError",
       "properties": [
         {
-          "description": "PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`, `missing_app_host`, `client_disabled`, `network_error`, `api_error` for an answer without a code, `unexpected_error`, `invalid_template_id` and `invalid_idempotency_key`.",
+          "description": "PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`, `missing_app_host`, `client_disabled`, `network_error`, `api_error` for an answer without a code, `unexpected_error`, and `invalid_form`, `invalid_template_id` and `invalid_idempotency_key` for a send the SDK refused before any request.",
           "type": "string",
           "name": "code"
         },
@@ -3819,7 +3819,7 @@
           "name": "traces"
         },
         {
-          "description": "Credential for fetching local feature flag definitions and decrypting remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
+          "description": "Credential for fetching local feature flag definitions and decrypting remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.\n\n`posthog.emails` sends with it too, which needs a project secret API key with the `hog_flow:write` scope. When\nthat key can't read feature flags, also set `enableLocalEvaluation: false`.",
           "type": "string",
           "name": "secretKey"
         },
@@ -3835,7 +3835,7 @@
           "name": "appHost"
         },
         {
-          "description": "How often `posthog.emails` retries a send that PostHog did not queue. Defaults to 2. `0` turns retries off.",
+          "description": "How often `posthog.emails` retries a send that PostHog did not queue, a whole number from 0. Defaults to 2. `0`\nturns retries off.",
           "type": "number",
           "name": "maxRetries"
         },
@@ -4313,12 +4313,12 @@
           "name": "distinctId"
         },
         {
-          "description": "Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's workflow was paused or the default sender changed. A deleted or changed template, or a project with no default sender, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what the email is for, such as `welcome:user_42`, and set `maxRetries: 0`.",
+          "description": "Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's workflow was paused or the default sender changed. A deleted template, or a project that no longer has a default sender, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what the email is for, such as `welcome:user_42`, and set `maxRetries: 0`.",
           "type": "string",
           "name": "idempotencyKey"
         },
         {
-          "description": "How often to retry this send. Overrides the `maxRetries` client option.",
+          "description": "How often to retry this send, a whole number from 0. Overrides the `maxRetries` client option.",
           "type": "number",
           "name": "maxRetries"
         },
@@ -4355,12 +4355,12 @@
           "name": "distinctId"
         },
         {
-          "description": "Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's\nworkflow was paused or the default sender changed. A deleted or changed template, or a project with no default\nsender, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what\nthe email is for, such as `welcome:user_42`, and set `maxRetries: 0`.",
+          "description": "Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's\nworkflow was paused or the default sender changed. A deleted template, or a project that no longer has a default\nsender, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner\nretries the send, pass a key derived from what the email is for, such as `welcome:user_42`, and set\n`maxRetries: 0`.",
           "type": "string",
           "name": "idempotencyKey"
         },
         {
-          "description": "How often to retry this send. Overrides the `maxRetries` client option.",
+          "description": "How often to retry this send, a whole number from 0. Overrides the `maxRetries` client option.",
           "type": "number",
           "name": "maxRetries"
         }

@@ -146,6 +146,16 @@ function isTimeout(error: unknown): boolean {
   return isPostHogFetchNetworkError(error) && error.error instanceof Error && error.error.name === 'AbortError'
 }
 
+function requestFailure(error: unknown): string {
+  const reasons: string[] = []
+  let reason = isPostHogFetchNetworkError(error) ? error.error : error
+  while (reason instanceof Error && reasons.length < 3) {
+    reasons.push(reason.message)
+    reason = reason.cause
+  }
+  return ['Request failed', ...reasons].join(': ')
+}
+
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
   const propertyNames = Array.isArray(value) ? value : [value]
   return propertyNames.filter(
@@ -716,7 +726,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       isDisabled: () => this.disabled,
       secretKey: () => this.options.personalApiKey,
       appHost: () => (this.options.appHost ? removeTrailingSlash(this.options.appHost) : cloudAppHost(this.host)),
-      maxRetries: () => this.options.maxRetries ?? 2,
+      maxRetries: () => this.options.maxRetries,
       headers: () => ({
         ...this.getCustomHeaders(),
         'User-Agent': this.getCustomUserAgent(),
@@ -3051,7 +3061,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return await this.requestJson(url, { method: 'POST', headers, body }, { retryCount: 0 })
     } catch (error) {
       this._events.emit('error', error)
-      throw new Error(isTimeout(error) ? `Request timed out after ${this.requestTimeout}ms` : 'Request failed')
+      throw new Error(isTimeout(error) ? `Request timed out after ${this.requestTimeout}ms` : requestFailure(error))
     }
   }
 

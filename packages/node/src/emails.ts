@@ -1,10 +1,10 @@
-import type { JsonType, PostHogApiResponse } from '@posthog/core'
+import { isValidUUID, type JsonType, type PostHogApiResponse } from '@posthog/core'
 
 const TEMPLATE_SEND_PATH = (templateId: string): string =>
   `/api/projects/@current/messaging_templates/${templateId}/send/`
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
+const DEFAULT_MAX_RETRIES = 2
 const FIRST_RETRY_DELAY_MS = 1_000
 const MAX_RETRY_DELAY_MS = 30_000
 
@@ -19,12 +19,13 @@ export interface SendEmailBase {
   distinctId?: string
   /**
    * Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's
-   * workflow was paused or the default sender changed. A deleted or changed template, or a project with no default
-   * sender, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what
-   * the email is for, such as `welcome:user_42`, and set `maxRetries: 0`.
+   * workflow was paused or the default sender changed. A deleted template, or a project that no longer has a default
+   * sender, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner
+   * retries the send, pass a key derived from what the email is for, such as `welcome:user_42`, and set
+   * `maxRetries: 0`.
    */
   idempotencyKey?: string
-  /** How often to retry this send. Overrides the `maxRetries` client option. */
+  /** How often to retry this send, a whole number from 0. Overrides the `maxRetries` client option. */
   maxRetries?: number
 }
 
@@ -57,7 +58,8 @@ export interface EmailError {
   /**
    * PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`,
    * `missing_app_host`, `client_disabled`, `network_error`, `api_error` for an answer without a code,
-   * `unexpected_error`, `invalid_template_id` and `invalid_idempotency_key`.
+   * `unexpected_error`, and `invalid_form`, `invalid_template_id` and `invalid_idempotency_key` for a send the SDK
+   * refused before any request.
    */
   code: string
   message: string
@@ -100,7 +102,8 @@ export interface Emails {
    * It never retries an exhausted monthly quota. The SDK captures no event: the send and its engagement events come
    * from PostHog and count as analytics events.
    *
-   * Needs the `secretKey` client option, a project secret API key (`phs_`) with the `hog_flow:write` scope.
+   * Needs the `secretKey` client option, a project secret API key (`phs_`) with the `hog_flow:write` scope. When the
+   * key can't read feature flags, also set `enableLocalEvaluation: false`, or the client polls flag definitions with it.
    *
    * @example
    * ```ts
@@ -122,7 +125,7 @@ export interface EmailsApi {
   secretKey(): string | undefined
   /** `undefined` when the client's host may be a proxy and no `appHost` was set. */
   appHost(): string | undefined
-  maxRetries(): number
+  maxRetries(): number | undefined
   headers(): Record<string, string>
   warn(message: string): void
   track<T>(work: Promise<T>): Promise<T>
@@ -149,6 +152,9 @@ export class PostHogEmails implements Emails {
   constructor(private readonly api: EmailsApi) {}
 
   send(options: SendEmailOptions): Promise<SendEmailResult> {
+    if (!isRecord(options)) {
+      return Promise.resolve(failure('invalid_form', 'send needs an options object with to and templateId.'))
+    }
     const refusal = this.refusalBeforeRequest(options)
     if (refusal) {
       return Promise.resolve(refusal)
@@ -173,10 +179,10 @@ export class PostHogEmails implements Emails {
           'goes to a proxy.'
       )
     }
-    if (typeof templateId !== 'string' || !UUID_PATTERN.test(templateId)) {
+    if (!isValidUUID(templateId)) {
       return failure('invalid_template_id', 'templateId must be the UUID of a template.', { field: 'templateId' })
     }
-    if (idempotencyKey !== undefined && !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey)) {
+    if (idempotencyKey !== undefined && !isIdempotencyKey(idempotencyKey)) {
       return failure(
         'invalid_idempotency_key',
         'idempotencyKey must be 1 to 255 visible ASCII characters, with no spaces.',
@@ -202,7 +208,7 @@ export class PostHogEmails implements Emails {
         ...(distinctId !== undefined && { identifiers: { distinct_id: distinctId } }),
       },
       idempotencyKey: idempotencyKey ?? crypto.randomUUID(),
-      maxRetries: maxRetries ?? this.api.maxRetries(),
+      maxRetries: retryCount(maxRetries) ?? retryCount(this.api.maxRetries()) ?? DEFAULT_MAX_RETRIES,
     }
   }
 
@@ -264,6 +270,14 @@ function isRetryable({ error }: SendEmailResult): boolean {
   }
 }
 
+function isIdempotencyKey(value: unknown): boolean {
+  return typeof value === 'string' && IDEMPOTENCY_KEY_PATTERN.test(value)
+}
+
+function retryCount(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+}
+
 function retryDelayMs(retry: number, retryAfterMs = 0): number {
   const backoff = FIRST_RETRY_DELAY_MS * 2 ** retry * (0.8 + Math.random() * 0.4)
   return Math.min(MAX_RETRY_DELAY_MS, Math.max(backoff, retryAfterMs))
@@ -280,6 +294,7 @@ function errorName(code: string, statusCode?: number): EmailErrorName {
       return 'missing_api_key'
     case 'network_error':
       return 'service_unavailable'
+    case 'invalid_form':
     case 'invalid_template_id':
     case 'invalid_idempotency_key':
       return 'validation_error'
