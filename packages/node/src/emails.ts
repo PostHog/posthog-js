@@ -5,6 +5,7 @@ const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const UPLOAD_PATH = (key: string): string => `/api/projects/@current/messaging_templates/by_key/${key}/`
 
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
+const CODE_ONLY_FIELDS = ['from', 'replyTo', 'subject', 'html', 'text'] as const
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const SEND_OPTIONS = new Set([
   'to',
@@ -36,10 +37,10 @@ export interface SendEmailBase {
   distinctId?: string
   /**
    * Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's
-   * workflow was paused or the default sender changed. A deleted template, or a project that no longer has a default
-   * sender, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner
-   * retries the send, pass a key derived from what the email is for, such as `welcome:user_42`, and set
-   * `maxRetries: 0`.
+   * workflow was paused or the default sender changed. A deleted template, a local template whose content changed, or
+   * a project that no longer has a default sender while you name no `from`, still refuses the send. Without it, the SDK
+   * makes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what the
+   * email is for, such as `welcome:user_42`, and set `maxRetries: 0`.
    */
   idempotencyKey?: string
   /**
@@ -251,7 +252,7 @@ export class PostHogEmails implements Emails {
       maxRetries: retryCount(options.maxRetries) ?? retryCount(this.api.maxRetries()) ?? DEFAULT_MAX_RETRIES,
     }
     return this.api.track(
-      this.sendForm({ ...options }, delivery)
+      this.sendForm(options, delivery)
         .then((result) => this.logWarnings(result))
         .catch(unexpectedFailure)
     )
@@ -292,14 +293,16 @@ export class PostHogEmails implements Emails {
 
   /** Sends the content's hash, and uploads the content only when PostHog does not hold it. */
   private async sendLocalTemplate(options: SendCodeEmailOptions, delivery: Delivery): Promise<SendEmailResult> {
+    const { templateKey } = options
     const content = { subject: options.subject, html: options.html, text: options.text }
-    const body = localTemplateBody(options, await emailContentHash(content))
+    const fields = jsonCopy(localTemplateFields(options))
+    const body = { template: { key: templateKey, hash: await emailContentHash(content) }, ...fields }
     const sent = await this.post(body, delivery)
     if (!isOutdated(sent)) {
       return sent
     }
     const uploaded = await this.exchange(
-      { method: 'PUT', path: UPLOAD_PATH(options.templateKey), body: uploadBody(options.templateKey, content) },
+      { method: 'PUT', path: UPLOAD_PATH(templateKey), body: uploadBody(templateKey, content) },
       delivery
     )
     return uploaded.error ? uploaded : this.post(body, delivery)
@@ -358,7 +361,7 @@ function formRefusal(options: SendEmailOptions): Failure | undefined {
   }
   if (isTemplateForm(options)) {
     return isValidUUID(options.templateId)
-      ? undefined
+      ? codeOnlyFieldRefusal(options)
       : failure('invalid_template_id', 'templateId must be the UUID of a template.', { field: 'templateId' })
   }
   if (typeof options.templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(options.templateKey)) {
@@ -367,6 +370,30 @@ function formRefusal(options: SendEmailOptions): Failure | undefined {
       'templateKey can only have letters, digits, hyphens (-) and underscores (_), at most 400.',
       { field: 'templateKey' }
     )
+  }
+  return contentRefusal(options)
+}
+
+function codeOnlyFieldRefusal(options: SendTemplateEmailOptions): Failure | undefined {
+  const field = CODE_ONLY_FIELDS.find((name) => options[name] !== undefined)
+  if (field === undefined) {
+    return undefined
+  }
+  return failure('invalid_form', `Send ${field} with templateKey. A template made in PostHog sets its own.`, { field })
+}
+
+function contentRefusal({ subject, html, text }: SendCodeEmailOptions): Failure | undefined {
+  if (typeof subject !== 'string') {
+    return failure('invalid_form', 'A send with templateKey needs a subject.', { field: 'subject' })
+  }
+  if (html !== undefined && typeof html !== 'string') {
+    return failure('invalid_form', 'html must be a string.', { field: 'html' })
+  }
+  if (text !== undefined && typeof text !== 'string') {
+    return failure('invalid_form', 'text must be a string.', { field: 'text' })
+  }
+  if (html === undefined && text === undefined) {
+    return failure('invalid_form', 'A send with templateKey needs html, text or both.', { field: 'html' })
   }
   return undefined
 }
@@ -402,9 +429,8 @@ function renderedContentBody(options: SendCodeEmailOptions): JsonType {
   }
 }
 
-function localTemplateBody(options: SendCodeEmailOptions, hash: string): JsonType {
+function localTemplateFields(options: SendCodeEmailOptions): Record<string, JsonType> {
   return {
-    template: { key: options.templateKey, hash },
     ...recipientFields(options),
     ...templateDataField(options.templateData),
     ...senderFields(options),
@@ -432,6 +458,10 @@ function senderFields({ from, replyTo }: SendCodeEmailOptions): Record<string, J
 
 function templateDataField(templateData: Record<string, unknown> | undefined): Record<string, JsonType> {
   return templateData === undefined ? {} : { message_data: templateData as JsonType }
+}
+
+function jsonCopy<T extends JsonType>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
 }
 
 function definedFields(fields: Record<string, string | undefined>): Record<string, string> {

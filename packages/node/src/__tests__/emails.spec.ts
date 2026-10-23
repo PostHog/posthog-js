@@ -1,6 +1,5 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import type { SendEmailOptions } from '@/emails'
-import { emailContentHash } from '@/email-content-hash'
 import { type Fault, FakeEmailsApi, refusalBody } from './utils/fake-emails-api'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
@@ -11,6 +10,7 @@ const APP_HOST = 'https://posthog.example.com'
 const TEMPLATE_ID = '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b'
 const SEND = 'POST /api/projects/@current/messaging/send/email/'
 const UPLOAD_WELCOME = 'PUT /api/projects/@current/messaging_templates/by_key/welcome/'
+const WELCOME_HASH = 'v1:e78af62206b6fdc0bd87d56d2a70555a9bb8d4a37617dcbb8a746f86f7db7a63'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 describe('emails', () => {
@@ -218,7 +218,7 @@ describe('emails', () => {
       expect(requestLog()).toEqual([SEND, UPLOAD_WELCOME, SEND])
       const [firstSend, upload, secondSend] = api.received
       expect(firstSend.body).toEqual({
-        template: { key: 'welcome', hash: await emailContentHash(welcome) },
+        template: { key: 'welcome', hash: WELCOME_HASH },
         to: JANE,
         message_data: { name: 'Jane' },
         identifiers: { distinct_id: 'user_42' },
@@ -251,16 +251,20 @@ describe('emails', () => {
       expect(api.localTemplate('welcome')?.html).toBe('<p>Hi again</p>')
     })
 
-    it('sends a local template to the recipient it was called with, even when the caller reuses the options', async () => {
+    it('sends a local template with the recipient and data it was called with, even when the caller reuses them', async () => {
       const posthog = createClient()
       const options = { to: JANE, ...welcome, templateData: { name: 'Jane' } }
 
       const toJane = posthog.emails.send(options)
       options.to = 'bob@example.com'
+      options.templateData.name = 'Bob'
       const toBob = posthog.emails.send(options)
       await Promise.all([toJane, toBob])
 
-      expect(api.delivered.map(({ to }) => to).sort()).toEqual(['bob@example.com', JANE])
+      expect(api.delivered.map(({ to, variables }) => [to, variables]).sort()).toEqual([
+        ['bob@example.com', { name: 'Bob' }],
+        [JANE, { name: 'Jane' }],
+      ])
     })
 
     it('returns the refusal of a key edited in PostHog, and sends nothing', async () => {
@@ -417,16 +421,29 @@ describe('emails', () => {
       expect(api.received).toEqual([])
     })
 
-    it('returns invalid_form for an option it does not take, such as Resend scheduledAt, without a request', async () => {
-      const result = await createClient().emails.send({
-        to: JANE,
-        templateId: TEMPLATE_ID,
-        scheduledAt: 'in 1 hour',
-      } as SendEmailOptions)
+    it.each([
+      ['from on the template form', { templateId: TEMPLATE_ID, from: 'Acme <hi@example.com>' }, 'from'],
+      ['replyTo on the template form', { templateId: TEMPLATE_ID, replyTo: 'help@example.com' }, 'replyTo'],
+      ['subject on the template form', { templateId: TEMPLATE_ID, subject: 'Hi' }, 'subject'],
+      ['html on the template form', { templateId: TEMPLATE_ID, html: '<p>Hi</p>' }, 'html'],
+      ['text on the template form', { templateId: TEMPLATE_ID, text: 'Hi' }, 'text'],
+      ['a code send without a subject', { templateKey: 'welcome', html: '<p>Hi</p>' }, 'subject'],
+      ['a code send without html or text', { templateKey: 'welcome', subject: 'Hi' }, 'html'],
+      ['a code send with html that is not a string', { templateKey: 'welcome', subject: 'Hi', html: 1 }, 'html'],
+      [
+        'Resend scheduledAt, which it does not take',
+        { templateId: TEMPLATE_ID, scheduledAt: 'in 1 hour' },
+        'scheduledAt',
+      ],
+      [
+        'Resend scheduledAt on a code send',
+        { templateKey: 'welcome', subject: 'Hi', html: '<p>Hi</p>', scheduledAt: 'in 1 hour' },
+        'scheduledAt',
+      ],
+    ])('returns invalid_form for %s without a request', async (_, form, field) => {
+      const result = await createClient().emails.send({ to: JANE, ...form } as unknown as SendEmailOptions)
 
-      expect(result.error).toEqual(
-        expect.objectContaining({ name: 'validation_error', code: 'invalid_form', field: 'scheduledAt' })
-      )
+      expect(result.error).toEqual(expect.objectContaining({ name: 'validation_error', code: 'invalid_form', field }))
       expect(api.received).toEqual([])
     })
 
