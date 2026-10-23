@@ -9,6 +9,7 @@ import {
   buildNodeWithSN,
   createCache,
 } from '../src/rebuild';
+import snapshot from '../src/snapshot';
 import { NodeType } from '@posthog/rrweb-types';
 import { createMirror, Mirror, normalizeCssString } from '../src/utils';
 
@@ -137,6 +138,38 @@ describe('rebuild', function () {
     it('leaves other elements alone', function () {
       expect(build('div').hasAttribute('autocomplete')).toBe(false);
       expect(build('select').hasAttribute('autocomplete')).toBe(false);
+    });
+  });
+
+  describe('select value', function () {
+    const roundTrip = (maskAllInputs: boolean) => {
+      const source = document.implementation.createHTMLDocument();
+      source.body.innerHTML = `
+        <select>
+          <option value="" disabled selected>Choose one</option>
+          <option value="a">Option A</option>
+          <option value="b">Option B</option>
+        </select>`;
+      source.querySelector('select')!.value = 'b';
+      const serialized = snapshot(source, { maskAllInputs })!;
+      const target = document.implementation.createHTMLDocument();
+      buildNodeWithSN(serialized, {
+        doc: target,
+        mirror: createMirror(),
+        hackCss: false,
+        cache,
+      });
+      return target.querySelector('select')!;
+    };
+
+    it('shows no option for a masked select', function () {
+      const select = roundTrip(true);
+      expect(select.selectedIndex).toBe(-1);
+      expect(select.value).toBe('');
+    });
+
+    it('keeps the recorded option for an unmasked select', function () {
+      expect(roundTrip(false).value).toBe('b');
     });
   });
 
