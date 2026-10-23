@@ -480,11 +480,19 @@ export default class MutationBuffer {
         if (parentNode && this.addedSet.has(dom.lastChild(parentNode) as Node)) {
           n = dom.lastChild(parentNode) as Node;
         } else if (parentNode) {
+          // Walk forward through siblings, probing past IGNORED_NODE siblings
+          // so a new node inserted before an ignored node (e.g. a <script>
+          // rrweb filtered out of the mirror) can still be reached from an
+          // earlier new sibling. Matches getNextId's loop, which skips past
+          // IGNORED_NODE siblings when computing nextId for the emitted add.
           // eslint-disable-next-line no-constant-condition
           while (true) {
-            const nextSibling = dom.nextSibling(n);
-            if (this.addedSet.has(nextSibling as Node)) {
-              n = nextSibling as Node;
+            let probe: Node | null = dom.nextSibling(n);
+            while (probe && this.mirror.getId(probe) === IGNORED_NODE) {
+              probe = dom.nextSibling(probe);
+            }
+            if (probe && this.addedSet.has(probe)) {
+              n = probe;
               continue;
             }
             break;
