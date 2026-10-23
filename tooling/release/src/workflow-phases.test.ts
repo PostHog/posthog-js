@@ -87,8 +87,6 @@ test('npm gate fails closed for failed, cancelled or skipped alias promotion', (
                 CHECK_RESULT: 'success',
                 IS_NEW_VERSION: 'true',
                 UPLOAD_RESULT: result,
-                NEXT_CHECK_RESULT: 'success',
-                NEXT_IS_NEW_VERSION: 'false',
             },
             encoding: 'utf8',
         })
@@ -96,8 +94,8 @@ test('npm gate fails closed for failed, cancelled or skipped alias promotion', (
     }
 })
 
-test('browser-next remains dormant while private, then uses the normal version check when public', () => {
-    const check = job(release, 'check-browser-next-version')
+test('@posthog/browser remains dormant while private, then uses the normal version check when public', () => {
+    const check = job(release, 'check-posthog-browser-version')
     assert.match(check, /ref: \$\{\{ needs.version-bump.outputs.commit-hash \}\}/)
     assert.match(check, /if: steps.manifest.outputs.private != 'true'/)
     assert.match(
@@ -126,25 +124,26 @@ test('browser-next remains dormant while private, then uses the normal version c
     }
 })
 
-test('browser CDN builds once from the version commit and transfers the entire artifact tree without a toolbar dependency', () => {
-    const build = job(release, 'build-browser-cdn')
+test('@posthog/browser builds once from the version commit and transfers the entire artifact tree without a toolbar dependency', () => {
+    const build = job(release, 'build-posthog-browser-s3-artifacts')
     assert.match(build, /ref: \$\{\{ needs.version-bump.outputs.commit-hash \}\}/)
-    assert.match(build, /needs.check-browser-next-version.result == 'success'/)
-    assert.match(build, /needs.check-browser-next-version.outputs.is-new-version == 'true'/)
+    assert.match(build, /needs.check-posthog-browser-version.result == 'success'/)
+    assert.match(build, /needs.check-posthog-browser-version.outputs.is-new-version == 'true'/)
     assert.match(build, /pnpm turbo run build --filter='@posthog\/browser\^\.\.\.'/)
     assert.match(build, /pnpm --filter @posthog\/browser build:cdn/)
     assert.ok(
-        build.indexOf('Build browser CDN dependencies') < build.indexOf('run: pnpm --filter @posthog/browser build:cdn')
+        build.indexOf('Build @posthog/browser dependencies') <
+            build.indexOf('run: pnpm --filter @posthog/browser build:cdn')
     )
     assert.match(build, /test -s packages\/browser-next\/dist-cdn\/posthog.js/)
     assert.match(build, /path: packages\/browser-next\/dist-cdn\/\n/)
     assert.match(build, /include-hidden-files: true/)
     assert.match(build, /retention-days: 30/)
     assert.doesNotMatch(build, /matrix:|toolbar/)
-    for (const id of ['upload-browser-cdn-immutable', 'promote-browser-cdn']) {
+    for (const id of ['upload-posthog-browser-s3-immutable', 'upload-posthog-browser-s3']) {
         const upload = job(release, id)
         assert.doesNotMatch(upload, /toolbar|build:cdn/)
-        assert.match(upload, /name: browser-cdn-dist/)
+        assert.match(upload, /name: posthog-browser-dist/)
         assert.match(upload, /path: packages\/browser-next\/dist-cdn/)
         assert.match(upload, /ref: \$\{\{ needs.version-bump.outputs.commit-hash \}\}/)
         assert.match(upload, /environment: 'S3 Upload'/)
@@ -158,74 +157,38 @@ test('browser CDN builds once from the version commit and transfers the entire a
     }
 })
 
-test('both browser immutable regions are a required barrier before any browser aliases or coordinated npm publication', () => {
-    const immutable = job(release, 'upload-browser-cdn-immutable')
-    const aliases = job(release, 'promote-browser-cdn')
-    assert.match(immutable, /needs.build-browser-cdn.result == 'success'/)
+test('both @posthog/browser immutable regions are required before its aliases and npm gate', () => {
+    const immutable = job(release, 'upload-posthog-browser-s3-immutable')
+    const aliases = job(release, 'upload-posthog-browser-s3')
+    assert.match(immutable, /needs.build-posthog-browser-s3-artifacts.result == 'success'/)
     assert.match(immutable, /upload-browser-s3 "\$BUCKET" "\$VERSION" --immutable-only/)
     assert.match(aliases, /upload-browser-s3 "\$BUCKET" "\$VERSION" --aliases-only/)
-    assert.ok(dependencies(aliases).includes('upload-browser-cdn-immutable'))
-    assert.match(aliases, /needs.upload-browser-cdn-immutable.result == 'success'/)
-    const gate = job(release, 'gate-posthog-js-publish')
-    for (const id of [
-        'check-browser-next-version',
-        'build-browser-cdn',
-        'upload-browser-cdn-immutable',
-        'promote-browser-cdn',
-    ]) {
-        assert.ok(dependencies(gate).includes(id))
-    }
-    for (const id of ['publish', 'publish-posthog-js']) {
-        const publish = job(release, id)
-        assert.ok(dependencies(publish).includes('gate-posthog-js-publish'))
-        assert.match(publish, /needs.gate-posthog-js-publish.result == 'success'/)
-    }
-    const notified = job(release, 'notify-released')
-    assert.ok(dependencies(notified).includes('promote-browser-cdn'))
-    assert.match(notified, /needs.promote-browser-cdn.result == 'success'/)
-    // Legacy recovery remains separately approved and gated by its own regional barrier.
-    assert.match(job(release, 'publish-recovered-posthog-js'), /needs.recover-posthog-js-s3.result == 'success'/)
+    assert.ok(dependencies(aliases).includes('upload-posthog-browser-s3-immutable'))
+    assert.match(aliases, /needs.upload-posthog-browser-s3-immutable.result == 'success'/)
+    assert.ok(dependencies(job(release, 'gate-posthog-browser-publish')).includes('upload-posthog-browser-s3'))
 })
 
-test('coordinated npm gate evaluates browser-next even when legacy browser is unchanged and rejects incomplete work', () => {
-    const gate = job(release, 'gate-posthog-js-publish')
-    const step = gate.slice(gate.indexOf('            - name: Require successful'))
-    const script = step.match(/ {14}run: \|\n((?: {18}.*\n|\n)+)/)?.[1]
+test('@posthog/browser npm gate rejects failed checks and incomplete S3 releases', () => {
+    const gate = job(release, 'gate-posthog-browser-publish')
+    const script = gate.match(/ {14}run: \|\n((?: {18}.*\n|\n)+)/)?.[1]
     assert.ok(script)
     const base = {
         ...process.env,
-        BUILD_RESULT: 'success',
         CHECK_RESULT: 'success',
-        IS_NEW_VERSION: 'false',
-        UPLOAD_RESULT: 'skipped',
-        NEXT_CHECK_RESULT: 'success',
-        NEXT_IS_NEW_VERSION: 'true',
-        NEXT_BUILD_RESULT: 'success',
-        NEXT_IMMUTABLE_RESULT: 'success',
-        NEXT_ALIAS_RESULT: 'success',
+        IS_NEW_VERSION: 'true',
+        UPLOAD_RESULT: 'success',
     }
     const run = (env: Record<string, string | undefined>, success: boolean) => {
         const child = spawnSync('bash', ['-c', script.replace(/^ {18}/gm, '')], { env, encoding: 'utf8' })
         assert.equal(child.status, success ? 0 : 1, child.stdout + child.stderr)
     }
     run(base, true)
-    for (const field of ['NEXT_CHECK_RESULT', 'NEXT_BUILD_RESULT', 'NEXT_IMMUTABLE_RESULT', 'NEXT_ALIAS_RESULT']) {
+    for (const field of ['CHECK_RESULT', 'UPLOAD_RESULT']) {
         for (const result of ['failure', 'cancelled', 'skipped', '']) {
             run({ ...base, [field]: result }, false)
         }
     }
-    for (const value of ['', 'unknown']) run({ ...base, NEXT_IS_NEW_VERSION: value }, false)
-    run(
-        {
-            ...base,
-            NEXT_IS_NEW_VERSION: 'false',
-            NEXT_BUILD_RESULT: 'skipped',
-            NEXT_IMMUTABLE_RESULT: 'skipped',
-            NEXT_ALIAS_RESULT: 'skipped',
-        },
-        true
-    )
-    run({ ...base, IS_NEW_VERSION: 'true', UPLOAD_RESULT: 'success' }, true)
-    run({ ...base, IS_NEW_VERSION: 'true', UPLOAD_RESULT: 'failure' }, false)
-    run({ ...base, CHECK_RESULT: 'failure' }, false)
+    for (const value of ['', 'unknown']) run({ ...base, IS_NEW_VERSION: value }, false)
+    run({ ...base, IS_NEW_VERSION: 'false', UPLOAD_RESULT: 'skipped' }, true)
+    run({ ...base, IS_NEW_VERSION: 'false', CHECK_RESULT: 'failure' }, false)
 })
