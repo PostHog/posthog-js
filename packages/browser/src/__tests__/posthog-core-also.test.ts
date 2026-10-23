@@ -345,7 +345,18 @@ describe('posthog core', () => {
 
             expect(posthog.capture(eventName, {}, {})).toBeUndefined()
             expect(hook).not.toHaveBeenCalled()
+            expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('user agent looks like a bot'))
             navigatorSpy.mockRestore()
+        })
+
+        it('logs why an event is dropped when capturing is disabled', () => {
+            const hook = vi.fn()
+            const posthog = posthogWith({ opt_out_capturing_by_default: true }, defaultOverrides)
+            posthog._addCaptureHook(hook)
+
+            expect(posthog.capture(eventName, {}, {})).toBeUndefined()
+            expect(hook).not.toHaveBeenCalled()
+            expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('capturing is disabled'))
         })
 
         it('respects opt_out_useragent_filter', () => {

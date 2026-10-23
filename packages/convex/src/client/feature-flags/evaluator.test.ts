@@ -60,6 +60,27 @@ describe('LocalFeatureFlagEvaluator', () => {
     expect(await evaluator.getFeatureFlag('pp-flag', 'user', {}, { plan: 'free' })).toBe(false)
   })
 
+  test.each(['not_icontains', 'not_starts_with', 'not_ends_with', 'not_regex', 'is_not', 'exact', 'gt'])(
+    'returns undefined for an unresolved property with %s',
+    async (operator) => {
+      const evaluator = new LocalFeatureFlagEvaluator(
+        definitions([
+          makeFlag('unresolved', {
+            filters: {
+              groups: [
+                {
+                  properties: [{ key: 'plan', value: 'pro', operator, type: 'person' }],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
+          }),
+        ])
+      )
+      expect(await evaluator.getFeatureFlag('unresolved', 'user', {}, { plan: undefined })).toBeUndefined()
+    }
+  )
+
   test('returns variant key for multivariate flags', async () => {
     const evaluator = new LocalFeatureFlagEvaluator(
       definitions([

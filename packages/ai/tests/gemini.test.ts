@@ -337,6 +337,55 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
   })
 
+  test('counts tool-use prompt tokens as input tokens', async () => {
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
+      candidates: [{ content: { parts: [{ text: 'Answer' }] }, finishReason: 'STOP' }],
+      usageMetadata: {
+        promptTokenCount: 15,
+        candidatesTokenCount: 8,
+        toolUsePromptTokenCount: 40,
+        totalTokenCount: 63,
+      },
+    })
+
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Search the web',
+      posthogDistinctId: 'test-id',
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(55)
+    expect(captureArgs[0].properties['$ai_output_tokens']).toBe(8)
+  })
+
+  test('counts tool-use prompt tokens as input tokens when streaming', async () => {
+    ;(client as any).client.models.generateContentStream = mockGenerateContentStream([
+      {
+        text: 'Answer',
+        candidates: [{ content: { parts: [{ text: 'Answer' }] }, finishReason: 'STOP' }],
+        usageMetadata: {
+          promptTokenCount: 15,
+          candidatesTokenCount: 8,
+          toolUsePromptTokenCount: 40,
+          totalTokenCount: 63,
+        },
+      },
+    ])
+
+    const stream = await client.models.generateContentStream({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Search the web',
+      posthogDistinctId: 'test-id',
+    })
+    for await (const _ of stream) {
+      // drain
+    }
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(55)
+  })
+
   test('preserves output inline data when the client enables multimodal capture', async () => {
     const base64Data = 'A'.repeat(2000)
     ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
@@ -944,6 +993,94 @@ describe('PostHogGemini - Jest test suite', () => {
       },
     ])
     expect(properties['$ai_output_tokens']).toBe(4)
+  })
+
+  test('captures thought parts as reasoning in the output and in a replayed model turn', async () => {
+    mockGeminiResponse = {
+      text: 'No, 391 = 17 × 23.',
+      candidates: [
+        {
+          content: {
+            role: 'model',
+            parts: [{ text: 'Try small primes: 391 / 17 = 23.', thought: true }, { text: 'No, 391 = 17 × 23.' }],
+          },
+          finishReason: 'STOP',
+        },
+      ],
+      usageMetadata: { promptTokenCount: 20, candidatesTokenCount: 9, thoughtsTokenCount: 30 },
+    }
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockGeminiResponse)
+
+    await client.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        { role: 'user', parts: [{ text: 'Is 91 prime?' }] },
+        {
+          role: 'model',
+          parts: [{ text: '91 = 7 × 13.', thought: true, thoughtSignature: 'c2ln' }, { text: 'No.' }],
+        },
+        { role: 'user', parts: [{ text: 'Is 391 prime?' }] },
+      ],
+      config: { thinkingConfig: { includeThoughts: true } },
+      posthogDistinctId: 'test-id',
+    })
+
+    const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
+    expect(properties['$ai_output_choices']).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Try small primes: 391 / 17 = 23.' },
+          { type: 'text', text: 'No, 391 = 17 × 23.' },
+        ],
+      },
+    ])
+    expect(properties['$ai_input'][1]).toEqual({
+      role: 'model',
+      content: [
+        { type: 'reasoning', text: '91 = 7 × 13.' },
+        { type: 'text', text: 'No.' },
+      ],
+    })
+  })
+
+  test('streaming captures thought parts as reasoning', async () => {
+    // Like the SDK's text getter, `text` is undefined on chunks that only carry thoughts
+    const thoughtChunks = [
+      { text: undefined, candidates: [{ content: { role: 'model', parts: [{ text: 'Try 17: ', thought: true }] } }] },
+      {
+        text: undefined,
+        candidates: [{ content: { role: 'model', parts: [{ text: '391 / 17 = 23.', thought: true }] } }],
+      },
+      {
+        text: 'No, 391 = 17 × 23.',
+        candidates: [{ content: { role: 'model', parts: [{ text: 'No, 391 = 17 × 23.' }] }, finishReason: 'STOP' }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 9, thoughtsTokenCount: 30 },
+      },
+    ]
+    ;(client as any).client.models.generateContentStream = mockGenerateContentStream(thoughtChunks)
+
+    const stream = client.models.generateContentStream({
+      model: 'gemini-2.5-flash',
+      contents: 'Is 391 prime?',
+      config: { thinkingConfig: { includeThoughts: true } },
+      posthogDistinctId: 'test-id',
+    })
+    for await (const _chunk of stream) {
+      // drain
+    }
+
+    const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
+    expect(properties['$ai_output_choices']).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Try 17: 391 / 17 = 23.' },
+          { type: 'text', text: 'No, 391 = 17 × 23.' },
+        ],
+      },
+    ])
+    expect(properties['$ai_reasoning_tokens']).toBe(30)
   })
 
   test('anonymous user - $process_person_profile set to false', async () => {

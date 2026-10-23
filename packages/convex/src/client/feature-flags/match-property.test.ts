@@ -123,9 +123,9 @@ describe('matchProperty — starts_with / ends_with', () => {
     ['not_starts_with', true],
     ['ends_with', false],
     ['not_ends_with', true],
-  ] as const)('%s matches null as a string but rejects undefined', (op, expected) => {
+  ] as const)('%s matches null as a string and keeps undefined inconclusive', (op, expected) => {
     expect(matchProperty(prop(op, 'Val'), { k: null })).toBe(expected)
-    expect(matchProperty(prop(op, 'Val'), { k: undefined })).toBe(false)
+    expect(() => matchProperty(prop(op, 'Val'), { k: undefined })).toThrow(InconclusiveMatchError)
   })
 })
 

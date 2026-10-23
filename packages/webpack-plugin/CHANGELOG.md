@@ -1,5 +1,12 @@
 # @posthog/webpack-plugin
 
+## 1.7.4
+
+### Patch Changes
+
+- [#5386](https://github.com/PostHog/posthog-js/pull/5386) [`42bc585`](https://github.com/PostHog/posthog-js/commit/42bc585c68fade51403680b08af32f900a7b6db3) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Delete source maps when processing or uploading them fails while `sourcemaps.deleteAfterUpload` is enabled (the default), so they no longer ship in the build output; set `deleteAfterUpload: false` to keep them.
+  (2026-10-22)
+
 ## 1.7.3
 
 ### Patch Changes

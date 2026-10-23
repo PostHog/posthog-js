@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.14.3",
+  "version": "8.16.1",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -15,7 +15,8 @@
     "check-types": "tsc --noEmit --project tsconfig.check.json",
     "clean": "rimraf dist",
     "test:unit": "vitest run && pnpm test:module-load",
-    "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",
+    "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs && node tests/evaluations-module-load.cjs",
+    "test:gemini-consumers": "node tests/gemini-consumer-types.mjs",
     "test:cassettes": "vitest run --config harness/vitest.config.ts",
     "test:cassettes:offline": "node harness/run-offline.mjs",
     "cassette:record": "node harness/record.mjs",
@@ -32,7 +33,7 @@
     "@anthropic-ai/sdk": ">=0.112.3 <0.135.0",
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
-    "@google/genai": "^1.52.0",
+    "@google/genai": "2.18.0",
     "@langchain/core": "^1.2.17",
     "openai": "^6.49.0",
     "@openai/agents": "^0.8.0",
@@ -74,7 +75,7 @@
     "@anthropic-ai/sdk": ">=0.112.3 <0.135.0",
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
-    "@google/genai": "^1.52.0",
+    "@google/genai": "^1.52.0 || ^2.18.0",
     "@langchain/core": "^1.2.3",
     "openai": "^6.48.0",
     "@opentelemetry/api": "^1.9.0",
@@ -181,6 +182,11 @@
       "require": "./dist/claude-agent-sdk/index.cjs",
       "import": "./dist/claude-agent-sdk/index.mjs",
       "types": "./dist/claude-agent-sdk/index.d.ts"
+    },
+    "./evaluations": {
+      "types": "./dist/evaluations/index.d.ts",
+      "import": "./dist/evaluations/index.mjs",
+      "require": "./dist/evaluations/index.cjs"
     }
   },
   "directories": {

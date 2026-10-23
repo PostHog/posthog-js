@@ -822,6 +822,19 @@ describe('PostHog Feature Flags v4', () => {
         }
       )
 
+      it('should capture feature_flag_called after opt in for a flag read while opted out', async () => {
+        posthog.optOut()
+        posthog.getFeatureFlag('feature-1')
+        posthog.optIn()
+        posthog.getFeatureFlag('feature-1')
+        await waitForPromises()
+
+        const flagCalledEvents = mocks.fetch.mock.calls
+          .flatMap((call) => parseBody(call)?.batch ?? [])
+          .filter((e: any) => e.event === '$feature_flag_called')
+        expect(flagCalledEvents).toHaveLength(1)
+      })
+
       describe('$feature_flag_has_experiment', () => {
         const mockFlagsWithMetadata = (metadata: Record<string, any>): void => {
           mocks.fetch.mockImplementation((url) => {

@@ -1,5 +1,30 @@
 # @posthog/core
 
+## 1.60.0
+
+### Minor Changes
+
+- [#5234](https://github.com/PostHog/posthog-js/pull/5234) [`1991b99`](https://github.com/PostHog/posthog-js/commit/1991b9962749653599d03b54d160368dbfc8009b) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - feat: report flags local evaluation could not resolve on `evaluateFlags()` snapshots via `unresolvedFlags`, tag reads of them with `local_evaluation_inconclusive`, and warn once about flags whose definition local evaluation does not support
+
+  Behavior changes:
+  - A condition with a filter local evaluation cannot check and a filter that does not match now resolves locally as no match, instead of falling back to a server request or staying unresolved.
+  - `$feature_flag_called` events from snapshot reads report `local_evaluation_inconclusive` instead of `flag_missing` for these flags.
+  - The load-time warning now also logs with `strictLocalEvaluation: true`. (2026-10-22)
+
+## 1.59.4
+
+### Patch Changes
+
+- [#5365](https://github.com/PostHog/posthog-js/pull/5365) [`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` the next time they are read after opt in.
+  (2026-10-22)
+
+## 1.59.3
+
+### Patch Changes
+
+- [#5350](https://github.com/PostHog/posthog-js/pull/5350) [`17260e5`](https://github.com/PostHog/posthog-js/commit/17260e501d6ae4b2fae17a2822c6a2f6d4addfe4) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back from local flag evaluation when a required property value is undefined.
+  (2026-10-21)
+
 ## 1.59.2
 
 ### Patch Changes

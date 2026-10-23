@@ -160,6 +160,9 @@ export const formatResponseAnthropic = (response: any): FormattedMessage[] => {
   for (const choice of response.content ?? []) {
     if (choice?.type === 'text' && choice?.text) {
       content.push({ type: 'text', text: choice.text })
+    } else if (choice?.type === 'thinking' && choice?.thinking) {
+      // redacted_thinking blocks only carry encrypted data, so they are not captured
+      content.push({ type: 'reasoning', text: choice.thinking })
     } else if (choice?.type === 'tool_use' && choice?.name && choice?.id) {
       content.push({
         type: 'function',
@@ -197,6 +200,11 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
 
         if (choice.message.content) {
           content.push({ type: 'text', text: choice.message.content })
+        }
+
+        // A refused request carries its text in `refusal` and leaves `content` empty
+        if (choice.message.refusal) {
+          content.push({ type: 'refusal', refusal: choice.message.refusal })
         }
 
         if (choice.message.tool_calls) {
@@ -330,7 +338,9 @@ export const formatResponseGemini = (response: any, client?: FullAiCaptureGate):
         const content: FormattedContent = []
 
         for (const part of candidate.content.parts) {
-          if (part.text) {
+          if (part.thought === true && part.text) {
+            content.push({ type: 'reasoning', text: part.text })
+          } else if (part.text) {
             content.push({ type: 'text', text: part.text })
           } else if (part.functionCall) {
             content.push({

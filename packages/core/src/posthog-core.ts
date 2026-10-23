@@ -1044,7 +1044,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
     const featureFlag = details?.flags[key]
     const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
-    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.flagCallReported[key]?.has(flagValue)
+    // An opted-out client drops the event, so marking the flag as reported would suppress the exposure after opt in.
+    const sendEvent =
+      (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.optedOut && !this.flagCallReported[key]?.has(flagValue)
 
     if (sendEvent) {
       const errors: string[] = []

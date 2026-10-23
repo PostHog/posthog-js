@@ -1,7 +1,7 @@
 import { h } from 'preact'
 import { ProductTourStep, ProductTourAppearance, ProductTourStepButton } from '../../../posthog-product-tours-types'
 import { getStepHtml, hasElementTarget } from '../product-tours-utils'
-import { IconPosthogLogo, cancelSVG } from '../../surveys/icons'
+import { IconPosthogLogo, cancelSVG } from '@posthog/browser-common/surveys/icons'
 
 interface TourButtonProps {
     button: ProductTourStepButton

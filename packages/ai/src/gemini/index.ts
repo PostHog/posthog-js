@@ -29,6 +29,19 @@ import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessa
 import { isObject, isString } from '../typeGuards'
 import { formatToolResult } from '../toolResult'
 import { mapGeminiUsage } from './usage'
+import { WrappedInteractions } from './interactions'
+
+/** Append streamed text to the last block of the same type, or start a new one. */
+function appendStreamedText(content: FormattedContent, type: 'text' | 'reasoning', text: string): void {
+  for (let i = content.length - 1; i >= 0; i--) {
+    const item = content[i]
+    if (item.type === type) {
+      item.text += text
+      return
+    }
+  }
+  content.push({ type, text })
+}
 
 interface MonitoringGeminiConfig extends GoogleGenAIOptions {
   posthog: PostHog
@@ -52,12 +65,14 @@ export class PostHogGoogleGenAI {
   private readonly phClient: PostHog
   private readonly client: GoogleGenAI
   public models: WrappedModels
+  public interactions: WrappedInteractions
 
   constructor(config: MonitoringGeminiConfig) {
     const { posthog, ...geminiConfig } = config
     this.phClient = posthog
     this.client = new GoogleGenAI(geminiConfig)
     this.models = new WrappedModels(this.client, this.phClient)
+    this.interactions = new WrappedInteractions(this.client, this.phClient)
   }
 }
 
@@ -143,22 +158,18 @@ export class WrappedModels {
           usage.webSearchCount = chunkWebSearchCount
         }
 
+        // chunk.text skips thought parts, so read thought summaries from the
+        // first candidate's parts (the candidate chunk.text reads). Gemini
+        // streams thoughts before the answer, so record them first.
+        for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+          if (part.thought === true && part.text) {
+            appendStreamedText(accumulatedContent, 'reasoning', part.text)
+          }
+        }
+
         // Handle text content
         if (chunk.text) {
-          // Find if we already have a text item to append to
-          let lastTextItem: FormattedContentItem | undefined
-          for (let i = accumulatedContent.length - 1; i >= 0; i--) {
-            if (accumulatedContent[i].type === 'text') {
-              lastTextItem = accumulatedContent[i]
-              break
-            }
-          }
-
-          if (lastTextItem && lastTextItem.type === 'text') {
-            lastTextItem.text += chunk.text
-          } else {
-            accumulatedContent.push({ type: 'text', text: chunk.text })
-          }
+          appendStreamedText(accumulatedContent, 'text', chunk.text)
         }
 
         // Track finish reason from candidates
@@ -302,8 +313,19 @@ export class WrappedModels {
     const blocks: Array<FormattedContentItem | FormattedGeminiFunctionResponse> = []
 
     for (const part of parts) {
+      // Thought summaries (thinkingConfig.includeThoughts) replayed from a prior model turn
+      if (
+        part &&
+        typeof part === 'object' &&
+        'thought' in part &&
+        part.thought === true &&
+        'text' in part &&
+        part.text
+      ) {
+        blocks.push({ type: 'reasoning', text: String(part.text) })
+      }
       // Handle dict/object with text field
-      if (part && typeof part === 'object' && 'text' in part && part.text) {
+      else if (part && typeof part === 'object' && 'text' in part && part.text) {
         blocks.push({ type: 'text', text: String(part.text) })
       }
       // Handle string parts
