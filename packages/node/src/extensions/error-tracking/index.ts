@@ -1,5 +1,7 @@
 import { addUncaughtExceptionListener, addUnhandledRejectionListener } from './autocapture'
 import { PostHogBackendClient } from '@/client'
+import type { ContextData } from '../context/types'
+import { snapshotEventContext } from '../context/event-context'
 import { isObject } from '@posthog/core'
 import { EventMessage, PostHogOptions } from '@/types'
 import type { Logger } from '@posthog/core'
@@ -47,8 +49,10 @@ export default class ErrorTracking {
     error: unknown,
     hint: CoreErrorTracking.EventHint,
     distinctId?: string,
-    additionalProperties?: Record<string | number, any>
+    additionalProperties?: Record<string | number, any>,
+    context?: ContextData
   ): Promise<EventMessage> {
+    const applyContextSnapshot = snapshotEventContext(context)
     const properties: EventMessage['properties'] = { ...additionalProperties }
 
     const exceptionProperties = builder.buildFromUnknown(error, hint)
@@ -59,7 +63,7 @@ export default class ErrorTracking {
       properties.$release_id = injectedReleaseId
     }
 
-    return {
+    return applyContextSnapshot({
       event: '$exception',
       // Leave distinctId resolution to prepareEventMessage which checks request context
       // and falls back to a random UUID with $process_person_profile = false
@@ -69,7 +73,7 @@ export default class ErrorTracking {
         ...properties,
       },
       _originatedFromCaptureException: true,
-    }
+    })
   }
 
   private startAutocaptureIfEnabled(): void {
@@ -86,7 +90,10 @@ export default class ErrorTracking {
           const eventMessage = await ErrorTracking.buildEventMessage(
             this.client.getErrorPropertiesBuilder(),
             exception,
-            hint
+            hint,
+            undefined,
+            undefined,
+            this.client.getContext()
           )
           const exceptionProperties = eventMessage.properties
           const exceptionType = exceptionProperties?.$exception_list[0]?.type ?? 'Exception'
