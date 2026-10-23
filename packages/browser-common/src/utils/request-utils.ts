@@ -102,19 +102,27 @@ export const maskQueryParams = function <T extends string | undefined>(
         return url as any
     }
 
-    const splitHash = url.split('#')
+    // Split only on the first # and the first ?, so a hash or query containing another # or ?
+    // is kept whole instead of being cut off
+    const splitHash = url.split(/#(.*)/)
     const withoutHash: string = splitHash[0] || ''
     const hash = splitHash[1]
 
-    const splitQuery: string[] = withoutHash.split('?')
+    const splitQuery: string[] = withoutHash.split(/\?(.*)/)
     const queryString: string = splitQuery[1]!
     const urlWithoutQueryAndHash: string = splitQuery[0]!
-    const queryParts = (queryString || '').split('&')
+    // Also split on any further ?, keeping the separators, so a param that follows one is still masked
+    const queryParts = (queryString || '').split(/([&?])/)
 
     // use an array of strings rather than an object to preserve ordering and duplicates
     const paramStrings: string[] = []
 
     for (let i = 0; i < queryParts.length; i++) {
+        if (i % 2 === 1) {
+            // a separator captured by the split
+            paramStrings.push(queryParts[i]!)
+            continue
+        }
         const keyValuePair = queryParts[i]!.split('=')
         if (!isArray(keyValuePair)) {
             continue
@@ -127,7 +135,7 @@ export const maskQueryParams = function <T extends string | undefined>(
 
     let result = urlWithoutQueryAndHash
     if (queryString != null) {
-        result += '?' + paramStrings.join('&')
+        result += '?' + paramStrings.join('')
     }
     if (hash != null) {
         result += '#' + hash
