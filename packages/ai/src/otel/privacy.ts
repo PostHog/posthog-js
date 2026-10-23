@@ -21,6 +21,11 @@ const CONTENT_ATTRIBUTES = new Set([
   'ai.values',
   'ai.embedding',
   'ai.embeddings',
+  'ai.documents',
+  'ai.request.text',
+  'ai.decision.state',
+  'ai.decision.questions',
+  'ai.decision.answers',
   // OpenTelemetry GenAI semantic conventions
   'gen_ai.input.messages',
   'gen_ai.output.messages',
@@ -29,9 +34,23 @@ const CONTENT_ATTRIBUTES = new Set([
   'gen_ai.completion',
   'gen_ai.tool.call.arguments',
   'gen_ai.tool.call.result',
+  'gen_ai.retrieval.documents',
+  'gen_ai.retrieval.query.text',
+  'gen_ai.memory.query.text',
+  'gen_ai.memory.records',
+  'gen_ai.evaluation.explanation',
   // Traceloop / OpenLLMetry
   'traceloop.entity.input',
   'traceloop.entity.output',
+  'traceloop.prompt.template',
+  'gen_ai.task.input',
+  'gen_ai.task.output',
+  'gen_ai.guardrail.input',
+  'gen_ai.guardrail.output',
+  'gen_ai.guardrail.error.message',
+  'gen_ai.response.revised_prompt',
+  'mcp.response.value',
+  'db.marqo.search.query',
   // Anthropic
   'anthropic.tool_result.content',
   // Pydantic AI / Logfire
@@ -40,6 +59,9 @@ const CONTENT_ATTRIBUTES = new Set([
   'tool_arguments',
   'tool_response',
   'events',
+  'model_request_parameters',
+  'inputs',
+  'prompt',
   // OpenInference
   'input.value',
   'output.value',
@@ -48,6 +70,14 @@ const CONTENT_ATTRIBUTES = new Set([
   'llm.prompt_template.variables',
   // Holds request parameters such as Responses `instructions`.
   'llm.invocation_parameters',
+  'reranker.query',
+  // Langfuse
+  'langfuse.trace.input',
+  'langfuse.trace.output',
+  'langfuse.observation.input',
+  'langfuse.observation.output',
+  'langfuse.observation.status_message',
+  'langfuse.experiment.item.expected_output',
   // Errors
   'exception.message',
   'exception.stacktrace',
@@ -62,20 +92,32 @@ const CONTENT_ATTRIBUTE_PREFIXES = [
   'llm.input_messages.',
   'llm.output_messages.',
   'llm.choices.',
+  'traceloop.prompt.template_variables.',
 ]
 
-const OPENINFERENCE_EMBEDDING_TEXT = /^embedding\.embeddings\.\d+\.embedding\.text$/
+const CONTENT_ATTRIBUTE_PATTERNS = [
+  /^db\.chroma\.(query|get|delete)\.where_document$/,
+  /^embedding\.embeddings\.\d+\.embedding\.text$/,
+  /^retrieval\.documents\.\d+\.document\.(content|metadata)$/,
+  /^reranker\.(input|output)_documents\.\d+\.document\.content$/,
+  /^(input|output)\.images\.\d+\.image\.url$/,
+  /^mastra\.[a-z_]+\.(input|output)$/,
+]
 
-// GenAI semantic convention span events (`gen_ai.user.message`, `gen_ai.choice`, ...) carry
-// message content under generic keys such as `content`.
-const CONTENT_EVENT_PREFIX = 'gen_ai.'
+// Prompt management metadata that shares the `gen_ai.prompt.` prefix with prompt content.
+const NON_CONTENT_ATTRIBUTES = new Set(['gen_ai.prompt.name', 'gen_ai.prompt.version'])
+
+// Ingestion only reads exception events. Every other event (GenAI semconv messages, vector
+// database results, framework logs) can carry content.
+const EXCEPTION_EVENT_NAME = 'exception'
 
 const PROVIDER_METADATA_ATTRIBUTE = 'ai.response.providerMetadata'
 
 const isContentAttribute = (key: string): boolean =>
-  CONTENT_ATTRIBUTES.has(key) ||
-  CONTENT_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix)) ||
-  OPENINFERENCE_EMBEDDING_TEXT.test(key)
+  !NON_CONTENT_ATTRIBUTES.has(key) &&
+  (CONTENT_ATTRIBUTES.has(key) ||
+    CONTENT_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix)) ||
+    CONTENT_ATTRIBUTE_PATTERNS.some((pattern) => pattern.test(key)))
 
 // Provider metadata can carry content, such as Google grounding search queries. Ingestion only
 // reads the Vercel AI Gateway cost from it.
@@ -111,7 +153,7 @@ function stripAttributes(attributes: Attributes): Attributes {
 
 function stripEvents(events: TimedEvent[]): TimedEvent[] {
   return events
-    .filter((event) => !event.name.startsWith(CONTENT_EVENT_PREFIX))
+    .filter((event) => event.name === EXCEPTION_EVENT_NAME)
     .map((event) => (event.attributes ? { ...event, attributes: stripAttributes(event.attributes) } : event))
 }
 

@@ -370,15 +370,51 @@ describe('captureAiGeneration', () => {
       headers: { Authorization: 'Bearer secret' },
       authorization: 'secret',
     }
+    const vercelOpenAIMcpTool = {
+      type: 'provider',
+      id: 'openai.mcp',
+      name: 'mcp',
+      args: {
+        serverLabel: 'docs',
+        serverUrl: 'https://mcp.example.com',
+        headers: { Authorization: 'Bearer secret' },
+        authorization: 'secret',
+      },
+    }
+    const vercelXaiMcpTool = {
+      type: 'provider-defined',
+      id: 'xai.mcp',
+      name: 'mcp',
+      args: { serverUrl: 'https://mcp.example.com', authorization: 'secret' },
+    }
+    const vercelGoogleMcpTool = {
+      type: 'provider',
+      id: 'google.mcp_server',
+      name: 'mcp_server',
+      args: { url: 'https://mcp.example.com', headers: { 'x-api-key': 'secret' } },
+    }
+    const vercelWebSearchTool = { type: 'provider', id: 'openai.web_search', name: 'web_search', args: {} }
     const functionTool = { type: 'function', function: { name: 'lookup', parameters: {} } }
 
-    await captureAiGeneration(client, { ...baseRequiredOptions, privacyMode, tools: [mcpTool, functionTool] })
+    await captureAiGeneration(client, {
+      ...baseRequiredOptions,
+      privacyMode,
+      tools: [mcpTool, vercelOpenAIMcpTool, vercelXaiMcpTool, vercelGoogleMcpTool, vercelWebSearchTool, functionTool],
+    })
 
     expect(lastCaptureProperties(client).$ai_tools).toEqual([
       { ...mcpTool, headers: '[REDACTED]', authorization: '[REDACTED]' },
+      {
+        ...vercelOpenAIMcpTool,
+        args: { ...vercelOpenAIMcpTool.args, headers: '[REDACTED]', authorization: '[REDACTED]' },
+      },
+      { ...vercelXaiMcpTool, args: { ...vercelXaiMcpTool.args, authorization: '[REDACTED]' } },
+      { ...vercelGoogleMcpTool, args: { ...vercelGoogleMcpTool.args, headers: '[REDACTED]' } },
+      vercelWebSearchTool,
       functionTool,
     ])
     expect(mcpTool.authorization).toBe('secret')
+    expect(vercelOpenAIMcpTool.args.authorization).toBe('secret')
   })
 
   it('mutates the original error in place when autocapture is enabled, so callers can re-throw safely', async () => {
