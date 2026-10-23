@@ -408,14 +408,31 @@ describe('emails', () => {
     )
 
     it.each([
-      ['missing_secret_key', 'missing_api_key', { secretKey: undefined }, MESSAGE_ID],
-      ['missing_app_host', 'application_error', { appHost: undefined }, MESSAGE_ID],
-      ['client_disabled', 'application_error', { disabled: true }, MESSAGE_ID],
-      ['invalid_message_id', 'validation_error', {}, ''],
-    ])('returns %s as %s without a request', async (code, name, clientOptions: PostHogOptions, id) => {
+      ['missing_secret_key', 'missing_api_key', { secretKey: undefined }, MESSAGE_ID, 'hog_flow:read'],
+      ['missing_app_host', 'application_error', { appHost: undefined }, MESSAGE_ID, 'appHost'],
+      ['client_disabled', 'application_error', { disabled: true }, MESSAGE_ID, 'disabled'],
+      ['invalid_message_id', 'validation_error', {}, '', 'id'],
+      ['invalid_message_id', 'validation_error', {}, 'message-\uD800', 'id'],
+    ])('returns %s as %s without a request', async (code, name, clientOptions: PostHogOptions, id, says) => {
       const result = await createClient(clientOptions).emails.get(id)
 
-      expect(result).toEqual({ data: null, error: expect.objectContaining({ name, code }) })
+      expect(result).toEqual({
+        data: null,
+        error: expect.objectContaining({ name, code, message: expect.stringContaining(says) }),
+      })
+      expect(api.received).toEqual([])
+    })
+
+    it('returns client_closed as application_error after shutdown without a request', async () => {
+      const client = createClient()
+      await client.shutdown()
+
+      const result = await client.emails.get(MESSAGE_ID)
+
+      expect(result).toEqual({
+        data: null,
+        error: expect.objectContaining({ name: 'application_error', code: 'client_closed' }),
+      })
       expect(api.received).toEqual([])
     })
 

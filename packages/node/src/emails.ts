@@ -158,8 +158,8 @@ export interface EmailError {
   /**
    * PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`,
    * `missing_app_host`, `client_disabled`, `client_closed`, `network_error`, `api_error` for an answer without a
-   * code, `unexpected_error`, and `invalid_form`, `invalid_template_id`, `invalid_template_key`, `invalid_attachment`
-   * and `invalid_idempotency_key` for a send the SDK refused before any request.
+   * code, `unexpected_error`, `invalid_form`, `invalid_template_id`, `invalid_template_key`, `invalid_attachment` and
+   * `invalid_idempotency_key` for a send the SDK refused before any request, and `invalid_message_id` for a read.
    */
   code: string
   message: string
@@ -333,6 +333,14 @@ interface Delivery {
 
 const READ_ONCE: Delivery = { maxRetries: 0 }
 
+interface EmailCall {
+  action: string
+  scope: string
+}
+
+const SENDING: EmailCall = { action: 'Sending email', scope: 'hog_flow:write' }
+const READING: EmailCall = { action: 'Reading an email', scope: 'hog_flow:read' }
+
 interface ApiRequest {
   method: 'GET' | 'POST' | 'PUT'
   path: string
@@ -370,16 +378,16 @@ export class PostHogEmails implements Emails {
   }
 
   get(id: string): Promise<GetEmailResult> {
-    const refusal =
-      this.clientRefusal() ??
-      (typeof id === 'string' && id
-        ? undefined
-        : failure('invalid_message_id', 'id must be the id that send returned.', { field: 'id' }))
+    const refusal = this.clientRefusal(READING)
     if (refusal) {
       return Promise.resolve(refusal)
     }
+    const path = statusPath(id)
+    if (path === undefined) {
+      return Promise.resolve(failure('invalid_message_id', 'id must be the id that send returned.', { field: 'id' }))
+    }
     return this.api.track(
-      this.exchange({ method: 'GET', path: STATUS_PATH(id) }, READ_ONCE)
+      this.exchange({ method: 'GET', path }, READ_ONCE)
         .then((outcome) => (outcome.error ? outcome : statusRecord(outcome.data)))
         .catch(unexpectedFailure)
     )
@@ -387,31 +395,31 @@ export class PostHogEmails implements Emails {
 
   private refusalBeforeRequest(options: SendEmailOptions): Failure | undefined {
     return (
-      this.clientRefusal() ??
+      this.clientRefusal(SENDING) ??
       formRefusal(options) ??
       unknownOptionRefusal(options) ??
       idempotencyKeyRefusal(options.idempotencyKey)
     )
   }
 
-  private clientRefusal(): Failure | undefined {
+  private clientRefusal({ action, scope }: EmailCall): Failure | undefined {
     if (this.api.isDisabled()) {
-      return failure('client_disabled', 'The PostHog client is disabled, so nothing was sent.')
+      return failure('client_disabled', 'The PostHog client is disabled, so the SDK made no request.')
     }
     if (this.api.isClosed()) {
-      return failure('client_closed', 'The PostHog client was shut down, so nothing was sent.')
+      return failure('client_closed', 'The PostHog client was shut down, so the SDK made no request.')
     }
     if (!this.api.secretKey()) {
       return failure(
         'missing_secret_key',
-        'Sending email needs the secretKey client option, a project secret API key with the hog_flow:write scope.'
+        `${action} needs the secretKey client option, a project secret API key with the ${scope} scope.`
       )
     }
     if (!this.api.appHost()) {
       return failure(
         'missing_app_host',
-        'Sending email needs the appHost client option when host is not PostHog Cloud, so the secret key never ' +
-          'goes to a proxy.'
+        `${action} needs the appHost client option when host is not PostHog Cloud, so the secret key never goes ` +
+          'to a proxy.'
       )
     }
     return undefined
@@ -759,6 +767,17 @@ function apiError({ status, body }: PostHogApiResponse): EmailError {
     statusCode: status,
     ...optional('docsUrl', textOf(fields.docs_url)),
     ...optional('field', textOf(fields.attr)),
+  }
+}
+
+function statusPath(id: unknown): string | undefined {
+  if (typeof id !== 'string' || !id) {
+    return undefined
+  }
+  try {
+    return STATUS_PATH(id)
+  } catch {
+    return undefined
   }
 }
 
