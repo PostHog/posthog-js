@@ -117,7 +117,7 @@ const PROVIDER_METADATA_ATTRIBUTE = 'ai.response.providerMetadata'
 const isContentAttribute = (key: string): boolean =>
   !NON_CONTENT_ATTRIBUTES.has(key) &&
   (CONTENT_ATTRIBUTES.has(key) ||
-    CONTENT_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix)) ||
+    CONTENT_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix) || prefix === `${key}.`) ||
     CONTENT_ATTRIBUTE_PATTERNS.some((pattern) => pattern.test(key)))
 
 // Provider metadata can carry content, such as Google grounding search queries. Ingestion only

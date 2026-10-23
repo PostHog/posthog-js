@@ -205,6 +205,8 @@ describe('PostHogTraceExporter AI span filtering', () => {
         'traceloop.prompt.template_variables.city',
         'db.marqo.search.query',
         'db.chroma.query.where_document',
+        'llm.prompts',
+        'llm.input_messages',
         'llm.input_messages.0.message.content',
         'llm.choices.0.completion.text',
         'llm.function_call',
