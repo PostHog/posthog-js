@@ -3,6 +3,7 @@ import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base'
 
 import { BinaryContentRedactor } from '../sanitization/binary_content_redactor'
 import { withAttributes } from './spans'
+import { isToolDefinitionAttribute, redactToolDefinitionCredentials } from './toolDefinitions'
 
 // Deliberately always redacts here — the OTLP export path has no per-client passthrough gate.
 const redactor = new BinaryContentRedactor()
@@ -20,9 +21,11 @@ function redactAttributes(attributes: Attributes): Attributes {
   let changed = false
   const out: Attributes = {}
   for (const key of Object.keys(attributes)) {
-    const value = attributes[key]
+    const original = attributes[key]
+    const value =
+      original !== undefined && isToolDefinitionAttribute(key) ? redactToolDefinitionCredentials(original) : original
     const redacted = value === undefined ? value : redactAttributeValue(value)
-    if (redacted !== value) {
+    if (redacted !== original) {
       changed = true
     }
     out[key] = redacted

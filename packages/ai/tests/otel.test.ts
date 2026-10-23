@@ -249,7 +249,8 @@ describe('PostHogTraceExporter AI span filtering', () => {
       'gen_ai.prompt.version': '3',
       'gen_ai.usage.output_tokens': 7,
     }
-    const tools = toolDefinitions(mcpTool, vercelMcpTool)
+    const unparseableTool = { 'llm.tools.1.tool.json_schema': 'lookup(q: string)' }
+    const tools = { ...toolDefinitions(mcpTool, vercelMcpTool), ...unparseableTool }
     const redactedTools = toolDefinitions(
       { ...mcpTool, authorization: '[REDACTED]' },
       { ...vercelMcpTool, args: { ...vercelMcpTool.args, headers: '[REDACTED]' } }
@@ -293,7 +294,13 @@ describe('PostHogTraceExporter AI span filtering', () => {
             ...redactedTools,
             'ai.response.providerMetadata': JSON.stringify({ gateway: { cost: '0.0012' } }),
           }
-        : { ...content, ...metadata, ...tools, 'ai.response.providerMetadata': providerMetadata }
+        : {
+            ...content,
+            ...metadata,
+            ...redactedTools,
+            ...unparseableTool,
+            'ai.response.providerMetadata': providerMetadata,
+          }
     )
     expect(exported[0].events).toEqual(
       privacyMode ? [{ ...exceptionEvent, attributes: { 'exception.type': 'AI_APICallError' } }] : events
