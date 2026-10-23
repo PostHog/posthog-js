@@ -2261,6 +2261,44 @@
       "path": "src/emails.ts"
     },
     {
+      "id": "EmailStatus",
+      "name": "EmailStatus",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "\"queued\" | \"waiting\" | \"unknown\" | \"skipped\" | \"failed\" | \"sent\" | \"delivered\" | \"bounced\" | \"complained\""
+    },
+    {
+      "id": "EmailStatusRecord",
+      "name": "EmailStatusRecord",
+      "properties": [
+        {
+          "description": "When PostHog queued the email, as an ISO 8601 timestamp.",
+          "type": "string",
+          "name": "createdAt"
+        },
+        {
+          "description": "The `id` that `posthog.emails.send()` returned.",
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "description": "Why the email was skipped, failed or bounced, when PostHog knows.",
+          "type": "string",
+          "name": "reason"
+        },
+        {
+          "type": "EmailStatus",
+          "name": "status"
+        },
+        {
+          "description": "When the email reached its status, as an ISO 8601 timestamp.",
+          "type": "string",
+          "name": "statusAt"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
       "id": "EmailTag",
       "name": "EmailTag",
       "properties": [
@@ -2788,6 +2826,13 @@
       "properties": [],
       "path": "src/types.ts",
       "example": "string | number | (string | number)[] | boolean"
+    },
+    {
+      "id": "GetEmailResult",
+      "name": "GetEmailResult",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "{\n    data: EmailStatusRecord;\n    error: null;\n} | {\n    data: null;\n    error: EmailError;\n}"
     },
     {
       "id": "GetFlagsResult",
