@@ -254,6 +254,8 @@ iframe.contentDocument.querySelector('center').clientHeight
           src: expect.stringMatching(/images\/robot.png$/),
           alt: 'This is a robot',
           rr_dataURL: expect.stringMatching(/^data:image\/webp;base64,/),
+          rr_naturalWidth: 76,
+          rr_naturalHeight: 96,
         },
       }),
     );

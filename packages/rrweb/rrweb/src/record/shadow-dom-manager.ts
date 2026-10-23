@@ -8,6 +8,7 @@ import {
   initMutationObserver,
   initScrollObserver,
   initAdoptedStyleSheetObserver,
+  initImageSizeObserver,
   mutationBuffers,
 } from './observer';
 import { callSafely, inDom } from '../utils';
@@ -90,6 +91,15 @@ export class ShadowDomManager {
         scrollCb: this.scrollCb,
         // https://gist.github.com/praveenpuglia/0832da687ed5a5d7a0907046c9ef1813
         // scroll is not allowed to pass the boundary, so we need to listen the shadow document
+        doc: shadowRoot as unknown as Document,
+        mirror: this.mirror,
+      }),
+    });
+    this.restoreHandlers.push({
+      doc: ownerDoc,
+      handler: initImageSizeObserver({
+        ...this.bypassOptions,
+        mutationCb: this.mutationCb,
         doc: shadowRoot as unknown as Document,
         mirror: this.mirror,
       }),
