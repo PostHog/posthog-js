@@ -18,8 +18,9 @@ export interface SendEmailBase {
    */
   distinctId?: string
   /**
-   * Sends with a key PostHog already accepted queue nothing and return the first send's `id`. Without it, the SDK
-   * makes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what
+   * Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's
+   * workflow was paused or the default sender changed. A deleted or changed template, or a project with no default
+   * sender, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what
    * the email is for, such as `welcome:user_42`, and set `maxRetries: 0`.
    */
   idempotencyKey?: string
