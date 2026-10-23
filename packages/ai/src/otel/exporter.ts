@@ -2,6 +2,7 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
 
 import { redactSpan } from './redact'
+import { stripContent } from './privacy'
 import { isAISpan } from './spans'
 import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
 
@@ -37,7 +38,12 @@ function normalizeHost(value?: unknown): string {
  * new PostHogTraceExporter({ projectToken: 'phc_...', host: 'https://eu.i.posthog.com' })
  * ```
  */
-export type PostHogTraceExporterOptions = { projectToken: string; host?: string }
+export type PostHogTraceExporterOptions = {
+  projectToken: string
+  host?: string
+  /** Drop prompts, outputs, tool arguments and results, and error messages from exported spans. Defaults to false. */
+  privacyMode?: boolean
+}
 
 /**
  * An OpenTelemetry `TraceExporter` that sends AI traces to PostHog's OTLP
@@ -72,6 +78,7 @@ export type PostHogTraceExporterOptions = { projectToken: string; host?: string 
  */
 export class PostHogTraceExporter extends OTLPTraceExporter {
   private readonly disabled: boolean
+  private readonly privacyMode: boolean
 
   constructor(options: PostHogTraceExporterOptions) {
     const token = normalizeToken(options.projectToken)
@@ -87,6 +94,7 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
     })
 
     this.disabled = disabled
+    this.privacyMode = options.privacyMode === true
     if (this.disabled) {
       console.warn('[PostHogTraceExporter] projectToken is missing or blank; the exporter will be disabled.')
     }
@@ -108,6 +116,7 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
     for (const span of aiSpans) {
       warnIfPostHogAiGatewayOtelAttributes(span.attributes)
     }
-    super.export(aiSpans.map(redactSpan), resultCallback)
+    const shareable = this.privacyMode ? aiSpans.map(stripContent) : aiSpans
+    super.export(shareable.map(redactSpan), resultCallback)
   }
 }

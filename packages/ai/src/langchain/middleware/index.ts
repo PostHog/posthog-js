@@ -7,7 +7,7 @@ import { createMiddleware } from 'langchain'
 import { v7 as uuidv7 } from 'uuid'
 import { z } from 'zod'
 import { isObject } from '../../typeGuards'
-import { toContentString } from '../../utils'
+import { isPrivacyModeEnabled, toContentString } from '../../utils'
 import { LangChainCallbackHandler, LangChainCallbackHandlerOptions } from '../callbacks'
 
 const postHogStateSchema = z.object({
@@ -43,7 +43,15 @@ const stringify = (value: unknown): string => {
   }
 }
 
-const toError = (error: unknown): Error => (error instanceof Error ? error : new Error(stringify(error)))
+const toError = (error: unknown, privacyMode: boolean): Error => {
+  if (error instanceof Error) {
+    return error
+  }
+  return privacyMode ? Object.assign(new Error(), { name: 'NonErrorThrown' }) : new Error(stringify(error))
+}
+
+const toolMessageError = (message: ToolMessage, privacyMode: boolean): Error =>
+  new Error(privacyMode ? 'Tool returned an error' : toContentString(message.content))
 
 const safely = (callback: () => void): void => {
   try {
@@ -147,6 +155,7 @@ export type PostHogLangChainMiddlewareOptions = LangChainCallbackHandlerOptions 
 export const createPostHogMiddleware = (options: PostHogLangChainMiddlewareOptions) => {
   const { stateSchema, ...callbackOptions } = options
   const callback = new LangChainMiddlewareCallbackHandler(callbackOptions)
+  const privacyMode = (): boolean => isPrivacyModeEnabled(callbackOptions.client, callbackOptions.privacyMode)
   const middlewareStateSchema = stateSchema
     ? extendInteropZodObject(stateSchema, postHogStateSchema.shape)
     : postHogStateSchema
@@ -208,7 +217,7 @@ export const createPostHogMiddleware = (options: PostHogLangChainMiddlewareOptio
         safely(() => callback.handleLLMEnd(toLLMResult(response), runId, parentRunId))
         return response
       } catch (error) {
-        safely(() => callback.handleLLMError(toError(error), runId))
+        safely(() => callback.handleLLMError(toError(error, privacyMode()), runId))
         throw error
       }
     },
@@ -239,13 +248,13 @@ export const createPostHogMiddleware = (options: PostHogLangChainMiddlewareOptio
       try {
         const result = await handler(request)
         if (ToolMessage.isInstance(result) && result.status === 'error') {
-          safely(() => callback.handleToolError(new Error(toContentString(result.content)), runId, parentRunId))
+          safely(() => callback.handleToolError(toolMessageError(result, privacyMode()), runId, parentRunId))
         } else {
           safely(() => callback.handleToolEnd(result, runId, parentRunId))
         }
         return result
       } catch (error) {
-        safely(() => callback.handleToolError(toError(error), runId))
+        safely(() => callback.handleToolError(toError(error, privacyMode()), runId))
         throw error
       }
     },

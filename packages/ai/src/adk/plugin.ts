@@ -4,11 +4,17 @@ import type { Content } from '@google/genai'
 import type { EventMessage, PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
 import { version } from '../../package.json'
-import { formatInlineDataBlock, formatResponseGemini, toContentString, withPrivacyMode } from '../utils'
+import {
+  formatInlineDataBlock,
+  formatResponseGemini,
+  isPrivacyModeEnabled,
+  toContentString,
+  withPrivacyMode,
+} from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import { captureAiGeneration } from '../captureAiGeneration'
 import { captureAiEvent, captureAiEventImmediate } from '../captureAiEvent'
-import { stringifyError } from '../serializeError'
+import { formatAiError } from '../serializeError'
 import type { FormattedContent, FormattedMessage } from '../types'
 import { mapGeminiUsage } from '../gemini/usage'
 
@@ -484,7 +490,12 @@ export class PostHogADKPlugin extends BasePlugin {
       $ai_latency: (Date.now() - pending.startTime) / 1000,
       ...(context.sessionId ? { $ai_session_id: context.sessionId } : {}),
       ...(context.agentName ? { $ai_agent_name: context.agentName } : {}),
-      ...(error ? { $ai_is_error: true, $ai_error: stringifyError(error) } : {}),
+      ...(error
+        ? {
+            $ai_is_error: true,
+            $ai_error: formatAiError(error, isPrivacyModeEnabled(this._client, this._privacyMode)),
+          }
+        : {}),
     })
   }
 

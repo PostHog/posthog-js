@@ -214,10 +214,13 @@ describe('AI capture lane wiring (Node SDK)', () => {
     expect(debugLog).toContain('custom_event')
   })
 
-  it('exposes enableFullAiCapture as a readonly field, default false', () => {
-    expect(harness.makeClient().enableFullAiCapture).toBe(false)
-    expect(harness.makeClient({ enableFullAiCapture: true }).enableFullAiCapture).toBe(true)
-  })
+  it.each(['enableFullAiCapture', 'privacyMode'] as const)(
+    'exposes %s as a readonly field, default false',
+    (option) => {
+      expect(harness.makeClient()[option]).toBe(false)
+      expect(harness.makeClient({ [option]: true })[option]).toBe(true)
+    }
+  )
 
   it('captureAi returns the event uuid and stamps it on the wire event', async () => {
     const posthog = harness.makeClient()
