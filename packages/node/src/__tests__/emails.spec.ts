@@ -341,6 +341,7 @@ describe('emails', () => {
     it.each([
       [400, 'invalid_recipient', 'validation_error'],
       [400, 'transactional_email_paused', 'validation_error'],
+      [400, 'invalid_request', 'validation_error'],
       [400, 'invalid_idempotency_key', 'validation_error'],
       [401, 'authentication_failed', 'missing_api_key'],
       [403, 'permission_denied', 'invalid_permission'],

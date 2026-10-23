@@ -158,7 +158,7 @@ export interface EmailError {
   statusCode?: number
   /** A link to the docs section that explains the fix. */
   docsUrl?: string
-  /** The request field the error is about. */
+  /** The request field the error is about, such as `cc` or `attachments__0__filename`. */
   field?: string
 }
 
