@@ -11,6 +11,7 @@ const arrayJs = fs.readFileSync(path.join(__dirname, '../../../dist/array.js'), 
 const arrayFullJs = fs.readFileSync(path.join(__dirname, '../../../dist/array.full.js'), 'utf-8')
 const arrayNoExternalJs = fs.readFileSync(path.join(__dirname, '../../../dist/array.no-external.js'), 'utf-8')
 const arrayFullNoExternalJs = fs.readFileSync(path.join(__dirname, '../../../dist/array.full.no-external.js'), 'utf-8')
+const arrayFullEs5Js = fs.readFileSync(path.join(__dirname, '../../../dist/array.full.es5.js'), 'utf-8')
 
 const moduleJs = fs.readFileSync(path.join(__dirname, '../../../dist/module.js'), 'utf-8')
 const moduleFullJs = fs.readFileSync(path.join(__dirname, '../../../dist/module.full.js'), 'utf-8')
@@ -19,6 +20,7 @@ const moduleFullNoExternalJs = fs.readFileSync(
     path.join(__dirname, '../../../dist/module.full.no-external.js'),
     'utf-8'
 )
+const moduleSlimJs = fs.readFileSync(path.join(__dirname, '../../../dist/module.slim.js'), 'utf-8')
 const moduleSlimDts = fs.readFileSync(path.join(__dirname, '../../../dist/module.slim.d.ts'), 'utf-8')
 const extensionBundlesDts = fs.readFileSync(path.join(__dirname, '../../../dist/extension-bundles.d.ts'), 'utf-8')
 const webVitalsSoftNavsJs = fs.readFileSync(path.join(__dirname, '../../../dist/web-vitals-soft-navs.js'), 'utf-8')
@@ -198,6 +200,37 @@ describe('Web vitals bundles', () => {
             })
             .map(({ builtin }) => builtin)
         expect(missing).toEqual([])
+    })
+})
+
+describe('uuidv7 polyfills', () => {
+    const es5Builtins = ['Math.trunc', 'Number.isInteger']
+    const assignsPolyfill = /\b(Math\.trunc|Number\.isInteger)\s*=(?!=)/
+
+    afterEach(() => {
+        document.querySelectorAll('iframe').forEach((iframe) => iframe.remove())
+    })
+
+    // Lighthouse reports these polyfills as "Legacy JavaScript", and every browser in the modern
+    // targets has both built-ins, so only the IE11 bundle should carry them
+    it.each([
+        ['array', arrayJs],
+        ['array.full', arrayFullJs],
+        ['module', moduleJs],
+        ['module.full', moduleFullJs],
+        ['module.slim', moduleSlimJs],
+    ])('%s does not polyfill Math.trunc or Number.isInteger', (_name, bundle) => {
+        expect(bundle.match(assignsPolyfill)?.[0]).toBeUndefined()
+    })
+
+    it('array.full.es5 installs Math.trunc and Number.isInteger for IE11', () => {
+        const { frameWindow } = evaluateBundle(arrayFullEs5Js, false, es5Builtins)
+
+        const frameMath = (frameWindow as unknown as { Math: Math }).Math
+        const frameNumber = (frameWindow as unknown as { Number: NumberConstructor }).Number
+        expect(frameMath.trunc(-1.5)).toBe(-1)
+        expect(frameNumber.isInteger(5)).toBe(true)
+        expect(frameNumber.isInteger(5.5)).toBe(false)
     })
 })
 
