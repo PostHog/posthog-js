@@ -144,6 +144,7 @@ const DEFAULT_OPTIONS = {
   collectFeedback: false,
   enableConversationId: true,
   captureModel: true,
+  captureInitialize: true,
 } satisfies Partial<MCPAnalyticsOptions>
 
 function buildTrackingData(

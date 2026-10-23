@@ -177,8 +177,8 @@ On fresh low-level instances, tools with an `outputSchema` deliver new handles t
 
 A valid echoed conversation handle takes precedence over transport sessions. A request that already carries a transport session or a PostHog session token does not mint a new handle or append a prompt-back block. Requests carrying neither use the conversation fallback.
 
-Intent, model capture, conversation correlation, and exception capture are enabled by default.
-Missing-capability reporting and feedback collection remain disabled.
+Intent, model capture, conversation correlation, exception capture, and `$mcp_initialize` are
+enabled by default. Missing-capability reporting and feedback collection remain disabled.
 
 ```ts
 instrument(server, posthog, { captureModel: false, enableConversationId: false })
@@ -192,6 +192,14 @@ handle to group later calls; calls without it mint new handles. Set `enableConve
 to retain transport-based session grouping and unchanged response content. Custom `PostHogMCP`
 dispatchers also enable model capture and conversation correlation by default.
 The reasoning behind these defaults is in [ADR-0013](./docs/adr/0013-analytics-capture-is-on-by-default.md).
+
+Set `captureInitialize: false` to stop sending `$mcp_initialize`. Many clients reconnect before
+every few tool calls, so this event can outnumber `$mcp_tool_call`. Nothing else changes: tool
+calls keep their sessions and client identity.
+
+```ts
+instrument(server, posthog, { captureInitialize: false })
+```
 
 ### Identifying the deployed server build
 
