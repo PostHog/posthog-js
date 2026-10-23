@@ -206,3 +206,17 @@ test('@posthog/browser npm gate rejects failed checks and incomplete S3 releases
     run({ ...base, IS_NEW_VERSION: 'false', UPLOAD_RESULT: 'skipped' }, true)
     run({ ...base, IS_NEW_VERSION: 'false', CHECK_RESULT: 'failure' }, false)
 })
+
+test('@posthog/browser publication reuses npm steps behind its S3 gate', () => {
+    const publish = job(release, 'publish-posthog-browser')
+    for (const gate of ['gate-posthog-js-publish', 'gate-posthog-browser-publish']) {
+        assert.ok(dependencies(publish).includes(gate))
+        assert.ok(publish.includes(`needs.${gate}.result == 'success'`))
+    }
+    assert.match(publish, /- name: '@posthog\/browser'/)
+    assert.match(publish, /steps: \*publish-package-steps/)
+    assert.doesNotMatch(job(release, 'publish'), /- name: '@posthog\/browser'/)
+    const notified = job(release, 'notify-released')
+    assert.ok(dependencies(notified).includes('publish-posthog-browser'))
+    assert.match(notified, /needs.publish-posthog-browser.result == 'success'/)
+})
