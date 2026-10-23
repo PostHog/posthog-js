@@ -1,4 +1,11 @@
-import { delay, waitForPromises, createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
+import {
+  delay,
+  waitForPromises,
+  createTestClient,
+  parseBody,
+  PostHogCoreTestClient,
+  PostHogCoreTestClientMocks,
+} from '@/testing'
 import { PostHogPersistedProperty } from '@/types'
 
 describe('PostHog Core', () => {
@@ -513,6 +520,22 @@ describe('PostHog Core', () => {
       await vi.advanceTimersByTimeAsync(1)
       await flushExpectation
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
+    })
+
+    it('stamps sent_at again on each retry and resends the same events', async () => {
+      mocks.fetch
+        .mockImplementationOnce(() => Promise.resolve({ status: 500, text: async () => 'err' }))
+        .mockImplementationOnce(() => Promise.resolve({ status: 200, text: async () => 'ok' }))
+      posthog.capture('test-event-1')
+
+      const flushPromise = posthog.flush()
+      await vi.advanceTimersByTimeAsync(100)
+      await flushPromise
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
+      const [first, retry] = mocks.fetch.mock.calls.map((call) => parseBody(call))
+      expect(Date.parse(retry.sent_at) - Date.parse(first.sent_at)).toBeGreaterThanOrEqual(100)
+      expect(retry.batch).toEqual(first.batch)
     })
 
     it('skips when client is disabled', async () => {
