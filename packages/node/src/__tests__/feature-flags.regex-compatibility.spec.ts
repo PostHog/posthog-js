@@ -235,6 +235,10 @@ describe('local regex compatibility', () => {
       expect(
         await posthog.getFeatureFlag('regex-variant', 'user', { personProperties, onlyEvaluateLocally: true })
       ).toBeUndefined()
+      const flags = await posthog.evaluateFlags('user', { personProperties, onlyEvaluateLocally: true })
+      expect(flags.unresolvedFlags['regex-variant']).toBe(
+        source === 'dependency' ? 'unresolved_dependency' : 'unsupported_definition'
+      )
       expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
       expect(await posthog.getFeatureFlag('regex-variant', 'user', { personProperties })).toBe('a')
       expect(mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')).toHaveLength(1)

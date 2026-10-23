@@ -706,7 +706,7 @@ class FeatureFlagsPoller {
     if (result !== undefined && !(regexError && [...deferredRegexValues].some((value) => value !== result))) {
       return result
     } else if (inconclusiveReason) {
-      // Had evaluation errors and no successful match - can't determine locally
+      // An unresolved condition can still change the selected value.
       throw preserveRegexUncertainty(
         new InconclusiveMatchError(
           "Can't determine if feature flag is enabled or not with given properties",
