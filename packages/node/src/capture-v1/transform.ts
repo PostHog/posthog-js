@@ -10,7 +10,7 @@ const LEGACY_OPTION_PROPERTIES: ReadonlyArray<{ property: string; optionKey: str
   { property: '$product_tour_id', optionKey: 'product_tour_id' },
 ]
 
-/** Sentinel property -> top-level string field (string-only, non-string dropped). */
+/** Property -> top-level string field; any value that is not a string is dropped. */
 const TOPLEVEL_SENTINELS: ReadonlyArray<{ property: string; field: 'session_id' | 'window_id' }> = [
   { property: '$session_id', field: 'session_id' },
   { property: '$window_id', field: 'window_id' },
@@ -18,6 +18,10 @@ const TOPLEVEL_SENTINELS: ReadonlyArray<{ property: string; field: 'session_id' 
 
 function isRecord(value: unknown): value is PostHogEventProperties {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function jsonTypeName(value: JsonType): string {
+  return Array.isArray(value) ? 'array' : typeof value
 }
 
 /**
@@ -103,12 +107,16 @@ export function buildV1Event(message: PostHogEventProperties): V1Event {
 
   const topLevel: { session_id?: string; window_id?: string } = {}
   for (const { property, field } of TOPLEVEL_SENTINELS) {
-    if (property in properties) {
-      const value = properties[property]
-      if (typeof value === 'string') {
-        topLevel[field] = value
-      }
-      delete properties[property]
+    if (!(property in properties)) {
+      continue
+    }
+    const value = properties[property]
+    delete properties[property]
+    if (typeof value === 'string') {
+      topLevel[field] = value
+    } else if (value !== undefined && value !== null) {
+      // console.warn, not the client logger: the logger only prints in debug mode, and the event loses this id.
+      console.warn(`[PostHog] dropping ${property}: a ${jsonTypeName(value)} value is not a string`)
     }
   }
 
