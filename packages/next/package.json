@@ -70,7 +70,7 @@
         "@posthog/core": "workspace:^",
         "@posthog/react": "workspace:^",
         "posthog-js": "workspace:^",
-        "posthog-node": "workspace:^",
+        "posthog-node": "^5.56.0",
         "server-only": "^0.0.1"
     },
     "devDependencies": {

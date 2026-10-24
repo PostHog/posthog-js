@@ -112,9 +112,9 @@ export class PostHogInterceptor implements NestInterceptor {
                   return throwError(() => exception)
                 }
                 const responseStatus = status ?? response?.statusCode
-                const additionalProperties: Record<string, any> | undefined =
+                const properties: Record<string, any> | undefined =
                   responseStatus !== undefined ? { $response_status_code: responseStatus } : undefined
-                this.posthog.captureException(exception, distinctId, additionalProperties)
+                this.posthog.captureException(exception, { distinctId, properties })
                 return throwError(() => exception)
               })
             )
