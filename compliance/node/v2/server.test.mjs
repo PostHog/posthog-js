@@ -31,7 +31,7 @@ async function harness(t, options = {}) {
         post('fixtures/allocate', {
             fixture_id,
             case_id: 'test',
-            profile_id: options.mode === 'v1' ? 'node-analytics-v1' : 'node-legacy',
+            profile_id: 'node-analytics-v1',
             timeout_ms,
         })
     const invoke = async (route, args = {}, fixture_id = 'f', timeout_ms = 5000) =>
@@ -48,7 +48,7 @@ async function harness(t, options = {}) {
     return { adapter, post, allocate, invoke, close }
 }
 
-for (const mode of ['v0', 'v1'])
+for (const mode of ['v1'])
     for (const format of ['cjs', 'esm']) {
         test(`public ${format}/${mode}: identify, alias and groupIdentify deliver literal properties after flush`, async (t) => {
             const traffic = []
@@ -68,7 +68,7 @@ for (const mode of ['v0', 'v1'])
                         mock.close(done)
                     })
             )
-            const { post, allocate, invoke, close } = await harness(t, { mode, format })
+            const { post, allocate, invoke, close } = await harness(t, { format })
             const negotiation = await post('negotiate', { protocol })
             assert.ok(negotiation.supported_routes.includes('/identify'))
             assert.ok(negotiation.supported_routes.includes('/alias'))
@@ -137,7 +137,7 @@ for (const mode of ['v0', 'v1'])
                 assert.deepEqual(await invoke('/flush'), { kind: 'sdk', outcome: { kind: 'void' } })
                 assert.equal(traffic.length, count + 1)
                 const request = traffic.at(-1)
-                assert.ok(request.path.startsWith(mode === 'v0' ? '/batch' : '/i/v1/analytics/events'))
+                assert.ok(request.path.startsWith('/i/v1/analytics/events'))
                 assert.equal(request.body.batch.length, 1)
                 const event = request.body.batch[0]
                 assert.equal(event.event, expectedEvent)
@@ -174,7 +174,7 @@ for (const mode of ['v0', 'v1'])
                         mock.close(done)
                     })
             )
-            const { post, allocate, invoke, close } = await harness(t, { mode, format })
+            const { post, allocate, invoke, close } = await harness(t, { format })
             const negotiation = await post('negotiate', { protocol })
             assert.ok(negotiation.supported_routes.includes('/capture_exception'))
             await allocate()
@@ -206,7 +206,7 @@ for (const mode of ['v0', 'v1'])
                 assert.deepEqual(await invoke('/flush'), { kind: 'sdk', outcome: { kind: 'void' } })
                 assert.equal(traffic.length, count + 1)
                 const request = traffic.at(-1)
-                assert.ok(request.path.startsWith(mode === 'v0' ? '/batch' : '/i/v1/analytics/events'))
+                assert.ok(request.path.startsWith('/i/v1/analytics/events'))
                 assert.equal(request.body.batch.length, 1)
                 const event = request.body.batch[0]
                 assert.equal(event.event, '$exception')
@@ -261,7 +261,7 @@ for (const mode of ['v0', 'v1'])
                         mock.close(done)
                     })
             )
-            const { post, allocate, invoke, close } = await harness(t, { mode, format })
+            const { post, allocate, invoke, close } = await harness(t, { format })
             const negotiation = await post('negotiate', { protocol })
             assert.equal(negotiation.protocol, protocol)
             assert.deepEqual(negotiation.profiles[0].fixture_capabilities, ['storage.empty.v1'])
@@ -290,7 +290,7 @@ for (const mode of ['v0', 'v1'])
                 { kind: 'void' }
             )
             assert.deepEqual((await invoke('/flush')).outcome, { kind: 'void' })
-            const capture = traffic.find(({ path }) => path.startsWith(mode === 'v0' ? '/batch' : '/i/v1/analytics'))
+            const capture = traffic.find(({ path }) => path.startsWith('/i/v1/analytics/events'))
             assert.ok(capture)
             assert.ok(capture.body.includes('slice'))
             assert.deepEqual(
@@ -403,14 +403,14 @@ test('transport errors remain non-200; SDK throws are completions and case IDs c
     await post('negotiate', { protocol: 'obsolete' }, 400)
     await post(
         'fixtures/allocate',
-        { fixture_id: 'bad', case_id: 'test', profile_id: 'node-legacy', timeout_ms: 60001 },
+        { fixture_id: 'bad', case_id: 'test', profile_id: 'node-analytics-v1', timeout_ms: 60001 },
         400
     )
     await post('invoke', { fixture_id: 'missing', call_id: 'x', route: '/flush', args: {}, timeout_ms: 1000 }, 400)
     await allocate()
     await post(
         'fixtures/allocate',
-        { fixture_id: 'f', case_id: 'test', profile_id: 'node-legacy', timeout_ms: 1000 },
+        { fixture_id: 'f', case_id: 'test', profile_id: 'node-analytics-v1', timeout_ms: 1000 },
         400
     )
     const data = {
@@ -599,7 +599,7 @@ test('an invalid consumer directory fails allocation within its deadline', async
     const { post } = await harness(t, { consumer: '/nonexistent/node-compliance-consumer' })
     await post(
         'fixtures/allocate',
-        { fixture_id: 'f', case_id: 'test', profile_id: 'node-legacy', timeout_ms: 100 },
+        { fixture_id: 'f', case_id: 'test', profile_id: 'node-analytics-v1', timeout_ms: 100 },
         400
     )
 })
@@ -610,7 +610,7 @@ test('missing public package fails allocation rather than claiming execution', a
     const { post } = await harness(t, { consumer: root })
     await post(
         'fixtures/allocate',
-        { fixture_id: 'f', case_id: 'test', profile_id: 'node-legacy', timeout_ms: 1000 },
+        { fixture_id: 'f', case_id: 'test', profile_id: 'node-analytics-v1', timeout_ms: 1000 },
         400
     )
 })

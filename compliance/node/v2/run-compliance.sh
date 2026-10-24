@@ -9,21 +9,16 @@ run_docker() { node "$script_dir/run-command.mjs" "$1" docker "${@:2}"; }
 docker() { run_docker "$command_timeout" "$@"; }
 adapter_image=${1:?adapter image required}
 harness_image=${2:?harness image required}
-mode=${3:?v0 or v1 required}
-reports=${4:?new absolute report directory required}
-suite=${5:-migration}
+reports=${3:?new absolute report directory required}
+suite=${4:-migration}
 case "$suite" in
     migration|acceptance) ;;
     *) echo 'Unknown compliance suite' >&2; exit 2 ;;
 esac
-case "$mode" in
-    v0) profile=node-legacy ;;
-    v1) profile=node-analytics-v1 ;;
-    *) echo 'Unknown capture mode' >&2; exit 2 ;;
-esac
+profile=node-analytics-v1
 [[ "$reports" = /* ]] || { echo 'Absolute report directory required' >&2; exit 2; }
 mkdir "$reports"
-network="node-v2-${mode}-$$"
+network="node-v2-$$"
 adapter="${network}-adapter"
 harness="${network}-harness"
 check="${network}-check"
@@ -57,7 +52,7 @@ trap 'exit 143' TERM
 docker network create --internal "$network" > "$reports/network.txt"
 network_created=true
 docker create --name "$adapter" --network "$network" --network-alias adapter \
-    -e HOST=0.0.0.0 -e PORT=8080 -e "POSTHOG_CAPTURE_MODE=$mode" "$adapter_image" > "$reports/adapter.txt"
+    -e HOST=0.0.0.0 -e PORT=8080 "$adapter_image" > "$reports/adapter.txt"
 adapter_created=true
 docker start "$adapter" > /dev/null
 ready=false
