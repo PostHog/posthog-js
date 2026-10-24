@@ -254,7 +254,7 @@
               "name": "distinctId"
             },
             {
-              "description": "Optional additional properties to include",
+              "description": "Optional additional properties to include. Exception properties the SDK or PostHog owns, such as `$exception_list` and `$exception_level`, are ignored.",
               "isOptional": true,
               "type": "Record<string | number, any>",
               "name": "additionalProperties"
@@ -312,7 +312,7 @@
               "name": "distinctId"
             },
             {
-              "description": "Optional additional properties to include",
+              "description": "Optional additional properties to include. Exception properties the SDK or PostHog owns, such as `$exception_list` and `$exception_level`, are ignored.",
               "isOptional": true,
               "type": "Record<string | number, any>",
               "name": "additionalProperties"
@@ -464,7 +464,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Context data to apply (distinctId, sessionId, properties)",
+              "description": "Context data to apply (distinctId, sessionId, properties, options)",
               "isOptional": false,
               "type": "Partial<ContextData>",
               "name": "data"
@@ -1259,6 +1259,64 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
+          "category": "Capture",
+          "description": "Register properties that every event sent by this client carries.",
+          "details": "Each event fills the keys it left unset in this order: the event's own values, then context properties, then these, then the values the SDK adds (such as `$is_server` and `$geoip_disable`). `before_send` sees the result and can change it.",
+          "id": "register",
+          "showDocs": true,
+          "title": "register",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nawait client.register({ service: 'billing' })\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The properties to add to every event",
+              "isOptional": false,
+              "type": "PostHogEventProperties",
+              "name": "properties"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Capture",
+          "description": "Register options that every event sent by this client carries.",
+          "details": "Each event fills the options it left unset (missing or `null`) in this order: the event's own `options`, then context options, then these, then the options the SDK adds (such as `process_person_profile: false` for an event with no distinct id). `before_send` sees the result and can change it. Values are sent to capture unchanged. An option beats its legacy property, such as `$process_person_profile`, wherever either one was set.",
+          "id": "registerOptions",
+          "showDocs": true,
+          "title": "registerOptions",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nclient.registerOptions({ cookieless_mode: true })\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The options to add to every event",
+              "isOptional": false,
+              "type": "Record<string, JsonType>",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
           "category": "Feature flags",
           "description": "Reload feature flag definitions from the configured cache provider or PostHog for local evaluation.",
           "details": null,
@@ -1396,6 +1454,64 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
+          "category": "Capture",
+          "description": "Remove a property added with `register()`.",
+          "details": null,
+          "id": "unregister",
+          "showDocs": true,
+          "title": "unregister",
+          "examples": [
+            {
+              "id": "unregister",
+              "name": "Generated example for unregister",
+              "code": "// Generated example for unregister\nposthog.unregister();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The property name to remove",
+              "isOptional": false,
+              "type": "string",
+              "name": "property"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Capture",
+          "description": "Remove an option added with `registerOptions()`.",
+          "details": null,
+          "id": "unregisterOptions",
+          "showDocs": true,
+          "title": "unregisterOptions",
+          "examples": [
+            {
+              "id": "unregisteroptions",
+              "name": "Generated example for unregisterOptions",
+              "code": "// Generated example for unregisterOptions\nposthog.unregisterOptions();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The option name to remove",
+              "isOptional": false,
+              "type": "string",
+              "name": "key"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
           "category": "Identification",
           "description": "Remove properties from a person profile.",
           "details": null,
@@ -1467,7 +1583,7 @@
         {
           "category": "Context",
           "description": "Run a function with specific context that will be applied to all events captured within that context. It propagates the context to all subsequent calls down the call stack. Context properties like tags and sessionId will be automatically attached to all events. By default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.",
-          "details": null,
+          "details": "Context `properties` and `options` fill only what an event left unset: the event's own values win, and context values beat `register()` and `registerOptions()` values and the values the SDK adds. `before_send` sees the result and can change it.",
           "id": "withContext",
           "showDocs": true,
           "title": "withContext",
@@ -1481,7 +1597,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)",
+              "description": "Context data to apply (sessionId, distinctId, properties, options)",
               "isOptional": false,
               "type": "Partial<ContextData>",
               "name": "data"
@@ -1673,34 +1789,6 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
-          "category": "",
-          "details": null,
-          "id": "register",
-          "showDocs": true,
-          "title": "register",
-          "examples": [
-            {
-              "id": "register",
-              "name": "Generated example for register",
-              "code": "// Generated example for register\nposthog.register();"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [
-            {
-              "description": "",
-              "isOptional": false,
-              "type": "PostHogEventProperties",
-              "name": "properties"
-            }
-          ],
-          "returnType": {
-            "id": "Promise<void>",
-            "name": "Promise<void>"
-          },
-          "path": "src/entrypoints/index.node.ts"
-        },
-        {
           "category": "Initialization",
           "description": "Shuts down the PostHog instance and ensures all events are sent.\nCall shutdown() once before the process exits to ensure that all events have been sent and all promises have resolved. Do not use this function if you intend to keep using this PostHog instance after calling it. Use flush() for per-request cleanup instead.",
           "details": null,
@@ -1721,34 +1809,6 @@
               "isOptional": true,
               "type": "number",
               "name": "shutdownTimeoutMs"
-            }
-          ],
-          "returnType": {
-            "id": "Promise<void>",
-            "name": "Promise<void>"
-          },
-          "path": "src/entrypoints/index.node.ts"
-        },
-        {
-          "category": "",
-          "details": null,
-          "id": "unregister",
-          "showDocs": true,
-          "title": "unregister",
-          "examples": [
-            {
-              "id": "unregister",
-              "name": "Generated example for unregister",
-              "code": "// Generated example for unregister\nposthog.unregister();"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [
-            {
-              "description": "",
-              "isOptional": false,
-              "type": "string",
-              "name": "property"
             }
           ],
           "returnType": {
@@ -2154,6 +2214,12 @@
           "name": "distinctId"
         },
         {
+          "description": "Options that fill the options an event left unset (missing or `null`). The event's own options win; these beat options from `registerOptions()`.",
+          "type": "Record<string, JsonType>",
+          "name": "options"
+        },
+        {
+          "description": "Properties that fill the keys an event left unset. The event's own values win.",
           "type": "Record<string, any>",
           "name": "properties"
         },
@@ -2274,6 +2340,7 @@
           "name": "options"
         },
         {
+          "description": "The event's distinct id. When it is missing, empty or only whitespace, the context distinct id\nis used; without one, the event gets a generated id and `options.process_person_profile: false`.",
           "type": "string",
           "name": "distinctId"
         },
@@ -2713,6 +2780,7 @@
           "name": "properties"
         },
         {
+          "description": "The event's distinct id. When it is missing, empty or only whitespace, the context distinct id\nis used, then `$<groupType>_<groupKey>`.",
           "type": "string",
           "name": "distinctId"
         },
@@ -3653,11 +3721,6 @@
       "name": "PostHogOptions",
       "properties": [
         {
-          "description": "Whether to disable GeoIP lookups",
-          "type": "boolean",
-          "name": "disableGeoip"
-        },
-        {
           "description": "PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com'",
           "type": "string",
           "name": "host"
@@ -3767,6 +3830,11 @@
         {
           "type": "\"memory\"",
           "name": "persistence"
+        },
+        {
+          "description": "Whether to disable GeoIP lookups for events and feature flag requests. When on, every event\ngets `$geoip_disable: true` unless the event, its context or `register()` sets\n`$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's\nown `$geoip_disable` property.",
+          "type": "boolean",
+          "name": "disableGeoip"
         },
         {
           "description": "The interval in milliseconds between periodic flushes",
