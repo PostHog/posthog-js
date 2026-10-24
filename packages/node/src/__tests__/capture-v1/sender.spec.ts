@@ -882,6 +882,41 @@ describe('V1CaptureSender', () => {
       expect(headers['PostHog-Request-Timestamp']).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
     })
 
+    it('cancels the backoff timer when aborted', async () => {
+      const fetch = vi.fn<[string, any], Promise<PostHogFetchResponse>>().mockResolvedValue(makeResponse(503))
+      const controller = new AbortController()
+      const sender = new V1CaptureSender({ ...baseConfig, initialRetryDelayMs: 10_000 }, { fetch, onError: () => {} })
+
+      const done = sender.send(v1Events([msg('u1')]), { signal: controller.signal })
+      await vi.advanceTimersByTimeAsync(0)
+      controller.abort()
+      await done
+
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('removes every abort listener it adds to a long-lived signal', async () => {
+      const fetch = vi
+        .fn<[string, any], Promise<PostHogFetchResponse>>()
+        .mockResolvedValueOnce(makeResponse(503))
+        .mockResolvedValueOnce(makeResponse(200, { results: {} }))
+      const { signal } = new AbortController()
+      const added = vi.spyOn(signal, 'addEventListener')
+      const removed = vi.spyOn(signal, 'removeEventListener')
+      const sender = new V1CaptureSender(baseConfig, { fetch, onError: () => {} })
+
+      const done = sender.send(v1Events([msg('u1')]), { signal })
+      await vi.advanceTimersByTimeAsync(baseConfig.initialRetryDelayMs)
+      await done
+
+      expect(fetch).toHaveBeenCalledTimes(2)
+      const removedListeners = new Set(removed.mock.calls.map(([, listener]) => listener))
+      const leaked = added.mock.calls.filter(([, listener]) => !removedListeners.has(listener))
+      expect(added.mock.calls.length).toBeGreaterThan(0)
+      expect(leaked).toEqual([])
+    })
+
     it('uses the real gzip compressor when not injected', async () => {
       const fetch = vi
         .fn<[string, any], Promise<PostHogFetchResponse>>()
