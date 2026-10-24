@@ -2,7 +2,7 @@ import type { JsonType } from '@posthog/core'
 
 import { EventMessage, PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { FeatureFlagEvaluations } from '@/feature-flag-evaluations'
-import { ANALYTICS_CAPTURE_PATH, apiImplementationV4, captureEvents } from '../utils'
+import { AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, apiImplementationV4, captureEvents } from '../utils'
 import { V1WiringHarness } from '../utils/v1-wiring'
 
 const { TRACE_ID, SPAN_ID } = vi.hoisted(() => ({
@@ -23,6 +23,8 @@ type Layers = {
 type Source = keyof Layers
 
 const SOURCES: Source[] = ['event', 'context', 'global']
+
+const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 /** What `before_send` received, copied so later changes cannot alter it. */
 type HookView = { event: string; properties: Record<string, any>; options?: Record<string, JsonType> }
@@ -520,6 +522,156 @@ describe('layered event values', () => {
 
         expect(event.options).toStrictEqual({ a: 1 })
       })
+    })
+  })
+
+  describe('identity', () => {
+    /** Sends one event from `send`, inside a context when `context` is given. */
+    const sendInContext = (
+      send: (client: PostHog) => unknown,
+      context?: { distinctId?: string; sessionId?: string; properties?: Record<string, JsonType> }
+    ): Promise<any> => sendOne((client) => (context ? client.withContext(context, () => send(client)) : send(client)))
+
+    const BLANK_IDS: [string, string | undefined][] = [
+      ['missing', undefined],
+      ['empty', ''],
+      ['whitespace', ' \t '],
+    ]
+
+    it.each(BLANK_IDS)('a %s distinct id takes the context id', async (_label, distinctId) => {
+      const event = await sendInContext((client) => client.capture({ distinctId, event: 'e' }), { distinctId: 'ctx' })
+
+      expect(event.distinct_id).toBe('ctx')
+      expect(event.options).toStrictEqual({})
+    })
+
+    it.each(BLANK_IDS)('a %s distinct id with no context id becomes a personless v7 id', async (_label, distinctId) => {
+      const event = await sendInContext((client) => client.capture({ distinctId, event: 'e' }), { distinctId: '  ' })
+
+      expect(event.distinct_id).toMatch(UUID_V7)
+      expect(event.options).toStrictEqual({ process_person_profile: false })
+    })
+
+    it("the caller's process_person_profile beats the personless option", async () => {
+      const event = await sendInContext((client) =>
+        client.capture({ event: 'e', options: { process_person_profile: true } })
+      )
+
+      expect(event.distinct_id).toMatch(UUID_V7)
+      expect(event.options).toStrictEqual({ process_person_profile: true })
+    })
+
+    it.each<[string, Record<string, JsonType>, string | undefined]>([
+      ['fills an unset $session_id', {}, 'ctx-session'],
+      ["loses to the event's own $session_id", { $session_id: 'event-session' }, 'event-session'],
+      ['loses to a null $session_id', { $session_id: null }, undefined],
+    ])('the context session %s', async (_label, properties, expected) => {
+      const event = await sendInContext((client) => client.capture({ distinctId: 'u', event: 'e', properties }), {
+        sessionId: 'ctx-session',
+      })
+
+      expect(event.session_id).toBe(expected)
+    })
+
+    describe('groupIdentify', () => {
+      it.each<[string, string | undefined, string | undefined, string]>([
+        ["uses the caller's id", 'caller', 'ctx', 'caller'],
+        ['uses the context id when the caller gives a blank one', '  ', 'ctx', 'ctx'],
+        ['falls back to $<type>_<key>', undefined, undefined, '$company_acme'],
+      ])('%s', async (_label, distinctId, contextId, expected) => {
+        const event = await sendInContext(
+          (client) => client.groupIdentify({ groupType: 'company', groupKey: 'acme', distinctId }),
+          { distinctId: contextId, sessionId: 'ctx-session' }
+        )
+
+        expect(event.distinct_id).toBe(expected)
+        expect(event.options).toStrictEqual({})
+        expect(event).not.toHaveProperty('session_id')
+      })
+    })
+
+    describe('alias', () => {
+      it('never takes its target from context or register()', async () => {
+        const event = await sendOne(async (client) => {
+          await client.register({ alias: 'global-target' })
+          client.withContext({ properties: { alias: 'context-target' } }, () =>
+            client.alias({ distinctId: 'u', alias: undefined as unknown as string })
+          )
+        })
+
+        expect(event.properties).not.toHaveProperty('alias')
+      })
+
+      it('takes its own distinct id from context and reports it in properties', async () => {
+        const event = await sendInContext((client) => client.alias({ distinctId: '', alias: 'anon' }), {
+          distinctId: 'ctx',
+          sessionId: 'ctx-session',
+        })
+
+        expect(event.distinct_id).toBe('ctx')
+        expect(event.properties).toMatchObject({ distinct_id: 'ctx', alias: 'anon' })
+        expect(event.session_id).toBe('ctx-session')
+      })
+    })
+
+    describe('identify', () => {
+      it('puts context properties in the event properties, not in $set, and sends no empty $set_once', async () => {
+        const event = await sendInContext(
+          (client) => client.identify({ distinctId: 'u', properties: { plan: 'pro' } }),
+          { properties: { region: 'eu' } }
+        )
+
+        expect(event.properties.$set).toStrictEqual({ plan: 'pro' })
+        expect(event.properties.region).toBe('eu')
+        expect(event.properties).not.toHaveProperty('$set_once')
+      })
+
+      it('sends only $set and $set_once when the caller gives $set', async () => {
+        const event = await sendInContext((client) =>
+          client.identify({ distinctId: 'u', properties: { $set: { a: 1 }, $set_once: { b: 2 }, other: 3 } })
+        )
+
+        expect(event.properties).toMatchObject({ $set: { a: 1 }, $set_once: { b: 2 } })
+        expect(event.properties).not.toHaveProperty('other')
+      })
+    })
+  })
+
+  describe('layers reach every message type', () => {
+    it.each<[string, (client: PostHog) => unknown, string]>([
+      ['capture', (c) => c.capture({ distinctId: 'u', event: 'e' }), ANALYTICS_CAPTURE_PATH],
+      ['captureAi', (c) => c.captureAi({ distinctId: 'u', event: '$ai_span' }), AI_CAPTURE_PATH],
+      ['captureException', (c) => c.captureException(new Error('boom'), 'u'), ANALYTICS_CAPTURE_PATH],
+      ['identify', (c) => c.identify({ distinctId: 'u', properties: { a: 1 } }), ANALYTICS_CAPTURE_PATH],
+      ['identifyImmediate', (c) => c.identifyImmediate({ distinctId: 'u' }), ANALYTICS_CAPTURE_PATH],
+      ['alias', (c) => c.alias({ distinctId: 'u', alias: 'anon' }), ANALYTICS_CAPTURE_PATH],
+      ['aliasImmediate', (c) => c.aliasImmediate({ distinctId: 'u', alias: 'anon' }), ANALYTICS_CAPTURE_PATH],
+      ['groupIdentify', (c) => c.groupIdentify({ groupType: 'company', groupKey: 'acme' }), ANALYTICS_CAPTURE_PATH],
+      [
+        'setPersonProperties',
+        (c) => c.setPersonProperties({ distinctId: 'u', properties: { a: 1 } }),
+        ANALYTICS_CAPTURE_PATH,
+      ],
+      [
+        'unsetPersonProperties',
+        (c) => c.unsetPersonProperties({ distinctId: 'u', properties: ['a'] }),
+        ANALYTICS_CAPTURE_PATH,
+      ],
+    ])('%s', async (_method, send, path) => {
+      const event = await sendOne(
+        async (client) => {
+          await client.register({ global_prop: 'g' })
+          client.registerOptions({ global_option: 'g' })
+          return client.withContext({ properties: { context_prop: 'c' }, options: { context_option: 'c' } }, () =>
+            send(client)
+          )
+        },
+        undefined,
+        path
+      )
+
+      expect(event.properties).toMatchObject({ global_prop: 'g', context_prop: 'c', $is_server: true })
+      expect(event.options).toMatchObject({ global_option: 'g', context_option: 'c' })
     })
   })
 })

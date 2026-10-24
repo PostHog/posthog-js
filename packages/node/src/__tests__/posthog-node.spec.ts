@@ -1000,6 +1000,7 @@ describe('PostHog Node.js', () => {
           await waitForFlushTimer()
         },
         '$identify',
+        'session-123',
       ],
       [
         'groupIdentify',
@@ -1008,6 +1009,7 @@ describe('PostHog Node.js', () => {
           await waitForFlushTimer()
         },
         '$groupidentify',
+        undefined,
       ],
       [
         'alias',
@@ -1016,10 +1018,11 @@ describe('PostHog Node.js', () => {
           await waitForFlushTimer()
         },
         '$create_alias',
+        'session-123',
       ],
-    ] as Array<[string, (ph: PostHog) => Promise<void>, string]>)(
-      'should not add registered or context properties to %s',
-      async (_, send, expectedEvent) => {
+    ] as Array<[string, (ph: PostHog) => Promise<void>, string, string | undefined]>)(
+      'should add registered and context properties to %s',
+      async (_, send, expectedEvent, expectedSessionId) => {
         const ph = new PostHog('TEST_API_KEY', {
           host: 'http://example.com',
           fetchRetryCount: 0,
@@ -1034,9 +1037,11 @@ describe('PostHog Node.js', () => {
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents![0]).toMatchObject({ event: expectedEvent })
-        expect(batchEvents![0].properties).not.toHaveProperty('registered_prop')
-        expect(batchEvents![0].properties).not.toHaveProperty('context_prop')
-        expect(batchEvents![0].properties).not.toHaveProperty('$session_id')
+        expect(batchEvents![0].properties).toMatchObject({
+          registered_prop: 'registered_value',
+          context_prop: 'context_value',
+        })
+        expect(batchEvents![0].properties.$session_id).toBe(expectedSessionId)
       }
     )
 
