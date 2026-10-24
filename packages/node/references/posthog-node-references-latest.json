@@ -1993,6 +1993,26 @@
       "example": "(event: EventMessage) => EventMessage | null"
     },
     {
+      "id": "CaptureCodec",
+      "name": "CaptureCodec",
+      "properties": [],
+      "path": "src/capture-v1/compression.ts",
+      "example": "Exclude<CaptureCompression, 'none'>"
+    },
+    {
+      "id": "CaptureCompression",
+      "name": "CaptureCompression",
+      "properties": [],
+      "path": "src/capture-v1/compression.ts",
+      "example": "(typeof CAPTURE_COMPRESSIONS)[number]"
+    },
+    {
+      "id": "CaptureCompressor",
+      "name": "CaptureCompressor",
+      "properties": [],
+      "path": "src/capture-v1/compression.ts"
+    },
+    {
       "id": "CaptureDroppedEvent",
       "name": "CaptureDroppedEvent",
       "properties": [
@@ -3680,21 +3700,6 @@
           "name": "bootstrap"
         },
         {
-          "description": "How many times we will retry HTTP requests",
-          "type": "number",
-          "name": "fetchRetryCount"
-        },
-        {
-          "description": "The delay between HTTP request retries in milliseconds",
-          "type": "number",
-          "name": "fetchRetryDelay"
-        },
-        {
-          "description": "Timeout in milliseconds for any calls",
-          "type": "number",
-          "name": "requestTimeout"
-        },
-        {
           "description": "Timeout in milliseconds for feature flag calls",
           "type": "number",
           "name": "featureFlagsRequestTimeoutMs"
@@ -3713,11 +3718,6 @@
           "description": "For Session Analysis how long before we expire a session in seconds",
           "type": "number",
           "name": "sessionExpirationTimeSeconds"
-        },
-        {
-          "description": "Whether to disable GZIP compression",
-          "type": "boolean",
-          "name": "disableCompression"
         },
         {
           "description": "Special flag to indicate ingested data is for a historical migration",
@@ -3755,9 +3755,54 @@
           "name": "flushInterval"
         },
         {
-          "description": "The maximum number of analytics events held in memory waiting to be sent (must be higher than `flushAt`).\nWhen the queue is full, the oldest event is dropped and reported through the `'error'` event.\n`captureAi` events have their own queue and do not count toward this limit.",
+          "description": "The maximum number of analytics events held in memory waiting to be sent (must be higher than `flushAt`).\nWhen the queue is full, the oldest event is dropped and reported through the `'error'` event.\n`captureAi` events have their own queue, sized by `captureAiMaxQueueSize`, and do not count toward this limit.",
           "type": "number",
           "name": "maxQueueSize"
+        },
+        {
+          "description": "How many times a capture request is retried after its first attempt, on both capture lanes.\nWaits start at 100 ms and double each retry, with jitter, up to 30 seconds; a `Retry-After`\nheader can raise a wait. Only HTTP 408, 500, 502, 503 and 504 and network errors are retried.\nWhen not set, `fetchRetryCount` is used.",
+          "type": "number",
+          "name": "captureMaxRetries"
+        },
+        {
+          "description": "How many times HTTP requests are retried. Capture requests use `captureMaxRetries` when it is set.",
+          "type": "number",
+          "name": "fetchRetryCount"
+        },
+        {
+          "description": "The delay between HTTP request retries in milliseconds. Capture requests do not use it:\nsee `captureMaxRetries` for their retry waits.",
+          "type": "number",
+          "name": "fetchRetryDelay"
+        },
+        {
+          "description": "How analytics capture requests compress their body. `'deflate'` is zlib-wrapped. `'zstd'` needs\nNode 22.15 or later and falls back to `'gzip'` elsewhere, including the edge build. When not set,\n`disableCompression: true` means `'none'`.",
+          "type": "\"none\" | \"gzip\" | \"deflate\" | \"zstd\"",
+          "name": "captureCompression"
+        },
+        {
+          "description": "How `captureAi` requests compress their body, with the same values as `captureCompression`.\nIt does not read `captureCompression` or `disableCompression`.",
+          "type": "\"none\" | \"gzip\" | \"deflate\" | \"zstd\"",
+          "name": "captureAiCompression"
+        },
+        {
+          "description": "Timeout in milliseconds for any calls. `captureAi` requests use `captureAiRequestTimeoutMs`.",
+          "type": "number",
+          "name": "requestTimeout"
+        },
+        {
+          "description": "The maximum number of `captureAi` events held in memory waiting to be sent. When the queue is\nfull, the oldest AI event is dropped and reported through the `'error'` event.",
+          "type": "number",
+          "name": "captureAiMaxQueueSize"
+        },
+        {
+          "description": "Timeout in milliseconds for each `captureAi` request. Analytics capture requests use `requestTimeout`.",
+          "type": "number",
+          "name": "captureAiRequestTimeoutMs"
+        },
+        {
+          "description": "Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it\nis set, and `captureAi` requests use `captureAiCompression`.",
+          "type": "boolean",
+          "name": "disableCompression"
         },
         {
           "description": "Configuration for the `posthog.metrics` API (count, gauge, histogram).\nSet `serviceName` so series can be filtered per service in the Metrics UI.",
