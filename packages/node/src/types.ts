@@ -166,7 +166,10 @@ export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
 
 export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 
-export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
+export type PostHogOptions = Omit<
+  PostHogCoreOptions,
+  'before_send' | 'flushInterval' | 'maxQueueSize' | 'fetchRetryCount' | 'fetchRetryDelay'
+> & {
   persistence?: 'memory'
   /**
    * The interval in milliseconds between periodic flushes
@@ -182,6 +185,28 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * @default 10000
    */
   maxQueueSize?: number
+  /**
+   * How many times a capture request is retried after its first attempt, on both capture lanes.
+   * Waits start at 100 ms and double each retry, with jitter, up to 30 seconds; a `Retry-After`
+   * header can raise a wait. Only HTTP 408, 500, 502, 503 and 504 and network errors are retried.
+   * When not set, `fetchRetryCount` is used.
+   *
+   * @default 3
+   */
+  captureMaxRetries?: number
+  /**
+   * How many times HTTP requests are retried. Capture requests use `captureMaxRetries` when it is set.
+   *
+   * @default 3
+   */
+  fetchRetryCount?: number
+  /**
+   * The delay between HTTP request retries in milliseconds. Capture requests do not use it:
+   * see `captureMaxRetries` for their retry waits.
+   *
+   * @default 3000
+   */
+  fetchRetryDelay?: number
   /**
    * Configuration for the `posthog.metrics` API (count, gauge, histogram).
    * Set `serviceName` so series can be filtered per service in the Metrics UI.

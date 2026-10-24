@@ -80,6 +80,7 @@ import {
   ANALYTICS_MAX_EVENT_BYTES,
   CAPTURE_BATCH_TARGET_BYTES,
 } from './capture-lane/limits'
+import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -168,6 +169,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   // Created on first use, so a client that never calls captureAi has no AI lane.
   private readonly _captureLanes = new Map<CaptureEndpoint, CaptureLane>()
+  private readonly _captureSettings: CaptureSettings
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
   /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
@@ -255,6 +257,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     this.options = normalizedOptions
     this.warnIfCaptureModeSet()
+    // console.error, not this._logger: the logger only prints in debug mode, and a bad option changes delivery.
+    this._captureSettings = resolveCaptureSettings(normalizedOptions, (message) =>
+      console.error(`[PostHog] ${message}`)
+    )
     this.enableFullAiCapture = normalizedOptions.enableFullAiCapture === true
     this.privacyMode = normalizedOptions.privacyMode === true
     this.context = this.initializeContext()
@@ -626,9 +632,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       historicalMigration: this.historicalMigration,
       compressionEnabled: !this.disableCompression,
       requestTimeoutMs: this.requestTimeout,
-      // 1 initial attempt + fetchRetryCount retries.
-      maxAttempts: (this.options.fetchRetryCount ?? 3) + 1,
-      initialRetryDelayMs: this.options.fetchRetryDelay ?? 3000,
+      maxRetries: this._captureSettings.maxRetries,
       isDebug: this.isDebug,
     }
   }

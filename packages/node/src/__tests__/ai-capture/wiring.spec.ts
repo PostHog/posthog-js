@@ -158,7 +158,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
   })
 
   it('treats a 413 as terminal: one request, a CaptureError naming the AI lane, no bisection', async () => {
-    const posthog = harness.makeClient({ fetchRetryCount: 3, fetchRetryDelay: 1 })
+    const posthog = harness.makeClient({ captureMaxRetries: 3 })
     const onError = vi.fn()
     posthog.on('error', onError)
     harness.fetch.mockImplementation((url: any) =>

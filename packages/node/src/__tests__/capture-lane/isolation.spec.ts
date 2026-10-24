@@ -133,7 +133,7 @@ describe('capture lane isolation (Node SDK)', () => {
 
   it('drains both lanes concurrently on shutdown and stops retrying at the deadline', async () => {
     harness.fetch.mockImplementation(() => Promise.resolve(errorResponse(503)))
-    const posthog = harness.makeClient({ fetchRetryCount: 5, fetchRetryDelay: 1000, flushAt: 100 })
+    const posthog = harness.makeClient({ captureMaxRetries: 5, flushAt: 100 })
     const errors: CaptureError[] = []
     posthog.on('error', (error) => errors.push(error))
     posthog.capture({ distinctId: 'u', event: 'custom', properties: {}, uuid: ANALYTICS_UUID })
@@ -141,13 +141,14 @@ describe('capture lane isolation (Node SDK)', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     let finished = false
-    const shutdown = posthog.shutdown(1500).then(() => (finished = true))
+    // With jitter the first retry waits 75-125 ms and the second starts 225-375 ms in, so exactly one retry fits.
+    const shutdown = posthog.shutdown(200).then(() => (finished = true))
     await vi.advanceTimersByTimeAsync(0)
     // Both first attempts go out before either lane's backoff elapses.
     expect(harness.callsTo(ANALYTICS_CAPTURE_PATH)).toHaveLength(1)
     expect(harness.callsTo(AI_CAPTURE_PATH)).toHaveLength(1)
 
-    await vi.advanceTimersByTimeAsync(1499)
+    await vi.advanceTimersByTimeAsync(199)
     expect(finished).toBe(false)
     await vi.advanceTimersByTimeAsync(1)
     await shutdown
@@ -194,12 +195,13 @@ describe('capture lane isolation (Node SDK)', () => {
     harness.fetch.mockImplementation((url: any) =>
       Promise.resolve(String(url).includes(AI_CAPTURE_PATH) ? errorResponse(500) : routeByUrl(url))
     )
-    const posthog = harness.makeClient({ fetchRetryCount: 1, fetchRetryDelay: 1 })
+    const posthog = harness.makeClient({ captureMaxRetries: 1 })
     const errors: CaptureError[] = []
     posthog.on('error', (error) => errors.push(error))
     const uuid = posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: {} })
     const flush = posthog.flush()
-    await vi.advanceTimersByTimeAsync(1)
+    // The longest first retry wait, with the highest jitter.
+    await vi.advanceTimersByTimeAsync(125)
     await flush
 
     expect(harness.callsTo(AI_CAPTURE_PATH)).toHaveLength(2)
