@@ -158,7 +158,6 @@ describe('mutation child traversal', () => {
       },
     });
     await settle();
-    const buffer = mutationBuffers.find((b) => b.bufferDoc() === document)!;
     const destination = document.getElementById('destination')!;
 
     // Mount 500 siblings each with 4 nested children (~2500 nodes) in one
@@ -210,12 +209,5 @@ describe('mutation child traversal', () => {
     for (const add of addsAfterBatch) {
       expect(add.parentId).not.toBe(-1);
     }
-
-    // Addedset must have been fully drained; the new algorithm deletes each
-    // node after processing so a non-empty residue would indicate a leaked
-    // reference. This is the structural proof of linearity — the old
-    // addList path would tombstone-stall and leave entries behind at
-    // this scale.
-    expect(buffer['addedSet'].size).toBe(0);
   });
 });

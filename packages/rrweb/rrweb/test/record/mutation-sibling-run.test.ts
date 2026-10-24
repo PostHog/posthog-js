@@ -8,27 +8,28 @@
 // comment/text anchors as direct children of <body>, scaling at ~n^1.8
 // on posthog-js 1.438.7 (pre-fix).
 //
-// After the port of upstream rrweb-io/rrweb#1652, the drain walks the
-// addedSet in topological order and never re-queues a node. The fail
-// mode we are testing is the old `addList` tail-rescan dropping entries
-// when the per-pass budget blew up — leaving residue in the set and
-// losing nodes from the emitted adds stream.
+// The fail mode we are testing is the old `addList` tail-rescan walking
+// the sibling chain O(n) times per emission as it tries to resolve
+// parentId/nextId for queued nodes. We assert this by counting
+// `dom.previousSibling` / `dom.nextSibling` / `dom.lastChild` lookups
+// per node across two batch sizes:
+//   - On the fix: total lookups scale as O(n), so lookups/node stays
+//     flat as n grows.
+//   - Pre-fix: total scaled as ~n^1.8, so lookups/node grew ~63× for a
+//     10× batch — well above any CI noise.
 //
-// We assert the shape invariants rather than wall time:
-//   - every added node reaches the emit sink (no silent drops)
-//   - the drain only runs once per emission (no tail-rescan recursion)
-//   - addedSet is empty at the end (no tombstone stall)
-// These hold on the fix at any batch size and would fail on the pre-fix
-// path for the batch sizes exercised below. Wall-time comparisons were
-// removed because they flake under GC jitter in CI.
+// Earlier versions of this test asserted on `buffer.addedSet.size` at
+// the end, but `emit()` swaps in a fresh empty addedSet before the
+// drain, so that residue check can never fire. @TueHaulund flagged this
+// on review of 5f35b1da4.
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import record from '../../src/record';
-import { mutationBuffers } from '../../src/record/observer';
+import dom from '@posthog/rrweb-utils';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
-type Row = { n: number; drainCalls: number; served: number; residue: number };
+type Row = { n: number; lookupCalls: number; served: number };
 
 async function measure(n: number, shape: 'anchors' | 'mixed'): Promise<Row> {
   document.body.innerHTML = '<main id="fixture"></main>';
@@ -45,35 +46,55 @@ async function measure(n: number, shape: 'anchors' | 'mixed'): Promise<Row> {
   });
   await settle();
 
-  const buffer = mutationBuffers.find((b) => b.bufferDoc() === document)!;
-  const original = (buffer as unknown as { processBufferedMutations: () => void })
-    .processBufferedMutations.bind(buffer);
-  const drainSpy = vi.fn(() => original());
-  (buffer as unknown as { processBufferedMutations: () => void }).processBufferedMutations =
-    drainSpy;
+  // Patch the three sibling-walk helpers the drain depends on and
+  // count calls between the batch append and the next settle. These
+  // are the hot-path lookups that scaled as ~n^1.8 on the pre-fix
+  // `addList` tail-rescan.
+  const originalPrev = dom.previousSibling;
+  const originalNext = dom.nextSibling;
+  const originalLast = dom.lastChild;
+  let lookupCalls = 0;
+  dom.previousSibling = function (node: Node) {
+    lookupCalls += 1;
+    return originalPrev.call(dom, node);
+  };
+  dom.nextSibling = function (node: Node) {
+    lookupCalls += 1;
+    return originalNext.call(dom, node);
+  };
+  dom.lastChild = function (node: Node) {
+    lookupCalls += 1;
+    return originalLast.call(dom, node);
+  };
 
-  for (let i = 0; i < n; i++) {
-    if (shape === 'anchors') {
-      fixture.appendChild(
-        i % 2 === 0 ? document.createComment('') : document.createTextNode(''),
-      );
-    } else {
-      if (i % 3 === 0) fixture.appendChild(document.createComment(''));
-      else if (i % 3 === 1) fixture.appendChild(document.createTextNode(''));
-      else {
-        const el = document.createElement('span');
-        el.setAttribute('data-i', String(i));
-        fixture.appendChild(el);
+  try {
+    const batch = document.createDocumentFragment();
+    for (let i = 0; i < n; i++) {
+      if (shape === 'anchors') {
+        batch.appendChild(
+          i % 2 === 0 ? document.createComment('') : document.createTextNode(''),
+        );
+      } else {
+        if (i % 3 === 0) batch.appendChild(document.createComment(''));
+        else if (i % 3 === 1) batch.appendChild(document.createTextNode(''));
+        else {
+          const el = document.createElement('span');
+          el.setAttribute('data-i', String(i));
+          batch.appendChild(el);
+        }
       }
     }
+    fixture.appendChild(batch);
+    await settle();
+    await settle();
+  } finally {
+    dom.previousSibling = originalPrev;
+    dom.nextSibling = originalNext;
+    dom.lastChild = originalLast;
+    stop();
   }
-  await settle();
-  await settle();
 
-  const residue = (buffer as unknown as { addedSet: Set<Node> }).addedSet.size;
-
-  stop();
-  return { n, drainCalls: drainSpy.mock.calls.length, served, residue };
+  return { n, lookupCalls, served };
 }
 
 describe('mutation buffer drain stays linear for long sibling runs (#5227)', () => {
@@ -81,7 +102,7 @@ describe('mutation buffer drain stays linear for long sibling runs (#5227)', () 
     document.body.innerHTML = '';
   });
 
-  it('anchor siblings: every added node reaches the emit sink at 500 and 5000', async () => {
+  it('anchor siblings: sibling-lookup count per node stays flat as batch grows 10x', async () => {
     const small = await measure(500, 'anchors');
     const big = await measure(5000, 'anchors');
 
@@ -91,15 +112,16 @@ describe('mutation buffer drain stays linear for long sibling runs (#5227)', () 
     expect(small.served).toBeGreaterThanOrEqual(small.n);
     expect(big.served).toBeGreaterThanOrEqual(big.n);
 
-    // The addedSet must be fully drained at both scales. Residue would
-    // indicate a tombstone-stall or an iterator early-exit.
-    expect(small.residue).toBe(0);
-    expect(big.residue).toBe(0);
+    // Lookups/node must stay flat for the fix to be O(n). The pre-fix
+    // path was ~n^1.8, so 10x batch size => ~63x per-node lookups. We
+    // assert < 5x to keep margin against batching noise.
+    const perNodeSmall = small.lookupCalls / small.n;
+    const perNodeBig = big.lookupCalls / big.n;
+    expect(perNodeBig).toBeLessThan(perNodeSmall * 5);
   }, 60000);
 
   it('mixed comment+text+element siblings: no silent drops at 5k batch', async () => {
     const row = await measure(5000, 'mixed');
     expect(row.served).toBeGreaterThanOrEqual(row.n);
-    expect(row.residue).toBe(0);
   }, 60000);
 });
