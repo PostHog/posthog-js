@@ -2,6 +2,7 @@ import { type PostHogEventProperties, type PostHogFetchResponse, isGzipSupported
 
 import { CaptureError } from '@/capture-v1/errors'
 import { V1CaptureSender, type V1CaptureSenderConfig, type V1CaptureSenderHooks } from '@/capture-v1/sender'
+import { type SerializedV1Event, serializeV1Event } from '@/capture-v1/serialize'
 
 const CLOCK_START = Date.parse('2024-01-01T00:00:00.000Z')
 
@@ -31,6 +32,8 @@ function makeStallingResponse(status: number, cancel: vi.Mock<Promise<void>, []>
 function msg(uuid: string, overrides: PostHogEventProperties = {}): PostHogEventProperties {
   return { event: 'test', distinct_id: 'user', uuid, properties: {}, ...overrides }
 }
+
+const v1Events = (messages: PostHogEventProperties[]): SerializedV1Event[] => messages.map(serializeV1Event)
 
 interface Harness {
   sender: V1CaptureSender
@@ -99,7 +102,7 @@ describe('V1CaptureSender', () => {
         const { sender, fetch, errors } = makeSender({ path })
         fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-        await sender.sendV1Batch([msg('u1')])
+        await sender.send(v1Events([msg('u1')]))
 
         expect(fetch).toHaveBeenCalledTimes(1)
         const [url, options] = fetch.mock.calls[0]
@@ -121,7 +124,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       const headers = headersOf(fetch, 0)
       expect(headers['Content-Type']).toBe('application/json')
@@ -137,7 +140,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch } = makeSender({ userAgent: undefined })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(headersOf(fetch, 0)).not.toHaveProperty('User-Agent')
     })
@@ -146,7 +149,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch } = makeSender({ historicalMigration: true })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(bodyOf(fetch, 0).historical_migration).toBe(true)
     })
@@ -159,7 +162,7 @@ describe('V1CaptureSender', () => {
         .mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'retry' } } }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       const h0 = headersOf(fetch, 0)
       const h1 = headersOf(fetch, 1)
@@ -175,7 +178,7 @@ describe('V1CaptureSender', () => {
 
     it('does not send when there are no messages', async () => {
       const { sender, fetch, errors } = makeSender()
-      await sender.sendV1Batch([])
+      await sender.send(v1Events([]))
       expect(fetch).not.toHaveBeenCalled()
       expect(errors).toEqual([])
     })
@@ -184,7 +187,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 0 })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toEqual([])
@@ -194,7 +197,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 0 })
       fetch.mockResolvedValueOnce(makeResponse(400))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
@@ -210,7 +213,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch } = makeSender({ compressionEnabled: true }, { compress })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(compress).toHaveBeenCalledTimes(1)
       expect(headersOf(fetch, 0)['Content-Encoding']).toBe('gzip')
@@ -222,7 +225,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch } = makeSender({ compressionEnabled: true }, { compress })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(headersOf(fetch, 0)).not.toHaveProperty('Content-Encoding')
       expect(typeof fetch.mock.calls[0][1].body).toBe('string')
@@ -233,7 +236,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch } = makeSender({ compressionEnabled: false }, { compress })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(compress).not.toHaveBeenCalled()
       expect(headersOf(fetch, 0)).not.toHaveProperty('Content-Encoding')
@@ -249,7 +252,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(200, { results: { u1: result } }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toEqual([])
@@ -259,7 +262,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toEqual([])
@@ -269,7 +272,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(200, { status: 1 }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(errors).toEqual([])
     })
@@ -280,7 +283,7 @@ describe('V1CaptureSender', () => {
         const { sender, fetch, errors } = makeSender({ path })
         fetch.mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'drop', details: 'billing' } } }))
 
-        await sender.sendV1Batch([msg('u1', { properties: { $ai_input: 'private prompt text' } })])
+        await sender.send(v1Events([msg('u1', { properties: { $ai_input: 'private prompt text' } })]))
 
         expect(fetch).toHaveBeenCalledTimes(1)
         expect(errors).toHaveLength(1)
@@ -298,7 +301,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'drop' } } }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect((errors[0] as CaptureError).drops).toEqual([{ uuid: 'u1', details: undefined }])
     })
@@ -309,7 +312,7 @@ describe('V1CaptureSender', () => {
         .mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'ok' }, u2: { result: 'retry' } } }))
         .mockResolvedValueOnce(makeResponse(200, { results: { u2: { result: 'ok' } } }))
 
-      await sender.sendV1Batch([msg('u1'), msg('u2')])
+      await sender.send(v1Events([msg('u1'), msg('u2')]))
 
       expect(fetch).toHaveBeenCalledTimes(2)
       expect(bodyOf(fetch, 0).batch.map((e: any) => e.uuid)).toEqual(['u1', 'u2'])
@@ -325,7 +328,7 @@ describe('V1CaptureSender', () => {
         )
         .mockResolvedValueOnce(makeResponse(200, { results: { u2: { result: 'ok' } } }))
 
-      await sender.sendV1Batch([msg('u1'), msg('u2')])
+      await sender.send(v1Events([msg('u1'), msg('u2')]))
 
       expect(errors).toHaveLength(1)
       const error = errors[0] as CaptureError
@@ -337,7 +340,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 3 })
       fetch.mockResolvedValue(makeResponse(200, { results: { u1: { result: 'retry' } } }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(3)
       const error = errors[0] as CaptureError
@@ -351,7 +354,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(200, 'not-json{'))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
@@ -367,7 +370,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(200, body))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
@@ -379,7 +382,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(status)).mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(2)
       expect(errors).toEqual([])
@@ -389,7 +392,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(429, '', { 'Retry-After': '1' }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(1)
       const error = errors[0] as CaptureError
@@ -401,7 +404,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(status))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
@@ -412,7 +415,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 4 })
       fetch.mockResolvedValue(makeResponse(503))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(4)
       expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
@@ -425,7 +428,7 @@ describe('V1CaptureSender', () => {
         .mockResolvedValueOnce(makeStallingResponse(503, cancel))
         .mockResolvedValueOnce(makeResponse(503, 'still unavailable'))
 
-      const sendPromise = sender.sendV1Batch([msg('u1')])
+      const sendPromise = sender.send(v1Events([msg('u1')]))
       await vi.advanceTimersByTimeAsync(999)
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(sleeps).toEqual([])
@@ -449,7 +452,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockRejectedValueOnce(new Error('ECONNRESET')).mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(fetch).toHaveBeenCalledTimes(2)
       expect(errors).toEqual([])
@@ -459,7 +462,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 3 })
       fetch.mockRejectedValue(new Error('timeout'))
 
-      await sender.sendV1Batch([msg('u1'), msg('u2')])
+      await sender.send(v1Events([msg('u1'), msg('u2')]))
 
       expect(fetch).toHaveBeenCalledTimes(3)
       const error = errors[0] as CaptureError
@@ -472,11 +475,13 @@ describe('V1CaptureSender', () => {
       fetch.mockImplementation(
         (_url, options) =>
           new Promise<PostHogFetchResponse>((_resolve, reject) => {
-            options.signal.addEventListener('abort', () => reject(new Error('custom fetch abort')), { once: true })
+            options.signal.addEventListener('abort', () => reject(new Error('custom fetch abort')), {
+              once: true,
+            })
           })
       )
 
-      const sendPromise = sender.sendV1Batch([msg('u1')])
+      const sendPromise = sender.send(v1Events([msg('u1')]))
       await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
@@ -499,7 +504,7 @@ describe('V1CaptureSender', () => {
           })
       )
 
-      const sendPromise = sender.sendV1Batch([msg('u1')])
+      const sendPromise = sender.send(v1Events([msg('u1')]))
       await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
@@ -519,7 +524,7 @@ describe('V1CaptureSender', () => {
         .mockImplementationOnce(() => Promise.resolve(makeStallingResponse(200, cancel)))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      const sendPromise = sender.sendV1Batch([msg('u1')])
+      const sendPromise = sender.send(v1Events([msg('u1')]))
       await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
@@ -537,12 +542,14 @@ describe('V1CaptureSender', () => {
         const response = makeStallingResponse(200, cancel)
         response.text = () =>
           new Promise<string>((_resolve, reject) => {
-            options.signal.addEventListener('abort', () => reject(new Error('custom body abort')), { once: true })
+            options.signal.addEventListener('abort', () => reject(new Error('custom body abort')), {
+              once: true,
+            })
           })
         return Promise.resolve(response)
       })
 
-      const sendPromise = sender.sendV1Batch([msg('u1')])
+      const sendPromise = sender.send(v1Events([msg('u1')]))
       await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
@@ -565,7 +572,7 @@ describe('V1CaptureSender', () => {
         return Promise.resolve(makeStallingResponse(200, cancel))
       })
 
-      const sendPromise = sender.sendV1Batch([msg('u1')])
+      const sendPromise = sender.send(v1Events([msg('u1')]))
       await vi.advanceTimersByTimeAsync(1000)
       await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
@@ -589,7 +596,7 @@ describe('V1CaptureSender', () => {
       const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
       fetch.mockResolvedValue(makeStallingResponse(400, cancel))
 
-      const sendPromise = sender.sendV1Batch([msg('u1')])
+      const sendPromise = sender.send(v1Events([msg('u1')]))
       await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
@@ -603,12 +610,128 @@ describe('V1CaptureSender', () => {
     })
   })
 
+  describe('unsent events (keepUnsent)', () => {
+    it('returns events whose last attempt got no response, without reporting them', async () => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 2 })
+      fetch.mockRejectedValue(new Error('ECONNREFUSED'))
+      const events = v1Events([msg('u1'), msg('u2')])
+
+      const unsent = await sender.send(events, { keepUnsent: true })
+
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(unsent).toEqual(events)
+      expect(errors).toEqual([])
+    })
+
+    it('reports server drops and returns only the retry events a later transport failure left unsent', async () => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 2 })
+      fetch
+        .mockResolvedValueOnce(
+          makeResponse(200, {
+            results: { u1: { result: 'drop', details: 'billing' }, u2: { result: 'retry' } },
+          })
+        )
+        .mockRejectedValueOnce(new Error('ECONNRESET'))
+      const events = v1Events([msg('u1'), msg('u2'), msg('u3')])
+
+      const unsent = await sender.send(events, { keepUnsent: true })
+
+      expect(unsent).toEqual([events[1]])
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toMatchObject({ drops: [{ uuid: 'u1', details: 'billing' }], retryExhausted: [] })
+    })
+
+    it.each<[string, () => PostHogFetchResponse]>([
+      ['an exhausted retryable status', () => makeResponse(500)],
+      ['a terminal status', () => makeResponse(400)],
+      ['an unparseable 2xx', () => makeResponse(200, 'not json')],
+    ])('reports and does not return events after %s', async (_name, response) => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 2 })
+      fetch.mockImplementation(() => Promise.resolve(response()))
+
+      const unsent = await sender.send(v1Events([msg('u1')]), { keepUnsent: true })
+
+      expect(unsent).toEqual([])
+      expect(errors).toHaveLength(1)
+      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
+    })
+
+    it('reports and does not return retry events still pending when the budget runs out on a 2xx', async () => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 2 })
+      fetch.mockResolvedValue(makeResponse(200, { results: { u1: { result: 'retry' } } }))
+
+      const unsent = await sender.send(v1Events([msg('u1')]), { keepUnsent: true })
+
+      expect(unsent).toEqual([])
+      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
+    })
+  })
+
+  describe('abort signal', () => {
+    it('makes no request once the signal is aborted', async () => {
+      const { sender, fetch, errors } = makeSender()
+      const controller = new AbortController()
+      controller.abort(new Error('shutdown deadline'))
+      const events = v1Events([msg('u1')])
+
+      expect(await sender.send(events, { signal: controller.signal, keepUnsent: true })).toEqual(events)
+      expect(fetch).not.toHaveBeenCalled()
+      expect(errors).toEqual([])
+    })
+
+    it('stops waiting for the next attempt when aborted during backoff', async () => {
+      const controller = new AbortController()
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 4 }, { sleep: () => new Promise(() => {}) })
+      fetch.mockResolvedValue(makeResponse(503))
+
+      const sendPromise = sender.send(v1Events([msg('u1')]), { signal: controller.signal })
+      await vi.advanceTimersByTimeAsync(0)
+      controller.abort(new Error('shutdown deadline'))
+      await sendPromise
+
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(errors).toHaveLength(1)
+      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
+    })
+
+    it('aborts a request still waiting for response headers', async () => {
+      const controller = new AbortController()
+      const { sender, fetch } = makeSender({ maxAttempts: 4, requestTimeoutMs: 60_000 })
+      fetch.mockImplementation(() => new Promise(() => {}))
+      const events = v1Events([msg('u1')])
+
+      const sendPromise = sender.send(events, { signal: controller.signal, keepUnsent: true })
+      await vi.advanceTimersByTimeAsync(100)
+      controller.abort(new Error('shutdown deadline'))
+
+      expect(await sendPromise).toEqual(events)
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(fetch.mock.calls[0][1].signal.aborted).toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('stops reading a stalled HTTP error body and still reports the status', async () => {
+      const controller = new AbortController()
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 1, requestTimeoutMs: 60_000 })
+      fetch.mockResolvedValue(makeStallingResponse(503, vi.fn().mockResolvedValue(undefined)))
+
+      const sendPromise = sender.send(v1Events([msg('u1')]), { signal: controller.signal })
+      await vi.advanceTimersByTimeAsync(100)
+      controller.abort(new Error('shutdown deadline'))
+      await sendPromise
+
+      expect(errors).toHaveLength(1)
+      expect(((errors[0] as CaptureError).cause as Error).message).toBe('Capture V1 request failed with HTTP 503')
+      expect(vi.getTimerCount()).toBe(0)
+    })
+  })
+
   describe('backoff and Retry-After', () => {
     it('uses exponential backoff between attempts', async () => {
       const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 100, maxAttempts: 4 })
       fetch.mockResolvedValue(makeResponse(503))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(sleeps).toEqual([100, 200, 400])
     })
@@ -621,7 +744,7 @@ describe('V1CaptureSender', () => {
       })
       fetch.mockResolvedValue(makeResponse(503))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(sleeps).toEqual([10_000, 15_000, 15_000])
     })
@@ -632,7 +755,7 @@ describe('V1CaptureSender', () => {
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': '5' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(sleeps).toEqual([5000])
     })
@@ -643,30 +766,38 @@ describe('V1CaptureSender', () => {
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': '1' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(sleeps).toEqual([10_000])
     })
 
     it('clamps a huge Retry-After to maxBackoffMs', async () => {
-      const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 100, maxBackoffMs: 30_000, maxAttempts: 2 })
+      const { sender, fetch, sleeps } = makeSender({
+        initialRetryDelayMs: 100,
+        maxBackoffMs: 30_000,
+        maxAttempts: 2,
+      })
       fetch
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': '9999' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(sleeps).toEqual([30_000])
     })
 
     it('parses an HTTP-date Retry-After as a delay from now', async () => {
-      const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 100, maxBackoffMs: 60_000, maxAttempts: 2 })
+      const { sender, fetch, sleeps } = makeSender({
+        initialRetryDelayMs: 100,
+        maxBackoffMs: 60_000,
+        maxAttempts: 2,
+      })
       // 20s after the fixed clock start.
       fetch
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': 'Mon, 01 Jan 2024 00:00:20 GMT' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(sleeps).toEqual([20_000])
     })
@@ -677,7 +808,7 @@ describe('V1CaptureSender', () => {
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': 'Mon, 01 Jan 2020 00:00:00 GMT' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(sleeps).toEqual([100])
     })
@@ -688,7 +819,7 @@ describe('V1CaptureSender', () => {
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': retryAfter }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(sleeps).toEqual([100])
     })
@@ -699,7 +830,7 @@ describe('V1CaptureSender', () => {
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': '9'.repeat(400) }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(sleeps).toEqual([100])
     })
@@ -710,7 +841,7 @@ describe('V1CaptureSender', () => {
         .mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'retry' } } }, { 'Retry-After': '3' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       expect(sleeps).toEqual([3000])
     })
@@ -740,7 +871,7 @@ describe('V1CaptureSender', () => {
 
       const sender = new V1CaptureSender(baseConfig, { fetch, onError: (e) => errors.push(e) })
       // No injected sleep: the retry backoff schedules a real (fake-timer) setTimeout we must advance.
-      const done = sender.sendV1Batch([msg('u1')])
+      const done = sender.send(v1Events([msg('u1')]))
       await vi.advanceTimersByTimeAsync(baseConfig.initialRetryDelayMs)
       await done
 
@@ -757,7 +888,7 @@ describe('V1CaptureSender', () => {
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       const sender = new V1CaptureSender({ ...baseConfig, compressionEnabled: true }, { fetch, onError: () => {} })
-      await sender.sendV1Batch([msg('u1')])
+      await sender.send(v1Events([msg('u1')]))
 
       // The default compressor is the platform gzip codec: it compresses where
       // supported and transparently falls back to an uncompressed string where it

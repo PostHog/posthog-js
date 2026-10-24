@@ -72,6 +72,7 @@ import { getActiveTraceProperties } from './extensions/error-tracking/trace-cont
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 import { V1CaptureSender, type V1CaptureSenderConfig } from './capture-v1/sender'
+import { serializeV1Event } from './capture-v1/serialize'
 import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from './capture-v1/types'
 import { partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
@@ -536,7 +537,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // A freshly-enqueued event is never undefined; drop any legacy undefined queue artifacts.
     const events = batchMessages.filter((message): message is PostHogEventProperties => message !== undefined)
-    await this.getCaptureSender(ANALYTICS_CAPTURE_ENDPOINT).sendV1Batch(events)
+    await this.getCaptureSender(ANALYTICS_CAPTURE_ENDPOINT).send(events.map(serializeV1Event))
   }
 
   private async sendAiCaptureBatch(batchMessages: (PostHogEventProperties | undefined)[]): Promise<void> {
@@ -548,7 +549,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
     const sender = this.getCaptureSender(AI_CAPTURE_ENDPOINT)
     for (const batch of batches) {
-      await sender.sendV1Batch(batch)
+      await sender.send(batch.map(serializeV1Event))
     }
   }
 
