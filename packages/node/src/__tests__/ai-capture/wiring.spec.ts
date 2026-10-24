@@ -124,7 +124,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
 
     expect(console.warn).toHaveBeenCalledTimes(1)
     expect(console.warn).toHaveBeenCalledWith(
-      `[PostHog] Dropped 2 event(s) for ${AI_CAPTURE_PATH} before sending: 2 with properties larger than 8388608 bytes`
+      `[PostHog] 2 event(s) were not delivered to ${AI_CAPTURE_PATH}: 2 dropped because their properties were larger than 8388608 bytes`
     )
   })
 

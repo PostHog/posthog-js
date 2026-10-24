@@ -37,6 +37,8 @@ function makeLane(config: Partial<CaptureLaneConfig> = {}, behavior: SendBehavio
   const batches: string[][] = []
   const flushes: string[][] = []
   const localDrops: CaptureError[] = []
+  // One entry per report: a report can carry several errors but has one summary line.
+  const summaries: string[] = []
   const errors: unknown[] = []
   const backgroundFlushes: Promise<void>[] = []
   let currentBehavior = behavior
@@ -58,7 +60,10 @@ function makeLane(config: Partial<CaptureLaneConfig> = {}, behavior: SendBehavio
     },
     {
       sender: { send: send as any },
-      onLocalDrops: (error) => localDrops.push(error),
+      onLocalDrops: (reported, summary) => {
+        localDrops.push(...reported)
+        summaries.push(summary)
+      },
       onError: (error) => errors.push(error),
       onFlush: (messages) => flushes.push(messages.map((message) => String(message.uuid))),
       onBackgroundFlush: (flush) => backgroundFlushes.push(flush),
@@ -68,7 +73,7 @@ function makeLane(config: Partial<CaptureLaneConfig> = {}, behavior: SendBehavio
   const setBehavior = (next: SendBehavior): void => {
     currentBehavior = next
   }
-  return { lane, send, batches, flushes, localDrops, errors, backgroundFlushes, setBehavior }
+  return { lane, send, batches, flushes, localDrops, summaries, errors, backgroundFlushes, setBehavior }
 }
 
 const ids = (count: number, from = 1): string[] => Array.from({ length: count }, (_, i) => `u${from + i}`)
@@ -396,6 +401,25 @@ describe('CaptureLane', () => {
         '2 event(s) for /i/v1/analytics/events were still queued when shutdown ended and were not sent'
       )
       expect(lane.length).toBe(0)
+    })
+
+    it('reports leftovers and local drops at shutdown in one report with one summary line', async () => {
+      const { lane, localDrops, summaries } = makeLane({ maxQueueSize: 2, maxEventBytes: 500 }, abortable)
+      lane.enqueue(msg(1, { pad: 'x'.repeat(1000) }))
+      lane.enqueue(msg(2))
+      lane.enqueue(msg(3))
+      lane.enqueue(msg(4))
+
+      lane.finishShutdown()
+
+      expect(localDrops.map((error) => [error.retryExhausted, error.drops.map((drop) => drop.uuid)])).toEqual([
+        [['u3', 'u4'], []],
+        [[], ['u1', 'u2']],
+      ])
+      expect(summaries).toEqual([
+        '4 event(s) were not delivered to /i/v1/analytics/events: 2 still queued when shutdown ended, ' +
+          '1 dropped because the queue was full (2 events), 1 dropped because they were larger than 500 bytes',
+      ])
     })
 
     it('drains events enqueued while an earlier flush was in flight', async () => {
