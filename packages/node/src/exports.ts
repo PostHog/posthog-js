@@ -3,6 +3,9 @@ export * from './extensions/express'
 export * from './types'
 
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
+export { EmailError } from './emails/errors'
+export type { EmailErrorName } from './emails/errors'
+export type { Emails, EmailWarning, SendEmailOptions, SendEmailResponse, SendEmailResult } from './emails/types'
 export type {
   FlagDefinitionCacheData,
   FlagDefinitionCacheInput,

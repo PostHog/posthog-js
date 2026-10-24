@@ -77,6 +77,8 @@ import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routi
 import { V1CaptureSender } from './capture-v1/sender'
 import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
+import { DEFAULT_EMAIL_REQUEST_MAX_RETRIES, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS, EmailSender } from './emails/emails'
+import type { Emails } from './emails/types'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -119,6 +121,14 @@ function normalizePersonalApiKey(value?: unknown): string | undefined {
 function normalizeHost(value?: unknown): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || DEFAULT_NODE_HOST
+}
+
+function positiveNumberOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+function nonNegativeIntegerOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback
 }
 
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
@@ -164,6 +174,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
+  private _emails?: EmailSender
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
   /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
@@ -669,6 +680,52 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
     }
     return this._metrics
+  }
+
+  /**
+   * The `posthog.emails` API: sends transactional email from PostHog email templates.
+   *
+   * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope. Sends go to
+   * `appHost`, or to the PostHog Cloud app host of `host`. `send` resolves to `{ data, error }`
+   * and does not reject. `data.id` is the queued email's message ID, and is `null` when the
+   * client is disabled and sent nothing.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { secretKey: 'phs_...', host: 'https://eu.i.posthog.com' })
+   * const { data, error } = await client.emails.send({
+   *   to: 'user@example.com',
+   *   templateId: '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b',
+   *   templateData: { name: 'Ada' },
+   *   distinctId: 'user_123',
+   *   idempotencyKey: 'welcome:user_123',
+   * })
+   * if (error) {
+   *   console.error(error.code, error.message)
+   * }
+   * ```
+   *
+   * {@label Emails}
+   */
+  public get emails(): Emails {
+    if (!this._emails) {
+      this._emails = new EmailSender(
+        {
+          secretKey: this.options.personalApiKey,
+          host: this.host,
+          appHost: this.options.appHost,
+          requestTimeoutMs: positiveNumberOr(this.options.emailRequestTimeoutMs, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS),
+          maxRetries: nonNegativeIntegerOr(this.options.emailRequestMaxRetries, DEFAULT_EMAIL_REQUEST_MAX_RETRIES),
+        },
+        {
+          fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
+          isDisabled: () => this.disabled,
+          logger: this._logger,
+          userAgent: this.getCustomUserAgent() || undefined,
+        }
+      )
+    }
+    return this._emails
   }
 
   /**

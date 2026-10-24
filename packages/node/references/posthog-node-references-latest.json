@@ -2109,6 +2109,81 @@
       "path": "../core/src/cookie.ts"
     },
     {
+      "id": "EmailErrorName",
+      "name": "EmailErrorName",
+      "properties": [],
+      "path": "src/emails/errors.ts",
+      "example": "\"validation_error\" | \"missing_api_key\" | \"invalid_permission\" | \"not_found\" | \"concurrent_idempotent_requests\" | \"invalid_idempotent_request\" | \"rate_limit_exceeded\" | \"monthly_quota_exceeded\" | \"service_unavailable\" | \"application_error\""
+    },
+    {
+      "id": "EmailErrorParams",
+      "name": "EmailErrorParams",
+      "properties": [
+        {
+          "type": "unknown",
+          "name": "cause"
+        },
+        {
+          "type": "string",
+          "name": "code"
+        },
+        {
+          "type": "string",
+          "name": "docsUrl"
+        },
+        {
+          "type": "string",
+          "name": "field"
+        },
+        {
+          "type": "string",
+          "name": "fix"
+        },
+        {
+          "type": "string",
+          "name": "message"
+        },
+        {
+          "type": "number",
+          "name": "retryAfterMs"
+        },
+        {
+          "type": "number",
+          "name": "statusCode"
+        },
+        {
+          "type": "string",
+          "name": "why"
+        }
+      ],
+      "path": "src/emails/errors.ts"
+    },
+    {
+      "id": "Emails",
+      "name": "Emails",
+      "properties": [],
+      "path": "src/emails/types.ts"
+    },
+    {
+      "id": "EmailWarning",
+      "name": "EmailWarning",
+      "properties": [
+        {
+          "type": "string",
+          "name": "code"
+        },
+        {
+          "type": "string",
+          "name": "fix"
+        },
+        {
+          "type": "string",
+          "name": "message"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
       "id": "EndBranching",
       "name": "EndBranching",
       "properties": [
@@ -2667,6 +2742,11 @@
       "id": "IPostHog",
       "name": "IPostHog",
       "properties": [
+        {
+          "description": "The `posthog.emails` API: sends transactional email from PostHog email templates. Needs `secretKey`, a project secret API key with the `hog_flow:write` scope.",
+          "type": "Emails",
+          "name": "emails"
+        },
         {
           "description": "The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count, gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed periodically. Configure via the `metrics` client option.",
           "type": "Metrics",
@@ -3716,7 +3796,7 @@
           "name": "traces"
         },
         {
-          "description": "Credential for fetching local feature flag definitions and decrypting remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
+          "description": "Credential for fetching local feature flag definitions, decrypting remote config and\nsending email.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. `emails.send` needs a Project Secret API Key with the\n`hog_flow:write` scope; set `enableLocalEvaluation: false` when the key is only for email.\nPrefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
           "type": "string",
           "name": "secretKey"
         },
@@ -3725,6 +3805,21 @@
           "type": "string",
           "name": "personalApiKey",
           "releaseTag": "deprecated"
+        },
+        {
+          "description": "Your PostHog app host, such as `https://posthog.example.com`. `emails.send` sends there.\n\nNeeded only when `host` is not PostHog Cloud, for example a reverse proxy, which must not\nreceive the secret key. On PostHog Cloud, the client derives `https://us.posthog.com` or\n`https://eu.posthog.com` from `host`.",
+          "type": "string",
+          "name": "appHost"
+        },
+        {
+          "description": "Timeout in milliseconds for each `emails.send` request.",
+          "type": "number",
+          "name": "emailRequestTimeoutMs"
+        },
+        {
+          "description": "Number of retries for an `emails.send` after a network error, a rate limit, or an\nunavailable service. Every retry sends the same idempotency key. Set to 0 when a job\nrunner already retries the send.",
+          "type": "number",
+          "name": "emailRequestMaxRetries"
         },
         {
           "description": "Redact prompts, outputs and error details from every event that the PostHog AI\nintegrations (`@posthog/ai`) capture with this client. Per-call privacy settings\ncan only add redaction. Defaults to false.",
@@ -4184,6 +4279,71 @@
         }
       ],
       "path": "../core/src/utils/index.ts"
+    },
+    {
+      "id": "SendEmailOptions",
+      "name": "SendEmailOptions",
+      "properties": [
+        {
+          "description": "The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address.",
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "description": "1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too.",
+          "type": "string",
+          "name": "idempotencyKey"
+        },
+        {
+          "description": "Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off.",
+          "type": "number",
+          "name": "maxRetries"
+        },
+        {
+          "description": "Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "The UUID of an email template made transactional in PostHog.",
+          "type": "string",
+          "name": "templateId"
+        },
+        {
+          "description": "One recipient email address.",
+          "type": "string",
+          "name": "to"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
+      "id": "SendEmailResponse",
+      "name": "SendEmailResponse",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "{\n    data: SendEmailResult;\n    error: null;\n} | {\n    data: null;\n    error: EmailError;\n}"
+    },
+    {
+      "id": "SendEmailResult",
+      "name": "SendEmailResult",
+      "properties": [
+        {
+          "description": "The queued email's message ID. `null` when the client is disabled and sent nothing.",
+          "type": "string | null",
+          "name": "id"
+        },
+        {
+          "description": "True when PostHog had already accepted this idempotency key and returned the first send's result.",
+          "type": "boolean",
+          "name": "replayed"
+        },
+        {
+          "type": "EmailWarning[]",
+          "name": "warnings"
+        }
+      ],
+      "path": "src/emails/types.ts"
     },
     {
       "id": "SendFeatureFlagsOptions",
