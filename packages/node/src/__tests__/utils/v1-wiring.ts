@@ -1,20 +1,8 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 
-import { waitForPromises } from '.'
+import { v1Response, waitForPromises } from '.'
 
 export const V1_URL = 'http://example.com/i/v1/analytics/events'
-
-/** A Capture V1 2xx response whose per-event `results` map defaults to all-accepted. */
-export function v1Response(results: Record<string, unknown> = {}): any {
-  const body = JSON.stringify({ results })
-  return {
-    status: 200,
-    text: () => Promise.resolve(body),
-    json: () => Promise.resolve({ results }),
-    headers: { get: () => null },
-    body: null,
-  }
-}
 
 /** A legacy `/batch/` 2xx response. */
 export function v0Response(): any {

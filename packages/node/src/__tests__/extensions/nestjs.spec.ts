@@ -2,6 +2,7 @@ import type { IncomingHttpHeaders } from 'node:http'
 import { defer, of, throwError, lastValueFrom } from 'rxjs'
 
 import { PostHog } from '@/entrypoints/index.node'
+import { anyCaptureUrl, captureRequests, lastSentBatch, v1Response } from '../utils'
 import { PostHogInterceptor } from '@/extensions/nestjs'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
@@ -17,16 +18,8 @@ const waitForFlushTimer = async (posthog: PostHog): Promise<void> => {
 }
 
 const getLastBatchEvents = (): any[] | undefined => {
-  expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
-
-  const call = mockedFetch.mock.calls
-    .slice()
-    .reverse()
-    .find((x) => (x[0] as string).includes('/batch/'))
-  if (!call) {
-    return undefined
-  }
-  return JSON.parse((call[1] as any).body as any).batch
+  expect(mockedFetch).toHaveBeenCalledWith(anyCaptureUrl, expect.objectContaining({ method: 'POST' }))
+  return lastSentBatch(mockedFetch)
 }
 
 const createMockContext = (overrides?: {
@@ -75,11 +68,7 @@ describe('PostHogInterceptor', () => {
   beforeEach(() => {
     posthog = createPostHog()
 
-    mockedFetch.mockResolvedValue({
-      status: 200,
-      text: () => Promise.resolve('ok'),
-      json: () => Promise.resolve({ status: 'ok' }),
-    } as any)
+    mockedFetch.mockResolvedValue(v1Response())
   })
 
   afterEach(async () => {
@@ -345,7 +334,7 @@ describe('PostHogInterceptor', () => {
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
       await waitForFlushTimer(posthog)
 
-      const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
+      const batchCalls = captureRequests(mockedFetch)
       expect(batchCalls.length).toBe(0)
     })
 
@@ -418,7 +407,7 @@ describe('PostHogInterceptor', () => {
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
       await waitForFlushTimer(posthog)
 
-      const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
+      const batchCalls = captureRequests(mockedFetch)
       expect(batchCalls.length).toBe(0)
     })
 
@@ -482,7 +471,7 @@ describe('PostHogInterceptor', () => {
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
       await waitForFlushTimer(posthog)
 
-      const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
+      const batchCalls = captureRequests(mockedFetch)
       expect(batchCalls.length).toBe(0)
     })
 

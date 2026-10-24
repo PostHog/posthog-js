@@ -3,6 +3,8 @@
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
+import { sentEventsOf } from './utils'
+
 const packageRoot = fileURLToPath(new URL('../../', import.meta.url))
 
 describe('built edge entrypoints', () => {
@@ -21,30 +23,29 @@ describe('built edge entrypoints', () => {
         `
           import { createRequire } from 'node:module'
           const { PostHog } = ${loader === 'import' ? `await import('${specifier}')` : `createRequire(import.meta.url)('${specifier}')`}
-          const batches = []
+          const requests = []
           const client = new PostHog('test-key', {
             host: 'https://example.test',
             disableCompression: true,
             fetchRetryCount: 0,
-            fetch: async (_url, options) => {
-              batches.push(...JSON.parse(options.body).batch)
+            fetch: async (url, options) => {
+              requests.push([url, { headers: options.headers, body: options.body }])
               return { status: 200, text: async () => '{}', json: async () => ({}) }
             },
           })
           client.capture({ distinctId: 'edge-user', event: 'edge-event' })
           await client.shutdown()
-          console.log(JSON.stringify(batches))
+          console.log(JSON.stringify(requests))
         `,
       ],
       {
         cwd: packageRoot,
         encoding: 'utf8',
         timeout: 10_000,
-        env: { ...process.env, POSTHOG_CAPTURE_MODE: 'v0' },
       }
     )
 
-    expect(JSON.parse(output)).toEqual([
+    expect(JSON.parse(output).flatMap(sentEventsOf)).toEqual([
       expect.objectContaining({
         distinct_id: 'edge-user',
         event: 'edge-event',
