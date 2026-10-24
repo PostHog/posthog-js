@@ -36,7 +36,7 @@
   "dependencies": {
     "@posthog/cli": "catalog:",
     "@nuxt/kit": ">=3.7.0",
-    "posthog-node": "workspace:^",
+    "posthog-node": "^5.56.0",
     "@posthog/core": "workspace:^",
     "@posthog/plugin-utils": "workspace:^",
     "posthog-js": "workspace:^"
