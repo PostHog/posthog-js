@@ -1317,6 +1317,47 @@ describe('record', function (this: ISuite) {
     expect(serializedEvents).not.toContain('updated-private-value');
   });
 
+  it('keeps recording shadow content of a host that is moved or re-inserted', async () => {
+    await ctx.page.evaluate(async () => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+      const host = document.createElement('div');
+      host.attachShadow({ mode: 'open' }).innerHTML = '<span>initial</span>';
+      const other = document.createElement('section');
+      document.body.append(host, other);
+      await settle();
+      const span = host.shadowRoot!.querySelector('span')!;
+
+      // Removed and re-attached within one mutation batch.
+      host.remove();
+      other.appendChild(host);
+      await settle();
+      span.textContent = 'after-move';
+      await settle();
+
+      // Removed, then re-inserted in a later batch.
+      host.remove();
+      await settle();
+      document.body.appendChild(host);
+      await settle();
+      span.textContent = 'after-reinsert';
+      await settle();
+
+      host.remove();
+      await settle();
+      span.textContent = 'after-final-removal';
+      await settle();
+    });
+    await waitForRAF(ctx.page);
+
+    const serializedEvents = JSON.stringify(ctx.events);
+    expect(serializedEvents).toContain('after-move');
+    expect(serializedEvents).toContain('after-reinsert');
+    expect(serializedEvents).not.toContain('after-final-removal');
+  });
+
   it('records mouse movement inside a same-origin iframe as MouseMove', async () => {
     await ctx.page.evaluate(async () => {
       const iframe = document.createElement('iframe');

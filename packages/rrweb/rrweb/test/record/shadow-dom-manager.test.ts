@@ -216,4 +216,74 @@ describe('ShadowDomManager', () => {
     manager.resetForDoc(iframeDoc);
     expect(mutationBuffers.length).toBe(buffersBeforeAdd);
   });
+
+  it('removeShadowRootsIn() releases only the roots inside the removed subtree', () => {
+    const manager = createManager();
+
+    const removed = document.createElement('div');
+    const kept = document.createElement('div');
+    elements.push(removed, kept);
+    document.body.append(removed, kept);
+
+    const buffersBeforeAdd = mutationBuffers.length;
+    removed.attachShadow({ mode: 'open' });
+    kept.attachShadow({ mode: 'open' });
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 2);
+
+    removed.remove();
+    manager.removeShadowRootsIn(removed);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    // A second pass over the same subtree is a no-op.
+    manager.removeShadowRootsIn(removed);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+  });
+
+  it('resetForDoc() still releases iframe roots after a top-level host was released', () => {
+    const manager = createManager();
+
+    const topHost = document.createElement('div');
+    const iframe = document.createElement('iframe');
+    elements.push(topHost, iframe);
+    document.body.append(topHost, iframe);
+    const iframeDoc = iframe.contentDocument as Document;
+    const iframeHost = iframeDoc.createElement('div');
+    iframeDoc.body.appendChild(iframeHost);
+
+    const buffersBeforeAdd = mutationBuffers.length;
+    manager.addShadowRoot(topHost.attachShadow({ mode: 'open' }), document);
+    manager.addShadowRoot(iframeHost.attachShadow({ mode: 'open' }), document);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 2);
+
+    topHost.remove();
+    manager.removeShadowRootsIn(topHost);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    manager.resetForDoc(iframeDoc);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd);
+  });
+
+  it('resetForDoc() leaves top-level roots observed when an iframe is torn down', () => {
+    const manager = createManager();
+
+    const topHost = document.createElement('div');
+    const iframe = document.createElement('iframe');
+    elements.push(topHost, iframe);
+    document.body.append(topHost, iframe);
+    const iframeDoc = iframe.contentDocument as Document;
+    const iframeHost = iframeDoc.createElement('div');
+    iframeDoc.body.appendChild(iframeHost);
+
+    const buffersBeforeAdd = mutationBuffers.length;
+    manager.addShadowRoot(topHost.attachShadow({ mode: 'open' }), document);
+    manager.addShadowRoot(iframeHost.attachShadow({ mode: 'open' }), document);
+
+    manager.resetForDoc(iframeDoc);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    // The top-level root is still tracked, so it can still be released on removal.
+    topHost.remove();
+    manager.removeShadowRootsIn(topHost);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd);
+  });
 });
