@@ -7,6 +7,7 @@ import fs from 'fs'
 import path from 'path'
 import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
 import { modernTransformOptions } from './oxc.config.mjs'
+import { loaderMethods } from './scripts/loader-methods.mjs'
 
 const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
@@ -453,7 +454,11 @@ const entrypointTargets = entrypoints.map((file) => {
                 : {}),
             ...(outputFormat === 'cjs' ? { exports: 'named' } : {}),
         })),
-        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
+        plugins: [
+            ...(fileName === 'loader' ? [loaderMethods()] : []),
+            ...pluginsForThisFile,
+            visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true }),
+        ],
     }
 })
 
