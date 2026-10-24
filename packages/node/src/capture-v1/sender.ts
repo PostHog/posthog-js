@@ -13,6 +13,23 @@ import type { CaptureEndpoint, V1BatchResponse } from './types'
 
 const DEFAULT_MAX_BACKOFF_MS = 30_000
 
+// Retry waits and request deadlines use ref'd timers, unlike safeSetTimeout, so an
+// awaited flush or shutdown keeps the process alive until the send finishes.
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      resolve()
+    }
+    // A lane reuses one signal for every send, so a finished wait must not leave its listener behind.
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 /** HTTP statuses the v1 backend wants retried. 429 is intentionally terminal in v1. */
 const RETRYABLE_STATUSES = new Set([408, 500, 502, 503, 504])
 
@@ -44,8 +61,8 @@ export interface V1CaptureSenderHooks {
   /** Surfaces partial/terminal delivery failures on the client error channel. */
   onError: (error: Error) => void
   now?: () => number
-  /** Waits between attempts. The sender stops waiting when the send is aborted. */
-  sleep?: (ms: number) => Promise<void>
+  /** Waits between attempts. The sender stops waiting when `signal` aborts, even if this does not. */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
   generateRequestId?: () => string
   compress?: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
 }
@@ -86,7 +103,7 @@ export class V1CaptureSender {
   private readonly fetchFn: FetchLike
   private readonly onError: (error: Error) => void
   private readonly now: () => number
-  private readonly sleep: (ms: number) => Promise<void>
+  private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>
   private readonly generateRequestId: () => string
   private readonly compress: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
 
@@ -96,9 +113,7 @@ export class V1CaptureSender {
     this.fetchFn = hooks.fetch
     this.onError = hooks.onError
     this.now = hooks.now ?? Date.now
-    // Retry waits and request deadlines use ref'd timers, unlike safeSetTimeout, so an
-    // awaited flush or shutdown keeps the process alive until the send finishes.
-    this.sleep = hooks.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
+    this.sleep = hooks.sleep ?? abortableSleep
     this.generateRequestId = hooks.generateRequestId ?? uuidv7
     this.compress = hooks.compress ?? gzipCompress
   }
@@ -226,7 +241,7 @@ export class V1CaptureSender {
       signal.addEventListener('abort', onAbort, { once: true })
     })
     try {
-      await Promise.race([this.sleep(ms), aborted])
+      await Promise.race([this.sleep(ms, signal), aborted])
     } finally {
       signal.removeEventListener('abort', onAbort)
     }
