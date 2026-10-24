@@ -426,19 +426,37 @@ describe('captureAiGeneration', () => {
     expect((error as any).__posthog_previously_captured_error).toBe(true)
   })
 
-  it('runs exception autocapture and tags the trace when enabled', async () => {
+  it.each([
+    {
+      name: 'positional arguments for posthog-node 5',
+      registerOptions: undefined,
+      readCall: (args: unknown[]) => ({ error: args[0], properties: args[2], uuid: args[3], argCount: args.length }),
+    },
+    {
+      name: 'an options object for posthog-node 6',
+      registerOptions: vi.fn(),
+      readCall: (args: any[]) => ({
+        error: args[0],
+        properties: args[1].properties,
+        uuid: args[1].uuid,
+        argCount: args.length,
+      }),
+    },
+  ])('runs exception autocapture and tags the trace with $name', async ({ registerOptions, readCall }) => {
     const client = buildClient({ enableExceptionAutocapture: true })
+    ;(client as any).registerOptions = registerOptions
     const error = new Error('boom')
 
     await captureAiGeneration(client, { ...baseRequiredOptions, error })
 
     expect(client.captureException).toHaveBeenCalledTimes(1)
-    const [capturedError, , properties, exceptionId] = (client.captureException as vi.Mock).mock.calls[0]
-    expect(capturedError).toBe(error)
-    expect(properties).toEqual({ $ai_trace_id: expect.any(String) })
-    expect(typeof exceptionId).toBe('string')
+    const call = readCall((client.captureException as vi.Mock).mock.calls[0])
+    expect(call.error).toBe(error)
+    expect(call.properties).toEqual({ $ai_trace_id: expect.any(String) })
+    expect(typeof call.uuid).toBe('string')
+    expect(call.argCount).toBe(registerOptions ? 2 : 4)
 
-    expect(lastCaptureProperties(client).$exception_event_id).toBe(exceptionId)
+    expect(lastCaptureProperties(client).$exception_event_id).toBe(call.uuid)
     expect((error as any).__posthog_previously_captured_error).toBe(true)
   })
 
