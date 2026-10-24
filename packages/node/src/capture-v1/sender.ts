@@ -30,6 +30,10 @@ function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
 /** HTTP statuses the v1 backend wants retried. 429 is intentionally terminal in v1. */
 const RETRYABLE_STATUSES = new Set([408, 500, 502, 503, 504])
 
+/** Only these redirects keep the method and body, so they are the only ones a capture request follows. */
+const FOLLOWED_REDIRECT_STATUSES = new Set([307, 308])
+const MAX_REDIRECTS = 5
+
 export interface V1CaptureSenderConfig {
   host: string
   /** The capture lane this sender posts to. */
@@ -73,8 +77,13 @@ export interface V1SendOptions {
   keepUnsent?: boolean
 }
 
-interface V1CaptureAttempt {
+interface RedirectOutcome {
   response: PostHogFetchResponse
+  /** Set when `response` is a redirect the sender does not follow. */
+  redirectFailure?: string
+}
+
+interface V1CaptureAttempt extends RedirectOutcome {
   signal: AbortSignal
   waitFor<T>(operation: Promise<T>): Promise<T>
   cancelBody: () => Promise<void>
@@ -94,6 +103,7 @@ interface V1CaptureAttempt {
  */
 export class V1CaptureSender {
   private readonly config: V1CaptureSenderConfig
+  private readonly hostOrigin: string | undefined
   private readonly fetchFn: FetchLike
   private readonly onError: (error: Error) => void
   private readonly now: () => number
@@ -104,6 +114,7 @@ export class V1CaptureSender {
 
   constructor(config: V1CaptureSenderConfig, hooks: V1CaptureSenderHooks) {
     this.config = config
+    this.hostOrigin = originOf(config.host)
     this.fetchFn = hooks.fetch
     this.onError = hooks.onError
     this.now = hooks.now ?? Date.now
@@ -150,8 +161,13 @@ export class V1CaptureSender {
       let retryDelayMs: number | undefined
       try {
         captureAttempt = await this.sendOnce(url, payload, attempt, requestId, signal)
-        const { response, signal: attemptSignal } = captureAttempt
+        const { response, signal: attemptSignal, redirectFailure } = captureAttempt
         const { status } = response
+        if (redirectFailure !== undefined) {
+          await captureAttempt.waitFor(captureAttempt.cancelBody()).catch(() => {})
+          this.surfaceBatchFailure(requestId, drops, pending, new Error(redirectFailure))
+          return []
+        }
         if (status < 200 || status >= 300) {
           if (!isLastAttempt && RETRYABLE_STATUSES.has(status)) {
             const retryAfterMs = this.parseRetryAfter(response)
@@ -294,24 +310,18 @@ export class V1CaptureSender {
     // Keeps an early abort from surfacing as an unhandled rejection before the race below observes it.
     deadline.catch(() => {})
     try {
-      // A fresh copy per request: fetch may detach a byte body it has sent.
-      const fetchPromise = this.fetchFn(url, {
-        method: 'POST',
-        headers,
-        body: typeof body === 'string' ? body : body.slice(),
-        signal: controller.signal,
-      })
+      const fetchPromise = this.fetchFollowingRedirects(url, headers, body, controller.signal)
       let responseAccepted = false
       void fetchPromise
-        .then((lateResponse) => {
+        .then((late) => {
           if (controller.signal.aborted && !responseAccepted) {
             // An injected fetch may ignore abort and resolve after the deadline.
             // Cancel its otherwise unreachable body to release any held resources.
-            void this.cancelBody(lateResponse)
+            void this.cancelBody(late.response)
           }
         })
         .catch(() => {})
-      const response = await Promise.race([fetchPromise, deadline])
+      const { response, redirectFailure } = await Promise.race([fetchPromise, deadline])
       responseAccepted = true
       timeoutPhase = 'while reading the response body'
       let cleanedUp = false
@@ -319,6 +329,7 @@ export class V1CaptureSender {
       const cancelBody = (): Promise<void> => (cancellation ??= this.cancelBody(response))
       return {
         response,
+        redirectFailure,
         signal: controller.signal,
         waitFor: <T>(operation: Promise<T>) => Promise.race([operation, deadline]),
         cancelBody,
@@ -340,6 +351,56 @@ export class V1CaptureSender {
       clearTimeout(timer)
       stopListening()
       throw error
+    }
+  }
+
+  /**
+   * Sends with `redirect: 'manual'` and follows 307 and 308 to the configured host's origin, at most
+   * `MAX_REDIRECTS` times, with the same method, headers and body. A fetch that follows redirects
+   * itself still works: its final response is not a redirect.
+   */
+  private async fetchFollowingRedirects(
+    url: string,
+    headers: PostHogFetchOptions['headers'],
+    body: string | Uint8Array,
+    signal: AbortSignal
+  ): Promise<RedirectOutcome> {
+    let target = url
+    for (let redirects = 0; ; redirects++) {
+      const response = await this.fetchFn(target, {
+        method: 'POST',
+        headers,
+        // A fresh copy per request: fetch may detach a byte body it has sent.
+        body: typeof body === 'string' ? body : body.slice(),
+        signal,
+        redirect: 'manual',
+      })
+      const { status } = response
+      if (status < 300 || status >= 400) {
+        return { response }
+      }
+      if (!FOLLOWED_REDIRECT_STATUSES.has(status)) {
+        return {
+          response,
+          redirectFailure: `Capture V1 request got an HTTP ${status} redirect, which it does not follow`,
+        }
+      }
+      if (redirects === MAX_REDIRECTS) {
+        return { response, redirectFailure: `Capture V1 request was redirected more than ${MAX_REDIRECTS} times` }
+      }
+      const next = resolveLocation(response.headers?.get('Location'), target)
+      if (next === undefined || originOf(next) !== this.hostOrigin) {
+        return {
+          response,
+          redirectFailure: `Capture V1 request got an HTTP ${status} redirect away from the configured host`,
+        }
+      }
+      void this.cancelBody(response)
+      // An injected fetch may ignore abort, so stop the chain here.
+      if (signal.aborted) {
+        throw signal.reason
+      }
+      target = next
     }
   }
 
@@ -490,5 +551,24 @@ export class V1CaptureSender {
     } catch {
       // Cancellation is best-effort and must never mask delivery handling.
     }
+  }
+}
+
+function originOf(url: string): string | undefined {
+  try {
+    return new URL(url).origin
+  } catch {
+    return undefined
+  }
+}
+
+function resolveLocation(location: string | null | undefined, base: string): string | undefined {
+  if (!location) {
+    return undefined
+  }
+  try {
+    return new URL(location, base).href
+  } catch {
+    return undefined
   }
 }
