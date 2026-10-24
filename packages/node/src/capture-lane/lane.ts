@@ -1,6 +1,6 @@
 import { type Logger, type PostHogEventProperties, safeSetTimeout } from '@posthog/core'
 
-import { CaptureError, type CaptureDroppedEvent } from '../capture-v1/errors'
+import { CaptureError, CaptureLossTally, type CaptureDroppedEvent, describeCaptureLoss } from '../capture-v1/errors'
 import type { V1SendOptions } from '../capture-v1/sender'
 import { type SerializedV1Event, serializeV1Event } from '../capture-v1/serialize'
 import type { CaptureEndpoint } from '../capture-v1/types'
@@ -32,8 +32,11 @@ export interface CaptureLaneConfig {
 
 export interface CaptureLaneHooks {
   sender: CaptureLaneSender
-  /** Events this lane dropped without sending, at most one report per flush cycle. */
-  onLocalDrops: (error: CaptureError) => void
+  /**
+   * Events this lane dropped without sending, at most one report per flush cycle. `summary` is
+   * one line with counts and causes only, for when nothing listens.
+   */
+  onLocalDrops: (errors: CaptureError[], summary: string) => void
   /** Failures the sender did not handle itself. */
   onError: (error: unknown) => void
   /** The messages one flush cycle sent. */
@@ -160,18 +163,7 @@ export class CaptureLane {
     clearTimeout(this.abortTimer)
     this.abortTimer = undefined
     this.clearFlushTimer()
-    const leftovers = this.queue.splice(0)
-    if (leftovers.length > 0) {
-      const error = new CaptureError({
-        endpoint: this.config.endpoint,
-        requestId: '',
-        drops: [],
-        retryExhausted: leftovers.map((event) => event.uuid),
-      })
-      error.message = `${leftovers.length} event(s) for ${this.config.endpoint} were still queued when shutdown ended and were not sent`
-      this.safely(() => this.hooks.onLocalDrops(error))
-    }
-    this.reportLocalDrops()
+    this.reportLocalDrops(this.queue.splice(0))
     if (this.abortController.signal.aborted) {
       this.abortController = new AbortController()
     }
@@ -283,33 +275,49 @@ export class CaptureLane {
     }
   }
 
-  private reportLocalDrops(): void {
+  private reportLocalDrops(leftovers: SerializedV1Event[] = []): void {
     const tally = this.localDrops
     this.localDrops = emptyTally()
-    this.reportTally(tally)
+    this.reportTally(tally, leftovers)
   }
 
-  private reportTally(tally: LocalDropTally): void {
+  /** Reports `tally` and the events still queued at the end of a shutdown together, in one report. */
+  private reportTally(tally: LocalDropTally, leftovers: SerializedV1Event[] = []): void {
+    const errors: CaptureError[] = []
+    const loss = new CaptureLossTally()
+    const { endpoint } = this.config
+    if (leftovers.length > 0) {
+      const error = new CaptureError({
+        endpoint,
+        requestId: '',
+        drops: [],
+        retryExhausted: leftovers.map((event) => event.uuid),
+      })
+      error.message = `${leftovers.length} event(s) for ${endpoint} were still queued when shutdown ended and were not sent`
+      errors.push(error)
+      loss.add('still queued when shutdown ended', leftovers.length)
+    }
     const total = tally.queueFull + tally.tooLarge
-    if (total === 0) {
-      return
+    if (total > 0) {
+      const { maxQueueSize, maxEventBytes, maxEventBytesOf } = this.config
+      const reasons: string[] = []
+      if (tally.queueFull > 0) {
+        reasons.push(`${tally.queueFull} because the queue was full (${maxQueueSize} events)`)
+      }
+      if (tally.tooLarge > 0) {
+        const measured = maxEventBytesOf === 'properties' ? 'properties larger' : 'larger'
+        reasons.push(`${tally.tooLarge} with ${measured} than ${maxEventBytes} bytes`)
+      }
+      const error = new CaptureError({ endpoint, requestId: '', drops: tally.sample, retryExhausted: [] })
+      error.message = `Dropped ${total} event(s) for ${endpoint} before sending: ${reasons.join(', ')}`
+      errors.push(error)
+      loss.add(`dropped because the queue was full (${maxQueueSize} events)`, tally.queueFull)
+      const measured = maxEventBytesOf === 'properties' ? 'their properties were' : 'they were'
+      loss.add(`dropped because ${measured} larger than ${maxEventBytes} bytes`, tally.tooLarge)
     }
-    const reasons: string[] = []
-    if (tally.queueFull > 0) {
-      reasons.push(`${tally.queueFull} because the queue was full (${this.config.maxQueueSize} events)`)
+    if (errors.length > 0) {
+      this.safely(() => this.hooks.onLocalDrops(errors, describeCaptureLoss(endpoint, loss)))
     }
-    if (tally.tooLarge > 0) {
-      const measured = this.config.maxEventBytesOf === 'properties' ? 'properties larger' : 'larger'
-      reasons.push(`${tally.tooLarge} with ${measured} than ${this.config.maxEventBytes} bytes`)
-    }
-    const error = new CaptureError({
-      endpoint: this.config.endpoint,
-      requestId: '',
-      drops: tally.sample,
-      retryExhausted: [],
-    })
-    error.message = `Dropped ${total} event(s) for ${this.config.endpoint} before sending: ${reasons.join(', ')}`
-    this.safely(() => this.hooks.onLocalDrops(error))
   }
 
   private armFlushTimer(): void {

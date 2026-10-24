@@ -309,6 +309,7 @@ export type PostHogFetchOptions = {
   headers: { [key: string]: string }
   body?: string | Blob | PostHogFetchBodyBytes
   signal?: AbortSignal
+  redirect?: 'follow' | 'manual' | 'error'
 }
 
 // Check out posthog-js for these additional options and try to keep them in sync

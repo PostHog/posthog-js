@@ -3,7 +3,6 @@ import { version } from './version'
 import {
   allSettled,
   FeatureFlagValue,
-  getEventUuid,
   isBlockedUA,
   isPlainObject,
   JsonType,
@@ -77,6 +76,7 @@ import { CaptureLane, type CaptureLaneConfig } from './capture-lane/lane'
 import { AI_MAX_PROPERTIES_BYTES, ANALYTICS_MAX_EVENT_BYTES, CAPTURE_BATCH_TARGET_BYTES } from './capture-lane/limits'
 import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
 import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
+import { canonicalizeUuid } from './capture-v1/uuid'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -367,8 +367,27 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   private _prepareLaneMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties | null {
-    const prepared = this.processBeforeEnqueue(this.prepareMessage(message, options))
+    // Runs after before_send, which can change the uuid.
+    const uuid = this._canonicalEventUuid(options?.uuid)
+    const prepared = this.processBeforeEnqueue(this.prepareMessage(message, { ...options, uuid }))
     return prepared === null ? null : this.normalizeMessage(prepared)
+  }
+
+  /**
+   * The canonical form of a caller's event uuid, or undefined when there is none to keep. An
+   * invalid uuid is replaced with a generated one and a warning that never repeats the value.
+   */
+  private _canonicalEventUuid(uuid: unknown): string | undefined {
+    if (uuid === undefined || uuid === null || uuid === '') {
+      return undefined
+    }
+    const canonical = typeof uuid === 'string' ? canonicalizeUuid(uuid) : undefined
+    if (canonical !== undefined) {
+      return canonical
+    }
+    // console.warn, not this._logger: the logger only prints in debug mode, and the event loses its uuid.
+    console.warn('[PostHog] Replaced an invalid event uuid with a generated one; uuids must be RFC 4122 strings')
+    return uuidv7()
   }
 
   /**
@@ -579,10 +598,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       lane = new CaptureLane(this._captureLaneConfig(endpoint), {
         sender: new V1CaptureSender(this.captureSenderConfig(endpoint, compressor), {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
-          onError: (error) => this._events.emit('error', error),
+          onError: (error, summary) => this._reportCaptureLoss([error], summary),
           compress: (payload, codec) => compressor.compress(payload, codec),
         }),
-        onLocalDrops: (error) => this._reportLocalCaptureDrops(error),
+        onLocalDrops: (errors, summary) => this._reportCaptureLoss(errors, summary),
         onError: (error) => this._events.emit('error', error),
         onFlush: (messages) => this._events.emit('flush', messages),
         onBackgroundFlush: (flush) => this._onLaneBackgroundFlush(flush),
@@ -611,12 +630,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  private _reportLocalCaptureDrops(error: CaptureError): void {
+  /** Emits each error; with no `'error'` listener, logs `summary` once instead, since the events are lost. */
+  private _reportCaptureLoss(errors: CaptureError[], summary: string): void {
     const errorListeners = this._events.events['error']?.length ?? 0
-    this._events.emit('error', error)
+    for (const error of errors) {
+      this._events.emit('error', error)
+    }
     if (errorListeners === 0) {
-      // console.warn, not this._logger: the logger only prints in debug mode, and these drops lose data.
-      console.warn(`[PostHog] ${error.message}`)
+      // console.warn, not this._logger: the logger only prints in debug mode.
+      console.warn(`[PostHog] ${summary}`)
     }
   }
 
@@ -990,6 +1012,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     prepareOptions?: { includeContextProperties?: boolean },
     explicitRoute?: string
   ): Promise<void> {
+    const uuid = this._canonicalEventUuid(props.uuid)
+    if (uuid !== props.uuid) {
+      props = { ...props, uuid }
+    }
     return this.addPendingPromise(
       this._prepareEventMessage(props, prepareOptions)
         .then(({ distinctId, event, properties, options }) => {
@@ -1117,7 +1143,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (this.disabled) {
       return undefined
     }
-    const uuid = getEventUuid(props.uuid, uuidv7)
+    const uuid = this._canonicalEventUuid(props.uuid) ?? uuidv7()
     void this._sendPreparedAiEvent({ ...props, uuid }, false)
     return uuid
   }
@@ -1136,7 +1162,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (this.disabled) {
       return undefined
     }
-    const uuid = getEventUuid(props.uuid, uuidv7)
+    const uuid = this._canonicalEventUuid(props.uuid) ?? uuidv7()
     await this._sendPreparedAiEvent({ ...props, uuid }, true)
     return uuid
   }
