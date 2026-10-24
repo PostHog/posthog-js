@@ -25,34 +25,27 @@ function v1Event(event: string, options: Record<string, unknown> = {}) {
 }
 
 it.each([
-  ['$ai_generation', '/batch/'],
-  ['$ai_embedding', '/batch/'],
   ['$ai_generation', '/i/v1/ai/events'],
   ['$ai_embedding', '/i/v1/ai/events/'],
   ['$ai_generation', '/i/v1/analytics/events'],
 ])('accepts compressed %s analytics on %s and retains decode failures', async (eventName, path) => {
   const collector = await startCollector()
   try {
-    const legacy = path === '/batch/'
-    const body = legacy
-      ? legacyBody([{ event: eventName, distinct_id: 'test', properties: {} }])
-      : v1Body([v1Event(eventName)])
     const response = await fetch(`${collector.url}${path}`, {
       method: 'POST',
       headers: { ...AUTH, 'content-encoding': 'gzip' },
-      body: gzipSync(body),
+      body: gzipSync(v1Body([v1Event(eventName)])),
     })
     expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ results: {} })
     expect(collector.events).toEqual([
-      legacy
-        ? { event: eventName, distinct_id: 'test', properties: {} }
-        : {
-            event: eventName,
-            uuid: '01890000-0000-7000-8000-000000000000',
-            distinct_id: 'test',
-            timestamp: '2026-01-01T00:00:00.000Z',
-            properties: { $session_id: 'session-1' },
-          },
+      {
+        event: eventName,
+        uuid: '01890000-0000-7000-8000-000000000000',
+        distinct_id: 'test',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        properties: { $session_id: 'session-1' },
+      },
     ])
     collector.verify()
     const invalid = await fetch(`${collector.url}${path}`, {
@@ -84,12 +77,17 @@ it('reads capture v1 options as the legacy properties they replace', async () =>
 })
 
 it.each([
-  ['non-AI events', '/batch/', {}, legacyBody([{ event: '$pageview', distinct_id: 'test', properties: {} }])],
-  ['non-AI v1 events', '/i/v1/ai/events', AUTH, v1Body([v1Event('$pageview')])],
+  ['non-AI events', '/i/v1/ai/events', AUTH, v1Body([v1Event('$pageview')])],
+  [
+    'the legacy batch endpoint',
+    '/batch/',
+    AUTH,
+    legacyBody([{ event: '$ai_generation', distinct_id: 'test', properties: {} }]),
+  ],
   ['a missing bearer token', '/i/v1/ai/events', {}, v1Body([v1Event('$ai_generation')])],
   ['a legacy body on a v1 endpoint', '/i/v1/ai/events', AUTH, legacyBody([])],
   [
-    'v1 events without v1 fields',
+    'events without v1 fields',
     '/i/v1/ai/events',
     AUTH,
     v1Body([{ event: '$ai_generation', distinct_id: 'test', properties: {} }]),

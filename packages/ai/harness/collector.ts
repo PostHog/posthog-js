@@ -2,7 +2,6 @@ import { createServer, type IncomingHttpHeaders } from 'node:http'
 import { gunzipSync } from 'node:zlib'
 
 const API_KEY = 'phc_cassette_test'
-const LEGACY_CAPTURE_PATH = '/batch/'
 const V1_CAPTURE_PATHS = new Set(['/i/v1/analytics/events', '/i/v1/ai/events'])
 
 // Capture v1 per-event `options`, keyed by the legacy property each one replaces.
@@ -19,7 +18,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** One capture v1 event in the legacy `/batch/` shape, so assertions hold for both wire formats. */
+/** One capture v1 event in the legacy `/batch/` event shape the replay assertions use. */
 function toLegacyEvent(item: unknown): unknown {
   if (
     !isObject(item) ||
@@ -38,12 +37,8 @@ function toLegacyEvent(item: unknown): unknown {
   return { ...event, properties: legacyProperties }
 }
 
-/** The events of one capture request, from either the legacy `/batch/` or the capture v1 wire format. */
-function readEvents(isLegacy: boolean, headers: IncomingHttpHeaders, payload: Record<string, unknown>): unknown[] {
-  if (isLegacy) {
-    if (payload.api_key !== API_KEY || !Array.isArray(payload.batch)) throw new Error('Invalid analytics payload')
-    return payload.batch
-  }
+/** The events of one capture v1 request. */
+function readEvents(headers: IncomingHttpHeaders, payload: Record<string, unknown>): unknown[] {
   if (headers.authorization !== `Bearer ${API_KEY}`) throw new Error('Invalid analytics credentials')
   if (typeof payload.created_at !== 'string' || !Array.isArray(payload.batch))
     throw new Error('Invalid analytics payload')
@@ -59,9 +54,8 @@ export async function startCollector() {
         response.end(JSON.stringify({ count: events.length }))
         return
       }
-      const isLegacy = request.url === LEGACY_CAPTURE_PATH
-      const isV1 = V1_CAPTURE_PATHS.has(request.url?.replace(/\/$/, '') ?? '')
-      if (request.method !== 'POST' || (!isLegacy && !isV1)) throw new Error('Unexpected collector request')
+      const path = request.url?.replace(/\/$/, '') ?? ''
+      if (request.method !== 'POST' || !V1_CAPTURE_PATHS.has(path)) throw new Error('Unexpected collector request')
       const chunks: Buffer[] = []
       let size = 0
       for await (const chunk of request) {
@@ -75,7 +69,7 @@ export async function startCollector() {
       const bytes = encoding === 'gzip' ? gunzipSync(compressed, { maxOutputLength: 1024 * 1024 }) : compressed
       const payload = JSON.parse(bytes.toString('utf8'))
       if (!isObject(payload)) throw new Error('Invalid analytics payload')
-      for (const item of readEvents(isLegacy, request.headers, payload)) {
+      for (const item of readEvents(request.headers, payload)) {
         if (
           !isObject(item) ||
           !['$ai_generation', '$ai_embedding'].includes(item.event as string) ||
