@@ -94,7 +94,7 @@ describe('capture v1 wiring (Node SDK)', () => {
       ['capture()', ANALYTICS_CAPTURE_PATH],
       ['captureAi()', AI_CAPTURE_PATH],
     ] as const)('uses Node gzip for %s on %s', async (method, path) => {
-      const posthog = makeClient({ disableCompression: false })
+      const posthog = makeClient({ disableCompression: false, captureAiCompression: undefined })
       const event = { distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt-4o-mini' } }
       if (method === 'capture()') {
         posthog.capture(event)

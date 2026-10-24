@@ -64,7 +64,7 @@ describe('capture lane isolation (Node SDK)', () => {
 
   it('keeps sending analytics events on their own timer while an AI send is stuck', async () => {
     const ai = holdLane(harness, AI_CAPTURE_PATH)
-    const posthog = harness.makeClient({ flushInterval: 1000, flushAt: 100, requestTimeout: 60_000 })
+    const posthog = harness.makeClient({ flushInterval: 1000, flushAt: 100, captureAiRequestTimeoutMs: 60_000 })
 
     posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: {} })
     posthog.capture({ distinctId: 'u', event: 'first', properties: {} })
@@ -106,7 +106,7 @@ describe('capture lane isolation (Node SDK)', () => {
 
   it('never drops analytics events when the AI queue is full', async () => {
     const ai = holdLane(harness, AI_CAPTURE_PATH)
-    const posthog = harness.makeClient({ flushAt: 1, requestTimeout: 60_000 })
+    const posthog = harness.makeClient({ flushAt: 1, captureAiRequestTimeoutMs: 60_000 })
     const errors: CaptureError[] = []
     posthog.on('error', (error) => errors.push(error))
 
@@ -131,9 +131,63 @@ describe('capture lane isolation (Node SDK)', () => {
     expect(errors[0].message).toContain('5 because the queue was full (1000 events)')
   })
 
+  it('caps the AI queue at captureAiMaxQueueSize', async () => {
+    const ai = holdLane(harness, AI_CAPTURE_PATH)
+    const posthog = harness.makeClient({ flushAt: 1, captureAiMaxQueueSize: 2 })
+    const errors: CaptureError[] = []
+    posthog.on('error', (error) => errors.push(error))
+
+    posthog.captureAi({ distinctId: 'u', event: '$ai_0', properties: {} })
+    await vi.advanceTimersByTimeAsync(0)
+    for (let i = 1; i <= 4; i++) {
+      posthog.captureAi({ distinctId: 'u', event: `$ai_${i}`, properties: {} })
+    }
+    ai.release()
+    await posthog.flush()
+
+    expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_0', '$ai_3', '$ai_4'])
+    expect(errors).toHaveLength(1)
+    expect(errors[0].endpoint).toBe(AI_CAPTURE_PATH)
+    expect(errors[0].message).toContain('2 because the queue was full (2 events)')
+  })
+
+  it.each<[string, Record<string, number>, number, number]>([
+    ['the defaults', {}, 10_000, 30_000],
+    ['requestTimeout on the analytics lane only', { requestTimeout: 200 }, 200, 30_000],
+    ['captureAiRequestTimeoutMs on the AI lane only', { captureAiRequestTimeoutMs: 300 }, 10_000, 300],
+  ])('times out each lane on its own deadline with %s', async (_label, options, analyticsMs, aiMs) => {
+    harness.fetch.mockImplementation(() => new Promise(() => {}))
+    const posthog = harness.makeClient(options)
+    posthog.capture({ distinctId: 'u', event: 'custom', properties: {} })
+    posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: {} })
+    void posthog.flush()
+    await vi.advanceTimersByTimeAsync(0)
+    const aborted = (path: string): boolean => harness.callsTo(path)[0][1].signal.aborted
+    let elapsed = 0
+    const advanceTo = async (ms: number): Promise<void> => {
+      await vi.advanceTimersByTimeAsync(ms - elapsed)
+      elapsed = ms
+    }
+
+    for (const [path, deadline] of [
+      [ANALYTICS_CAPTURE_PATH, analyticsMs],
+      [AI_CAPTURE_PATH, aiMs],
+    ].sort((a, b) => (a[1] as number) - (b[1] as number)) as [string, number][]) {
+      await advanceTo(deadline - 1)
+      expect(aborted(path)).toBe(false)
+      await advanceTo(deadline)
+      expect(aborted(path)).toBe(true)
+    }
+    // Requeued events go out again on later flushes; end those before teardown.
+    harness.useDefaultRouting()
+    const shutdown = posthog.shutdown(1000)
+    await vi.advanceTimersByTimeAsync(1000)
+    await shutdown
+  })
+
   it('drains both lanes concurrently on shutdown and stops retrying at the deadline', async () => {
     harness.fetch.mockImplementation(() => Promise.resolve(errorResponse(503)))
-    const posthog = harness.makeClient({ fetchRetryCount: 5, fetchRetryDelay: 1000, flushAt: 100 })
+    const posthog = harness.makeClient({ captureMaxRetries: 5, flushAt: 100 })
     const errors: CaptureError[] = []
     posthog.on('error', (error) => errors.push(error))
     posthog.capture({ distinctId: 'u', event: 'custom', properties: {}, uuid: ANALYTICS_UUID })
@@ -141,13 +195,14 @@ describe('capture lane isolation (Node SDK)', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     let finished = false
-    const shutdown = posthog.shutdown(1500).then(() => (finished = true))
+    // With jitter the first retry waits 75-125 ms and the second starts 225-375 ms in, so exactly one retry fits.
+    const shutdown = posthog.shutdown(200).then(() => (finished = true))
     await vi.advanceTimersByTimeAsync(0)
     // Both first attempts go out before either lane's backoff elapses.
     expect(harness.callsTo(ANALYTICS_CAPTURE_PATH)).toHaveLength(1)
     expect(harness.callsTo(AI_CAPTURE_PATH)).toHaveLength(1)
 
-    await vi.advanceTimersByTimeAsync(1499)
+    await vi.advanceTimersByTimeAsync(199)
     expect(finished).toBe(false)
     await vi.advanceTimersByTimeAsync(1)
     await shutdown
@@ -194,12 +249,13 @@ describe('capture lane isolation (Node SDK)', () => {
     harness.fetch.mockImplementation((url: any) =>
       Promise.resolve(String(url).includes(AI_CAPTURE_PATH) ? errorResponse(500) : routeByUrl(url))
     )
-    const posthog = harness.makeClient({ fetchRetryCount: 1, fetchRetryDelay: 1 })
+    const posthog = harness.makeClient({ captureMaxRetries: 1 })
     const errors: CaptureError[] = []
     posthog.on('error', (error) => errors.push(error))
     const uuid = posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: {} })
     const flush = posthog.flush()
-    await vi.advanceTimersByTimeAsync(1)
+    // The longest first retry wait, with the highest jitter.
+    await vi.advanceTimersByTimeAsync(125)
     await flush
 
     expect(harness.callsTo(AI_CAPTURE_PATH)).toHaveLength(2)
