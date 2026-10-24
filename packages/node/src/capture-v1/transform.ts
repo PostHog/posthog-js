@@ -2,52 +2,12 @@ import type { JsonType, PostHogEventProperties } from '@posthog/core'
 
 import type { V1Event, V1EventOptions } from './types'
 
-/**
- * Coerce a value to a boolean the way the capture server does, or return
- * `undefined` if it cannot be coerced (the option is then omitted so the server
- * falls back to its default). Accepts native booleans, the strings
- * `"true"`/`"1"`/`"false"`/`"0"` (trimmed, case-insensitive), and any number
- * (nonzero -> true).
- */
-export function coerceBool(value: JsonType): boolean | undefined {
-  if (typeof value === 'boolean') {
-    return value
-  }
-  if (typeof value === 'number') {
-    return value !== 0
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase()
-    if (normalized === 'true' || normalized === '1') {
-      return true
-    }
-    if (normalized === 'false' || normalized === '0') {
-      return false
-    }
-  }
-  return undefined
-}
-
-/**
- * Accept only a native string, else return `undefined` (the option is then
- * omitted). The backend's `product_tour_id` is `Option<String>`, so numbers,
- * booleans, objects, and arrays are dropped rather than coerced — matching
- * posthog-go, posthog-rs, and posthog-python exactly.
- */
-export function coerceString(value: JsonType): string | undefined {
-  return typeof value === 'string' ? value : undefined
-}
-
-/** Legacy sentinel property -> typed `options` field, with its coercion. */
-const OPTION_SENTINELS: ReadonlyArray<{
-  property: string
-  optionKey: keyof V1EventOptions
-  coerce: (value: JsonType) => boolean | string | undefined
-}> = [
-  { property: '$cookieless_mode', optionKey: 'cookieless_mode', coerce: coerceBool },
-  { property: '$ignore_sent_at', optionKey: 'disable_skew_correction', coerce: coerceBool },
-  { property: '$process_person_profile', optionKey: 'process_person_profile', coerce: coerceBool },
-  { property: '$product_tour_id', optionKey: 'product_tour_id', coerce: coerceString },
+/** Legacy property -> the `options` key it fills when the caller left that option unset. */
+const LEGACY_OPTION_PROPERTIES: ReadonlyArray<{ property: string; optionKey: string }> = [
+  { property: '$process_person_profile', optionKey: 'process_person_profile' },
+  { property: '$cookieless_mode', optionKey: 'cookieless_mode' },
+  { property: '$ignore_sent_at', optionKey: 'disable_skew_correction' },
+  { property: '$product_tour_id', optionKey: 'product_tour_id' },
 ]
 
 /** Sentinel property -> top-level string field (string-only, non-string dropped). */
@@ -56,8 +16,24 @@ const TOPLEVEL_SENTINELS: ReadonlyArray<{ property: string; field: 'session_id' 
   { property: '$window_id', field: 'window_id' },
 ]
 
-function isRecord(value: JsonType | undefined): value is PostHogEventProperties {
+function isRecord(value: unknown): value is PostHogEventProperties {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * A copy of the caller's per-event options, or undefined when there are none. Any value that
+ * is not an object is reported and ignored, so the event is still sent.
+ */
+export function readEventOptions(value: unknown): V1EventOptions | undefined {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  if (isRecord(value)) {
+    return { ...value }
+  }
+  // console.error, not the client logger: the logger only prints in debug mode, and the event loses its options.
+  console.error('[PostHog] options must be an object; sending the event without its options')
+  return undefined
 }
 
 /**
@@ -101,25 +77,27 @@ function relocateInto(properties: PostHogEventProperties, key: string, value: Js
  * Transform one already-normalized queued message into a Capture V1 wire event.
  *
  * The input message is never mutated (events may be retried or handed to
- * callbacks): a fresh `properties` map is built. Sentinel properties are lifted
- * out of `properties` (deleting the copy) into the typed `options` object and
- * the top-level `session_id`/`window_id` fields; `$lib`/`$lib_version` are
- * stripped (the server injects them from `PostHog-Sdk-Info`); top-level
- * `$set`/`$set_once` are relocated into `properties`.
+ * callbacks): fresh `options` and `properties` maps are built. Option values are
+ * sent unchanged; capture reads them. Each legacy option property is removed from
+ * `properties` and fills its option when the caller left that option missing or
+ * `null`. `$session_id`/`$window_id` move to the top-level `session_id`/`window_id`
+ * fields; `$lib`/`$lib_version` are stripped (the server injects them from
+ * `PostHog-Sdk-Info`); top-level `$set`/`$set_once` are relocated into `properties`.
  */
 export function buildV1Event(message: PostHogEventProperties): V1Event {
   const sourceProperties = isRecord(message.properties) ? message.properties : {}
   const properties: PostHogEventProperties = { ...sourceProperties }
 
-  const options: V1EventOptions = {}
-  for (const { property, optionKey, coerce } of OPTION_SENTINELS) {
-    if (property in properties) {
-      const coerced = coerce(properties[property])
-      if (coerced !== undefined) {
-        ;(options as Record<string, boolean | string>)[optionKey] = coerced
-      }
-      // Always strip the sentinel, even when coercion omits the option.
-      delete properties[property]
+  const options: V1EventOptions = readEventOptions(message.options) ?? {}
+  for (const { property, optionKey } of LEGACY_OPTION_PROPERTIES) {
+    if (!(property in properties)) {
+      continue
+    }
+    const legacyValue = properties[property]
+    delete properties[property]
+    const option = options[optionKey]
+    if ((option === undefined || option === null) && legacyValue !== undefined) {
+      options[optionKey] = legacyValue
     }
   }
 

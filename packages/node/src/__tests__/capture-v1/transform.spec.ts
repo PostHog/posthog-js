@@ -1,6 +1,6 @@
 import type { JsonType, PostHogEventProperties } from '@posthog/core'
 
-import { buildV1Event, coerceBool, coerceString } from '@/capture-v1/transform'
+import { buildV1Event } from '@/capture-v1/transform'
 
 function baseMessage(overrides: PostHogEventProperties = {}): PostHogEventProperties {
   return {
@@ -14,102 +14,132 @@ function baseMessage(overrides: PostHogEventProperties = {}): PostHogEventProper
 }
 
 describe('capture v1 transform', () => {
-  describe('coerceBool', () => {
-    it.each<[string, JsonType, boolean | undefined]>([
-      ['native true', true, true],
-      ['native false', false, false],
-      ['string "true"', 'true', true],
-      ['string "TRUE" (case-insensitive)', 'TRUE', true],
-      ['string " true " (trimmed)', ' true ', true],
-      ['string "1"', '1', true],
-      ['string "false"', 'false', false],
-      ['string "FALSE"', 'FALSE', false],
-      ['string " 0 " (trimmed)', ' 0 ', false],
-      ['string "0"', '0', false],
-      ['number 1', 1, true],
-      ['number 42', 42, true],
-      ['number -1 (nonzero)', -1, true],
-      ['number 0', 0, false],
-      ['string "yes" (uncoercible)', 'yes', undefined],
-      ['string "off" (uncoercible)', 'off', undefined],
-      ['empty string (uncoercible)', '', undefined],
-      ['null (uncoercible)', null, undefined],
-      ['array (uncoercible)', [], undefined],
-      ['object (uncoercible)', {}, undefined],
-    ])('coerces %s', (_label, input, expected) => {
-      expect(coerceBool(input)).toBe(expected)
-    })
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
-  describe('coerceString', () => {
-    it.each<[string, JsonType, string | undefined]>([
-      ['native string', 'abc', 'abc'],
-      ['empty string', '', ''],
-      ['integer (dropped)', 42, undefined],
-      ['zero (dropped)', 0, undefined],
-      ['negative integer (dropped)', -7, undefined],
-      ['float (dropped)', 1.5, undefined],
-      ['bool (dropped)', true, undefined],
-      ['null (dropped)', null, undefined],
-      ['array (dropped)', [], undefined],
-      ['object (dropped)', {}, undefined],
-    ])('accepts only strings: %s', (_label, input, expected) => {
-      expect(coerceString(input)).toBe(expected)
+  describe('buildV1Event - options and legacy option properties', () => {
+    const LEGACY_PAIRS = [
+      ['$process_person_profile', 'process_person_profile'],
+      ['$cookieless_mode', 'cookieless_mode'],
+      ['$ignore_sent_at', 'disable_skew_correction'],
+      ['$product_tour_id', 'product_tour_id'],
+    ] as const
+
+    describe.each(LEGACY_PAIRS)('%s and %s', (property, optionKey) => {
+      it.each<[string, JsonType | undefined, JsonType | undefined, JsonType | undefined]>([
+        ['a set option wins over the legacy property', 'from-option', 'from-legacy', 'from-option'],
+        ['a false option wins over a true legacy property', false, true, false],
+        ['the legacy property fills a missing option', undefined, 'from-legacy', 'from-legacy'],
+        ['the legacy property fills a null option', null, false, false],
+        ['a null option without a legacy property is sent as null', null, undefined, null],
+        ['a null legacy property fills a missing option with null', undefined, null, null],
+      ])('%s', (_label, optionValue, legacyValue, expected) => {
+        const event = buildV1Event(
+          baseMessage({
+            options: optionValue === undefined ? {} : { [optionKey]: optionValue },
+            properties: legacyValue === undefined ? { keep: 'me' } : { [property]: legacyValue, keep: 'me' },
+          })
+        )
+
+        expect(event.options).toStrictEqual({ [optionKey]: expected })
+        expect(event.properties).toStrictEqual({ keep: 'me' })
+      })
+
+      it('leaves the option out when neither the option nor the legacy property is set', () => {
+        const event = buildV1Event(baseMessage({ properties: { keep: 'me' } }))
+
+        expect(event.options).not.toHaveProperty(optionKey)
+      })
+
+      it.each<[string, JsonType]>([
+        ['string "no"', 'no'],
+        ['string "YES"', 'YES'],
+        ['string "maybe"', 'maybe'],
+        ['number 0', 0],
+        ['number 1.5', 1.5],
+        ['array', ['a', 1]],
+        ['object', { nested: true }],
+      ])('sends a legacy %s value unchanged', (_label, value) => {
+        const event = buildV1Event(baseMessage({ properties: { [property]: value } }))
+
+        expect(event.options).toStrictEqual({ [optionKey]: value })
+        expect(event.properties).toStrictEqual({})
+      })
+
+      it.each<[string, JsonType]>([
+        ['string "no"', 'no'],
+        ['string "YES"', 'YES'],
+        ['string "maybe"', 'maybe'],
+        ['number 0', 0],
+        ['array', [true]],
+      ])('sends an option %s value unchanged', (_label, value) => {
+        const event = buildV1Event(baseMessage({ options: { [optionKey]: value } }))
+
+        expect(event.options).toStrictEqual({ [optionKey]: value })
+      })
     })
-  })
 
-  describe('buildV1Event - option sentinels', () => {
-    it.each<[string, JsonType, keyof ReturnType<typeof buildV1Event>['options'], boolean | string]>([
-      ['$cookieless_mode', true, 'cookieless_mode', true],
-      ['$ignore_sent_at', 'true', 'disable_skew_correction', true],
-      ['$process_person_profile', 0, 'process_person_profile', false],
-      ['$product_tour_id', 'tour_9', 'product_tour_id', 'tour_9'],
-    ])('lifts %s into options and strips it from properties', (property, value, optionKey, expected) => {
-      const event = buildV1Event(baseMessage({ properties: { [property]: value, keep: 'me' } }))
+    it('passes unknown option keys through unchanged', () => {
+      const event = buildV1Event(
+        baseMessage({ options: { future_option: 'x', another: [1, { deep: null }] }, properties: { keep: 'me' } })
+      )
 
-      expect(event.options[optionKey]).toBe(expected)
-      expect(event.properties).not.toHaveProperty(property)
-      expect(event.properties.keep).toBe('me')
+      expect(event.options).toStrictEqual({ future_option: 'x', another: [1, { deep: null }] })
+      expect(event.properties).toStrictEqual({ keep: 'me' })
     })
 
-    it('drops a non-string $product_tour_id but still strips the sentinel', () => {
-      const event = buildV1Event(baseMessage({ properties: { $product_tour_id: 42, keep: 'me' } }))
-      expect(event.options).not.toHaveProperty('product_tour_id')
-      expect(event.properties).not.toHaveProperty('$product_tour_id')
-      expect(event.properties.keep).toBe('me')
-    })
-
-    it('omits an option that cannot be coerced but still strips the sentinel', () => {
-      const event = buildV1Event(baseMessage({ properties: { $cookieless_mode: 'maybe', $product_tour_id: 1.5 } }))
-
-      expect(event.options).not.toHaveProperty('cookieless_mode')
-      expect(event.options).not.toHaveProperty('product_tour_id')
-      expect(event.properties).not.toHaveProperty('$cookieless_mode')
-      expect(event.properties).not.toHaveProperty('$product_tour_id')
-    })
-
-    it('leaves options as an empty object when no sentinels are present', () => {
-      const event = buildV1Event(baseMessage({ properties: { foo: 'bar' } }))
-      expect(event.options).toEqual({})
-    })
-
-    it('populates multiple options together', () => {
+    it('combines caller options with every legacy property', () => {
       const event = buildV1Event(
         baseMessage({
+          options: { process_person_profile: true, future_option: 1 },
           properties: {
+            $process_person_profile: false,
             $cookieless_mode: '1',
-            $ignore_sent_at: false,
-            $process_person_profile: true,
-            $product_tour_id: 'abc',
+            $ignore_sent_at: 'false',
+            $product_tour_id: 7,
+            keep: 'me',
           },
         })
       )
-      expect(event.options).toEqual({
-        cookieless_mode: true,
-        disable_skew_correction: false,
+
+      expect(event.options).toStrictEqual({
         process_person_profile: true,
-        product_tour_id: 'abc',
+        future_option: 1,
+        cookieless_mode: '1',
+        disable_skew_correction: 'false',
+        product_tour_id: 7,
       })
+      expect(event.properties).toStrictEqual({ keep: 'me' })
+    })
+
+    it('sends options as an empty object when nothing sets one', () => {
+      expect(buildV1Event(baseMessage({ properties: { foo: 'bar' } })).options).toStrictEqual({})
+      expect(buildV1Event(baseMessage({ options: null })).options).toStrictEqual({})
+    })
+
+    it('does not log when options are missing or null', () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      buildV1Event(baseMessage())
+      buildV1Event(baseMessage({ options: null }))
+
+      expect(error).not.toHaveBeenCalled()
+    })
+
+    it.each<[string, JsonType]>([
+      ['an array', ['process_person_profile']],
+      ['a string', 'process_person_profile'],
+      ['a number', 0],
+      ['a boolean', true],
+    ])('logs one error for %s options and still lifts the legacy properties', (_label, options) => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const event = buildV1Event(baseMessage({ options, properties: { $cookieless_mode: true, keep: 'me' } }))
+
+      expect(event.options).toStrictEqual({ cookieless_mode: true })
+      expect(event.properties).toStrictEqual({ keep: 'me' })
+      expect(error.mock.calls).toEqual([['[PostHog] options must be an object; sending the event without its options']])
     })
   })
 
@@ -254,7 +284,14 @@ describe('capture v1 transform', () => {
     it('does not mutate the input message or its properties', () => {
       const message = baseMessage({
         $set: { name: 'Jane' },
-        properties: { $cookieless_mode: true, $session_id: 'sess', $lib: 'posthog-node', keep: 'me' },
+        options: { process_person_profile: null },
+        properties: {
+          $cookieless_mode: true,
+          $process_person_profile: false,
+          $session_id: 'sess',
+          $lib: 'posthog-node',
+          keep: 'me',
+        },
       })
       const snapshot = structuredClone(message)
 
