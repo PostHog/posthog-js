@@ -1,4 +1,4 @@
-import type { PostHogEventProperties } from '@posthog/core'
+import type { JsonType, PostHogEventProperties } from '@posthog/core'
 
 /** Capture lane for analytics events. */
 export const ANALYTICS_CAPTURE_ENDPOINT = '/i/v1/analytics/events'
@@ -9,16 +9,11 @@ export const AI_CAPTURE_ENDPOINT = '/i/v1/ai/events'
 export type CaptureEndpoint = typeof ANALYTICS_CAPTURE_ENDPOINT | typeof AI_CAPTURE_ENDPOINT
 
 /**
- * Typed `options` object on a Capture V1 event. Legacy `$`-prefixed sentinel
- * properties are lifted here (renamed + strictly typed) by the transform.
+ * The `options` object on a Capture V1 event: the caller's options plus any legacy
+ * `$`-prefixed option properties lifted by the transform. Values are sent unchanged.
  * Always serialized as an object (`{}` when empty), never `null`.
  */
-export interface V1EventOptions {
-  cookieless_mode?: boolean
-  disable_skew_correction?: boolean
-  process_person_profile?: boolean
-  product_tour_id?: string
-}
+export type V1EventOptions = Record<string, JsonType>
 
 /**
  * A single event in a Capture V1 batch.

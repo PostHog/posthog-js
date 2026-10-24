@@ -99,12 +99,13 @@ describe('server wire snapshots', () => {
 
     const messages = [
       {
-        event: 'all-valid-sentinels',
+        event: 'options-and-legacy-properties',
         distinct_id: 'person-1',
         uuid: FIXED_EVENT_UUID,
         timestamp: '2025-02-03T05:05:06.123456+01:00',
         $set: { plan: 'pro' },
         $set_once: { first_seen: '2025-02-03' },
+        options: { process_person_profile: true, future_option: 'kept' },
         properties: {
           $cookieless_mode: '1',
           $ignore_sent_at: 'false',
@@ -118,7 +119,7 @@ describe('server wire snapshots', () => {
         },
       },
       {
-        event: 'invalid-sentinels-are-omitted',
+        event: 'legacy-option-values-sent-unchanged',
         distinct_id: 'person-2',
         uuid: '0194cc39-1f25-7000-8000-000000000003',
         timestamp: '2025-02-03T04:05:07.000Z',
