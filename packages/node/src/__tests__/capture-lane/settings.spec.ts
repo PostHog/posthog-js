@@ -44,6 +44,41 @@ describe('resolveCaptureSettings', () => {
   })
 })
 
+describe('resolveCaptureSettings AI lane limits', () => {
+  it('defaults to a 1000 event queue and a 30 second timeout, and keeps requestTimeout for analytics', () => {
+    const { settings, logged } = resolve({ requestTimeout: 5000 })
+
+    expect(settings.ai).toMatchObject({ maxQueueSize: 1000, requestTimeoutMs: 30_000 })
+    expect(settings.analytics.requestTimeoutMs).toBe(5000)
+    expect(resolve({}).settings.analytics.requestTimeoutMs).toBe(10_000)
+    expect(logged).toEqual([])
+  })
+
+  it('uses valid values', () => {
+    const { settings, logged } = resolve({ captureAiMaxQueueSize: 5, captureAiRequestTimeoutMs: 1500.5 })
+
+    expect(settings.ai).toMatchObject({ maxQueueSize: 5, requestTimeoutMs: 1500.5 })
+    expect(logged).toEqual([])
+  })
+
+  it.each<[keyof PostHogOptions, unknown, string]>([
+    ['captureAiMaxQueueSize', 0, 'captureAiMaxQueueSize must be a positive integer; using the default.'],
+    ['captureAiMaxQueueSize', 2.5, 'captureAiMaxQueueSize must be a positive integer; using the default.'],
+    ['captureAiMaxQueueSize', '10', 'captureAiMaxQueueSize must be a positive integer; using the default.'],
+    ['captureAiRequestTimeoutMs', -1, 'captureAiRequestTimeoutMs must be a positive number; using the default.'],
+    [
+      'captureAiRequestTimeoutMs',
+      Number.POSITIVE_INFINITY,
+      'captureAiRequestTimeoutMs must be a positive number; using the default.',
+    ],
+  ])('logs one error for %s %s and uses the default', (name, value, message) => {
+    const { settings, logged } = resolve({ [name]: value } as PostHogOptions)
+
+    expect(settings.ai).toMatchObject({ maxQueueSize: 1000, requestTimeoutMs: 30_000 })
+    expect(logged).toEqual([message])
+  })
+})
+
 describe('capture settings on the client', () => {
   const harness = new V1WiringHarness()
   const unavailable = (): any => ({ status: 503, text: () => Promise.resolve(''), headers: { get: () => null } })
