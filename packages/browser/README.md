@@ -20,6 +20,8 @@ SDK usage examples and code snippets live in the official documentation so they 
 ></script>
 ```
 
+`crossorigin="anonymous"` is recommended but optional on the loader tag. Without it, the loader still works, but uses the browser's default script request mode and has limited cross-origin error reporting. The loader cannot change the mode of its own request after download. The full SDK script it injects always uses `crossOrigin = 'anonymous'`, regardless of the outer tag.
+
 Use `eu-assets.i.posthog.com` for EU projects. Every project loads the same static file: the loader reads `project_token` from its own URL, falling back to `data-project-token`. Putting the token in the URL path instead would require additional routing, as with Sentry's loader.
 
 The small loader exposes queued public SDK methods, including `people.set` and `people.set_once`, and asynchronously loads `array.js` from the same directory without forwarding the query string. Its method list is generated from the SDK class during the build, so it stays in sync without bundling the SDK itself. Existing snippet and npm installations are unchanged; use only one installation method per page.
