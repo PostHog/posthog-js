@@ -67,7 +67,11 @@ export type SendFeatureFlagsOptions = {
 }
 
 export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
-  distinctId?: string // Optional - can be provided via context
+  /**
+   * The event's distinct id. When it is missing, empty or only whitespace, the context distinct id
+   * is used; without one, the event gets a generated id and `options.process_person_profile: false`.
+   */
+  distinctId?: string
   event: string
   groups?: Record<string, string | number> // Mapping of group type to group id
   /**
@@ -98,7 +102,11 @@ export type GroupIdentifyMessage = {
   groupType: string
   groupKey: string // Unique identifier for the group
   properties?: Record<string | number, any>
-  distinctId?: string // optional distinctId to associate message with a person
+  /**
+   * The event's distinct id. When it is missing, empty or only whitespace, the context distinct id
+   * is used, then `$<groupType>_<groupKey>`.
+   */
+  distinctId?: string
   disableGeoip?: boolean
   /**
    * Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,
@@ -201,6 +209,7 @@ export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 export type PostHogOptions = Omit<
   PostHogCoreOptions,
   | 'before_send'
+  | 'disableGeoip'
   | 'flushInterval'
   | 'maxQueueSize'
   | 'fetchRetryCount'
@@ -209,6 +218,15 @@ export type PostHogOptions = Omit<
   | 'requestTimeout'
 > & {
   persistence?: 'memory'
+  /**
+   * Whether to disable GeoIP lookups for events and feature flag requests. When on, every event
+   * gets `$geoip_disable: true` unless the event, its context or `register()` sets
+   * `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's
+   * own `$geoip_disable` property.
+   *
+   * @default true
+   */
+  disableGeoip?: boolean
   /**
    * The interval in milliseconds between periodic flushes
    *
@@ -387,6 +405,14 @@ export type PostHogOptions = Omit<
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.
    * If a function returns null, the event will be dropped.
+   *
+   * @remarks
+   * The hook gets a copy of the finished event: the event's own values, then the values filled
+   * from context, `register()` and `registerOptions()`, then the values the SDK adds (such as
+   * `$is_server`, `$geoip_disable`, feature flag properties and `options.process_person_profile`).
+   * It has the final say: it can change or remove any of them, and nothing is added after it.
+   * Set `$geoip_disable` in `properties` to change GeoIP; the `disableGeoip` and `groups` fields
+   * are already applied to the properties it sees.
    */
   before_send?: BeforeSendFn | BeforeSendFn[]
   /**
@@ -487,7 +513,8 @@ export type PostHogOptions = Omit<
    * react-native events. Set this to `false` when running the SDK as a
    * client/CLI so the event is attributed to the device OS normally instead of
    * being marked as a server event. When `false`, the `$is_server` property is
-   * omitted entirely.
+   * omitted entirely. A `$is_server` value set on the event, in context or with
+   * `register()` wins over this setting.
    *
    * @default true
    * @example
@@ -726,7 +753,7 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param alias the unique ID of the user before
    */
-  alias(data: { distinctId: string; alias: string }): void
+  alias(data: { distinctId: string; alias: string; disableGeoip?: boolean; options?: Record<string, JsonType> }): void
 
   /**
    * @description To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.
@@ -734,7 +761,12 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param alias the unique ID of the user before
    */
-  aliasImmediate(data: { distinctId: string; alias: string }): Promise<void>
+  aliasImmediate(data: {
+    distinctId: string
+    alias: string
+    disableGeoip?: boolean
+    options?: Record<string, JsonType>
+  }): Promise<void>
 
   /**
    * @description PostHog feature flags (https://posthog.com/docs/features/feature-flags)
@@ -981,7 +1013,7 @@ export interface IPostHog {
 
   /**
    * @description Run a function with specific context that will be applied to all events captured within that context.
-   * @param data Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)
+   * @param data Context data to apply (sessionId, distinctId, properties, options)
    * @param fn Function to run with the context
    * @param options Context options (fresh)
    * @returns The return value of the function
@@ -992,7 +1024,7 @@ export interface IPostHog {
    * @description Set context without a callback wrapper. Must be called in the same
    * async scope that makes PostHog calls. Prefer `withContext()` when you can wrap
    * code in a callback.
-   * @param data Context data to apply (distinctId, sessionId, properties)
+   * @param data Context data to apply (distinctId, sessionId, properties, options)
    * @param options Context options (fresh)
    */
   enterContext(data: Partial<ContextData>, options?: ContextOptions): void
