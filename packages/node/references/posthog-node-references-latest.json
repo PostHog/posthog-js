@@ -3514,6 +3514,10 @@
         {
           "type": "AbortSignal",
           "name": "signal"
+        },
+        {
+          "type": "\"follow\" | \"manual\" | \"error\"",
+          "name": "redirect"
         }
       ],
       "path": "../core/src/types.ts"
@@ -4345,7 +4349,7 @@
           "name": "prefix"
         },
         {
-          "type": "(\"fatal\" | \"error\" | \"warning\" | \"log\" | \"info\" | \"debug\")[] | \"*\"",
+          "type": "(\"error\" | \"fatal\" | \"warning\" | \"log\" | \"info\" | \"debug\")[] | \"*\"",
           "name": "severityAllowList"
         },
         {
