@@ -74,6 +74,7 @@ describe('waitUntil debounced flush', () => {
         flushInterval: 60000, // Long interval so timer doesn't trigger
         fetchRetryCount: 0,
         disableCompression: true,
+        captureAiCompression: 'none',
         waitUntil: mockWaitUntil,
         waitUntilDebounceMs: DEBOUNCE_MS,
       })

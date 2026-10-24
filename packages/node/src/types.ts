@@ -168,7 +168,7 @@ export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 
 export type PostHogOptions = Omit<
   PostHogCoreOptions,
-  'before_send' | 'flushInterval' | 'maxQueueSize' | 'fetchRetryCount' | 'fetchRetryDelay'
+  'before_send' | 'flushInterval' | 'maxQueueSize' | 'fetchRetryCount' | 'fetchRetryDelay' | 'disableCompression'
 > & {
   persistence?: 'memory'
   /**
@@ -207,6 +207,28 @@ export type PostHogOptions = Omit<
    * @default 3000
    */
   fetchRetryDelay?: number
+  /**
+   * How analytics capture requests compress their body. `'deflate'` is zlib-wrapped. `'zstd'` needs
+   * Node 22.15 or later and falls back to `'gzip'` elsewhere, including the edge build. When not set,
+   * `disableCompression: true` means `'none'`.
+   *
+   * @default 'gzip'
+   */
+  captureCompression?: 'none' | 'gzip' | 'deflate' | 'zstd'
+  /**
+   * How `captureAi` requests compress their body, with the same values as `captureCompression`.
+   * It does not read `captureCompression` or `disableCompression`.
+   *
+   * @default 'gzip'
+   */
+  captureAiCompression?: 'none' | 'gzip' | 'deflate' | 'zstd'
+  /**
+   * Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it
+   * is set, and `captureAi` requests use `captureAiCompression`.
+   *
+   * @default false
+   */
+  disableCompression?: boolean
   /**
    * Configuration for the `posthog.metrics` API (count, gauge, histogram).
    * Set `serviceName` so series can be filtered per service in the Metrics UI.
