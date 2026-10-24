@@ -7,6 +7,7 @@ import type {
   MetricsConfig,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogEventProperties,
   PostHogFlagsAndPayloadsResponse,
   Properties,
   Span,
@@ -96,6 +97,21 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
    * capture() with '$exception' directly.
    */
   _originatedFromCaptureException?: boolean
+}
+
+/**
+ * An event as `prepareEventMessage()` builds it: the shape of `EventMessage`, with the distinct id
+ * resolved and the properties and options filled from every layer, after `before_send`.
+ */
+export type PreparedEventMessage = {
+  distinctId: string
+  event: string
+  properties: PostHogEventProperties
+  /** The event's options, sent to capture unchanged. */
+  options?: Record<string, JsonType>
+  uuid?: string
+  timestamp?: Date
+  disableGeoip?: boolean
 }
 
 export type GroupIdentifyMessage = {
