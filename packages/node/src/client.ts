@@ -81,6 +81,7 @@ import {
   CAPTURE_BATCH_TARGET_BYTES,
 } from './capture-lane/limits'
 import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
+import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -579,11 +580,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const endpoint = route === AI_CAPTURE_ROUTE ? AI_CAPTURE_ENDPOINT : ANALYTICS_CAPTURE_ENDPOINT
     let lane = this._captureLanes.get(endpoint)
     if (!lane) {
+      const compressor = this.captureCompressor()
       lane = new CaptureLane(this._captureLaneConfig(endpoint), {
-        sender: new V1CaptureSender(this.captureSenderConfig(endpoint), {
+        sender: new V1CaptureSender(this.captureSenderConfig(endpoint, compressor), {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
           onError: (error) => this._events.emit('error', error),
-          compress: (payload) => this.compressPayload(payload),
+          compress: (payload, codec) => compressor.compress(payload, codec),
         }),
         onLocalDrops: (error) => this._reportLocalCaptureDrops(error),
         onError: (error) => this._events.emit('error', error),
@@ -620,8 +622,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  /** Every lane shares the client's retry, timeout and compression settings. */
-  private captureSenderConfig(path: CaptureEndpoint): V1CaptureSenderConfig {
+  /**
+   * Compresses capture request bodies. The edge build uses CompressionStream; the Node
+   * entrypoint overrides this with node:zlib.
+   */
+  protected captureCompressor(): CaptureCompressor {
+    return webCompressor
+  }
+
+  private captureSenderConfig(path: CaptureEndpoint, compressor: CaptureCompressor): V1CaptureSenderConfig {
+    const laneSettings = path === AI_CAPTURE_ENDPOINT ? this._captureSettings.ai : this._captureSettings.analytics
+    const compression = resolveCaptureCodec(laneSettings.compression, compressor, (fallback) =>
+      this._logger.debug(`zstd compression is not available in this runtime; ${path} uses ${fallback} instead`)
+    )
     return {
       host: this.host,
       path,
@@ -630,7 +643,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       libraryVersion: this.getLibraryVersion(),
       userAgent: this.getCustomUserAgent() || undefined,
       historicalMigration: this.historicalMigration,
-      compressionEnabled: !this.disableCompression,
+      compression,
       requestTimeoutMs: this.requestTimeout,
       maxRetries: this._captureSettings.maxRetries,
       isDebug: this.isDebug,

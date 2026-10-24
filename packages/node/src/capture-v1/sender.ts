@@ -1,12 +1,6 @@
-import {
-  type FetchLike,
-  type PostHogFetchBodyBytes,
-  type PostHogFetchOptions,
-  type PostHogFetchResponse,
-  gzipCompress,
-  uuidv7,
-} from '@posthog/core'
+import { type FetchLike, type PostHogFetchOptions, type PostHogFetchResponse, uuidv7 } from '@posthog/core'
 
+import { type CaptureCodec, type CaptureCompression, webCompressor } from './compression'
 import { CaptureError, type CaptureDroppedEvent, type CaptureErrorParams } from './errors'
 import { type SerializedV1Event, buildV1Body } from './serialize'
 import type { CaptureEndpoint, V1BatchResponse } from './types'
@@ -47,8 +41,8 @@ export interface V1CaptureSenderConfig {
   /** Value for the `User-Agent` header, if the runtime allows setting it. */
   userAgent?: string
   historicalMigration: boolean
-  /** When true, the body is gzip-compressed (falling back to uncompressed on failure). */
-  compressionEnabled: boolean
+  /** The body encoding; a body that fails to compress is sent uncompressed. */
+  compression: CaptureCompression
   requestTimeoutMs: number
   /** Retries after the first attempt. */
   maxRetries: number
@@ -65,7 +59,7 @@ export interface V1CaptureSenderHooks {
   generateRequestId?: () => string
   /** Uniform in [0, 1); sets the jitter of each retry wait. */
   random?: () => number
-  compress?: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
+  compress?: (payload: string, codec: CaptureCodec) => Promise<Uint8Array | null>
 }
 
 export interface V1SendOptions {
@@ -106,7 +100,7 @@ export class V1CaptureSender {
   private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>
   private readonly generateRequestId: () => string
   private readonly random: () => number
-  private readonly compress: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
+  private readonly compress: (payload: string, codec: CaptureCodec) => Promise<Uint8Array | null>
 
   constructor(config: V1CaptureSenderConfig, hooks: V1CaptureSenderHooks) {
     this.config = config
@@ -116,7 +110,7 @@ export class V1CaptureSender {
     this.sleep = hooks.sleep ?? abortableSleep
     this.generateRequestId = hooks.generateRequestId ?? uuidv7
     this.random = hooks.random ?? Math.random
-    this.compress = hooks.compress ?? gzipCompress
+    this.compress = hooks.compress ?? webCompressor.compress
   }
 
   /** Sends `events` and resolves with the ones to queue again (always empty unless `keepUnsent`). */
@@ -255,15 +249,7 @@ export class V1CaptureSender {
     externalSignal: AbortSignal | undefined
   ): Promise<V1CaptureAttempt> {
     const headers = this.buildHeaders(attempt, requestId)
-    let body: string | Blob | PostHogFetchBodyBytes = payload
-    if (this.config.compressionEnabled) {
-      const compressed = await this.compress(payload, this.config.isDebug)
-      if (compressed !== null) {
-        body = compressed
-        headers['Content-Encoding'] = 'gzip'
-      }
-      // A codec that fails to compress falls back to sending uncompressed.
-    }
+    const body = await this.encodeBody(payload, headers)
 
     const controller = new AbortController()
     let timeoutPhase = 'waiting for response headers'
@@ -308,7 +294,13 @@ export class V1CaptureSender {
     // Keeps an early abort from surfacing as an unhandled rejection before the race below observes it.
     deadline.catch(() => {})
     try {
-      const fetchPromise = this.fetchFn(url, { method: 'POST', headers, body, signal: controller.signal })
+      // A fresh copy per request: fetch may detach a byte body it has sent.
+      const fetchPromise = this.fetchFn(url, {
+        method: 'POST',
+        headers,
+        body: typeof body === 'string' ? body : body.slice(),
+        signal: controller.signal,
+      })
       let responseAccepted = false
       void fetchPromise
         .then((lateResponse) => {
@@ -349,6 +341,26 @@ export class V1CaptureSender {
       stopListening()
       throw error
     }
+  }
+
+  /** Compresses `payload` with the configured codec and sets `Content-Encoding` to match. */
+  private async encodeBody(payload: string, headers: PostHogFetchOptions['headers']): Promise<string | Uint8Array> {
+    const codec = this.config.compression
+    if (codec === 'none') {
+      return payload
+    }
+    try {
+      const compressed = await this.compress(payload, codec)
+      if (compressed !== null) {
+        headers['Content-Encoding'] = codec
+        return compressed
+      }
+    } catch (error) {
+      if (this.config.isDebug) {
+        console.error(`Failed to ${codec} compress the capture request body`, error)
+      }
+    }
+    return payload
   }
 
   private buildHeaders(attempt: number, requestId: string): PostHogFetchOptions['headers'] {

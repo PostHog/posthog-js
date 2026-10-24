@@ -13,6 +13,15 @@ const CAPTURE_PATHS = ['/i/v1/analytics/events']
 let fetchCalls: Array<{ url: string; headers: Record<string, string>; body: unknown }> = []
 const originalFetch = global.fetch
 
+// Capture bodies may be a string, Blob or byte array, and gzip or deflate compressed.
+async function decodeBody(body: BodyInit, encoding: string | undefined): Promise<string> {
+    const raw = new Response(body)
+    if (encoding === 'gzip' || encoding === 'deflate') {
+        return await new Response(raw.body!.pipeThrough(new DecompressionStream(encoding))).text()
+    }
+    return await raw.text()
+}
+
 function mockFetch(responseByUrl?: Record<string, unknown>, statusByUrl?: Record<string, number>) {
     fetchCalls = []
     return vi.fn(async (url: string | URL, init?: RequestInit) => {
@@ -21,17 +30,7 @@ function mockFetch(responseByUrl?: Record<string, unknown>, statusByUrl?: Record
         const status = Object.entries(statusByUrl ?? {}).find(([pattern]) => urlStr.includes(pattern))?.[1] ?? 200
         let body: unknown
         if (init?.body) {
-            let rawText: string
-            if (init.body instanceof Blob) {
-                if (headers['Content-Encoding'] === 'gzip') {
-                    const ds = new DecompressionStream('gzip')
-                    rawText = await new Response(init.body.stream().pipeThrough(ds)).text()
-                } else {
-                    rawText = await init.body.text()
-                }
-            } else {
-                rawText = init.body as string
-            }
+            const rawText = await decodeBody(init.body, headers['Content-Encoding'])
             try {
                 body = JSON.parse(rawText)
             } catch {

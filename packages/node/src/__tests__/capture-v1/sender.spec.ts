@@ -61,7 +61,7 @@ function makeSender(
       libraryVersion: '1.2.3',
       userAgent: 'posthog-node/1.2.3',
       historicalMigration: false,
-      compressionEnabled: false,
+      compression: 'none',
       requestTimeoutMs: 1000,
       maxRetries: 3,
       ...configOverrides,
@@ -207,33 +207,54 @@ describe('V1CaptureSender', () => {
   })
 
   describe('compression', () => {
-    it('gzips the body and advertises Content-Encoding when compression succeeds', async () => {
-      const blob = new Blob(['compressed'])
-      const compress = vi.fn().mockResolvedValue(blob)
-      const { sender, fetch } = makeSender({ compressionEnabled: true }, { compress })
-      fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
+    const compressed = new Uint8Array([1, 2, 3])
+
+    it.each(['gzip', 'deflate', 'zstd'] as const)(
+      'sends the %s body and advertises that Content-Encoding',
+      async (codec) => {
+        const compress = vi.fn().mockResolvedValue(compressed)
+        const { sender, fetch } = makeSender({ compression: codec }, { compress })
+        fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+        await sender.send(v1Events([msg('u1')]))
+
+        expect(compress).toHaveBeenCalledWith(expect.stringContaining('"batch"'), codec)
+        expect(headersOf(fetch, 0)['Content-Encoding']).toBe(codec)
+        expect(fetch.mock.calls[0][1].body).toEqual(compressed)
+      }
+    )
+
+    it('sends a fresh copy of the compressed body on every attempt', async () => {
+      const compress = vi.fn().mockResolvedValue(compressed)
+      const { sender, fetch } = makeSender({ compression: 'gzip' }, { compress })
+      fetch.mockResolvedValueOnce(makeResponse(503)).mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       await sender.send(v1Events([msg('u1')]))
 
-      expect(compress).toHaveBeenCalledTimes(1)
-      expect(headersOf(fetch, 0)['Content-Encoding']).toBe('gzip')
-      expect(fetch.mock.calls[0][1].body).toBe(blob)
+      const [first, second] = fetch.mock.calls.map((call) => call[1].body)
+      expect(first).toEqual(compressed)
+      expect(second).toEqual(compressed)
+      expect(first).not.toBe(second)
+      expect(first).not.toBe(compressed)
     })
 
-    it('falls back to uncompressed when compression returns null', async () => {
-      const compress = vi.fn().mockResolvedValue(null)
-      const { sender, fetch } = makeSender({ compressionEnabled: true }, { compress })
+    it.each<[string, () => Promise<Uint8Array | null>]>([
+      ['resolves to null', () => Promise.resolve(null)],
+      ['rejects', () => Promise.reject(new Error('codec failed'))],
+    ])('sends uncompressed when the codec %s', async (_label, compress) => {
+      const { sender, fetch, errors } = makeSender({ compression: 'gzip' }, { compress })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       await sender.send(v1Events([msg('u1')]))
 
       expect(headersOf(fetch, 0)).not.toHaveProperty('Content-Encoding')
-      expect(typeof fetch.mock.calls[0][1].body).toBe('string')
+      expect(bodyOf(fetch, 0).batch[0].uuid).toBe('u1')
+      expect(errors).toEqual([])
     })
 
-    it('does not compress when disabled', async () => {
+    it('does not compress when compression is none', async () => {
       const compress = vi.fn()
-      const { sender, fetch } = makeSender({ compressionEnabled: false }, { compress })
+      const { sender, fetch } = makeSender({ compression: 'none' }, { compress })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       await sender.send(v1Events([msg('u1')]))
@@ -892,7 +913,7 @@ describe('V1CaptureSender', () => {
       libraryId: 'posthog-node',
       libraryVersion: '1.2.3',
       historicalMigration: false,
-      compressionEnabled: false,
+      compression: 'none',
       requestTimeoutMs: 1000,
       maxRetries: 1,
     }
@@ -954,23 +975,23 @@ describe('V1CaptureSender', () => {
       expect(leaked).toEqual([])
     })
 
-    it('uses the real gzip compressor when not injected', async () => {
+    it.each(['gzip', 'deflate'] as const)('uses the CompressionStream %s codec when not injected', async (codec) => {
       const fetch = vi
         .fn<[string, any], Promise<PostHogFetchResponse>>()
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      const sender = new V1CaptureSender({ ...baseConfig, compressionEnabled: true }, { fetch, onError: () => {} })
+      const sender = new V1CaptureSender({ ...baseConfig, compression: codec }, { fetch, onError: () => {} })
       await sender.send(v1Events([msg('u1')]))
 
-      // The default compressor is the platform gzip codec: it compresses where
-      // supported and transparently falls back to an uncompressed string where it
-      // is not (e.g. the edge runtime has no CompressionStream).
+      // Without CompressionStream (some edge runtimes) the default codec fails and the body goes uncompressed.
+      const [, options] = fetch.mock.calls[0]
       if (isGzipSupported()) {
-        expect(fetch.mock.calls[0][1].headers['Content-Encoding']).toBe('gzip')
-        expect(fetch.mock.calls[0][1].body).toBeInstanceOf(Blob)
+        expect(options.headers['Content-Encoding']).toBe(codec)
+        const decompressed = new Response(new Blob([options.body]).stream().pipeThrough(new DecompressionStream(codec)))
+        expect(JSON.parse(await decompressed.text()).batch[0].uuid).toBe('u1')
       } else {
-        expect(fetch.mock.calls[0][1].headers['Content-Encoding']).toBeUndefined()
-        expect(typeof fetch.mock.calls[0][1].body).toBe('string')
+        expect(options.headers['Content-Encoding']).toBeUndefined()
+        expect(typeof options.body).toBe('string')
       }
     })
   })
