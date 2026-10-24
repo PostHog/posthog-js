@@ -10,5 +10,8 @@ posthog-node, the Node.js backend SDK: server-side capture, identify and local f
 - flag definitions: PostHog servers answer the poller with the flag definitions used for local evaluation
   handler: FeatureFlagsPoller in src/extensions/feature-flags/feature-flags.ts
   trust: posthog-api
+- email send responses: PostHog servers answer `emails.send` with a queued message ID or an error
+  handler: EmailSender in src/emails/emails.ts
+  trust: posthog-api
 
 ## invariants

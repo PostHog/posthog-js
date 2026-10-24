@@ -15,6 +15,7 @@ import type {
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
+import type { Emails } from './emails/types'
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
 import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
@@ -211,12 +212,15 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   traces?: TracesConfig
   /**
-   * Credential for fetching local feature flag definitions and decrypting remote config.
+   * Credential for fetching local feature flag definitions, decrypting remote config and
+   * sending email.
    *
    * Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).
    * Local evaluation can also use definitions from `flagDefinitionCacheProvider` without
    * this credential. Remote config payload decryption via `getRemoteConfigPayload`
-   * still requires it. Prefer this over the deprecated
+   * still requires it. `emails.send` needs a Project Secret API Key with the
+   * `hog_flow:write` scope; set `enableLocalEvaluation: false` when the key is only for email.
+   * Prefer this over the deprecated
    * `personalApiKey` option; when both are set, `secretKey` takes precedence.
    *
    * @example
@@ -229,6 +233,28 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * @deprecated Use `secretKey` instead.
    */
   personalApiKey?: string
+  /**
+   * Your PostHog app host, such as `https://posthog.example.com`. `emails.send` sends there.
+   *
+   * Needed only when `host` is not PostHog Cloud, for example a reverse proxy, which must not
+   * receive the secret key. On PostHog Cloud, the client derives `https://us.posthog.com` or
+   * `https://eu.posthog.com` from `host`.
+   */
+  appHost?: string
+  /**
+   * Timeout in milliseconds for each `emails.send` request.
+   *
+   * @default 15000
+   */
+  emailRequestTimeoutMs?: number
+  /**
+   * Number of retries for an `emails.send` after a network error, a rate limit, or an
+   * unavailable service. Every retry sends the same idempotency key. Set to 0 when a job
+   * runner already retries the send.
+   *
+   * @default 2
+   */
+  emailRequestMaxRetries?: number
   /**
    * Redact prompts, outputs and error details from every event that the PostHog AI
    * integrations (`@posthog/ai`) capture with this client. Per-call privacy settings
@@ -903,6 +929,12 @@ export interface IPostHog {
    * periodically. Configure via the `metrics` client option.
    */
   readonly metrics: Metrics
+
+  /**
+   * @description The `posthog.emails` API: sends transactional email from PostHog email templates.
+   * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope.
+   */
+  readonly emails: Emails
 
   /**
    * @description Starts a span without making it active, for work that can't wrap a callback.
