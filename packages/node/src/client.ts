@@ -162,6 +162,42 @@ function isolateForBeforeSend(eventMessage: EventMessage): EventMessage {
   return isolated
 }
 
+/**
+ * The `$identify` properties: `$set` is the caller's `$set`, or every other property when there is
+ * none; `$set_once` only when the caller gave one.
+ */
+function identifyEventProperties(properties: Record<string | number, any>): PostHogEventProperties {
+  const { $set, $set_once, $anon_distinct_id, ...rest } = properties
+  return {
+    $set: $set || rest,
+    ...($set_once !== undefined && $set_once !== null ? { $set_once } : {}),
+    $anon_distinct_id: $anon_distinct_id ?? undefined,
+  }
+}
+
+/** How one message type resolves identity and which layers may set which keys. */
+type PrepareEventOptions = {
+  /** The distinct id when neither the call nor the context gives one; otherwise a personless id is generated. */
+  fallbackDistinctId?: string
+  /** Whether the context session id fills `$session_id`. */
+  contextSession?: boolean
+  /** Properties that only the call sets: no layer fills them. */
+  callOnlyProperties?: readonly string[]
+  /** Set the `distinct_id` property to the resolved distinct id. */
+  distinctIdProperty?: boolean
+}
+
+/** `alias` never takes its target from a context or default, and reports the resolved id. */
+const ALIAS_PREPARE_OPTIONS: PrepareEventOptions = { callOnlyProperties: ['alias'], distinctIdProperty: true }
+
+/** The id, or undefined when it is missing, empty or only whitespace. */
+function presentDistinctId(value: unknown): string | undefined {
+  if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
+    return undefined
+  }
+  return value as string
+}
+
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
   const propertyNames = Array.isArray(value) ? value : [value]
   return propertyNames.filter(
@@ -1102,7 +1138,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     type: string,
     props: EventMessage,
     immediate: boolean,
-    prepareOptions?: { includeContextProperties?: boolean },
+    prepareOptions?: PrepareEventOptions,
     explicitRoute?: string
   ): Promise<void> {
     const uuid = this._canonicalEventUuid(props.uuid)
@@ -1300,21 +1336,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The identify data containing distinctId and properties
    */
   identify({ distinctId, properties = {}, disableGeoip, options }: IdentifyMessage): void {
-    // Catch properties passed as $set and move them to the top level
-    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
-    // if no $set is provided we assume all rest properties are $set
-    const setProps = $set || rest
-    const setOnceProps = $set_once || {}
-    const eventProperties = {
-      $set: setProps,
-      $set_once: setOnceProps,
-      $anon_distinct_id: $anon_distinct_id ?? undefined,
-    }
+    const eventProperties = identifyEventProperties(properties)
     this._sendPreparedEvent(
       'identify',
       { distinctId, event: '$identify', properties: eventProperties, disableGeoip, options },
-      false,
-      { includeContextProperties: false }
+      false
     )
   }
 
@@ -1339,21 +1365,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when the identify is processed
    */
   async identifyImmediate({ distinctId, properties = {}, disableGeoip, options }: IdentifyMessage): Promise<void> {
-    // Catch properties passed as $set and move them to the top level
-    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
-    // if no $set is provided we assume all rest properties are $set
-    const setProps = $set || rest
-    const setOnceProps = $set_once || {}
-    const eventProperties = {
-      $set: setProps,
-      $set_once: setOnceProps,
-      $anon_distinct_id: $anon_distinct_id ?? undefined,
-    }
+    const eventProperties = identifyEventProperties(properties)
     await this._sendPreparedEvent(
       'identify',
       { distinctId, event: '$identify', properties: eventProperties, disableGeoip, options },
-      true,
-      { includeContextProperties: false }
+      true
     )
   }
 
@@ -1440,12 +1456,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       {
         distinctId: data.distinctId,
         event: '$create_alias',
-        properties: { distinct_id: data.distinctId, alias: data.alias },
+        properties: { alias: data.alias },
         disableGeoip: data.disableGeoip,
         options: data.options,
       },
       false,
-      { includeContextProperties: false }
+      ALIAS_PREPARE_OPTIONS
     )
   }
 
@@ -1477,12 +1493,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       {
         distinctId: data.distinctId,
         event: '$create_alias',
-        properties: { distinct_id: data.distinctId, alias: data.alias },
+        properties: { alias: data.alias },
         disableGeoip: data.disableGeoip,
         options: data.options,
       },
       true,
-      { includeContextProperties: false }
+      ALIAS_PREPARE_OPTIONS
     )
   }
 
@@ -2772,7 +2788,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this._sendPreparedEvent(
       'capture',
       {
-        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        distinctId,
         event: '$groupidentify',
         properties: {
           $group_type: groupType,
@@ -2783,7 +2799,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         options,
       },
       false,
-      { includeContextProperties: false }
+      { fallbackDistinctId: `$${groupType}_${groupKey}`, contextSession: false }
     )
   }
 
@@ -2820,7 +2836,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     await this._sendPreparedEvent(
       'capture',
       {
-        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        distinctId,
         event: '$groupidentify',
         properties: {
           $group_type: groupType,
@@ -2831,7 +2847,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         options,
       },
       true,
-      { includeContextProperties: false }
+      { fallbackDistinctId: `$${groupType}_${groupKey}`, contextSession: false }
     )
   }
 
@@ -3500,7 +3516,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   private async _prepareEventMessage(
     props: EventMessage,
-    prepareOptions: { includeContextProperties?: boolean } = {}
+    prepareOptions: PrepareEventOptions = {}
   ): Promise<{
     distinctId: string
     event: string
@@ -3524,17 +3540,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // Read every layer now, before the first await, so later changes never reach this event.
     const contextData = this.context?.get()
-    const includeContextProperties = prepareOptions.includeContextProperties ?? true
-    const contextProperties = includeContextProperties ? snapshotLayer(contextData?.properties) : undefined
+    const contextProperties = snapshotLayer(contextData?.properties)
     const contextOptions = snapshotLayer(contextData?.options)
-    const globalProperties = includeContextProperties ? snapshotLayer(this.props) : undefined
+    const globalProperties = snapshotLayer(this.props)
     const globalOptions = this._globalOptions
 
-    const resolvedDistinctId = distinctId || contextData?.distinctId
-    const eventDistinctId = resolvedDistinctId || uuidv7()
+    const resolvedDistinctId =
+      presentDistinctId(distinctId) ?? presentDistinctId(contextData?.distinctId) ?? prepareOptions.fallbackDistinctId
+    const eventDistinctId = resolvedDistinctId ?? uuidv7()
 
     const eventProperties: PostHogEventProperties = { ...(properties || {}) }
-    if (includeContextProperties && contextData?.sessionId && isUnsetProperty(eventProperties, '$session_id')) {
+    if (prepareOptions.distinctIdProperty) {
+      eventProperties.distinct_id = eventDistinctId
+    }
+    if (
+      (prepareOptions.contextSession ?? true) &&
+      contextData?.sessionId &&
+      isUnsetProperty(eventProperties, '$session_id')
+    ) {
       eventProperties.$session_id = contextData.sessionId
     }
     if (isPlainObject(groups) && Object.keys(groups).length > 0) {
@@ -3545,7 +3568,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       fillProperties(eventProperties, [{ $geoip_disable: disableGeoip }])
     }
 
-    fillProperties(eventProperties, [contextProperties, globalProperties])
+    fillProperties(eventProperties, [contextProperties, globalProperties], prepareOptions.callOnlyProperties)
     fillProperties(eventProperties, [
       await this._sdkEventProperties(event, eventProperties, eventDistinctId, {
         groups,
@@ -3559,7 +3582,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     fillOptions(filledOptions, [
       contextOptions,
       globalOptions,
-      resolvedDistinctId ? undefined : { process_person_profile: false },
+      resolvedDistinctId !== undefined ? undefined : { process_person_profile: false },
     ])
     const eventOptions = callOptions !== undefined || Object.keys(filledOptions).length > 0 ? filledOptions : undefined
 
