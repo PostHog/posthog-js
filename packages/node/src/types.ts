@@ -16,6 +16,7 @@ import type {
 import { ContextData, ContextOptions } from './extensions/context/types'
 
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
+import type { Emails } from './emails'
 import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 export type IdentifyMessage = {
@@ -219,6 +220,9 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * still requires it. Prefer this over the deprecated
    * `personalApiKey` option; when both are set, `secretKey` takes precedence.
    *
+   * `posthog.emails` sends with it too, which needs a project secret API key with the `hog_flow:write` scope. When
+   * that key can't read feature flags, also set `enableLocalEvaluation: false`.
+   *
    * @example
    * ```ts
    * const client = new PostHog('phc_...', { secretKey: 'phs_...' })
@@ -229,6 +233,19 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * @deprecated Use `secretKey` instead.
    */
   personalApiKey?: string
+  /**
+   * The PostHog app host that `posthog.emails` sends to with the `secretKey`, such as `https://posthog.example.com`
+   * for a self-hosted instance. Derived when `host` is PostHog Cloud. Any other `host` may be a reverse proxy, so
+   * `emails` calls fail with `missing_app_host` until you set it, and the secret key never goes to the proxy.
+   */
+  appHost?: string
+  /**
+   * How often `posthog.emails` retries a send that PostHog did not queue, a whole number from 0. Defaults to 2. `0`
+   * turns retries off.
+   */
+  maxRetries?: number
+  /** The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request. */
+  migratedFrom?: string
   /**
    * Redact prompts, outputs and error details from every event that the PostHog AI
    * integrations (`@posthog/ai`) capture with this client. Per-call privacy settings
@@ -903,6 +920,12 @@ export interface IPostHog {
    * periodically. Configure via the `metrics` client option.
    */
   readonly metrics: Metrics
+
+  /**
+   * @description The `posthog.emails` API: send transactional email from your server. Needs the `secretKey` client
+   * option.
+   */
+  readonly emails: Emails
 
   /**
    * @description Starts a span without making it active, for work that can't wrap a callback.

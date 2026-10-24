@@ -2036,6 +2036,43 @@
       "example": "Record<string, string>"
     },
     {
+      "id": "CodeEmailFields",
+      "name": "CodeEmailFields",
+      "properties": [
+        {
+          "description": "A verified sender, such as `'Acme <security@acme.com>'`. Without it, the project's default sender.",
+          "type": "string",
+          "name": "from"
+        },
+        {
+          "type": "string | string[]",
+          "name": "replyTo"
+        },
+        {
+          "type": "string",
+          "name": "subject"
+        },
+        {
+          "description": "Leave it out to send rendered content: the email goes out as is, and PostHog never stores it. Pass it to send a local template: PostHog fills its `{{ variables.* }}`, and the SDK uploads the template when PostHog does not hold its content yet.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog.",
+          "type": "string",
+          "name": "templateKey"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "CodeEmailForm",
+      "name": "CodeEmailForm",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "CodeEmailFields & ({\n    html: string;\n    text?: string;\n} | {\n    html?: string;\n    text: string;\n})"
+    },
+    {
       "id": "Coercer",
       "name": "Coercer",
       "properties": [],
@@ -2107,6 +2144,84 @@
       "name": "CookieStore_2",
       "properties": [],
       "path": "../core/src/cookie.ts"
+    },
+    {
+      "id": "EmailError",
+      "name": "EmailError",
+      "properties": [
+        {
+          "description": "PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`, `missing_app_host`, `client_disabled`, `client_closed`, `network_error`, `api_error` for an answer without a code, `unexpected_error`, and `invalid_form`, `invalid_template_id`, `invalid_template_key` and `invalid_idempotency_key` for a send the SDK refused before any request.",
+          "type": "string",
+          "name": "code"
+        },
+        {
+          "description": "A link to the docs section that explains the fix.",
+          "type": "string",
+          "name": "docsUrl"
+        },
+        {
+          "description": "The request field the error is about.",
+          "type": "string",
+          "name": "field"
+        },
+        {
+          "description": "What to change so the email sends.",
+          "type": "string",
+          "name": "fix"
+        },
+        {
+          "type": "string",
+          "name": "message"
+        },
+        {
+          "description": "`validation_error`, `missing_api_key`, `invalid_permission`, `not_found`, `concurrent_idempotent_requests`, `invalid_idempotent_request`, `rate_limit_exceeded`, `monthly_quota_exceeded`, `service_unavailable` or `application_error`.",
+          "type": "EmailErrorName",
+          "name": "name"
+        },
+        {
+          "description": "The HTTP status, when PostHog answered.",
+          "type": "number",
+          "name": "statusCode"
+        },
+        {
+          "description": "Why PostHog refused the email.",
+          "type": "string",
+          "name": "why"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "EmailErrorName",
+      "name": "EmailErrorName",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "\"validation_error\" | \"missing_api_key\" | \"invalid_permission\" | \"not_found\" | \"concurrent_idempotent_requests\" | \"invalid_idempotent_request\" | \"rate_limit_exceeded\" | \"monthly_quota_exceeded\" | \"service_unavailable\" | \"application_error\""
+    },
+    {
+      "id": "Emails",
+      "name": "Emails",
+      "properties": [],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "EmailWarning",
+      "name": "EmailWarning",
+      "properties": [
+        {
+          "type": "string",
+          "name": "code"
+        },
+        {
+          "type": "string",
+          "name": "fix"
+        },
+        {
+          "type": "string",
+          "name": "message"
+        }
+      ],
+      "path": "src/emails.ts"
     },
     {
       "id": "EndBranching",
@@ -2668,6 +2783,11 @@
       "name": "IPostHog",
       "properties": [
         {
+          "description": "The `posthog.emails` API: send transactional email from your server. Needs the `secretKey` client option.",
+          "type": "Emails",
+          "name": "emails"
+        },
+        {
           "description": "The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count, gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed periodically. Configure via the `metrics` client option.",
           "type": "Metrics",
           "name": "metrics"
@@ -2982,6 +3102,26 @@
         }
       ],
       "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "PostHogApiResponse",
+      "name": "PostHogApiResponse",
+      "properties": [
+        {
+          "type": "number",
+          "name": "status"
+        },
+        {
+          "type": "unknown",
+          "name": "body"
+        },
+        {
+          "description": "The answer's `Retry-After` in milliseconds, when it sent a usable one.",
+          "type": "number",
+          "name": "retryAfterMs"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogCaptureOptions",
@@ -3716,7 +3856,7 @@
           "name": "traces"
         },
         {
-          "description": "Credential for fetching local feature flag definitions and decrypting remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
+          "description": "Credential for fetching local feature flag definitions and decrypting remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.\n\n`posthog.emails` sends with it too, which needs a project secret API key with the `hog_flow:write` scope. When\nthat key can't read feature flags, also set `enableLocalEvaluation: false`.",
           "type": "string",
           "name": "secretKey"
         },
@@ -3725,6 +3865,21 @@
           "type": "string",
           "name": "personalApiKey",
           "releaseTag": "deprecated"
+        },
+        {
+          "description": "The PostHog app host that `posthog.emails` sends to with the `secretKey`, such as `https://posthog.example.com`\nfor a self-hosted instance. Derived when `host` is PostHog Cloud. Any other `host` may be a reverse proxy, so\n`emails` calls fail with `missing_app_host` until you set it, and the secret key never goes to the proxy.",
+          "type": "string",
+          "name": "appHost"
+        },
+        {
+          "description": "How often `posthog.emails` retries a send that PostHog did not queue, a whole number from 0. Defaults to 2. `0`\nturns retries off.",
+          "type": "number",
+          "name": "maxRetries"
+        },
+        {
+          "description": "The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request.",
+          "type": "string",
+          "name": "migratedFrom"
         },
         {
           "description": "Redact prompts, outputs and error details from every event that the PostHog AI\nintegrations (`@posthog/ai`) capture with this client. Per-call privacy settings\ncan only add redaction. Defaults to false.",
@@ -4186,6 +4341,59 @@
       "path": "../core/src/utils/index.ts"
     },
     {
+      "id": "SendCodeEmailOptions",
+      "name": "SendCodeEmailOptions",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "SendEmailBase & CodeEmailForm & Without<Omit<TemplateEmailForm, 'templateData'>>"
+    },
+    {
+      "id": "SendEmailBase",
+      "name": "SendEmailBase",
+      "properties": [
+        {
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as analytics events of the recipient. They count as analytics events. Without it, PostHog decides: on for the code form.",
+          "type": "boolean",
+          "name": "captureEngagement"
+        },
+        {
+          "description": "The recipient's distinct ID in your app. The email's events, such as sent, opened and clicked, land on this person and count as analytics events. Always pass it: without it, they land on a person keyed by the address.",
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "description": "Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's workflow was paused or the default sender changed. A deleted template, a local template whose content changed, or a project that no longer has a default sender while you name no `from`, still refuses the send. Without it, the SDK makes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what the email is for, such as `welcome:user_42`, and set `maxRetries: 0`.",
+          "type": "string",
+          "name": "idempotencyKey"
+        },
+        {
+          "description": "How often to retry this send, a whole number from 0. Overrides the `maxRetries` client option.",
+          "type": "number",
+          "name": "maxRetries"
+        },
+        {
+          "description": "One recipient email address.",
+          "type": "string",
+          "name": "to"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
+      "id": "SendEmailOptions",
+      "name": "SendEmailOptions",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "SendTemplateEmailOptions | SendCodeEmailOptions"
+    },
+    {
+      "id": "SendEmailResult",
+      "name": "SendEmailResult",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "{\n    data: {\n        id: string;\n        warnings: EmailWarning[];\n    };\n    error: null;\n} | {\n    data: null;\n    error: EmailError;\n}"
+    },
+    {
       "id": "SendFeatureFlagsOptions",
       "name": "SendFeatureFlagsOptions",
       "properties": [
@@ -4221,6 +4429,74 @@
       "properties": [],
       "path": "../core/src/metrics/types.ts",
       "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
+      "id": "SendTemplateEmailOptions",
+      "name": "SendTemplateEmailOptions",
+      "properties": [
+        {
+          "description": "One recipient email address.",
+          "type": "string",
+          "name": "to"
+        },
+        {
+          "description": "The recipient's distinct ID in your app. The email's events, such as sent, opened and clicked, land on this\nperson and count as analytics events. Always pass it: without it, they land on a person keyed by the address.",
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "description": "Sends with a key PostHog already accepted queue nothing and return the first send's `id`, even after the email's\nworkflow was paused or the default sender changed. A deleted template, a local template whose content changed, or\na project that no longer has a default sender while you name no `from`, still refuses the send. Without it, the SDK\nmakes a UUID v4 that covers its own retries. When a job runner retries the send, pass a key derived from what the\nemail is for, such as `welcome:user_42`, and set `maxRetries: 0`.",
+          "type": "string",
+          "name": "idempotencyKey"
+        },
+        {
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as analytics\nevents of the recipient. They count as analytics events. Without it, PostHog decides: on for the code form.",
+          "type": "boolean",
+          "name": "captureEngagement"
+        },
+        {
+          "description": "How often to retry this send, a whole number from 0. Overrides the `maxRetries` client option.",
+          "type": "number",
+          "name": "maxRetries"
+        },
+        {
+          "description": "The UUID of the template.",
+          "type": "string",
+          "name": "templateId"
+        },
+        {
+          "description": "Values for the template's `{{ variables.* }}`. The template can't read person properties.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog.",
+          "type": "never",
+          "name": "templateKey"
+        },
+        {
+          "type": "never",
+          "name": "subject"
+        },
+        {
+          "description": "A verified sender, such as `'Acme <security@acme.com>'`. Without it, the project's default sender.",
+          "type": "never",
+          "name": "from"
+        },
+        {
+          "type": "never",
+          "name": "replyTo"
+        },
+        {
+          "type": "never",
+          "name": "html"
+        },
+        {
+          "type": "never",
+          "name": "text"
+        }
+      ],
+      "path": "src/emails.ts"
     },
     {
       "id": "SendTracesBatchOutcome",
@@ -4868,6 +5144,23 @@
       "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {
+      "id": "TemplateEmailForm",
+      "name": "TemplateEmailForm",
+      "properties": [
+        {
+          "description": "Values for the template's `{{ variables.* }}`. The template can't read person properties.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "The UUID of the template.",
+          "type": "string",
+          "name": "templateId"
+        }
+      ],
+      "path": "src/emails.ts"
+    },
+    {
       "id": "UnresolvedFlagReason",
       "name": "UnresolvedFlagReason",
       "properties": [],
@@ -4888,6 +5181,13 @@
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "Without",
+      "name": "Without",
+      "properties": [],
+      "path": "src/emails.ts",
+      "example": "{\n    [K in keyof T]?: never;\n}"
     }
   ],
   "categories": [
