@@ -22,17 +22,41 @@ export type IdentifyMessage = {
   distinctId: string
   properties?: Record<string | number, any>
   disableGeoip?: boolean
+  /**
+   * Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;
+   * unknown keys pass through. A legacy property such as `$process_person_profile` fills an option
+   * left unset. Capture drops an event whose option value it cannot read (`invalid_options`), and
+   * the SDK reports the drop through the `'error'` event.
+   */
+  options?: Record<string, JsonType>
 }
 
 export type SetPersonPropertiesMessage = {
   distinctId: string
   properties?: Record<string | number, any>
   propertiesOnce?: Record<string | number, any>
+  /**
+   * Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;
+   * unknown keys pass through. A legacy property such as `$process_person_profile` fills an option
+   * left unset. Capture drops an event whose option value it cannot read (`invalid_options`), and
+   * the SDK reports the drop through the `'error'` event.
+   */
+  options?: Record<string, JsonType>
 }
 
 export type UnsetPersonPropertiesMessage = {
   distinctId: string
   properties: string | string[]
+  /**
+   * Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;
+   * unknown keys pass through. A legacy property such as `$process_person_profile` fills an option
+   * left unset. Capture drops an event whose option value it cannot read (`invalid_options`), and
+   * the SDK reports the drop through the `'error'` event.
+   */
+  options?: Record<string, JsonType>
 }
 
 export type SendFeatureFlagsOptions = {
@@ -76,6 +100,14 @@ export type GroupIdentifyMessage = {
   properties?: Record<string | number, any>
   distinctId?: string // optional distinctId to associate message with a person
   disableGeoip?: boolean
+  /**
+   * Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;
+   * unknown keys pass through. A legacy property such as `$process_person_profile` fills an option
+   * left unset. Capture drops an event whose option value it cannot read (`invalid_options`), and
+   * the SDK reports the drop through the `'error'` event.
+   */
+  options?: Record<string, JsonType>
 }
 
 export type PropertyGroup = {
