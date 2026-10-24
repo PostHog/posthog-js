@@ -37,16 +37,6 @@ export interface V1Event {
 }
 
 /**
- * The Capture V1 batch envelope. Unlike v0 there is no `api_key` (Bearer auth)
- * and no `sent_at`. `historical_migration` is omitted when false.
- */
-export interface V1Batch {
-  created_at: string
-  historical_migration?: boolean
-  batch: V1Event[]
-}
-
-/**
  * Per-event result codes in a v1 2xx response body. Unknown strings are
  * tolerated as terminal success for forward compatibility.
  */

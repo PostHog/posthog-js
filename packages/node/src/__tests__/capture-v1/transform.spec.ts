@@ -1,6 +1,6 @@
 import type { JsonType, PostHogEventProperties } from '@posthog/core'
 
-import { buildV1Batch, buildV1Event, coerceBool, coerceString } from '@/capture-v1/transform'
+import { buildV1Event, coerceBool, coerceString } from '@/capture-v1/transform'
 
 function baseMessage(overrides: PostHogEventProperties = {}): PostHogEventProperties {
   return {
@@ -261,29 +261,6 @@ describe('capture v1 transform', () => {
       buildV1Event(message)
 
       expect(message).toEqual(snapshot)
-    })
-  })
-
-  describe('buildV1Batch', () => {
-    it('wraps events with created_at and omits historical_migration by default', () => {
-      const batch = buildV1Batch([baseMessage(), baseMessage({ event: 'second' })], {
-        createdAt: '2024-01-15T10:30:01.000Z',
-      })
-
-      expect(batch.created_at).toBe('2024-01-15T10:30:01.000Z')
-      expect(batch.batch).toHaveLength(2)
-      expect(batch.batch[1].event).toBe('second')
-      expect(batch).not.toHaveProperty('historical_migration')
-    })
-
-    it('includes historical_migration only when true', () => {
-      const batch = buildV1Batch([baseMessage()], { createdAt: 'now', historicalMigration: true })
-      expect(batch.historical_migration).toBe(true)
-    })
-
-    it('produces an empty batch array for no messages', () => {
-      const batch = buildV1Batch([], { createdAt: 'now' })
-      expect(batch.batch).toEqual([])
     })
   })
 })

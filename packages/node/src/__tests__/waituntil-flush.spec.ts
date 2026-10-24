@@ -1,6 +1,6 @@
 import { PostHog } from '@/entrypoints/index.node'
 
-import { captureRequests, sentEventsOf, v1Response } from './utils'
+import { captureCalls, captureRequests, sentEventsOf, v1Response } from './utils'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
@@ -13,7 +13,7 @@ function getFlushedBatches(): any[][] {
 }
 
 describe('flush combines events and spans', () => {
-  it('waits for the span export even when the event flush rejects', async () => {
+  it('waits for the span export even when the event delivery fails', async () => {
     // `Promise.all` settled on the event rejection, so a serverless host could
     // freeze the invocation with the span request still open.
     vi.useRealTimers()
@@ -25,7 +25,7 @@ describe('flush combines events and spans', () => {
         order.push('traces-done')
         return { status: 200, text: () => Promise.resolve('{}'), json: () => Promise.resolve({}) } as any
       }
-      return v1Response()
+      return new Response('events endpoint down', { status: 400 })
     })
     const posthog = new PostHog('key', {
       host: 'http://example.com',
@@ -34,19 +34,23 @@ describe('flush combines events and spans', () => {
       traces: { serviceName: 'svc' },
       disableCompression: true,
     })
-    // Fail the send seam itself: only the legacy sender throws when the events request fails.
-    vi.spyOn(posthog as any, 'sendBatch').mockRejectedValue(new Error('events endpoint down'))
-    posthog.capture({ distinctId: 'u', event: 'e' })
-    posthog.startSpan('s').end()
+    const errors: unknown[] = []
+    posthog.on('error', (error) => errors.push(error))
+    try {
+      posthog.capture({ distinctId: 'u', event: 'e' })
+      posthog.startSpan('s').end()
 
-    await expect(posthog.flush()).rejects.toThrow()
-    order.push('flush-returned')
+      await expect(posthog.flush()).resolves.toBeUndefined()
+      order.push('flush-returned')
 
-    // Exact, not an index comparison: before the fix `traces-done` is absent
-    // when flush returns, and `indexOf` gives -1, which passes any `lessThan`.
-    expect(order).toEqual(['traces-start', 'traces-done', 'flush-returned'])
-    await posthog.shutdown()
-    vi.useFakeTimers()
+      // Exact, not an index comparison: before the fix `traces-done` is absent
+      // when flush returns, and `indexOf` gives -1, which passes any `lessThan`.
+      expect(order).toEqual(['traces-start', 'traces-done', 'flush-returned'])
+      expect(errors).toEqual([expect.objectContaining({ name: 'CaptureError', retryExhausted: [expect.any(String)] })])
+    } finally {
+      await posthog.shutdown()
+      vi.useFakeTimers()
+    }
   })
 })
 
@@ -162,6 +166,30 @@ describe('waitUntil debounced flush', () => {
       } finally {
         completeDelivery()
       }
+    })
+
+    it('drains both capture lanes before resolving the waitUntil promise', async () => {
+      let releaseAi!: () => void
+      mockedFetch.mockImplementation((url: any) =>
+        String(url).includes('/i/v1/ai/events')
+          ? new Promise((resolve) => (releaseAi = () => resolve(v1Response())))
+          : Promise.resolve(v1Response())
+      )
+      const settled = vi.fn()
+
+      posthog.capture({ distinctId: 'user-1', event: 'analytics_event' })
+      posthog.captureAi({ distinctId: 'user-1', event: '$ai_generation' })
+      await vi.advanceTimersByTimeAsync(0)
+      const waitUntilPromise = mockWaitUntil.mock.calls[0][0] as Promise<unknown>
+      void waitUntilPromise.then(settled)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+
+      expect(getFlushedBatches().map((batch) => batch.map(({ event }) => event))).toEqual([['analytics_event']])
+      expect(captureCalls(mockedFetch, '/i/v1/ai/events')).toHaveLength(1)
+      expect(settled).not.toHaveBeenCalled()
+
+      releaseAi()
+      await expect(waitUntilPromise).resolves.toBeUndefined()
     })
 
     it('does not activate debounced flush when no waitUntil in options', async () => {
