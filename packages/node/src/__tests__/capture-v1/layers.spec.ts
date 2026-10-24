@@ -82,9 +82,9 @@ describe('layered event values', () => {
 
   /** Captures one event with options from the event, a context and `registerOptions()`. */
   const captureWithOptionLayers = (layers: Layers, message: Partial<EventMessage> = {}) =>
-    sendOne((client) => {
+    sendOne(async (client) => {
       if (layers.global) {
-        client.registerOptions(layers.global)
+        await client.registerOptions(layers.global)
       }
       const capture = (): void =>
         client.capture({ distinctId: 'u', event: 'e', ...message, options: layers.event ?? message.options })
@@ -377,7 +377,7 @@ describe('layered event values', () => {
           $window_id: 'window',
           dropped: 'yes',
         })
-        client.registerOptions({ future_option: 1 })
+        await client.registerOptions({ future_option: 1 })
         await client.withContext({ sessionId: 'session' }, () => client.getFeatureFlag('test-flag', 'u'))
       })
 
@@ -436,8 +436,8 @@ describe('layered event values', () => {
     it('before_send sees the filled options and can remove one', async () => {
       const seen: EventMessage[] = []
       const event = await sendOne(
-        (client) => {
-          client.registerOptions({ cookieless_mode: true, product_tour_id: 'tour' })
+        async (client) => {
+          await client.registerOptions({ cookieless_mode: true, product_tour_id: 'tour' })
           client.capture({ distinctId: 'u', event: 'e' })
         },
         {
@@ -455,10 +455,10 @@ describe('layered event values', () => {
 
     describe('registerOptions', () => {
       it('merges calls, and unregisterOptions removes one key', async () => {
-        const event = await sendOne((client) => {
-          client.registerOptions({ a: 1, b: 2 })
-          client.registerOptions({ b: 3, c: 4 })
-          client.unregisterOptions('a')
+        const event = await sendOne(async (client) => {
+          await expect(client.registerOptions({ a: 1, b: 2 })).resolves.toBeUndefined()
+          await client.registerOptions({ b: 3, c: 4 })
+          await expect(client.unregisterOptions('a')).resolves.toBeUndefined()
           client.capture({ distinctId: 'u', event: 'e' })
         })
 
@@ -466,11 +466,11 @@ describe('layered event values', () => {
       })
 
       it('an event keeps the options it read when it was captured', async () => {
-        const event = await sendOne((client) => {
-          client.registerOptions({ a: 1 })
+        const event = await sendOne(async (client) => {
+          await client.registerOptions({ a: 1 })
           client.capture({ distinctId: 'u', event: 'e' })
-          client.registerOptions({ a: 2 })
-          client.unregisterOptions('a')
+          await client.registerOptions({ a: 2 })
+          await client.unregisterOptions('a')
         })
 
         expect(event.options).toStrictEqual({ a: 1 })
@@ -482,9 +482,9 @@ describe('layered event values', () => {
         ['a number', 1],
         ['null', null],
       ])('logs one error for %s and ignores it', async (_label, value) => {
-        const event = await sendOne((client) => {
-          client.registerOptions({ kept: true })
-          client.registerOptions(value as Record<string, JsonType>)
+        const event = await sendOne(async (client) => {
+          await client.registerOptions({ kept: true })
+          await client.registerOptions(value as Record<string, JsonType>)
           client.capture({ distinctId: 'u', event: 'e' })
         })
 
@@ -661,7 +661,7 @@ describe('layered event values', () => {
       const event = await sendOne(
         async (client) => {
           await client.register({ global_prop: 'g' })
-          client.registerOptions({ global_option: 'g' })
+          await client.registerOptions({ global_option: 'g' })
           return client.withContext({ properties: { context_prop: 'c' }, options: { context_option: 'c' } }, () =>
             send(client)
           )
