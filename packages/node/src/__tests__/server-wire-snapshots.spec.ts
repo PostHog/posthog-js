@@ -155,16 +155,15 @@ describe('server wire snapshots', () => {
       '    at handler (service/src/handler.ts:12:5)',
     ].join('\n')
 
-    posthog.captureException(
-      error,
-      'person-exception',
-      {
+    posthog.captureException(error, {
+      distinctId: 'person-exception',
+      properties: {
         endpoint: '/v1/orders',
         request: { method: 'POST', tags: ['checkout', 'priority'] },
         status_code: 503,
       },
-      FIXED_EVENT_UUID
-    )
+      uuid: FIXED_EVENT_UUID,
+    })
     await (posthog as any).promiseQueue.join()
     await posthog.flush()
 

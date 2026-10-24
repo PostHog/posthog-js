@@ -28,6 +28,16 @@ const RESERVED_EXCEPTION_PROPERTIES: ReadonlySet<string> = new Set([
   '$cymbal_errors',
 ])
 
+/** The `$exception_level` values a caller may set (sdk-specs `exception-event-metadata`). */
+const EXCEPTION_LEVELS: ReadonlySet<string> = new Set<CoreErrorTracking.SeverityLevel>([
+  'fatal',
+  'error',
+  'warning',
+  'log',
+  'info',
+  'debug',
+])
+
 export default class ErrorTracking {
   private client: PostHogBackendClient
   private _exceptionAutocaptureEnabled: boolean
@@ -67,7 +77,8 @@ export default class ErrorTracking {
     error: unknown,
     hint: CoreErrorTracking.EventHint,
     distinctId?: string,
-    additionalProperties?: Record<string | number, any>
+    additionalProperties?: Record<string | number, any>,
+    level?: CoreErrorTracking.SeverityLevel
   ): Promise<EventMessage> {
     const properties: EventMessage['properties'] = {}
     for (const [key, value] of Object.entries(additionalProperties ?? {})) {
@@ -78,6 +89,9 @@ export default class ErrorTracking {
 
     const exceptionProperties = builder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
+    if (level !== undefined && EXCEPTION_LEVELS.has(level)) {
+      exceptionProperties.$exception_level = level
+    }
 
     return {
       event: '$exception',
