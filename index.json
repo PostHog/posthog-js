@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/5419": {
+    "key": "PostHog/posthog-js/issue/5419",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5419",
+    "url": "https://github.com/PostHog/posthog-js/issues/5419",
+    "conclusion": "Confirmed likely recorder memory leak: detached top-level shadow hosts are not individually released before the next full snapshot.",
+    "labels": [
+      "feature/replay",
+      "web",
+      "javascript",
+      "team/client-libraries",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-24T15:42:58.829Z"
+  },
   "PostHog/posthog-js/issue/5382": {
     "key": "PostHog/posthog-js/issue/5382",
     "repo": "PostHog/posthog-js",
@@ -2937,21 +2953,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-07-01T13:38:03.572Z"
-  },
-  "PostHog/posthog-js/issue/3595": {
-    "key": "PostHog/posthog-js/issue/3595",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3595",
-    "url": "https://github.com/PostHog/posthog-js/issues/3595",
-    "conclusion": "Valid feature request; current SDK typings do not provide project-specific feature flag key/variant safety.",
-    "labels": [
-      "enhancement",
-      "feature/flags",
-      "team/feature-flags",
-      "node",
-      "web"
-    ],
-    "closed": false,
-    "updatedAt": "2026-07-01T09:36:48.807Z"
   }
 }
