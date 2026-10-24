@@ -1,5 +1,3 @@
-import { PostHogPersistedProperty } from '@posthog/core'
-
 import { CaptureError, PostHog } from '@/entrypoints/index.node'
 
 import { AI_CAPTURE_PATH, AI_CAPTURE_URL, ANALYTICS_CAPTURE_PATH, v1Response, v413Response } from '../utils'
@@ -9,9 +7,6 @@ vi.mock('../../version', () => ({ version: '1.2.3' }))
 
 describe('AI capture lane wiring (Node SDK)', () => {
   const harness = new V1WiringHarness()
-
-  const aiCaptureQueueEvents = (posthog: PostHog): string[] =>
-    (posthog.getPersistedProperty(PostHogPersistedProperty.AiCaptureQueue) || []).map((item: any) => item.message.event)
 
   const deliveredEventsIn = async (fragment: string): Promise<string[]> => {
     const events: string[] = []
@@ -96,28 +91,57 @@ describe('AI capture lane wiring (Node SDK)', () => {
     expect(harness.fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('drops events over 8MiB with a name-and-size-only error log, delivering the rest', async () => {
+  it('drops events whose properties pass 8MiB with one aggregate error, delivering the rest', async () => {
     const posthog = harness.makeClient()
-    posthog.debug(true)
     const onError = vi.fn()
     posthog.on('error', onError)
     const pad = 'x'.repeat(9 * 1024 * 1024)
-    posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: { pad } })
+    const dropped = [1, 2].map(() =>
+      posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: { pad } })
+    )
     posthog.captureAi({ distinctId: 'u', event: '$ai_span', properties: {} })
     await posthog.flush()
 
     expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_span'])
-    const errorLog = (console.error as vi.Mock).mock.calls.flat().join(' ')
-    expect(errorLog).toContain('$ai_generation')
-    expect(errorLog).toMatch(/\d+ bytes/)
-    expect(errorLog).not.toContain('xxxx')
-
     expect(onError).toHaveBeenCalledTimes(1)
-    const emittedError = onError.mock.calls[0][0]
-    expect(emittedError).toBeInstanceOf(Error)
-    expect(emittedError.message).toContain('$ai_generation')
-    expect(emittedError.message).toMatch(/\d+ bytes/)
-    expect(emittedError.message).not.toContain('xxxx')
+    const error = onError.mock.calls[0][0] as CaptureError
+    expect(error).toBeInstanceOf(CaptureError)
+    expect(error.endpoint).toBe(AI_CAPTURE_PATH)
+    expect(error.drops).toEqual(dropped.map((uuid) => ({ uuid, details: 'event too large' })))
+    expect(error.message).toBe(
+      `Dropped 2 event(s) for ${AI_CAPTURE_PATH} before sending: 2 with properties larger than 8388608 bytes`
+    )
+    // With a listener, the listener owns reporting.
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('warns once on the console for local drops when nothing listens for errors', async () => {
+    const posthog = harness.makeClient()
+    const pad = 'x'.repeat(9 * 1024 * 1024)
+    posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: { pad } })
+    posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: { pad } })
+    await posthog.flush()
+
+    expect(console.warn).toHaveBeenCalledTimes(1)
+    expect(console.warn).toHaveBeenCalledWith(
+      `[PostHog] Dropped 2 event(s) for ${AI_CAPTURE_PATH} before sending: 2 with properties larger than 8388608 bytes`
+    )
+  })
+
+  it('drops an oversized captureAiImmediate event without sending it', async () => {
+    const posthog = harness.makeClient()
+    const onError = vi.fn()
+    posthog.on('error', onError)
+
+    const uuid = await posthog.captureAiImmediate({
+      distinctId: 'u',
+      event: '$ai_generation',
+      properties: { pad: 'x'.repeat(9 * 1024 * 1024) },
+    })
+
+    expect(harness.callsTo(AI_CAPTURE_PATH)).toHaveLength(0)
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect((onError.mock.calls[0][0] as CaptureError).drops).toEqual([{ uuid, details: 'event too large' }])
   })
 
   it('splits multi-MB batches into byte-bounded requests', async () => {
@@ -172,7 +196,6 @@ describe('AI capture lane wiring (Node SDK)', () => {
     posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: {} })
     await posthog.shutdown()
     expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_generation'])
-    expect(aiCaptureQueueEvents(posthog)).toEqual([])
   })
 
   it('routes non-$ai_ events through the lane anyway, with a debug log', async () => {

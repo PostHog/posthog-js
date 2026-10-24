@@ -23,7 +23,6 @@ import {
   resolveMetricsConfig,
   resolveTracesConfig,
   runWithActiveSpan,
-  RetriableOptions,
   raceWithTimeout,
   safeSetTimeout,
   SyncSpanContextManager,
@@ -72,10 +71,16 @@ import { getActiveTraceProperties } from './extensions/error-tracking/trace-cont
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 import { V1CaptureSender, type V1CaptureSenderConfig } from './capture-v1/sender'
-import { serializeV1Event } from './capture-v1/serialize'
 import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from './capture-v1/types'
-import { partitionAiBatch } from './ai-capture/batching'
-import { AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
+import type { CaptureError } from './capture-v1/errors'
+import { CaptureLane, type CaptureLaneConfig } from './capture-lane/lane'
+import {
+  AI_MAX_PROPERTIES_BYTES,
+  AI_MAX_QUEUE_SIZE,
+  ANALYTICS_MAX_EVENT_BYTES,
+  CAPTURE_BATCH_TARGET_BYTES,
+} from './capture-lane/limits'
+import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -86,9 +91,6 @@ const MAX_CACHE_SIZE = 50 * 1000
 const WAITUNTIL_DEBOUNCE_MS = 50
 const WAITUNTIL_MAX_WAIT_MS = 500
 const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
-
-/** Queue route for `capture()` events; its queue is the historical {@link PostHogPersistedProperty.Queue}. */
-const ANALYTICS_ROUTE = 'analytics'
 
 // Process-wide dedup for deprecation warnings — without this, calling a deprecated
 // method in a loop would spam logs. Matches Python's `warnings.warn` default-dedup behavior.
@@ -164,12 +166,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _traces?: PostHogTraces
   private _spanContext?: SpanContextManager
 
-  private readonly _captureSenders = new Map<CaptureEndpoint, V1CaptureSender>()
+  // Created on first use, so a client that never calls captureAi has no AI lane.
+  private readonly _captureLanes = new Map<CaptureEndpoint, CaptureLane>()
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
   /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
   public readonly privacyMode: boolean
-  private _aiCaptureRouteActive = false
 
   // Feature flag overrides for local testing/development
   private _flagOverrides?: Record<string, FeatureFlagValue>
@@ -311,14 +313,60 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
   }
 
+  /** Queues the event on its capture lane instead of the core queue. */
   protected override enqueue(
     type: string,
     message: any,
     options?: PostHogCaptureOptions,
     explicitRoute?: string
   ): void {
-    super.enqueue(type, message, options, explicitRoute)
+    this.wrap(() => {
+      if (this.optedOut) {
+        this._events.emit(type, `Library is disabled. Not sending event. To re-enable, call posthog.optIn()`)
+        return
+      }
+      const prepared = this._prepareLaneMessage(message, options)
+      if (prepared === null) {
+        return
+      }
+      this._captureLane(explicitRoute).enqueue(prepared)
+      this._events.emit(type, prepared)
+    })
     this.scheduleDebouncedFlush()
+  }
+
+  /** Sends the event through its capture lane's sender, without queueing it. */
+  protected override async sendImmediate(
+    type: string,
+    message: any,
+    options?: PostHogCaptureOptions,
+    explicitRoute?: string
+  ): Promise<void> {
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return
+    }
+    if (!this._isInitialized) {
+      await this._initPromise
+    }
+    if (this.optedOut) {
+      this._events.emit(type, `Library is disabled. Not sending event. To re-enable, call posthog.optIn()`)
+      return
+    }
+    const prepared = this._prepareLaneMessage(message, options)
+    if (prepared === null) {
+      return
+    }
+    try {
+      await this._captureLane(explicitRoute).sendImmediate(prepared)
+    } catch (err) {
+      this._events.emit('error', err)
+    }
+  }
+
+  private _prepareLaneMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties | null {
+    const prepared = this.processBeforeEnqueue(this.prepareMessage(message, options))
+    return prepared === null ? null : this.normalizeMessage(prepared)
   }
 
   /**
@@ -326,9 +374,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * failed span export leaves the spans queued rather than rejecting, since
    * callers already treat `flush()` as safe to leave unwrapped.
    */
-  private _flushEventsAndSpans(skipThrottledSpans = false): Promise<void> {
-    const events = this.flushWithPendingPromises()
-    if (!this._traces || (skipThrottledSpans && this._traces.throttled)) {
+  private _flushEventsAndSpans(): Promise<void> {
+    // Pending captures land on their lanes first, so this flush sends them too.
+    const events = this.flushWithPendingPromises().then(() => this._flushCaptureLanes())
+    if (!this._traces) {
       return events
     }
     // Settled, not `all`: `all` rejects the moment the event flush does, and a
@@ -342,18 +391,30 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     })
   }
 
-  protected override flushAutomatic(): Promise<void> {
-    // The events timer must not drag spans through a `Retry-After` window the
-    // traces queue is honouring; its own timer picks them up when it closes.
-    return this._flushKeepingRuntimeAlive(true)
-  }
-
+  /**
+   * Sends all queued events and spans, and resolves when every send has finished.
+   * It does not reject when delivery fails: those failures arrive on the `'error'` event.
+   */
   override async flush(): Promise<void> {
-    return this._flushKeepingRuntimeAlive(false)
+    return this._keepRuntimeAlive(this._flushEventsAndSpans())
   }
 
-  private _flushKeepingRuntimeAlive(skipThrottledSpans: boolean): Promise<void> {
-    const flushPromise = this._flushEventsAndSpans(skipThrottledSpans)
+  /** Every lane flushes concurrently, so a slow lane only delays this promise, not the other lanes' sends. */
+  private _flushCaptureLanes(): Promise<void> {
+    return Promise.all([...this._captureLanes.values()].map((lane) => lane.flush())).then(() => {})
+  }
+
+  /** A flush a lane started on its own, from its timer or `flushAt`. */
+  private _onLaneBackgroundFlush(laneFlush: Promise<void>): void {
+    // Spans ride along, except while the traces queue is honouring a `Retry-After`
+    // window; its own timer picks them up when the window closes.
+    const traces = this._traces
+    const flush =
+      traces && !traces.throttled ? allSettled([laneFlush, traces.flush().catch(() => {})]).then(() => {}) : laneFlush
+    void this._keepRuntimeAlive(flush)
+  }
+
+  private _keepRuntimeAlive(flushPromise: Promise<void>): Promise<void> {
     const waitUntil = this.options.waitUntil
     // Only register when no debounce promise is already keeping runtime alive
     if (waitUntil && !this._waitUntilCycle) {
@@ -507,63 +568,50 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this.options.fetch ? this.options.fetch(url, options) : fetch(url, options)
   }
 
-  /** Every `capture()` event, including `$ai_*`, stays on the analytics route. */
-  protected getQueueRouteKey(_message: PostHogEventProperties): string {
-    return ANALYTICS_ROUTE
-  }
-
-  protected persistedQueueKeyForRoute(route: string): PostHogPersistedProperty {
-    return route === AI_CAPTURE_ROUTE ? PostHogPersistedProperty.AiCaptureQueue : PostHogPersistedProperty.Queue
-  }
-
-  protected getActiveQueueRoutes(): string[] {
-    return this._aiCaptureRouteActive ? [ANALYTICS_ROUTE, AI_CAPTURE_ROUTE] : [ANALYTICS_ROUTE]
-  }
-
-  /**
-   * Capture submission seam shared by the batched (`_flush`) and immediate (`sendImmediate`)
-   * paths. Each route has its own queue and capture lane, so a failure on one lane can never
-   * re-send events already accepted on the other. The sender reports failures on the error
-   * channel and resolves, so `_flush` treats every batch as consumed.
-   */
-  protected async sendBatch(
-    batchMessages: (PostHogEventProperties | undefined)[],
-    _retryOptions?: Partial<RetriableOptions>,
-    route: string = ANALYTICS_ROUTE
-  ): Promise<void> {
-    if (route === AI_CAPTURE_ROUTE) {
-      return this.sendAiCaptureBatch(batchMessages)
-    }
-
-    // A freshly-enqueued event is never undefined; drop any legacy undefined queue artifacts.
-    const events = batchMessages.filter((message): message is PostHogEventProperties => message !== undefined)
-    await this.getCaptureSender(ANALYTICS_CAPTURE_ENDPOINT).send(events.map(serializeV1Event))
-  }
-
-  private async sendAiCaptureBatch(batchMessages: (PostHogEventProperties | undefined)[]): Promise<void> {
-    const { batches, dropped } = partitionAiBatch(batchMessages)
-    for (const { event, bytes } of dropped) {
-      const message = `Event ${event} (${bytes} bytes) exceeds the ${AI_MAX_EVENT_BYTES / (1024 * 1024)}MiB limit for ${AI_CAPTURE_ENDPOINT}, dropping.`
-      this._logger.error(message)
-      this._events.emit('error', new Error(message))
-    }
-    const sender = this.getCaptureSender(AI_CAPTURE_ENDPOINT)
-    for (const batch of batches) {
-      await sender.send(batch.map(serializeV1Event))
-    }
-  }
-
-  private getCaptureSender(path: CaptureEndpoint): V1CaptureSender {
-    let sender = this._captureSenders.get(path)
-    if (!sender) {
-      sender = new V1CaptureSender(this.captureSenderConfig(path), {
-        fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
+  /** The lane for `route`; `captureAi` events use the AI lane, every other event the analytics lane. */
+  private _captureLane(route?: string): CaptureLane {
+    const endpoint = route === AI_CAPTURE_ROUTE ? AI_CAPTURE_ENDPOINT : ANALYTICS_CAPTURE_ENDPOINT
+    let lane = this._captureLanes.get(endpoint)
+    if (!lane) {
+      lane = new CaptureLane(this._captureLaneConfig(endpoint), {
+        sender: new V1CaptureSender(this.captureSenderConfig(endpoint), {
+          fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
+          onError: (error) => this._events.emit('error', error),
+          compress: (payload) => this.compressPayload(payload),
+        }),
+        onLocalDrops: (error) => this._reportLocalCaptureDrops(error),
         onError: (error) => this._events.emit('error', error),
-        compress: (payload) => this.compressPayload(payload),
+        onFlush: (messages) => this._events.emit('flush', messages),
+        onBackgroundFlush: (flush) => this._onLaneBackgroundFlush(flush),
+        logger: this._logger,
       })
-      this._captureSenders.set(path, sender)
+      this._captureLanes.set(endpoint, lane)
     }
-    return sender
+    return lane
+  }
+
+  private _captureLaneConfig(endpoint: CaptureEndpoint): CaptureLaneConfig {
+    const isAi = endpoint === AI_CAPTURE_ENDPOINT
+    return {
+      endpoint,
+      flushAt: this.flushAt,
+      flushIntervalMs: this.options.flushInterval ?? 5000,
+      maxBatchSize: Math.max(this.flushAt, this.options.maxBatchSize ?? 100),
+      // Never below flushAt, or the flushAt trigger could never fire.
+      maxQueueSize: Math.max(this.flushAt, isAi ? AI_MAX_QUEUE_SIZE : (this.options.maxQueueSize ?? 10000)),
+      targetBatchBytes: CAPTURE_BATCH_TARGET_BYTES,
+      maxEventBytes: isAi ? AI_MAX_PROPERTIES_BYTES : ANALYTICS_MAX_EVENT_BYTES,
+      maxEventBytesOf: isAi ? 'properties' : 'event',
+    }
+  }
+
+  private _reportLocalCaptureDrops(error: CaptureError): void {
+    const errorListeners = this._events.events['error']?.length ?? 0
+    this._events.emit('error', error)
+    if (errorListeners === 0) {
+      // console.warn, not this._logger: the logger only prints in debug mode, and these drops lose data.
+      console.warn(`[PostHog] ${error.message}`)
+    }
   }
 
   /** Every lane shares the client's retry, timeout and compression settings. */
@@ -1082,7 +1130,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (typeof props?.event === 'string' && !props.event.startsWith('$ai_')) {
       this._logger.debug(`captureAi called with non-AI event ${props.event}; routing it to the AI endpoint anyway.`)
     }
-    this._aiCaptureRouteActive = true
     return this._sendPreparedEvent('capture', props, immediate, undefined, AI_CAPTURE_ROUTE)
   }
 
@@ -2903,11 +2950,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._traces.reset()
     }
     try {
-      return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))
+      // The core shutdown waits for pending captures to land on their lanes; the lanes drain meanwhile,
+      // then once more for whatever those captures added.
+      await Promise.all([
+        super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now())),
+        this._drainCaptureLanes(shutdownDeadlineMs),
+      ])
+      await this._drainCaptureLanes(shutdownDeadlineMs)
     } finally {
+      for (const lane of this._captureLanes.values()) {
+        lane.finishShutdown()
+      }
       this._distinctIdHasSentFlagCalls.clear()
       resolve?.()
     }
+  }
+
+  private _drainCaptureLanes(deadlineMs: number): Promise<void> {
+    return Promise.all([...this._captureLanes.values()].map((lane) => lane.drain(deadlineMs))).then(() => {})
   }
 
   private async _requestRemoteConfigPayload(flagKey: string): Promise<PostHogFetchResponse | undefined> {

@@ -645,31 +645,58 @@ describe('PostHog Node.js', () => {
   })
 
   describe('maxQueueSize', () => {
-    it('defaults to 10000, higher than the shared core default of 1000', () => {
-      const ph = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-      })
+    const queueCaps = (options: PostHogOptions): { analytics: number; ai: number } => {
+      const ph = new PostHog('TEST_API_KEY', { host: 'http://example.com', ...options }) as any
+      return {
+        analytics: ph._captureLaneConfig('/i/v1/analytics/events').maxQueueSize,
+        ai: ph._captureLaneConfig('/i/v1/ai/events').maxQueueSize,
+      }
+    }
 
-      expect((ph as any).maxQueueSize).toBe(10000)
+    it('defaults to 10000, higher than the shared core default of 1000', () => {
+      expect(queueCaps({})).toEqual({ analytics: 10000, ai: 1000 })
     })
 
-    it('still honors an explicit override', () => {
-      const ph = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        maxQueueSize: 42,
-        flushAt: 1,
-      })
-
-      expect((ph as any).maxQueueSize).toBe(42)
+    it('still honors an explicit override, for analytics events only', () => {
+      expect(queueCaps({ maxQueueSize: 42, flushAt: 1 })).toEqual({ analytics: 42, ai: 1000 })
     })
 
     it('keeps the Node default when a wrapper forwards maxQueueSize: undefined', () => {
+      expect(queueCaps({ maxQueueSize: undefined })).toEqual({ analytics: 10000, ai: 1000 })
+    })
+
+    it('drops the oldest analytics events beyond the cap and reports them once', async () => {
+      let release!: () => void
+      mockedFetch.mockImplementationOnce(
+        () => new Promise((resolve) => (release = () => resolve(new Response('{"results":{}}', { status: 200 }))))
+      )
+      mockedFetch.mockResolvedValue(new Response('{"results":{}}', { status: 200 }))
       const ph = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
-        maxQueueSize: undefined,
+        maxQueueSize: 2,
+        flushAt: 1,
+        fetchRetryCount: 0,
+        disableCompression: true,
       })
+      const errors: CaptureError[] = []
+      ph.on('error', (error) => errors.push(error))
+      try {
+        ph.capture({ distinctId: 'u', event: 'in-flight' })
+        await vi.advanceTimersByTimeAsync(0)
+        for (const event of ['dropped-1', 'dropped-2', 'kept-1', 'kept-2']) {
+          ph.capture({ distinctId: 'u', event })
+        }
+        await vi.advanceTimersByTimeAsync(0)
+        release()
+        await ph.flush()
 
-      expect((ph as any).maxQueueSize).toBe(10000)
+        expect(sentEvents(mockedFetch).map((event) => event.event)).toEqual(['in-flight', 'kept-1', 'kept-2'])
+        expect(errors).toHaveLength(1)
+        expect(errors[0].drops).toHaveLength(2)
+        expect(errors[0].message).toContain('2 because the queue was full (2 events)')
+      } finally {
+        await ph.shutdown()
+      }
     })
   })
 
@@ -1045,17 +1072,27 @@ describe('PostHog Node.js', () => {
 
         await vi.advanceTimersByTimeAsync(0)
         expect(mockedFetch).toHaveBeenCalledTimes(1)
+        const firstBatch = sentEvents(mockedFetch).map((event) => event.uuid)
+        expect(firstBatch).toHaveLength(20)
+
+        // A network failure keeps the batch, so the one coalesced follow-up flush resends it.
         rejectFetch.shift()!(new Error('network down'))
         await vi.advanceTimersByTimeAsync(0)
-        expect(mockedFetch).toHaveBeenCalledTimes(1)
+        expect(mockedFetch).toHaveBeenCalledTimes(2)
+        expect(
+          sentEvents(mockedFetch)
+            .slice(20)
+            .map((event) => event.uuid)
+        ).toEqual(firstBatch)
 
-        // The failed batch is reported and consumed, so two new events are needed to reach flushAt again.
+        // More captures while that resend is in flight still coalesce into a single follow-up.
         ph.capture({ event: 'offline-event-20', distinctId: '123' })
         ph.capture({ event: 'offline-event-21', distinctId: '123' })
         await vi.advanceTimersByTimeAsync(0)
         expect(mockedFetch).toHaveBeenCalledTimes(2)
         rejectFetch.shift()!(new Error('network down'))
         await vi.advanceTimersByTimeAsync(0)
+        expect(mockedFetch).toHaveBeenCalledTimes(3)
       } finally {
         mockedFetch.mockResolvedValue(new Response('{}', { status: 200 }))
         for (const reject of rejectFetch) {
@@ -1152,10 +1189,10 @@ describe('PostHog Node.js', () => {
       }
 
       await ph.shutdown()
-      // flush waits for all pending capture preparation before sending the batch
-      const batchEvents = getLastBatchEvents()
-      expect(batchEvents?.length).toEqual(10)
-      expect(batchEvents?.[batchEvents?.length - 1]).toMatchObject({
+      // shutdown waits for all pending capture preparation, so every event is sent
+      const batchEvents = sentEvents(mockedFetch)
+      expect(batchEvents.map((event) => event.distinct_id)).toEqual(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
+      expect(batchEvents[batchEvents.length - 1]).toMatchObject({
         // last event in batch
         distinct_id: '9',
         event: 'test-event',
@@ -1167,8 +1204,6 @@ describe('PostHog Node.js', () => {
         timestamp: expect.any(String),
       })
       expect(10).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('capture')).length)
-      // all pending capture preparation is joined before the first flush, so one batch sends all events
-      expect(1).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('flush')).length)
     })
   })
 
@@ -1213,14 +1248,17 @@ describe('PostHog Node.js', () => {
       ph.capture({ event: 'test-event', distinctId: '123' })
 
       // shutdown() waits for capture preparation, then flushes. The capture sender aborts the
-      // hanging request after requestTimeout and reports the batch on the error channel.
+      // hanging request after requestTimeout; with no HTTP response the event stays queued, and
+      // shutdown reports it as unsent when it ends.
       await ph.shutdown()
 
       expect(hangingFetch).toHaveBeenCalledTimes(1)
+      expect(hangingFetch.mock.calls[0][1]?.signal?.aborted).toBe(true)
       expect(errors).toHaveLength(1)
       expect(errors[0]).toBeInstanceOf(CaptureError)
       expect(errors[0].endpoint).toBe('/i/v1/analytics/events')
-      expect(errors[0].cause.name).toBe('AbortError')
+      expect(errors[0].retryExhausted).toHaveLength(1)
+      expect(errors[0].message).toContain('still queued when shutdown ended')
     }, 10000)
   })
 

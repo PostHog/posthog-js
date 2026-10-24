@@ -52,8 +52,7 @@ describe('immediate write responses', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  // Skipped: the capture sender reads a terminal error body for up to requestTimeout, which outlasts this shutdown budget.
-  it.skip('drains queued events within the shutdown budget when an immediate error body stalls', async () => {
+  it('drains queued events within the shutdown budget when an immediate error body stalls', async () => {
     let respond!: (response: Response) => void
     fetch.mockImplementationOnce(
       () =>
