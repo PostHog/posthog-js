@@ -355,6 +355,27 @@ describe('config', () => {
             })
         })
 
+        it.each([
+            [undefined, 'unset'],
+            ['unset', 'unset'],
+            ['2025-05-24', '2025-05-24'],
+            ['2026-08-30', '2026-08-30'],
+            ['latest', '2026-08-30'],
+        ] as const)('reports the applied defaults in event properties for %s', (defaults, expected) => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults })
+
+            expect(posthog.calculateEventProperties('test_event', {}).$config_defaults).toBe(expected)
+            expect(posthog.config.defaults).toBe(defaults ?? 'unset')
+        })
+
+        it('reports the applied defaults date on replay snapshots with latest defaults', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: 'latest' })
+
+            expect(posthog.calculateEventProperties('$snapshot', {}).$config_defaults).toBe('2026-08-30')
+        })
+
         it('preserves explicit overrides with the latest defaults', () => {
             const posthog = new PostHog()
             posthog._init('test-token', {

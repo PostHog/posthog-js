@@ -1881,6 +1881,7 @@ export interface PostHogConfig {
      * Set to `'latest'` to always use the newest defaults in the loaded SDK version.
      * Unlike a pinned date, `'latest'` opts into future default changes when the SDK is upgraded,
      * which may include breaking changes. Explicit configuration options still take precedence.
+     * Events report the resolved date in `$config_defaults` when using `'latest'`.
      *
      * - `'latest'`: Use all default changes available in the loaded SDK version
      * - `'unset'`: Use legacy default behaviors

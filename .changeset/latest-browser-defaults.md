@@ -3,4 +3,4 @@
 '@posthog/types': minor
 ---
 
-Add `defaults: 'latest'` to opt into the newest defaults as the SDK is upgraded.
+Add `defaults: 'latest'` to follow the newest defaults and report the applied date in events.
