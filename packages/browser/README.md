@@ -24,7 +24,7 @@ SDK usage examples and code snippets live in the official documentation so they 
 
 Use `eu-assets.i.posthog.com` for EU projects. Every project loads the same static file: the loader reads `project_token` from its own URL, falling back to `data-project-token`. Putting the token in the URL path instead would require additional routing, as with Sentry's loader.
 
-The small loader exposes queued public SDK methods, including `people.set` and `people.set_once`, and asynchronously loads `array.js` from the same directory without forwarding the query string. Its method list is generated from the SDK class during the build, so it stays in sync without bundling the SDK itself. Existing snippet and npm installations are unchanged; use only one installation method per page.
+The small loader exposes queued public SDK methods, including `people.set` and `people.set_once`, and asynchronously loads an immutable SDK bundle without forwarding the query string. Its method list is generated from the SDK class during the build, so it stays in sync without bundling the SDK itself. Existing snippet and npm installations are unchanged; use only one installation method per page.
 
 Include the tag before application scripts that call `posthog`. Do not add `async` or `defer` if those scripts need the queue immediately. Calls before the full SDK loads are queued; synchronous getters cannot return SDK values yet. The loader does not buffer browser interactions or errors that happen before the SDK installs its listeners.
 
@@ -55,7 +55,9 @@ Set `data-defer-init="true"` to download the SDK without automatically initializ
 
 Call `init()` before other SDK methods. If the SDK is still downloading, initialization and subsequent calls are queued. If it has already downloaded, `init()` uses the normal SDK API. Deferred initialization supports function-valued configuration, such as `before_send`, and named instances. It does not defer downloading the scripts and is separate from HTML's `defer` attribute.
 
-To pin the SDK, use `/static/<version>/loader.js` for a release that includes the loader. It loads that release's sibling `array.js`; historical releases without a loader are not changed or backfilled. `/static/loader.js` follows stable releases. A reverse proxy must forward both the loader and SDK paths, along with the SDK's normal API/config/extension paths.
+The mutable `/static/loader.js` and `/static/<major>/loader.js` aliases embed their SDK build version and load `/static/<build-version>/array.js`. A cached loader therefore keeps using its matching SDK even when the aliases change. The loader does not fall back to the mutable `/static/array.js` alias.
+
+To pin the SDK, use `/static/<version>/loader.js` for a release that includes the loader. An explicitly versioned loader URL keeps loading its versioned sibling `array.js`. Historical releases without a loader are not changed or backfilled. Reverse proxies and self-hosted deployments must serve the versioned SDK directories as well as the loader, along with the SDK's normal API/config/extension paths.
 
 Fatal automatic-initialization configuration errors are reported even when debug mode is off. Invalid JSON configuration still prevents automatic initialization.
 

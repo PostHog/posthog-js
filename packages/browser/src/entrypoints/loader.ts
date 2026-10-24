@@ -3,6 +3,7 @@ import { document } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getQueryParam } from '@posthog/browser-common/utils/request-utils'
 import type { PostHogConfig } from '@posthog/types'
+import { version } from '../../package.json'
 import { assignableWindow } from '../utils/globals'
 import methods from 'virtual:posthog-loader-methods'
 
@@ -114,7 +115,12 @@ function load(): void {
     }
     assignableWindow.posthog = posthog
 
-    url.pathname = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1) + 'array.js'
+    const directory = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1)
+    // Cached mutable loaders must keep using their own release, not a separately cached SDK alias.
+    const versionedDirectory = /\/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\/$/.test(directory)
+        ? directory
+        : directory.replace(/\/static\/\d+\/$/, '/static/') + version + '/'
+    url.pathname = versionedDirectory + 'array.js'
     url.search = ''
     url.hash = ''
     const core = document.createElement('script')

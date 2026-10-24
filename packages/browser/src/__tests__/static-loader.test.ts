@@ -1,3 +1,4 @@
+import { version } from '../../package.json'
 import { AssignableWindow } from '../utils/globals'
 
 const loaderWindow = window as AssignableWindow
@@ -52,7 +53,7 @@ describe('static script loader', () => {
         expect(ph.people.toString()).toBe('posthog.people (stub)')
         const [core] = injectedScripts()
         expect(injectedScripts()).toHaveLength(1)
-        expect(core.src).toBe(`https://${region}-assets.i.posthog.com/static/array.js`)
+        expect(core.src).toBe(`https://${region}-assets.i.posthog.com/static/${version}/array.js`)
         expect(core.async).toBe(true)
         expect(core.crossOrigin).toBe('anonymous')
     })
@@ -73,7 +74,7 @@ describe('static script loader', () => {
         await load()
         const ph = loaderWindow.posthog
         expect(ph._i).toEqual([])
-        expect(injectedScripts()[0].src).toBe('https://customer.example/ingest/static/array.js')
+        expect(injectedScripts()[0].src).toBe(`https://customer.example/ingest/static/${version}/array.js`)
         const beforeSend = vi.fn()
         const config = { api_host: '/ingest', before_send: beforeSend }
         expect(ph.init('phc_manual', config)).toBe(ph)
@@ -139,7 +140,7 @@ describe('static script loader', () => {
         script.src = 'https://us-assets.i.posthog.com/static/loader.js?cache=1&project_token=%20phc%5Furl%20'
         await load()
         expect(loaderWindow.posthog._i[0][0]).toBe('phc_url')
-        expect(injectedScripts()[0].src).toBe('https://us-assets.i.posthog.com/static/array.js')
+        expect(injectedScripts()[0].src).toBe(`https://us-assets.i.posthog.com/static/${version}/array.js`)
     })
 
     it('prefers the URL token over the attribute fallback', async () => {
@@ -162,10 +163,14 @@ describe('static script loader', () => {
         expect(injectedScripts()).toHaveLength(0)
     })
 
-    it.each(['1', '1.438.21', '1.438.22-beta.1'])('loads the sibling core for version %s', async (version) => {
-        script.src = `https://eu-assets.i.posthog.com/static/${version}/loader.js?cache=1#fragment`
+    it.each([
+        ['1', version],
+        ['1.438.21', '1.438.21'],
+        ['1.438.22-beta.1', '1.438.22-beta.1'],
+    ])('loads an immutable core from the %s loader namespace', async (loaderVersion, coreVersion) => {
+        script.src = `https://eu-assets.i.posthog.com/static/${loaderVersion}/loader.js?cache=1#fragment`
         await load()
-        expect(injectedScripts()[0].src).toBe(`https://eu-assets.i.posthog.com/static/${version}/array.js`)
+        expect(injectedScripts()[0].src).toBe(`https://eu-assets.i.posthog.com/static/${coreVersion}/array.js`)
     })
 
     it('preserves proxy paths and accepts an explicit ingestion host', async () => {
@@ -173,7 +178,18 @@ describe('static script loader', () => {
         script.setAttribute('data-api-host', '/ingest')
         await load()
         expect(loaderWindow.posthog._i[0][1].api_host).toBe('/ingest')
-        expect(injectedScripts()[0].src).toBe('https://customer.example/ingest/static/array.js')
+        expect(injectedScripts()[0].src).toBe(`https://customer.example/ingest/static/${version}/array.js`)
+    })
+
+    it.each([
+        ['ingest/static/1', `ingest/static/${version}`],
+        ['proxy/2026/static', `proxy/2026/static/${version}`],
+        ['assets/123', `assets/123/${version}`],
+    ])('preserves the proxy prefix for %s', async (loaderDirectory, coreDirectory) => {
+        script.src = `https://customer.example/${loaderDirectory}/loader.js`
+        script.setAttribute('data-api-host', '/ingest')
+        await load()
+        expect(injectedScripts()[0].src).toBe(`https://customer.example/${coreDirectory}/array.js`)
     })
 
     it('applies configuration before queuing initialization, with explicit attributes taking precedence', async () => {
