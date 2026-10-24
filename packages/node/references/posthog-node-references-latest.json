@@ -94,7 +94,7 @@
             {
               "description": "The alias data containing distinctId and alias",
               "isOptional": false,
-              "type": "{\n        distinctId: string;\n        alias: string;\n        disableGeoip?: boolean;\n    }",
+              "type": "{\n        distinctId: string;\n        alias: string;\n        disableGeoip?: boolean;\n        options?: Record<string, JsonType>;\n    }",
               "name": "data"
             }
           ],
@@ -123,7 +123,7 @@
             {
               "description": "The alias data containing distinctId and alias",
               "isOptional": false,
-              "type": "{\n        distinctId: string;\n        alias: string;\n        disableGeoip?: boolean;\n    }",
+              "type": "{\n        distinctId: string;\n        alias: string;\n        disableGeoip?: boolean;\n        options?: Record<string, JsonType>;\n    }",
               "name": "data"
             }
           ],
@@ -1008,7 +1008,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip }"
+              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip, options }"
             },
             {
               "description": "",
@@ -1043,7 +1043,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip, }"
+              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip, options, }"
             },
             {
               "description": "",
@@ -1083,7 +1083,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ distinctId, properties, disableGeoip }"
+              "name": "{ distinctId, properties, disableGeoip, options }"
             },
             {
               "description": "",
@@ -1118,7 +1118,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ distinctId, properties, disableGeoip }"
+              "name": "{ distinctId, properties, disableGeoip, options }"
             },
             {
               "description": "",
@@ -1345,7 +1345,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ distinctId, properties, propertiesOnce }"
+              "name": "{ distinctId, properties, propertiesOnce, options }"
             },
             {
               "description": "",
@@ -1415,7 +1415,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ distinctId, properties }"
+              "name": "{ distinctId, properties, options }"
             },
             {
               "description": "",
@@ -2269,6 +2269,11 @@
           "name": "disableGeoip"
         },
         {
+          "description": "Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;\nunknown keys pass through. A legacy property such as `$process_person_profile` fills an option\nleft unset. Capture drops an event whose option value it cannot read (`invalid_options`), and\nthe SDK reports the drop through the `'error'` event.",
+          "type": "Record<string, JsonType>",
+          "name": "options"
+        },
+        {
           "type": "string",
           "name": "distinctId"
         },
@@ -2714,6 +2719,11 @@
         {
           "type": "boolean",
           "name": "disableGeoip"
+        },
+        {
+          "description": "Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;\nunknown keys pass through. A legacy property such as `$process_person_profile` fills an option\nleft unset. Capture drops an event whose option value it cannot read (`invalid_options`), and\nthe SDK reports the drop through the `'error'` event.",
+          "type": "Record<string, JsonType>",
+          "name": "options"
         }
       ],
       "path": "src/types.ts"
@@ -2733,6 +2743,11 @@
         {
           "type": "boolean",
           "name": "disableGeoip"
+        },
+        {
+          "description": "Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;\nunknown keys pass through. A legacy property such as `$process_person_profile` fills an option\nleft unset. Capture drops an event whose option value it cannot read (`invalid_options`), and\nthe SDK reports the drop through the `'error'` event.",
+          "type": "Record<string, JsonType>",
+          "name": "options"
         }
       ],
       "path": "src/types.ts"
@@ -4374,6 +4389,11 @@
         {
           "type": "Record<string | number, any>",
           "name": "propertiesOnce"
+        },
+        {
+          "description": "Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;\nunknown keys pass through. A legacy property such as `$process_person_profile` fills an option\nleft unset. Capture drops an event whose option value it cannot read (`invalid_options`), and\nthe SDK reports the drop through the `'error'` event.",
+          "type": "Record<string, JsonType>",
+          "name": "options"
         }
       ],
       "path": "src/types.ts"
@@ -4988,6 +5008,11 @@
         {
           "type": "string | string[]",
           "name": "properties"
+        },
+        {
+          "description": "Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;\nunknown keys pass through. A legacy property such as `$process_person_profile` fills an option\nleft unset. Capture drops an event whose option value it cannot read (`invalid_options`), and\nthe SDK reports the drop through the `'error'` event.",
+          "type": "Record<string, JsonType>",
+          "name": "options"
         }
       ],
       "path": "src/types.ts"
