@@ -500,6 +500,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $geoip_disable: false,
         $is_server: true,
       })
     })
@@ -561,6 +562,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $geoip_disable: false,
         $is_server: true,
       })
 
@@ -717,12 +719,14 @@ describe('PostHog Node.js', () => {
       expect(beforeSendFn).toHaveBeenCalledWith({
         distinctId: '123',
         event: 'test-event',
-        properties: { foo: 'bar' },
+        properties: { foo: 'bar', $geoip_disable: true, $is_server: true },
         groups: undefined,
+        flags: undefined,
         sendFeatureFlags: undefined,
         timestamp: undefined,
         disableGeoip: undefined,
         uuid: undefined,
+        options: undefined,
       })
 
       const batchEvents = getLastBatchEvents()
@@ -1758,6 +1762,7 @@ describe('PostHog Node.js', () => {
         '$feature/feature-variant': 'variant',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $geoip_disable: false,
         $is_server: true,
       })
 

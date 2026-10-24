@@ -2,6 +2,7 @@ import { version } from './version'
 
 import {
   allSettled,
+  ErrorTracking as CoreErrorTracking,
   FeatureFlagValue,
   isBlockedUA,
   isPlainObject,
@@ -78,7 +79,7 @@ import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/set
 import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
 import { canonicalizeUuid } from './capture-v1/uuid'
 import { readEventOptions } from './capture-v1/transform'
-import { fillOptions, snapshotLayer } from './event-defaults'
+import { fillOptions, fillProperties, isUnsetProperty, snapshotLayer } from './event-defaults'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -124,15 +125,31 @@ function normalizeHost(value?: unknown): string {
   return normalizedValue || DEFAULT_NODE_HOST
 }
 
+/** Properties that set an option or a session field, kept on a minimal `$feature_flag_called` event. */
+const FLAG_CALLED_OPTION_SOURCE_PROPERTIES = [
+  '$cookieless_mode',
+  '$ignore_sent_at',
+  '$product_tour_id',
+  '$process_person_profile',
+  '$session_id',
+  '$window_id',
+]
+
 /** Property values the SDK passes to `before_send` by reference unless copied. */
 const NESTED_HOOK_PROPERTIES = ['$set', '$set_once', '$groups', '$group_set']
 
 /**
- * A copy of the event for `before_send`, so a hook that mutates its properties cannot change the
- * caller's objects. `options` needs no copy here: `readEventOptions` already made one.
+ * A copy of the event for `before_send`, so a hook that mutates its properties, options or groups
+ * cannot change the caller's objects or the defaults they were filled from.
  */
 function isolateForBeforeSend(eventMessage: EventMessage): EventMessage {
   const isolated: EventMessage = { ...eventMessage }
+  if (isPlainObject(eventMessage.options)) {
+    isolated.options = { ...eventMessage.options }
+  }
+  if (isPlainObject(eventMessage.groups)) {
+    isolated.groups = { ...eventMessage.groups }
+  }
   if (isPlainObject(eventMessage.properties)) {
     const properties = { ...eventMessage.properties }
     for (const key of NESTED_HOOK_PROPERTIES) {
@@ -930,32 +947,82 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Returns the common properties attached to every captured event.
-   *
-   * @remarks
-   * Extends the shared core properties (`$lib`, `$lib_version`) with
-   * `$is_server: true` so that events emitted from the server-side SDKs
-   * (posthog-node and posthog-edge, which both extend this class) are
-   * distinguishable from browser and react-native events. Browser and
-   * react-native clients do not extend `PostHogBackendClient`, so they
-   * never receive this property.
-   *
-   * This is controlled by the `isServer` option, which defaults to `true`.
-   * When `isServer` is `false` (e.g. when using the SDK as a client/CLI), the
-   * `$is_server` property is omitted entirely so the device OS is attributed
-   * normally.
-   *
-   * @returns The common event properties, including `$is_server: true` when
-   * the `isServer` option is enabled.
+   * The properties the SDK adds to an event: `$is_server` (unless the `isServer` option is
+   * `false`), `$geoip_disable` (when the `disableGeoip` option is on), feature flag properties,
+   * and for `$exception` events the active OpenTelemetry trace ids and the injected release id.
+   * They fill only the keys every other layer left unset.
    */
-  protected override getCommonEventProperties(): PostHogEventProperties {
-    const commonProperties = super.getCommonEventProperties()
-
+  private async _sdkEventProperties(
+    event: string,
+    properties: PostHogEventProperties,
+    distinctId: string,
+    flagInputs: Pick<EventMessage, 'groups' | 'flags' | 'sendFeatureFlags' | 'disableGeoip'>
+  ): Promise<PostHogEventProperties> {
+    const sdkProperties: PostHogEventProperties = await this._flagEventProperties(distinctId, flagInputs)
     if (this.options.isServer ?? true) {
-      commonProperties.$is_server = true
+      sdkProperties.$is_server = true
+    }
+    if (this.options.disableGeoip ?? true) {
+      sdkProperties.$geoip_disable = true
+    }
+    if (event === '$exception') {
+      // Both ids or neither, so a trace id is never paired with another trace's span id.
+      if (isUnsetProperty(properties, '$trace_id') && isUnsetProperty(properties, '$span_id')) {
+        Object.assign(sdkProperties, await getActiveTraceProperties())
+      }
+      const releaseId = CoreErrorTracking.getInjectedReleaseId()
+      if (releaseId) {
+        sdkProperties.$release_id = releaseId
+      }
+    }
+    return sdkProperties
+  }
+
+  /**
+   * `$feature/<key>` and `$active_feature_flags` from a `flags` snapshot or, when there is none,
+   * from `sendFeatureFlags`. Any failure gives no flag properties, and the event is still sent.
+   */
+  private async _flagEventProperties(
+    distinctId: string,
+    {
+      groups,
+      flags,
+      sendFeatureFlags,
+      disableGeoip,
+    }: Pick<EventMessage, 'groups' | 'flags' | 'sendFeatureFlags' | 'disableGeoip'>
+  ): Promise<PostHogEventProperties> {
+    try {
+      // An explicit `flags` snapshot always wins: the event carries the values the code branched
+      // on, with no additional network call.
+      if (flags) {
+        if (sendFeatureFlags) {
+          console.warn(
+            '[PostHog] Both `flags` and `sendFeatureFlags` were passed to capture(); using `flags` and ignoring `sendFeatureFlags`.'
+          )
+        }
+        return flags._getEventProperties()
+      }
+
+      if (sendFeatureFlags) {
+        emitDeprecationWarningOnce(
+          'sendFeatureFlags',
+          '`sendFeatureFlags` is deprecated and will be removed in a future major version. ' +
+            'Pass a `flags` snapshot from `posthog.evaluateFlags(...)` instead — it avoids a ' +
+            'second `/flags` request per capture and guarantees the event carries the exact ' +
+            'flag values your code branched on.'
+        )
+        // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
+        const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
+        const flagValues = await this.getFeatureFlagsForEvent(distinctId, groups, disableGeoip, sendFeatureFlagsOptions)
+        return buildFlagEventProperties(flagValues)
+      }
+    } catch {
+      return {}
     }
 
-    return commonProperties
+    // $feature_flag_called events are not enriched with cached flags — the flags
+    // on that event should reflect the specific call, not a potentially stale snapshot.
+    return {}
   }
 
   /**
@@ -1047,16 +1114,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         .then(({ distinctId, event, properties, options, eventOptions }) => {
           const captureOptions: PostHogCaptureOptions = {
             timestamp: options.timestamp,
-            disableGeoip: options.disableGeoip,
+            // `$geoip_disable` is already set before before_send; core must not add it after.
+            disableGeoip: false,
             uuid: options.uuid,
           }
           const message = {
             distinctId,
             event,
-            properties: {
-              ...properties,
-              ...this.getCommonEventProperties(),
-            },
+            properties,
             ...(eventOptions !== undefined ? { options: eventOptions } : {}),
           }
           return immediate
@@ -2906,6 +2971,38 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Register properties that every event sent by this client carries.
+   *
+   * @remarks
+   * Each event fills the keys it left unset in this order: the event's own values, then context
+   * properties, then these, then the values the SDK adds (such as `$is_server` and
+   * `$geoip_disable`). `before_send` sees the result and can change it.
+   *
+   * @example
+   * ```ts
+   * await client.register({ service: 'billing' })
+   * ```
+   *
+   * {@label Capture}
+   *
+   * @param properties - The properties to add to every event
+   */
+  override register(properties: PostHogEventProperties): Promise<void> {
+    return super.register(properties)
+  }
+
+  /**
+   * Remove a property added with `register()`.
+   *
+   * {@label Capture}
+   *
+   * @param property - The property name to remove
+   */
+  override unregister(property: string): Promise<void> {
+    return super.unregister(property)
+  }
+
+  /**
    * Register options that every event sent by this client carries.
    *
    * @remarks
@@ -3396,9 +3493,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this._prepareEventMessage(props)
   }
 
+  /**
+   * Build an event in the canonical order: identity, the call's own values, then the values it left
+   * unset from context, then `register()` / `registerOptions()`, then the SDK, then the minimal
+   * `$feature_flag_called` allowlist, then `before_send`, which has the final say.
+   */
   private async _prepareEventMessage(
     props: EventMessage,
-    options: { includeContextProperties?: boolean } = {}
+    prepareOptions: { includeContextProperties?: boolean } = {}
   ): Promise<{
     distinctId: string
     event: string
@@ -3418,55 +3520,69 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip,
       uuid,
     }: EventMessage = props
-    let eventOptions = readEventOptions(props.options)
+    const callOptions = readEventOptions(props.options)
 
+    // Read every layer now, before the first await, so later changes never reach this event.
     const contextData = this.context?.get()
+    const includeContextProperties = prepareOptions.includeContextProperties ?? true
+    const contextProperties = includeContextProperties ? snapshotLayer(contextData?.properties) : undefined
+    const contextOptions = snapshotLayer(contextData?.options)
+    const globalProperties = includeContextProperties ? snapshotLayer(this.props) : undefined
     const globalOptions = this._globalOptions
-    const includeContextProperties = options.includeContextProperties ?? true
 
-    let mergedDistinctId = distinctId || contextData?.distinctId
+    const resolvedDistinctId = distinctId || contextData?.distinctId
+    const eventDistinctId = resolvedDistinctId || uuidv7()
 
-    const mergedProperties = includeContextProperties
-      ? {
-          ...this.props,
-          ...(contextData?.properties || {}),
-          ...(properties || {}),
-        }
-      : { ...(properties || {}) }
-
-    if (event === '$exception' && !('$trace_id' in mergedProperties || '$span_id' in mergedProperties)) {
-      Object.assign(mergedProperties, await getActiveTraceProperties())
+    const eventProperties: PostHogEventProperties = { ...(properties || {}) }
+    if (includeContextProperties && contextData?.sessionId && isUnsetProperty(eventProperties, '$session_id')) {
+      eventProperties.$session_id = contextData.sessionId
+    }
+    if (isPlainObject(groups) && Object.keys(groups).length > 0) {
+      const existingGroups = eventProperties.$groups
+      eventProperties.$groups = isPlainObject(existingGroups) ? { ...existingGroups, ...groups } : { ...groups }
+    }
+    if (disableGeoip !== undefined && disableGeoip !== null) {
+      fillProperties(eventProperties, [{ $geoip_disable: disableGeoip }])
     }
 
-    const filledOptions: Record<string, JsonType> = { ...eventOptions }
-    fillOptions(filledOptions, [
-      snapshotLayer(contextData?.options),
-      globalOptions,
-      mergedDistinctId ? undefined : { process_person_profile: false },
+    fillProperties(eventProperties, [contextProperties, globalProperties])
+    fillProperties(eventProperties, [
+      await this._sdkEventProperties(event, eventProperties, eventDistinctId, {
+        groups,
+        flags,
+        sendFeatureFlags,
+        disableGeoip,
+      }),
     ])
-    if (eventOptions !== undefined || Object.keys(filledOptions).length > 0) {
-      eventOptions = filledOptions
-    }
-    if (!mergedDistinctId) {
-      mergedDistinctId = uuidv7()
+
+    const filledOptions: Record<string, JsonType> = { ...callOptions }
+    fillOptions(filledOptions, [
+      contextOptions,
+      globalOptions,
+      resolvedDistinctId ? undefined : { process_person_profile: false },
+    ])
+    const eventOptions = callOptions !== undefined || Object.keys(filledOptions).length > 0 ? filledOptions : undefined
+
+    // Runs after every fill and before before_send, so no default can re-add a stripped property
+    // but a hook still can.
+    const finalProperties = this._shouldSendMinimalFlagCalledEvent(event, eventProperties)
+      ? minimizeFlagCalledEventProperties(eventProperties, FLAG_CALLED_OPTION_SOURCE_PROPERTIES)
+      : eventProperties
+
+    let finalEvent = event
+    if (
+      event === '$pageview' &&
+      this.options.__preview_capture_bot_pageviews &&
+      typeof finalProperties.$raw_user_agent === 'string' &&
+      isBlockedUA(finalProperties.$raw_user_agent, this.options.custom_blocked_useragents || [])
+    ) {
+      finalEvent = '$bot_pageview'
+      finalProperties.$browser_type = 'bot'
     }
 
-    if (includeContextProperties && contextData?.sessionId && !mergedProperties.$session_id) {
-      mergedProperties.$session_id = contextData.sessionId
-    }
-
-    // Minimal $feature_flag_called events: rebuild from the strict allowlist before before_send
-    // runs, so a customer hook may deliberately re-add stripped properties. Everything the SDK
-    // itself adds after this point ($groups, $lib/$lib_version/$is_server, $geoip_disable) is
-    // allowlisted — no SDK enrichment may reintroduce stripped properties.
-    const finalProperties = this._shouldSendMinimalFlagCalledEvent(event, mergedProperties)
-      ? minimizeFlagCalledEventProperties(mergedProperties)
-      : mergedProperties
-
-    // Run before_send if configured
     const eventMessage = this._runBeforeSend({
-      distinctId: mergedDistinctId,
-      event,
+      distinctId: eventDistinctId,
+      event: finalEvent,
       properties: finalProperties,
       groups,
       flags,
@@ -3481,80 +3597,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return Promise.reject(null)
     }
 
-    // :TRICKY: If we flush, or need to shut down, to not lose events we want this promise to resolve before we flush
-    const eventProperties = await Promise.resolve()
-      .then(async () => {
-        // Precedence: an explicit `flags` snapshot always wins, regardless of
-        // `sendFeatureFlags`. The snapshot guarantees the event carries the same
-        // values the developer branched on with no additional network call. The
-        // `sendFeatureFlags` path only runs when no snapshot is provided.
-        if (flags) {
-          if (sendFeatureFlags) {
-            console.warn(
-              '[PostHog] Both `flags` and `sendFeatureFlags` were passed to capture(); using `flags` and ignoring `sendFeatureFlags`.'
-            )
-          }
-          return flags._getEventProperties()
-        }
-
-        if (sendFeatureFlags) {
-          emitDeprecationWarningOnce(
-            'sendFeatureFlags',
-            '`sendFeatureFlags` is deprecated and will be removed in a future major version. ' +
-              'Pass a `flags` snapshot from `posthog.evaluateFlags(...)` instead — it avoids a ' +
-              'second `/flags` request per capture and guarantees the event carries the exact ' +
-              'flag values your code branched on.'
-          )
-          // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
-          const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
-          const flagValues = await this.getFeatureFlagsForEvent(
-            eventMessage.distinctId!,
-            groups,
-            disableGeoip,
-            sendFeatureFlagsOptions
-          )
-          return buildFlagEventProperties(flagValues)
-        }
-
-        // $feature_flag_called events are not enriched with cached flags — the flags
-        // on that event should reflect the specific call, not a potentially stale snapshot.
-        return {}
-      })
-      .catch(() => {
-        // Something went wrong getting the flag info - we should capture the event anyways
-        return {}
-      })
-      .then((additionalProperties): PostHogEventProperties => {
-        // No matter what - capture the event
-        const resolvedGroups = eventMessage.groups || groups
-
-        return {
-          ...additionalProperties,
-          ...(eventMessage.properties || {}),
-          // Only stamp $groups from the top-level `groups` when present — otherwise a
-          // caller-provided properties.$groups would be clobbered with undefined (#3888).
-          ...(resolvedGroups !== undefined && Object.keys(resolvedGroups).length > 0
-            ? { $groups: resolvedGroups }
-            : {}),
-        }
-      })
-
-    // Handle bot pageview collection based on preview flag
-    if (
-      eventMessage.event === '$pageview' &&
-      this.options.__preview_capture_bot_pageviews &&
-      typeof eventProperties.$raw_user_agent === 'string'
-    ) {
-      if (isBlockedUA(eventProperties.$raw_user_agent, this.options.custom_blocked_useragents || [])) {
-        eventMessage.event = '$bot_pageview'
-        eventProperties.$browser_type = 'bot'
-      }
-    }
-
     return {
       distinctId: eventMessage.distinctId!,
       event: eventMessage.event,
-      properties: eventProperties,
+      properties: eventMessage.properties || {},
       options: {
         timestamp: eventMessage.timestamp,
         disableGeoip: eventMessage.disableGeoip,
