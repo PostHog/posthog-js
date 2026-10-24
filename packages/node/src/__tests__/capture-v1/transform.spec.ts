@@ -156,11 +156,53 @@ describe('capture v1 transform', () => {
       expect(event.properties.keep).toBe('me')
     })
 
-    it('drops a non-string $session_id but still strips it', () => {
-      const event = buildV1Event(baseMessage({ properties: { $session_id: 123 } }))
+    it.each(['$session_id', '$window_id'] as const)('sends an empty %s string as an empty string', (property) => {
+      const event = buildV1Event(baseMessage({ properties: { [property]: '' } }))
 
-      expect(event.session_id).toBeUndefined()
-      expect(event.properties).not.toHaveProperty('$session_id')
+      expect(event[property === '$session_id' ? 'session_id' : 'window_id']).toBe('')
+      expect(event.properties).toStrictEqual({})
+    })
+
+    it.each(['$session_id', '$window_id'] as const)('drops a null %s without a warning', (property) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const event = buildV1Event(baseMessage({ properties: { [property]: null } }))
+
+      expect(event).not.toHaveProperty('session_id')
+      expect(event).not.toHaveProperty('window_id')
+      expect(event.properties).toStrictEqual({})
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    describe.each(['$session_id', '$window_id'] as const)('a %s that is not a string', (property) => {
+      it.each<[string, JsonType]>([
+        ['number', 123],
+        ['boolean', false],
+        ['object', { id: 'secret-value' }],
+        ['array', ['secret-value']],
+      ])('is dropped with a warning naming its %s type and not its value', (typeName, value) => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+        const event = buildV1Event(baseMessage({ properties: { [property]: value, keep: 'me' } }))
+
+        expect(event).not.toHaveProperty('session_id')
+        expect(event).not.toHaveProperty('window_id')
+        expect(event.properties).toStrictEqual({ keep: 'me' })
+        expect(warn.mock.calls).toEqual([[`[PostHog] dropping ${property}: a ${typeName} value is not a string`]])
+      })
+    })
+
+    it('warns on every dropped id, not once per process', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      buildV1Event(baseMessage({ properties: { $session_id: 1, $window_id: 2 } }))
+      buildV1Event(baseMessage({ properties: { $session_id: 3 } }))
+
+      expect(warn.mock.calls).toEqual([
+        ['[PostHog] dropping $session_id: a number value is not a string'],
+        ['[PostHog] dropping $window_id: a number value is not a string'],
+        ['[PostHog] dropping $session_id: a number value is not a string'],
+      ])
     })
 
     it('omits session_id/window_id when the sentinels are absent', () => {
