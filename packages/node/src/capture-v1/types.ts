@@ -45,6 +45,8 @@ export type V1ResultCode = 'ok' | 'warning' | 'drop' | 'retry'
 export interface V1EventResult {
   result: V1ResultCode | string
   details?: string | null
+  /** How many later copies of this uuid in the request the server dropped as duplicates. */
+  duplicates_dropped?: number
 }
 
 /** Shape of a v1 2xx response body: a per-uuid map of results. */
