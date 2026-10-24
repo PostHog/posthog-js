@@ -11,7 +11,10 @@ import { CaptureError, type CaptureDroppedEvent, type CaptureErrorParams } from 
 import { type SerializedV1Event, buildV1Body } from './serialize'
 import type { CaptureEndpoint, V1BatchResponse } from './types'
 
-const DEFAULT_MAX_BACKOFF_MS = 30_000
+/** Wait before the first retry; each later retry doubles it. */
+export const RETRY_BASE_DELAY_MS = 100
+/** Ceiling for every retry wait, including one raised by `Retry-After`. */
+export const MAX_RETRY_DELAY_MS = 30_000
 
 // Retry waits and request deadlines use ref'd timers, unlike safeSetTimeout, so an
 // awaited flush or shutdown keeps the process alive until the send finishes.
@@ -47,12 +50,8 @@ export interface V1CaptureSenderConfig {
   /** When true, the body is gzip-compressed (falling back to uncompressed on failure). */
   compressionEnabled: boolean
   requestTimeoutMs: number
-  /** Total attempts, including the first (1 initial + N retries). */
-  maxAttempts: number
-  /** Base exponential backoff, doubled each retry and capped at `maxBackoffMs`. */
-  initialRetryDelayMs: number
-  /** Single ceiling for both the backoff schedule and the `Retry-After` clamp. */
-  maxBackoffMs?: number
+  /** Retries after the first attempt. */
+  maxRetries: number
   isDebug?: boolean
 }
 
@@ -64,6 +63,8 @@ export interface V1CaptureSenderHooks {
   /** Waits between attempts. The sender stops waiting when `signal` aborts, even if this does not. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
   generateRequestId?: () => string
+  /** Uniform in [0, 1); sets the jitter of each retry wait. */
+  random?: () => number
   compress?: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
 }
 
@@ -99,22 +100,22 @@ interface V1CaptureAttempt {
  */
 export class V1CaptureSender {
   private readonly config: V1CaptureSenderConfig
-  private readonly maxBackoffMs: number
   private readonly fetchFn: FetchLike
   private readonly onError: (error: Error) => void
   private readonly now: () => number
   private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>
   private readonly generateRequestId: () => string
+  private readonly random: () => number
   private readonly compress: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
 
   constructor(config: V1CaptureSenderConfig, hooks: V1CaptureSenderHooks) {
     this.config = config
-    this.maxBackoffMs = config.maxBackoffMs ?? DEFAULT_MAX_BACKOFF_MS
     this.fetchFn = hooks.fetch
     this.onError = hooks.onError
     this.now = hooks.now ?? Date.now
     this.sleep = hooks.sleep ?? abortableSleep
     this.generateRequestId = hooks.generateRequestId ?? uuidv7
+    this.random = hooks.random ?? Math.random
     this.compress = hooks.compress ?? gzipCompress
   }
 
@@ -141,10 +142,9 @@ export class V1CaptureSender {
       return []
     }
 
-    // Guard against a misconfigured budget (e.g. fetchRetryCount: -1): always make
-    // at least one attempt so a bad config surfaces a delivery error instead of
-    // silently dropping the batch without ever sending or calling onError.
-    const maxAttempts = Math.max(1, this.config.maxAttempts)
+    // Always make one attempt, so a bad budget reports a delivery error instead of dropping the batch silently.
+    const { maxRetries } = this.config
+    const maxAttempts = (Number.isInteger(maxRetries) && maxRetries > 0 ? maxRetries : 0) + 1
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (signal?.aborted) {
         return unsent(signal.reason)
@@ -395,13 +395,15 @@ export class V1CaptureSender {
     return retryable
   }
 
+  /** The wait after failed attempt `attempt` (1-based): jittered exponential backoff, raised to `Retry-After`. */
   private backoffDelay(attempt: number, retryAfterMs?: number): number {
-    const exponential = Math.min(this.config.initialRetryDelayMs * 2 ** (attempt - 1), this.maxBackoffMs)
+    const jitter = 0.75 + 0.5 * this.random()
+    const backoff = Math.min(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1) * jitter, MAX_RETRY_DELAY_MS)
     if (retryAfterMs === undefined) {
-      return exponential
+      return backoff
     }
-    // Retry-After is a minimum (never lets us retry earlier than our own backoff) and is clamped to the ceiling.
-    return Math.max(exponential, Math.min(retryAfterMs, this.maxBackoffMs))
+    // Compared after jitter, so jitter can never make the wait shorter than Retry-After.
+    return Math.max(backoff, Math.min(retryAfterMs, MAX_RETRY_DELAY_MS))
   }
 
   /** Parse `Retry-After` (delta-seconds or HTTP-date). Non-positive/past values are ignored. */

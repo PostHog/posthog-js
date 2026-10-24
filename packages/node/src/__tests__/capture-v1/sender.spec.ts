@@ -63,9 +63,7 @@ function makeSender(
       historicalMigration: false,
       compressionEnabled: false,
       requestTimeoutMs: 1000,
-      maxAttempts: 4,
-      initialRetryDelayMs: 100,
-      maxBackoffMs: 30_000,
+      maxRetries: 3,
       ...configOverrides,
     },
     {
@@ -79,6 +77,8 @@ function makeSender(
         return Promise.resolve()
       },
       generateRequestId: () => 'req-fixed',
+      // The midpoint of the jitter range, so waits are exactly 100 ms, 200 ms, 400 ms, ...
+      random: () => 0.5,
       ...hookOverrides,
     }
   )
@@ -183,8 +183,8 @@ describe('V1CaptureSender', () => {
       expect(errors).toEqual([])
     })
 
-    it('still makes one attempt when maxAttempts is misconfigured to 0', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 0 })
+    it('still makes one attempt when maxRetries is misconfigured below 0', async () => {
+      const { sender, fetch, errors } = makeSender({ maxRetries: -1 })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       await sender.send(v1Events([msg('u1')]))
@@ -193,8 +193,8 @@ describe('V1CaptureSender', () => {
       expect(errors).toEqual([])
     })
 
-    it('surfaces a delivery error rather than silently dropping when maxAttempts is 0', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 0 })
+    it('surfaces a delivery error rather than silently dropping when maxRetries is below 0', async () => {
+      const { sender, fetch, errors } = makeSender({ maxRetries: -1 })
       fetch.mockResolvedValueOnce(makeResponse(400))
 
       await sender.send(v1Events([msg('u1')]))
@@ -337,7 +337,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('reports retry-exhausted uuids after the attempt budget runs out', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 3 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 2 })
       fetch.mockResolvedValue(makeResponse(200, { results: { u1: { result: 'retry' } } }))
 
       await sender.send(v1Events([msg('u1')]))
@@ -400,7 +400,7 @@ describe('V1CaptureSender', () => {
       expect((error.cause as Error).message).toContain('429')
     })
 
-    it.each([400, 401, 402, 413, 415])('treats non-retryable status %s as terminal', async (status) => {
+    it.each([400, 401, 402, 404, 413, 415, 501])('treats non-retryable status %s as terminal', async (status) => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(status))
 
@@ -412,7 +412,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('exhausts the budget on a persistently retryable status', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 4 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 3 })
       fetch.mockResolvedValue(makeResponse(503))
 
       await sender.send(v1Events([msg('u1')]))
@@ -422,7 +422,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('bounds response body cancellation by the request deadline before retrying a 5xx', async () => {
-      const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 2 })
+      const { sender, fetch, errors, sleeps } = makeSender({ maxRetries: 1 })
       const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
       fetch
         .mockResolvedValueOnce(makeStallingResponse(503, cancel))
@@ -459,7 +459,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('surfaces a batch failure after transport errors exhaust the budget', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 3 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 2 })
       fetch.mockRejectedValue(new Error('timeout'))
 
       await sender.send(v1Events([msg('u1'), msg('u2')]))
@@ -471,7 +471,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('identifies a timeout before response headers arrive when custom fetch rejects on abort', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 1, requestTimeoutMs: 1000 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 0, requestTimeoutMs: 1000 })
       fetch.mockImplementation(
         (_url, options) =>
           new Promise<PostHogFetchResponse>((_resolve, reject) => {
@@ -495,7 +495,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('cancels a response body when custom fetch resolves after the header deadline', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 1, requestTimeoutMs: 1000 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 0, requestTimeoutMs: 1000 })
       let resolveFetch!: (response: PostHogFetchResponse) => void
       fetch.mockImplementation(
         () =>
@@ -518,7 +518,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('retries a stalled success body without waiting for body cancellation to settle', async () => {
-      const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
+      const { sender, fetch, errors, sleeps } = makeSender({ maxRetries: 1, requestTimeoutMs: 1000 })
       const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
       fetch
         .mockImplementationOnce(() => Promise.resolve(makeStallingResponse(200, cancel)))
@@ -536,7 +536,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('preserves the response-body timeout error when custom body reading rejects on abort', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 1, requestTimeoutMs: 1000 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 0, requestTimeoutMs: 1000 })
       const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
       fetch.mockImplementation((_url, options) => {
         const response = makeStallingResponse(200, cancel)
@@ -564,7 +564,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('surfaces CaptureError after stalled success bodies exhaust the timeout retry budget', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 1, requestTimeoutMs: 1000 })
       const cancels: vi.Mock<Promise<void>, []>[] = []
       fetch.mockImplementation(() => {
         const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
@@ -592,7 +592,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('times out a stalled HTTP error body without changing terminal status classification', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 1, requestTimeoutMs: 1000 })
       const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
       fetch.mockResolvedValue(makeStallingResponse(400, cancel))
 
@@ -612,7 +612,7 @@ describe('V1CaptureSender', () => {
 
   describe('unsent events (keepUnsent)', () => {
     it('returns events whose last attempt got no response, without reporting them', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 2 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 1 })
       fetch.mockRejectedValue(new Error('ECONNREFUSED'))
       const events = v1Events([msg('u1'), msg('u2')])
 
@@ -624,7 +624,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('reports server drops and returns only the retry events a later transport failure left unsent', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 2 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 1 })
       fetch
         .mockResolvedValueOnce(
           makeResponse(200, {
@@ -646,7 +646,7 @@ describe('V1CaptureSender', () => {
       ['a terminal status', () => makeResponse(400)],
       ['an unparseable 2xx', () => makeResponse(200, 'not json')],
     ])('reports and does not return events after %s', async (_name, response) => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 2 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 1 })
       fetch.mockImplementation(() => Promise.resolve(response()))
 
       const unsent = await sender.send(v1Events([msg('u1')]), { keepUnsent: true })
@@ -657,7 +657,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('reports and does not return retry events still pending when the budget runs out on a 2xx', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 2 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 1 })
       fetch.mockResolvedValue(makeResponse(200, { results: { u1: { result: 'retry' } } }))
 
       const unsent = await sender.send(v1Events([msg('u1')]), { keepUnsent: true })
@@ -681,7 +681,7 @@ describe('V1CaptureSender', () => {
 
     it('stops waiting for the next attempt when aborted during backoff', async () => {
       const controller = new AbortController()
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 4 }, { sleep: () => new Promise(() => {}) })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 3 }, { sleep: () => new Promise(() => {}) })
       fetch.mockResolvedValue(makeResponse(503))
 
       const sendPromise = sender.send(v1Events([msg('u1')]), { signal: controller.signal })
@@ -696,7 +696,7 @@ describe('V1CaptureSender', () => {
 
     it('aborts a request still waiting for response headers', async () => {
       const controller = new AbortController()
-      const { sender, fetch } = makeSender({ maxAttempts: 4, requestTimeoutMs: 60_000 })
+      const { sender, fetch } = makeSender({ maxRetries: 3, requestTimeoutMs: 60_000 })
       fetch.mockImplementation(() => new Promise(() => {}))
       const events = v1Events([msg('u1')])
 
@@ -712,7 +712,7 @@ describe('V1CaptureSender', () => {
 
     it('stops reading a stalled HTTP error body and still reports the status', async () => {
       const controller = new AbortController()
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 1, requestTimeoutMs: 60_000 })
+      const { sender, fetch, errors } = makeSender({ maxRetries: 0, requestTimeoutMs: 60_000 })
       fetch.mockResolvedValue(makeStallingResponse(503, vi.fn().mockResolvedValue(undefined)))
 
       const sendPromise = sender.send(v1Events([msg('u1')]), { signal: controller.signal })
@@ -727,30 +727,41 @@ describe('V1CaptureSender', () => {
   })
 
   describe('backoff and Retry-After', () => {
-    it('uses exponential backoff between attempts', async () => {
-      const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 100, maxAttempts: 4 })
+    it.each<[string, number, number[]]>([
+      ['the lowest jitter', 0, [75, 150, 300]],
+      ['no jitter', 0.5, [100, 200, 400]],
+      ['the highest jitter', 1, [125, 250, 500]],
+    ])('waits 100, 200, 400 ms scaled by %s', async (_label, random, expected) => {
+      const { sender, fetch, sleeps } = makeSender({}, { random: () => random })
       fetch.mockResolvedValue(makeResponse(503))
 
       await sender.send(v1Events([msg('u1')]))
 
-      expect(sleeps).toEqual([100, 200, 400])
+      expect(fetch).toHaveBeenCalledTimes(4)
+      expect(sleeps).toEqual(expected)
     })
 
-    it('caps exponential backoff at maxBackoffMs', async () => {
-      const { sender, fetch, sleeps } = makeSender({
-        initialRetryDelayMs: 10_000,
-        maxBackoffMs: 15_000,
-        maxAttempts: 4,
-      })
+    it('draws a new jitter for each wait', async () => {
+      const draws = [0, 1, 0.5]
+      const { sender, fetch, sleeps } = makeSender({}, { random: () => draws.shift()! })
       fetch.mockResolvedValue(makeResponse(503))
 
       await sender.send(v1Events([msg('u1')]))
 
-      expect(sleeps).toEqual([10_000, 15_000, 15_000])
+      expect(sleeps).toEqual([75, 250, 400])
     })
 
-    it('treats Retry-After delta-seconds as a minimum (raises a small backoff)', async () => {
-      const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 100, maxAttempts: 2 })
+    it('caps every wait at 30 seconds, after jitter', async () => {
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 9 }, { random: () => 1 })
+      fetch.mockResolvedValue(makeResponse(503))
+
+      await sender.send(v1Events([msg('u1')]))
+
+      expect(sleeps).toEqual([125, 250, 500, 1000, 2000, 4000, 8000, 16_000, 30_000])
+    })
+
+    it('raises a shorter wait to a Retry-After in delta-seconds', async () => {
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 1 })
       fetch
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': '5' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
@@ -760,23 +771,42 @@ describe('V1CaptureSender', () => {
       expect(sleeps).toEqual([5000])
     })
 
-    it('does not let a small Retry-After shorten a larger backoff', async () => {
-      const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 10_000, maxAttempts: 2 })
+    it.each<[string, number, number[]]>([
+      ['the lowest jitter', 0, [75, 150, 300, 1000]],
+      ['the highest jitter', 1, [125, 250, 500, 1000]],
+    ])('never lets %s make a wait shorter than Retry-After', async (_label, random, expected) => {
+      // The fourth wait has a base of 800 ms, so jitter alone puts it at 600-1000 ms.
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 4 }, { random: () => random })
       fetch
+        .mockResolvedValueOnce(makeResponse(503))
+        .mockResolvedValueOnce(makeResponse(503))
+        .mockResolvedValueOnce(makeResponse(503))
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': '1' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       await sender.send(v1Events([msg('u1')]))
 
-      expect(sleeps).toEqual([10_000])
+      expect(sleeps).toEqual(expected)
     })
 
-    it('clamps a huge Retry-After to maxBackoffMs', async () => {
-      const { sender, fetch, sleeps } = makeSender({
-        initialRetryDelayMs: 100,
-        maxBackoffMs: 30_000,
-        maxAttempts: 2,
-      })
+    it('keeps a jittered backoff that is longer than Retry-After', async () => {
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 5 }, { random: () => 0 })
+      // The fifth wait has a base of 1600 ms; the lowest jitter makes it 1200 ms.
+      fetch
+        .mockResolvedValueOnce(makeResponse(503))
+        .mockResolvedValueOnce(makeResponse(503))
+        .mockResolvedValueOnce(makeResponse(503))
+        .mockResolvedValueOnce(makeResponse(503))
+        .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': '1' }))
+        .mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      await sender.send(v1Events([msg('u1')]))
+
+      expect(sleeps).toEqual([75, 150, 300, 600, 1200])
+    })
+
+    it('clamps a huge Retry-After to 30 seconds', async () => {
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 1 })
       fetch
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': '9999' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
@@ -787,11 +817,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('parses an HTTP-date Retry-After as a delay from now', async () => {
-      const { sender, fetch, sleeps } = makeSender({
-        initialRetryDelayMs: 100,
-        maxBackoffMs: 60_000,
-        maxAttempts: 2,
-      })
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 1 })
       // 20s after the fixed clock start.
       fetch
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': 'Mon, 01 Jan 2024 00:00:20 GMT' }))
@@ -802,8 +828,19 @@ describe('V1CaptureSender', () => {
       expect(sleeps).toEqual([20_000])
     })
 
+    it('clamps an HTTP-date Retry-After to 30 seconds', async () => {
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 1 })
+      fetch
+        .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': 'Mon, 01 Jan 2024 00:05:00 GMT' }))
+        .mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      await sender.send(v1Events([msg('u1')]))
+
+      expect(sleeps).toEqual([30_000])
+    })
+
     it('ignores a past HTTP-date Retry-After and uses backoff', async () => {
-      const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 100, maxAttempts: 2 })
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 1 })
       fetch
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': 'Mon, 01 Jan 2020 00:00:00 GMT' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
@@ -814,7 +851,7 @@ describe('V1CaptureSender', () => {
     })
 
     it.each(['0', '-5', 'garbage'])('ignores a non-positive/invalid Retry-After (%s)', async (retryAfter) => {
-      const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 100, maxAttempts: 2 })
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 1 })
       fetch
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': retryAfter }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
@@ -825,7 +862,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('ignores a Retry-After so large it parses to a non-finite number of seconds', async () => {
-      const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 100, maxAttempts: 2 })
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 1 })
       fetch
         .mockResolvedValueOnce(makeResponse(503, '', { 'Retry-After': '9'.repeat(400) }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
@@ -836,7 +873,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('honors Retry-After on a 200 partial-retry response', async () => {
-      const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 100, maxAttempts: 2 })
+      const { sender, fetch, sleeps } = makeSender({ maxRetries: 1 })
       fetch
         .mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'retry' } } }, { 'Retry-After': '3' }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
@@ -857,9 +894,7 @@ describe('V1CaptureSender', () => {
       historicalMigration: false,
       compressionEnabled: false,
       requestTimeoutMs: 1000,
-      maxAttempts: 2,
-      initialRetryDelayMs: 1,
-      maxBackoffMs: 30_000,
+      maxRetries: 1,
     }
 
     it('uses the real clock, request-id generator and sleep when not injected', async () => {
@@ -872,7 +907,8 @@ describe('V1CaptureSender', () => {
       const sender = new V1CaptureSender(baseConfig, { fetch, onError: (e) => errors.push(e) })
       // No injected sleep: the retry backoff schedules a real (fake-timer) setTimeout we must advance.
       const done = sender.send(v1Events([msg('u1')]))
-      await vi.advanceTimersByTimeAsync(baseConfig.initialRetryDelayMs)
+      // The longest first wait, with the highest jitter.
+      await vi.advanceTimersByTimeAsync(125)
       await done
 
       expect(fetch).toHaveBeenCalledTimes(2)
@@ -885,7 +921,7 @@ describe('V1CaptureSender', () => {
     it('cancels the backoff timer when aborted', async () => {
       const fetch = vi.fn<[string, any], Promise<PostHogFetchResponse>>().mockResolvedValue(makeResponse(503))
       const controller = new AbortController()
-      const sender = new V1CaptureSender({ ...baseConfig, initialRetryDelayMs: 10_000 }, { fetch, onError: () => {} })
+      const sender = new V1CaptureSender(baseConfig, { fetch, onError: () => {} })
 
       const done = sender.send(v1Events([msg('u1')]), { signal: controller.signal })
       await vi.advanceTimersByTimeAsync(0)
@@ -907,7 +943,8 @@ describe('V1CaptureSender', () => {
       const sender = new V1CaptureSender(baseConfig, { fetch, onError: () => {} })
 
       const done = sender.send(v1Events([msg('u1')]), { signal })
-      await vi.advanceTimersByTimeAsync(baseConfig.initialRetryDelayMs)
+      // The longest first wait, with the highest jitter.
+      await vi.advanceTimersByTimeAsync(125)
       await done
 
       expect(fetch).toHaveBeenCalledTimes(2)
