@@ -4,7 +4,8 @@ import type { PostHogFetchOptions } from '@posthog/core'
 
 import { V1CaptureSender } from '@/capture-v1/sender'
 import { PostHog } from '@/entrypoints/index.node'
-import { v0Response, v1Response } from './utils/v1-wiring'
+import { v1Response } from './utils'
+import { v0Response } from './utils/v1-wiring'
 
 type FetchCall = [string, PostHogFetchOptions]
 

@@ -2,7 +2,8 @@ import { PostHogPersistedProperty } from '@posthog/core'
 
 import { PostHog } from '@/entrypoints/index.node'
 
-import { V1WiringHarness, v1Response, waitForFlushTimer } from '../utils/v1-wiring'
+import { v1Response } from '../utils'
+import { V1WiringHarness, waitForFlushTimer } from '../utils/v1-wiring'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
 

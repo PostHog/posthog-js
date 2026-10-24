@@ -1,7 +1,17 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import ErrorTracking from '@/extensions/error-tracking'
 import type { IPostHog } from '@/types'
-import { anyFlagsCall, anyLocalEvalCall, apiImplementation, wait, waitForPromises } from './utils'
+import {
+  anyCaptureUrl,
+  anyFlagsCall,
+  anyLocalEvalCall,
+  apiImplementation,
+  lastSentBatch,
+  sentEvents,
+  v1Response,
+  wait,
+  waitForPromises,
+} from './utils'
 import { randomUUID } from 'crypto'
 import { setTimeout as waitWithRealTimers } from 'node:timers/promises'
 import { UUID_REGEX } from '@posthog/core'
@@ -31,17 +41,8 @@ const waitForFlushTimer = async (): Promise<void> => {
 }
 
 const getLastBatchEvents = (): any[] | undefined => {
-  expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
-
-  // reverse mock calls array to get the last call
-  const call = mockedFetch.mock.calls
-    .slice()
-    .reverse()
-    .find((x) => (x[0] as string).includes('/batch/'))
-  if (!call) {
-    return undefined
-  }
-  return JSON.parse((call[1] as any).body as any).batch
+  expect(mockedFetch).toHaveBeenCalledWith(anyCaptureUrl, expect.objectContaining({ method: 'POST' }))
+  return lastSentBatch(mockedFetch)
 }
 
 describe('PostHog Node.js', () => {
@@ -66,25 +67,11 @@ describe('PostHog Node.js', () => {
       disableCompression: true,
     })
 
-    mockedFetch.mockResolvedValue({
-      status: 200,
-      text: () => Promise.resolve('ok'),
-      json: () =>
-        Promise.resolve({
-          status: 'ok',
-        }),
-    } as any)
+    mockedFetch.mockResolvedValue(v1Response())
   })
 
   afterEach(async () => {
-    mockedFetch.mockResolvedValue({
-      status: 200,
-      text: () => Promise.resolve('ok'),
-      json: () =>
-        Promise.resolve({
-          status: 'ok',
-        }),
-    } as any)
+    mockedFetch.mockResolvedValue(v1Response())
 
     // ensure clean shutdown & no test interdependencies
     await posthog.shutdown()
@@ -728,7 +715,7 @@ describe('PostHog Node.js', () => {
       await waitForFlushTimer()
 
       expect(beforeSendFn).toHaveBeenCalledTimes(1)
-      expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+      expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
     })
 
     it('should support array of before_send functions', async () => {
@@ -775,7 +762,7 @@ describe('PostHog Node.js', () => {
       expect(beforeSend1).toHaveBeenCalledTimes(1)
       expect(beforeSend2).toHaveBeenCalledTimes(1)
       expect(beforeSend3).not.toHaveBeenCalled()
-      expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+      expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
     })
 
     it('should fail closed when a before_send function throws', async () => {
@@ -800,7 +787,7 @@ describe('PostHog Node.js', () => {
 
       expect(sentinel).not.toHaveBeenCalled()
       expect(loggerSpy).toHaveBeenCalledWith("Error in before_send function for event 'test-event':", error)
-      expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+      expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
       loggerSpy.mockRestore()
     })
 
@@ -964,7 +951,7 @@ describe('PostHog Node.js', () => {
         await send(ph)
 
         expect(beforeSendFn).toHaveBeenCalledTimes(1)
-        expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+        expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
       }
     )
 
@@ -1078,14 +1065,7 @@ describe('PostHog Node.js', () => {
         // simulate network delay
         await wait(500)
 
-        return Promise.resolve({
-          status: 200,
-          text: () => Promise.resolve('ok'),
-          json: () =>
-            Promise.resolve({
-              status: 'ok',
-            }),
-        } as any)
+        return Promise.resolve(v1Response())
       })
 
       vi.useRealTimers()
@@ -1144,10 +1124,7 @@ describe('PostHog Node.js', () => {
       }
       expect(flushSettled).toBe(true)
       expect(shutdownSettled).toBe(true)
-      const flushedEvents = mockedFetch.mock.calls
-        .filter(([url]) => String(url).endsWith('/batch/'))
-        .flatMap(([, options]) => JSON.parse(options!.body as string).batch)
-      expect(flushedEvents).toMatchObject([
+      expect(sentEvents(mockedFetch)).toMatchObject([
         { event: 'test-event-1' },
         { event: 'test-event-2' },
         { event: 'test-event-3' },
@@ -2192,15 +2169,9 @@ describe('PostHog Node.js', () => {
         expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
 
         // Should make immediate batch call
-        expect(mockedFetch).toHaveBeenCalledWith(
-          'http://example.com/batch/',
-          expect.objectContaining({ method: 'POST' })
-        )
+        expect(mockedFetch).toHaveBeenCalledWith(anyCaptureUrl, expect.objectContaining({ method: 'POST' }))
 
-        const lastCall = mockedFetch.mock.calls.find((call) => (call[0] as string).includes('/batch/'))
-        const body = JSON.parse(lastCall?.[1]?.body as string)
-
-        expect(body.batch[0]).toEqual(
+        expect(sentEvents(mockedFetch)[0]).toEqual(
           expect.objectContaining({
             distinct_id: 'user123',
             event: 'test event',
@@ -2397,10 +2368,7 @@ describe('PostHog Node.js', () => {
           await hashStarted
           await vi.advanceTimersByTimeAsync(0)
           expect(flushFinished).toBe(false)
-          expect(mockedFetch).not.toHaveBeenCalledWith(
-            'http://example.com/batch/',
-            expect.objectContaining({ method: 'POST' })
-          )
+          expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.objectContaining({ method: 'POST' }))
 
           releaseHash()
           await flushing
@@ -2887,7 +2855,7 @@ describe('PostHog Node.js', () => {
       await waitForPromises()
       await posthog.flush()
 
-      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.any(Object))
+      expect(mockedFetch).toHaveBeenCalledWith(anyCaptureUrl, expect.any(Object))
 
       expect(getLastBatchEvents()?.[0]).toEqual(
         expect.objectContaining({
@@ -2916,7 +2884,7 @@ describe('PostHog Node.js', () => {
       await waitForPromises()
       await posthog.flush()
 
-      expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.any(Object))
+      expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.any(Object))
 
       // # called for different user, should call capture again
       expect(
@@ -2929,7 +2897,7 @@ describe('PostHog Node.js', () => {
       vi.runOnlyPendingTimers()
       await waitForPromises()
       await posthog.flush()
-      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.any(Object))
+      expect(mockedFetch).toHaveBeenCalledWith(anyCaptureUrl, expect.any(Object))
 
       expect(getLastBatchEvents()?.[0]).toEqual(
         expect.objectContaining({
@@ -2958,7 +2926,7 @@ describe('PostHog Node.js', () => {
       vi.runOnlyPendingTimers()
       await waitForPromises()
       await posthog.flush()
-      expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.any(Object))
+      expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.any(Object))
 
       // # called for different flag, falls back to flags, should call capture again
       expect(
@@ -2972,7 +2940,7 @@ describe('PostHog Node.js', () => {
       await posthog.flush()
       // one to flags, one to batch
       expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
-      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.any(Object))
+      expect(mockedFetch).toHaveBeenCalledWith(anyCaptureUrl, expect.any(Object))
 
       expect(getLastBatchEvents()?.[0]).toEqual(
         expect.objectContaining({
@@ -3002,7 +2970,7 @@ describe('PostHog Node.js', () => {
       await posthog.flush()
       // call flags, but not batch
       expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
-      expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.any(Object))
+      expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.any(Object))
     })
 
     describe('`sendFeatureFlagEvent` client option', () => {
@@ -3057,7 +3025,7 @@ describe('PostHog Node.js', () => {
           await posthog.flush()
 
           // Should NOT send $feature_flag_called event because global setting is false
-          expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+          expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
         })
 
         it('overrides client sendFeatureFlagEvent option when method-level option is provided', async () => {
@@ -3078,7 +3046,7 @@ describe('PostHog Node.js', () => {
           await posthog.flush()
 
           // The client option should have been overridden, allowing the event to be sent
-          expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+          expect(mockedFetch).toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
         })
       })
     })

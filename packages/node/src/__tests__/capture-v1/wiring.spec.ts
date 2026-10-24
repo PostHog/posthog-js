@@ -2,7 +2,8 @@ import { gunzipSync } from 'node:zlib'
 
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { CaptureV1Error } from '@/capture-v1/errors'
-import { V1_URL, V1WiringHarness, v0Response, v1Response, waitForFlushTimer } from '../utils/v1-wiring'
+import { v1Response } from '../utils'
+import { V1_URL, V1WiringHarness, v0Response, waitForFlushTimer } from '../utils/v1-wiring'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
 
