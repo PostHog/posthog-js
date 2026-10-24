@@ -50,6 +50,7 @@ import {
   IPostHog,
   OverrideFeatureFlagsOptions,
   PostHogOptions,
+  PreparedEventMessage,
   SendFeatureFlagsOptions,
   SetPersonPropertiesMessage,
   UnsetPersonPropertiesMessage,
@@ -1147,18 +1148,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
     return this.addPendingPromise(
       this._prepareEventMessage(props, prepareOptions)
-        .then(({ distinctId, event, properties, options, eventOptions }) => {
+        .then(({ distinctId, event, properties, options, uuid, timestamp }) => {
           const captureOptions: PostHogCaptureOptions = {
-            timestamp: options.timestamp,
+            timestamp,
             // `$geoip_disable` is already set before before_send; core must not add it after.
             disableGeoip: false,
-            uuid: options.uuid,
+            uuid,
           }
           const message = {
             distinctId,
             event,
             properties,
-            ...(eventOptions !== undefined ? { options: eventOptions } : {}),
+            ...(options !== undefined ? { options } : {}),
           }
           return immediate
             ? this.sendImmediate(type, message, captureOptions, explicitRoute)
@@ -3500,12 +3501,26 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  public async prepareEventMessage(props: EventMessage): Promise<{
-    distinctId: string
-    event: string
-    properties: PostHogEventProperties
-    options: PostHogCaptureOptions
-  }> {
+  /**
+   * Build an event as `capture()` would send it, without sending it.
+   *
+   * @remarks
+   * The result has the same shape as the message passed in: `options` holds the event's options
+   * after every layer filled them, and `uuid`, `timestamp` and `disableGeoip` are top-level fields.
+   * Rejects with `null` when `before_send` drops the event.
+   *
+   * @example
+   * ```ts
+   * const message = await client.prepareEventMessage({ distinctId: 'user_123', event: 'button_clicked' })
+   * console.log(message.properties.$is_server, message.options)
+   * ```
+   *
+   * {@label Capture}
+   *
+   * @param props - The event to build
+   * @returns The event with its properties and options filled, after `before_send`
+   */
+  public async prepareEventMessage(props: EventMessage): Promise<PreparedEventMessage> {
     return this._prepareEventMessage(props)
   }
 
@@ -3517,14 +3532,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private async _prepareEventMessage(
     props: EventMessage,
     prepareOptions: PrepareEventOptions = {}
-  ): Promise<{
-    distinctId: string
-    event: string
-    properties: PostHogEventProperties
-    options: PostHogCaptureOptions
-    /** The event's `options` map, sent to capture unchanged. */
-    eventOptions?: Record<string, JsonType>
-  }> {
+  ): Promise<PreparedEventMessage> {
     const {
       distinctId,
       event,
@@ -3624,12 +3632,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       distinctId: eventMessage.distinctId!,
       event: eventMessage.event,
       properties: eventMessage.properties || {},
-      options: {
-        timestamp: eventMessage.timestamp,
-        disableGeoip: eventMessage.disableGeoip,
-        uuid: eventMessage.uuid,
-      },
-      eventOptions: eventMessage.options,
+      options: eventMessage.options,
+      uuid: eventMessage.uuid,
+      timestamp: eventMessage.timestamp,
+      disableGeoip: eventMessage.disableGeoip,
     }
   }
 
