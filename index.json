@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/5420": {
+    "key": "PostHog/posthog-js/issue/5420",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5420",
+    "url": "https://github.com/PostHog/posthog-js/issues/5420",
+    "conclusion": "Confirmed packaging regression in posthog-node: the optional OpenTelemetry peer is still statically resolved by esbuild.",
+    "labels": [
+      "node",
+      "javascript",
+      "feature/error-tracking",
+      "team/client-libraries",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-24T17:46:08.757Z"
+  },
   "PostHog/posthog-js/issue/5419": {
     "key": "PostHog/posthog-js/issue/5419",
     "repo": "PostHog/posthog-js",
@@ -2938,20 +2954,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-07-01T20:57:56.770Z"
-  },
-  "PostHog/posthog-js/issue/4046": {
-    "key": "PostHog/posthog-js/issue/4046",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 4046",
-    "url": "https://github.com/PostHog/posthog-js/issues/4046",
-    "conclusion": "Valid feature request; current code confirms the Convex flag refresh loop is not gated before scheduling.",
-    "labels": [
-      "enhancement",
-      "feature",
-      "feature/flags",
-      "team/feature-flags"
-    ],
-    "closed": false,
-    "updatedAt": "2026-07-01T13:38:03.572Z"
   }
 }
