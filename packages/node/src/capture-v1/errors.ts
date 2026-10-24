@@ -57,3 +57,35 @@ export class CaptureError extends Error {
     return message
   }
 }
+
+/** Counts of undelivered events by cause, in the order the causes first occurred. */
+export class CaptureLossTally {
+  private readonly counts = new Map<string, number>()
+
+  add(cause: string, count: number): void {
+    if (count > 0) {
+      this.counts.set(cause, (this.counts.get(cause) ?? 0) + count)
+    }
+  }
+
+  get total(): number {
+    let total = 0
+    for (const count of this.counts.values()) {
+      total += count
+    }
+    return total
+  }
+
+  entries(): [cause: string, count: number][] {
+    return [...this.counts]
+  }
+}
+
+/**
+ * The one line logged for a capture loss when nothing listens for `'error'`. It holds the lane,
+ * counts and causes only: never server response text, event content or uuids.
+ */
+export function describeCaptureLoss(endpoint: CaptureEndpoint, loss: CaptureLossTally): string {
+  const causes = loss.entries().map(([cause, count]) => `${count} ${cause}`)
+  return `${loss.total} event(s) were not delivered to ${endpoint}: ${causes.join(', ')}`
+}

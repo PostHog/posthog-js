@@ -1,7 +1,13 @@
 import { type FetchLike, type PostHogFetchOptions, type PostHogFetchResponse, uuidv7 } from '@posthog/core'
 
 import { type CaptureCodec, type CaptureCompression, webCompressor } from './compression'
-import { CaptureError, type CaptureDroppedEvent, type CaptureErrorParams } from './errors'
+import {
+  CaptureError,
+  CaptureLossTally,
+  type CaptureDroppedEvent,
+  type CaptureErrorParams,
+  describeCaptureLoss,
+} from './errors'
 import { type SerializedV1Event, buildV1Body } from './serialize'
 import type { CaptureEndpoint, V1BatchResponse, V1EventResult } from './types'
 import { canonicalizeUuid } from './uuid'
@@ -35,6 +41,9 @@ const RETRYABLE_STATUSES = new Set([408, 500, 502, 503, 504])
 const FOLLOWED_REDIRECT_STATUSES = new Set([307, 308])
 const MAX_REDIRECTS = 5
 
+/** Errors the sender raised for its own request deadline, so a loss summary can call them timeouts. */
+const timeoutErrors = new WeakSet<Error>()
+
 /** Drop details for a copy of an event the server dropped as a duplicate of an earlier one in the request. */
 export const DUPLICATE_EVENT_UUID = 'duplicate_event_uuid'
 
@@ -59,8 +68,11 @@ export interface V1CaptureSenderConfig {
 
 export interface V1CaptureSenderHooks {
   fetch: FetchLike
-  /** Surfaces partial/terminal delivery failures on the client error channel. */
-  onError: (error: Error) => void
+  /**
+   * Surfaces partial/terminal delivery failures on the client error channel, at most once per
+   * batch. `summary` is one line with counts and causes only, for when nothing listens.
+   */
+  onError: (error: CaptureError, summary: string) => void
   now?: () => number
   /** Waits between attempts. The sender stops waiting when `signal` aborts, even if this does not. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
@@ -109,7 +121,7 @@ export class V1CaptureSender {
   private readonly config: V1CaptureSenderConfig
   private readonly hostOrigin: string | undefined
   private readonly fetchFn: FetchLike
-  private readonly onError: (error: Error) => void
+  private readonly onError: (error: CaptureError, summary: string) => void
   private readonly now: () => number
   private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>
   private readonly generateRequestId: () => string
@@ -140,14 +152,15 @@ export class V1CaptureSender {
     const createdAt = new Date(this.now()).toISOString()
     const url = `${this.config.host}${this.config.path}`
     const drops: CaptureDroppedEvent[] = []
+    const loss = new CaptureLossTally()
     let pending = events
 
-    const unsent = (cause: unknown): T[] => {
+    const unsent = (cause: unknown, failure: string): T[] => {
       if (keepUnsent) {
-        this.surfacePartialDrops(requestId, drops)
+        this.surfacePartialDrops(requestId, drops, loss)
         return pending
       }
-      this.surfaceBatchFailure(requestId, drops, pending, cause)
+      this.surfaceBatchFailure(requestId, drops, pending, cause, loss, failure)
       return []
     }
 
@@ -156,7 +169,7 @@ export class V1CaptureSender {
     const maxAttempts = (Number.isInteger(maxRetries) && maxRetries > 0 ? maxRetries : 0) + 1
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (signal?.aborted) {
-        return unsent(signal.reason)
+        return unsent(signal.reason, 'not sent: aborted')
       }
       const isLastAttempt = attempt === maxAttempts
       const payload = buildV1Body(pending, { createdAt, historicalMigration: this.config.historicalMigration })
@@ -169,7 +182,8 @@ export class V1CaptureSender {
         const { status } = response
         if (redirectFailure !== undefined) {
           await captureAttempt.waitFor(captureAttempt.cancelBody()).catch(() => {})
-          this.surfaceBatchFailure(requestId, drops, pending, new Error(redirectFailure))
+          const failure = `failed on a redirect it does not follow (HTTP ${status})`
+          this.surfaceBatchFailure(requestId, drops, pending, new Error(redirectFailure), loss, failure)
           return []
         }
         if (status < 200 || status >= 300) {
@@ -179,7 +193,7 @@ export class V1CaptureSender {
             retryDelayMs = this.backoffDelay(attempt, retryAfterMs)
           } else {
             const httpError = await this.buildHttpError(response, status, captureAttempt.waitFor)
-            this.surfaceBatchFailure(requestId, drops, pending, httpError)
+            this.surfaceBatchFailure(requestId, drops, pending, httpError, loss, `failed with HTTP ${status}`)
             return []
           }
         } else {
@@ -195,23 +209,32 @@ export class V1CaptureSender {
               requestId,
               drops,
               pending,
-              new Error(`Capture V1 returned an unparseable ${status} response body`)
+              new Error(`Capture V1 returned an unparseable ${status} response body`),
+              loss,
+              `failed with an unreadable response (HTTP ${status})`
             )
             return []
           }
 
+          const dropsBefore = drops.length
           const retryable = this.classify(pending, parsed, drops)
+          for (const drop of drops.slice(dropsBefore)) {
+            const cause = drop.details === DUPLICATE_EVENT_UUID ? 'dropped as duplicate uuids' : 'dropped by the server'
+            loss.add(`${cause} (HTTP ${status})`, 1)
+          }
           if (retryable.length === 0) {
-            this.surfacePartialDrops(requestId, drops)
+            this.surfacePartialDrops(requestId, drops, loss)
             return []
           }
           if (isLastAttempt) {
-            this.onError(
+            loss.add(`still marked for retry after ${maxAttempts} attempt(s) (HTTP ${status})`, retryable.length)
+            this.report(
               this.captureError({
                 requestId,
                 drops,
                 retryExhausted: retryable.map((event) => event.uuid),
-              })
+              }),
+              loss
             )
             return []
           }
@@ -228,7 +251,7 @@ export class V1CaptureSender {
         // Connection/timeouts, including a timeout while consuming the response body,
         // are retried until the budget runs out.
         if (isLastAttempt || signal?.aborted) {
-          return unsent(transportError)
+          return unsent(transportError, this.describeTransportFailure(transportError, signal))
         }
         retryDelayMs = this.backoffDelay(attempt)
       } finally {
@@ -295,6 +318,7 @@ export class V1CaptureSender {
           `Capture V1 request timed out ${timeoutPhase} after ${this.config.requestTimeoutMs}ms`
         )
         timeoutError.name = 'AbortError'
+        timeoutErrors.add(timeoutError)
         abortWith(timeoutError)
       }, this.config.requestTimeoutMs)
       if (externalSignal) {
@@ -551,15 +575,37 @@ export class V1CaptureSender {
     requestId: string,
     drops: CaptureDroppedEvent[],
     pending: SerializedV1Event[],
-    cause: unknown
+    cause: unknown,
+    loss: CaptureLossTally,
+    failure: string
   ): void {
-    this.onError(this.captureError({ requestId, drops, retryExhausted: pending.map((event) => event.uuid), cause }))
+    loss.add(failure, pending.length)
+    this.report(
+      this.captureError({ requestId, drops, retryExhausted: pending.map((event) => event.uuid), cause }),
+      loss
+    )
   }
 
-  private surfacePartialDrops(requestId: string, drops: CaptureDroppedEvent[]): void {
+  private surfacePartialDrops(requestId: string, drops: CaptureDroppedEvent[], loss: CaptureLossTally): void {
     if (drops.length > 0) {
-      this.onError(this.captureError({ requestId, drops, retryExhausted: [] }))
+      this.report(this.captureError({ requestId, drops, retryExhausted: [] }), loss)
     }
+  }
+
+  private report(error: CaptureError, loss: CaptureLossTally): void {
+    this.onError(error, describeCaptureLoss(this.config.path, loss))
+  }
+
+  /** A failure without an HTTP response, named by type only: its message can carry server or proxy text. */
+  private describeTransportFailure(error: unknown, signal: AbortSignal | undefined): string {
+    if (error instanceof Error && timeoutErrors.has(error)) {
+      return 'failed: request timed out'
+    }
+    if (signal?.aborted) {
+      return 'failed: request aborted'
+    }
+    const name = error instanceof Error && /^\w{1,64}$/.test(error.name) ? error.name : 'unknown'
+    return `failed with a network error (${name})`
   }
 
   private captureError(params: Omit<CaptureErrorParams, 'endpoint'>): CaptureError {

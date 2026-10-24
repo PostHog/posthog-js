@@ -598,10 +598,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       lane = new CaptureLane(this._captureLaneConfig(endpoint), {
         sender: new V1CaptureSender(this.captureSenderConfig(endpoint, compressor), {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
-          onError: (error) => this._events.emit('error', error),
+          onError: (error, summary) => this._reportCaptureLoss([error], summary),
           compress: (payload, codec) => compressor.compress(payload, codec),
         }),
-        onLocalDrops: (error) => this._reportLocalCaptureDrops(error),
+        onLocalDrops: (errors, summary) => this._reportCaptureLoss(errors, summary),
         onError: (error) => this._events.emit('error', error),
         onFlush: (messages) => this._events.emit('flush', messages),
         onBackgroundFlush: (flush) => this._onLaneBackgroundFlush(flush),
@@ -630,12 +630,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  private _reportLocalCaptureDrops(error: CaptureError): void {
+  /** Emits each error; with no `'error'` listener, logs `summary` once instead, since the events are lost. */
+  private _reportCaptureLoss(errors: CaptureError[], summary: string): void {
     const errorListeners = this._events.events['error']?.length ?? 0
-    this._events.emit('error', error)
+    for (const error of errors) {
+      this._events.emit('error', error)
+    }
     if (errorListeners === 0) {
-      // console.warn, not this._logger: the logger only prints in debug mode, and these drops lose data.
-      console.warn(`[PostHog] ${error.message}`)
+      // console.warn, not this._logger: the logger only prints in debug mode.
+      console.warn(`[PostHog] ${summary}`)
     }
   }
 
