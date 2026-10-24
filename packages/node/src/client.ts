@@ -6,7 +6,6 @@ import {
   getEventUuid,
   isBlockedUA,
   isPlainObject,
-  isPostHogFetchContentTooLargeError,
   JsonType,
   minimizeFlagCalledEventProperties,
   PostHogCaptureOptions,
@@ -72,12 +71,10 @@ import ErrorTracking from './extensions/error-tracking'
 import { getActiveTraceProperties } from './extensions/error-tracking/trace-context'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
-import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
-import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routing'
-import { V1CaptureSender } from './capture-v1/sender'
-import { ANALYTICS_CAPTURE_ENDPOINT } from './capture-v1/types'
-import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
-import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
+import { V1CaptureSender, type V1CaptureSenderConfig } from './capture-v1/sender'
+import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from './capture-v1/types'
+import { partitionAiBatch } from './ai-capture/batching'
+import { AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -88,6 +85,9 @@ const MAX_CACHE_SIZE = 50 * 1000
 const WAITUNTIL_DEBOUNCE_MS = 50
 const WAITUNTIL_MAX_WAIT_MS = 500
 const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
+
+/** Queue route for `capture()` events; its queue is the historical {@link PostHogPersistedProperty.Queue}. */
+const ANALYTICS_ROUTE = 'analytics'
 
 // Process-wide dedup for deprecation warnings — without this, calling a deprecated
 // method in a loop would spam logs. Matches Python's `warnings.warn` default-dedup behavior.
@@ -163,8 +163,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _traces?: PostHogTraces
   private _spanContext?: SpanContextManager
 
-  private readonly captureMode: CaptureMode
-  private _v1Sender?: V1CaptureSender
+  private readonly _captureSenders = new Map<CaptureEndpoint, V1CaptureSender>()
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
   /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
@@ -252,7 +251,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     super(normalizedApiKey, normalizedOptions)
 
     this.options = normalizedOptions
-    this.captureMode = resolveCaptureMode()
+    this.warnIfCaptureModeSet()
     this.enableFullAiCapture = normalizedOptions.enableFullAiCapture === true
     this.privacyMode = normalizedOptions.privacyMode === true
     this.context = this.initializeContext()
@@ -507,128 +506,90 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this.options.fetch ? this.options.fetch(url, options) : fetch(url, options)
   }
 
-  /**
-   * Route an event to its queue. In v1 mode `$ai_*` events go to the isolated {@link AI_ROUTE}
-   * (legacy transport) and everything else to {@link ANALYTICS_ROUTE} (Capture V1); in v0 mode
-   * every event stays on {@link ANALYTICS_ROUTE}, which maps to the historical queue. Routing runs
-   * on the post-`before_send`, normalized event name (core calls this after `processBeforeEnqueue`).
-   */
-  protected getQueueRouteKey(message: PostHogEventProperties): string {
-    return this.captureMode === 'v1' && isLegacyOnlyEvent(message) ? AI_ROUTE : ANALYTICS_ROUTE
+  /** Every `capture()` event, including `$ai_*`, stays on the analytics route. */
+  protected getQueueRouteKey(_message: PostHogEventProperties): string {
+    return ANALYTICS_ROUTE
   }
 
   protected persistedQueueKeyForRoute(route: string): PostHogPersistedProperty {
-    if (route === AI_CAPTURE_ROUTE) {
-      return PostHogPersistedProperty.AiCaptureQueue
-    }
-    return route === AI_ROUTE ? PostHogPersistedProperty.AiQueue : PostHogPersistedProperty.Queue
+    return route === AI_CAPTURE_ROUTE ? PostHogPersistedProperty.AiCaptureQueue : PostHogPersistedProperty.Queue
   }
 
   protected getActiveQueueRoutes(): string[] {
-    const routes = this.captureMode === 'v1' ? [ANALYTICS_ROUTE, AI_ROUTE] : [ANALYTICS_ROUTE]
-    if (this._aiCaptureRouteActive) {
-      routes.push(AI_CAPTURE_ROUTE)
-    }
-    return routes
-  }
-
-  protected getBatchEndpointPath(route: string): string {
-    return route === AI_CAPTURE_ROUTE ? AI_CAPTURE_ENDPOINT_PATH : super.getBatchEndpointPath(route)
+    return this._aiCaptureRouteActive ? [ANALYTICS_ROUTE, AI_CAPTURE_ROUTE] : [ANALYTICS_ROUTE]
   }
 
   /**
    * Capture submission seam shared by the batched (`_flush`) and immediate (`sendImmediate`)
-   * paths. Events are routed to homogeneous per-route queues at enqueue time, so a batch here is
-   * never mixed: the {@link AI_ROUTE} (and all of v0 mode) uses the legacy `/batch/` transport,
-   * which throws so `_flush` can shrink/persist/retry its own queue; the {@link ANALYTICS_ROUTE}
-   * in v1 mode uses the Capture V1 endpoint. Because the routes flush independently, a v0/AI leg
-   * failure can never re-send analytics events already accepted on the V1 leg.
+   * paths. Each route has its own queue and capture lane, so a failure on one lane can never
+   * re-send events already accepted on the other. The sender reports failures on the error
+   * channel and resolves, so `_flush` treats every batch as consumed.
    */
   protected async sendBatch(
     batchMessages: (PostHogEventProperties | undefined)[],
-    retryOptions?: Partial<RetriableOptions>,
+    _retryOptions?: Partial<RetriableOptions>,
     route: string = ANALYTICS_ROUTE
   ): Promise<void> {
     if (route === AI_CAPTURE_ROUTE) {
-      return this.sendAiCaptureBatch(batchMessages, retryOptions)
+      return this.sendAiCaptureBatch(batchMessages)
     }
 
-    if (this.captureMode !== 'v1' || route === AI_ROUTE) {
-      return super.sendBatch(batchMessages, retryOptions, route)
-    }
-
-    // Analytics route in v1 mode: homogeneous (no `$ai_*`, routed away at enqueue) and never
-    // undefined for a freshly-enqueued event; drop any legacy undefined queue artifacts.
-    const v1Events = batchMessages.filter((message): message is PostHogEventProperties => message !== undefined)
-    await this.getV1Sender().sendV1Batch(v1Events)
+    // A freshly-enqueued event is never undefined; drop any legacy undefined queue artifacts.
+    const events = batchMessages.filter((message): message is PostHogEventProperties => message !== undefined)
+    await this.getCaptureSender(ANALYTICS_CAPTURE_ENDPOINT).sendV1Batch(events)
   }
 
-  private async sendAiCaptureBatch(
-    batchMessages: (PostHogEventProperties | undefined)[],
-    retryOptions?: Partial<RetriableOptions>
-  ): Promise<void> {
+  private async sendAiCaptureBatch(batchMessages: (PostHogEventProperties | undefined)[]): Promise<void> {
     const { batches, dropped } = partitionAiBatch(batchMessages)
     for (const { event, bytes } of dropped) {
-      const message = `Event ${event} (${bytes} bytes) exceeds the ${AI_MAX_EVENT_BYTES / (1024 * 1024)}MiB limit for ${AI_CAPTURE_ENDPOINT_PATH}, dropping.`
+      const message = `Event ${event} (${bytes} bytes) exceeds the ${AI_MAX_EVENT_BYTES / (1024 * 1024)}MiB limit for ${AI_CAPTURE_ENDPOINT}, dropping.`
       this._logger.error(message)
       this._events.emit('error', new Error(message))
     }
+    const sender = this.getCaptureSender(AI_CAPTURE_ENDPOINT)
     for (const batch of batches) {
-      await this.sendAiSubBatch(batch, retryOptions)
+      await sender.sendV1Batch(batch)
     }
   }
 
-  // A single-event 413 means the server's cap is below that event's size, so no split can save it.
-  private async sendAiSubBatch(
-    batch: PostHogEventProperties[],
-    retryOptions?: Partial<RetriableOptions>
-  ): Promise<void> {
-    try {
-      await super.sendBatch(batch, retryOptions, AI_CAPTURE_ROUTE)
-    } catch (err) {
-      if (!isPostHogFetchContentTooLargeError(err)) {
-        throw err
-      }
-      if (batch.length === 1) {
-        const [event] = batch
-        const eventName = typeof event.event === 'string' ? event.event : 'unknown'
-        const message = `Event ${eventName} (${eventByteSize(event)} bytes) was rejected with 413 by ${AI_CAPTURE_ENDPOINT_PATH} on its own, dropping.`
-        this._logger.error(message)
-        this._events.emit('error', new Error(message))
-        return
-      }
-      const mid = Math.ceil(batch.length / 2)
-      await this.sendAiSubBatch(batch.slice(0, mid), retryOptions)
-      await this.sendAiSubBatch(batch.slice(mid), retryOptions)
+  private getCaptureSender(path: CaptureEndpoint): V1CaptureSender {
+    let sender = this._captureSenders.get(path)
+    if (!sender) {
+      sender = new V1CaptureSender(this.captureSenderConfig(path), {
+        fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
+        onError: (error) => this._events.emit('error', error),
+        compress: (payload) => this.compressPayload(payload),
+      })
+      this._captureSenders.set(path, sender)
+    }
+    return sender
+  }
+
+  /** Every lane shares the client's retry, timeout and compression settings. */
+  private captureSenderConfig(path: CaptureEndpoint): V1CaptureSenderConfig {
+    return {
+      host: this.host,
+      path,
+      apiKey: this.apiKey,
+      libraryId: this.getLibraryId(),
+      libraryVersion: this.getLibraryVersion(),
+      userAgent: this.getCustomUserAgent() || undefined,
+      historicalMigration: this.historicalMigration,
+      compressionEnabled: !this.disableCompression,
+      requestTimeoutMs: this.requestTimeout,
+      // 1 initial attempt + fetchRetryCount retries.
+      maxAttempts: (this.options.fetchRetryCount ?? 3) + 1,
+      initialRetryDelayMs: this.options.fetchRetryDelay ?? 3000,
+      isDebug: this.isDebug,
     }
   }
 
-  private getV1Sender(): V1CaptureSender {
-    if (!this._v1Sender) {
-      this._v1Sender = new V1CaptureSender(
-        {
-          host: this.host,
-          path: ANALYTICS_CAPTURE_ENDPOINT,
-          apiKey: this.apiKey,
-          libraryId: this.getLibraryId(),
-          libraryVersion: this.getLibraryVersion(),
-          userAgent: this.getCustomUserAgent() || undefined,
-          historicalMigration: this.historicalMigration,
-          compressionEnabled: !this.disableCompression,
-          requestTimeoutMs: this.requestTimeout,
-          // Reuse the existing v0 retry knobs: 1 initial attempt + fetchRetryCount retries.
-          maxAttempts: (this.options.fetchRetryCount ?? 3) + 1,
-          initialRetryDelayMs: this.options.fetchRetryDelay ?? 3000,
-          isDebug: this.isDebug,
-        },
-        {
-          fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
-          onError: (error) => this._events.emit('error', error),
-          compress: (payload) => this.compressPayload(payload),
-        }
-      )
+  private warnIfCaptureModeSet(): void {
+    const captureMode = typeof process !== 'undefined' ? process.env?.POSTHOG_CAPTURE_MODE : undefined
+    if (captureMode !== undefined) {
+      // console.warn, not this._logger: the logger only prints in debug mode, which cannot be on yet.
+      console.warn('[PostHog] POSTHOG_CAPTURE_MODE is no longer read. Capture always uses capture v1.')
     }
-    return this._v1Sender
   }
 
   /**
