@@ -168,7 +168,13 @@ export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 
 export type PostHogOptions = Omit<
   PostHogCoreOptions,
-  'before_send' | 'flushInterval' | 'maxQueueSize' | 'fetchRetryCount' | 'fetchRetryDelay' | 'disableCompression'
+  | 'before_send'
+  | 'flushInterval'
+  | 'maxQueueSize'
+  | 'fetchRetryCount'
+  | 'fetchRetryDelay'
+  | 'disableCompression'
+  | 'requestTimeout'
 > & {
   persistence?: 'memory'
   /**
@@ -180,7 +186,7 @@ export type PostHogOptions = Omit<
   /**
    * The maximum number of analytics events held in memory waiting to be sent (must be higher than `flushAt`).
    * When the queue is full, the oldest event is dropped and reported through the `'error'` event.
-   * `captureAi` events have their own queue and do not count toward this limit.
+   * `captureAi` events have their own queue, sized by `captureAiMaxQueueSize`, and do not count toward this limit.
    *
    * @default 10000
    */
@@ -222,6 +228,25 @@ export type PostHogOptions = Omit<
    * @default 'gzip'
    */
   captureAiCompression?: 'none' | 'gzip' | 'deflate' | 'zstd'
+  /**
+   * Timeout in milliseconds for any calls. `captureAi` requests use `captureAiRequestTimeoutMs`.
+   *
+   * @default 10000
+   */
+  requestTimeout?: number
+  /**
+   * The maximum number of `captureAi` events held in memory waiting to be sent. When the queue is
+   * full, the oldest AI event is dropped and reported through the `'error'` event.
+   *
+   * @default 1000
+   */
+  captureAiMaxQueueSize?: number
+  /**
+   * Timeout in milliseconds for each `captureAi` request. Analytics capture requests use `requestTimeout`.
+   *
+   * @default 30000
+   */
+  captureAiRequestTimeoutMs?: number
   /**
    * Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it
    * is set, and `captureAi` requests use `captureAiCompression`.

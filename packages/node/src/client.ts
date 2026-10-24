@@ -74,12 +74,7 @@ import { V1CaptureSender, type V1CaptureSenderConfig } from './capture-v1/sender
 import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from './capture-v1/types'
 import type { CaptureError } from './capture-v1/errors'
 import { CaptureLane, type CaptureLaneConfig } from './capture-lane/lane'
-import {
-  AI_MAX_PROPERTIES_BYTES,
-  AI_MAX_QUEUE_SIZE,
-  ANALYTICS_MAX_EVENT_BYTES,
-  CAPTURE_BATCH_TARGET_BYTES,
-} from './capture-lane/limits'
+import { AI_MAX_PROPERTIES_BYTES, ANALYTICS_MAX_EVENT_BYTES, CAPTURE_BATCH_TARGET_BYTES } from './capture-lane/limits'
 import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
 import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
@@ -606,7 +601,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       flushIntervalMs: this.options.flushInterval ?? 5000,
       maxBatchSize: Math.max(this.flushAt, this.options.maxBatchSize ?? 100),
       // Never below flushAt, or the flushAt trigger could never fire.
-      maxQueueSize: Math.max(this.flushAt, isAi ? AI_MAX_QUEUE_SIZE : (this.options.maxQueueSize ?? 10000)),
+      maxQueueSize: Math.max(
+        this.flushAt,
+        isAi ? this._captureSettings.ai.maxQueueSize : (this.options.maxQueueSize ?? 10000)
+      ),
       targetBatchBytes: CAPTURE_BATCH_TARGET_BYTES,
       maxEventBytes: isAi ? AI_MAX_PROPERTIES_BYTES : ANALYTICS_MAX_EVENT_BYTES,
       maxEventBytesOf: isAi ? 'properties' : 'event',
@@ -644,7 +642,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       userAgent: this.getCustomUserAgent() || undefined,
       historicalMigration: this.historicalMigration,
       compression,
-      requestTimeoutMs: this.requestTimeout,
+      requestTimeoutMs: laneSettings.requestTimeoutMs,
       maxRetries: this._captureSettings.maxRetries,
       isDebug: this.isDebug,
     }
