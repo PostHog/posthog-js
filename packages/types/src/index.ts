@@ -56,6 +56,7 @@ export type {
 } from './session-recording'
 
 // Config types
+export { CONFIG_DEFAULTS_DATES } from './posthog-config'
 export type {
     AutocaptureCompatibleElement,
     DomAutocaptureEvents,

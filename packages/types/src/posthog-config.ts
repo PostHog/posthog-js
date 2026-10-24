@@ -475,20 +475,21 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
+export const CONFIG_DEFAULTS_DATES = Object.freeze([
+    '2026-08-30',
+    '2026-08-29',
+    '2026-06-25',
+    '2026-05-30',
+    '2026-01-30',
+    '2025-11-30',
+    '2025-05-24',
+] as const)
+
 /**
  * Configuration defaults snapshot used by `PostHogConfig.defaults`.
  * Later dates include all earlier default changes. `latest` includes all changes in the loaded SDK version.
  */
-export type ConfigDefaults =
-    | 'latest'
-    | '2026-08-30'
-    | '2026-08-29'
-    | '2026-06-25'
-    | '2026-05-30'
-    | '2026-01-30'
-    | '2025-11-30'
-    | '2025-05-24'
-    | 'unset'
+export type ConfigDefaults = 'latest' | (typeof CONFIG_DEFAULTS_DATES)[number] | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
