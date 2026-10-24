@@ -1,11 +1,9 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 
-import { v1Response, waitForPromises } from '.'
+import { captureCalls, captureEvents, isCaptureUrl, v1Response, waitForPromises } from '.'
 
-export const V1_URL = 'http://example.com/i/v1/analytics/events'
-
-/** A legacy `/batch/` 2xx response. */
-export function v0Response(): any {
+/** A generic 2xx response for the non-capture endpoints (logs, metrics, flags). */
+export function okResponse(): any {
   return {
     status: 200,
     text: () => Promise.resolve('ok'),
@@ -15,29 +13,18 @@ export function v0Response(): any {
   }
 }
 
-export function v413Response(): any {
-  return {
-    status: 413,
-    text: () => Promise.resolve('Content Too Large'),
-    json: () => Promise.resolve({ status: 'Content Too Large' }),
-    headers: { get: () => null },
-    body: null,
-  }
-}
-
-/** Default fetch behavior: the v1 endpoint returns all-accepted, everything else a v0 200. */
+/** Default fetch behavior: capture endpoints accept every event, everything else returns a 200. */
 export function routeByUrl(url: string): any {
-  return url.includes('/i/v1/analytics/events') ? v1Response() : v0Response()
+  return isCaptureUrl(url) ? v1Response() : okResponse()
 }
 
 /**
- * Shared fixture for the Capture V1 wiring/integration specs: owns the global `fetch` spy, tracks
+ * Shared fixture for the capture wiring/integration specs: owns the global `fetch` spy, tracks
  * clients for teardown, and exposes call inspectors so each suite only writes its own scenario.
  */
 export class V1WiringHarness {
   readonly fetch: vi.SpyInstance
   private readonly clients: PostHog[] = []
-  private readonly originalCaptureMode = process.env.POSTHOG_CAPTURE_MODE
 
   constructor() {
     this.fetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
@@ -48,52 +35,30 @@ export class V1WiringHarness {
     this.fetch.mockImplementation((url: any) => Promise.resolve(routeByUrl(url as string)))
   }
 
-  /**
-   * Capture V1 is opt-in via the `POSTHOG_CAPTURE_MODE` env var only (no public option).
-   * The mode is resolved once, in the PostHog constructor, so toggling the env var around
-   * construction keeps each client hermetic even when v0 and v1 clients coexist in a suite.
-   */
-  makeClient(options: PostHogOptions = {}, captureMode?: 'v0' | 'v1'): PostHog {
-    const previous = process.env.POSTHOG_CAPTURE_MODE
-    if (captureMode !== undefined) {
-      process.env.POSTHOG_CAPTURE_MODE = captureMode
-    }
-    try {
-      const client = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        fetchRetryCount: 0,
-        disableCompression: true,
-        ...options,
-      })
-      this.clients.push(client)
-      return client
-    } finally {
-      if (previous === undefined) {
-        delete process.env.POSTHOG_CAPTURE_MODE
-      } else {
-        process.env.POSTHOG_CAPTURE_MODE = previous
-      }
-    }
+  makeClient(options: PostHogOptions = {}): PostHog {
+    const client = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      fetchRetryCount: 0,
+      disableCompression: true,
+      ...options,
+    })
+    this.clients.push(client)
+    return client
   }
 
   /** All fetch calls whose URL contains `fragment`, as `[url, options]` tuples. */
   callsTo(fragment: string): [string, any][] {
-    return this.fetch.mock.calls.filter((call: any[]) => (call[0] as string).includes(fragment)) as [string, any][]
+    return captureCalls(this.fetch, fragment)
   }
 
   /** Event names carried in every batch posted to a URL containing `fragment`, in call order. */
   eventsIn(fragment: string): string[] {
-    return this.callsTo(fragment).flatMap((call) => JSON.parse(call[1].body).batch.map((event: any) => event.event))
+    return captureEvents(this.fetch, fragment).map((event: any) => event.event)
   }
 
   async cleanup(): Promise<void> {
     while (this.clients.length) {
       await this.clients.pop()?.shutdown()
-    }
-    if (this.originalCaptureMode === undefined) {
-      delete process.env.POSTHOG_CAPTURE_MODE
-    } else {
-      process.env.POSTHOG_CAPTURE_MODE = this.originalCaptureMode
     }
   }
 }
