@@ -253,6 +253,22 @@ describe('emails', () => {
       expect(api.received).toEqual([])
     })
 
+    it.each([
+      ['after shutdown', async (client: PostHog) => await client.shutdown()],
+      ['while shutdown drains', (client: PostHog) => void client.shutdown()],
+    ])('returns client_closed as application_error %s without a request', async (_, shutDown) => {
+      const client = createClient()
+      await shutDown(client)
+
+      const result = await sendWelcome(client)
+
+      expect(result).toEqual({
+        data: null,
+        error: expect.objectContaining({ name: 'application_error', code: 'client_closed' }),
+      })
+      expect(api.received).toEqual([])
+    })
+
     it('returns invalid_form for an option it does not take, such as Resend scheduledAt, without a request', async () => {
       const result = await createClient().emails.send({
         to: JANE,

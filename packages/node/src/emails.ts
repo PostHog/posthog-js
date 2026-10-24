@@ -58,7 +58,7 @@ export interface EmailError {
   name: EmailErrorName
   /**
    * PostHog's error code, such as `invalid_recipient`, or one of the SDK's own: `missing_secret_key`,
-   * `missing_app_host`, `client_disabled`, `network_error`, `api_error` for an answer without a code,
+   * `missing_app_host`, `client_disabled`, `client_closed`, `network_error`, `api_error` for an answer without a code,
    * `unexpected_error`, and `invalid_form`, `invalid_template_id` and `invalid_idempotency_key` for a send the SDK
    * refused before any request.
    */
@@ -123,6 +123,7 @@ export interface Emails {
 /** @internal */
 export interface EmailsApi {
   isDisabled(): boolean
+  isClosed(): boolean
   secretKey(): string | undefined
   /** `undefined` when the client's host may be a proxy and no `appHost` was set. */
   appHost(): string | undefined
@@ -167,6 +168,9 @@ export class PostHogEmails implements Emails {
     const { templateId, idempotencyKey } = options
     if (this.api.isDisabled()) {
       return failure('client_disabled', 'The PostHog client is disabled, so nothing was sent.')
+    }
+    if (this.api.isClosed()) {
+      return failure('client_closed', 'The PostHog client was shut down, so nothing was sent.')
     }
     if (!this.api.secretKey()) {
       return failure(

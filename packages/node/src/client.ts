@@ -205,6 +205,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
   private _emails?: Emails
+  private _emailsClosed = false
   private _traces?: PostHogTraces
   private _spanContext?: SpanContextManager
 
@@ -734,6 +735,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   public get emails(): Emails {
     this._emails ??= new PostHogEmails({
       isDisabled: () => this.disabled,
+      isClosed: () => this._emailsClosed,
       secretKey: () => this.options.personalApiKey,
       appHost: () => (this.options.appHost ? removeTrailingSlash(this.options.appHost) : cloudAppHost(this.host)),
       maxRetries: () => this.options.maxRetries,
@@ -2987,6 +2989,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // super._shutdown spend from the same budget, so shutdown(500) can't take
     // ~1000ms by giving each phase a fresh full timeout.
     const shutdownDeadlineMs = Date.now() + (shutdownTimeoutMs ?? 30000)
+    this._emailsClosed = true
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
