@@ -78,6 +78,7 @@ import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/set
 import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
 import { canonicalizeUuid } from './capture-v1/uuid'
 import { readEventOptions } from './capture-v1/transform'
+import { fillOptions, snapshotLayer } from './event-defaults'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -192,6 +193,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   public readonly enableFullAiCapture: boolean
   /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
   public readonly privacyMode: boolean
+
+  // Options from registerOptions(). Replaced, never mutated, so an event can keep the object it read.
+  private _globalOptions: Record<string, JsonType> = {}
 
   // Feature flag overrides for local testing/development
   private _flagOverrides?: Record<string, FeatureFlagValue>
@@ -2901,6 +2905,47 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return false
   }
 
+  /**
+   * Register options that every event sent by this client carries.
+   *
+   * @remarks
+   * Each event fills the options it left unset (missing or `null`) in this order: the event's own
+   * `options`, then context options, then these, then the options the SDK adds (such as
+   * `process_person_profile: false` for an event with no distinct id). `before_send` sees the
+   * result and can change it. Values are sent to capture unchanged. An option beats its legacy
+   * property, such as `$process_person_profile`, wherever either one was set.
+   *
+   * @example
+   * ```ts
+   * client.registerOptions({ cookieless_mode: true })
+   * ```
+   *
+   * {@label Capture}
+   *
+   * @param options - The options to add to every event
+   */
+  registerOptions(options: Record<string, JsonType>): void {
+    if (!isPlainObject(options)) {
+      // console.error, not this._logger: the logger only prints in debug mode, and the options are lost.
+      console.error('[PostHog] registerOptions takes an object; ignoring the value')
+      return
+    }
+    this._globalOptions = { ...this._globalOptions, ...options }
+  }
+
+  /**
+   * Remove an option added with `registerOptions()`.
+   *
+   * {@label Capture}
+   *
+   * @param key - The option name to remove
+   */
+  unregisterOptions(key: string): void {
+    const remaining = { ...this._globalOptions }
+    delete remaining[key]
+    this._globalOptions = remaining
+  }
+
   protected abstract initializeContext(): IPostHogContext | undefined
 
   /**
@@ -2908,6 +2953,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * It propagates the context to all subsequent calls down the call stack.
    * Context properties like tags and sessionId will be automatically attached to all events.
    * By default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.
+   *
+   * @remarks
+   * Context `properties` and `options` fill only what an event left unset: the event's own values
+   * win, and context values beat `register()` and `registerOptions()` values and the values the SDK
+   * adds. `before_send` sees the result and can change it.
    *
    * @example
    * ```ts
@@ -2918,7 +2968,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Context}
    *
-   * @param data - Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)
+   * @param data - Context data to apply (sessionId, distinctId, properties, options)
    * @param fn - Function to run with the context
    * @param options - Context options (fresh: true to start with clean context instead of inheriting)
    * @returns The return value of the function
@@ -2963,7 +3013,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * across unrelated work. Prefer `withContext()` when you can wrap code
    * in a callback — it creates an isolated scope that cleans up automatically.
    *
-   * @param data - Context data to apply (distinctId, sessionId, properties)
+   * @param data - Context data to apply (distinctId, sessionId, properties, options)
    * @param options - Context options (fresh: true to start with clean context instead of inheriting)
    */
   enterContext(data: Partial<ContextData>, options?: ContextOptions): void {
@@ -3371,6 +3421,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let eventOptions = readEventOptions(props.options)
 
     const contextData = this.context?.get()
+    const globalOptions = this._globalOptions
     const includeContextProperties = options.includeContextProperties ?? true
 
     let mergedDistinctId = distinctId || contextData?.distinctId
@@ -3387,11 +3438,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       Object.assign(mergedProperties, await getActiveTraceProperties())
     }
 
+    const filledOptions: Record<string, JsonType> = { ...eventOptions }
+    fillOptions(filledOptions, [
+      snapshotLayer(contextData?.options),
+      globalOptions,
+      mergedDistinctId ? undefined : { process_person_profile: false },
+    ])
+    if (eventOptions !== undefined || Object.keys(filledOptions).length > 0) {
+      eventOptions = filledOptions
+    }
     if (!mergedDistinctId) {
       mergedDistinctId = uuidv7()
-      if (eventOptions?.process_person_profile === undefined || eventOptions.process_person_profile === null) {
-        eventOptions = { ...eventOptions, process_person_profile: false }
-      }
     }
 
     if (includeContextProperties && contextData?.sessionId && !mergedProperties.$session_id) {
