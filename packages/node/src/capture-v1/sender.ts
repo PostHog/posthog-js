@@ -51,6 +51,17 @@ export interface V1CaptureSenderHooks {
   compress?: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
 }
 
+export interface V1SendOptions {
+  /** Aborting stops the current attempt and every later one; the pending events come back as unsent. */
+  signal?: AbortSignal
+  /**
+   * When true, events whose last attempt got no HTTP response (or were cut off by `signal`) are
+   * returned to the caller unreported, so it can queue them again. When false they are reported
+   * as undelivered.
+   */
+  keepUnsent?: boolean
+}
+
 interface V1CaptureAttempt {
   response: PostHogFetchResponse
   signal: AbortSignal
