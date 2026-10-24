@@ -981,7 +981,7 @@ export interface IPostHog {
 
   /**
    * @description Run a function with specific context that will be applied to all events captured within that context.
-   * @param data Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)
+   * @param data Context data to apply (sessionId, distinctId, properties, options)
    * @param fn Function to run with the context
    * @param options Context options (fresh)
    * @returns The return value of the function
@@ -992,7 +992,7 @@ export interface IPostHog {
    * @description Set context without a callback wrapper. Must be called in the same
    * async scope that makes PostHog calls. Prefer `withContext()` when you can wrap
    * code in a callback.
-   * @param data Context data to apply (distinctId, sessionId, properties)
+   * @param data Context data to apply (distinctId, sessionId, properties, options)
    * @param options Context options (fresh)
    */
   enterContext(data: Partial<ContextData>, options?: ContextOptions): void

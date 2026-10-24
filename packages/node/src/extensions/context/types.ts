@@ -1,7 +1,15 @@
+import type { JsonType } from '@posthog/core'
+
 export interface ContextData {
   distinctId?: string
   sessionId?: string
+  /** Properties that fill the keys an event left unset. The event's own values win. */
   properties?: Record<string, any>
+  /**
+   * Options that fill the options an event left unset (missing or `null`). The event's own options
+   * win; these beat options from `registerOptions()`.
+   */
+  options?: Record<string, JsonType>
 }
 
 export interface ContextOptions {
