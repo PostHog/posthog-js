@@ -2,4 +2,4 @@
 'posthog-js': minor
 ---
 
-Add a single-tag browser SDK loader with a project_token URL parameter or data-project-token attribute.
+Add a single-tag browser SDK loader with URL or attribute tokens and optional deferred initialization.

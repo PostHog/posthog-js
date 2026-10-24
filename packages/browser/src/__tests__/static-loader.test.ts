@@ -58,6 +58,52 @@ describe('static script loader', () => {
         expect(core.crossOrigin).toBe('anonymous')
     })
 
+    it.each([undefined, 'false'])('keeps automatic initialization when data-defer-init is %j', async (value) => {
+        if (value) {
+            script.setAttribute('data-defer-init', value)
+        }
+        await load()
+        expect(loaderWindow.posthog._i).toHaveLength(1)
+        expect(loaderWindow.posthog._i[0][0]).toBe('phc_test')
+    })
+
+    it('downloads the SDK without initialization and queues an explicit init call', async () => {
+        script.src = 'https://customer.example/ingest/static/loader.js'
+        script.removeAttribute('data-project-token')
+        script.setAttribute('data-defer-init', 'true')
+        await load()
+        const ph = loaderWindow.posthog
+        expect(ph._i).toEqual([])
+        expect(injectedScripts()[0].src).toBe('https://customer.example/ingest/static/array.js')
+        const beforeSend = vi.fn()
+        const config = { api_host: '/ingest', before_send: beforeSend }
+        expect(ph.init('phc_manual', config)).toBe(ph)
+        ph.capture('after manual init')
+        expect(ph._i).toEqual([['phc_manual', config, 'posthog']])
+        expect(ph.slice()).toEqual([['capture', 'after manual init']])
+    })
+
+    it('keeps named initialization queues separate in deferred mode', async () => {
+        script.setAttribute('data-defer-init', 'true')
+        await load()
+        const ph = loaderWindow.posthog
+        const first = ph.init('phc_named', {}, 'secondary')
+        first.capture('first named event')
+        const second = ph.init('phc_named', {}, 'secondary')
+        second.people.set({ plan: 'paid' })
+        expect(second).toBe(first)
+        expect(ph.secondary).toBe(first)
+        expect(ph._i).toEqual([
+            ['phc_named', {}, 'secondary'],
+            ['phc_named', {}, 'secondary'],
+        ])
+        expect(ph.slice()).toEqual([])
+        expect(first.slice()).toEqual([['capture', 'first named event']])
+        expect(first.people.slice()).toEqual([['set', { plan: 'paid' }]])
+        expect(first.toString()).toBe('posthog.secondary (stub)')
+        expect(first.people.toString()).toBe('posthog.secondary.people (stub)')
+    })
+
     it.each(['onSurveysLoaded', 'captureTraceMetric'])(
         'queues the public %s method before the SDK loads',
         async (method) => {

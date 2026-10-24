@@ -32,12 +32,30 @@ Include the tag before application scripts that call `posthog`. Do not add `asyn
 | `data-api-host`      | Ingestion host, including relative proxy paths such as `/ingest`. Inferred for the standard US/EU asset hosts; required for custom asset hosts. |
 | `data-defaults`      | Defaults snapshot. Fixed at `2026-08-30` when omitted, independently of SDK upgrades.                                                           |
 | `data-config`        | JSON object with SDK options, applied before initialization. Explicit `data-api-host` and `data-defaults` attributes take precedence.           |
+| `data-defer-init`    | Set to `true` to wait for an explicit `init()` call. Defaults to `false`.                                                                       |
 
-For consent-gated installation, set `data-config='{"opt_out_capturing_by_default":true}'` on the tag before it executes. Use the existing snippet or npm integration when configuration needs JavaScript callbacks, such as `before_send`, or named instances.
+For consent-gated automatic installation, set `data-config='{"opt_out_capturing_by_default":true}'` on the tag before it executes.
+
+### Deferred initialization
+
+Set `data-defer-init="true"` to download the SDK without automatically initializing it. The default is `false`. Pass the project token and all configuration to an explicit `posthog.init()` call instead. The automatic-init token and configuration attributes are not used in this mode.
+
+```html
+<script src="https://us-assets.i.posthog.com/static/loader.js" data-defer-init="true" crossorigin="anonymous"></script>
+<script>
+    posthog.init('phc_TOKEN', {
+        api_host: 'https://us.i.posthog.com',
+        defaults: '2026-08-30',
+    })
+    posthog.capture('example event')
+</script>
+```
+
+Call `init()` before other SDK methods. If the SDK is still downloading, initialization and subsequent calls are queued. If it has already downloaded, `init()` uses the normal SDK API. Deferred initialization supports function-valued configuration, such as `before_send`, and named instances. It does not defer downloading the scripts and is separate from HTML's `defer` attribute.
 
 To pin the SDK, use `/static/<version>/loader.js` for a release that includes the loader. It loads that release's sibling `array.js`; historical releases without a loader are not changed or backfilled. `/static/loader.js` follows stable releases. A reverse proxy must forward both the loader and SDK paths, along with the SDK's normal API/config/extension paths.
 
-Fatal loader configuration errors are reported even when debug mode is off. Invalid JSON configuration still prevents initialization.
+Fatal automatic-initialization configuration errors are reported even when debug mode is off. Invalid JSON configuration still prevents automatic initialization.
 
 The loader forwards its CSP nonce to the SDK script. Your CSP must still allow the SDK, its extensions, and event ingestion. An existing legacy stub or live global instance takes precedence: the loader never replaces it or switches its project token.
 

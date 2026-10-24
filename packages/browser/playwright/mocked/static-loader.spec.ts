@@ -162,6 +162,53 @@ test('JavaScript injection exposes a callable queue when the loader onload callb
     expect(state.errors).toEqual([])
 })
 
+for (const timing of ['before-core', 'after-core'] as const) {
+    test(`deferred initialization accepts explicit configuration ${timing}`, async ({ page }, testInfo) => {
+        const state = await install(page, testInfo, { dynamic: true, delayCore: true })
+        await page.evaluate(
+            (source) =>
+                new Promise<void>((resolve, reject) => {
+                    const script = document.createElement('script')
+                    script.src = source
+                    script.setAttribute('data-defer-init', 'true')
+                    script.crossOrigin = 'anonymous'
+                    script.onload = () => resolve()
+                    script.onerror = () => reject(new Error('Loader download failed'))
+                    document.head.appendChild(script)
+                }),
+            state.source.split('?')[0]
+        )
+        expect(await page.evaluate(() => (window as any).posthog._i)).toEqual([])
+        if (timing === 'after-core') {
+            state.releaseCore()
+            await page.waitForFunction(() => typeof (window as any).posthog.version === 'string')
+            expect(await page.evaluate(() => (window as any).posthog.__loaded)).toBe(false)
+        }
+        expect(state.events).toEqual([])
+        await page.evaluate((options) => {
+            const ph = (window as any).posthog
+            ph.init('phc_manual', {
+                ...options,
+                api_host: 'https://us.i.posthog.com',
+                before_send: (event: { properties: Record<string, unknown> }) => {
+                    event.properties.manual_callback = true
+                    return event
+                },
+            })
+            ph.capture('explicit init event')
+        }, state.options)
+        if (timing === 'before-core') {
+            state.releaseCore()
+        }
+        await waitForSDK(page)
+        await expect.poll(() => state.events.filter(({ event }) => event === 'explicit init event')).toHaveLength(1)
+        expect(state.events.find(({ event }) => event === 'explicit init event')?.properties.manual_callback).toBe(true)
+        expect(await page.evaluate(() => (window as any).posthog.config.token)).toBe('phc_manual')
+        expect(state.coreRequests).toEqual(['https://us-assets.i.posthog.com/static/array.js'])
+        expect(state.errors).toEqual([])
+    })
+}
+
 test('queues survey callbacks, trace metrics and nested people methods before the core loads', async ({
     page,
 }, testInfo) => {
