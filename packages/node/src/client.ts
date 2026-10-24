@@ -3419,7 +3419,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param error - The error to capture
    * @param distinctId - Optional user distinct ID
-   * @param additionalProperties - Optional additional properties to include
+   * @param additionalProperties - Optional additional properties to include. Exception properties the SDK or PostHog owns, such as `$exception_list` and `$exception_level`, are ignored.
    * @param uuid - Optional event UUID
    * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
    */
@@ -3476,7 +3476,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param error - The error to capture
    * @param distinctId - Optional user distinct ID
-   * @param additionalProperties - Optional additional properties to include
+   * @param additionalProperties - Optional additional properties to include. Exception properties the SDK or PostHog owns, such as `$exception_list` and `$exception_level`, are ignored.
    * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
    * @returns Promise that resolves when the error is captured
    */

@@ -8,6 +8,26 @@ import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 const SHUTDOWN_TIMEOUT = 2000
 
+/**
+ * Exception properties that the SDK or PostHog owns (sdk-specs `exception-event-metadata`), so
+ * a caller's properties never set them.
+ */
+const RESERVED_EXCEPTION_PROPERTIES: ReadonlySet<string> = new Set([
+  '$exception_list',
+  '$exception_level',
+  '$exception_source',
+  '$debug_images',
+  '$exception_types',
+  '$exception_values',
+  '$exception_sources',
+  '$exception_functions',
+  '$exception_fingerprint_version',
+  '$exception_fingerprint_record',
+  '$exception_issue_id',
+  '$exception_release',
+  '$cymbal_errors',
+])
+
 export default class ErrorTracking {
   private client: PostHogBackendClient
   private _exceptionAutocaptureEnabled: boolean
@@ -49,15 +69,19 @@ export default class ErrorTracking {
     distinctId?: string,
     additionalProperties?: Record<string | number, any>
   ): Promise<EventMessage> {
-    const properties: EventMessage['properties'] = { ...additionalProperties }
+    const properties: EventMessage['properties'] = {}
+    for (const [key, value] of Object.entries(additionalProperties ?? {})) {
+      if (!RESERVED_EXCEPTION_PROPERTIES.has(key)) {
+        properties[key] = value
+      }
+    }
 
     const exceptionProperties = builder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
 
     return {
       event: '$exception',
-      // Leave distinctId resolution to prepareEventMessage which checks request context
-      // and falls back to a random UUID with $process_person_profile = false
+      // The client resolves a missing id: the context id, else a personless id.
       distinctId: distinctId,
       properties: {
         ...exceptionProperties,

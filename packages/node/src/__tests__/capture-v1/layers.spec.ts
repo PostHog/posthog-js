@@ -674,4 +674,39 @@ describe('layered event values', () => {
       expect(event.options).toMatchObject({ global_option: 'g', context_option: 'c' })
     })
   })
+
+  describe('captureException properties', () => {
+    it.each([
+      '$exception_source',
+      '$debug_images',
+      '$exception_types',
+      '$exception_values',
+      '$exception_sources',
+      '$exception_functions',
+      '$exception_fingerprint_version',
+      '$exception_fingerprint_record',
+      '$exception_issue_id',
+      '$exception_release',
+      '$cymbal_errors',
+    ])('cannot set %s', async (key) => {
+      const event = await sendOne((client) => client.captureException(new Error('boom'), 'u', { [key]: 'caller' }))
+
+      expect(event.properties).not.toHaveProperty(key)
+    })
+
+    it('cannot replace $exception_list or $exception_level, and keep other properties', async () => {
+      const event = await sendOne((client) =>
+        client.captureException(new Error('boom'), 'u', {
+          $exception_list: 'caller',
+          $exception_level: 'fatal',
+          $exception_fingerprint: 'custom',
+          custom: 1,
+        })
+      )
+
+      expect(event.properties.$exception_list[0]).toMatchObject({ type: 'Error', value: 'boom' })
+      expect(event.properties.$exception_level).toBe('error')
+      expect(event.properties).toMatchObject({ $exception_fingerprint: 'custom', custom: 1 })
+    })
+  })
 })
