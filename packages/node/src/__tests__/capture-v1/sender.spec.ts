@@ -485,6 +485,106 @@ describe('V1CaptureSender', () => {
     })
   })
 
+  describe('duplicates_dropped', () => {
+    const DUP = { uuid: 'a', details: 'duplicate_event_uuid' }
+    const uuidsIn = (fetch: Harness['fetch'], call: number): string[] =>
+      bodyOf(fetch, call).batch.map((e: any) => e.uuid)
+
+    it('reports the next n copies as duplicate drops when the kept copy is ok', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(makeResponse(200, { results: { a: { result: 'ok', duplicates_dropped: 2 } } }))
+
+      await sender.send(v1Events([msg('a'), msg('a'), msg('a')]))
+
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toMatchObject({ drops: [DUP, DUP], retryExhausted: [] })
+    })
+
+    it('keeps the drop details on the kept copy', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(
+        makeResponse(200, { results: { a: { result: 'drop', details: 'billing', duplicates_dropped: 1 } } })
+      )
+
+      await sender.send(v1Events([msg('a'), msg('a')]))
+
+      expect((errors[0] as CaptureError).drops).toEqual([{ uuid: 'a', details: 'billing' }, DUP])
+    })
+
+    it('resends only the kept copy when its result is retry', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch
+        .mockResolvedValueOnce(makeResponse(200, { results: { a: { result: 'retry', duplicates_dropped: 1 } } }))
+        .mockResolvedValueOnce(makeResponse(200, { results: { a: { result: 'ok' } } }))
+
+      await sender.send(v1Events([msg('a'), msg('a')]))
+
+      expect(uuidsIn(fetch, 1)).toEqual(['a'])
+      expect(errors[0]).toMatchObject({ drops: [DUP], retryExhausted: [] })
+    })
+
+    it('counts copies per uuid when uuids interleave', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(
+        makeResponse(200, {
+          results: { a: { result: 'ok', duplicates_dropped: 2 }, b: { result: 'retry', duplicates_dropped: 1 } },
+        })
+      )
+      fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      await sender.send(v1Events([msg('a'), msg('b'), msg('a'), msg('b'), msg('a')]))
+
+      expect(uuidsIn(fetch, 1)).toEqual(['b'])
+      expect((errors[0] as CaptureError).drops).toEqual([DUP, { ...DUP, uuid: 'b' }, DUP])
+    })
+
+    it('gives copies past n the kept verdict', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch
+        .mockResolvedValueOnce(
+          makeResponse(200, {
+            results: {
+              a: { result: 'retry', duplicates_dropped: 1 },
+              b: { result: 'drop', details: 'billing', duplicates_dropped: 1 },
+            },
+          })
+        )
+        .mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      await sender.send(v1Events([msg('a'), msg('a'), msg('a'), msg('b'), msg('b'), msg('b')]))
+
+      expect(uuidsIn(fetch, 1)).toEqual(['a', 'a'])
+      expect((errors[0] as CaptureError).drops).toEqual([
+        DUP,
+        { uuid: 'b', details: 'billing' },
+        { ...DUP, uuid: 'b' },
+        { uuid: 'b', details: 'billing' },
+      ])
+    })
+
+    it.each<[string, unknown]>([
+      ['zero', 0],
+      ['negative', -1],
+      ['fractional', 1.5],
+      ['a string', '1'],
+      ['null', null],
+      ['absent', undefined],
+    ])('ignores a %s duplicates_dropped and gives every copy the result', async (_label, duplicates) => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(
+        makeResponse(200, { results: { a: { result: 'drop', details: 'billing', duplicates_dropped: duplicates } } })
+      )
+
+      await sender.send(v1Events([msg('a'), msg('a')]))
+
+      expect((errors[0] as CaptureError).drops).toEqual([
+        { uuid: 'a', details: 'billing' },
+        { uuid: 'a', details: 'billing' },
+      ])
+    })
+  })
+
   describe('2xx malformed body', () => {
     it('treats an unparseable 2xx body as terminal failure without retrying', async () => {
       const { sender, fetch, errors } = makeSender()

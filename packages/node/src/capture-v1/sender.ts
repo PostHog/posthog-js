@@ -35,6 +35,9 @@ const RETRYABLE_STATUSES = new Set([408, 500, 502, 503, 504])
 const FOLLOWED_REDIRECT_STATUSES = new Set([307, 308])
 const MAX_REDIRECTS = 5
 
+/** Drop details for a copy of an event the server dropped as a duplicate of an earlier one in the request. */
+export const DUPLICATE_EVENT_UUID = 'duplicate_event_uuid'
+
 export interface V1CaptureSenderConfig {
   host: string
   /** The capture lane this sender posts to. */
@@ -458,10 +461,23 @@ export class V1CaptureSender {
       results.set(canonicalizeUuid(uuid) ?? uuid, result)
     }
     const retryable: T[] = []
+    // Only built when a result reports duplicates, so the usual response costs nothing extra.
+    let copiesSeen: Map<string, number> | undefined
     for (const event of pending) {
       const result = results.get(event.uuid)
       if (!result) {
         continue
+      }
+      const duplicates = result.duplicates_dropped
+      if (typeof duplicates === 'number' && Number.isSafeInteger(duplicates) && duplicates > 0) {
+        copiesSeen ??= new Map()
+        const copy = copiesSeen.get(event.uuid) ?? 0
+        copiesSeen.set(event.uuid, copy + 1)
+        // The first copy takes the result; the next `duplicates` copies are the ones the server dropped.
+        if (copy >= 1 && copy <= duplicates) {
+          drops.push({ uuid: event.uuid, details: DUPLICATE_EVENT_UUID })
+          continue
+        }
       }
       if (result.result === 'drop') {
         drops.push({ uuid: event.uuid, details: result.details ?? undefined })
