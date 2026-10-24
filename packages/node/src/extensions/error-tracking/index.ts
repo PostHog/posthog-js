@@ -54,11 +54,6 @@ export default class ErrorTracking {
     const exceptionProperties = builder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
 
-    const injectedReleaseId = CoreErrorTracking.getInjectedReleaseId()
-    if (injectedReleaseId) {
-      properties.$release_id = injectedReleaseId
-    }
-
     return {
       event: '$exception',
       // Leave distinctId resolution to prepareEventMessage which checks request context

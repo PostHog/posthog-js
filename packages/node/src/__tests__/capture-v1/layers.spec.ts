@@ -1,14 +1,51 @@
 import type { JsonType } from '@posthog/core'
 
 import { EventMessage, PostHog, PostHogOptions } from '@/entrypoints/index.node'
-import { ANALYTICS_CAPTURE_PATH, captureEvents } from '../utils'
+import { FeatureFlagEvaluations } from '@/feature-flag-evaluations'
+import { ANALYTICS_CAPTURE_PATH, apiImplementationV4, captureEvents } from '../utils'
 import { V1WiringHarness } from '../utils/v1-wiring'
+
+const { TRACE_ID, SPAN_ID } = vi.hoisted(() => ({
+  TRACE_ID: '0af7651916cd43dd8448eb211c80319c',
+  SPAN_ID: 'b7ad6b7169203331',
+}))
+
+vi.mock('@/extensions/error-tracking/trace-context', () => ({
+  getActiveTraceProperties: async () => ({ $trace_id: TRACE_ID, $span_id: SPAN_ID }),
+}))
 
 type Layers = {
   event?: Record<string, JsonType>
   context?: Record<string, JsonType>
   global?: Record<string, JsonType>
 }
+
+type Source = keyof Layers
+
+const SOURCES: Source[] = ['event', 'context', 'global']
+
+/** What `before_send` received, copied so later changes cannot alter it. */
+type HookView = { event: string; properties: Record<string, any>; options?: Record<string, JsonType> }
+
+/** A `flags` snapshot with one enabled flag `x` set to variant `v`, built without a network call. */
+const flagSnapshot = (): FeatureFlagEvaluations =>
+  new FeatureFlagEvaluations({
+    host: { captureFlagCalledEventIfNeeded: () => {}, logWarning: () => {} },
+    distinctId: 'u',
+    flags: {
+      x: {
+        key: 'x',
+        enabled: true,
+        variant: 'v',
+        payload: undefined,
+        id: 1,
+        version: 1,
+        reason: undefined,
+        locallyEvaluated: true,
+        hasExperiment: undefined,
+      },
+    },
+  })
 
 describe('layered event values', () => {
   vi.useFakeTimers()
@@ -51,6 +88,310 @@ describe('layered event values', () => {
         client.capture({ distinctId: 'u', event: 'e', ...message, options: layers.event ?? message.options })
       return layers.context ? client.withContext({ options: layers.context }, capture) : capture()
     })
+
+  /**
+   * Sends one event whose properties come from the event, a context and `register()`, and returns
+   * the wire event plus what `before_send` saw.
+   */
+  const sendWithPropertyLayers = async (
+    layers: Layers,
+    message: Partial<EventMessage> = {},
+    clientOptions: PostHogOptions = {}
+  ): Promise<{ event: any; hookSaw: HookView }> => {
+    const seen: HookView[] = []
+    const event = await sendOne(
+      async (client) => {
+        if (layers.global) {
+          await client.register(layers.global)
+        }
+        const capture = (): void =>
+          client.capture({ distinctId: 'u', event: 'e', ...message, properties: layers.event ?? message.properties })
+        return layers.context ? client.withContext({ properties: layers.context }, capture) : capture()
+      },
+      {
+        ...clientOptions,
+        before_send: (hookEvent) => {
+          seen.push(
+            structuredClone({
+              event: hookEvent!.event,
+              properties: hookEvent!.properties!,
+              options: hookEvent!.options,
+            })
+          )
+          return hookEvent
+        },
+      }
+    )
+    expect(seen).toHaveLength(1)
+    return { event, hookSaw: seen[0] }
+  }
+
+  describe('properties', () => {
+    it.each<[string, Layers, JsonType]>([
+      [
+        'the event beats context and global',
+        { event: { k: 'event' }, context: { k: 'context' }, global: { k: 'global' } },
+        'event',
+      ],
+      ['context beats global', { context: { k: 'context' }, global: { k: 'global' } }, 'context'],
+      ['global fills alone', { global: { k: 'global' } }, 'global'],
+      [
+        'undefined on the event counts as unset',
+        { event: { k: undefined as any }, context: { k: 'context' } },
+        'context',
+      ],
+      ['null on the event blocks the fill', { event: { k: null }, context: { k: 'context' } }, null],
+      ['null in context blocks the global fill', { context: { k: null }, global: { k: 'global' } }, null],
+    ])('%s', async (_label, layers, expected) => {
+      const { event, hookSaw } = await sendWithPropertyLayers(layers)
+
+      expect(event.properties.k).toStrictEqual(expected)
+      expect(hookSaw.properties.k).toStrictEqual(expected)
+    })
+
+    describe('nested fill', () => {
+      it.each(['$set', '$set_once', '$groups', '$group_set'])('%s fills inner keys one level deep', async (key) => {
+        const { event } = await sendWithPropertyLayers({
+          event: { [key]: { a: 'event', u: undefined as any } },
+          context: { [key]: { a: 'context', b: 'context', u: 'context' } },
+          global: { [key]: { b: 'global', c: 'global' } },
+        })
+
+        expect(event.properties[key]).toStrictEqual({ a: 'event', b: 'context', c: 'global', u: 'context' })
+      })
+
+      it.each<[string, Layers, JsonType]>([
+        ['an event $set that is not an object wins whole', { event: { $set: 'x' }, context: { $set: { a: 1 } } }, 'x'],
+        ['$unset uses the top-level rule', { event: { $unset: ['a'] }, context: { $unset: ['b'] } }, ['a']],
+        [
+          'any other object uses the top-level rule',
+          { event: { meta: { a: 1 } }, context: { meta: { b: 2 } } },
+          { a: 1 },
+        ],
+      ])('%s', async (_label, layers, expected) => {
+        const key = Object.keys(layers.event!)[0]
+        const { event } = await sendWithPropertyLayers(layers)
+
+        expect(event.properties[key]).toStrictEqual(expected)
+      })
+
+      it('a filled default never changes the registered object', async () => {
+        const registered = { a: 'global' }
+        await sendWithPropertyLayers({ event: { $set: { b: 'event' } }, global: { $set: registered } })
+
+        expect(registered).toStrictEqual({ a: 'global' })
+      })
+    })
+
+    it('typed groups merge over a $groups property key by key, then context fills', async () => {
+      const { event, hookSaw } = await sendWithPropertyLayers(
+        { event: { $groups: { company: 'property', org: 'property' } }, context: { $groups: { project: 'context' } } },
+        { groups: { company: 'typed' } }
+      )
+
+      const expected = { company: 'typed', org: 'property', project: 'context' }
+      expect(event.properties.$groups).toStrictEqual(expected)
+      expect(hookSaw.properties.$groups).toStrictEqual(expected)
+    })
+
+    describe('SDK values', () => {
+      it('fill $is_server and $geoip_disable when no layer sets them, before before_send', async () => {
+        const { event, hookSaw } = await sendWithPropertyLayers({})
+
+        expect(event.properties).toStrictEqual({ $is_server: true, $geoip_disable: true })
+        expect(hookSaw.properties).toStrictEqual({ $is_server: true, $geoip_disable: true })
+      })
+
+      it.each<[string, PostHogOptions, string]>([
+        ['isServer: false', { isServer: false }, '$is_server'],
+        ['disableGeoip: false', { disableGeoip: false }, '$geoip_disable'],
+      ])('%s leaves the value out', async (_label, clientOptions, key) => {
+        const { event, hookSaw } = await sendWithPropertyLayers({}, {}, clientOptions)
+
+        expect(event.properties).not.toHaveProperty(key)
+        expect(hookSaw.properties).not.toHaveProperty(key)
+      })
+
+      const userValueCases = ['$is_server', '$geoip_disable'].flatMap((key) =>
+        SOURCES.map((source): [string, Source] => [key, source])
+      )
+      it.each(userValueCases)('%s set in the %s layer beats the SDK value', async (key, source) => {
+        const { event, hookSaw } = await sendWithPropertyLayers({ [source]: { [key]: false } })
+
+        expect(event.properties[key]).toBe(false)
+        expect(hookSaw.properties[key]).toBe(false)
+      })
+
+      it.each<[string, Layers, boolean]>([
+        ['beats context and global', { context: { $geoip_disable: false }, global: { $geoip_disable: false } }, true],
+        ["loses to the event's own property", { event: { $geoip_disable: false } }, false],
+      ])('a per-call disableGeoip %s', async (_label, layers, expected) => {
+        const { event } = await sendWithPropertyLayers(layers, { disableGeoip: true }, { disableGeoip: false })
+
+        expect(event.properties.$geoip_disable).toBe(expected)
+      })
+
+      describe('feature flag properties from a flags snapshot', () => {
+        it('fill before before_send', async () => {
+          const { event, hookSaw } = await sendWithPropertyLayers({}, { flags: flagSnapshot() })
+
+          for (const properties of [event.properties, hookSaw.properties]) {
+            expect(properties['$feature/x']).toBe('v')
+            expect(properties.$active_feature_flags).toStrictEqual(['x'])
+          }
+        })
+
+        it.each(SOURCES)('lose to the %s layer', async (source) => {
+          const userValues = { '$feature/x': 'mine', $active_feature_flags: ['mine'] }
+          const { event, hookSaw } = await sendWithPropertyLayers({ [source]: userValues }, { flags: flagSnapshot() })
+
+          expect(event.properties).toMatchObject(userValues)
+          expect(hookSaw.properties).toMatchObject(userValues)
+        })
+      })
+
+      describe('trace ids on $exception', () => {
+        it('fill as a pair before before_send', async () => {
+          const { event, hookSaw } = await sendWithPropertyLayers({}, { event: '$exception' })
+
+          for (const properties of [event.properties, hookSaw.properties]) {
+            expect(properties).toMatchObject({ $trace_id: TRACE_ID, $span_id: SPAN_ID })
+          }
+        })
+
+        const pairCases = ['$trace_id', '$span_id'].flatMap((key) =>
+          SOURCES.map((source): [string, Source] => [key, source])
+        )
+        it.each(pairCases)('a %s in the %s layer stops both', async (key, source) => {
+          const { event } = await sendWithPropertyLayers({ [source]: { [key]: 'mine' } }, { event: '$exception' })
+
+          const otherKey = key === '$trace_id' ? '$span_id' : '$trace_id'
+          expect(event.properties[key]).toBe('mine')
+          expect(event.properties).not.toHaveProperty(otherKey)
+        })
+
+        it('are not added to other events', async () => {
+          const { event } = await sendWithPropertyLayers({})
+
+          expect(event.properties).not.toHaveProperty('$trace_id')
+        })
+      })
+
+      describe('$release_id on $exception', () => {
+        beforeEach(() => {
+          vi.stubEnv('POSTHOG_RELEASE_ID', 'injected-release')
+        })
+
+        afterEach(() => {
+          vi.unstubAllEnvs()
+        })
+
+        it('fills before before_send', async () => {
+          const { event, hookSaw } = await sendWithPropertyLayers({}, { event: '$exception' })
+
+          expect(event.properties.$release_id).toBe('injected-release')
+          expect(hookSaw.properties.$release_id).toBe('injected-release')
+        })
+
+        it.each(SOURCES)('loses to the %s layer', async (source) => {
+          const { event } = await sendWithPropertyLayers({ [source]: { $release_id: 'mine' } }, { event: '$exception' })
+
+          expect(event.properties.$release_id).toBe('mine')
+        })
+
+        it('loses to captureException properties', async () => {
+          const event = await sendOne((client) =>
+            client.captureException(new Error('boom'), 'u', { $release_id: 'mine' })
+          )
+
+          expect(event.properties.$release_id).toBe('mine')
+        })
+      })
+    })
+
+    it('before_send sees the $bot_pageview rename and has the final say', async () => {
+      const seen: HookView[] = []
+      const event = await sendOne(
+        (client) =>
+          client.capture({
+            distinctId: 'u',
+            event: '$pageview',
+            properties: { $raw_user_agent: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+          }),
+        {
+          __preview_capture_bot_pageviews: true,
+          before_send: (hookEvent) => {
+            seen.push(structuredClone({ event: hookEvent!.event, properties: hookEvent!.properties! }))
+            delete hookEvent!.properties!.$browser_type
+            return hookEvent
+          },
+        }
+      )
+
+      expect(seen[0].event).toBe('$bot_pageview')
+      expect(seen[0].properties.$browser_type).toBe('bot')
+      expect(event.event).toBe('$bot_pageview')
+      expect(event.properties).not.toHaveProperty('$browser_type')
+    })
+
+    it('before_send can remove every SDK value and nothing re-adds it', async () => {
+      const event = await sendOne(
+        (client) => client.capture({ distinctId: 'u', event: '$exception', flags: flagSnapshot() }),
+        {
+          before_send: (hookEvent) => {
+            hookEvent!.properties = {}
+            hookEvent!.options = {}
+            return hookEvent
+          },
+        }
+      )
+
+      expect(event.properties).toStrictEqual({})
+      expect(event.options).toStrictEqual({})
+    })
+
+    it('a minimal $feature_flag_called event keeps the properties that set options and session fields', async () => {
+      harness.fetch.mockImplementation(
+        apiImplementationV4({
+          flags: {
+            'test-flag': {
+              key: 'test-flag',
+              enabled: true,
+              variant: undefined,
+              reason: { code: 'condition_match', condition_index: 0, description: 'Matched' },
+              metadata: { id: 1, version: 1, payload: undefined, has_experiment: false },
+            },
+          },
+          errorsWhileComputingFlags: false,
+          minimalFlagCalledEvents: true,
+        } as any)
+      )
+      const event = await sendOne(async (client) => {
+        await client.register({
+          $cookieless_mode: true,
+          $ignore_sent_at: true,
+          $product_tour_id: 'tour',
+          $process_person_profile: false,
+          $window_id: 'window',
+          dropped: 'yes',
+        })
+        client.registerOptions({ future_option: 1 })
+        await client.withContext({ sessionId: 'session' }, () => client.getFeatureFlag('test-flag', 'u'))
+      })
+
+      expect(event.event).toBe('$feature_flag_called')
+      expect(event.options).toStrictEqual({
+        cookieless_mode: true,
+        disable_skew_correction: true,
+        product_tour_id: 'tour',
+        process_person_profile: false,
+        future_option: 1,
+      })
+      expect(event.session_id).toBe('session')
+      expect(event.window_id).toBe('window')
+      expect(event.properties).not.toHaveProperty('dropped')
+    })
+  })
 
   describe('options', () => {
     it.each<[string, Layers, JsonType]>([

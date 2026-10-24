@@ -201,6 +201,7 @@ export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 export type PostHogOptions = Omit<
   PostHogCoreOptions,
   | 'before_send'
+  | 'disableGeoip'
   | 'flushInterval'
   | 'maxQueueSize'
   | 'fetchRetryCount'
@@ -209,6 +210,15 @@ export type PostHogOptions = Omit<
   | 'requestTimeout'
 > & {
   persistence?: 'memory'
+  /**
+   * Whether to disable GeoIP lookups for events and feature flag requests. When on, every event
+   * gets `$geoip_disable: true` unless the event, its context or `register()` sets
+   * `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's
+   * own `$geoip_disable` property.
+   *
+   * @default true
+   */
+  disableGeoip?: boolean
   /**
    * The interval in milliseconds between periodic flushes
    *
@@ -387,6 +397,14 @@ export type PostHogOptions = Omit<
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.
    * If a function returns null, the event will be dropped.
+   *
+   * @remarks
+   * The hook gets a copy of the finished event: the event's own values, then the values filled
+   * from context, `register()` and `registerOptions()`, then the values the SDK adds (such as
+   * `$is_server`, `$geoip_disable`, feature flag properties and `options.process_person_profile`).
+   * It has the final say: it can change or remove any of them, and nothing is added after it.
+   * Set `$geoip_disable` in `properties` to change GeoIP; the `disableGeoip` and `groups` fields
+   * are already applied to the properties it sees.
    */
   before_send?: BeforeSendFn | BeforeSendFn[]
   /**
@@ -487,7 +505,8 @@ export type PostHogOptions = Omit<
    * react-native events. Set this to `false` when running the SDK as a
    * client/CLI so the event is attributed to the device OS normally instead of
    * being marked as a server event. When `false`, the `$is_server` property is
-   * omitted entirely.
+   * omitted entirely. A `$is_server` value set on the event, in context or with
+   * `register()` wins over this setting.
    *
    * @default true
    * @example
