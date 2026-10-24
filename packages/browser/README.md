@@ -32,7 +32,7 @@ Include the tag before application scripts that call `posthog`. Do not add `asyn
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `data-project-token` | Project token fallback when the URL has no `project_token` value.                                                                               |
 | `data-api-host`      | Ingestion host, including relative proxy paths such as `/ingest`. Inferred for the standard US/EU asset hosts; required for custom asset hosts. |
-| `data-defaults`      | Defaults snapshot. Fixed at `2026-08-30` when omitted, independently of SDK upgrades.                                                           |
+| `data-defaults`      | Defaults snapshot override. If neither this attribute nor `data-config.defaults` is set, the SDK uses `unset`.                                  |
 | `data-config`        | JSON object with SDK options, applied before initialization. Explicit `data-api-host` and `data-defaults` attributes take precedence.           |
 | `data-defer-init`    | Set to `true` to wait for an explicit `init()` call. Defaults to `false`.                                                                       |
 

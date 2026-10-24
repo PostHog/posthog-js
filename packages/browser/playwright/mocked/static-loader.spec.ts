@@ -128,6 +128,7 @@ for (const [region, tokenSource] of [
             `https://${region}.i.posthog.com`
         )
         expect(await page.evaluate(() => (window as any).posthog.config.token)).toBe('phc_loader_test')
+        expect(await page.evaluate(() => (window as any).posthog.config.defaults)).toBe('unset')
         expect(state.coreRequests).toEqual([`https://${region}-assets.i.posthog.com/static/array.js`])
         expect(state.errors).toEqual([])
     })

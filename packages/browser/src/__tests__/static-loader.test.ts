@@ -37,9 +37,8 @@ describe('static script loader', () => {
 
         const ph = loaderWindow.posthog
         expect(ph.__SV).toBe(1)
-        expect(ph._i).toEqual([
-            ['phc_test', { api_host: `https://${region}.i.posthog.com`, defaults: '2026-08-30' }, 'posthog'],
-        ])
+        expect(ph._i).toEqual([['phc_test', { api_host: `https://${region}.i.posthog.com` }, 'posthog']])
+        expect(ph._i[0][1]).not.toHaveProperty('defaults')
         ph.identify('user')
         ph.capture('queued event', { value: 1 })
         ph.onFeatureFlags(() => {})
@@ -212,6 +211,12 @@ describe('static script loader', () => {
         script.setAttribute('data-config', '{"api_host":"/ingest","defaults":"2026-01-30"}')
         await load()
         expect(loaderWindow.posthog._i[0][1]).toEqual({ api_host: '/ingest', defaults: '2026-01-30' })
+    })
+
+    it.each(['data-defaults', 'data-config'])('preserves an explicit unset snapshot from %s', async (attribute) => {
+        script.setAttribute(attribute, attribute === 'data-defaults' ? 'unset' : '{"defaults":"unset"}')
+        await load()
+        expect(loaderWindow.posthog._i[0][1].defaults).toBe('unset')
     })
 
     it('propagates a CSP nonce to the injected script', async () => {

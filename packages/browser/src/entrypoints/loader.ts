@@ -63,12 +63,10 @@ function getAutoInit(script: HTMLScriptElement, origin: string): QueuedInit | un
         return
     }
 
-    config = {
-        ...config,
-        api_host: apiHost,
-        // Keep this snapshot fixed across loader upgrades; opt into newer behavior with data-defaults.
-        defaults:
-            (script.getAttribute('data-defaults') as PostHogConfig['defaults']) || config.defaults || '2026-08-30',
+    config = { ...config, api_host: apiHost }
+    const defaults = script.getAttribute('data-defaults')
+    if (defaults) {
+        config.defaults = defaults as PostHogConfig['defaults']
     }
     return [token, config, 'posthog']
 }
