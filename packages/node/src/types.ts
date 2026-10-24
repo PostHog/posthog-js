@@ -1,4 +1,5 @@
 import type {
+  ErrorTracking,
   PostHogCoreOptions,
   ExceptionRateLimiterConfig,
   FeatureFlagValue,
@@ -97,6 +98,29 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
    * capture() with '$exception' directly.
    */
   _originatedFromCaptureException?: boolean
+}
+
+/** Options for `captureException()` and `captureExceptionImmediate()`. */
+export type CaptureExceptionOptions = {
+  /** The event's distinct id. Without one, the context distinct id is used, else a personless id. */
+  distinctId?: string
+  /**
+   * Properties to add to the event. Exception properties the SDK or PostHog owns, such as
+   * `$exception_list` and `$exception_level`, are ignored: use `level` to set the level.
+   */
+  properties?: Record<string | number, any>
+  /** Per-event options, as in `capture()`. */
+  options?: Record<string, JsonType>
+  /** Overrides the generated event UUID. Must be a valid UUID. */
+  uuid?: string
+  /** A `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events. */
+  flags?: FeatureFlagEvaluations
+  /**
+   * The exception's severity, sent as `$exception_level`. An unknown value is ignored.
+   *
+   * @default 'error'
+   */
+  level?: ErrorTracking.SeverityLevel
 }
 
 /**
@@ -667,32 +691,16 @@ export interface IPostHog {
   /**
    * @description Capture an exception as a $exception event.
    * @param error The error to capture.
-   * @param distinctId Optional user distinct ID.
-   * @param additionalProperties Optional additional properties to include.
-   * @param uuid Optional event UUID.
-   * @param flags Optional `FeatureFlagEvaluations` snapshot to attach to the event.
+   * @param options Optional distinct id, properties, options, uuid, flags snapshot and level.
    */
-  captureException(
-    error: unknown,
-    distinctId?: string,
-    additionalProperties?: Record<string | number, any>,
-    uuid?: EventMessage['uuid'],
-    flags?: FeatureFlagEvaluations
-  ): void
+  captureException(error: unknown, options?: CaptureExceptionOptions): void
 
   /**
    * @description Capture an exception as a $exception event immediately.
    * @param error The error to capture.
-   * @param distinctId Optional user distinct ID.
-   * @param additionalProperties Optional additional properties to include.
-   * @param flags Optional `FeatureFlagEvaluations` snapshot to attach to the event.
+   * @param options Optional distinct id, properties, options, uuid, flags snapshot and level.
    */
-  captureExceptionImmediate(
-    error: unknown,
-    distinctId?: string,
-    additionalProperties?: Record<string | number, any>,
-    flags?: FeatureFlagEvaluations
-  ): Promise<void>
+  captureExceptionImmediate(error: unknown, options?: CaptureExceptionOptions): Promise<void>
 
   /**
    * @description Capture an AI event on the dedicated AI capture endpoint.

@@ -464,7 +464,7 @@ describe('evaluateFlags', () => {
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('boolean-flag')
 
-      posthog.captureException(new Error('boom'), 'user-1', undefined, undefined, flags.onlyAccessed())
+      posthog.captureException(new Error('boom'), { distinctId: 'user-1', flags: flags.onlyAccessed() })
 
       await posthog.flush()
 
@@ -484,7 +484,7 @@ describe('evaluateFlags', () => {
       const filtered = flags.only(['boolean-flag'])
       const spy = vi.spyOn(posthog, 'captureImmediate').mockResolvedValue(undefined)
 
-      await posthog.captureExceptionImmediate(new Error('boom'), 'user-1', undefined, filtered)
+      await posthog.captureExceptionImmediate(new Error('boom'), { distinctId: 'user-1', flags: filtered })
       await waitForPromises()
 
       expect(spy).toHaveBeenCalledTimes(1)

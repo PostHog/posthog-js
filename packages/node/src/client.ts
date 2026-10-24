@@ -38,6 +38,7 @@ import type {
 } from '@posthog/core'
 import {
   AllFlagsOptions,
+  CaptureExceptionOptions,
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
@@ -97,12 +98,12 @@ const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
 // method in a loop would spam logs. Matches Python's `warnings.warn` default-dedup behavior.
 const _emittedDeprecations = new Set<string>()
 
-function emitDeprecationWarningOnce(id: string, message: string): void {
+function emitDeprecationWarningOnce(id: string, message: string, log: (message: string) => void = console.warn): void {
   if (_emittedDeprecations.has(id)) {
     return
   }
   _emittedDeprecations.add(id)
-  console.warn(`[PostHog] ${message}`)
+  log(`[PostHog] ${message}`)
 }
 
 /**
@@ -135,6 +136,37 @@ const FLAG_CALLED_OPTION_SOURCE_PROPERTIES = [
   '$session_id',
   '$window_id',
 ]
+
+/**
+ * The options of a `captureException()` or `captureExceptionImmediate()` call. A string second
+ * argument, or extra arguments after one that is not an object, is the 5.x positional form
+ * `(error, distinctId, properties, uuid, flags)` (no `uuid` for the immediate variant): it still
+ * works and logs one deprecation error per process.
+ */
+function readCaptureExceptionArgs(
+  method: string,
+  second: unknown,
+  rest: unknown[],
+  legacyHasUuid: boolean
+): CaptureExceptionOptions {
+  if (typeof second !== 'string' && (rest.length === 0 || isPlainObject(second))) {
+    return isPlainObject(second) ? (second as CaptureExceptionOptions) : {}
+  }
+  emitDeprecationWarningOnce(
+    'captureException positional arguments',
+    `${method}(error, distinctId, properties) is deprecated: pass an object instead, e.g. ` +
+      `${method}(error, { distinctId, properties }). The old form will be removed in the next major version.`,
+    console.error
+  )
+  const [properties, ...tail] = rest
+  const [uuid, flags] = legacyHasUuid ? tail : [undefined, tail[0]]
+  return {
+    distinctId: (second ?? undefined) as string | undefined,
+    properties: properties as CaptureExceptionOptions['properties'],
+    uuid: uuid as string | undefined,
+    flags: flags as FeatureFlagEvaluations | undefined,
+  }
+}
 
 /** Property values the SDK passes to `before_send` by reference unless copied. */
 const NESTED_HOOK_PROPERTIES = ['$set', '$set_once', '$groups', '$group_set']
@@ -3391,6 +3423,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Capture an error exception as an event.
    *
+   * @remarks
+   * The 5.x positional form `captureException(error, distinctId, properties, uuid, flags)` still
+   * works in 6.x but logs a deprecation error once per process, and will be removed in the next
+   * major version.
+   *
    * @example
    * ```ts
    * // Capture an error with user ID
@@ -3398,20 +3435,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   // Some risky operation
    *   riskyOperation()
    * } catch (error) {
-   *   client.captureException(error, 'user_123')
+   *   client.captureException(error, { distinctId: 'user_123' })
    * }
    * ```
    *
    * @example
    * ```ts
-   * // Capture with additional properties
+   * // Capture with additional properties and a level
    * try {
    *   apiCall()
    * } catch (error) {
-   *   client.captureException(error, 'user_123', {
-   *     endpoint: '/api/users',
-   *     method: 'POST',
-   *     status_code: 500
+   *   client.captureException(error, {
+   *     distinctId: 'user_123',
+   *     properties: { endpoint: '/api/users', method: 'POST', status_code: 500 },
+   *     level: 'warning',
    *   })
    * }
    * ```
@@ -3419,34 +3456,28 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Error tracking}
    *
    * @param error - The error to capture
-   * @param distinctId - Optional user distinct ID
-   * @param additionalProperties - Optional additional properties to include. Exception properties the SDK or PostHog owns, such as `$exception_list` and `$exception_level`, are ignored.
-   * @param uuid - Optional event UUID
-   * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
+   * @param options - Optional distinct id, properties, options, uuid, flags snapshot and level
    */
-  captureException(
-    error: unknown,
-    distinctId?: string,
-    additionalProperties?: Record<string | number, any>,
-    uuid?: EventMessage['uuid'],
-    flags?: FeatureFlagEvaluations
-  ): void {
+  captureException(error: unknown, options?: CaptureExceptionOptions): void
+  captureException(error: unknown, options?: unknown, ...legacyArgs: unknown[]): void {
+    const exceptionOptions = readCaptureExceptionArgs('captureException', options, legacyArgs, true)
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
-        ErrorTracking.buildEventMessage(
-          this.getErrorPropertiesBuilder(),
-          error,
-          { syntheticException },
-          distinctId,
-          additionalProperties
-        ).then((msg) => this._capturePreparedEvent({ ...msg, uuid, flags }, false))
+        this._buildExceptionEvent(error, syntheticException, exceptionOptions).then((msg) =>
+          this._capturePreparedEvent(msg, false)
+        )
       )
     }
   }
 
   /**
    * Capture an error exception as an event immediately (synchronously).
+   *
+   * @remarks
+   * The 5.x positional form `captureExceptionImmediate(error, distinctId, properties, flags)` still
+   * works in 6.x but logs a deprecation error once per process, and will be removed in the next
+   * major version.
    *
    * @example
    * ```ts
@@ -3455,7 +3486,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   // Some risky operation
    *   riskyOperation()
    * } catch (error) {
-   *   await client.captureExceptionImmediate(error, 'user_123')
+   *   await client.captureExceptionImmediate(error, { distinctId: 'user_123' })
    * }
    * ```
    *
@@ -3465,10 +3496,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * try {
    *   apiCall()
    * } catch (error) {
-   *   await client.captureExceptionImmediate(error, 'user_123', {
-   *     endpoint: '/api/users',
-   *     method: 'POST',
-   *     status_code: 500
+   *   await client.captureExceptionImmediate(error, {
+   *     distinctId: 'user_123',
+   *     properties: { endpoint: '/api/users', method: 'POST', status_code: 500 },
    *   })
    * }
    * ```
@@ -3476,29 +3506,34 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Error tracking}
    *
    * @param error - The error to capture
-   * @param distinctId - Optional user distinct ID
-   * @param additionalProperties - Optional additional properties to include. Exception properties the SDK or PostHog owns, such as `$exception_list` and `$exception_level`, are ignored.
-   * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
+   * @param options - Optional distinct id, properties, options, uuid, flags snapshot and level
    * @returns Promise that resolves when the error is captured
    */
-  async captureExceptionImmediate(
-    error: unknown,
-    distinctId?: string,
-    additionalProperties?: Record<string | number, any>,
-    flags?: FeatureFlagEvaluations
-  ): Promise<void> {
+  captureExceptionImmediate(error: unknown, options?: CaptureExceptionOptions): Promise<void>
+  async captureExceptionImmediate(error: unknown, options?: unknown, ...legacyArgs: unknown[]): Promise<void> {
+    const exceptionOptions = readCaptureExceptionArgs('captureExceptionImmediate', options, legacyArgs, false)
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       return this.addPendingPromise(
-        ErrorTracking.buildEventMessage(
-          this.getErrorPropertiesBuilder(),
-          error,
-          { syntheticException },
-          distinctId,
-          additionalProperties
-        ).then((msg) => this.captureImmediate({ ...msg, flags }))
+        this._buildExceptionEvent(error, syntheticException, exceptionOptions).then((msg) => this.captureImmediate(msg))
       )
     }
+  }
+
+  private async _buildExceptionEvent(
+    error: unknown,
+    syntheticException: Error,
+    { distinctId, properties, options, uuid, flags, level }: CaptureExceptionOptions
+  ): Promise<EventMessage> {
+    const msg = await ErrorTracking.buildEventMessage(
+      this.getErrorPropertiesBuilder(),
+      error,
+      { syntheticException },
+      distinctId,
+      properties,
+      level
+    )
+    return { ...msg, options, uuid, flags }
   }
 
   /**
