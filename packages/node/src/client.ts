@@ -7,10 +7,13 @@ import {
   isBlockedUA,
   isPlainObject,
   isPostHogFetchContentTooLargeError,
+  isPostHogFetchNetworkError,
   JsonType,
   minimizeFlagCalledEventProperties,
   PostHogCaptureOptions,
+  PostHogApiResponse,
   PostHogCoreStateless,
+  removeTrailingSlash,
   PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
@@ -77,6 +80,7 @@ import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routi
 import { V1CaptureSender } from './capture-v1/sender'
 import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
+import { type Emails, PostHogEmails } from './emails'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -121,6 +125,47 @@ function normalizeHost(value?: unknown): string {
   return normalizedValue || DEFAULT_NODE_HOST
 }
 
+const CLOUD_APP_HOSTS: Record<string, string> = {
+  'us.i.posthog.com': 'https://us.posthog.com',
+  'us.posthog.com': 'https://us.posthog.com',
+  'app.posthog.com': 'https://us.posthog.com',
+  'eu.i.posthog.com': 'https://eu.posthog.com',
+  'eu.posthog.com': 'https://eu.posthog.com',
+}
+
+function cloudAppHost(host: string): string | undefined {
+  try {
+    const url = new URL(host)
+    return url.protocol === 'https:' && url.port === '' ? CLOUD_APP_HOSTS[url.hostname] : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function isTimeout(error: unknown): boolean {
+  return isPostHogFetchNetworkError(error) && error.error instanceof Error && error.error.name === 'AbortError'
+}
+
+function requestFailure(error: unknown): string {
+  const reasons: string[] = []
+  let reason = isPostHogFetchNetworkError(error) ? error.error : error
+  for (let depth = 0; reason instanceof Error && depth < 3; depth++) {
+    reasons.push(describeError(reason))
+    reason = reason.cause
+  }
+  return ['Request failed', ...reasons.filter(Boolean)].join(': ')
+}
+
+function describeError(error: Error): string {
+  if (error.message || !(error instanceof AggregateError)) {
+    return error.message
+  }
+  return error.errors
+    .filter((inner): inner is Error => inner instanceof Error)
+    .map((inner) => inner.message)
+    .join(', ')
+}
+
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
   const propertyNames = Array.isArray(value) ? value : [value]
   return propertyNames.filter(
@@ -159,6 +204,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
+  private _emails?: Emails
+  private _emailsClosed = false
   private _traces?: PostHogTraces
   private _spanContext?: SpanContextManager
 
@@ -669,6 +716,39 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
     }
     return this._metrics
+  }
+
+  /**
+   * The `posthog.emails` API: send transactional email from your server. Needs the `secretKey` client option.
+   *
+   * @example
+   * ```ts
+   * const { data, error } = await client.emails.send({
+   *   to: 'jane@example.com',
+   *   distinctId: user.id,
+   *   templateId: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b',
+   * })
+   * ```
+   *
+   * {@label Emails}
+   */
+  public get emails(): Emails {
+    this._emails ??= new PostHogEmails({
+      isDisabled: () => this.disabled,
+      isClosed: () => this._emailsClosed,
+      secretKey: () => this.options.personalApiKey,
+      appHost: () => (this.options.appHost ? removeTrailingSlash(this.options.appHost) : cloudAppHost(this.host)),
+      maxRetries: () => this.options.maxRetries,
+      headers: () => ({
+        ...this.getCustomHeaders(),
+        'User-Agent': this.getCustomUserAgent(),
+        ...(this.options.migratedFrom && { 'X-PostHog-Migrated-From': this.options.migratedFrom }),
+      }),
+      warn: (message) => this._logger.warn(message),
+      track: (work) => this.addPendingPromise(work),
+      request: (url, headers, body) => this._requestEmailsApi(url, headers, body),
+    })
+    return this._emails
   }
 
   /**
@@ -2909,6 +2989,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // super._shutdown spend from the same budget, so shutdown(500) can't take
     // ~1000ms by giving each phase a fresh full timeout.
     const shutdownDeadlineMs = Date.now() + (shutdownTimeoutMs ?? 30000)
+    this._emailsClosed = true
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
@@ -2980,6 +3061,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       if (abortTimeout) {
         clearTimeout(abortTimeout)
       }
+    }
+  }
+
+  /** One attempt: `posthog.emails` retries on its own, with the same idempotency key. */
+  private async _requestEmailsApi(
+    url: string,
+    headers: Record<string, string>,
+    body: string
+  ): Promise<PostHogApiResponse> {
+    try {
+      return await this.requestJson(url, { method: 'POST', headers, body }, { retryCount: 0 })
+    } catch (error) {
+      this._events.emit('error', error)
+      throw new Error(isTimeout(error) ? `Request timed out after ${this.requestTimeout}ms` : requestFailure(error))
     }
   }
 
