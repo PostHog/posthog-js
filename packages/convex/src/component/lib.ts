@@ -1,3 +1,4 @@
+import type { FeatureFlagValue, JsonType } from '@posthog/core'
 import { PostHog as PostHogEdge } from 'posthog-node/edge'
 import { action, env, internalMutation, internalQuery, query, type MutationCtx } from './_generated/server.js'
 import { api, internal } from './_generated/api.js'
@@ -233,7 +234,7 @@ function remoteFlagsOptions(args: {
 
 export const evaluateFlag = action({
   args: { ...remoteFlagsArgs, key: v.string() },
-  handler: async (_ctx, args) => {
+  handler: async (_ctx, args): Promise<FeatureFlagValue | null> => {
     const { projectToken, host } = readConfig()
     if (!projectToken) return null
     const client = getClient(projectToken, host)
@@ -251,7 +252,7 @@ export const evaluateFlag = action({
 
 export const evaluateFlagPayload = action({
   args: { ...remoteFlagsArgs, key: v.string() },
-  handler: async (_ctx, args) => {
+  handler: async (_ctx, args): Promise<JsonType | null> => {
     const { projectToken, host } = readConfig()
     if (!projectToken) return null
     const client = getClient(projectToken, host)
