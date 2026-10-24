@@ -336,6 +336,13 @@ export type PostHogFetchResponse = {
   body?: ReadableStream<Uint8Array> | null
 }
 
+export type PostHogApiResponse = {
+  status: number
+  body: unknown
+  /** The answer's `Retry-After` in milliseconds, when it sent a usable one. */
+  retryAfterMs?: number
+}
+
 export type PostHogQueueItem = {
   message?: PostHogEventProperties
   callback?: (err: unknown) => void

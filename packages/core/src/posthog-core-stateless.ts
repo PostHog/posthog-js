@@ -17,6 +17,7 @@ import {
   PostHogFeatureFlagDetails,
   FeatureFlagDetail,
   SurveyResponse,
+  PostHogApiResponse,
   PostHogFetchResponse,
   PostHogFetchBodyBytes,
   PostHogFetchOptions,
@@ -40,6 +41,7 @@ import {
   createLogger,
   getEventUuid,
   safeJsonStringify,
+  trySafe,
 } from './utils'
 import { parseRetryAfterMs } from './utils/retry-after'
 import { uuidv7 } from './vendor/uuidv7'
@@ -154,6 +156,11 @@ type RequiredResponseHandling<T> = {
 
 type SuccessfulWriteResponseHandling = {
   type: 'successful-write'
+}
+
+async function readApiResponse(response: PostHogFetchResponse): Promise<PostHogApiResponse> {
+  const text = await response.text()
+  return { status: response.status, body: trySafe(() => JSON.parse(text)) }
 }
 
 export const maybeAdd = (key: string, value: JsonType | undefined): Record<string, JsonType> =>
@@ -1872,6 +1879,25 @@ export abstract class PostHogCoreStateless {
    */
   async _sendTracesBatch(payload: OtlpTracesPayload): Promise<SendTracesBatchOutcome> {
     return this._sendOtlpBatch({ path: 'traces', auth: 'bearer', payload })
+  }
+
+  protected async requestJson(
+    url: string,
+    options: PostHogFetchOptions,
+    retryOptions?: Partial<RetriableOptions>
+  ): Promise<PostHogApiResponse> {
+    try {
+      return await this.fetchWithRetry(url, options, { type: 'required', consume: readApiResponse }, retryOptions)
+    } catch (error) {
+      if (error instanceof PostHogFetchHttpError) {
+        return {
+          status: error.status,
+          body: await error.json.catch(() => undefined),
+          retryAfterMs: error.retryAfterMs,
+        }
+      }
+      throw error
+    }
   }
 
   private fetchWithRetry<T>(
