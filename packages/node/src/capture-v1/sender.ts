@@ -6,7 +6,6 @@ import {
   type PostHogFetchResponse,
   gzipCompress,
   safeJsonStringify,
-  safeSetTimeout,
   uuidv7,
 } from '@posthog/core'
 
@@ -87,7 +86,9 @@ export class V1CaptureSender {
     this.fetchFn = hooks.fetch
     this.onError = hooks.onError
     this.now = hooks.now ?? Date.now
-    this.sleep = hooks.sleep ?? ((ms) => new Promise((resolve) => safeSetTimeout(resolve, ms)))
+    // Retry waits and request deadlines use ref'd timers, unlike safeSetTimeout, so an
+    // awaited flush or shutdown keeps the process alive until the send finishes.
+    this.sleep = hooks.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
     this.generateRequestId = hooks.generateRequestId ?? uuidv7
     this.compress = hooks.compress ?? gzipCompress
   }
@@ -201,12 +202,12 @@ export class V1CaptureSender {
 
     const controller = new AbortController()
     let timeoutPhase = 'waiting for response headers'
-    let timer: ReturnType<typeof safeSetTimeout>
+    let timer: ReturnType<typeof setTimeout> | undefined
     // hooks.fetch is user-injectable, so it may ignore an abort signal while
     // resolving headers or reading the body. Race both phases against the same
     // deadline rather than relying only on standards-compliant fetch behavior.
     const deadline = new Promise<never>((_resolve, reject) => {
-      timer = safeSetTimeout(() => {
+      timer = setTimeout(() => {
         const timeoutError = new Error(
           `Capture V1 request timed out ${timeoutPhase} after ${this.config.requestTimeoutMs}ms`
         )
