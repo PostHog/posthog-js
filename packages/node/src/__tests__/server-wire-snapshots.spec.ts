@@ -3,6 +3,7 @@
 import type { PostHogFetchOptions } from '@posthog/core'
 
 import { V1CaptureSender } from '@/capture-v1/sender'
+import { serializeV1Event } from '@/capture-v1/serialize'
 import { PostHog } from '@/entrypoints/index.node'
 import { captureCalls, v1Response } from './utils'
 import { okResponse } from './utils/v1-wiring'
@@ -96,7 +97,7 @@ describe('server wire snapshots', () => {
       }
     )
 
-    await sender.sendV1Batch([
+    const messages = [
       {
         event: 'all-valid-sentinels',
         distinct_id: 'person-1',
@@ -131,7 +132,8 @@ describe('server wire snapshots', () => {
           ordinary: true,
         },
       },
-    ])
+    ]
+    await sender.send(messages.map(serializeV1Event))
 
     expect(mockedFetch).toHaveBeenCalledTimes(1)
     expect(snapshotRequest(mockedFetch.mock.calls[0] as FetchCall)).toMatchSnapshot()
