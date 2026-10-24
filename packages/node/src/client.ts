@@ -3030,14 +3030,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @example
    * ```ts
-   * client.registerOptions({ cookieless_mode: true })
+   * await client.registerOptions({ cookieless_mode: true })
    * ```
    *
    * {@label Capture}
    *
    * @param options - The options to add to every event
    */
-  registerOptions(options: Record<string, JsonType>): void {
+  async registerOptions(options: Record<string, JsonType>): Promise<void> {
     if (!isPlainObject(options)) {
       // console.error, not this._logger: the logger only prints in debug mode, and the options are lost.
       console.error('[PostHog] registerOptions takes an object; ignoring the value')
@@ -3053,7 +3053,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param key - The option name to remove
    */
-  unregisterOptions(key: string): void {
+  async unregisterOptions(key: string): Promise<void> {
     const remaining = { ...this._globalOptions }
     delete remaining[key]
     this._globalOptions = remaining
