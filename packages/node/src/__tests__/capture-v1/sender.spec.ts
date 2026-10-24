@@ -377,6 +377,23 @@ describe('V1CaptureSender', () => {
       expect(errors).toEqual([])
     })
 
+    it.each<[string, (uuid: string) => string]>([
+      ['uppercase', (uuid) => uuid.toUpperCase()],
+      ['braced', (uuid) => `{${uuid}}`],
+      ['urn', (uuid) => `urn:uuid:${uuid}`],
+      ['32-hex', (uuid) => uuid.replace(/-/g, '')],
+    ])('matches a result keyed by the %s form of the event uuid', async (_label, form) => {
+      const uuid = '0198c0de-1234-7abc-8def-0123456789ab'
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(
+        makeResponse(200, { results: { [form(uuid)]: { result: 'drop', details: 'billing' } } })
+      )
+
+      await sender.send(v1Events([msg(uuid)]))
+
+      expect((errors[0] as CaptureError).drops).toEqual([{ uuid, details: 'billing' }])
+    })
+
     it('treats an absent uuid as accepted', async () => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))

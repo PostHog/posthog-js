@@ -3,7 +3,8 @@ import { type FetchLike, type PostHogFetchOptions, type PostHogFetchResponse, uu
 import { type CaptureCodec, type CaptureCompression, webCompressor } from './compression'
 import { CaptureError, type CaptureDroppedEvent, type CaptureErrorParams } from './errors'
 import { type SerializedV1Event, buildV1Body } from './serialize'
-import type { CaptureEndpoint, V1BatchResponse } from './types'
+import type { CaptureEndpoint, V1BatchResponse, V1EventResult } from './types'
+import { canonicalizeUuid } from './uuid'
 
 /** Wait before the first retry; each later retry doubles it. */
 export const RETRY_BASE_DELAY_MS = 100
@@ -451,10 +452,14 @@ export class V1CaptureSender {
     parsed: V1BatchResponse,
     drops: CaptureDroppedEvent[]
   ): T[] {
-    const results = parsed.results ?? {}
+    // Events carry canonical uuids, so results match by the canonical form of the server's keys.
+    const results = new Map<string, V1EventResult>()
+    for (const [uuid, result] of Object.entries(parsed.results ?? {})) {
+      results.set(canonicalizeUuid(uuid) ?? uuid, result)
+    }
     const retryable: T[] = []
     for (const event of pending) {
-      const result = results[event.uuid]
+      const result = results.get(event.uuid)
       if (!result) {
         continue
       }
