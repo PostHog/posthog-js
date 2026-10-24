@@ -4,6 +4,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getQueryParam } from '@posthog/browser-common/utils/request-utils'
 import type { PostHogConfig } from '@posthog/types'
 import { assignableWindow } from '../utils/globals'
+import methods from 'virtual:posthog-loader-methods'
 
 const logger = createLogger('[Loader]')
 
@@ -22,7 +23,7 @@ function load(): void {
     // Putting the token in the URL path would require additional routing; a query keeps this file shared.
     const token = (getQueryParam(script.src, 'project_token') || script.getAttribute('data-project-token'))?.trim()
     if (!token) {
-        logger.error('Missing project_token or data-project-token')
+        logger.critical('Missing project_token or data-project-token')
         return
     }
 
@@ -30,12 +31,12 @@ function load(): void {
     try {
         const parsed: unknown = JSON.parse(script.getAttribute('data-config') || '{}')
         if (!isObject(parsed)) {
-            logger.error('data-config must be a JSON object')
+            logger.critical('data-config must be a JSON object')
             return
         }
         config = parsed
     } catch {
-        logger.error('data-config must be valid JSON')
+        logger.critical('data-config must be valid JSON')
         return
     }
 
@@ -48,7 +49,7 @@ function load(): void {
         config.api_host ||
         (/^https:\/\/(us|eu)-assets\.i\.posthog\.com$/.test(origin) ? origin.replace('-assets', '') : undefined)
     if (!isString(apiHost) || !apiHost.trim()) {
-        logger.error('Set data-api-host when using a custom asset host')
+        logger.critical('Set data-api-host when using a custom asset host')
         return
     }
 
@@ -65,15 +66,16 @@ function load(): void {
         _i: [[token, config, 'posthog']],
         people: [] as QueuedCall[],
     })
-    const methods =
-        'init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagResult isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug'
     for (const method of methods.split(' ')) {
-        Object.defineProperty(posthog, method, {
+        const [namespace, nestedMethod] = method.split('.')
+        const queue = nestedMethod ? posthog.people : posthog
+        const name = nestedMethod || namespace
+        Object.defineProperty(queue, name, {
             configurable: true,
             enumerable: true,
             writable: true,
             value: (...args: unknown[]) => {
-                posthog.push([method, ...args])
+                queue.push([name, ...args])
             },
         })
     }

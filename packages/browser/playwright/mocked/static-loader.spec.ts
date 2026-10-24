@@ -162,6 +162,33 @@ test('JavaScript injection exposes a callable queue when the loader onload callb
     expect(state.errors).toEqual([])
 })
 
+test('queues survey callbacks, trace metrics and nested people methods before the core loads', async ({
+    page,
+}, testInfo) => {
+    const state = await install(page, testInfo, { delayCore: true })
+    await page.evaluate(() => {
+        const ph = (window as any).posthog
+        ph.onSurveysLoaded(() => {})
+        ph.people.set({ plan: 'paid' })
+        ph.people.set_once({ first_seen: 'loader' })
+        ph.captureTraceMetric('loader-trace', 'score', 0.9)
+    })
+    state.releaseCore()
+    await waitForSDK(page)
+    await expect.poll(() => state.events.filter(({ event }) => event === '$set')).toHaveLength(2)
+    await expect.poll(() => state.events.filter(({ event }) => event === '$ai_metric')).toHaveLength(1)
+    expect(state.events.filter(({ event }) => event === '$set').map(({ properties }) => properties)).toEqual([
+        expect.objectContaining({ $set: { plan: 'paid' }, $set_once: {} }),
+        expect.objectContaining({ $set: {}, $set_once: { first_seen: 'loader' } }),
+    ])
+    expect(state.events.find(({ event }) => event === '$ai_metric')?.properties).toMatchObject({
+        $ai_trace_id: 'loader-trace',
+        $ai_metric_name: 'score',
+        $ai_metric_value: '0.9',
+    })
+    expect(state.errors).toEqual([])
+})
+
 test('duplicate tags preserve the pending queue and the loaded SDK', async ({ page }, testInfo) => {
     const state = await install(page, testInfo, { delayCore: true, duplicate: true })
     state.releaseCore()

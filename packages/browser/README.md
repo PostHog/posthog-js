@@ -22,7 +22,7 @@ SDK usage examples and code snippets live in the official documentation so they 
 
 Use `eu-assets.i.posthog.com` for EU projects. Every project loads the same static file: the loader reads `project_token` from its own URL, falling back to `data-project-token`. Putting the token in the URL path instead would require additional routing, as with Sentry's loader.
 
-The small loader exposes the same queued methods as the inline snippet and asynchronously loads `array.js` from the same directory, without forwarding the query string. Existing snippet and npm installations are unchanged; use only one installation method per page.
+The small loader exposes queued public SDK methods, including `people.set` and `people.set_once`, and asynchronously loads `array.js` from the same directory without forwarding the query string. Its method list is generated from the SDK class during the build, so it stays in sync without bundling the SDK itself. Existing snippet and npm installations are unchanged; use only one installation method per page.
 
 Include the tag before application scripts that call `posthog`. Do not add `async` or `defer` if those scripts need the queue immediately. Calls before the full SDK loads are queued; synchronous getters cannot return SDK values yet. The loader does not buffer browser interactions or errors that happen before the SDK installs its listeners.
 
@@ -36,6 +36,8 @@ Include the tag before application scripts that call `posthog`. Do not add `asyn
 For consent-gated installation, set `data-config='{"opt_out_capturing_by_default":true}'` on the tag before it executes. Use the existing snippet or npm integration when configuration needs JavaScript callbacks, such as `before_send`, or named instances.
 
 To pin the SDK, use `/static/<version>/loader.js` for a release that includes the loader. It loads that release's sibling `array.js`; historical releases without a loader are not changed or backfilled. `/static/loader.js` follows stable releases. A reverse proxy must forward both the loader and SDK paths, along with the SDK's normal API/config/extension paths.
+
+Fatal loader configuration errors are reported even when debug mode is off. Invalid JSON configuration still prevents initialization.
 
 The loader forwards its CSP nonce to the SDK script. Your CSP must still allow the SDK, its extensions, and event ingestion. An existing legacy stub or live global instance takes precedence: the loader never replaces it or switches its project token.
 

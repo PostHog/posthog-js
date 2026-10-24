@@ -48,7 +48,7 @@ describe('static script loader', () => {
             ['capture', 'queued event', { value: 1 }],
         ])
         expect(ph[2][0]).toBe('onFeatureFlags')
-        expect(ph.people).toEqual([])
+        expect(ph.people.slice()).toEqual([])
         expect(ph.toString()).toBe('posthog (stub)')
         expect(ph.people.toString()).toBe('posthog.people (stub)')
         const [core] = injectedScripts()
@@ -56,6 +56,37 @@ describe('static script loader', () => {
         expect(core.src).toBe(`https://${region}-assets.i.posthog.com/static/array.js`)
         expect(core.async).toBe(true)
         expect(core.crossOrigin).toBe('anonymous')
+    })
+
+    it.each(['onSurveysLoaded', 'captureTraceMetric'])(
+        'queues the public %s method before the SDK loads',
+        async (method) => {
+            await load()
+            const args = method === 'onSurveysLoaded' ? [vi.fn()] : ['trace-id', 'score', 0.9]
+            loaderWindow.posthog[method](...args)
+            expect(loaderWindow.posthog.slice()).toEqual([[method, ...args]])
+        }
+    )
+
+    it.each(['set', 'set_once'])('queues people.%s separately from top-level calls', async (method) => {
+        await load()
+        loaderWindow.posthog.people[method]({ plan: 'paid' })
+        expect(loaderWindow.posthog.people.slice()).toEqual([[method, { plan: 'paid' }]])
+        expect(loaderWindow.posthog.slice()).toEqual([])
+    })
+
+    it.each([
+        ['a missing token', (element: HTMLScriptElement) => element.removeAttribute('data-project-token')],
+        ['malformed JSON', (element: HTMLScriptElement) => element.setAttribute('data-config', '{')],
+        ['non-object JSON', (element: HTMLScriptElement) => element.setAttribute('data-config', 'null')],
+        ['an unknown host', (element: HTMLScriptElement) => (element.src = 'https://customer.example/loader.js')],
+    ] as const)('reports %s without debug mode', async (_name, configure) => {
+        Reflect.deleteProperty(loaderWindow, 'POSTHOG_DEBUG')
+        configure(script)
+        await load()
+        expect(console.error).toHaveBeenCalled()
+        expect(loaderWindow.posthog).toBeUndefined()
+        expect(injectedScripts()).toHaveLength(0)
     })
 
     it('reads and decodes the project token from the script URL without forwarding its query to the core', async () => {
