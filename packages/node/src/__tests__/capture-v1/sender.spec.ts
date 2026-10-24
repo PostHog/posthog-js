@@ -1,6 +1,6 @@
 import { type PostHogEventProperties, type PostHogFetchResponse, isGzipSupported } from '@posthog/core'
 
-import { CaptureV1Error } from '@/capture-v1/errors'
+import { CaptureError } from '@/capture-v1/errors'
 import { V1CaptureSender, type V1CaptureSenderConfig, type V1CaptureSenderHooks } from '@/capture-v1/sender'
 
 const CLOCK_START = Date.parse('2024-01-01T00:00:00.000Z')
@@ -52,6 +52,7 @@ function makeSender(
   const sender = new V1CaptureSender(
     {
       host: 'https://t.posthog.com',
+      path: '/i/v1/analytics/events',
       apiKey: 'phc_test',
       libraryId: 'posthog-node',
       libraryVersion: '1.2.3',
@@ -92,26 +93,29 @@ function headersOf(fetch: Harness['fetch'], call: number): Record<string, string
 
 describe('V1CaptureSender', () => {
   describe('request contract', () => {
-    it('POSTs to the v1 analytics endpoint with the batch envelope and no v0 fields', async () => {
-      const { sender, fetch, errors } = makeSender()
-      fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
+    it.each(['/i/v1/analytics/events', '/i/v1/ai/events'] as const)(
+      'POSTs to its %s lane with the batch envelope and no v0 fields',
+      async (path) => {
+        const { sender, fetch, errors } = makeSender({ path })
+        fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.sendV1Batch([msg('u1')])
+        await sender.sendV1Batch([msg('u1')])
 
-      expect(fetch).toHaveBeenCalledTimes(1)
-      const [url, options] = fetch.mock.calls[0]
-      expect(url).toBe('https://t.posthog.com/i/v1/analytics/events')
-      expect(options.method).toBe('POST')
+        expect(fetch).toHaveBeenCalledTimes(1)
+        const [url, options] = fetch.mock.calls[0]
+        expect(url).toBe(`https://t.posthog.com${path}`)
+        expect(options.method).toBe('POST')
 
-      const body = bodyOf(fetch, 0)
-      expect(body.created_at).toBe('2024-01-01T00:00:00.000Z')
-      expect(body.batch).toHaveLength(1)
-      expect(body.batch[0].uuid).toBe('u1')
-      expect(body).not.toHaveProperty('api_key')
-      expect(body).not.toHaveProperty('sent_at')
-      expect(body).not.toHaveProperty('historical_migration')
-      expect(errors).toEqual([])
-    })
+        const body = bodyOf(fetch, 0)
+        expect(body.created_at).toBe('2024-01-01T00:00:00.000Z')
+        expect(body.batch).toHaveLength(1)
+        expect(body.batch[0].uuid).toBe('u1')
+        expect(body).not.toHaveProperty('api_key')
+        expect(body).not.toHaveProperty('sent_at')
+        expect(body).not.toHaveProperty('historical_migration')
+        expect(errors).toEqual([])
+      }
+    )
 
     it('sets all required v1 headers with Bearer auth and no api_key in the body', async () => {
       const { sender, fetch } = makeSender()
@@ -194,8 +198,8 @@ describe('V1CaptureSender', () => {
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
-      expect(errors[0]).toBeInstanceOf(CaptureV1Error)
-      expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
+      expect(errors[0]).toBeInstanceOf(CaptureError)
+      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
     })
   })
 
@@ -270,19 +274,25 @@ describe('V1CaptureSender', () => {
       expect(errors).toEqual([])
     })
 
-    it('surfaces a drop as a terminal failure without retrying', async () => {
-      const { sender, fetch, errors } = makeSender()
-      fetch.mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'drop', details: 'billing' } } }))
+    it.each(['/i/v1/analytics/events', '/i/v1/ai/events'] as const)(
+      'surfaces a drop on the %s lane as a terminal CaptureError naming that lane',
+      async (path) => {
+        const { sender, fetch, errors } = makeSender({ path })
+        fetch.mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'drop', details: 'billing' } } }))
 
-      await sender.sendV1Batch([msg('u1')])
+        await sender.sendV1Batch([msg('u1', { properties: { $ai_input: 'private prompt text' } })])
 
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(errors).toHaveLength(1)
-      const error = errors[0] as CaptureV1Error
-      expect(error).toBeInstanceOf(CaptureV1Error)
-      expect(error.drops).toEqual([{ uuid: 'u1', details: 'billing' }])
-      expect(error.retryExhausted).toEqual([])
-    })
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(errors).toHaveLength(1)
+        const error = errors[0] as CaptureError
+        expect(error).toBeInstanceOf(CaptureError)
+        expect(error.name).toBe('CaptureError')
+        expect(error.endpoint).toBe(path)
+        expect(error.drops).toEqual([{ uuid: 'u1', details: 'billing' }])
+        expect(error.retryExhausted).toEqual([])
+        expect(error.message).toBe(`Capture batch req-fixed to ${path} did not fully deliver: 1 dropped, 0 undelivered`)
+      }
+    )
 
     it('surfaces a drop with no details', async () => {
       const { sender, fetch, errors } = makeSender()
@@ -290,7 +300,7 @@ describe('V1CaptureSender', () => {
 
       await sender.sendV1Batch([msg('u1')])
 
-      expect((errors[0] as CaptureV1Error).drops).toEqual([{ uuid: 'u1', details: undefined }])
+      expect((errors[0] as CaptureError).drops).toEqual([{ uuid: 'u1', details: undefined }])
     })
 
     it('resends only the retry-tagged events on the next attempt', async () => {
@@ -318,7 +328,7 @@ describe('V1CaptureSender', () => {
       await sender.sendV1Batch([msg('u1'), msg('u2')])
 
       expect(errors).toHaveLength(1)
-      const error = errors[0] as CaptureV1Error
+      const error = errors[0] as CaptureError
       expect(error.drops).toEqual([{ uuid: 'u1', details: 'bad' }])
       expect(error.retryExhausted).toEqual([])
     })
@@ -330,7 +340,7 @@ describe('V1CaptureSender', () => {
       await sender.sendV1Batch([msg('u1')])
 
       expect(fetch).toHaveBeenCalledTimes(3)
-      const error = errors[0] as CaptureV1Error
+      const error = errors[0] as CaptureError
       expect(error.retryExhausted).toEqual(['u1'])
       expect(error.drops).toEqual([])
     })
@@ -345,7 +355,7 @@ describe('V1CaptureSender', () => {
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
-      const error = errors[0] as CaptureV1Error
+      const error = errors[0] as CaptureError
       expect(error.retryExhausted).toEqual(['u1'])
       expect((error.cause as Error).message).toContain('unparseable')
     })
@@ -360,7 +370,7 @@ describe('V1CaptureSender', () => {
       await sender.sendV1Batch([msg('u1')])
 
       expect(fetch).toHaveBeenCalledTimes(1)
-      expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
+      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
     })
   })
 
@@ -382,7 +392,7 @@ describe('V1CaptureSender', () => {
       await sender.sendV1Batch([msg('u1')])
 
       expect(fetch).toHaveBeenCalledTimes(1)
-      const error = errors[0] as CaptureV1Error
+      const error = errors[0] as CaptureError
       expect(error.retryExhausted).toEqual(['u1'])
       expect((error.cause as Error).message).toContain('429')
     })
@@ -395,7 +405,7 @@ describe('V1CaptureSender', () => {
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
-      expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
+      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
     })
 
     it('exhausts the budget on a persistently retryable status', async () => {
@@ -405,7 +415,7 @@ describe('V1CaptureSender', () => {
       await sender.sendV1Batch([msg('u1')])
 
       expect(fetch).toHaveBeenCalledTimes(4)
-      expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
+      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
     })
 
     it('bounds response body cancellation by the request deadline before retrying a 5xx', async () => {
@@ -427,9 +437,9 @@ describe('V1CaptureSender', () => {
       expect(fetch).toHaveBeenCalledTimes(2)
       expect(sleeps).toEqual([100])
       expect(errors).toHaveLength(1)
-      expect(errors[0]).toBeInstanceOf(CaptureV1Error)
-      expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
-      expect(((errors[0] as CaptureV1Error).cause as Error).message).toContain('HTTP 503: still unavailable')
+      expect(errors[0]).toBeInstanceOf(CaptureError)
+      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
+      expect(((errors[0] as CaptureError).cause as Error).message).toContain('HTTP 503: still unavailable')
       expect(vi.getTimerCount()).toBe(0)
     })
   })
@@ -452,7 +462,7 @@ describe('V1CaptureSender', () => {
       await sender.sendV1Batch([msg('u1'), msg('u2')])
 
       expect(fetch).toHaveBeenCalledTimes(3)
-      const error = errors[0] as CaptureV1Error
+      const error = errors[0] as CaptureError
       expect(error.retryExhausted).toEqual(['u1', 'u2'])
       expect((error.cause as Error).message).toBe('timeout')
     })
@@ -471,7 +481,7 @@ describe('V1CaptureSender', () => {
       await sendPromise
 
       expect(errors).toHaveLength(1)
-      const error = errors[0] as CaptureV1Error
+      const error = errors[0] as CaptureError
       expect((error.cause as Error).name).toBe('AbortError')
       expect((error.cause as Error).message).toBe(
         'Capture V1 request timed out waiting for response headers after 1000ms'
@@ -537,7 +547,7 @@ describe('V1CaptureSender', () => {
       await sendPromise
 
       expect(errors).toHaveLength(1)
-      const error = errors[0] as CaptureV1Error
+      const error = errors[0] as CaptureError
       expect((error.cause as Error).name).toBe('AbortError')
       expect((error.cause as Error).message).toBe(
         'Capture V1 request timed out while reading the response body after 1000ms'
@@ -546,7 +556,7 @@ describe('V1CaptureSender', () => {
       expect(vi.getTimerCount()).toBe(0)
     })
 
-    it('surfaces CaptureV1Error after stalled success bodies exhaust the timeout retry budget', async () => {
+    it('surfaces CaptureError after stalled success bodies exhaust the timeout retry budget', async () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
       const cancels: vi.Mock<Promise<void>, []>[] = []
       fetch.mockImplementation(() => {
@@ -564,8 +574,8 @@ describe('V1CaptureSender', () => {
       expect(cancels).toHaveLength(2)
       expect(cancels.every((cancel) => cancel.mock.calls.length === 1)).toBe(true)
       expect(errors).toHaveLength(1)
-      const error = errors[0] as CaptureV1Error
-      expect(error).toBeInstanceOf(CaptureV1Error)
+      const error = errors[0] as CaptureError
+      expect(error).toBeInstanceOf(CaptureError)
       expect(error.retryExhausted).toEqual(['u1'])
       expect((error.cause as Error).name).toBe('AbortError')
       expect((error.cause as Error).message).toBe(
@@ -586,9 +596,9 @@ describe('V1CaptureSender', () => {
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(cancel).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
-      expect(errors[0]).toBeInstanceOf(CaptureV1Error)
-      expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
-      expect(((errors[0] as CaptureV1Error).cause as Error).message).toContain('HTTP 400')
+      expect(errors[0]).toBeInstanceOf(CaptureError)
+      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
+      expect(((errors[0] as CaptureError).cause as Error).message).toContain('HTTP 400')
       expect(vi.getTimerCount()).toBe(0)
     })
   })
@@ -709,6 +719,7 @@ describe('V1CaptureSender', () => {
   describe('default hooks (no injection)', () => {
     const baseConfig: V1CaptureSenderConfig = {
       host: 'https://t.posthog.com',
+      path: '/i/v1/analytics/events',
       apiKey: 'phc_test',
       libraryId: 'posthog-node',
       libraryVersion: '1.2.3',

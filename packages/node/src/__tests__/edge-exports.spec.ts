@@ -45,7 +45,9 @@ describe('built edge entrypoints', () => {
       }
     )
 
-    expect(JSON.parse(output).flatMap(sentEventsOf)).toEqual([
+    const requests = JSON.parse(output)
+    expect(requests.map(([url]: [string]) => url)).toEqual(['https://example.test/i/v1/analytics/events'])
+    expect(requests.flatMap(sentEventsOf)).toEqual([
       expect.objectContaining({
         distinct_id: 'edge-user',
         event: 'edge-event',

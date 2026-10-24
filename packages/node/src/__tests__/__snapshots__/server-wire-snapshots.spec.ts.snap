@@ -3,11 +3,11 @@
 exports[`server wire snapshots > snapshots a deterministic complete captureException wire event 1`] = `
 {
   "body": {
-    "api_key": "<redacted>",
     "batch": [
       {
         "distinct_id": "person-exception",
         "event": "$exception",
+        "options": {},
         "properties": {
           "$exception_level": "error",
           "$exception_list": [
@@ -47,8 +47,6 @@ exports[`server wire snapshots > snapshots a deterministic complete captureExcep
           ],
           "$geoip_disable": true,
           "$is_server": true,
-          "$lib": "posthog-node",
-          "$lib_version": "<sdk-version>",
           "endpoint": "/v1/orders",
           "request": {
             "method": "POST",
@@ -63,14 +61,19 @@ exports[`server wire snapshots > snapshots a deterministic complete captureExcep
         "uuid": "0194cc39-1f25-7000-8000-000000000001",
       },
     ],
-    "sent_at": "2025-02-03T04:05:06.789Z",
+    "created_at": "2025-02-03T04:05:06.789Z",
   },
   "headers": {
+    "Authorization": "Bearer <redacted>",
     "Content-Type": "application/json",
+    "PostHog-Attempt": "1",
+    "PostHog-Request-Id": "<generated>",
+    "PostHog-Request-Timestamp": "2025-02-03T04:05:06.789Z",
+    "PostHog-Sdk-Info": "posthog-node/<sdk-version>",
     "User-Agent": "posthog-node/<sdk-version>",
   },
   "method": "POST",
-  "url": "https://us.example.test/batch/",
+  "url": "https://us.example.test/i/v1/analytics/events",
 }
 `;
 

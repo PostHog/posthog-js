@@ -1,8 +1,9 @@
 import { PostHogPersistedProperty } from '@posthog/core'
 
-import { PostHog } from '@/entrypoints/index.node'
+import { CaptureError, PostHog } from '@/entrypoints/index.node'
 
-import { V1WiringHarness, v413Response, v0Response, waitForFlushTimer } from '../utils/v1-wiring'
+import { AI_CAPTURE_PATH, AI_CAPTURE_URL, ANALYTICS_CAPTURE_PATH, v1Response, v413Response } from '../utils'
+import { V1WiringHarness, routeByUrl } from '../utils/v1-wiring'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
 
@@ -42,46 +43,56 @@ describe('AI capture lane wiring (Node SDK)', () => {
     vi.clearAllMocks()
   })
 
-  it('captureAi posts to the AI endpoint with the V0 body shape', async () => {
+  it('captureAi posts to the AI endpoint with v1 headers and the v1 body shape', async () => {
     const posthog = harness.makeClient()
-    posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt' } })
+    const uuid = posthog.captureAi({
+      distinctId: 'user-42',
+      event: '$ai_generation',
+      timestamp: new Date('2026-01-02T03:04:05.678Z'),
+      properties: { $ai_model: 'gpt-4o-mini', $ai_trace_id: 'trace-1', $session_id: 'session-1' },
+    })
     await posthog.flush()
 
-    const calls = harness.callsTo('/i/v0/ai/batch/')
+    const calls = harness.callsTo(AI_CAPTURE_PATH)
     expect(calls).toHaveLength(1)
-    const body = JSON.parse(calls[0][1].body)
-    expect(Object.keys(body).sort()).toEqual(['api_key', 'batch', 'sent_at'])
-    expect(body.batch.map((event: any) => event.event)).toEqual(['$ai_generation'])
-    expect(harness.callsTo('example.com/batch/')).toHaveLength(0)
+    const [url, options] = calls[0]
+    expect(url).toBe(AI_CAPTURE_URL)
+    expect(options.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer TEST_API_KEY',
+      'PostHog-Sdk-Info': 'posthog-node/1.2.3',
+      'PostHog-Attempt': '1',
+    })
+    const body = JSON.parse(options.body)
+    expect(Object.keys(body).sort()).toEqual(['batch', 'created_at'])
+    expect(body.batch).toEqual([
+      {
+        event: '$ai_generation',
+        uuid,
+        distinct_id: 'user-42',
+        timestamp: '2026-01-02T03:04:05.678Z',
+        session_id: 'session-1',
+        options: {},
+        properties: expect.objectContaining({ $ai_model: 'gpt-4o-mini', $ai_trace_id: 'trace-1' }),
+      },
+    ])
+    expect(body.batch[0].properties).not.toHaveProperty('$lib')
+    expect(harness.callsTo(ANALYTICS_CAPTURE_PATH)).toHaveLength(0)
   })
 
-  it('capture() is never rerouted to the AI endpoint, in either capture mode', async () => {
-    for (const mode of ['v0', 'v1'] as const) {
-      const posthog = harness.makeClient({}, mode)
-      posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: {} })
-      await posthog.flush()
-    }
-    expect(harness.callsTo('/i/v0/ai/batch/')).toHaveLength(0)
-    expect(harness.eventsIn('example.com/batch/')).toEqual(['$ai_generation', '$ai_generation'])
-  })
-
-  it('captureAi stays on the AI endpoint in v1 mode, isolated from both other routes', async () => {
-    const posthog = harness.makeClient({}, 'v1')
-    posthog.capture({ distinctId: 'u', event: 'custom', properties: {} })
+  it('capture() is never rerouted to the AI endpoint', async () => {
+    const posthog = harness.makeClient()
     posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: {} })
-    posthog.captureAi({ distinctId: 'u', event: '$ai_span', properties: {} })
-    await waitForFlushTimer()
     await posthog.flush()
 
-    expect(harness.eventsIn('/i/v1/analytics/events')).toEqual(['custom'])
-    expect(harness.eventsIn('example.com/batch/')).toEqual(['$ai_generation'])
-    expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['$ai_span'])
+    expect(harness.callsTo(AI_CAPTURE_PATH)).toHaveLength(0)
+    expect(harness.eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['$ai_generation'])
   })
 
   it('captureAiImmediate sends a single event only to the AI endpoint', async () => {
     const posthog = harness.makeClient()
     await posthog.captureAiImmediate({ distinctId: 'u', event: '$ai_embedding', properties: {} })
-    expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['$ai_embedding'])
+    expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_embedding'])
     expect(harness.fetch).toHaveBeenCalledTimes(1)
   })
 
@@ -95,7 +106,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
     posthog.captureAi({ distinctId: 'u', event: '$ai_span', properties: {} })
     await posthog.flush()
 
-    expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['$ai_span'])
+    expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_span'])
     const errorLog = (console.error as vi.Mock).mock.calls.flat().join(' ')
     expect(errorLog).toContain('$ai_generation')
     expect(errorLog).toMatch(/\d+ bytes/)
@@ -117,90 +128,50 @@ describe('AI capture lane wiring (Node SDK)', () => {
     }
     await posthog.flush()
 
-    const calls = harness.callsTo('/i/v0/ai/batch/')
+    const calls = harness.callsTo(AI_CAPTURE_PATH)
     expect(calls).toHaveLength(2)
-    expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['$ai_a', '$ai_b', '$ai_c'])
+    expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_a', '$ai_b', '$ai_c'])
   })
 
-  it('bisects a sub-batch in-lane on 413 without tripping the shared batch-size halving', async () => {
-    const posthog = harness.makeClient()
-    harness.fetch.mockImplementationOnce(() => Promise.resolve(v413Response()))
-    harness.fetch.mockImplementation(() => Promise.resolve(v0Response()))
-
-    const envelopes = ['$ai_a', '$ai_b', '$ai_c'].map((event, index) => ({
-      event,
-      distinct_id: `user-${index}`,
-      timestamp: `2024-01-0${index + 1}T00:00:00.000Z`,
-      uuid: `0198c0de-0000-7000-8000-00000000000${index}`,
-    }))
-    for (const { event, distinct_id, timestamp, uuid } of envelopes) {
-      posthog.captureAi({ distinctId: distinct_id, event, timestamp: new Date(timestamp), uuid, properties: {} })
-    }
-    await expect(posthog.flush()).resolves.not.toThrow()
-
-    const batches = harness.callsTo('/i/v0/ai/batch/').map(([, options]) => JSON.parse(options.body).batch)
-    expect(batches.map((batch) => batch.map((event: any) => event.event))).toEqual([
-      ['$ai_a', '$ai_b', '$ai_c'],
-      ['$ai_a', '$ai_b'],
-      ['$ai_c'],
-    ])
-    expect(batches[0]).toMatchObject(envelopes)
-    expect(batches.slice(1).flat()).toEqual(batches[0])
-    expect(await deliveredEventsIn('/i/v0/ai/batch/')).toEqual(['$ai_a', '$ai_b', '$ai_c'])
-
-    harness.useDefaultRouting()
-    for (const event of ['custom_1', 'custom_2', 'custom_3'] as const) {
-      posthog.capture({ distinctId: 'u', event, properties: {} })
-    }
-    await posthog.flush()
-
-    const analyticsCalls = harness.callsTo('example.com/batch/')
-    expect(analyticsCalls).toHaveLength(1)
-    expect(JSON.parse(analyticsCalls[0][1].body).batch.map((e: any) => e.event)).toEqual([
-      'custom_1',
-      'custom_2',
-      'custom_3',
-    ])
-  })
-
-  it('drops a single event that still 413s alone, without throwing, and keeps the lane usable', async () => {
-    const posthog = harness.makeClient()
-    posthog.debug(true)
+  it('treats a 413 as terminal: one request, a CaptureError naming the AI lane, no bisection', async () => {
+    const posthog = harness.makeClient({ fetchRetryCount: 3, fetchRetryDelay: 1 })
     const onError = vi.fn()
     posthog.on('error', onError)
     harness.fetch.mockImplementation((url: any) =>
-      Promise.resolve(url.includes('/i/v0/ai/batch/') ? v413Response() : v0Response())
+      Promise.resolve(url.includes(AI_CAPTURE_PATH) ? v413Response() : routeByUrl(url))
     )
 
-    posthog.captureAi({ distinctId: 'u', event: '$ai_undeliverable', properties: {} })
+    const uuids = ['$ai_a', '$ai_b', '$ai_c'].map((event) =>
+      posthog.captureAi({ distinctId: 'u', event, properties: { $ai_model: 'gpt-4o-mini' } })
+    )
     await expect(posthog.flush()).resolves.not.toThrow()
 
-    expect(await deliveredEventsIn('/i/v0/ai/batch/')).toEqual([])
-    const errorLog = (console.error as vi.Mock).mock.calls.flat().join(' ')
-    expect(errorLog).toContain('$ai_undeliverable')
-    expect(errorLog).toMatch(/\d+ bytes/)
-
+    expect(harness.callsTo(AI_CAPTURE_PATH)).toHaveLength(1)
+    expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_a', '$ai_b', '$ai_c'])
     expect(onError).toHaveBeenCalledTimes(1)
-    const emittedError = onError.mock.calls[0][0]
-    expect(emittedError).toBeInstanceOf(Error)
-    expect(emittedError.message).toContain('$ai_undeliverable')
-    expect(emittedError.message).toMatch(/\d+ bytes/)
+    const error = onError.mock.calls[0][0] as CaptureError
+    expect(error).toBeInstanceOf(CaptureError)
+    expect(error.endpoint).toBe(AI_CAPTURE_PATH)
+    expect(error.retryExhausted).toEqual(uuids)
+    expect((error.cause as Error).message).toContain('HTTP 413')
 
     harness.useDefaultRouting()
     posthog.captureAi({ distinctId: 'u', event: '$ai_next', properties: {} })
+    posthog.capture({ distinctId: 'u', event: 'custom', properties: {} })
     await posthog.flush()
-    expect(await deliveredEventsIn('/i/v0/ai/batch/')).toEqual(['$ai_next'])
+    expect(await deliveredEventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_next'])
+    expect(harness.eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['custom'])
   })
 
   it('keeps the AI route inactive (and flush silent) until first use', async () => {
     const posthog = harness.makeClient()
     posthog.capture({ distinctId: 'u', event: 'custom', properties: {} })
     await posthog.flush()
-    expect(harness.callsTo('/i/v0/ai/batch/')).toHaveLength(0)
+    expect(harness.callsTo(AI_CAPTURE_PATH)).toHaveLength(0)
 
     posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: {} })
     await posthog.shutdown()
-    expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['$ai_generation'])
+    expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_generation'])
     expect(aiCaptureQueueEvents(posthog)).toEqual([])
   })
 
@@ -209,7 +180,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
     posthog.debug(true)
     posthog.captureAi({ distinctId: 'u', event: 'custom_event', properties: {} })
     await posthog.flush()
-    expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['custom_event'])
+    expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['custom_event'])
     const debugLog = (console.debug as vi.Mock).mock.calls.flat().join(' ')
     expect(debugLog).toContain('custom_event')
   })
@@ -226,7 +197,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
     const posthog = harness.makeClient()
     const uuid = posthog.captureAi({ distinctId: 'u', event: '$ai_generation' })
     await posthog.flush()
-    const body = JSON.parse(harness.callsTo('/i/v0/ai/batch/')[0][1].body)
+    const body = JSON.parse(harness.callsTo(AI_CAPTURE_PATH)[0][1].body)
     expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/)
     expect(body.batch[0].uuid).toBe(uuid)
   })
@@ -236,7 +207,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
     const supplied = '0198c0de-0000-7000-8000-000000000abc'
     expect(posthog.captureAi({ distinctId: 'u', event: '$ai_generation', uuid: supplied })).toBe(supplied)
     await posthog.flush()
-    const calls = harness.callsTo('/i/v0/ai/batch/')
+    const calls = harness.callsTo(AI_CAPTURE_PATH)
     expect(calls).toHaveLength(1)
     expect(JSON.parse(calls[0][1].body).batch[0].uuid).toBe(supplied)
   })
@@ -252,8 +223,8 @@ describe('AI capture lane wiring (Node SDK)', () => {
     const started = new Promise<void>((resolve) => {
       startFetch = resolve
     })
-    let completeFetch!: (response: ReturnType<typeof v0Response>) => void
-    const response = new Promise<ReturnType<typeof v0Response>>((resolve) => {
+    let completeFetch!: (response: ReturnType<typeof v1Response>) => void
+    const response = new Promise<ReturnType<typeof v1Response>>((resolve) => {
       completeFetch = resolve
     })
     harness.fetch.mockImplementation(() => {
@@ -268,12 +239,12 @@ describe('AI capture lane wiring (Node SDK)', () => {
       await vi.advanceTimersByTimeAsync(0)
       expect(settled).not.toHaveBeenCalled()
     } finally {
-      completeFetch(v0Response())
+      completeFetch(v1Response())
       await capture
     }
     const uuid = await capture
     expect(settled).toHaveBeenCalledWith(uuid)
-    const calls = harness.callsTo('/i/v0/ai/batch/')
+    const calls = harness.callsTo(AI_CAPTURE_PATH)
     expect(calls).toHaveLength(1)
     expect(JSON.parse(calls[0][1].body).batch[0].uuid).toBe(uuid)
   })
