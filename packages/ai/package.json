@@ -69,7 +69,7 @@
   "dependencies": {
     "@posthog/core": "workspace:^",
     "uuid": "^11.1.0",
-    "zod": "^4.1.13"
+    "zod": "^4.6.6"
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.112.3 <0.135.0",
