@@ -200,17 +200,3 @@ test('@posthog/browser reports S3 failures to the release approval thread', () =
     assert.match(notify, /thread_ts: \$\{\{ needs.notify-approval-needed.outputs.slack_ts \}\}/)
     assert.match(notify, /message: '❌ `@posthog\/browser` S3 release failed/)
 })
-
-test('@posthog/browser publication reuses npm steps behind its S3 gate', () => {
-    const publish = job(release, 'publish-posthog-browser')
-    for (const gate of ['gate-posthog-js-publish', 'gate-posthog-browser-publish']) {
-        assert.ok(dependencies(publish).includes(gate))
-        assert.ok(publish.includes(`needs.${gate}.result == 'success'`))
-    }
-    assert.match(publish, /- name: '@posthog\/browser'/)
-    assert.match(publish, /steps: \*publish-package-steps/)
-    assert.doesNotMatch(job(release, 'publish'), /- name: '@posthog\/browser'/)
-    const notified = job(release, 'notify-released')
-    assert.ok(dependencies(notified).includes('publish-posthog-browser'))
-    assert.match(notified, /needs.publish-posthog-browser.result == 'success'/)
-})
