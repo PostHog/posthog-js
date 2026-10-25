@@ -2,20 +2,6 @@
   "version": 1,
   "items": [
     {
-      "id": "issue-3765-auto-none-no-comment-no-close-1792934095060",
-      "kind": "issue",
-      "number": 3765,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-10-25T13:14:55.060Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 40196713858,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/40196713858"
-      },
-      "attempts": 1
-    },
-    {
       "id": "issue-3766-auto-none-no-comment-no-close-1792934109678",
       "kind": "issue",
       "number": 3766,
