@@ -66,6 +66,7 @@ import {
   SessionReplayTriggerGroupsEvaluator,
   parseSessionRecordingTriggerGroups,
   type SessionReplayTriggerGroup,
+  type SessionReplayTriggerGroupsActivation,
   type SessionReplayTriggerGroupsDecision,
 } from './session-replay/triggerGroups'
 
@@ -323,6 +324,9 @@ export class PostHog extends PostHogCore {
   private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
+  // True when the last evaluation wanted to record but the native start failed, so the next
+  // matching trigger-group event retries it.
+  private _sessionReplayStartFailed = false
   private _manualRecordingStartRequest?: ManualRecordingStartRequest
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
   private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
@@ -907,8 +911,9 @@ export class PostHog extends PostHogCore {
     // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
     // always preserve them so replay can re-arm against the new user's flags. The
     // user-specific survey state (SurveysSeen, SurveyLastSeenDate) is still cleared.
-    // Do NOT keep SessionReplayEventTriggerActivatedSession: it is user-session state, so the
-    // base reset() must clear it to stop one user's activation leaking into the next.
+    // Do NOT keep SessionReplayEventTriggerActivatedSession or SessionReplayTriggerGroupsActivation:
+    // they are user-session state, so the base reset() must clear them to stop one user's
+    // activation leaking into the next.
     // PushRegistered is device-level subscription state, not user data: native reset()
     // re-binds the subscription rather than deleting it, so the device stays registered.
     super.reset([
@@ -3131,6 +3136,13 @@ export class PostHog extends PostHogCore {
       this._sessionReplayEventTriggers = []
       this._sessionReplayTriggerGroups = triggerGroups
       this._triggerGroupsEvaluator.onConfig(triggerGroups)
+      // A session kept across an app restart keeps the groups it already activated, like the v1 trigger.
+      this._triggerGroupsEvaluator.restoreActivation(
+        super.getSessionId(),
+        this.getPersistedProperty<SessionReplayTriggerGroupsActivation>(
+          PostHogPersistedProperty.SessionReplayTriggerGroupsActivation
+        )
+      )
 
       const decision = this._triggerGroupsEvaluator.evaluate(
         super.getSessionId(),
@@ -3211,8 +3223,10 @@ export class PostHog extends PostHogCore {
       this._sessionReplayRecordingActive = this._sessionReplayNativeInitialized
         ? await this._startSessionRecording(true)
         : await this.initializeNativePlugin(options, remoteConfig, true)
+      this._sessionReplayStartFailed = this._sessionReplayRecordingActive !== true
     } else {
       this._logger.info('Session replay disabled.')
+      this._sessionReplayStartFailed = false
 
       if (this._sessionReplayRecordingActive === true) {
         // Linked flag turned off — pause so a gated-off user isn't recorded. Keep the flag
@@ -3349,7 +3363,14 @@ export class PostHog extends PostHogCore {
     if (!result.anyMatched) {
       return
     }
-    if (!result.newlyActivated && this._sessionReplayRecordingActive === true) {
+    if (result.newlyActivated) {
+      this.setPersistedProperty(
+        PostHogPersistedProperty.SessionReplayTriggerGroupsActivation,
+        this._triggerGroupsEvaluator.getActivation()
+      )
+    } else if (!this._sessionReplayStartFailed) {
+      // Nothing changed: recording is already on, or off for a reason another match can't fix
+      // (the group sampled out, another leg pending). Only a failed native start is worth retrying.
       return
     }
     void this._evaluateAndStartSessionReplay()

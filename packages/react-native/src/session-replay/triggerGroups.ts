@@ -19,12 +19,18 @@ export type SessionReplayTriggerFlagCondition = {
   variant: string | null
 }
 
+// A leg counts as configured when the raw config has it, even if none of its entries parse: like
+// posthog-js, an unparseable condition then never matches instead of dropping out and letting the
+// group record every session. Absent flags fall back to whether any entry parsed.
 export type SessionReplayTriggerConditions = {
   matchType: 'any' | 'all'
   events: SessionReplayTriggerEventCondition[]
   urls: RegExp[]
   flag: SessionReplayTriggerFlagCondition | null
   properties: SessionReplayTriggerPropertyFilter[]
+  hasEventsLeg?: boolean
+  hasUrlsLeg?: boolean
+  hasFlagLeg?: boolean
 }
 
 export type SessionReplayTriggerGroup = {
@@ -33,6 +39,16 @@ export type SessionReplayTriggerGroup = {
   sampleRate: number | null
   minDurationMs: number | null
   conditions: SessionReplayTriggerConditions
+}
+
+// The API can send the rate as a string. One that doesn't parse samples out (NaN never passes the
+// threshold on web either); only a missing rate samples in.
+function parseTriggerGroupSampleRate(value: JsonType | undefined): number | null {
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return value.trim() !== '' && Number.isFinite(parsed) ? parsed : 0
+  }
+  return getFiniteNumber(value)
 }
 
 // null means v1: the web SDK keeps the v1 strategy unless version is 2 and a group parses.
@@ -64,7 +80,7 @@ export function parseSessionRecordingTriggerGroups(
     groups.push({
       id,
       name: typeof map['name'] === 'string' ? map['name'] : '',
-      sampleRate: getFiniteNumber(map['sampleRate']),
+      sampleRate: parseTriggerGroupSampleRate(map['sampleRate']),
       minDurationMs: getFiniteNumber(map['minDurationMs']),
       conditions: parseTriggerConditions(map['conditions']),
     })
@@ -75,12 +91,16 @@ export function parseSessionRecordingTriggerGroups(
 
 function parseTriggerConditions(conditions: JsonType | undefined): SessionReplayTriggerConditions {
   const map = conditions && typeof conditions === 'object' ? (conditions as { [key: string]: JsonType }) : {}
+  const rawFlag = map['flag']
   return {
     matchType: map['matchType'] === 'any' ? 'any' : 'all',
     events: parseTriggerEvents(map['events']),
     urls: parseTriggerUrls(map['urls']),
-    flag: parseTriggerFlag(map['flag']),
+    flag: parseTriggerFlag(rawFlag),
     properties: parseTriggerPropertyFilters(map['properties']),
+    hasEventsLeg: Array.isArray(map['events']) && map['events'].length > 0,
+    hasUrlsLeg: Array.isArray(map['urls']) && map['urls'].length > 0,
+    hasFlagLeg: (typeof rawFlag === 'string' && rawFlag.length > 0) || (!!rawFlag && typeof rawFlag === 'object'),
   }
 }
 
@@ -242,6 +262,13 @@ export type TriggerGroupsEventResult = {
   newlyActivated: boolean
 }
 
+// Event and screen activation for one session, persisted so it survives an app restart.
+export type SessionReplayTriggerGroupsActivation = {
+  sessionId: string
+  eventGroupIds: string[]
+  screenGroupIds: string[]
+}
+
 enum TriggerStatus {
   ACTIVATED,
   PENDING,
@@ -283,14 +310,15 @@ export class SessionReplayTriggerGroupsEvaluator {
     for (const group of this.groups) {
       const conditions = group.conditions
 
+      // An already activated group still reports a match, so the caller can retry a failed native start.
       const eventMatched =
-        conditions.events.length > 0 &&
-        !this.eventActivatedGroupIds.has(group.id) &&
-        this.matchesEventLeg(conditions, eventName, eventProperties, personProperties)
+        conditions.events.length > 0 && this.matchesEventLeg(conditions, eventName, eventProperties, personProperties)
       if (eventMatched) {
-        this.eventActivatedGroupIds.add(group.id)
         anyMatched = true
-        newlyActivated = true
+        if (!this.eventActivatedGroupIds.has(group.id)) {
+          this.eventActivatedGroupIds.add(group.id)
+          newlyActivated = true
+        }
       }
 
       if (eventName === SCREEN_EVENT_NAME) {
@@ -298,13 +326,14 @@ export class SessionReplayTriggerGroupsEvaluator {
         const screenMatched =
           conditions.urls.length > 0 &&
           typeof screenName === 'string' &&
-          !this.screenActivatedGroupIds.has(group.id) &&
           conditions.urls.some((regex) => regex.test(screenName)) &&
           matchTriggerPropertyFilters(conditions.properties, eventProperties, personProperties)
         if (screenMatched) {
-          this.screenActivatedGroupIds.add(group.id)
           anyMatched = true
-          newlyActivated = true
+          if (!this.screenActivatedGroupIds.has(group.id)) {
+            this.screenActivatedGroupIds.add(group.id)
+            newlyActivated = true
+          }
         }
       }
     }
@@ -312,12 +341,40 @@ export class SessionReplayTriggerGroupsEvaluator {
     return { anyMatched, newlyActivated }
   }
 
+  getActivation(): SessionReplayTriggerGroupsActivation | null {
+    if (this.activationSessionId === null) {
+      return null
+    }
+    return {
+      sessionId: this.activationSessionId,
+      eventGroupIds: Array.from(this.eventActivatedGroupIds),
+      screenGroupIds: Array.from(this.screenActivatedGroupIds),
+    }
+  }
+
+  // Adds the persisted activation for sessionId. Activation from any other session is ignored.
+  restoreActivation(sessionId: string, activation: SessionReplayTriggerGroupsActivation | null | undefined): void {
+    // Storage is read back as-is, so a malformed value must not break replay evaluation.
+    if (!activation || activation.sessionId !== sessionId) {
+      return
+    }
+    this.resetActivationForNewSession(sessionId)
+    for (const id of Array.isArray(activation.eventGroupIds) ? activation.eventGroupIds : []) {
+      this.eventActivatedGroupIds.add(id)
+    }
+    for (const id of Array.isArray(activation.screenGroupIds) ? activation.screenGroupIds : []) {
+      this.screenActivatedGroupIds.add(id)
+    }
+  }
+
+  // Read-only for activation: a caller holding a stale session id must not wipe the current
+  // session's activated groups. Only onEvent and restoreActivation move activation to a new session.
   evaluate(
     sessionId: string,
     flags: Record<string, FeatureFlagValue> | null | undefined,
     personProperties: Record<string, unknown> | undefined
   ): SessionReplayTriggerGroupsDecision {
-    this.resetActivationForNewSession(sessionId)
+    const activatedSession = this.activationSessionId === sessionId
 
     let shouldRecord = false
     let hasPendingGroups = false
@@ -325,7 +382,7 @@ export class SessionReplayTriggerGroupsEvaluator {
     const matchedGroups: SessionReplayTriggerGroupMatch[] = []
 
     for (const group of this.groups) {
-      switch (this.groupStatus(group, flags)) {
+      switch (this.groupStatus(group, flags, activatedSession)) {
         case TriggerStatus.ACTIVATED: {
           const sampled = this.samplingDecision(group, sessionId)
           matchedGroups.push({ id: group.id, name: group.name, matched: true, sampled })
@@ -351,12 +408,13 @@ export class SessionReplayTriggerGroupsEvaluator {
 
   private groupStatus(
     group: SessionReplayTriggerGroup,
-    flags: Record<string, FeatureFlagValue> | null | undefined
+    flags: Record<string, FeatureFlagValue> | null | undefined,
+    activatedSession: boolean
   ): TriggerStatus {
     const conditions = group.conditions
-    const hasEvents = conditions.events.length > 0
-    const hasUrls = conditions.urls.length > 0
-    const hasFlag = conditions.flag !== null
+    const hasEvents = conditions.hasEventsLeg ?? conditions.events.length > 0
+    const hasUrls = conditions.hasUrlsLeg ?? conditions.urls.length > 0
+    const hasFlag = conditions.hasFlagLeg ?? conditions.flag !== null
 
     if (!hasEvents && !hasUrls && !hasFlag) {
       return TriggerStatus.ACTIVATED
@@ -364,15 +422,15 @@ export class SessionReplayTriggerGroupsEvaluator {
 
     const eventLeg = !hasEvents
       ? TriggerStatus.DISABLED
-      : this.eventActivatedGroupIds.has(group.id)
+      : activatedSession && this.eventActivatedGroupIds.has(group.id)
         ? TriggerStatus.ACTIVATED
         : TriggerStatus.PENDING
     const screenLeg = !hasUrls
       ? TriggerStatus.DISABLED
-      : this.screenActivatedGroupIds.has(group.id)
+      : activatedSession && this.screenActivatedGroupIds.has(group.id)
         ? TriggerStatus.ACTIVATED
         : TriggerStatus.PENDING
-    const flagLeg = this.flagLegStatus(conditions.flag, flags)
+    const flagLeg = hasFlag ? this.flagLegStatus(conditions.flag, flags) : TriggerStatus.DISABLED
 
     return conditions.matchType === 'any'
       ? orTriggerStatus(eventLeg, screenLeg, flagLeg)
@@ -383,10 +441,8 @@ export class SessionReplayTriggerGroupsEvaluator {
     flag: SessionReplayTriggerFlagCondition | null,
     flags: Record<string, FeatureFlagValue> | null | undefined
   ): TriggerStatus {
-    if (flag === null) {
-      return TriggerStatus.DISABLED
-    }
-    if (flags === null || flags === undefined) {
+    // A configured flag leg that didn't parse never matches.
+    if (flag === null || flags === null || flags === undefined) {
       return TriggerStatus.PENDING
     }
 

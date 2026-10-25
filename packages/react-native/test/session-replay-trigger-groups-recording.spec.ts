@@ -86,11 +86,12 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     await posthog.shutdown()
   })
 
-  const newPostHog = (): PostHog =>
+  const newPostHog = (options: { enablePersistSessionIdAcrossRestart?: boolean } = {}): PostHog =>
     new PostHog('test-token', {
       customStorage: mockStorage,
       enableSessionReplay: true,
       flushInterval: 0,
+      ...options,
     })
 
   // First launch caches the recording config (incl. triggerGroups) so the *next* launch
@@ -248,6 +249,79 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     posthog.capture('purchase')
     await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
     expect(replay.start).toHaveBeenCalledTimes(1)
+  })
+
+  const purchaseGroup = {
+    id: 'g1',
+    name: 'Purchases',
+    sampleRate: 1,
+    conditions: { matchType: 'any', events: [{ name: 'purchase' }] },
+  }
+
+  it('retries the native start on a later matching event when the first start failed', async () => {
+    currentSessionRecording = v2Config([purchaseGroup])
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+
+    replay.start.mockImplementationOnce(async () => {
+      throw new Error('native start failed')
+    })
+
+    posthog.capture('purchase')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+
+    // The group is already activated, but the next match still re-kicks the failed start.
+    posthog.capture('purchase')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(2))
+  })
+
+  it('does not re-evaluate replay on every match while a group is sampled out', async () => {
+    currentSessionRecording = v2Config([{ ...purchaseGroup, sampleRate: 0 }])
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+    const evaluate = vi.spyOn(posthog as any, '_evaluateAndStartSessionReplay')
+
+    posthog.capture('purchase')
+    posthog.capture('purchase')
+    posthog.capture('purchase')
+    await wait(50)
+
+    // only the activating match re-evaluates; later ones can't change a sampled-out decision
+    expect(evaluate).toHaveBeenCalledTimes(1)
+    expect(replay.start).not.toHaveBeenCalled()
+  })
+
+  it('keeps the activated groups when the session survives an app restart', async () => {
+    currentSessionRecording = v2Config([purchaseGroup])
+    await warmup()
+
+    posthog = newPostHog({ enablePersistSessionIdAcrossRestart: true })
+    await posthog.ready()
+    await wait(50)
+    const sessionId = posthog.getSessionId()
+
+    posthog.capture('purchase')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await posthog.shutdown()
+    replay.start.mockClear()
+
+    posthog = newPostHog({ enablePersistSessionIdAcrossRestart: true })
+    await posthog.ready()
+    expect(posthog.getSessionId()).toBe(sessionId)
+    // No new purchase: the restored activation starts recording on its own.
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+  })
+
+  it('pins the persisted activation key (renaming it would orphan activation across app upgrades)', () => {
+    expect(PostHogPersistedProperty.SessionReplayTriggerGroupsActivation).toBe(
+      'session_replay_trigger_groups_activation'
+    )
   })
 
   it('keeps v1 behaviour when version is missing or 1', async () => {

@@ -291,6 +291,8 @@ export enum PostHogPersistedProperty {
   PushRegistered = 'push_registered',
   // Session id for which an event trigger has activated session replay. only used by posthog-react-native
   SessionReplayEventTriggerActivatedSession = 'session_replay_event_trigger_activated_session',
+  // Session replay v2 trigger groups activated by events or screens in a session. only used by posthog-react-native
+  SessionReplayTriggerGroupsActivation = 'session_replay_trigger_groups_activation',
   SurveyLastSeenDate = 'survey_last_seen_date', // only used by posthog-react-native
   SurveysInProgress = 'surveys_in_progress', // only used by posthog-react-native
   SurveysSeen = 'surveys_seen', // only used by posthog-react-native

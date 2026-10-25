@@ -48,6 +48,43 @@ describe('parseSessionRecordingTriggerGroups', () => {
     expect(parseSessionRecordingTriggerGroups({ version: 2, triggerGroups: [{ no: 'id' }] })).toBeNull()
   })
 
+  it('parses a string sample rate and samples out one that does not parse', () => {
+    const groups = parseSessionRecordingTriggerGroups({
+      version: 2,
+      triggerGroups: [
+        { id: 'g1', conditions: {} },
+        { id: 'g2', sampleRate: '0.5', conditions: {} },
+        { id: 'g3', sampleRate: 'abc', conditions: {} },
+      ],
+    })
+    expect(groups?.map((g) => g.sampleRate)).toEqual([null, 0.5, 0])
+  })
+
+  it('keeps a configured leg configured even when none of its entries parse', () => {
+    const groups = parseSessionRecordingTriggerGroups({
+      version: 2,
+      triggerGroups: [
+        {
+          id: 'g1',
+          conditions: {
+            urls: [{ url: '([invalid', matching: 'regex' }],
+            events: [{ properties: [] }],
+            flag: { variant: 'beta' },
+          },
+        },
+      ],
+    })
+    const conditions = groups![0].conditions
+    expect([conditions.urls.length, conditions.events.length, conditions.flag]).toEqual([0, 0, null])
+    expect([conditions.hasUrlsLeg, conditions.hasEventsLeg, conditions.hasFlagLeg]).toEqual([true, true, true])
+
+    const evaluator = new SessionReplayTriggerGroupsEvaluator()
+    evaluator.onConfig(groups!)
+    const decision = evaluator.evaluate('s1', {}, undefined)
+    expect(decision.shouldRecord).toBe(false)
+    expect(decision.hasPendingGroups).toBe(true)
+  })
+
   it('parses groups, conditions and filters from a v2 config', () => {
     const groups = parseSessionRecordingTriggerGroups({
       version: 2,
@@ -83,6 +120,9 @@ describe('parseSessionRecordingTriggerGroups', () => {
           urls: [/checkout.*/],
           flag: { flag: 'replay-flag', variant: 'beta' },
           properties: [{ key: 'plan', type: 'person', operator: 'exact', value: 'pro' }],
+          hasEventsLeg: true,
+          hasUrlsLeg: true,
+          hasFlagLeg: true,
         },
       },
     ])
@@ -98,9 +138,19 @@ describe('parseSessionRecordingTriggerGroups', () => {
       {
         id: 'g1',
         name: '',
-        sampleRate: null,
+        // an unparseable rate samples out rather than reading as "no rate"
+        sampleRate: 0,
         minDurationMs: null,
-        conditions: { matchType: 'all', events: [], urls: [], flag: null, properties: [] },
+        conditions: {
+          matchType: 'all',
+          events: [],
+          urls: [],
+          flag: null,
+          properties: [],
+          hasEventsLeg: false,
+          hasUrlsLeg: false,
+          hasFlagLeg: false,
+        },
       },
     ])
   })
@@ -555,5 +605,35 @@ describe('SessionReplayTriggerGroupsEvaluator', () => {
     expect(decision.shouldRecord).toBe(false)
     expect(decision.hasPendingGroups).toBe(true)
     expect(evaluator.onEvent('s2', 'purchase', undefined, undefined).newlyActivated).toBe(true)
+  })
+
+  it('restores persisted activation only for its own session and tolerates malformed storage', () => {
+    const purchase = group({ conditions: conditions({ events: [{ name: 'purchase', properties: [] }] }) })
+    const evaluator = new SessionReplayTriggerGroupsEvaluator()
+    evaluator.onConfig([purchase])
+    evaluator.onEvent('s1', 'purchase', undefined, undefined)
+    const persisted = evaluator.getActivation()
+    expect(persisted).toEqual({ sessionId: 's1', eventGroupIds: ['g1'], screenGroupIds: [] })
+
+    const restored = new SessionReplayTriggerGroupsEvaluator()
+    restored.onConfig([purchase])
+    restored.restoreActivation('s2', persisted)
+    expect(restored.evaluate('s2', null, undefined).shouldRecord).toBe(false)
+    restored.restoreActivation('s1', persisted)
+    expect(restored.evaluate('s1', null, undefined).shouldRecord).toBe(true)
+
+    const malformed = new SessionReplayTriggerGroupsEvaluator()
+    malformed.onConfig([purchase])
+    expect(() => malformed.restoreActivation('s1', { sessionId: 's1' } as any)).not.toThrow()
+    expect(malformed.evaluate('s1', null, undefined).hasPendingGroups).toBe(true)
+  })
+
+  it('evaluating a stale session does not wipe the current session activation', () => {
+    const evaluator = new SessionReplayTriggerGroupsEvaluator()
+    evaluator.onConfig([group({ conditions: conditions({ events: [{ name: 'purchase', properties: [] }] }) })])
+    evaluator.onEvent('s2', 'purchase', undefined, undefined)
+
+    expect(evaluator.evaluate('s1', null, undefined).shouldRecord).toBe(false)
+    expect(evaluator.evaluate('s2', null, undefined).shouldRecord).toBe(true)
   })
 })
