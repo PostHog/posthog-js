@@ -837,6 +837,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 1.6.1(vitest@1.6.1(@edge-runtime/vm@5.0.0)(@types/node@20.19.9)(happy-dom@14.12.3)(jsdom@26.1.0)(lightningcss@1.33.0)(terser@5.51.2))
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       rxjs:
         specifier: ^7.8.0
         version: 7.8.2
