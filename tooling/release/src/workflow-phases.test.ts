@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
+import { execFileSync, spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import test from 'node:test'
 
 const release = readFileSync(new URL('../../../.github/workflows/release.yml', import.meta.url), 'utf8')
@@ -94,41 +94,57 @@ test('npm gate fails closed for failed, cancelled or skipped alias promotion', (
     }
 })
 
-test('@posthog/browser remains dormant while private, then uses the normal version check when public', () => {
+test('@posthog/browser S3 eligibility follows the release commit and stays stable on retries', () => {
     const check = job(release, 'check-posthog-browser-version')
-    assert.match(check, /ref: \$\{\{ needs.version-bump.outputs.commit-hash \}\}/)
-    assert.match(check, /if: steps.manifest.outputs.private != 'true'/)
-    assert.match(
-        check,
-        /is-new-version: \$\{\{ steps.manifest.outputs.private == 'true' && 'false' \|\| steps.check-version.outputs.is-new-version \}\}/
-    )
     const script = check.match(/ {14}run: \|\n((?: {18}.*\n|\n)+)/)?.[1]
     assert.ok(script)
-    const root = mkdtempSync(path.join(os.tmpdir(), 'browser-cdn-manifest-'))
-    try {
-        mkdirSync(path.join(root, 'packages/browser-next'), { recursive: true })
-        for (const manifest of [{ private: true }, { private: false }, {}]) {
-            writeFileSync(path.join(root, 'packages/browser-next/package.json'), JSON.stringify(manifest))
-            const output = path.join(root, 'output')
-            writeFileSync(output, '')
-            const child: SpawnSyncReturns<string> = spawnSync('bash', ['-c', script.replace(/^ {18}/gm, '')], {
-                cwd: root,
-                env: { ...process.env, GITHUB_OUTPUT: output },
-                encoding: 'utf8',
-            })
-            assert.equal(child.status, 0, child.stdout + child.stderr)
-            assert.equal(readFileSync(output, 'utf8'), `private=${manifest.private === true}\n`)
+    for (const manifest of [
+        { version: '0.1.0' },
+        { version: '0.1.0', private: false },
+        { version: '0.1.0', private: true },
+        { version: '0.0.3' },
+    ]) {
+        const root = mkdtempSync(path.join(os.tmpdir(), 'browser-s3-version-'))
+        try {
+            const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' })
+            git('init', '--quiet', '--initial-branch=main')
+            git('config', 'user.name', 'Test')
+            git('config', 'user.email', 'test@example.com')
+            git('config', 'commit.gpgsign', 'false')
+            mkdirSync(path.join(root, 'packages/browser-next'), { recursive: true })
+            for (const current of [{ version: '0.0.3', private: true }, manifest]) {
+                writeFileSync(path.join(root, 'packages/browser-next/package.json'), JSON.stringify(current))
+                git('add', 'packages/browser-next/package.json')
+                git('commit', '--quiet', '--allow-empty', '-m', 'release')
+            }
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const output = path.join(root, 'output')
+                writeFileSync(output, '')
+                const child: SpawnSyncReturns<string> = spawnSync('bash', ['-c', script.replace(/^ {18}/gm, '')], {
+                    cwd: root,
+                    env: { ...process.env, GITHUB_OUTPUT: output },
+                    encoding: 'utf8',
+                })
+                assert.equal(child.status, 0, child.stdout + child.stderr)
+                assert.equal(
+                    readFileSync(output, 'utf8'),
+                    `committed-version=${manifest.version}\nversion-changed=${manifest.private !== true && manifest.version !== '0.0.3'}\n`
+                )
+            }
+        } finally {
+            rmSync(root, { recursive: true, force: true })
         }
-    } finally {
-        rmSync(root, { recursive: true, force: true })
     }
+    assert.match(check, /ref: \$\{\{ needs.version-bump.outputs.commit-hash \}\}/)
+    assert.match(check, /fetch-depth: 2/)
+    assert.match(check, /version-changed: \$\{\{ steps.check-version.outputs.version-changed \}\}/)
 })
 
 test('@posthog/browser builds once from the version commit and transfers the entire artifact tree without a toolbar dependency', () => {
     const build = job(release, 'build-posthog-browser-s3-artifacts')
     assert.match(build, /ref: \$\{\{ needs.version-bump.outputs.commit-hash \}\}/)
     assert.match(build, /needs.check-posthog-browser-version.result == 'success'/)
-    assert.match(build, /needs.check-posthog-browser-version.outputs.is-new-version == 'true'/)
+    assert.match(build, /needs.check-posthog-browser-version.outputs.version-changed == 'true'/)
     assert.match(build, /pnpm turbo run build --filter='@posthog\/browser\^\.\.\.'/)
     assert.match(build, /pnpm --filter @posthog\/browser build:cdn/)
     assert.ok(
@@ -157,7 +173,7 @@ test('@posthog/browser builds once from the version commit and transfers the ent
     }
 })
 
-test('both @posthog/browser immutable regions are required before its aliases and npm gate', () => {
+test('both @posthog/browser immutable regions are required before its aliases', () => {
     const immutable = job(release, 'upload-posthog-browser-s3-immutable')
     const aliases = job(release, 'upload-posthog-browser-s3')
     assert.match(immutable, /needs.build-posthog-browser-s3-artifacts.result == 'success'/)
@@ -165,44 +181,22 @@ test('both @posthog/browser immutable regions are required before its aliases an
     assert.match(aliases, /upload-browser-s3 "\$BUCKET" "\$VERSION" --aliases-only/)
     assert.ok(dependencies(aliases).includes('upload-posthog-browser-s3-immutable'))
     assert.match(aliases, /needs.upload-posthog-browser-s3-immutable.result == 'success'/)
-    assert.ok(dependencies(job(release, 'gate-posthog-browser-publish')).includes('upload-posthog-browser-s3'))
 })
 
-test('@posthog/browser S3 gate reports failures to the release approval thread', () => {
-    const gate = job(release, 'gate-posthog-browser-publish')
-    assert.ok(dependencies(gate).includes('notify-approval-needed'))
-    for (const required of [
-        'if: failure()',
-        'continue-on-error: true',
-        'actions/slack-thread-reply@',
-        'thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}',
-        "message: '❌ Blocked `@posthog/browser` npm publication because its S3 release did not succeed.",
+test('@posthog/browser reports S3 failures to the release approval thread', () => {
+    const notify = job(release, 'notify-posthog-browser-s3-failed')
+    for (const id of [
+        'check-posthog-browser-version',
+        'build-posthog-browser-s3-artifacts',
+        'upload-posthog-browser-s3-immutable',
+        'upload-posthog-browser-s3',
     ]) {
-        assert.ok(gate.includes(required), `Missing failure notification configuration: ${required}`)
+        assert.ok(dependencies(notify).includes(id))
+        assert.ok(notify.includes(`needs.${id}.result == 'failure'`))
     }
-})
-
-test('@posthog/browser npm gate rejects failed checks and incomplete S3 releases', () => {
-    const gate = job(release, 'gate-posthog-browser-publish')
-    const script = gate.match(/ {14}run: \|\n((?: {18}.*\n|\n)+)/)?.[1]
-    assert.ok(script)
-    const base = {
-        ...process.env,
-        CHECK_RESULT: 'success',
-        IS_NEW_VERSION: 'true',
-        UPLOAD_RESULT: 'success',
-    }
-    const run = (env: Record<string, string | undefined>, success: boolean) => {
-        const child = spawnSync('bash', ['-c', script.replace(/^ {18}/gm, '')], { env, encoding: 'utf8' })
-        assert.equal(child.status, success ? 0 : 1, child.stdout + child.stderr)
-    }
-    run(base, true)
-    for (const field of ['CHECK_RESULT', 'UPLOAD_RESULT']) {
-        for (const result of ['failure', 'cancelled', 'skipped', '']) {
-            run({ ...base, [field]: result }, false)
-        }
-    }
-    for (const value of ['', 'unknown']) run({ ...base, IS_NEW_VERSION: value }, false)
-    run({ ...base, IS_NEW_VERSION: 'false', UPLOAD_RESULT: 'skipped' }, true)
-    run({ ...base, IS_NEW_VERSION: 'false', CHECK_RESULT: 'failure' }, false)
+    assert.ok(dependencies(notify).includes('notify-approval-needed'))
+    assert.match(notify, /continue-on-error: true/)
+    assert.match(notify, /actions\/slack-thread-reply@/)
+    assert.match(notify, /thread_ts: \$\{\{ needs.notify-approval-needed.outputs.slack_ts \}\}/)
+    assert.match(notify, /message: '❌ `@posthog\/browser` S3 release failed/)
 })
