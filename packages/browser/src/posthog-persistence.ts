@@ -58,7 +58,7 @@ const GROUP_FRESHNESS_KEY: Partial<Record<PersistenceStorageGroup, string>> = {
     surveys: SURVEYS_LOADED_AT,
 }
 
-import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
+import { isArray, isNull, isNumber, isString, isUndefined } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
@@ -255,6 +255,8 @@ export class PostHogPersistence {
     private _localIdentityChangePending = false
     private _crossTabFeatureFlagIdentityMismatch = false
     private _metaIdentifierChangePending = new Set<string>()
+    // Storage as it was when the Meta identifiers in `props` last matched it.
+    private _metaIdentifierStorageSnapshot: string | undefined
     private readonly _crossTabFeatureFlagHandlers = new Set<() => void>()
     private _onStorage?: (event: StorageEvent) => void
 
@@ -1219,28 +1221,69 @@ export class PostHogPersistence {
      *    in-memory writes that haven't yet been debounced to storage.
      */
     refreshKey(prop: string): void {
+        this._refreshKeys([prop])
+    }
+
+    // Reads the main entry at most once, however many keys are refreshed.
+    private _refreshKeys(props: readonly string[]): void {
         if (this._disabled) {
             return
         }
-        if (this._metaIdentifierChangePending.has(prop)) {
-            return
+        let mainEntry: Properties | null | undefined
+        let mainEntryRead = false
+        const readMainEntry = () => {
+            if (!mainEntryRead) {
+                mainEntry = this._storage._parse(this._name)
+                mainEntryRead = true
+            }
+            return mainEntry
         }
-        const group = this._splitStorage ? getPersistenceKeyPolicy(prop)?.storageGroup : undefined
-        const entry = group ? localStore._parse(this._groupEntryName(group)) : this._storage._parse(this._name)
-        if (entry && prop in entry) {
-            this._setProp(prop, entry[prop], false)
-            return
-        }
-        // A grouped key that has not migrated yet still lives in the main blob;
-        // check there once before concluding a sibling removed it.
-        if (group) {
-            const mainEntry = this._storage._parse(this._name)
-            if (mainEntry && prop in mainEntry) {
-                this._setProp(prop, mainEntry[prop], false)
+        props.forEach((prop) => {
+            if (this._metaIdentifierChangePending.has(prop)) {
                 return
             }
+            const group = this._splitStorage ? getPersistenceKeyPolicy(prop)?.storageGroup : undefined
+            const entry = group ? localStore._parse(this._groupEntryName(group)) : readMainEntry()
+            if (entry && prop in entry) {
+                this._setProp(prop, entry[prop], false)
+                return
+            }
+            // A grouped key that has not migrated yet still lives in the main blob;
+            // check there once before concluding a sibling removed it.
+            if (group) {
+                const groupMainEntry = readMainEntry()
+                if (groupMainEntry && prop in groupMainEntry) {
+                    this._setProp(prop, groupMainEntry[prop], false)
+                    return
+                }
+            }
+            this._deleteProp(prop, false)
+        })
+    }
+
+    /**
+     * Refresh the Meta identifier keys from storage, so a sibling tab's update is not lost.
+     * capture() calls this on every event, so it parses storage only when storage has changed
+     * since the identifiers last matched it. A full parse on each click made INP regress.
+     */
+    refreshMetaIdentifiers(): void {
+        const snapshot = this._storageSnapshot()
+        if (!isUndefined(snapshot) && snapshot === this._metaIdentifierStorageSnapshot) {
+            return
         }
-        this._deleteProp(prop, false)
+        this._refreshKeys(META_IDENTIFIER_PERSISTENCE_KEYS)
+        this._rememberMetaIdentifierStorageSnapshot()
+    }
+
+    // A pending local change is not in storage yet, so storage does not match `props` until it is written.
+    private _rememberMetaIdentifierStorageSnapshot(): void {
+        this._metaIdentifierStorageSnapshot =
+            this._metaIdentifierChangePending.size === 0 ? this._storageSnapshot() : undefined
+    }
+
+    private _storageSnapshot(): string | undefined {
+        const snapshot = this._storage._rawText ? this._storage._rawText(this._name) : this._storage._get(this._name)
+        return isString(snapshot) ? snapshot : undefined
     }
 
     /**
@@ -1303,7 +1346,7 @@ export class PostHogPersistence {
                 !this._config.cookieWinsOnConflict ||
                 this._config.persistence.toLowerCase() !== 'localstorage+cookie'
             ) {
-                META_IDENTIFIER_PERSISTENCE_KEYS.forEach((key) => this.refreshKey(key))
+                this.refreshMetaIdentifiers()
             }
         }
 
@@ -1337,6 +1380,9 @@ export class PostHogPersistence {
             this._localIdentityChangePending = false
             this._metaIdentifierChangePending.clear()
         }
+        if (writeResult === 'written') {
+            this._rememberMetaIdentifierStorageSnapshot()
+        }
         if (crossTabPropertiesChanged) {
             this._crossTabFeatureFlagHandlers.forEach((handler) => handler())
         }
@@ -1367,6 +1413,9 @@ export class PostHogPersistence {
                     this._pendingCrossTabFeatureFlagChanges.delete(key)
                 }
             })
+        }
+        if (mainWriteResult === 'written') {
+            this._rememberMetaIdentifierStorageSnapshot()
         }
         for (const group of PERSISTENCE_STORAGE_GROUPS) {
             const groupProps = groups[group]
