@@ -1688,6 +1688,7 @@
         },
         {
           "category": "",
+          "description": "",
           "details": null,
           "id": "getFeatureFlagDetails",
           "showDocs": true,
@@ -1699,7 +1700,7 @@
               "code": "// Generated example for getFeatureFlagDetails\nposthog.getFeatureFlagDetails();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [],
           "returnType": {
             "id": "PostHogFeatureFlagDetails | undefined",
@@ -1709,6 +1710,7 @@
         },
         {
           "category": "",
+          "description": "",
           "details": null,
           "id": "getFeatureFlagPayloads",
           "showDocs": true,
@@ -1720,7 +1722,7 @@
               "code": "// Generated example for getFeatureFlagPayloads\nposthog.getFeatureFlagPayloads();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [],
           "returnType": {
             "id": "PostHogFlagsResponse['featureFlagPayloads'] | undefined",
@@ -1765,6 +1767,7 @@
         },
         {
           "category": "",
+          "description": "",
           "details": null,
           "id": "getFeatureFlags",
           "showDocs": true,
@@ -1776,7 +1779,7 @@
               "code": "// Generated example for getFeatureFlags\nposthog.getFeatureFlags();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [],
           "returnType": {
             "id": "PostHogFlagsResponse['featureFlags'] | undefined",
@@ -1786,6 +1789,7 @@
         },
         {
           "category": "",
+          "description": "",
           "details": null,
           "id": "getFeatureFlagsAndPayloads",
           "showDocs": true,
@@ -1797,7 +1801,7 @@
               "code": "// Generated example for getFeatureFlagsAndPayloads\nposthog.getFeatureFlagsAndPayloads();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [],
           "returnType": {
             "id": "{\n        flags: PostHogFlagsResponse['featureFlags'] | undefined;\n        payloads: PostHogFlagsResponse['featureFlagPayloads'] | undefined;\n    }",
@@ -1916,6 +1920,7 @@
         },
         {
           "category": "",
+          "description": "",
           "details": null,
           "id": "onFeatureFlag",
           "showDocs": true,
@@ -1927,7 +1932,7 @@
               "code": "// Generated example for onFeatureFlag\nposthog.onFeatureFlag();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [
             {
               "description": "",

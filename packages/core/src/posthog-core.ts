@@ -1145,16 +1145,25 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return result?.payload
   }
 
+  /**
+   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
+   */
   getFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
     return this.getFeatureFlagDetails()?.featureFlagPayloads
   }
 
+  /**
+   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
+   */
   getFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
     // NOTE: We don't check for _initPromise here as the function is designed to be
     // callable before the state being loaded anyways
     return this.getFeatureFlagDetails()?.featureFlags
   }
 
+  /**
+   * @deprecated Use `getAllFeatureFlags()` for every flag, or `getFeatureFlagResult()` for one flag.
+   */
   getFeatureFlagDetails(): PostHogFeatureFlagDetails | undefined {
     // NOTE: We don't check for _initPromise here as the function is designed to be
     // callable before the state being loaded anyways
@@ -1188,6 +1197,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return normalizeFlagsResponse(result) as PostHogFeatureFlagDetails
   }
 
+  /**
+   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
+   */
   getFeatureFlagsAndPayloads(): {
     flags: PostHogFlagsResponse['featureFlags'] | undefined
     payloads: PostHogFlagsResponse['featureFlagPayloads'] | undefined
@@ -1219,7 +1231,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   // Used when we want to trigger the reload but we don't care about the result
-  reloadFeatureFlags(options?: { cb?: (err?: Error, flags?: PostHogFlagsResponse['featureFlags']) => void }): void {
+  reloadFeatureFlags(options?: {
+    /**
+     * @deprecated Use `reloadFeatureFlagsAsync()` to wait for the reload instead.
+     */
+    cb?: (err?: Error, flags?: PostHogFlagsResponse['featureFlags']) => void
+  }): void {
     if (this.disableRemoteFeatureFlags && !this.disabled) {
       this._initPromise.then(() => options?.cb?.(undefined, this.getFeatureFlags()))
       return
@@ -1259,6 +1276,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     })
   }
 
+  /**
+   * @deprecated Use `onFeatureFlags()` and read the flag with `getFeatureFlagResult()` in the callback.
+   */
   onFeatureFlag(key: string, cb: (value: FeatureFlagValue) => void): () => void {
     return this.on('featureflags', async () => {
       const flagResponse = this.getFeatureFlag(key)
