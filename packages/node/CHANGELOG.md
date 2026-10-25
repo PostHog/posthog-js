@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.57.2
+
+### Patch Changes
+
+- [#5422](https://github.com/PostHog/posthog-js/pull/5422) [`b5036c4`](https://github.com/PostHog/posthog-js/commit/b5036c46ccef4f653a9cb13b32543e3fa2a45c6d) Thanks [@posthog](https://github.com/apps/posthog)! - fix: esbuild no longer fails to bundle posthog-node when the optional `@opentelemetry/api` peer is not installed
+  (2026-10-25)
+
 ## 5.57.1
 
 ### Patch Changes
