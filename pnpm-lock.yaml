@@ -144,8 +144,8 @@ importers:
         specifier: ^0.15.1
         version: 0.15.1
       '@posthog/coherence':
-        specifier: ^1.10.0
-        version: 1.10.0
+        specifier: ^1.10.1
+        version: 1.10.1
       '@types/node':
         specifier: ^22.19.1
         version: 22.19.1
@@ -6605,8 +6605,8 @@ packages:
     engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
 
-  '@posthog/coherence@1.10.0':
-    resolution: {integrity: sha512-f3V3siic24zfkDXDJGeCA/BizmgzCzyiWJ+F63RsvsOSqf2HkO+h0rkv0P56d3ZiAjzOgl2CUhql2+ErSQHMyQ==}
+  '@posthog/coherence@1.10.1':
+    resolution: {integrity: sha512-Ge373x9OJ360TivaVCvFDTfG4ObGhVGAvV6pXFY46Z8nB//ZJshLXtRqJB6CuJLu9rVUXOHYNOQazDKUus1ZEQ==}
     engines: {node: '>=22.18'}
     os: [darwin, linux]
     hasBin: true
@@ -25369,7 +25369,7 @@ snapshots:
     dependencies:
       detect-libc: 2.1.2
 
-  '@posthog/coherence@1.10.0':
+  '@posthog/coherence@1.10.1':
     optionalDependencies:
       pyright: 1.1.414
       typescript: 5.9.3
