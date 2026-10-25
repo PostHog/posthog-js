@@ -463,6 +463,7 @@ function record<T = eventWithTime>(
   let incrementalSnapshotCount = 0;
   // Set per id — one iframe id can collect several cleanups across loads.
   const iframeObserverCleanups = new Map<number, Set<listenerHandler>>();
+  const observedIframeDocuments = new Map<Document, listenerHandler>();
 
   // Forward-declared; assigned inside the try{} block where `handlers` is
   // in scope. Optional-typed so a premature call is a no-op rather than a
@@ -1036,8 +1037,15 @@ function record<T = eventWithTime>(
     const loadListener = (iframeEl: HTMLIFrameElement) => {
       try {
         const iframeId = mirror.getId(iframeEl);
-        const cleanup = observe(iframeEl.contentDocument!);
-        if (typeof cleanup === 'function') {
+        const iframeDocument = iframeEl.contentDocument;
+        if (!iframeDocument || observedIframeDocuments.has(iframeDocument)) return;
+        const stopObserving = observe(iframeDocument);
+        if (typeof stopObserving === 'function') {
+          const cleanup = () => {
+            observedIframeDocuments.delete(iframeDocument);
+            stopObserving();
+          };
+          observedIframeDocuments.set(iframeDocument, cleanup);
           handlers.push(cleanup);
           // Accumulate cleanups across iframe navigations.
           if (iframeId !== -1) {
@@ -1171,6 +1179,7 @@ function record<T = eventWithTime>(
       iframeManager.removeLoadListener();
       iframeManager.destroy();
       iframeObserverCleanups.clear();
+      observedIframeDocuments.clear();
       // Global shadow teardown belongs to the recording lifecycle, not per-buffer reset() which would fire on every iframe teardown.
       shadowDomManager.reset();
       mirror.reset();
