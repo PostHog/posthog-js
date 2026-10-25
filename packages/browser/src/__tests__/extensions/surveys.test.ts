@@ -9,11 +9,11 @@ import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-t
 import { FlagsResponse } from '../../types'
 import { createMockPostHog } from '../helpers/posthog-instance'
 
-const createSurveyFeatureFlags = (values: Record<string, boolean | string>): PostHogFeatureFlags => {
+const createSurveyFeatureFlags = (values: Record<string, boolean | string>): PostHog['featureFlags'] => {
     const flags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
     vi.spyOn(flags, 'getFeatureFlag').mockImplementation((key) => values[key])
     vi.spyOn(flags, 'isFeatureEnabled').mockImplementation((key) => !!values[key])
-    return flags
+    return flags as unknown as PostHog['featureFlags']
 }
 
 describe('SurveyManager', () => {
@@ -72,7 +72,7 @@ describe('SurveyManager', () => {
             is_capturing: vi.fn(() => true),
             capture: vi.fn(),
             featureFlags: createSurveyFeatureFlags(flagsResponse.featureFlags),
-            surveys: { getSurveys: vi.fn((callback) => callback(mockSurveys)) },
+            surveys: { getSurveys: vi.fn((callback) => callback(mockSurveys)) } as unknown as PostHog['surveys'],
         })
 
         surveyManager = new SurveyManager(getSurveyRenderContext(mockPostHog)!)
@@ -110,7 +110,7 @@ describe('SurveyManager', () => {
 
     describe('on a core without is_capturing (version skew)', () => {
         beforeEach(() => {
-            // @ts-expect-error deliberately removing the method to emulate an older core
+            // deliberately removing the method to emulate an older core
             mockPostHog.is_capturing = undefined
         })
 

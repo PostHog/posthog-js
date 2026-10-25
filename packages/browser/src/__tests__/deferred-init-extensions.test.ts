@@ -121,7 +121,7 @@ describe('deferred extension initialization', () => {
                             instance.identify('early-logs-user')
                             instance.captureLog({ body: 'loaded callback' })
                             logger.info('logger callback')
-                            expect((instance.logs as any)._queue).toHaveLength(0)
+                            expect((instance as any).logs._queue).toHaveLength(0)
                             expect(setup).not.toHaveBeenCalled()
                             expect(loader).not.toHaveBeenCalled()
                             expect(console.log).toBe(originalLog)

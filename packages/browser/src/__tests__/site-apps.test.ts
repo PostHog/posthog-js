@@ -65,7 +65,9 @@ describe('SiteApps', () => {
             }),
             get_distinct_id: vi.fn().mockImplementation(() => 'distinctid'),
             _send_request: vi.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
-            featureFlags: new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig)),
+            featureFlags: new PostHogFeatureFlags(
+                new MutableFeatureFlagsConfigSource(defaultConfig)
+            ) as unknown as PostHog['featureFlags'],
             requestRouter: new RequestRouter(posthog),
             getGroups: () => ({ organization: '5' }),
             on: vi.fn(),

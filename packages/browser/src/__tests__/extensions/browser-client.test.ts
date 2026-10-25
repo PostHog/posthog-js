@@ -123,7 +123,7 @@ describe('BrowserClientAdapter', () => {
         const unsubscribe = vi.fn()
         let notify!: (sessionId: string) => void
         instance.onSessionId = vi.fn((listener) => {
-            notify = listener
+            notify = (sessionId) => listener(sessionId, 'window')
             listener('existing-session', 'window')
             return unsubscribe
         })
@@ -486,7 +486,7 @@ describe('BrowserClientAdapter', () => {
         expect(send).toHaveBeenCalledTimes(2)
     })
 
-    it.each([false, 'on_reject', 'always'] as const)(
+    it.each([undefined, 'on_reject', 'always'] as const)(
         'exposes live consent separately from capture permission in cookieless mode %s',
         async (cookielessMode) => {
             const instance = await createPosthogInstance(undefined, {
