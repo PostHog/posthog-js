@@ -1267,18 +1267,21 @@ export class PostHogPersistence {
      * since the identifiers last matched it. A full parse on each click made INP regress.
      */
     refreshMetaIdentifiers(): void {
+        if (this._disabled) {
+            return
+        }
         const snapshot = this._storageSnapshot()
         if (!isUndefined(snapshot) && snapshot === this._metaIdentifierStorageSnapshot) {
             return
         }
         this._refreshKeys(META_IDENTIFIER_PERSISTENCE_KEYS)
-        this._rememberMetaIdentifierStorageSnapshot()
+        // Remember the text read before the parse, so a sibling write that lands after it is parsed next time.
+        this._rememberMetaIdentifierStorageSnapshot(snapshot)
     }
 
     // A pending local change is not in storage yet, so storage does not match `props` until it is written.
-    private _rememberMetaIdentifierStorageSnapshot(): void {
-        this._metaIdentifierStorageSnapshot =
-            this._metaIdentifierChangePending.size === 0 ? this._storageSnapshot() : undefined
+    private _rememberMetaIdentifierStorageSnapshot(snapshot = this._storageSnapshot()): void {
+        this._metaIdentifierStorageSnapshot = this._metaIdentifierChangePending.size === 0 ? snapshot : undefined
     }
 
     private _storageSnapshot(): string | undefined {

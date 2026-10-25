@@ -70,4 +70,38 @@ describe('capture() hot path', () => {
         )
         expect(persistenceEntryParses(parseSpy)).toHaveLength(0)
     })
+
+    it('adopts the $fbc that another tab wrote while a refresh was parsing', () => {
+        const { posthog, storageKey } = setupWithManyFlags({ persistence: 'localStorage' })
+        const persistence = posthog.persistence!
+        const writeSiblingFbc = (value: string) => {
+            const siblingEntry = JSON.parse(localStorage.getItem(storageKey)!)
+            siblingEntry[PERSISTENCE_FACEBOOK_CLICK_ID] = { value, delivered: true }
+            localStorage.setItem(storageKey, JSON.stringify(siblingEntry))
+        }
+        writeSiblingFbc('fb.1.1700000000000.first')
+        const refreshKeys = persistence['_refreshKeys'].bind(persistence)
+        vi.spyOn(persistence as any, '_refreshKeys').mockImplementationOnce((keys) => {
+            refreshKeys(keys as string[])
+            writeSiblingFbc('fb.1.1700000000000.during-parse')
+        })
+
+        persistence.refreshMetaIdentifiers()
+        persistence.refreshMetaIdentifiers()
+
+        expect(persistence.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual({
+            value: 'fb.1.1700000000000.during-parse',
+            delivered: true,
+        })
+    })
+
+    it('does not read the persistence entry while persistence is disabled', () => {
+        const { posthog, storageKey } = setupWithManyFlags({ persistence: 'localStorage' })
+        posthog.set_config({ disable_persistence: true })
+
+        const getItemSpy = vi.spyOn(Storage.prototype, 'getItem')
+        posthog.capture('$autocapture')
+
+        expect(getItemSpy.mock.calls.filter(([key]) => key === storageKey)).toHaveLength(0)
+    })
 })
