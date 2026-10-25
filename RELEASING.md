@@ -21,14 +21,14 @@ Keep each changeset description to one short, user-facing line, similar to a PR 
 Changes to `.changeset/` on `main` trigger the [`Release` workflow](https://github.com/PostHog/posthog-js/actions/workflows/release.yml). It can also be started through workflow dispatch. The workflow:
 
 1. Waits for approval and creates the version-bump commit on `main`.
-2. For each changed public browser package, builds and uploads immutable assets to the US and EU S3 buckets. `posthog-js` includes regional toolbar assets; `@posthog/browser` has a separate, toolbar-independent build. Each package promotes its aliases from the same build artifacts only after both regions verify its immutable assets.
+2. If the version of the `posthog-js` browser package changed, builds and uploads its immutable browser and toolbar assets to the US and EU S3 buckets. Only after both regions verify successfully does a second phase promote the major-version and compatibility aliases, using the same build artifacts.
 3. Publishes the changed packages to npm.
 4. Creates package tags and GitHub releases.
 5. Dispatches downstream dependency upgrades and reports the result in Slack.
 
-### Browser S3/CDN gate
+### `posthog-js` S3/CDN gate
 
-The browser S3 release happens before npm publishing. When `posthog-js` changes, every npm publish job is gated on:
+The `posthog-js` S3 release happens before npm publishing. When `posthog-js` changes, every npm publish job is gated on:
 
 - successfully identifying the new browser version;
 - building the browser distribution;
@@ -36,7 +36,7 @@ The browser S3 release happens before npm publishing. When `posthog-js` changes,
 - successfully uploading and verifying immutable assets in both the US and EU S3 buckets; and
 - successfully promoting and verifying aliases in both regions (prereleases verify immutable assets but do not write aliases).
 
-If any of that work fails, no package from the coordinated npm release is published. If `posthog-js` did not change, its S3 jobs are skipped; the separate `@posthog/browser` gate still applies.
+If any of that work fails, no package from the coordinated npm release is published. If `posthog-js` did not change, its S3 jobs are skipped and npm publishing proceeds normally.
 
 A stable `posthog-js` release uploads:
 
@@ -46,9 +46,9 @@ A stable `posthog-js` release uploads:
 
 Prerelease versions receive only immutable versioned assets. The workflow does not purge CDN caches. Mutable aliases use `Cache-Control: public, max-age=300`, so they can continue serving cached bytes for up to five minutes. Versioned assets use `Cache-Control: public, max-age=31536000, immutable`.
 
-### `@posthog/browser` S3 gate
+### `@posthog/browser` S3 publication
 
-While `packages/browser-next/package.json` is private, its version check and S3 uploads are skipped. Once public, a new version must complete both regional immutable uploads and alias phases before its npm publication. Failed or indeterminate version checks block publication of this package.
+S3 publication runs independently of npm publication. The workflow compares `packages/browser-next/package.json` at the pinned Changesets version-bump commit with its parent and publishes S3 assets when the package is public and its version changed. This decision remains the same on retries, regardless of npm publication status.
 
 The workflow builds `pnpm --filter @posthog/browser build:cdn` once from the pinned Changesets version-bump commit, after building workspace dependencies. Both regions and phases consume the same `posthog-browser-dist` artifact, containing `posthog.js`, deferred chunks, and source maps.
 

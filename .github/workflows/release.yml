@@ -865,28 +865,23 @@ jobs:
         permissions:
             contents: read
         outputs:
-            is-new-version: ${{ steps.manifest.outputs.private == 'true' && 'false' || steps.check-version.outputs.is-new-version }}
+            version-changed: ${{ steps.check-version.outputs.version-changed }}
             committed-version: ${{ steps.check-version.outputs.committed-version }}
         steps:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
-                  fetch-depth: 1
-
-            - name: Check whether @posthog/browser publication is enabled
-              id: manifest
-              run: |
-                  set -euo pipefail
-                  is_private=$(jq -r '.private == true' packages/browser-next/package.json)
-                  echo "private=$is_private" >> "$GITHUB_OUTPUT"
+                  fetch-depth: 2
 
             - name: Check @posthog/browser version
               id: check-version
-              if: steps.manifest.outputs.private != 'true'
-              uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2.1.1
-              with:
-                  path: packages/browser-next
+              run: |
+                  set -euo pipefail
+                  previous_version=$(git show HEAD^:packages/browser-next/package.json | jq -r '.version')
+                  jq -r --arg previous "$previous_version" \
+                      '"committed-version=\(.version)", "version-changed=\(.private != true and .version != $previous)"' \
+                      packages/browser-next/package.json >> "$GITHUB_OUTPUT"
 
     build-posthog-browser-s3-artifacts:
         name: Build @posthog/browser assets for S3
@@ -895,7 +890,7 @@ jobs:
         if: >-
             always() &&
             needs.check-posthog-browser-version.result == 'success' &&
-            needs.check-posthog-browser-version.outputs.is-new-version == 'true'
+            needs.check-posthog-browser-version.outputs.version-changed == 'true'
         permissions:
             contents: read
         steps:
@@ -935,7 +930,7 @@ jobs:
         if: >-
             always() &&
             needs.check-posthog-browser-version.result == 'success' &&
-            needs.check-posthog-browser-version.outputs.is-new-version == 'true' &&
+            needs.check-posthog-browser-version.outputs.version-changed == 'true' &&
             needs.build-posthog-browser-s3-artifacts.result == 'success'
         environment: 'S3 Upload'
         permissions:
@@ -1019,7 +1014,7 @@ jobs:
         if: >-
             always() &&
             needs.check-posthog-browser-version.result == 'success' &&
-            needs.check-posthog-browser-version.outputs.is-new-version == 'true' &&
+            needs.check-posthog-browser-version.outputs.version-changed == 'true' &&
             needs.upload-posthog-browser-s3-immutable.result == 'success'
         environment: 'S3 Upload'
         permissions:
@@ -1090,47 +1085,35 @@ jobs:
                   VERSION: ${{ needs.check-posthog-browser-version.outputs.committed-version }}
               run: node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --aliases-only
 
-    gate-posthog-browser-publish:
-        name: Gate @posthog/browser npm publishing on S3
-        needs: [version-bump, notify-approval-needed, check-posthog-browser-version, upload-posthog-browser-s3]
+    notify-posthog-browser-s3-failed:
+        name: Notify @posthog/browser S3 failure
+        needs:
+            [
+                notify-approval-needed,
+                check-posthog-browser-version,
+                build-posthog-browser-s3-artifacts,
+                upload-posthog-browser-s3-immutable,
+                upload-posthog-browser-s3,
+            ]
         runs-on: ubuntu-latest
-        if: always() && needs.version-bump.outputs.commit-hash != ''
+        if: >-
+            always() &&
+            (
+                needs.check-posthog-browser-version.result == 'failure' ||
+                needs.build-posthog-browser-s3-artifacts.result == 'failure' ||
+                needs.upload-posthog-browser-s3-immutable.result == 'failure' ||
+                needs.upload-posthog-browser-s3.result == 'failure'
+            )
         permissions: {}
         steps:
-            - name: Require successful @posthog/browser S3 release before npm publishing
-              env:
-                  CHECK_RESULT: ${{ needs.check-posthog-browser-version.result }}
-                  IS_NEW_VERSION: ${{ needs.check-posthog-browser-version.outputs.is-new-version }}
-                  UPLOAD_RESULT: ${{ needs.upload-posthog-browser-s3.result }}
-              run: |
-                  set -euo pipefail
-                  if [ "$CHECK_RESULT" != 'success' ]; then
-                      echo '::error::Cannot determine whether @posthog/browser requires S3 publication.'
-                      exit 1
-                  fi
-                  case "$IS_NEW_VERSION" in
-                      true)
-                          if [ "$UPLOAD_RESULT" != 'success' ]; then
-                              echo '::error::Cannot publish @posthog/browser until its S3 release succeeds in both regions.'
-                              exit 1
-                          fi
-                          ;;
-                      false) ;;
-                      *)
-                          echo "::error::Invalid @posthog/browser version-check result: '$IS_NEW_VERSION'."
-                          exit 1
-                          ;;
-                  esac
-
             - name: Notify Slack - @posthog/browser S3 failed
-              if: failure()
               continue-on-error: true
               uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Blocked `@posthog/browser` npm publication because its S3 release did not succeed. <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>'
+                  message: '❌ `@posthog/browser` S3 release failed. <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>'
                   emoji_reaction: 'x'
 
     check-browser-version:
