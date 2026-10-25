@@ -22,7 +22,7 @@ import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { compareAssets, digest, validateUploads, validateWorkers } from './assertions.mjs'
 
-const fixtures = ['next14', 'next15', 'next16']
+const fixtures = ['next15-react18', 'next15', 'next16']
 const directory = import.meta.dirname
 const repository = path.resolve(directory, '../../../..')
 const artifactRoot = path.join(repository, 'test-results/nextjs-integration')
@@ -123,6 +123,12 @@ async function prepare() {
     recursive: true,
     filter: (source) => path.basename(source) !== 'node_modules',
   })
+  for (const name of fixtures) {
+    const { next, react } = json(path.join(workspace, name, 'package.json')).dependencies
+    assert.equal(next.split('.')[0], name.match(/^next(\d+)/)[1], `${name} must use its named Next.js major`)
+    const reactMajor = name.match(/react(\d+)/)?.[1]
+    if (reactMajor) assert.equal(react.split('.')[0], reactMajor, `${name} must use its named React major`)
+  }
   const store = process.env.NEXTJS_INTEGRATION_STORE_DIR
   await run('pnpm', ['install', '--frozen-lockfile', '--ignore-scripts', ...(store ? ['--store-dir', store] : [])], {
     cwd: workspace,
