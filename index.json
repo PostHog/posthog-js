@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/5442": {
+    "key": "PostHog/posthog-js/issue/5442",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5442",
+    "url": "https://github.com/PostHog/posthog-js/issues/5442",
+    "conclusion": "Confirmed configuration bug: the Expo 57 example enables pnpm's no-downgrade trust policy but omits the existing scoped exception required by its locked dependency graph.",
+    "labels": [
+      "react-native",
+      "team/client-libraries",
+      "bug"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/5443",
+    "closed": false,
+    "updatedAt": "2026-10-26T22:30:56.796Z"
+  },
   "PostHog/posthog-js/issue/5435": {
     "key": "PostHog/posthog-js/issue/5435",
     "repo": "PostHog/posthog-js",
@@ -2941,18 +2956,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-07-02T09:32:12.004Z"
-  },
-  "PostHog/posthog-js/issue/3614": {
-    "key": "PostHog/posthog-js/issue/3614",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3614",
-    "url": "https://github.com/PostHog/posthog-js/issues/3614",
-    "conclusion": "Likely a real LLM analytics bug, but the report points to the Python SDK or backend trace processing rather than a clear posthog-js package issue.",
-    "labels": [
-      "bug",
-      "team/llm-analytics"
-    ],
-    "closed": false,
-    "updatedAt": "2026-07-02T09:30:32.128Z"
   }
 }
