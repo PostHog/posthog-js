@@ -48,7 +48,7 @@ Prerelease versions receive only immutable versioned assets. The workflow does n
 
 ### `@posthog/browser` S3 publication
 
-S3 publication runs independently of npm publication. The workflow compares `packages/browser-next/package.json` at the pinned Changesets version-bump commit with its parent and publishes S3 assets when the package is public and its version changed. This decision remains the same on retries, regardless of npm publication status.
+S3 publication runs independently of npm publication. The workflow compares `packages/browser-next/package.json` at the pinned Changesets version-bump commit with its parent and publishes S3 assets when its version changed. This decision remains the same on retries, regardless of npm publication status.
 
 The workflow builds `pnpm --filter @posthog/browser build:cdn` once from the pinned Changesets version-bump commit, after building workspace dependencies. Both regions and phases consume the same `posthog-browser-dist` artifact, containing `posthog.js`, deferred chunks, and source maps.
 
