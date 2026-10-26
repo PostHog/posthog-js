@@ -98,6 +98,9 @@ packageExtensions:
 minimumReleaseAgeExclude:
   - '@posthog/cli'
   - '@posthog/coherence@1.7.1'
+  # convex, next and nuxt pin posthog-node ^5 from the registry; a new 5.x release must not wait 7 days.
+  - '@posthog/core'
+  - posthog-node
   - posthog-react-native-session-replay
   - web-vitals@6.2.1
 
