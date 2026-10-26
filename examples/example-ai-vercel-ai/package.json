@@ -19,7 +19,7 @@
         "@ai-sdk/google": "^1.0.0",
         "@opentelemetry/sdk-node": "^0.217.0",
         "@opentelemetry/resources": "^2.0.0",
-        "zod": "^3.0.0"
+        "zod": "^4.6.6"
     },
     "devDependencies": {
         "tsx": "^4.0.0",
