@@ -9,11 +9,11 @@ const compiler = rspack({
     mode: 'production',
     context: root,
     target: ['web', 'es2022'],
-    entry: { posthog: './snippet/entry.ts' },
+    entry: { script: './snippet/entry.ts' },
     devtool: 'source-map',
     output: {
         path: `${root}dist-cdn`,
-        filename: 'posthog.js',
+        filename: 'script.js',
         chunkFilename: 'chunks/[name].[contenthash:16].js',
         publicPath: 'auto',
         uniqueName: `posthog-browser-${version}`,

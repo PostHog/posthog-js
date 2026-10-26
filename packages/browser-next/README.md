@@ -43,10 +43,7 @@ Use `analytics: false` to keep the default entrypoint buffer-only, or import `cr
 The CDN build supports a plain external classic script in ordinary, `async`, or `defer` placement. The proposed asset namespace is `/static/browser/<exact-version-or-major>/`; availability depends on CDN deployment. For example, once deployed:
 
 ```html
-<script
-    async
-    src="https://us-assets.i.posthog.com/static/browser/0/posthog.js?projectToken=YOUR_PROJECT_TOKEN"
-></script>
+<script async src="https://us-assets.i.posthog.com/static/browser/0/script.js?projectToken=YOUR_PROJECT_TOKEN"></script>
 ```
 
 The first response embeds the client core. Optional implementations load through native bundler-generated script chunks relative to that script's directory, including when assets and the page have different origins. Publish the entire `dist-cdn` tree together, keeping hashed chunks available during alias updates. Query parameters and fragments are not forwarded to chunk URLs. When the installing script has a CSP nonce, deferred chunk scripts inherit it. The asset host is not the ingestion host: the SDK's US ingestion default still applies. Set `apiHost` explicitly for EU ingestion or a proxy, URL-encoding its value, for example `&amp;apiHost=https%3A%2F%2Feu.i.posthog.com` in HTML.
@@ -85,7 +82,7 @@ pnpm --filter @posthog/browser bundle-size:cdn
 pnpm --filter @posthog/browser test:snippet
 ```
 
-`dist-cdn/posthog.js`, its hashed `chunks/`, and source maps are CDN-only artifacts, outside the npm package's `dist` graph. `test:snippet` serves the exact generated scripts in plain HTML from a separate nested asset origin, and verifies real Capture V1 delivery against the checked-in SDK mock server in Chromium, Firefox, and WebKit. All browser requests are restricted to the local fixture origins. Attribution reports distinguish actual minified/compressed artifact sizes from transformed module sizes before minification.
+`dist-cdn/script.js`, its hashed `chunks/`, and source maps are CDN-only artifacts, outside the npm package's `dist` graph. `test:snippet` serves the exact generated scripts in plain HTML from a separate nested asset origin, and verifies real Capture V1 delivery against the checked-in SDK mock server in Chromium, Firefox, and WebKit. All browser requests are restricted to the local fixture origins. Attribution reports distinguish actual minified/compressed artifact sizes from transformed module sizes before minification.
 
 ## Autocapture
 

@@ -50,14 +50,14 @@ Prerelease versions receive only immutable versioned assets. The workflow does n
 
 S3 publication runs independently of npm publication. The workflow compares `packages/browser-next/package.json` at the pinned Changesets version-bump commit with its parent and publishes S3 assets when its version changed. This decision remains the same on retries, regardless of npm publication status.
 
-The workflow builds `pnpm --filter @posthog/browser build:cdn` once from the pinned Changesets version-bump commit, after building workspace dependencies. Both regions and phases consume the same `posthog-browser-dist` artifact, containing `posthog.js`, deferred chunks, and source maps.
+The workflow builds `pnpm --filter @posthog/browser build:cdn` once from the pinned Changesets version-bump commit, after building workspace dependencies. Both regions and phases consume the same `posthog-browser-dist` artifact, containing `script.js`, deferred chunks, and source maps.
 
 Stable releases publish byte-identical trees at:
 
 - `/static/browser/<exact-package-version>/` with `Cache-Control: public, max-age=31536000, immutable`;
 - `/static/browser/<major>/` with `Cache-Control: public, max-age=300`.
 
-Prereleases publish only the exact-version tree. Dependencies are uploaded and verified before `posthog.js` in both phases. Historical hashed chunks are retained for cached entries. Alias promotion is not atomic across objects or regions and does not purge CDN caches.
+Prereleases publish only the exact-version tree. Dependencies are uploaded and verified before `script.js` in both phases. Historical hashed chunks are retained for cached entries. Alias promotion is not atomic across objects or regions and does not purge CDN caches.
 
 Before stable alias promotion, the workflow requires the release version to match the current package version on `main`. Superseded retries can repair immutable URLs but cannot promote aliases, even if the newer version's S3 publication failed; retry the latest release instead. When running the phases manually, confirm the target version matches `main` before promoting aliases.
 
