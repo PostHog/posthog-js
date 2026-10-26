@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline smoke test for fixture-specific tarballs, overrides and Docker selection.
+# Smoke test for fixture-specific tarballs, minimal Docker context and offline run.
 set -euo pipefail
 runner=$(cd "$(dirname "$0")" && pwd)/run-ci.sh
 work=$(mktemp -d)
@@ -65,4 +65,4 @@ node -e 'const p=require("./artifacts/subject-context/overrides.json").packages;
 
 "$runner" "$work/artifacts" --fixtures 'nuxt-4'
 node -e 'const p=require("./artifacts/subject-context/overrides.json").packages; if (Object.keys(p).sort().join()!=="@posthog/browser-common,@posthog/cli,@posthog/core,@posthog/nuxt,@posthog/plugin-utils,@posthog/types,posthog-js,posthog-node") process.exit(1)'
-echo 'Harness override checks passed.'
+echo 'Prepared subject image checks passed.'
