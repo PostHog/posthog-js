@@ -4,7 +4,7 @@ import type { PostHog } from '../src/types'
 
 vi.mock('../src/index', () => ({ createPostHog: vi.fn() }))
 const create = vi.mocked(createPostHog)
-const url = 'https://cdn.example/nested/posthog.js?projectToken=phc_fixture'
+const url = 'https://cdn.example/nested/script.js?projectToken=phc_fixture'
 const target = () => new EventTarget() as unknown as Window & { posthog?: unknown }
 const client = () => ({ dispose: vi.fn(async () => {}) }) as unknown as PostHog
 
@@ -39,8 +39,8 @@ describe('snippet query configuration', () => {
     })
 
     it.each([
-        'https://cdn.example/posthog.js',
-        'https://cdn.example/posthog.js?projectToken=%20',
+        'https://cdn.example/script.js',
+        'https://cdn.example/script.js?projectToken=%20',
         url + '&apiHost=javascript:bad',
         url + '&apiHost=https://user:password@proxy.example',
         url + '&apiHost=https://proxy.example?token=bad',
@@ -109,7 +109,7 @@ describe('snippet installation', () => {
         vi.spyOn(console, 'error').mockImplementation(() => {
             throw new Error('console unavailable')
         })
-        await expect(startSnippet('https://cdn.example/posthog.js', target())).resolves.toBeUndefined()
+        await expect(startSnippet('https://cdn.example/script.js', target())).resolves.toBeUndefined()
     })
 
     it('contains initialization failure, redacts errors, and permits a subsequent tag to retry', async () => {
