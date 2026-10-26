@@ -181,6 +181,7 @@ describe('emails.send', () => {
     [404, 'not_found', 'not_found'],
     [409, 'idempotency_key_in_flight', 'concurrent_idempotent_requests'],
     [422, 'idempotency_key_reused', 'invalid_idempotent_request'],
+    [422, 'recipient_suppressed', 'validation_error'],
     [429, 'throttled', 'rate_limit_exceeded'],
     [429, 'quota_limited', 'monthly_quota_exceeded'],
     [503, 'delivery_unavailable', 'service_unavailable'],
@@ -255,14 +256,19 @@ describe('emails.send', () => {
     expect(fetch).toHaveBeenCalledTimes(attempts)
   })
 
-  it('times out a request that never answers', async () => {
+  it('times out a request that answers too late and releases the late response', async () => {
     makeClient({ emailRequestTimeoutMs: 1_000 })
-    fetch.mockImplementation(() => new Promise(() => {}))
+    let answer!: (response: unknown) => void
+    fetch.mockImplementation(() => new Promise((resolve) => (answer = resolve)))
+    const cancel = vi.fn()
 
     const pending = send({ maxRetries: 0 })
     await vi.advanceTimersByTimeAsync(1_000)
-
     expect((await pending).error?.code).toBe('network_error')
+
+    answer({ status: 202, headers: new Headers(), text: async () => '{}', body: { cancel } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(cancel).toHaveBeenCalledTimes(1)
   })
 
   it('does not retry an acceptance without a message ID', async () => {

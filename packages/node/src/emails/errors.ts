@@ -78,7 +78,8 @@ function emailErrorName(status: number | undefined, code: string): EmailErrorNam
     case 409:
       return code === 'template_outdated' ? 'validation_error' : 'concurrent_idempotent_requests'
     case 422:
-      return 'invalid_idempotent_request'
+      // The template send route also answers 422 for send checks such as recipient_suppressed.
+      return code === 'idempotency_key_reused' ? 'invalid_idempotent_request' : 'validation_error'
     case 429:
       return code === 'quota_limited' ? 'monthly_quota_exceeded' : 'rate_limit_exceeded'
     case 503:

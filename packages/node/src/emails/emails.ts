@@ -162,13 +162,19 @@ export class EmailSender implements Emails {
         controller.abort(timeoutError)
       }, timeoutMs)
     })
+    const fetchPromise = Promise.resolve().then(() =>
+      this.hooks.fetch(url, { method: 'POST', headers, body, signal: controller.signal })
+    )
+    void fetchPromise
+      .then((lateResponse) => {
+        if (controller.signal.aborted) {
+          // Release a late response from an injected fetch that ignored the deadline, so it frees its connection.
+          void Promise.resolve(lateResponse.body?.cancel()).catch(() => {})
+        }
+      })
+      .catch(() => {})
     try {
-      const response = await Promise.race([
-        Promise.resolve().then(() =>
-          this.hooks.fetch(url, { method: 'POST', headers, body, signal: controller.signal })
-        ),
-        deadline,
-      ])
+      const response = await Promise.race([fetchPromise, deadline])
       const text = await Promise.race([response.text(), deadline])
       return { status: response.status, payload: parseJson(text), retryAfterMs: readRetryAfter(response) }
     } finally {
