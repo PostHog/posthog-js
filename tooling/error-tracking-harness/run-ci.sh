@@ -3,14 +3,14 @@
 # From the repository root: tooling/error-tracking-harness/run-ci.sh <absolute artifact directory> [--fixtures names] [harness args...]
 #
 # HARNESS_IMAGE must be the digest-pinned image: a tag could change under CI, a digest cannot.
-# The harness runs with no network; plugin overrides come from the packed tarballs.
+# The image build resolves selected tarballs once; the test run has no network.
 set -euo pipefail
 artifacts=${1:?absolute artifact directory required}
 shift
 [[ "$artifacts" = /* ]] || { echo 'Absolute artifact directory required' >&2; exit 2; }
 mkdir -p "$artifacts"
 
-# Override only plugins used by the selected fixtures: the harness rejects unused overrides.
+# Prepare exactly the fixture set whose PR-built dependencies will enter the image.
 fixtures='next-14,next-15,next-16-turbopack,next-16-webpack,nuxt-4,rollup-4,vite-8,vite-8-sri,webpack-5.112,webpack-5.112-sri'
 args=()
 while (( $# )); do
@@ -19,13 +19,13 @@ while (( $# )); do
             [[ $# -ge 2 ]] || { echo '--fixtures needs a value' >&2; exit 2; }
             fixtures=$2; shift 2 ;;
         --fixtures=*) fixtures=${1#*=}; shift ;;
-        --tags|--tags=*) echo 'Use --fixtures with local plugin overrides, not --tags.' >&2; exit 2 ;;
+        --tags|--tags=*) echo 'Use --fixtures when building a prepared subject image, not --tags.' >&2; exit 2 ;;
         *) args+=("$1"); shift ;;
     esac
 done
 IFS=, read -r -a names <<< "$fixtures"
 (( ${#names[@]} > 0 )) || { echo 'Empty fixture selection' >&2; exit 2; }
-# Bind the workspace dependency closure of each fixture. Packing without overriding
+# Bind the workspace dependency closure of each fixture. Packing without installing
 # would silently exercise baked releases instead of this checkout's SDKs and utilities.
 overrides=()
 add_overrides() {
@@ -49,8 +49,8 @@ for fixture in "${names[@]}"; do
     esac
 done
 # The npm CLI shim is a plugin dependency, separate from the selected CLI binary.
-# A transitive offline reinstall needs its tarball even though the harness passes
-# cliBinaryPath explicitly and never executes the shim's postinstall download.
+# Installation needs its tarball even though the harness passes cliBinaryPath
+# explicitly and never executes the shim's postinstall download.
 add_overrides @posthog/cli
 filters=()
 for package in "${overrides[@]}"; do
@@ -80,29 +80,35 @@ NODE
 npm --prefix "$artifacts" pack "@posthog/cli@$cli_version" --pack-destination "$PACKAGE_DEST" --ignore-scripts --silent
 ls "$PACKAGE_DEST" > "$artifacts/subject.txt"
 
-# The new harness accepts named local tarballs, not --plugins subject. Locate tarballs by
-# package identity rather than relying on pnpm's archive filename convention. Other packed
-# workspace packages are build dependencies; only selected packages enter the manifest.
-node - "$PACKAGE_DEST" "${overrides[@]}" <<'NODE'
+# Stage only selected tarballs in the Docker context (never the repository or secrets).
+context="$artifacts/subject-context"
+rm -rf "$context"
+mkdir -p "$context"
+node - "$PACKAGE_DEST" "$context" "${overrides[@]}" <<'NODE'
 const { execFileSync } = require('node:child_process')
-const { readdirSync, writeFileSync } = require('node:fs')
+const { copyFileSync, readdirSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const directory = process.argv[2]
-const expected = new Set(process.argv.slice(3))
+const context = process.argv[3]
+const expected = new Set(process.argv.slice(4))
 const packages = {}
 for (const file of readdirSync(directory).filter((name) => name.endsWith('.tgz'))) {
     const manifest = JSON.parse(execFileSync('tar', ['-xzOf', path.join(directory, file), 'package/package.json'], { encoding: 'utf8' }))
     if (!expected.has(manifest.name)) continue
     if (packages[manifest.name]) throw new Error(`Duplicate tarball for ${manifest.name}`)
     packages[manifest.name] = `/subject/${file}`
+    copyFileSync(path.join(directory, file), path.join(context, file))
 }
 const missing = [...expected].filter((name) => !packages[name])
 if (missing.length) throw new Error(`Missing override tarballs: ${missing.join(', ')}`)
-writeFileSync(path.join(directory, 'overrides.json'), JSON.stringify({ packages }, null, 2) + '\n')
+writeFileSync(path.join(context, 'overrides.json'), JSON.stringify({ packages }, null, 2) + '\n')
 NODE
 
-# pnpm-isolated cannot bind local overrides; select only supported plugin fixtures.
+# Network access is limited to this trusted image build; runtime has none.
+image="error-tracking-harness:subject-$(git rev-parse --short=12 HEAD)-${GITHUB_RUN_ID:-local}"
 docker pull "$HARNESS_IMAGE"
-docker run --rm --network none \
-    -v "$PACKAGE_DEST:/subject:ro" -v "$artifacts:/artifacts" \
-    "$HARNESS_IMAGE" --artifacts /artifacts --overrides /subject/overrides.json --fixtures "$fixtures" "${args[@]}"
+docker build -f tooling/error-tracking-harness/Dockerfile.subject \
+    --build-arg "HARNESS_IMAGE=$HARNESS_IMAGE" --build-arg "FIXTURES=$fixtures" \
+    -t "$image" "$context"
+docker run --rm --network none -v "$artifacts:/artifacts" \
+    "$image" --artifacts /artifacts --fixtures "$fixtures" "${args[@]}"
