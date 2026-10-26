@@ -1688,7 +1688,6 @@
         },
         {
           "category": "",
-          "description": "",
           "details": null,
           "id": "getFeatureFlagDetails",
           "showDocs": true,
@@ -1700,7 +1699,7 @@
               "code": "// Generated example for getFeatureFlagDetails\nposthog.getFeatureFlagDetails();"
             }
           ],
-          "releaseTag": "deprecated",
+          "releaseTag": "public",
           "params": [],
           "returnType": {
             "id": "PostHogFeatureFlagDetails | undefined",
@@ -1710,7 +1709,7 @@
         },
         {
           "category": "",
-          "description": "",
+          "description": "Returns the payload of every loaded flag, keyed by flag key.",
           "details": null,
           "id": "getFeatureFlagPayloads",
           "showDocs": true,
@@ -1767,7 +1766,7 @@
         },
         {
           "category": "",
-          "description": "",
+          "description": "Returns the value of every loaded flag, keyed by flag key.",
           "details": null,
           "id": "getFeatureFlags",
           "showDocs": true,
@@ -1789,7 +1788,7 @@
         },
         {
           "category": "",
-          "description": "",
+          "description": "Returns the values and payloads of every loaded flag, as two maps keyed by flag key.",
           "details": null,
           "id": "getFeatureFlagsAndPayloads",
           "showDocs": true,
@@ -1920,7 +1919,7 @@
         },
         {
           "category": "",
-          "description": "",
+          "description": "Calls `cb` with the flag's value whenever flags load.",
           "details": null,
           "id": "onFeatureFlag",
           "showDocs": true,

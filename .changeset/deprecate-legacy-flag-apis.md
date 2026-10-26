@@ -4,4 +4,4 @@
 'posthog-js-lite': patch
 ---
 
-Deprecate `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()` and `getFeatureFlagDetails()` in favor of `getAllFeatureFlags()` and `getFeatureFlagResult()`, `onFeatureFlag()` in favor of `onFeatureFlags()`, and the `cb` option of `reloadFeatureFlags()` in favor of `reloadFeatureFlagsAsync()`. They continue to work.
+Deprecate `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` in favor of `getAllFeatureFlags()`, `onFeatureFlag()` in favor of `onFeatureFlags()`, and the `cb` option of `reloadFeatureFlags()` in favor of `reloadFeatureFlagsAsync()`. In React Native, also deprecate the `useFeatureFlagWithPayload()` hook in favor of `useFeatureFlagResult()`. They continue to work.

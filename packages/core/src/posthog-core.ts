@@ -1146,6 +1146,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   /**
+   * Returns the payload of every loaded flag, keyed by flag key.
+   *
    * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
    */
   getFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
@@ -1153,6 +1155,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   /**
+   * Returns the value of every loaded flag, keyed by flag key.
+   *
    * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
    */
   getFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
@@ -1161,9 +1165,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this.getFeatureFlagDetails()?.featureFlags
   }
 
-  /**
-   * @deprecated Use `getAllFeatureFlags()` for every flag, or `getFeatureFlagResult()` for one flag.
-   */
   getFeatureFlagDetails(): PostHogFeatureFlagDetails | undefined {
     // NOTE: We don't check for _initPromise here as the function is designed to be
     // callable before the state being loaded anyways
@@ -1198,6 +1199,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   /**
+   * Returns the values and payloads of every loaded flag, as two maps keyed by flag key.
+   *
    * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
    */
   getFeatureFlagsAndPayloads(): {
@@ -1233,6 +1236,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   // Used when we want to trigger the reload but we don't care about the result
   reloadFeatureFlags(options?: {
     /**
+     * Called with the loaded flags when the reload finishes.
+     *
      * @deprecated Use `reloadFeatureFlagsAsync()` to wait for the reload instead.
      */
     cb?: (err?: Error, flags?: PostHogFlagsResponse['featureFlags']) => void
@@ -1277,6 +1282,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   /**
+   * Calls `cb` with the flag's value whenever flags load.
+   *
    * @deprecated Use `onFeatureFlags()` and read the flag with `getFeatureFlagResult()` in the callback.
    */
   onFeatureFlag(key: string, cb: (value: FeatureFlagValue) => void): () => void {
