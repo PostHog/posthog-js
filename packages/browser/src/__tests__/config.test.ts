@@ -6,9 +6,9 @@ import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-commo
 import { isFunction } from '@posthog/core'
 
 describe('config', () => {
-    it('keeps synchronous replay fetch disabled by default', () => {
-        expect(defaultConfig().__preview_replay_sync_fetch).toBe(false)
-        expect(defaultConfig('2026-05-30').__preview_replay_sync_fetch).toBe(false)
+    it('enables synchronous replay fetch by default for new cores', () => {
+        expect(defaultConfig().__preview_replay_sync_fetch).toBe(true)
+        expect(defaultConfig('2026-05-30').__preview_replay_sync_fetch).toBe(true)
     })
 
     describe('memory persistence without bootstrap.distinctID', () => {

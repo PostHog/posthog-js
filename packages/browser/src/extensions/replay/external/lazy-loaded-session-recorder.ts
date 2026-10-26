@@ -859,8 +859,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                             this._networkPayloadCapture,
                             isIngestionEndpoint
                         ),
-                        // This private init option is deliberately off by default, including for old
-                        // cores loading a new recorder from the unversioned CDN. Never infer it from a version.
+                        // Only new cores default this private option to true. Old cores loading the
+                        // unversioned recorder lack it and must retain legacy fetch delegation.
                         captureFetchSynchronously: this._instance.config.__preview_replay_sync_fetch === true,
                     })
                 )
