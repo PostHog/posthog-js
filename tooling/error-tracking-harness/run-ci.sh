@@ -3,7 +3,7 @@
 # From the repository root: tooling/error-tracking-harness/run-ci.sh <absolute artifact directory> [harness args...]
 #
 # HARNESS_IMAGE must be the digest-pinned image: a tag could change under CI, a digest cannot.
-# The harness runs with no network; the packed plugins are the only thing it sees from here.
+# The harness runs with no network; plugin overrides come from the packed tarballs.
 set -euo pipefail
 artifacts=${1:?absolute artifact directory required}
 shift
@@ -27,7 +27,34 @@ pnpm turbo run package \
     --filter=posthog-node --filter=posthog-js
 ls "$PACKAGE_DEST" > "$artifacts/subject.txt"
 
+# The new harness accepts named local tarballs, not --plugins subject. Locate tarballs by
+# package identity rather than relying on pnpm's archive filename convention. Other packed
+# workspace packages are build dependencies; fixture bindings currently override the plugins.
+node - "$PACKAGE_DEST" <<'NODE'
+const { execFileSync } = require('node:child_process')
+const { readdirSync, writeFileSync } = require('node:fs')
+const path = require('node:path')
+const directory = process.argv[2]
+const expected = new Set(['@posthog/webpack-plugin', '@posthog/rollup-plugin', '@posthog/nextjs-config', '@posthog/nuxt'])
+const packages = {}
+for (const file of readdirSync(directory).filter((name) => name.endsWith('.tgz'))) {
+    const manifest = JSON.parse(execFileSync('tar', ['-xzOf', path.join(directory, file), 'package/package.json'], { encoding: 'utf8' }))
+    if (!expected.has(manifest.name)) continue
+    if (packages[manifest.name]) throw new Error(`Duplicate tarball for ${manifest.name}`)
+    packages[manifest.name] = `/subject/${file}`
+}
+const missing = [...expected].filter((name) => !packages[name])
+if (missing.length) throw new Error(`Missing plugin tarballs: ${missing.join(', ')}`)
+writeFileSync(path.join(directory, 'overrides.json'), JSON.stringify({ packages }, null, 2) + '\n')
+NODE
+
+# pnpm-isolated cannot bind local overrides; exercise every supported plugin fixture instead.
+selection=(--fixtures 'next-14,next-15,next-16-turbopack,next-16-webpack,nuxt-4,rollup-4,vite-8,vite-8-sri,webpack-5.112,webpack-5.112-sri')
+for arg in "$@"; do
+    case "$arg" in --fixtures|--fixtures=*|--tags|--tags=*) selection=(); break ;; esac
+done
+
 docker pull "$HARNESS_IMAGE"
 docker run --rm --network none \
     -v "$PACKAGE_DEST:/subject:ro" -v "$artifacts:/artifacts" \
-    "$HARNESS_IMAGE" --artifacts /artifacts --plugins subject "$@"
+    "$HARNESS_IMAGE" --artifacts /artifacts --overrides /subject/overrides.json "${selection[@]}" "$@"
