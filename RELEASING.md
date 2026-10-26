@@ -59,6 +59,8 @@ Stable releases publish byte-identical trees at:
 
 Prereleases publish only the exact-version tree. Dependencies are uploaded and verified before `posthog.js` in both phases. Historical hashed chunks are retained for cached entries. Alias promotion is not atomic across objects or regions and does not purge CDN caches.
 
+Before stable alias promotion, the workflow requires the release version to match the current package version on `main`. Superseded retries can repair immutable URLs but cannot promote aliases, even if the newer version's S3 publication failed; retry the latest release instead. When running the phases manually, confirm the target version matches `main` before promoting aliases.
+
 ```sh
 node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --immutable-only
 # After immutable uploads succeed in both US and EU:

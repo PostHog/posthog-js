@@ -1055,6 +1055,19 @@ jobs:
                   role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
                   aws-region: ${{ matrix.region.aws_region }}
 
+            - name: Reject superseded browser alias promotion
+              if: ${{ !contains(needs.check-posthog-browser-version.outputs.committed-version, '-') }}
+              env:
+                  VERSION: ${{ needs.check-posthog-browser-version.outputs.committed-version }}
+              run: |
+                  set -euo pipefail
+                  git fetch --no-tags --depth=1 origin main
+                  main_version=$(git show FETCH_HEAD:packages/browser-next/package.json | jq -r '.version')
+                  if [ "$VERSION" != "$main_version" ]; then
+                      echo "::error::Refusing superseded alias promotion: $VERSION; main is $main_version"
+                      exit 1
+                  fi
+
             - name: Verify immutable assets and promote browser aliases
               env:
                   BUCKET: ${{ matrix.region.bucket }}
