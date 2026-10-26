@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.438.23
+
+### Patch Changes
+
+- [#5335](https://github.com/PostHog/posthog-js/pull/5335) [`cb34fe0`](https://github.com/PostHog/posthog-js/commit/cb34fe03c49feb636ea4537f6f6b05144d163dac) Thanks [@hpouillot](https://github.com/hpouillot)! - Enable synchronous session replay fetch capture by default for new SDK versions.
+  (2026-10-26)
+- Updated dependencies [[`cb34fe0`](https://github.com/PostHog/posthog-js/commit/cb34fe03c49feb636ea4537f6f6b05144d163dac)]:
+  - @posthog/types@1.416.1
+
 ## 1.438.22
 
 ### Patch Changes

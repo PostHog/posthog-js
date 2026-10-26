@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.416.1
+
+### Patch Changes
+
+- [#5335](https://github.com/PostHog/posthog-js/pull/5335) [`cb34fe0`](https://github.com/PostHog/posthog-js/commit/cb34fe03c49feb636ea4537f6f6b05144d163dac) Thanks [@hpouillot](https://github.com/hpouillot)! - Correct the documented default for synchronous session replay fetch capture.
+  (2026-10-26)
+
 ## 1.416.0
 
 ### Minor Changes
