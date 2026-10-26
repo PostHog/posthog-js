@@ -1,3 +1,4 @@
+import { isUndefined } from '@posthog/core'
 // Mock posthog-node
 const {
     mockCapture,
@@ -69,7 +70,7 @@ function createMockCookies(entries: Record<string, string>) {
     return {
         get: vi.fn((name: string) => {
             const value = entries[name]
-            return value !== undefined ? { name, value } : undefined
+            return isUndefined(value) ? undefined : { name, value }
         }),
         getAll: vi.fn(() => Object.entries(entries).map(([name, value]) => ({ name, value }))),
         has: vi.fn((name: string) => name in entries),
