@@ -215,6 +215,26 @@ describe('Next.js optional span context', () => {
         expect(client.getContext()).toBeUndefined()
     })
 
+    it.each([
+        ['context lookups', (requestClient: IPostHog) => requestClient.getContext()?.distinctId],
+        [
+            'captures',
+            (requestClient: IPostHog) => {
+                const captured = new Promise<string>((resolve) =>
+                    client.on('capture', (message) => resolve(message.distinct_id))
+                )
+                requestClient.capture({ event: 'nested' })
+                return captured
+            },
+        ],
+    ])('keeps nested application identity for %s', async (_, readDistinctId) => {
+        const { bridge } = await setup()
+        const distinctId = await bridge.withPostHogContext((requestClient) =>
+            requestClient.withContext({ distinctId: 'authenticated-person' }, () => readDistinctId(requestClient))
+        )
+        expect(distinctId).toBe('authenticated-person')
+    })
+
     it('isolates concurrent requests through awaited work', async () => {
         const { bridge, tracer } = await setup()
         await Promise.all(

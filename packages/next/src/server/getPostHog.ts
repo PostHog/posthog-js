@@ -13,11 +13,7 @@ import { resolveServerDistinctId, type PostHogDistinctIdResolver } from '../shar
  * AsyncLocalStorage.enterWith() doesn't propagate back to the caller
  * across the await boundary of this async function.
  */
-export function withRequestContext(
-    client: IPostHog,
-    contextData: Parameters<IPostHog['withContext']>[0],
-    options?: Parameters<IPostHog['withContext']>[2]
-): IPostHog {
+export function withRequestContext(client: IPostHog, contextData: Parameters<IPostHog['withContext']>[0]): IPostHog {
     return new Proxy(client, {
         get(target, prop, receiver) {
             if (prop === 'withContext') {
@@ -25,10 +21,7 @@ export function withRequestContext(
             }
             const value = Reflect.get(target, prop, receiver)
             if (isFunction(value)) {
-                return (...args: unknown[]) =>
-                    options
-                        ? target.withContext(contextData, () => value.apply(target, args), options)
-                        : target.withContext(contextData, () => value.apply(target, args))
+                return (...args: unknown[]) => target.withContext(contextData, () => value.apply(target, args))
             }
             return value
         },
