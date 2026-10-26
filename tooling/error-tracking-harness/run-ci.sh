@@ -25,25 +25,37 @@ while (( $# )); do
 done
 IFS=, read -r -a names <<< "$fixtures"
 (( ${#names[@]} > 0 )) || { echo 'Empty fixture selection' >&2; exit 2; }
-plugins=()
+# Bind the workspace dependency closure of each fixture. Packing without overriding
+# would silently exercise baked releases instead of this checkout's SDKs and utilities.
+overrides=()
+add_overrides() {
+    for package in "$@"; do
+        if [[ ! " ${overrides[*]} " == *" $package "* ]]; then overrides+=("$package"); fi
+    done
+}
 for fixture in "${names[@]}"; do
     case "$fixture" in
-        next-14|next-15|next-16-turbopack|next-16-webpack) plugin=@posthog/nextjs-config ;;
-        nuxt-4) plugin=@posthog/nuxt ;;
-        rollup-4|vite-8|vite-8-sri) plugin=@posthog/rollup-plugin ;;
-        webpack-5.112|webpack-5.112-sri) plugin=@posthog/webpack-plugin ;;
+        next-14|next-15|next-16-turbopack|next-16-webpack)
+            add_overrides @posthog/nextjs-config @posthog/webpack-plugin @posthog/plugin-utils \
+                posthog-node posthog-js @posthog/browser-common @posthog/core @posthog/types ;;
+        nuxt-4)
+            add_overrides @posthog/nuxt @posthog/plugin-utils posthog-node posthog-js \
+                @posthog/browser-common @posthog/core @posthog/types ;;
+        rollup-4|vite-8|vite-8-sri)
+            add_overrides @posthog/rollup-plugin @posthog/plugin-utils posthog-node @posthog/core @posthog/types ;;
+        webpack-5.112|webpack-5.112-sri)
+            add_overrides @posthog/webpack-plugin @posthog/plugin-utils posthog-node @posthog/core @posthog/types ;;
         *) echo "Unsupported fixture for local overrides: $fixture" >&2; exit 2 ;;
     esac
-    if [[ ! " ${plugins[*]} " == *" $plugin "* ]]; then plugins+=("$plugin"); fi
 done
-# Nuxt and webpack depend on core, which in turn depends on types. Bind both
-# transitive packages offline instead of using older versions baked into fixtures.
-overrides=("${plugins[@]}")
-if [[ " ${plugins[*]} " == *' @posthog/nuxt '* || " ${plugins[*]} " == *' @posthog/webpack-plugin '* ]]; then
-    overrides+=(@posthog/core @posthog/types)
-fi
+# The npm CLI shim is a plugin dependency, separate from the selected CLI binary.
+# A transitive offline reinstall needs its tarball even though the harness passes
+# cliBinaryPath explicitly and never executes the shim's postinstall download.
+add_overrides @posthog/cli
 filters=()
-for package in "${overrides[@]}"; do filters+=("--filter=$package"); done
+for package in "${overrides[@]}"; do
+    if [[ "$package" != @posthog/cli ]]; then filters+=("--filter=$package"); fi
+done
 
 if [[ ! "${HARNESS_IMAGE:-}" =~ ^ghcr\.io/posthog/error-tracking-harness@sha256:[0-9a-f]{64}$ ]]; then
     echo 'HARNESS_IMAGE must be ghcr.io/posthog/error-tracking-harness@sha256:<64 lowercase hex digits>.' >&2
@@ -52,15 +64,25 @@ fi
 printf 'HARNESS_IMAGE=%s\n' "$HARNESS_IMAGE" > "$artifacts/image.txt"
 git rev-parse HEAD > "$artifacts/source.txt"
 
-# Pack the selected plugins and overrides, plus the SDKs used by the fixtures.
+# Pack the entire selected workspace closure. Turbo builds its dependencies first.
 export PACKAGE_DEST="$PWD/target"
 rm -rf "$PACKAGE_DEST"
-pnpm turbo run package "${filters[@]}" --filter=posthog-node --filter=posthog-js
+pnpm turbo run package "${filters[@]}"
+# @posthog/cli is published outside this workspace and intentionally exempt from
+# the repository's release-age cooldown. Pack exactly the catalog version, not latest.
+cli_version=$(node <<'NODE'
+const { readFileSync } = require('node:fs')
+const match = readFileSync('pnpm-workspace.yaml', 'utf8').match(/^\s*['"]@posthog\/cli['"]:\s*~(\d+\.\d+\.\d+)\s*$/m)
+if (!match) throw new Error('Expected a tilde-pinned @posthog/cli catalog version')
+process.stdout.write(match[1])
+NODE
+)
+npm --prefix "$artifacts" pack "@posthog/cli@$cli_version" --pack-destination "$PACKAGE_DEST" --ignore-scripts --silent
 ls "$PACKAGE_DEST" > "$artifacts/subject.txt"
 
 # The new harness accepts named local tarballs, not --plugins subject. Locate tarballs by
 # package identity rather than relying on pnpm's archive filename convention. Other packed
-# workspace packages are build dependencies; bind core and types with Nuxt/webpack.
+# workspace packages are build dependencies; only selected packages enter the manifest.
 node - "$PACKAGE_DEST" "${overrides[@]}" <<'NODE'
 const { execFileSync } = require('node:child_process')
 const { readdirSync, writeFileSync } = require('node:fs')

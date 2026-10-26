@@ -25,7 +25,8 @@ while IFS= read -r path; do
         packages/nextjs-config/*) next=true ;;
         packages/nuxt/*) nuxt=true ;;
         packages/rollup-plugin/*) rollup=true ;;
-        packages/webpack-plugin/*) webpack=true ;;
+        # nextjs-config consumes the webpack plugin, so run its fixtures as well.
+        packages/webpack-plugin/*) webpack=true; next=true ;;
         *) shared=true ;;
     esac
 done <<< "$changes"
