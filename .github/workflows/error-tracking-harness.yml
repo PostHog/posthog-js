@@ -49,16 +49,34 @@ jobs:
         permissions:
             contents: read
         env:
-            # Digest of PostHog/error-tracking-harness at 9c6170aee21b. Printed by its Image workflow.
-            HARNESS_IMAGE: ghcr.io/posthog/error-tracking-harness@sha256:b6d1d184fae91e4406758b69d347eaa5b61bd2c73f4954b91bc9b53706d17902
+            # Digest of PostHog/error-tracking-harness at cb160cdfb828. Printed by its Image workflow.
+            HARNESS_IMAGE: ghcr.io/posthog/error-tracking-harness@sha256:3476b6fdaf20379001683f0f3a9d7224b7dfc0e27a429cdd33f56c520eeeab80
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
             - name: Setup environment
               uses: ./.github/actions/setup
               with:
                   build: false
+            - name: Select fixtures
+              id: fixtures
+              env:
+                  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+                  EVENT_NAME: ${{ github.event_name }}
+              run: |
+                  set -euo pipefail
+                  if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+                      fixtures=$(tooling/error-tracking-harness/select-fixtures.sh --all)
+                  else
+                      # Checkout is shallow; a missing base must run the full matrix.
+                      if [[ -n "$BASE_SHA" && ! "$BASE_SHA" =~ ^0+$ ]] && ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+                          git fetch --no-tags --depth=1 origin "$BASE_SHA" || echo 'Could not fetch base; running all fixtures.'
+                      fi
+                      fixtures=$(tooling/error-tracking-harness/select-fixtures.sh "${BASE_SHA:-0}" HEAD)
+                  fi
+                  echo "fixtures=$fixtures" >> "$GITHUB_OUTPUT"
+                  echo "Selected fixtures: $fixtures" >> "$GITHUB_STEP_SUMMARY"
             - name: Pack the plugins and run the harness
-              run: tooling/error-tracking-harness/run-ci.sh "$RUNNER_TEMP/error-tracking-harness"
+              run: tooling/error-tracking-harness/run-ci.sh "$RUNNER_TEMP/error-tracking-harness" --fixtures '${{ steps.fixtures.outputs.fixtures }}'
             - name: Report
               if: always()
               run: |
