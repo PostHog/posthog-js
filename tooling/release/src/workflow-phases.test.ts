@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { execFileSync, spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import test from 'node:test'
 
@@ -176,6 +177,60 @@ test('both @posthog/browser immutable regions are required before its aliases', 
     assert.match(aliases, /upload-browser-s3 "\$BUCKET" "\$VERSION" --aliases-only/)
     assert.ok(dependencies(aliases).includes('upload-posthog-browser-s3-immutable'))
     assert.match(aliases, /needs.upload-posthog-browser-s3-immutable.result == 'success'/)
+})
+
+test('@posthog/browser stable aliases require the current main version', () => {
+    assert.doesNotMatch(job(release, 'upload-posthog-browser-s3-immutable'), /Reject superseded/)
+    const aliases = job(release, 'upload-posthog-browser-s3')
+    const start = aliases.indexOf('            - name: Reject superseded browser alias promotion')
+    assert.notEqual(start, -1)
+    const step = aliases.slice(start, aliases.indexOf('            - name: Verify immutable assets', start))
+    assert.match(
+        step,
+        /if: \$\{\{ !contains\(needs.check-posthog-browser-version.outputs.committed-version, '-'\) \}\}/
+    )
+    const script = step.match(/ {14}run: \|\n((?: {18}.*\n|\n)+)/)?.[1]
+    assert.ok(script)
+    const root = mkdtempSync(path.join(os.tmpdir(), 'browser-alias-version-'))
+    try {
+        const origin = path.join(root, 'origin')
+        const checkout = path.join(root, 'checkout')
+        const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' })
+        mkdirSync(path.join(origin, 'packages/browser-next'), { recursive: true })
+        mkdirSync(path.join(origin, 'tooling/release'), { recursive: true })
+        writeFileSync(path.join(origin, 'tooling/release/README.md'), 'release tooling')
+        git(origin, 'init', '--quiet', '--initial-branch=main')
+        git(origin, 'config', 'user.name', 'Test')
+        git(origin, 'config', 'user.email', 'test@example.com')
+        git(origin, 'config', 'commit.gpgsign', 'false')
+        const commit = (version: string) => {
+            writeFileSync(path.join(origin, 'packages/browser-next/package.json'), JSON.stringify({ version }))
+            git(origin, 'add', 'packages/browser-next/package.json', 'tooling/release/README.md')
+            git(origin, 'commit', '--quiet', '-m', 'release')
+        }
+        commit('0.1.0')
+        git(root, 'clone', '--quiet', '--depth=1', pathToFileURL(origin).href, checkout)
+        git(checkout, 'sparse-checkout', 'set', '--cone', 'tooling/release')
+        const pinned = git(checkout, 'rev-parse', 'HEAD')
+        const run = (version: string): SpawnSyncReturns<string> =>
+            spawnSync('bash', ['-c', script.replace(/^ {18}/gm, '')], {
+                cwd: checkout,
+                env: { ...process.env, VERSION: version },
+                encoding: 'utf8',
+            })
+        assert.equal(run('0.1.0').status, 0)
+        commit('0.1.1')
+        const superseded = run('0.1.0')
+        assert.equal(superseded.status, 1, superseded.stdout + superseded.stderr)
+        assert.match(superseded.stdout, /Refusing superseded alias promotion/)
+        assert.equal(git(checkout, 'rev-parse', 'HEAD'), pinned)
+        git(checkout, 'checkout', '--quiet', '--detach', 'FETCH_HEAD')
+        assert.equal(run('0.1.1').status, 0)
+        git(checkout, 'remote', 'set-url', 'origin', pathToFileURL(path.join(root, 'missing')).href)
+        assert.notEqual(run('0.1.1').status, 0)
+    } finally {
+        rmSync(root, { recursive: true, force: true })
+    }
 })
 
 test('@posthog/browser reports S3 failures to the release approval thread', () => {
