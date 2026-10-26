@@ -868,6 +868,15 @@ export default class MutationBuffer {
         break;
       }
       case 'childList': {
+        // Runs before the blocked-parent return so hosts removed from a
+        // blocked container are released too. Still attached by the time the
+        // batch is processed means moved, not removed.
+        m.removedNodes.forEach((n) => {
+          if (!inDom(n)) {
+            this.shadowDomManager.removeShadowRootsIn(n);
+          }
+        });
+
         /**
          * Parent is blocked, ignore all child mutations
          */
@@ -882,10 +891,6 @@ export default class MutationBuffer {
 
         m.addedNodes.forEach((n) => this.genAdds(n, m.target));
         m.removedNodes.forEach((n) => {
-          // Still attached by the time the batch is processed means moved, not removed.
-          if (!inDom(n)) {
-            this.shadowDomManager.removeShadowRootsIn(n);
-          }
           const nodeId = this.mirror.getId(n);
           const parentId = isShadowRoot(m.target)
             ? this.mirror.getId(dom.host(m.target))

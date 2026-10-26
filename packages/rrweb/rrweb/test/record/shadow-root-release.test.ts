@@ -139,6 +139,22 @@ describe('releasing removed shadow hosts', () => {
     expect(addedTexts()).toContain('after-reinsert');
   });
 
+  it('releases a host removed from inside a blocked container', async () => {
+    const baseline = pageBuffers().length;
+    const container = document.getElementById('page')!;
+    const host = createHost();
+    container.appendChild(host);
+    await settle();
+    expect(pageBuffers().length).toBe(baseline + 1);
+
+    container.classList.add('rr-block');
+    await settle();
+    host.remove();
+    await settle();
+
+    expect(pageBuffers().length).toBe(baseline);
+  });
+
   it('releases a removed host even when it was moved earlier in the same batch', async () => {
     const baseline = pageBuffers().length;
     const host = createHost();

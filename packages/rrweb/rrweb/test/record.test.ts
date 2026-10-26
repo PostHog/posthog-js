@@ -1344,18 +1344,45 @@ describe('record', function (this: ISuite) {
       await settle();
       span.textContent = 'after-reinsert';
       await settle();
-
-      host.remove();
-      await settle();
-      span.textContent = 'after-final-removal';
-      await settle();
     });
     await waitForRAF(ctx.page);
 
     const serializedEvents = JSON.stringify(ctx.events);
     expect(serializedEvents).toContain('after-move');
     expect(serializedEvents).toContain('after-reinsert');
-    expect(serializedEvents).not.toContain('after-final-removal');
+  });
+
+  it('keeps shadow changes made while frozen on a host removed and re-inserted', async () => {
+    await ctx.page.evaluate(async () => {
+      const { record, freezePage } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+      const host = document.createElement('div');
+      host.attachShadow({ mode: 'open' }).innerHTML = '<span>initial</span>';
+      document.body.appendChild(host);
+      await settle();
+      const span = host.shadowRoot!.querySelector('span')!;
+
+      freezePage();
+      span.textContent = 'while-frozen';
+      await settle();
+      host.remove();
+      await settle();
+      document.body.appendChild(host);
+      await settle();
+      // 'unfreeze' happens upon a user event
+      document.body.click();
+      await settle();
+
+      span.textContent = 'after-unfreeze';
+      await settle();
+    });
+    await waitForRAF(ctx.page);
+
+    const serializedEvents = JSON.stringify(ctx.events);
+    expect(serializedEvents).toContain('while-frozen');
+    expect(serializedEvents).toContain('after-unfreeze');
   });
 
   it('records mouse movement inside a same-origin iframe as MouseMove', async () => {
