@@ -1338,9 +1338,9 @@ export class PostHogPersistence {
     }
 
     /**
-     * Refresh the Meta identifier keys from storage, so a sibling tab's update is not lost.
-     * capture() calls this on every event, so it parses storage only when storage has changed
-     * since the identifiers last matched it. A full parse on each click made INP regress.
+     * Refresh the Meta identifier keys from storage, so a sibling's update is not lost.
+     * Parses storage only when its text changed since the identifiers last matched it.
+     * Used before each write by the cookie store, which has no storage event.
      */
     refreshMetaIdentifiers(): void {
         if (this._disabled) {
@@ -1356,12 +1356,16 @@ export class PostHogPersistence {
     }
 
     // A pending local change is not in storage yet, so storage does not match `props` until it is written.
-    private _rememberMetaIdentifierStorageSnapshot(snapshot = this._storageSnapshot()): void {
-        this._metaIdentifierStorageSnapshot = this._metaIdentifierChangePending.size === 0 ? snapshot : undefined
+    private _rememberMetaIdentifierStorageSnapshot(snapshot?: string): void {
+        if (!this._storesIdentityInCookie || this._splitStorageEligible) {
+            return
+        }
+        this._metaIdentifierStorageSnapshot =
+            this._metaIdentifierChangePending.size === 0 ? (snapshot ?? this._storageSnapshot()) : undefined
     }
 
     private _storageSnapshot(): string | undefined {
-        const snapshot = this._storage._rawText ? this._storage._rawText(this._name) : this._storage._get(this._name)
+        const snapshot = this._storage._get(this._name)
         return isString(snapshot) ? snapshot : undefined
     }
 

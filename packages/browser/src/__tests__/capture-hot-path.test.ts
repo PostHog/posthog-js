@@ -98,6 +98,30 @@ describe('capture() hot path', () => {
         }
     )
 
+    it('adopts the $fbc that another tab wrote while a refresh was parsing', () => {
+        const { posthog, storageKey } = setupWithManyFlags({ persistence: 'localStorage' })
+        const persistence = posthog.persistence!
+        const writeSiblingFbc = (value: string) => {
+            const siblingEntry = JSON.parse(localStorage.getItem(storageKey)!)
+            siblingEntry[PERSISTENCE_FACEBOOK_CLICK_ID] = { value, delivered: true }
+            localStorage.setItem(storageKey, JSON.stringify(siblingEntry))
+        }
+        writeSiblingFbc('fb.1.1700000000000.first')
+        const refreshKeys = persistence['_refreshKeys'].bind(persistence)
+        vi.spyOn(persistence as any, '_refreshKeys').mockImplementationOnce((keys) => {
+            refreshKeys(keys as string[])
+            writeSiblingFbc('fb.1.1700000000000.during-parse')
+        })
+
+        persistence.refreshMetaIdentifiers()
+        persistence.refreshMetaIdentifiers()
+
+        expect(persistence.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual({
+            value: 'fb.1.1700000000000.during-parse',
+            delivered: true,
+        })
+    })
+
     it('drops a Meta identifier another tab removed', () => {
         const { posthog, storageKey } = setupWithManyFlags({ persistence: 'localStorage' })
         posthog.persistence!.register({

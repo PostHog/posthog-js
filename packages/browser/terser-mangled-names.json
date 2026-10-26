@@ -696,7 +696,6 @@
         "_random",
         "_rateCapWindowMs",
         "_rateLimiter",
-        "_rawText",
         "_read",
         "_readLegacyFromRawStorage",
         "_readMetaCookie",
