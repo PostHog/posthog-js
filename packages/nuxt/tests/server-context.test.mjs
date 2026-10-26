@@ -61,7 +61,39 @@ for (const requestContext of [undefined, false, true]) {
   assert.equal(typeof wrapper, requestContext ? 'function' : 'undefined')
   await onError(new Error('background'))
   assert.equal(errors.at(-1).distinctId, 'anonymous-id')
+  await client.withContext({ distinctId: 'authenticated-person' }, () => onError(new Error('application background')))
+  assert.equal(errors.at(-1).distinctId, requestContext ? 'authenticated-person' : 'anonymous-id')
   if (wrapper) {
+    const browserHeaders = { 'x-posthog-distinct-id': 'browser-person', 'x-posthog-session-id': 'browser-session' }
+    for (const outer of [
+      { properties: { tenant: 'acme' } },
+      { distinctId: 'authenticated', properties: { plan: 'pro' } },
+    ]) {
+      await client.withContext(outer, () =>
+        wrapper({ source: {}, headers: browserHeaders }, async () => {
+          assert.deepEqual(client.getContext()?.properties, outer.properties)
+          assert.equal(client.getContext()?.distinctId, outer.distinctId ?? 'browser-person')
+          assert.equal(client.getContext()?.sessionId, 'browser-session')
+        })
+      )
+    }
+    for (const [label, report, expected] of [
+      [
+        'inside application context',
+        (error, source) => client.withContext({ distinctId: 'authenticated-person' }, () => onError(error, { source })),
+        'authenticated-person',
+      ],
+      ['inside request scope', (error, source) => onError(error, { source }), 'browser-person'],
+    ]) {
+      const source = {}
+      const error = new Error(label)
+      await wrapper({ source, headers: browserHeaders }, () => report(error, source))
+      const captured = errors.find((value) => value.error === error)
+      assert.equal(captured.distinctId, expected, label)
+      assert.equal(captured.context.distinctId, expected, label)
+      assert.equal(captured.properties.$session_id, 'browser-session', label)
+    }
+
     const manager = new AsyncLocalStorageContextManager().enable()
     context.setGlobalContextManager(manager)
     const provider = new BasicTracerProvider({ spanProcessors: [new PostHogContextSpanProcessor(client)] })

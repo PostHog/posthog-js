@@ -10,7 +10,7 @@ type RequestContext = {
   source?: object
   headers?: Headers | Record<string, string | string[] | undefined>
 }
-type RequestIdentity = { distinctId?: string; sessionId?: string }
+type RequestScope = NonNullable<ReturnType<PostHog['getContext']>>
 type RequestWrapper = <T>(request: RequestContext, handler: () => T | Promise<T>) => Promise<T>
 type ErrorHandler = (error: unknown, request?: RequestContext) => Promise<void>
 type NitroBindings = {
@@ -35,6 +35,15 @@ function readHeader(headers: RequestContext['headers'], name: string): string | 
   return sanitized.trim().slice(0, 1000) || undefined
 }
 
+function preferActiveContext(active: RequestScope | undefined, fallback: RequestScope | undefined): RequestScope {
+  return {
+    ...fallback,
+    ...active,
+    distinctId: active?.distinctId ?? fallback?.distinctId,
+    sessionId: active?.sessionId ?? fallback?.sessionId,
+  }
+}
+
 export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose, wrapRequest }: NitroBindings): void {
   const runtimeConfig = useRuntimeConfig() as RuntimeConfig
   const posthogCommon = runtimeConfig.public.posthog
@@ -47,19 +56,18 @@ export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose, wr
   })
 
   serverClient.current = client
-  const requestContexts = new WeakMap<object, RequestIdentity>()
+  const requestContexts = new WeakMap<object, RequestScope>()
 
   if (requestContext) {
     wrapRequest?.(async (request, handler) => {
-      const existing = client.getContext()
-      const identity = {
-        distinctId: existing?.distinctId ?? readHeader(request.headers, 'x-posthog-distinct-id'),
-        sessionId: existing?.sessionId ?? readHeader(request.headers, 'x-posthog-session-id'),
-      }
-      if (request.source) requestContexts.set(request.source, identity)
+      const scope = preferActiveContext(client.getContext(), {
+        distinctId: readHeader(request.headers, 'x-posthog-distinct-id'),
+        sessionId: readHeader(request.headers, 'x-posthog-session-id'),
+      })
+      if (request.source) requestContexts.set(request.source, scope)
       const lifetime = new AbortController()
       return client.withContext(
-        identity,
+        scope,
         async () => {
           try {
             enrichCurrentSpan(client)
@@ -96,12 +104,13 @@ export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose, wr
         props.method = request.method
       }
 
-      const identity = request?.source ? requestContexts.get(request.source) : undefined
-      if (identity?.sessionId) props.$session_id = identity.sessionId
+      const saved = request?.source ? requestContexts.get(request.source) : undefined
+      const scope = requestContext ? preferActiveContext(client.getContext(), saved) : {}
+      if (scope.sessionId) props.$session_id = scope.sessionId
       client.withContext(
-        identity ?? {},
+        scope,
         () => {
-          client.captureException(error, identity?.distinctId ?? uuidv7(), props)
+          client.captureException(error, scope.distinctId ?? uuidv7(), props)
         },
         { fresh: true }
       )
