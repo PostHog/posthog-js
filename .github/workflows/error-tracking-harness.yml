@@ -49,8 +49,8 @@ jobs:
         permissions:
             contents: read
         env:
-            # Digest of PostHog/error-tracking-harness at cb160cdfb828. Printed by its Image workflow.
-            HARNESS_IMAGE: ghcr.io/posthog/error-tracking-harness@sha256:3476b6fdaf20379001683f0f3a9d7224b7dfc0e27a429cdd33f56c520eeeab80
+            # Digest of PostHog/error-tracking-harness at 63d841bc6959. Printed by its Image workflow.
+            HARNESS_IMAGE: ghcr.io/posthog/error-tracking-harness@sha256:291c8246ab9a37922257a6c420c3c4bda190379b450157aab7892a8010959c12
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
             - name: Setup environment
