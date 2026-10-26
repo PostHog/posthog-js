@@ -65,18 +65,13 @@ export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose, wr
         sessionId: readHeader(request.headers, 'x-posthog-session-id'),
       })
       if (request.source) requestContexts.set(request.source, scope)
-      const lifetime = new AbortController()
       return client.withContext(
         scope,
         async () => {
-          try {
-            enrichCurrentSpan(client)
-            return await handler()
-          } finally {
-            lifetime.abort()
-          }
+          enrichCurrentSpan(client)
+          return await handler()
         },
-        { fresh: true, signal: lifetime.signal }
+        { fresh: true }
       )
     })
   }

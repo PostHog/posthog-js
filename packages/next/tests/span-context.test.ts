@@ -148,13 +148,13 @@ describe('Next.js optional span context', () => {
         expect(cachedClient).toHaveBeenLastCalledWith(config.apiKey, config.options)
     })
 
-    it.each(['success', 'failure'])('expires captured client calls and async SDK work after %s', async (outcome) => {
+    it.each(['success', 'failure'])('keeps context for async SDK work after %s', async (outcome) => {
         const { bridge, tracer } = await setup()
-        let retained!: IPostHog
+        let requestContext: ReturnType<IPostHog['getContext']>
         let release!: () => void
         let work!: Promise<void>
         const result = bridge.withPostHogContext((requestClient) => {
-            retained = requestClient
+            requestContext = requestClient.getContext()
             work = requestClient.withSpan('job', async () => {
                 await new Promise<void>((resolve) => {
                     release = resolve
@@ -166,12 +166,12 @@ describe('Next.js optional span context', () => {
         })
         if (outcome === 'failure') await expect(result).rejects.toThrow('request failure')
         else expect(await result).toBe('ok')
-        expect(retained.getContext()).toBeUndefined()
-        retained.withSpan('late-client', () => tracer.startSpan('late-client-work').end())
         release()
         await work
         await provider.forceFlush()
-        expect(exporter.getFinishedSpans().map((span) => span.attributes)).toEqual([{}, {}])
+        const expected = { sessionId: requestContext?.sessionId, posthogDistinctId: requestContext?.distinctId }
+        expect(expected.sessionId).toEqual(expect.any(String))
+        expect(exporter.getFinishedSpans().map((span) => span.attributes)).toEqual([expected])
         expect(client.getContext()).toBeUndefined()
     })
 

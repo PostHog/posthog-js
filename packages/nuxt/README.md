@@ -24,13 +24,13 @@ after that client closes. Initialize the application's tracing setup after the
 PostHog Nitro plugin and before requests start. Keep the application's existing
 provider, exporters, processors, and sampler. This module does not create spans
 or install OpenTelemetry. The Node SDK must include the shared context span
-bridge and abort-signal context support before this integration is released.
+bridge before this integration is released.
 
 The wrapper covers Nitro 2's H3 request handler and Nitro 3's fetch handler.
 It adds context to an existing recording request span and to child spans started
-inside the handler when the shared processor is installed. Context ends when the
-handler returns or throws. Nitro 3 can return a streaming response before the
-body finishes; later stream work and detached background tasks omit request IDs.
+inside the handler when the shared processor is installed. Work that the handler
+starts, including detached background tasks, keeps the request context after the
+handler returns or throws.
 An error reported through Nitro's error hook uses the active application context
 first, then the saved request context. Errors without either keep the existing
 anonymous identity.

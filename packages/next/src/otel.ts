@@ -31,20 +31,15 @@ export function createPostHogSpanContext(config: CreatePostHogConfig = {}): Post
                 config.options,
                 config.getDistinctId
             )
-            const controller = new AbortController()
             return client.withContext(
                 contextData ?? {},
                 async () => {
-                    try {
-                        if (contextData) {
-                            enrichCurrentSpan(client)
-                        }
-                        return await work(client)
-                    } finally {
-                        controller.abort()
+                    if (contextData) {
+                        enrichCurrentSpan(client)
                     }
+                    return await work(client)
                 },
-                { fresh: true, signal: controller.signal }
+                { fresh: true }
             )
         },
     }

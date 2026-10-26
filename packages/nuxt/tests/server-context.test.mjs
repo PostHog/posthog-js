@@ -165,7 +165,7 @@ for (const requestContext of [undefined, false, true]) {
             await Promise.resolve()
             assert.equal(client.getContext()?.distinctId, id)
             assert.equal(client.getContext()?.sessionId, id + '-session')
-            detached.push(after.then(() => assert.equal(client.getContext(), undefined)))
+            detached.push(after.then(() => assert.equal(client.getContext()?.distinctId, id)))
             throw error
           })
         } catch (caught) {
@@ -212,7 +212,7 @@ for (const version of [2, 3]) {
     const observed = client.getContext()
     detached.push(
       afterResponse.then(() => {
-        assert.equal(client.getContext(), undefined)
+        assert.equal(client.getContext()?.distinctId, id)
         tracer.startSpan('after:' + id).end()
       })
     )
@@ -299,9 +299,9 @@ for (const version of [2, 3]) {
     release()
     await Promise.all(detached)
     for (const span of exporter.getFinishedSpans()) {
-      const [kind, id] = span.name.split(':')
-      assert.equal(span.attributes.posthogDistinctId, kind === 'after' ? undefined : id)
-      assert.equal(span.attributes.sessionId, kind === 'after' ? undefined : id + '-session')
+      const id = span.name.split(':')[1]
+      assert.equal(span.attributes.posthogDistinctId, id)
+      assert.equal(span.attributes.sessionId, id + '-session')
     }
     assert.equal(exporter.getFinishedSpans().length, 36)
     for (const id of ids.filter((id) => id.endsWith('1'))) {
