@@ -13,5 +13,6 @@ posthog-node, the Node.js backend SDK: server-side capture, identify and local f
 - email send responses: PostHog servers answer `emails.send` with a queued message ID or an error
   handler: EmailSender in src/emails/emails.ts
   trust: posthog-api
+  control: none — the reply only fills the result the caller awaits, and its one effect, a retry, is bounded by maxRetries and a 30 second ceiling
 
 ## invariants

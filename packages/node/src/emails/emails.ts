@@ -5,7 +5,6 @@ import {
   parseRetryAfterMs,
   removeTrailingSlash,
   safeJsonStringify,
-  safeSetTimeout,
 } from '@posthog/core'
 
 import { EmailError } from './errors'
@@ -81,7 +80,7 @@ export class EmailSender implements Emails {
       if (!appHost) {
         // A custom host is often an ingestion proxy, which must not receive the secret key.
         throw new EmailError({
-          code: 'app_host_required',
+          code: 'missing_app_host',
           message:
             "The client's host is not PostHog Cloud, so the client can't tell where to send email. Set appHost to your PostHog app host on the client.",
         })
@@ -151,10 +150,12 @@ export class EmailSender implements Emails {
   private async request(url: string, headers: Record<string, string>, body: string): Promise<Reply> {
     const controller = new AbortController()
     const timeoutMs = this.config.requestTimeoutMs
-    let timer: ReturnType<typeof safeSetTimeout>
+    let timer: ReturnType<typeof setTimeout>
     // `fetch` is injectable and may ignore the abort signal, so both phases race the deadline.
+    // A plain timer, not an unref'd one: an injected fetch may hold no handle, and the process must stay up until
+    // the deadline settles the send.
     const deadline = new Promise<never>((_resolve, reject) => {
-      timer = safeSetTimeout(() => {
+      timer = setTimeout(() => {
         const timeoutError = new Error(`Email request timed out after ${timeoutMs}ms`)
         timeoutError.name = 'AbortError'
         reject(timeoutError)
@@ -246,7 +247,9 @@ function parseJson(text: string): unknown {
 
 function readRetryAfter(response: PostHogFetchResponse): number | undefined {
   try {
-    return parseRetryAfterMs(response.headers?.get('retry-after'))
+    // The full wait, not the shared five minute cap: callers schedule their own retry from it, and the retry ceiling
+    // here applies separately in retryDelayMs.
+    return parseRetryAfterMs(response.headers?.get('retry-after'), Date.now(), Number.MAX_SAFE_INTEGER)
   } catch {
     return undefined
   }

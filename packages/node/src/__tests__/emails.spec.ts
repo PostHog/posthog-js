@@ -133,7 +133,7 @@ describe('emails.send', () => {
   })
 
   it.each([
-    ['a custom host without appHost', { host: 'https://ph.example.com' }, 'app_host_required', 'application_error'],
+    ['a custom host without appHost', { host: 'https://ph.example.com' }, 'missing_app_host', 'application_error'],
     ['no secret key', { secretKey: undefined }, 'missing_secret_key', 'missing_api_key'],
   ])('refuses to send with %s', async (_name, options, code, name) => {
     makeClient(options)
@@ -215,11 +215,11 @@ describe('emails.send', () => {
   })
 
   it('gives up at once on a Retry-After over 30 seconds', async () => {
-    replies = [rejected(429, 'throttled', { 'Retry-After': '120' })]
+    replies = [rejected(429, 'throttled', { 'Retry-After': '3600' })]
 
     const { error } = await send()
 
-    expect(error).toMatchObject({ code: 'throttled', retryAfterMs: 120_000 })
+    expect(error).toMatchObject({ code: 'throttled', retryAfterMs: 3_600_000 })
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
