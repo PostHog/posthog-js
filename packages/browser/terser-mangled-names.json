@@ -545,6 +545,7 @@
         "_maybeLogBufferingReason",
         "_mergeCrossTabFeatureFlagProperties",
         "_mergeItemMaps",
+        "_mergeMetaIdentifierProperties",
         "_mergePendingCrossTabFeatureFlagChanges",
         "_mergeWindowBack",
         "_messagesEndRef",

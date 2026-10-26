@@ -1,6 +1,6 @@
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
-import { PERSISTENCE_FACEBOOK_CLICK_ID } from '../constants'
+import { PERSISTENCE_FACEBOOK_BROWSER_ID, PERSISTENCE_FACEBOOK_CLICK_ID } from '../constants'
 import type { PostHogConfig } from '../types'
 
 // capture() runs inside click handlers, so its work adds directly to Interaction to Next Paint.
@@ -19,6 +19,24 @@ const setupWithManyFlags = (config: Partial<PostHogConfig>) => {
     posthog.capture('warm up')
     return { posthog, storageKey: `ph_${token}_posthog` }
 }
+
+const readEntry = (storageKey: string) => JSON.parse(localStorage.getItem(storageKey)!)
+
+// jsdom does not fire `storage` into the window that wrote, so a sibling tab is simulated by
+// writing localStorage and then dispatching the event the browser would deliver to this tab.
+const siblingWrites = (storageKey: string, patch: (entry: Record<string, unknown>) => void): string => {
+    const entry = readEntry(storageKey)
+    patch(entry)
+    const newValue = JSON.stringify(entry)
+    localStorage.setItem(storageKey, newValue)
+    return newValue
+}
+
+const siblingStorageEventArrives = (storageKey: string, newValue: string) =>
+    window.dispatchEvent(new StorageEvent('storage', { key: storageKey, newValue, storageArea: localStorage }))
+
+const siblingWritesAndEventArrives = (storageKey: string, patch: (entry: Record<string, unknown>) => void) =>
+    siblingStorageEventArrives(storageKey, siblingWrites(storageKey, patch))
 
 describe('capture() hot path', () => {
     afterEach(() => {
@@ -55,44 +73,81 @@ describe('capture() hot path', () => {
         }
     )
 
-    it('adopts the $fbc that another tab wrote, then stops parsing the persistence entry', () => {
+    it.each<PostHogConfig['persistence']>(['localStorage', 'localStorage+cookie'])(
+        'adopts the Meta identifiers another tab wrote after the storage event, then stops parsing (persistence: %s)',
+        (persistence) => {
+            const { posthog, storageKey } = setupWithManyFlags({ persistence })
+            const fbc = { value: 'fb.1.1700000000000.sibling', delivered: true }
+            const fbp = { value: 'fb.1.1700000000000.1234567890', delivered: false }
+
+            const newValue = siblingWrites(storageKey, (entry) => {
+                entry[PERSISTENCE_FACEBOOK_CLICK_ID] = fbc
+                entry[PERSISTENCE_FACEBOOK_BROWSER_ID] = fbp
+            })
+            const parseSpy = vi.spyOn(JSON, 'parse')
+            siblingStorageEventArrives(storageKey, newValue)
+            expect(persistenceEntryParses(parseSpy)).toHaveLength(1)
+
+            expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbc)
+            expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_BROWSER_ID]).toEqual(fbp)
+
+            parseSpy.mockClear()
+            posthog.capture('$autocapture')
+            posthog.capture('$autocapture')
+            expect(persistenceEntryParses(parseSpy)).toHaveLength(0)
+        }
+    )
+
+    it('drops a Meta identifier another tab removed', () => {
         const { posthog, storageKey } = setupWithManyFlags({ persistence: 'localStorage' })
-        const siblingEntry = JSON.parse(localStorage.getItem(storageKey)!)
-        siblingEntry[PERSISTENCE_FACEBOOK_CLICK_ID] = { value: 'fb.1.1700000000000.sibling', delivered: true }
-        localStorage.setItem(storageKey, JSON.stringify(siblingEntry))
+        posthog.persistence!.register({
+            [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: 'fb.1.1700000000000.local', delivered: true },
+        })
 
-        posthog.capture('$autocapture')
-        const parseSpy = vi.spyOn(JSON, 'parse')
-        posthog.capture('$autocapture')
+        siblingWritesAndEventArrives(storageKey, (entry) => {
+            delete entry[PERSISTENCE_FACEBOOK_CLICK_ID]
+        })
 
-        expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(
-            siblingEntry[PERSISTENCE_FACEBOOK_CLICK_ID]
-        )
-        expect(persistenceEntryParses(parseSpy)).toHaveLength(0)
+        expect(posthog.persistence!.props).not.toHaveProperty(PERSISTENCE_FACEBOOK_CLICK_ID)
     })
 
-    it('adopts the $fbc that another tab wrote while a refresh was parsing', () => {
+    it('does not overwrite a sibling write that landed between our last write and our next write', () => {
         const { posthog, storageKey } = setupWithManyFlags({ persistence: 'localStorage' })
+        const fbc = { value: 'fb.1.1700000000000.sibling', delivered: true }
+
+        // The sibling's storage event has not been delivered to this tab yet.
+        siblingWrites(storageKey, (entry) => (entry[PERSISTENCE_FACEBOOK_CLICK_ID] = fbc))
+        expect(posthog.persistence!.props).not.toHaveProperty(PERSISTENCE_FACEBOOK_CLICK_ID)
+
+        posthog.persistence!.register({ unrelated: 'change' })
+
+        expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbc)
+        expect(readEntry(storageKey)[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbc)
+        expect(readEntry(storageKey).unrelated).toEqual('change')
+    })
+
+    it('keeps an unflushed local Meta identifier change over a sibling write', () => {
+        const { posthog, storageKey } = setupWithManyFlags({
+            persistence: 'localStorage',
+            persistence_save_debounce_ms: 250,
+        })
         const persistence = posthog.persistence!
-        const writeSiblingFbc = (value: string) => {
-            const siblingEntry = JSON.parse(localStorage.getItem(storageKey)!)
-            siblingEntry[PERSISTENCE_FACEBOOK_CLICK_ID] = { value, delivered: true }
-            localStorage.setItem(storageKey, JSON.stringify(siblingEntry))
-        }
-        writeSiblingFbc('fb.1.1700000000000.first')
-        const refreshKeys = persistence['_refreshKeys'].bind(persistence)
-        vi.spyOn(persistence as any, '_refreshKeys').mockImplementationOnce((keys) => {
-            refreshKeys(keys as string[])
-            writeSiblingFbc('fb.1.1700000000000.during-parse')
-        })
+        persistence.flush()
+        const local = { value: 'fb.1.1700000000000.local', delivered: false }
+        const sibling = { value: 'fb.1.1700000000000.sibling', delivered: true }
 
-        persistence.refreshMetaIdentifiers()
-        persistence.refreshMetaIdentifiers()
+        persistence.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: local })
+        expect(readEntry(storageKey)).not.toHaveProperty(PERSISTENCE_FACEBOOK_CLICK_ID)
 
-        expect(persistence.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual({
-            value: 'fb.1.1700000000000.during-parse',
-            delivered: true,
-        })
+        siblingWritesAndEventArrives(storageKey, (entry) => (entry[PERSISTENCE_FACEBOOK_CLICK_ID] = sibling))
+        expect(persistence.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(local)
+
+        persistence.flush()
+        expect(readEntry(storageKey)[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(local)
+
+        // Once flushed, the pending guard is gone and a later sibling write is adopted again.
+        siblingWritesAndEventArrives(storageKey, (entry) => (entry[PERSISTENCE_FACEBOOK_CLICK_ID] = sibling))
+        expect(persistence.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(sibling)
     })
 
     it('does not read the persistence entry while persistence is disabled', () => {

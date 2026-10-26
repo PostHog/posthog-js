@@ -380,6 +380,9 @@ export class PostHogPersistence {
             return false
         }
 
+        if (slot === MAIN_STORAGE_SLOT) {
+            this._mergeMetaIdentifierProperties(nextEntry)
+        }
         const identityEntry = slot === MAIN_STORAGE_SLOT ? nextEntry : localStore._parse(this._name)
         if (identityEntry && this._hasCrossTabFeatureFlagIdentityMismatch(identityEntry)) {
             return false
@@ -457,6 +460,22 @@ export class PostHogPersistence {
         return changed
     }
 
+    // Same adoption rules as `refreshKey`, applied to an entry the caller already parsed.
+    private _mergeMetaIdentifierProperties(nextEntry: Properties): void {
+        META_IDENTIFIER_PERSISTENCE_KEYS.forEach((prop) => {
+            if (this._metaIdentifierChangePending.has(prop)) {
+                return
+            }
+            if (prop in nextEntry) {
+                if (!isStorageValueEqual(nextEntry[prop], this.props[prop])) {
+                    this._setProp(prop, nextEntry[prop], false)
+                }
+            } else if (prop in this.props) {
+                this._deleteProp(prop, false)
+            }
+        })
+    }
+
     private _reconcileCrossTabFeatureFlagPropertiesBeforeWrite(): boolean {
         // localStorage has no atomic read/merge/write operation. This reconciliation
         // closes normal event and debounce windows, but two tabs that flush at the
@@ -481,6 +500,7 @@ export class PostHogPersistence {
                     mainState.storageValue = null
                 } else {
                     mainEntry = parseStorageValue(mainValue)
+                    this._mergeMetaIdentifierProperties(mainEntry)
                     this._crossTabFeatureFlagIdentityMismatch =
                         !this._localIdentityChangePending && this._hasCrossTabFeatureFlagIdentityMismatch(mainEntry)
                     if (this._crossTabFeatureFlagIdentityMismatch) {
@@ -1345,10 +1365,10 @@ export class PostHogPersistence {
         // not adopt a sibling write that arrived while it was in progress.
         if (!forceSuppressedSnapshot) {
             this.syncCookieProperties()
-            if (
-                !this._config.cookieWinsOnConflict ||
-                this._config.persistence.toLowerCase() !== 'localstorage+cookie'
-            ) {
+            // localStorage-backed stores adopt sibling Meta identifiers from the storage
+            // event and from the pre-write reconciliation below. Only the cookie store,
+            // capped at 4 KB, still re-reads here; sessionStorage and memory have no siblings.
+            if (this._storesIdentityInCookie && !this._splitStorageEligible) {
                 this.refreshMetaIdentifiers()
             }
         }
