@@ -12,8 +12,8 @@ import { startS3 } from './test-utils/s3-server.ts'
 const cli = fileURLToPath(new URL('./cli.ts', import.meta.url))
 const version = '0.1.0'
 const files: Record<string, string> = {
-    'posthog.js': 'classic entry',
-    'posthog.js.map': '{}',
+    'script.js': 'classic entry',
+    'script.js.map': '{}',
     'chunks/flags-abc.js': 'flags',
     'chunks/flags-abc.js.map': '{}',
     'chunks/nested/surveys-def.js': 'surveys',
@@ -105,13 +105,13 @@ test('browser asset planner includes the complete recursive tree with isolated p
 
 test('browser collector requires the entry and refuses symlinks instead of silently omitting assets', async (t) => {
     const s3 = await fixture(t)
-    await fs.unlink(path.join(s3.dist, 'posthog.js'))
+    await fs.unlink(path.join(s3.dist, 'script.js'))
     const missing = await s3.run()
     assert.equal(missing.code, 1)
-    assert.match(missing.output, /must contain posthog.js/)
+    assert.match(missing.output, /must contain script.js/)
     assert.equal(s3.requests.length, 0)
-    await fs.writeFile(path.join(s3.dist, 'posthog.js'), files['posthog.js'])
-    await fs.symlink('posthog.js', path.join(s3.dist, 'link.js'))
+    await fs.writeFile(path.join(s3.dist, 'script.js'), files['script.js'])
+    await fs.symlink('script.js', path.join(s3.dist, 'link.js'))
     await assert.rejects(collectBrowserAssets(s3.dist), /Unsupported browser CDN asset/)
 })
 
@@ -127,7 +127,7 @@ test('real browser CLI verifies every immutable dependency before aliases and re
     assert.ok(s3.requests.filter((r) => r.method === 'PUT').every((r) => r.headers['if-none-match'] === '*'))
     assert.equal(
         s3.requests.filter((r) => r.method === 'PUT').at(-1)?.key,
-        `/assets/static/browser/${version}/posthog.js`
+        `/assets/static/browser/${version}/script.js`
     )
     const corrupt = s3.objects.get(`/assets/static/browser/${version}/chunks/nested/surveys-def.js`)!
     const original = { ...corrupt }
@@ -154,7 +154,7 @@ test('real browser CLI verifies every immutable dependency before aliases and re
     }
     assert.ok(s3.objects.has('/assets/static/browser/0/chunks/historical.js'))
     const puts = s3.requests.filter((r) => r.method === 'PUT')
-    assert.equal(puts.at(-1)?.key, '/assets/static/browser/0/posthog.js')
+    assert.equal(puts.at(-1)?.key, '/assets/static/browser/0/script.js')
     assert.ok(puts.every((r) => r.key.startsWith('/assets/static/browser/0/')))
 })
 
@@ -171,7 +171,7 @@ test('browser CLI resumes partial immutable uploads without rewriting matching a
     assert.ok(completed.length > 0)
     assert.ok(completed.every((key) => key.startsWith(`/assets/static/browser/${version}/`)))
     assert.ok(
-        !completed.includes(`/assets/static/browser/${version}/posthog.js`),
+        !completed.includes(`/assets/static/browser/${version}/script.js`),
         'failed dependencies must not expose the immutable entry'
     )
     s3.hooks.before = undefined
@@ -192,7 +192,7 @@ test('browser CLI uses the shared retry and conditional-write verification after
     const s3 = await fixture(t)
     let attempts = 0
     s3.hooks.before = (req, res) => {
-        if (req.method === 'PUT' && req.key.endsWith('/posthog.js') && ++attempts === 1) {
+        if (req.method === 'PUT' && req.key.endsWith('/script.js') && ++attempts === 1) {
             s3.objects.set(req.key, {
                 body: req.body,
                 contentType: String(req.headers['content-type']),

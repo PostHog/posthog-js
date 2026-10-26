@@ -147,7 +147,7 @@ test('@posthog/browser builds once from the version commit and transfers the ent
         build.indexOf('Build @posthog/browser dependencies') <
             build.indexOf('run: pnpm --filter @posthog/browser build:cdn')
     )
-    assert.match(build, /test -s packages\/browser-next\/dist-cdn\/posthog.js/)
+    assert.match(build, /test -s packages\/browser-next\/dist-cdn\/script.js/)
     assert.match(build, /path: packages\/browser-next\/dist-cdn\/\n/)
     assert.match(build, /include-hidden-files: true/)
     assert.match(build, /retention-days: 30/)

@@ -39,8 +39,8 @@ export async function collectBrowserAssets(distDir = DIST_DIR): Promise<ReleaseA
         }
     }
     await walk(distDir)
-    if (!assets.some((asset) => asset.relativeKey === 'posthog.js')) {
-        throw new Error('Browser CDN build must contain posthog.js')
+    if (!assets.some((asset) => asset.relativeKey === 'script.js')) {
+        throw new Error('Browser CDN build must contain script.js')
     }
     return assets
 }
@@ -91,7 +91,7 @@ export async function uploadBrowserS3(bucket: string, version: string, phase: 'i
     const plans = buildBrowserAssetUploadPlans(version, await collectBrowserAssets())
     if (phase === 'immutable') {
         await assertCanUploadImmutableAssets(bucket, plans.immutable, false)
-        await uploadEntryLast(bucket, plans.immutable, `static/browser/${version}/posthog.js`, 'immutable browser', {
+        await uploadEntryLast(bucket, plans.immutable, `static/browser/${version}/script.js`, 'immutable browser', {
             ifNoneMatch: '*',
         })
         return
@@ -104,7 +104,7 @@ export async function uploadBrowserS3(bucket: string, version: string, phase: 'i
     await uploadEntryLast(
         bucket,
         plans.majorAlias,
-        `static/browser/${parseSemver(version)!.major}/posthog.js`,
+        `static/browser/${parseSemver(version)!.major}/script.js`,
         'browser major-alias'
     )
 }
