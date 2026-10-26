@@ -856,7 +856,7 @@ jobs:
                   set -euo pipefail
                   previous_version=$(git show HEAD^:packages/browser-next/package.json | jq -r '.version')
                   jq -r --arg previous "$previous_version" \
-                      '"committed-version=\(.version)", "version-changed=\(.private != true and .version != $previous)"' \
+                      '"committed-version=\(.version)", "version-changed=\(.version != $previous)"' \
                       packages/browser-next/package.json >> "$GITHUB_OUTPUT"
 
     build-posthog-browser-s3-artifacts:
@@ -1082,6 +1082,11 @@ jobs:
             )
         permissions: {}
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+              with:
+                  egress-policy: audit
+
             - name: Notify Slack - @posthog/browser S3 failed
               continue-on-error: true
               uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main

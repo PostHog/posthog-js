@@ -98,12 +98,7 @@ test('@posthog/browser S3 eligibility follows the release commit and stays stabl
     const check = job(release, 'check-posthog-browser-version')
     const script = check.match(/ {14}run: \|\n((?: {18}.*\n|\n)+)/)?.[1]
     assert.ok(script)
-    for (const manifest of [
-        { version: '0.1.0' },
-        { version: '0.1.0', private: false },
-        { version: '0.1.0', private: true },
-        { version: '0.0.3' },
-    ]) {
+    for (const manifest of [{ version: '0.1.0' }, { version: '0.0.3' }]) {
         const root = mkdtempSync(path.join(os.tmpdir(), 'browser-s3-version-'))
         try {
             const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' })
@@ -112,7 +107,7 @@ test('@posthog/browser S3 eligibility follows the release commit and stays stabl
             git('config', 'user.email', 'test@example.com')
             git('config', 'commit.gpgsign', 'false')
             mkdirSync(path.join(root, 'packages/browser-next'), { recursive: true })
-            for (const current of [{ version: '0.0.3', private: true }, manifest]) {
+            for (const current of [{ version: '0.0.3' }, manifest]) {
                 writeFileSync(path.join(root, 'packages/browser-next/package.json'), JSON.stringify(current))
                 git('add', 'packages/browser-next/package.json')
                 git('commit', '--quiet', '--allow-empty', '-m', 'release')
@@ -128,7 +123,7 @@ test('@posthog/browser S3 eligibility follows the release commit and stays stabl
                 assert.equal(child.status, 0, child.stdout + child.stderr)
                 assert.equal(
                     readFileSync(output, 'utf8'),
-                    `committed-version=${manifest.version}\nversion-changed=${manifest.private !== true && manifest.version !== '0.0.3'}\n`
+                    `committed-version=${manifest.version}\nversion-changed=${manifest.version !== '0.0.3'}\n`
                 )
             }
         } finally {
@@ -185,6 +180,9 @@ test('both @posthog/browser immutable regions are required before its aliases', 
 
 test('@posthog/browser reports S3 failures to the release approval thread', () => {
     const notify = job(release, 'notify-posthog-browser-s3-failed')
+    assert.match(notify, /steps:\n {12}- name: Audit runner egress/)
+    assert.match(notify, /uses: step-security\/harden-runner@[a-f0-9]{40}/)
+    assert.match(notify, /egress-policy: audit/)
     for (const id of [
         'check-posthog-browser-version',
         'build-posthog-browser-s3-artifacts',
