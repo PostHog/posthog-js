@@ -12,7 +12,7 @@ const assets = createMockServer({
     adapter: async (request, controls) => {
         if (!request.path.startsWith(assetPrefix)) return undefined
         const file = request.path.slice(assetPrefix.length)
-        if (!/^(posthog\.js|chunks\/[\w.-]+\.js)$/.test(file)) return { status: 404 }
+        if (!/^(script\.js|chunks\/[\w.-]+\.js)$/.test(file)) return { status: 404 }
         if (file.startsWith('chunks/')) {
             await controls.waitForBarrier('chunks')
             if (controls.getState().failChunks) return { status: 503 }
@@ -30,7 +30,7 @@ const backend = createMockServer({
         if (request.path === '/' || request.path === '/favicon.ico') return { status: 204 }
         if (request.path !== '/nested/page') return undefined
         const options = JSON.parse(request.url.searchParams.get('options') ?? '{}')
-        const src = new URL(`${assetOrigin}${assetPrefix}posthog.js`)
+        const src = new URL(`${assetOrigin}${assetPrefix}script.js`)
         src.search = new URLSearchParams(
             Object.entries({
                 projectToken: 'phc_snippet_fixture',

@@ -71,7 +71,7 @@ for (const mode of ['sync', 'async', 'defer']) {
             batch: [{ event: 'snippet_early', properties: { placement: 'plain-html' } }],
         })
         expect((await backend.inspect()).requests.some((request) => request.path === '/e/')).toBe(false)
-        const chunks = (await assetRequests()).filter((request) => request.path !== `${assetPrefix}posthog.js`)
+        const chunks = (await assetRequests()).filter((request) => request.path !== `${assetPrefix}script.js`)
         expect(chunks.length).toBeGreaterThan(0)
         for (const request of chunks) {
             expect(request.path.startsWith(`${assetPrefix}chunks/`)).toBe(true)
@@ -95,7 +95,7 @@ test('core is embedded in the first response; disabled products do not request c
         location({ flags: 'false', logs: 'false', surveys: 'false', autocapture: 'false', optOutByDefault: 'true' })
     )
     await expect.poll(() => page.evaluate(() => window.snippetEvidence.readyCount)).toBe(1)
-    expect((await assetRequests()).map((request) => request.path)).toEqual([`${assetPrefix}posthog.js`])
+    expect((await assetRequests()).map((request) => request.path)).toEqual([`${assetPrefix}script.js`])
     expect((await backend.inspect()).events).toHaveLength(0)
     const summary = await page.evaluate(async () => {
         ;(window.posthog as PostHog).optIn()

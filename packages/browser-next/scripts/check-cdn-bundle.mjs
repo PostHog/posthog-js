@@ -7,7 +7,7 @@ const root = new URL('../', import.meta.url)
 const stats = JSON.parse(await readFile(new URL('.playwright/cdn-stats.json', root), 'utf8'))
 const initial = stats.chunks.filter((chunk) => chunk.initial)
 assert.equal(initial.length, 1, 'The classic entry must embed its complete initial graph')
-assert.deepEqual(initial[0].files, ['posthog.js'])
+assert.deepEqual(initial[0].files, ['script.js'])
 const modules = (entries) =>
     entries.flatMap((entry) => (entry.modules ? modules(entry.modules) : entry.name ? [entry] : []))
 const initialModules = modules(initial[0].modules)
