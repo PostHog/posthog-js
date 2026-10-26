@@ -73,8 +73,10 @@ export class EmailSender implements Emails {
     try {
       const prepared = prepareSend(options, this.config.maxRetries)
       if (this.hooks.isDisabled()) {
-        this.hooks.logger.debug('The client is disabled, so no email was sent.')
-        return { data: { id: null, replayed: false, warnings: [] }, error: null }
+        throw new EmailError({
+          code: 'client_disabled',
+          message: 'The PostHog client is disabled, so no email was sent.',
+        })
       }
       const appHost = resolveAppHost(this.config.host, this.config.appHost)
       if (!appHost) {

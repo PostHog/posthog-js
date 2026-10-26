@@ -294,13 +294,13 @@ describe('emails.send', () => {
     })
   })
 
-  it('sends nothing from a disabled client', async () => {
+  it('sends nothing from a disabled client and returns client_disabled', async () => {
     makeClient({ disabled: true })
 
     const { data, error } = await send()
 
-    expect(error).toBeNull()
-    expect(data).toEqual({ id: null, replayed: false, warnings: [] })
+    expect(data).toBeNull()
+    expect({ code: error?.code, name: error?.name }).toEqual({ code: 'client_disabled', name: 'application_error' })
     expect(fetch).not.toHaveBeenCalled()
   })
 

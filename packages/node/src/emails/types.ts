@@ -37,8 +37,8 @@ export interface EmailWarning {
  * The queued email. A result means PostHog queued the email, not that it was delivered.
  */
 export interface SendEmailResult {
-  /** The queued email's message ID. `null` when the client is disabled and sent nothing. */
-  id: string | null
+  /** The queued email's message ID. */
+  id: string
   /** True when PostHog had already accepted this idempotency key and returned the first send's result. */
   replayed: boolean
   warnings: EmailWarning[]

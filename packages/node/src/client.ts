@@ -687,8 +687,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope. Sends go to
    * `appHost`, or to the PostHog Cloud app host of `host`. `send` resolves to `{ data, error }`
-   * and does not reject. `data.id` is the queued email's message ID, and is `null` when the
-   * client is disabled and sent nothing.
+   * and does not reject. `data.id` is the queued email's message ID. A disabled client sends
+   * nothing and returns the error `client_disabled`.
    *
    * @example
    * ```ts

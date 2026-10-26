@@ -4329,8 +4329,8 @@
       "name": "SendEmailResult",
       "properties": [
         {
-          "description": "The queued email's message ID. `null` when the client is disabled and sent nothing.",
-          "type": "string | null",
+          "description": "The queued email's message ID.",
+          "type": "string",
           "name": "id"
         },
         {
