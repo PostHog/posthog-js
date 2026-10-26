@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { context, trace, ROOT_CONTEXT, SpanKind, type Attributes } from '@opentelemetry/api'
+import { context, trace, ROOT_CONTEXT, SpanKind } from '@opentelemetry/api'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
 import {
   BasicTracerProvider,
@@ -78,49 +78,45 @@ describe('OpenTelemetry request context', () => {
     return app.use.mock.calls[0][0]
   }
 
-  it.each(['signal', 'request', 'outer-signal'] as const)(
-    'expires nested span context on %s completion',
-    async (expired) => {
-      const response = new EventEmitter()
-      const controller = new AbortController()
-      const outer = new AbortController()
-      const tracer = provider.getTracer('signal-test')
-      client.withContext(
-        {},
-        () => {
-          middleware()(
-            { headers: { 'x-posthog-session-id': 'request-session', 'x-posthog-distinct-id': 'request-user' } },
-            response,
-            () => {
-              client.withContext(
-                { properties: { scope: 'nested' } },
-                () => {
-                  const before = tracer.startSpan('before')
-                  if (expired === 'signal') controller.abort()
-                  else if (expired === 'outer-signal') outer.abort()
-                  else response.emit('finish')
-                  expect(client.getContext()).toBeUndefined()
-                  tracer.startSpan('after').end()
-                  before.end()
-                },
-                { signal: controller.signal }
-              )
-              response.emit('finish')
-            }
-          )
-        },
-        { signal: outer.signal }
-      )
-      await provider.forceFlush()
-      expect(exporter.getFinishedSpans().find((span) => span.name === 'before')?.attributes).toEqual({
-        sessionId: 'request-session',
-        posthogDistinctId: 'request-user',
-      })
-      expect(exporter.getFinishedSpans().find((span) => span.name === 'after')?.attributes).toEqual({})
-    }
-  )
+  it.each(['signal', 'outer-signal'] as const)('expires nested span context when the %s aborts', async (expired) => {
+    const response = new EventEmitter()
+    const controller = new AbortController()
+    const outer = new AbortController()
+    const tracer = provider.getTracer('signal-test')
+    client.withContext(
+      {},
+      () => {
+        middleware()(
+          { headers: { 'x-posthog-session-id': 'request-session', 'x-posthog-distinct-id': 'request-user' } },
+          response,
+          () => {
+            client.withContext(
+              { properties: { scope: 'nested' } },
+              () => {
+                const before = tracer.startSpan('before')
+                if (expired === 'signal') controller.abort()
+                else outer.abort()
+                expect(client.getContext()).toBeUndefined()
+                tracer.startSpan('after').end()
+                before.end()
+              },
+              { signal: controller.signal }
+            )
+            response.emit('finish')
+          }
+        )
+      },
+      { signal: outer.signal }
+    )
+    await provider.forceFlush()
+    expect(exporter.getFinishedSpans().find((span) => span.name === 'before')?.attributes).toEqual({
+      sessionId: 'request-session',
+      posthogDistinctId: 'request-user',
+    })
+    expect(exporter.getFinishedSpans().find((span) => span.name === 'after')?.attributes).toEqual({})
+  })
 
-  it.each([false, true])('keeps a fresh job independent of the response with own signal=%s', async (withSignal) => {
+  it.each([false, true])('keeps a fresh job separate from the request with own signal=%s', async (withSignal) => {
     const response = new EventEmitter()
     const controller = new AbortController()
     const tracer = provider.getTracer('job-test')
@@ -144,9 +140,6 @@ describe('OpenTelemetry request context', () => {
           },
           { fresh: true, signal: withSignal ? controller.signal : undefined }
         )
-        response.emit('finish')
-        expect(client.getContext()).toBeUndefined()
-        tracer.startSpan('ended-request').end()
       }
     )
     await job
@@ -155,7 +148,6 @@ describe('OpenTelemetry request context', () => {
       sessionId: 'job-session',
       posthogDistinctId: 'job-user',
     })
-    expect(spans.find((span) => span.name === 'ended-request')?.attributes).toEqual({})
     if (withSignal) expect(spans.find((span) => span.name === 'ended-job')?.attributes).toEqual({})
   })
 
@@ -179,10 +171,7 @@ describe('OpenTelemetry request context', () => {
                 await Promise.resolve()
                 const child = tracer.startSpan('child', { attributes })
                 client.enterContext({ distinctId: 'later-user', sessionId: 'later-session' })
-                response.emit('finish')
                 child.end()
-                const detached = tracer.startSpan('detached')
-                detached.end()
                 requestSpan.end()
                 resolve()
               })().catch(reject)
@@ -194,15 +183,13 @@ describe('OpenTelemetry request context', () => {
     const spans = exporter.getFinishedSpans()
     expect(spans.find((span) => span.name === 'request')?.attributes).toMatchObject(expected)
     expect(spans.find((span) => span.name === 'child')?.attributes).toMatchObject(expected)
-    expect(spans.find((span) => span.name === 'detached')?.attributes).toEqual({})
     expect(client.getContext()).toBeUndefined()
   })
 
-  it.each(['finish', 'close'])('isolates concurrent requests and expires scope on %s', async (event) => {
+  it.each(['finish', 'close'])('isolates concurrent requests and keeps their scope after %s', async (event) => {
     const tracer = provider.getTracer('test')
     const run = middleware()
     const releases: (() => void)[] = []
-    const spans: Attributes[] = []
     await Promise.all(
       ['first', 'second'].map(
         (id) =>
@@ -214,9 +201,9 @@ describe('OpenTelemetry request context', () => {
                 const span = tracer.startSpan(id)
                 span.end()
                 response.emit(event)
-                const late = tracer.startSpan('late')
+                const late = tracer.startSpan(`${id}-late`)
                 late.end()
-                expect(client.getContext()).toBeUndefined()
+                expect(client.getContext()?.sessionId).toBe(id)
                 resolve()
               })().catch(reject)
             })
@@ -225,8 +212,12 @@ describe('OpenTelemetry request context', () => {
       )
     )
     await provider.forceFlush()
-    exporter.getFinishedSpans().forEach((span) => spans.push(span.attributes))
-    expect(spans).toEqual(expect.arrayContaining([{ sessionId: 'first' }, { sessionId: 'second' }, {}]))
+    expect(Object.fromEntries(exporter.getFinishedSpans().map((span) => [span.name, span.attributes]))).toEqual({
+      first: { sessionId: 'first' },
+      'first-late': { sessionId: 'first' },
+      second: { sessionId: 'second' },
+      'second-late': { sessionId: 'second' },
+    })
   })
 
   it('preserves application identity and omits invalid or missing header IDs', () => {
@@ -443,7 +434,7 @@ describe('OpenTelemetry request context', () => {
   it.each([
     [{ sessionId: 'job' }, { sessionId: 'job' }],
     [{ distinctId: 'job-user' }, { posthogDistinctId: 'job-user' }],
-  ])('clears a thrown request scope and accepts explicit context %j after expiry', async (data, expected) => {
+  ])('lets detached work after a thrown request start a fresh context %j', async (data, expected) => {
     const error = new Error('handler failed')
     let detached: Promise<void> | undefined
     let release: () => void = () => undefined
@@ -456,7 +447,7 @@ describe('OpenTelemetry request context', () => {
             await new Promise<void>((resolve) => {
               release = resolve
             })
-            expect(client.getContext()).toBeUndefined()
+            expect(client.getContext()?.sessionId).toBe('request')
             client.withContext(
               data,
               () => {

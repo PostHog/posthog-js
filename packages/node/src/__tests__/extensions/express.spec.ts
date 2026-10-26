@@ -100,27 +100,6 @@ describe('Express extension', () => {
       expect(app.use).toHaveBeenCalledWith(expect.any(Function))
     })
 
-    it.each(['destroyed', 'writableFinished'] as const)(
-      'does not start request context after the response is %s',
-      async (state) => {
-        const res = Object.assign(createMockResponse(), { [state]: true })
-        let continuation: Promise<void> | undefined
-        const next = vi.fn(() => {
-          expect(posthog.getContext()).toBeUndefined()
-          continuation = Promise.resolve().then(() => expect(posthog.getContext()).toBeUndefined())
-        })
-        createRequestContextMiddleware(posthog)(
-          createMockRequest({ headers: { 'x-posthog-session-id': 'expired-session' } }),
-          res,
-          next
-        )
-        await continuation
-        expect(next).toHaveBeenCalledOnce()
-        expect(res.listenerCount('finish')).toBe(0)
-        expect(res.listenerCount('close')).toBe(0)
-      }
-    )
-
     it('should set request context for normal captures', async () => {
       const middleware = createRequestContextMiddleware(posthog)
       const req = createMockRequest({

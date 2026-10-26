@@ -69,29 +69,11 @@ export function setupExpressRequestContext(
 }
 
 function posthogRequestContext(posthog: PostHogBackendClient): ExpressMiddleware {
-  return (req, res, next): void => {
-    const controller = new AbortController()
-    const complete = (): void => {
-      controller.abort()
-      res.removeListener('finish', complete)
-      res.removeListener('close', complete)
-    }
-    res.once('finish', complete)
-    res.once('close', complete)
-    if (res.destroyed || res.writableFinished) complete()
-    posthog.withContext(
-      buildRequestContextData(posthog, req),
-      () => {
-        notifyContextListeners(posthog, true)
-        try {
-          next()
-        } catch (error) {
-          complete()
-          throw error
-        }
-      },
-      { signal: controller.signal }
-    )
+  return (req, _res, next): void => {
+    posthog.withContext(buildRequestContextData(posthog, req), () => {
+      notifyContextListeners(posthog, true)
+      next()
+    })
   }
 }
 

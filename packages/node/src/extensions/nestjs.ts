@@ -96,35 +96,12 @@ export class PostHogInterceptor implements NestInterceptor {
       properties,
     }
 
-    return new Observable((subscriber) => {
-      const controller = new AbortController()
-      const rawResponse = response?.raw ?? response
-      const hasResponseEvents =
-        typeof rawResponse?.once === 'function' && typeof rawResponse?.removeListener === 'function'
-      const complete = (): void => {
-        controller.abort()
-        if (hasResponseEvents) {
-          rawResponse.removeListener('finish', complete)
-          rawResponse.removeListener('close', complete)
-        }
-      }
-      if (hasResponseEvents) {
-        rawResponse.once('finish', complete)
-        rawResponse.once('close', complete)
-        if (rawResponse.writableFinished || rawResponse.destroyed) complete()
-      }
-
-      return this.posthog.withContext(
+    return new Observable((subscriber) =>
+      this.posthog.withContext(
         contextData,
         () => {
           notifyContextListeners(this.posthog, true)
-          let source: Observable<any>
-          try {
-            source = next.handle()
-          } catch (error) {
-            complete()
-            throw error
-          }
+          let source = next.handle()
 
           if (this.captureExceptions) {
             source = source.pipe(
@@ -145,12 +122,10 @@ export class PostHogInterceptor implements NestInterceptor {
             )
           }
 
-          const subscription = source.subscribe(subscriber)
-          if (!hasResponseEvents) subscription.add(complete)
-          return subscription
+          return source.subscribe(subscriber)
         },
-        { fresh: true, signal: controller.signal }
+        { fresh: true }
       )
-    })
+    )
   }
 }

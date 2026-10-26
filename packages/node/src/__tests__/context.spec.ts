@@ -1,5 +1,3 @@
-import { EventEmitter } from 'node:events'
-import { setupExpressRequestContext } from '@/extensions/express'
 import { PostHog } from '@/entrypoints/index.node'
 import { apiImplementation } from './utils'
 import { waitForPromises } from './utils'
@@ -581,50 +579,38 @@ describe('PostHog Context', () => {
 
   it.each(
     (['buffered', 'immediate'] as const).flatMap((mode) =>
-      (['signal', 'response'] as const).flatMap((lifetime) =>
-        (['context', 'explicit', 'personless'] as const).map((identity) => ({ mode, lifetime, identity }))
-      )
+      (['context', 'explicit', 'personless'] as const).map((identity) => ({ mode, identity }))
     )
-  )(
-    'keeps $mode exception context after $lifetime expiry with $identity identity',
-    async ({ mode, lifetime, identity }) => {
-      const controller = new AbortController()
-      const response = new EventEmitter()
-      const explicit = identity === 'explicit'
-      const contextId = identity === 'personless' ? undefined : 'request-user'
-      const data = { distinctId: contextId, sessionId: 'request-session', properties: { route: '/work' } }
-      let pending: Promise<void> | undefined
-      const capture = (): void => {
-        const error = new Error('operation failed')
-        const properties = explicit ? { $session_id: 'explicit-session', route: '/explicit' } : undefined
-        const distinctId = explicit ? 'explicit-user' : undefined
-        if (mode === 'immediate') pending = posthog.captureExceptionImmediate(error, distinctId, properties)
-        else posthog.captureException(error, distinctId, properties)
-        if (lifetime === 'signal') controller.abort()
-        else response.emit('finish')
-        expect(posthog.getContext()).toBeUndefined()
-      }
-
-      if (lifetime === 'signal') posthog.withContext(data, capture, { signal: controller.signal })
-      else {
-        const app = { use: vi.fn() }
-        setupExpressRequestContext(posthog, app)
-        posthog.withContext(data, () => app.use.mock.calls[0][0]({ headers: {} }, response, capture))
-      }
-      await pending
-      await posthog.flush()
-
-      const events = getLastBatchEvents()
-      expect(events).toHaveLength(1)
-      const event = events?.[0]
-      expect(event.event).toBe('$exception')
-      expect(event.properties.$session_id).toBe(explicit ? 'explicit-session' : 'request-session')
-      expect(event.properties.route).toBe(explicit ? '/explicit' : '/work')
-      expect(event.properties.$process_person_profile).toBe(identity === 'personless' ? false : undefined)
-      if (identity === 'personless') expect(event.distinct_id).toEqual(expect.any(String))
-      else expect(event.distinct_id).toBe(explicit ? 'explicit-user' : 'request-user')
+  )('keeps $mode exception context after signal expiry with $identity identity', async ({ mode, identity }) => {
+    const controller = new AbortController()
+    const explicit = identity === 'explicit'
+    const contextId = identity === 'personless' ? undefined : 'request-user'
+    const data = { distinctId: contextId, sessionId: 'request-session', properties: { route: '/work' } }
+    let pending: Promise<void> | undefined
+    const capture = (): void => {
+      const error = new Error('operation failed')
+      const properties = explicit ? { $session_id: 'explicit-session', route: '/explicit' } : undefined
+      const distinctId = explicit ? 'explicit-user' : undefined
+      if (mode === 'immediate') pending = posthog.captureExceptionImmediate(error, distinctId, properties)
+      else posthog.captureException(error, distinctId, properties)
+      controller.abort()
+      expect(posthog.getContext()).toBeUndefined()
     }
-  )
+
+    posthog.withContext(data, capture, { signal: controller.signal })
+    await pending
+    await posthog.flush()
+
+    const events = getLastBatchEvents()
+    expect(events).toHaveLength(1)
+    const event = events?.[0]
+    expect(event.event).toBe('$exception')
+    expect(event.properties.$session_id).toBe(explicit ? 'explicit-session' : 'request-session')
+    expect(event.properties.route).toBe(explicit ? '/explicit' : '/work')
+    expect(event.properties.$process_person_profile).toBe(identity === 'personless' ? false : undefined)
+    if (identity === 'personless') expect(event.distinct_id).toEqual(expect.any(String))
+    else expect(event.distinct_id).toBe(explicit ? 'explicit-user' : 'request-user')
+  })
 
   it.each([
     {

@@ -38,13 +38,11 @@ Without `fresh: true`, nested scopes inherit the parent lifetime as well as thei
 Express preserves an existing application identity and treats incoming headers as fallback analytics context.
 The headers must not be used for authentication or authorization.
 
-Express context stays active through async request work until the response finishes or closes.
-If the response is already finished or destroyed when the middleware runs, its context starts expired.
-New spans from detached work after that point have no request IDs.
-Exceptions captured before completion keep their original context while asynchronous error processing finishes.
+Express context stays active through async request work, including promises and timers that continue after the response ends.
+Exceptions keep the context they were captured in while asynchronous error processing finishes.
 Use explicit context for a background job that needs its own IDs.
 The Node.js `PostHogInterceptor` from `posthog-node/nestjs` also enriches request and child spans.
-It keeps its existing fresh header context and ends it when the Express or Fastify response finishes or closes.
+It keeps its existing fresh header context, with the same lifetime as Express.
 Explicit `sessionId` and `posthogDistinctId` span attributes keep their values.
 This integration does not create IDs, traces, recordings, or log exporters.
 It does not change the application's OpenTelemetry setup or require OpenTelemetry for other SDK use.

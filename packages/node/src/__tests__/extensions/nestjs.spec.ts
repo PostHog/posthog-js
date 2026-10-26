@@ -1,5 +1,4 @@
 import type { IncomingHttpHeaders } from 'node:http'
-import { EventEmitter } from 'node:events'
 import { defer, of, throwError, lastValueFrom } from 'rxjs'
 
 import { PostHog } from '@/entrypoints/index.node'
@@ -45,9 +44,9 @@ const createMockContext = (overrides?: {
     headers: overrides?.headers ?? {},
     socket: { remoteAddress: overrides?.remoteAddress ?? '127.0.0.1' },
   }
-  const response = Object.assign(new EventEmitter(), {
+  const response = {
     statusCode: overrides?.statusCode ?? 500,
-  })
+  }
   return {
     switchToHttp: () => ({
       getRequest: () => request,

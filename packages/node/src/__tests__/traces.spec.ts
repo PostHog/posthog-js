@@ -297,7 +297,7 @@ describe('PostHog traces', () => {
       expect(attributeOf(span, 'sessionId')).toEqual({ stringValue: 'session-123' })
     })
 
-    it('keeps native snapshots and omits request IDs from spans after the response', async () => {
+    it('keeps request IDs on spans that start after the response', async () => {
       const app = { use: vi.fn() }
       setupExpressRequestContext(posthog, app)
       const response = new EventEmitter()
@@ -314,11 +314,11 @@ describe('PostHog traces', () => {
         }
       )
       await flushTraces()
-      const [request, detached] = sentSpans()
-      expect(attributeOf(request, 'sessionId')).toEqual({ stringValue: 'request-session' })
-      expect(attributeOf(request, 'posthogDistinctId')).toEqual({ stringValue: 'request-user' })
-      expect(attributeOf(detached, 'sessionId')).toBeUndefined()
-      expect(attributeOf(detached, 'posthogDistinctId')).toBeUndefined()
+      for (const span of sentSpans()) {
+        expect(attributeOf(span, 'sessionId')).toEqual({ stringValue: 'request-session' })
+        expect(attributeOf(span, 'posthogDistinctId')).toEqual({ stringValue: 'request-user' })
+      }
+      expect(sentSpans()).toHaveLength(2)
     })
 
     it('omits the keys outside a request context', async () => {

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { Observable, defer, lastValueFrom } from 'rxjs'
+import { defer, lastValueFrom } from 'rxjs'
 import { context, trace, ROOT_CONTEXT } from '@opentelemetry/api'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
@@ -43,11 +43,9 @@ describe('NestJS span context', () => {
   }
 
   it.each([
-    ['express', 'success', 'finish'],
-    ['express', 'error', 'close'],
-    ['fastify', 'success', 'finish'],
-    ['fastify', 'error', 'close'],
-  ])('keeps %s %s context until response %s', async (adapter, outcome, event) => {
+    ['success', 'finish'],
+    ['error', 'close'],
+  ])('keeps %s context after response %s', async (outcome, event) => {
     const response = new EventEmitter()
     const tracer = provider.getTracer('nestjs-test')
     const incoming = tracer.startSpan('incoming', { attributes: { posthogDistinctId: 'application-user' } })
@@ -59,7 +57,7 @@ describe('NestJS span context', () => {
       client.withContext({ properties: { application: true } }, async () => {
         const interceptor = new PostHogInterceptor(client)
         const result = lastValueFrom(
-          interceptor.intercept(requestContext(adapter === 'fastify' ? { raw: response } : response), {
+          interceptor.intercept(requestContext(response), {
             handle: () =>
               defer(async () => {
                 const child = tracer.startSpan('child')
@@ -74,7 +72,7 @@ describe('NestJS span context', () => {
                     releaseLate = resolve
                   })
                   tracer.startSpan('late').end()
-                  expect(client.getContext()).toBeUndefined()
+                  expect(client.getContext()?.sessionId).toBe('browser-session')
                   child.end()
                 })()
                 if (outcome === 'error') throw new Error('request failure')
@@ -94,7 +92,7 @@ describe('NestJS span context', () => {
     incoming.end()
     await provider.forceFlush()
     const spans = exporter.getFinishedSpans()
-    for (const name of ['child', 'pending-response']) {
+    for (const name of ['child', 'pending-response', 'late']) {
       expect(spans.find((span) => span.name === name)?.attributes).toEqual({
         sessionId: 'browser-session',
         posthogDistinctId: 'header-user',
@@ -104,42 +102,5 @@ describe('NestJS span context', () => {
       sessionId: 'browser-session',
       posthogDistinctId: 'application-user',
     })
-    expect(spans.find((span) => span.name === 'late')?.attributes).toEqual({})
-    expect(response.listenerCount('finish')).toBe(0)
-    expect(response.listenerCount('close')).toBe(0)
-  })
-
-  it.each(['throw', 'error', 'unsubscribe'])('expires unsupported-response scope on %s', async (outcome) => {
-    const tracer = provider.getTracer('nestjs-test')
-    let release!: () => void
-    let late!: Promise<void>
-    const begin = (): void => {
-      late = (async () => {
-        await new Promise<void>((resolve) => {
-          release = resolve
-        })
-        tracer.startSpan('late').end()
-        expect(client.getContext()).toBeUndefined()
-      })()
-    }
-    const interceptor = new PostHogInterceptor(client)
-    const stream = interceptor.intercept(requestContext({}), {
-      handle: () => {
-        if (outcome === 'throw') {
-          begin()
-          throw new Error('request failure')
-        }
-        return new Observable((subscriber) => {
-          begin()
-          if (outcome === 'error') subscriber.error(new Error('request failure'))
-        })
-      },
-    })
-    if (outcome === 'unsubscribe') stream.subscribe().unsubscribe()
-    else await expect(lastValueFrom(stream)).rejects.toThrow('request failure')
-    release()
-    await late
-    await provider.forceFlush()
-    expect(exporter.getFinishedSpans().find((span) => span.name === 'late')?.attributes).toEqual({})
   })
 })
