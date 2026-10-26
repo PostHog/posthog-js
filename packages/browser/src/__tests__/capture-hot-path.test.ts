@@ -150,6 +150,52 @@ describe('capture() hot path', () => {
         expect(persistence.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(sibling)
     })
 
+    it('fills a Meta identifier from the shared cookie a sibling subdomain wrote, without parsing the entry', () => {
+        const { posthog, storageKey } = setupWithManyFlags({ persistence: 'localStorage+cookie' })
+        const fbc = { value: 'fb.1.1700000000000.subdomain', delivered: true }
+        const cookieParses = (parseSpy: { mock: { calls: unknown[][] } }) =>
+            parseSpy.mock.calls.filter(
+                ([text]) =>
+                    typeof text === 'string' &&
+                    text.includes(PERSISTENCE_FACEBOOK_CLICK_ID) &&
+                    !text.includes(ACTIVE_FEATURE_FLAGS[0])
+            )
+        const siblingSubdomainWritesCookie = (patch: (cookie: Record<string, unknown>) => void) => {
+            const cookieText = decodeURIComponent(
+                document.cookie
+                    .split('; ')
+                    .find((entry) => entry.startsWith(`${storageKey}=`))!
+                    .split('=')[1]
+            )
+            const cookie = JSON.parse(cookieText)
+            patch(cookie)
+            document.cookie = `${storageKey}=${encodeURIComponent(JSON.stringify(cookie))}; path=/`
+        }
+
+        siblingSubdomainWritesCookie((cookie) => (cookie[PERSISTENCE_FACEBOOK_CLICK_ID] = fbc))
+        let parseSpy = vi.spyOn(JSON, 'parse')
+        posthog.persistence!.register({ unrelated: 'change' })
+
+        expect(persistenceEntryParses(parseSpy)).toHaveLength(0)
+        expect(cookieParses(parseSpy)).toHaveLength(1)
+        expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbc)
+        expect(readEntry(storageKey)[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbc)
+
+        // Our own writes do not trigger a cookie parse on the next write.
+        parseSpy.mockRestore()
+        parseSpy = vi.spyOn(JSON, 'parse')
+        posthog.capture('$autocapture')
+        posthog.capture('$autocapture')
+        expect(cookieParses(parseSpy)).toHaveLength(0)
+
+        // localStorage wins: a cookie value never replaces one this tab already holds.
+        siblingSubdomainWritesCookie(
+            (cookie) => (cookie[PERSISTENCE_FACEBOOK_CLICK_ID] = { value: 'fb.1.1700000000000.other', delivered: true })
+        )
+        posthog.persistence!.register({ unrelated: 'again' })
+        expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbc)
+    })
+
     it('does not read the persistence entry while persistence is disabled', () => {
         const { posthog, storageKey } = setupWithManyFlags({ persistence: 'localStorage' })
         posthog.set_config({ disable_persistence: true })

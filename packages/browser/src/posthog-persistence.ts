@@ -241,6 +241,10 @@ export class PostHogPersistence {
     // this fingerprint to cheaply detect identity changes made on sibling subdomains.
     private _lastSeenCookiePropertiesFingerprint: string | undefined
     private _lastSeenMainCookieValue: string | undefined
+    // Shared-cookie text last reconciled for Meta identifiers. Used only by
+    // localStorage+cookie without cookieWinsOnConflict; syncCookieProperties
+    // covers the cookie-wins case.
+    private _lastSeenMetaIdentifierCookieValue: string | undefined
     // Identity changes can be adopted by background persistence writes before
     // capture runs. Keep the transition pending until core performs the flag and
     // person-cache side effects associated with the new identity.
@@ -474,6 +478,58 @@ export class PostHogPersistence {
                 this._deleteProp(prop, false)
             }
         })
+    }
+
+    private _metaIdentifierCookieSyncEnabled(): boolean {
+        return this._storesIdentityInCookie && this._splitStorageEligible && !this._config.cookieWinsOnConflict
+    }
+
+    // A sibling subdomain writes only the cookie, so no storage event reaches this tab.
+    // localStorage wins in this mode: the cookie fills a Meta identifier this tab lacks.
+    private _adoptMetaIdentifiersFromCookie(): void {
+        if (!this._metaIdentifierCookieSyncEnabled()) {
+            return
+        }
+        let cookieValue: string | undefined
+        try {
+            cookieValue = cookieStore._get(this._name) || undefined
+        } catch {
+            return
+        }
+        if (!cookieValue || cookieValue === this._lastSeenMetaIdentifierCookieValue) {
+            return
+        }
+        this._lastSeenMetaIdentifierCookieValue = cookieValue
+        let cookieEntry: Properties
+        try {
+            cookieEntry = getSafeCookieProperties(JSON.parse(cookieValue))
+        } catch {
+            return
+        }
+        META_IDENTIFIER_PERSISTENCE_KEYS.forEach((prop) => {
+            if (prop in cookieEntry && !(prop in this.props) && !this._metaIdentifierChangePending.has(prop)) {
+                this._setProp(prop, cookieEntry[prop], false)
+            }
+        })
+    }
+
+    // Advance the snapshot only when the cookie holds exactly what this write put there,
+    // so a sibling write landing right after ours stays eligible for the next reconciliation.
+    private _rememberMetaIdentifierCookieValue(props: Properties): void {
+        if (!this._metaIdentifierCookieSyncEnabled()) {
+            return
+        }
+        try {
+            const expected = JSON.stringify(
+                getCookiePersistedProperties(props, this._config.cookie_persisted_properties || [])
+            )
+            const current = cookieStore._get(this._name) || undefined
+            if (current === expected) {
+                this._lastSeenMetaIdentifierCookieValue = current
+            }
+        } catch {
+            // noop
+        }
     }
 
     private _reconcileCrossTabFeatureFlagPropertiesBeforeWrite(): boolean {
@@ -1366,8 +1422,9 @@ export class PostHogPersistence {
         if (!forceSuppressedSnapshot) {
             this.syncCookieProperties()
             // localStorage-backed stores adopt sibling Meta identifiers from the storage
-            // event and from the pre-write reconciliation below. Only the cookie store,
-            // capped at 4 KB, still re-reads here; sessionStorage and memory have no siblings.
+            // event, the pre-write reconciliation and the cookie compare below. Only the
+            // cookie store, capped at 4 KB, still re-reads here; sessionStorage and memory
+            // have no siblings.
             if (this._storesIdentityInCookie && !this._splitStorageEligible) {
                 this.refreshMetaIdentifiers()
             }
@@ -1386,6 +1443,9 @@ export class PostHogPersistence {
             }
             return
         }
+        if (!forceSuppressedSnapshot) {
+            this._adoptMetaIdentifiersFromCookie()
+        }
         if (this._splitStorage) {
             this._writeNowSplit()
             if (crossTabPropertiesChanged) {
@@ -1397,6 +1457,7 @@ export class PostHogPersistence {
         const writeResult = this._writeEntry(this._storage, this._name, this.props, MAIN_STORAGE_SLOT)
         if (writeResult === 'written') {
             this._rememberCurrentCookieProperties(this.props)
+            this._rememberMetaIdentifierCookieValue(this.props)
         }
         if (writeResult !== 'failed') {
             this._pendingCrossTabFeatureFlagChanges.clear()
@@ -1427,6 +1488,7 @@ export class PostHogPersistence {
         const mainWriteResult = this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)
         if (mainWriteResult === 'written') {
             this._rememberCurrentCookieProperties(main)
+            this._rememberMetaIdentifierCookieValue(main)
         }
         if (mainWriteResult !== 'failed') {
             this._localIdentityChangePending = false
@@ -1627,6 +1689,7 @@ export class PostHogPersistence {
         }
         this._lastSeenCookiePropertiesFingerprint = undefined
         this._lastSeenMainCookieValue = undefined
+        this._lastSeenMetaIdentifierCookieValue = undefined
     }
 
     // removes the storage entry and deletes all loaded data
@@ -1826,6 +1889,7 @@ export class PostHogPersistence {
         if (!disabled && (persistenceModeChanged || cookiePersistedPropertiesChanged || cookiePrecedenceChanged)) {
             this._lastSeenCookiePropertiesFingerprint = undefined
             this._lastSeenMainCookieValue = undefined
+            this._lastSeenMetaIdentifierCookieValue = undefined
             // Newly added cookie-backed keys are still local-only in the current
             // cookie. Keep the old key set authoritative until migration writes
             // the first snapshot under the new configuration.

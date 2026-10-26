@@ -813,6 +813,7 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
         '_syncCookieProperties',
         '_mergeCrossTabFeatureFlagProperties',
         '_mergeMetaIdentifierProperties',
+        '_adoptMetaIdentifiersFromCookie',
         '_truncateExistingPersonInfoForCookie',
         'register',
         'register_once',
