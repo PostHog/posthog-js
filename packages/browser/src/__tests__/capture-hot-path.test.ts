@@ -38,6 +38,18 @@ const siblingStorageEventArrives = (storageKey: string, newValue: string) =>
 const siblingWritesAndEventArrives = (storageKey: string, patch: (entry: Record<string, unknown>) => void) =>
     siblingStorageEventArrives(storageKey, siblingWrites(storageKey, patch))
 
+const siblingSubdomainWritesCookie = (storageKey: string, patch: (cookie: Record<string, unknown>) => void) => {
+    const cookieText = decodeURIComponent(
+        document.cookie
+            .split('; ')
+            .find((entry) => entry.startsWith(`${storageKey}=`))!
+            .split('=')[1]
+    )
+    const cookie = JSON.parse(cookieText)
+    patch(cookie)
+    document.cookie = `${storageKey}=${encodeURIComponent(JSON.stringify(cookie))}; path=/`
+}
+
 describe('capture() hot path', () => {
     afterEach(() => {
         vi.restoreAllMocks()
@@ -184,19 +196,7 @@ describe('capture() hot path', () => {
                     text.includes(PERSISTENCE_FACEBOOK_CLICK_ID) &&
                     !text.includes(ACTIVE_FEATURE_FLAGS[0])
             )
-        const siblingSubdomainWritesCookie = (patch: (cookie: Record<string, unknown>) => void) => {
-            const cookieText = decodeURIComponent(
-                document.cookie
-                    .split('; ')
-                    .find((entry) => entry.startsWith(`${storageKey}=`))!
-                    .split('=')[1]
-            )
-            const cookie = JSON.parse(cookieText)
-            patch(cookie)
-            document.cookie = `${storageKey}=${encodeURIComponent(JSON.stringify(cookie))}; path=/`
-        }
-
-        siblingSubdomainWritesCookie((cookie) => (cookie[PERSISTENCE_FACEBOOK_CLICK_ID] = fbc))
+        siblingSubdomainWritesCookie(storageKey, (cookie) => (cookie[PERSISTENCE_FACEBOOK_CLICK_ID] = fbc))
         let parseSpy = vi.spyOn(JSON, 'parse')
         posthog.persistence!.register({ unrelated: 'change' })
 
@@ -214,10 +214,44 @@ describe('capture() hot path', () => {
 
         // localStorage wins: a cookie value never replaces one this tab already holds.
         siblingSubdomainWritesCookie(
+            storageKey,
             (cookie) => (cookie[PERSISTENCE_FACEBOOK_CLICK_ID] = { value: 'fb.1.1700000000000.other', delivered: true })
         )
         posthog.persistence!.register({ unrelated: 'again' })
         expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbc)
+    })
+
+    it('keeps a newer cookie $fbc over an older sibling localStorage value when the cookie wins', () => {
+        const { posthog, storageKey } = setupWithManyFlags({
+            persistence: 'localStorage+cookie',
+            cookieWinsOnConflict: true,
+        })
+        const older = { value: 'fb.1.1700000000000.older', delivered: true }
+        const newer = { value: 'fb.1.1700000000001.newer', delivered: true }
+
+        siblingWrites(storageKey, (entry) => (entry[PERSISTENCE_FACEBOOK_CLICK_ID] = older))
+        siblingSubdomainWritesCookie(storageKey, (cookie) => (cookie[PERSISTENCE_FACEBOOK_CLICK_ID] = newer))
+
+        posthog.persistence!.register({ unrelated: 'change' })
+
+        expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(newer)
+        expect(readEntry(storageKey)[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(newer)
+    })
+
+    it('drops the Meta identifiers when a sibling tab removes the whole entry', () => {
+        const { posthog, storageKey } = setupWithManyFlags({ persistence: 'localStorage' })
+        posthog.persistence!.register({
+            [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: 'fb.1.1700000000000.local', delivered: true },
+        })
+
+        localStorage.removeItem(storageKey)
+        window.dispatchEvent(
+            new StorageEvent('storage', { key: storageKey, newValue: null, storageArea: localStorage })
+        )
+
+        expect(posthog.persistence!.props).not.toHaveProperty(PERSISTENCE_FACEBOOK_CLICK_ID)
+        posthog.persistence!.register({ unrelated: 'change' })
+        expect(readEntry(storageKey)).not.toHaveProperty(PERSISTENCE_FACEBOOK_CLICK_ID)
     })
 
     it('does not read the persistence entry while persistence is disabled', () => {

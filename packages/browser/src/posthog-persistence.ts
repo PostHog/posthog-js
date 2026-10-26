@@ -376,6 +376,9 @@ export class PostHogPersistence {
                 state.storageValue = null
                 if (slot !== MAIN_STORAGE_SLOT) {
                     state.persisted = false
+                } else {
+                    // A sibling removed the entry (reset or opt-out), so its Meta identifiers go too.
+                    this._mergeMetaIdentifierProperties({})
                 }
                 return false
             }
@@ -465,9 +468,15 @@ export class PostHogPersistence {
     }
 
     // Same adoption rules as `refreshKey`, applied to an entry the caller already parsed.
+    // When the cookie wins, its keys are owned by `syncCookieProperties`: a sibling tab's
+    // localStorage entry can carry an older value than a subdomain's newer cookie.
     private _mergeMetaIdentifierProperties(nextEntry: Properties): void {
+        const cookieOwnedKeys =
+            this._storesIdentityInCookie && this._config.cookieWinsOnConflict
+                ? [...COOKIE_PERSISTED_PROPERTIES, ...(this._config.cookie_persisted_properties || [])]
+                : []
         META_IDENTIFIER_PERSISTENCE_KEYS.forEach((prop) => {
-            if (this._metaIdentifierChangePending.has(prop)) {
+            if (this._metaIdentifierChangePending.has(prop) || cookieOwnedKeys.indexOf(prop) !== -1) {
                 return
             }
             if (prop in nextEntry) {
