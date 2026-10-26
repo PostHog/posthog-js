@@ -232,11 +232,33 @@ describe('PostHogGenkitSpanProcessor', () => {
     const events = capturedEvents(client)
     const generation = events.find((event) => event.event === '$ai_generation')
     expect(generation.properties).toMatchObject({ $ai_is_error: true, $ai_http_status: 500 })
-    expect(JSON.parse(generation.properties.$ai_error)).toEqual({ name: 'Error', message: 'quota exceeded' })
+    expect(JSON.parse(generation.properties.$ai_error)).toEqual({
+      name: 'Error',
+      message: 'quota exceeded',
+      stack: expect.stringContaining('genkit.test.ts'),
+    })
     expect(generation.properties.$ai_output_choices).toEqual([])
     const trace = events.find((event) => event.event === '$ai_trace')
     expect(trace.properties.$ai_is_error).toBe(true)
     expect(trace.properties.$ai_span_name).toBe('failingFlow')
+  })
+
+  it('sends model errors to exception autocapture as an Error with the original stack', async () => {
+    client.options = { enableExceptionAutocapture: true }
+    client.captureException = vi.fn()
+    const ai = genkit({})
+    ai.defineModel({ name: 'fake/failing-model' }, async () => {
+      // OpenTelemetry records the code, not the class name, as the exception type.
+      throw Object.assign(new TypeError('bad request'), { code: 400 })
+    })
+
+    await expect(ai.generate({ model: 'fake/failing-model', prompt: 'Hi' })).rejects.toThrow('bad request')
+
+    expect(client.captureException).toHaveBeenCalledTimes(1)
+    const [error] = client.captureException.mock.calls[0]
+    expect(error).toBeInstanceOf(Error)
+    expect(error).toMatchObject({ name: 'TypeError', message: 'bad request' })
+    expect(error.stack).toContain('genkit.test.ts')
   })
 
   it('leaves out inputs and outputs in privacy mode', async () => {
@@ -253,7 +275,7 @@ describe('PostHogGenkitSpanProcessor', () => {
     expect(capturedEvents(client)[0].properties.$ai_input_tokens).toBe(10)
   })
 
-  it('redacts base64 media in generation input', async () => {
+  it('maps media parts to image and inline data blocks, and redacts base64 data', async () => {
     const ai = genkit({})
     ai.defineModel({ name: 'fake/vision-model', supports: { media: true } }, async () => ({
       message: { role: 'model', content: [{ text: 'A red pixel.' }] },
@@ -263,13 +285,67 @@ describe('PostHogGenkitSpanProcessor', () => {
 
     await ai.generate({
       model: 'fake/vision-model',
-      prompt: [{ text: 'Describe this image.' }, { media: { url: image, contentType: 'image/png' } }],
+      prompt: [
+        { text: 'Describe these files.' },
+        { media: { url: image, contentType: 'image/png' } },
+        { media: { url: 'https://example.com/cat.jpg' } },
+        { media: { url: 'data:application/pdf;base64,JVBERi0xLjQK', contentType: 'application/pdf' } },
+        { media: { url: 'gs://bucket/talk.mp3', contentType: 'audio/mpeg' } },
+      ],
     })
 
     const generation = capturedEvents(client).find((event) => event.event === '$ai_generation')
-    expect(generation.properties.$ai_input[0].content[1]).toEqual({
-      media: { url: '[base64 image/png redacted]', contentType: 'image/png' },
+    expect(generation.properties.$ai_input[0].content.slice(1)).toEqual([
+      { type: 'image', inline_data: { mime_type: 'image/png', data: '[base64 image/png redacted]' } },
+      { type: 'image', image: 'https://example.com/cat.jpg' },
+      { type: 'document', inline_data: { mime_type: 'application/pdf', data: '[base64 application/pdf redacted]' } },
+      { media: { url: 'gs://bucket/talk.mp3', contentType: 'audio/mpeg' } },
+    ])
+  })
+
+  it('keeps credentials in plugin config out of every event', async () => {
+    await createWeatherFlow()('Paris')
+
+    const events = capturedEvents(client)
+    expect(JSON.stringify(events)).not.toContain('secret')
+    const generate = events.find((event) => event.properties.$ai_span_name === 'generate')
+    expect(generate.properties.$ai_input_state.config).toEqual({ temperature: 0.2, apiKey: '[REDACTED]' })
+    expect(generate.properties.$ai_output_state.request.config).toEqual({ temperature: 0.2, apiKey: '[REDACTED]' })
+  })
+
+  it.each([
+    ['googleai/gemini-2.5-flash', 'gemini', 'gemini-2.5-flash'],
+    ['vertexai/gemini-2.5-flash', 'vertex', 'gemini-2.5-flash'],
+    ['ollama/llama3', 'ollama', 'llama3'],
+  ])('sends the provider of %s as %s', async (name, provider, model) => {
+    const ai = genkit({})
+    ai.defineModel({ name }, async () => ({ message: { role: 'model', content: [{ text: 'Hi' }] } }))
+
+    await ai.generate({ model: name, prompt: 'Hi' })
+
+    const generation = capturedEvents(client).find((event) => event.event === '$ai_generation')
+    expect(generation.properties).toMatchObject({ $ai_provider: provider, $ai_model: model })
+  })
+
+  it('captures an embedder call as $ai_embedding without the vectors or credentials', async () => {
+    const ai = genkit({})
+    const embedder = ai.defineEmbedder({ name: 'googleai/text-embedding-004' }, async (documents) => ({
+      embeddings: documents.map(() => ({ embedding: [0.25, 0.5] })),
+    }))
+
+    await ai.embedMany({ embedder, content: ['first document', 'second document'], options: { apiKey: 'secret' } })
+
+    const events = capturedEvents(client)
+    expect(events.map((event) => event.event)).toEqual(['$ai_embedding'])
+    expect(events[0].properties).toMatchObject({
+      $ai_provider: 'gemini',
+      $ai_model: 'text-embedding-004',
+      $ai_input: ['first document', 'second document'],
+      $ai_framework: 'genkit',
     })
+    expect(events[0].properties.$ai_output_choices ?? null).toBeNull()
+    expect(JSON.stringify(events)).not.toContain('secret')
+    expect(JSON.stringify(events)).not.toContain('0.25')
   })
 
   it('adds groups and properties, and captures personless events without a distinct ID', async () => {
