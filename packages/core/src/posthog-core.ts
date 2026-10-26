@@ -1295,6 +1295,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     })
   }
 
+  /**
+   * Overrides the values of the given flags locally until cleared with `null`.
+   *
+   * @deprecated Use `updateFlags()` instead. To keep the values from being replaced by the next flags load, also set `disableRemoteFeatureFlags`.
+   */
   async overrideFeatureFlag(flags: PostHogFlagsResponse['featureFlags'] | null): Promise<void> {
     this.wrap(() => {
       if (flags === null) {

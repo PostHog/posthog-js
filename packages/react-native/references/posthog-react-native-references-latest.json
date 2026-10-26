@@ -1982,6 +1982,7 @@
         },
         {
           "category": "",
+          "description": "Overrides the values of the given flags locally until cleared with `null`.",
           "details": null,
           "id": "overrideFeatureFlag",
           "showDocs": true,
@@ -1993,7 +1994,7 @@
               "code": "// Generated example for overrideFeatureFlag\nposthog.overrideFeatureFlag();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [
             {
               "description": "",
