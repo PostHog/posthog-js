@@ -333,7 +333,7 @@ const DEFAULT_QUEUE_ROUTE = 'default'
 
 export abstract class PostHogCoreStateless {
   // options
-  readonly apiKey: string
+  readonly projectToken: string
   readonly host: string
   readonly flushAt: number
   readonly preloadFeatureFlags: boolean
@@ -417,17 +417,22 @@ export abstract class PostHogCoreStateless {
   abstract getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined
   abstract setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void
 
-  constructor(apiKey: string, options: PostHogCoreOptions = {}) {
-    const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
+  /** The project token the client was created with. Same value as `projectToken`. */
+  get apiKey(): string {
+    return this.projectToken
+  }
+
+  constructor(projectToken: string, options: PostHogCoreOptions = {}) {
+    const normalizedProjectToken = typeof projectToken === 'string' ? projectToken.trim() : ''
     const normalizedHost = typeof options.host === 'string' ? options.host.trim() : ''
-    const missingApiKey = !normalizedApiKey
+    const missingProjectToken = !normalizedProjectToken
 
     this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
-    if (missingApiKey) {
-      this._logger.error("You must pass your PostHog project's api key. The client will be disabled.")
+    if (missingProjectToken) {
+      this._logger.error('You must pass your PostHog project token. The client will be disabled.')
     }
 
-    this.apiKey = normalizedApiKey
+    this.projectToken = normalizedProjectToken
     this.host = removeTrailingSlash(normalizedHost || 'https://us.i.posthog.com')
     this.flushAt = options.flushAt ? Math.max(options.flushAt, 1) : 20
     this.maxBatchSize = Math.max(this.flushAt, options.maxBatchSize ?? 100)
@@ -448,7 +453,7 @@ export abstract class PostHogCoreStateless {
     this.featureFlagsRequestMaxRetries = options.featureFlagsRequestMaxRetries ?? 1
     this.remoteConfigRequestTimeoutMs = options.remoteConfigRequestTimeoutMs ?? 3000 // 3 seconds
     this.disableGeoip = options.disableGeoip ?? true
-    this.disabled = (options.disabled ?? false) || missingApiKey
+    this.disabled = (options.disabled ?? false) || missingProjectToken
     this.historicalMigration = options?.historicalMigration ?? false
     // Init promise allows the derived class to block calls until it is ready
     this._initPromise = Promise.resolve()
@@ -768,7 +773,7 @@ export abstract class PostHogCoreStateless {
       host = 'https://eu-assets.i.posthog.com'
     }
 
-    const url = `${host}/array/${this.apiKey}/config`
+    const url = `${host}/array/${this.projectToken}/config`
     const fetchOptions: PostHogFetchOptions = {
       method: 'GET',
       headers: { ...this.getCustomHeaders(), 'Content-Type': 'application/json' },
@@ -804,7 +809,7 @@ export abstract class PostHogCoreStateless {
     const configParam = fetchConfig ? '&config=true' : ''
     const url = `${this.host}/flags/?v=2${configParam}`
     const requestData: Record<string, any> = {
-      token: this.apiKey,
+      token: this.projectToken,
       distinct_id: distinctId,
       groups,
       person_properties: personProperties,
@@ -1145,7 +1150,7 @@ export abstract class PostHogCoreStateless {
       return []
     }
 
-    const url = `${this.host}/api/surveys/?token=${this.apiKey}`
+    const url = `${this.host}/api/surveys/?token=${this.projectToken}`
     const fetchOptions: PostHogFetchOptions = {
       method: 'GET',
       headers: { ...this.getCustomHeaders(), 'Content-Type': 'application/json' },
@@ -1591,7 +1596,7 @@ export abstract class PostHogCoreStateless {
     route: string = DEFAULT_QUEUE_ROUTE
   ): Promise<void> {
     const data: Record<string, any> = {
-      api_key: this.apiKey,
+      api_key: this.projectToken,
       batch: batchMessages.map((message) => {
         if (!message) {
           return message
@@ -1805,7 +1810,7 @@ export abstract class PostHogCoreStateless {
     const url =
       auth === 'bearer'
         ? `${this.host}/i/v1/${path}`
-        : `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.apiKey)}`
+        : `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.projectToken)}`
 
     const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
     const body = gzippedPayload || serialized
@@ -1815,7 +1820,7 @@ export abstract class PostHogCoreStateless {
       headers: {
         ...this.getCustomHeaders(),
         'Content-Type': 'application/json',
-        ...(auth === 'bearer' && { Authorization: `Bearer ${this.apiKey}` }),
+        ...(auth === 'bearer' && { Authorization: `Bearer ${this.projectToken}` }),
         ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
       },
       body,
