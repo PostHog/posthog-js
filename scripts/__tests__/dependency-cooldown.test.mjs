@@ -58,6 +58,16 @@ test('independent pnpm installs have their own workspace policy', () => {
     assert.deepEqual(missing, [])
 })
 
+test('Expo 57 example permits its locked ESLint resolver trust downgrade', async () => {
+    const directory = 'examples/example-expo-57'
+    const [workspace, lockfile] = await Promise.all([
+        readFile(path.join(root, directory, 'pnpm-workspace.yaml'), 'utf8'),
+        readFile(path.join(root, directory, 'pnpm-lock.yaml'), 'utf8'),
+    ])
+    assert.match(lockfile, /^ {2}eslint-import-resolver-typescript@3\.10\.1:/m)
+    assert.match(workspace, /^trustPolicyExclude:\n  - eslint-import-resolver-typescript@3\.10\.1$/m)
+})
+
 test('pnpm hooks do not weaken the seven-day workspace policy', () => {
     const require = createRequire(import.meta.url)
     for (const file of files.filter((file) => path.basename(file) === '.pnpmfile.cjs')) {
