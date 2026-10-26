@@ -2,20 +2,27 @@ import type { SpanProcessor, ReadableSpan, Span } from '@opentelemetry/sdk-trace
 import type { Context } from '@opentelemetry/api'
 import { PostHogSpanProcessor } from '../src/otel'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 
 vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
   OTLPTraceExporter: vi.fn(),
 }))
 
-vi.mock('@opentelemetry/sdk-trace-base', () => ({
-  BatchSpanProcessor: vi.fn().mockImplementation(() => ({
-    onStart: vi.fn(),
-    onEnd: vi.fn(),
+vi.mock('@opentelemetry/sdk-trace-base', () => {
+  throw new Error('@opentelemetry/sdk-trace-base must not be imported at runtime')
+})
+
+type ExportCallback = (result: { code: number; error?: Error }) => void
+
+function mockExporter(code = 0): { export: vi.Mock; shutdown: vi.Mock } {
+  const exporter = {
+    export: vi.fn((_spans: ReadableSpan[], callback: ExportCallback) => callback({ code })),
     shutdown: vi.fn().mockResolvedValue(undefined),
-    forceFlush: vi.fn().mockResolvedValue(undefined),
-  })),
-}))
+  }
+  vi.mocked(OTLPTraceExporter).mockImplementation(function () {
+    return exporter
+  } as any)
+  return exporter
+}
 
 function mockProcessor(): SpanProcessor & { onStart: vi.Mock; onEnd: vi.Mock } {
   return {
@@ -71,7 +78,6 @@ describe('PostHogSpanProcessor', () => {
       url: expectedUrl,
       headers: { Authorization: `Bearer ${expectedToken}` },
     })
-    expect(BatchSpanProcessor).toHaveBeenCalledWith(expect.any(Object))
   })
 
   it.each([
@@ -88,7 +94,6 @@ describe('PostHogSpanProcessor', () => {
     await expect(processor.forceFlush()).resolves.toBeUndefined()
 
     expect(OTLPTraceExporter).not.toHaveBeenCalled()
-    expect(BatchSpanProcessor).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith(
       '[PostHogSpanProcessor] projectToken is missing or blank; the processor will be disabled.'
     )
@@ -120,6 +125,80 @@ describe('PostHogSpanProcessor', () => {
 
     await processor.forceFlush()
     expect(inner.forceFlush).toHaveBeenCalled()
+  })
+})
+
+describe('PostHogSpanProcessor batching', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('exports queued AI spans in one batch on forceFlush', async () => {
+    const exporter = mockExporter()
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test' })
+
+    processor.onEnd(makeSpan('gen_ai.chat'))
+    processor.onEnd(makeSpan('http.request'))
+    processor.onEnd(makeSpan('gen_ai.embeddings'))
+    expect(exporter.export).not.toHaveBeenCalled()
+
+    await processor.forceFlush()
+
+    expect(exporter.export).toHaveBeenCalledTimes(1)
+    expect(exporter.export.mock.calls[0][0].map((span: ReadableSpan) => span.name)).toEqual([
+      'gen_ai.chat',
+      'gen_ai.embeddings',
+    ])
+  })
+
+  it('exports queued spans after the scheduled delay', async () => {
+    vi.useFakeTimers()
+    const exporter = mockExporter()
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test' })
+
+    processor.onEnd(makeSpan('gen_ai.chat'))
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(exporter.export).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(exporter.export).toHaveBeenCalledTimes(1)
+  })
+
+  it('exports a full batch without waiting for the scheduled delay', () => {
+    const exporter = mockExporter()
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test' })
+
+    for (let i = 0; i < 512; i++) {
+      processor.onEnd(makeSpan('gen_ai.chat'))
+    }
+
+    expect(exporter.export).toHaveBeenCalledTimes(1)
+    expect(exporter.export.mock.calls[0][0]).toHaveLength(512)
+  })
+
+  it('rejects forceFlush when the export fails', async () => {
+    mockExporter(1)
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test' })
+
+    processor.onEnd(makeSpan('gen_ai.chat'))
+
+    await expect(processor.forceFlush()).rejects.toThrow('span export failed')
+  })
+
+  it('flushes and shuts down the exporter once, then ignores new spans', async () => {
+    const exporter = mockExporter()
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test' })
+
+    processor.onEnd(makeSpan('gen_ai.chat'))
+    await Promise.all([processor.shutdown(), processor.shutdown()])
+    processor.onEnd(makeSpan('gen_ai.chat'))
+    await processor.forceFlush()
+
+    expect(exporter.export).toHaveBeenCalledTimes(1)
+    expect(exporter.shutdown).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -1,6 +1,6 @@
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { Context } from '@opentelemetry/api'
-import { BatchSpanProcessor, type SpanProcessor, type ReadableSpan, type Span } from '@opentelemetry/sdk-trace-base'
+import type { SpanExporter, SpanProcessor, ReadableSpan, Span } from '@opentelemetry/sdk-trace-base'
 
 import { redactSpan } from './redact'
 import { stripContent } from './privacy'
@@ -10,6 +10,13 @@ import { isAISpan } from './spans'
 import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
+// OpenTelemetry's ExportResultCode.SUCCESS is 0.
+const EXPORT_SUCCESS = 0
+// The same defaults as OpenTelemetry's BatchSpanProcessor.
+const MAX_QUEUE_SIZE = 2048
+const MAX_EXPORT_BATCH_SIZE = 512
+const SCHEDULED_DELAY_MS = 5000
+const EXPORT_TIMEOUT_MS = 30000
 
 function normalizeToken(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -67,6 +74,79 @@ class NoopSpanProcessor implements SpanProcessor {
   }
   forceFlush(): Promise<void> {
     return Promise.resolve()
+  }
+}
+
+/**
+ * Queues spans and exports them in batches. It replaces OpenTelemetry's BatchSpanProcessor,
+ * because `@opentelemetry/sdk-trace-base` does not exist in OpenTelemetry JS 3.x.
+ */
+class BatchingSpanProcessor implements SpanProcessor {
+  private queue: ReadableSpan[] = []
+  private timer?: ReturnType<typeof setTimeout>
+  private readonly pendingExports = new Set<Promise<void>>()
+  private shutdownPromise?: Promise<void>
+
+  constructor(private readonly exporter: SpanExporter) {}
+
+  onStart(_span: Span, _parentContext: Context): void {
+    return
+  }
+
+  onEnd(span: ReadableSpan): void {
+    if (this.shutdownPromise || this.queue.length >= MAX_QUEUE_SIZE) {
+      return
+    }
+    this.queue.push(span)
+    if (this.queue.length >= MAX_EXPORT_BATCH_SIZE) {
+      this.exportQueued().catch(() => {})
+    } else if (!this.timer) {
+      this.timer = setTimeout(() => {
+        this.exportQueued().catch(() => {})
+      }, SCHEDULED_DELAY_MS)
+      this.timer.unref?.()
+    }
+  }
+
+  forceFlush(): Promise<void> {
+    return this.exportQueued()
+  }
+
+  shutdown(): Promise<void> {
+    this.shutdownPromise ??= this.exportQueued().finally(() => this.exporter.shutdown())
+    return this.shutdownPromise
+  }
+
+  private exportQueued(): Promise<void> {
+    clearTimeout(this.timer)
+    this.timer = undefined
+    while (this.queue.length > 0) {
+      this.track(this.exportBatch(this.queue.splice(0, MAX_EXPORT_BATCH_SIZE)))
+    }
+    return Promise.all(this.pendingExports).then(() => undefined)
+  }
+
+  private track(exported: Promise<void>): void {
+    this.pendingExports.add(exported)
+    const untrack = (): void => {
+      this.pendingExports.delete(exported)
+    }
+    exported.then(untrack, untrack)
+  }
+
+  private exportBatch(spans: ReadableSpan[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timeout')), EXPORT_TIMEOUT_MS)
+      timeout.unref?.()
+      this.exporter.export(spans, (result) => {
+        clearTimeout(timeout)
+        if (result.code === EXPORT_SUCCESS) {
+          resolve()
+        } else {
+          reject(result.error ?? new Error('BatchingSpanProcessor: span export failed'))
+        }
+      })
+    })
   }
 }
 
@@ -134,7 +214,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
           Authorization: `Bearer ${token}`,
         },
       })
-      this.inner = new BatchSpanProcessor(exporter)
+      this.inner = new BatchingSpanProcessor(exporter)
     }
   }
 
@@ -145,7 +225,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
     }
     // Forwarded unconditionally — filtering happens in onEnd. We can't filter
     // here because the span hasn't finished yet and may not have AI attributes
-    // set. BatchSpanProcessor.onStart is a no-op so this is safe.
+    // set. BatchingSpanProcessor.onStart is a no-op so this is safe.
     this.inner.onStart(span, parentContext)
   }
 

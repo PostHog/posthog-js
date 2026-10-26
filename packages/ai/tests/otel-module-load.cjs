@@ -45,30 +45,49 @@ try {
     })
   )
 
-  // Reproduce a strict package-manager layout: only @posthog/ai's declared
-  // OpenTelemetry peers are available at its level. Their dependencies remain
-  // nested inside their own package layouts.
+  // Reproduce a strict package-manager layout: only the OpenTelemetry packages
+  // that both 2.x and 3.x apps install are available at @posthog/ai's level.
+  // Their dependencies remain nested inside their own package layouts.
+  // OpenTelemetry JS 3.x has no @opentelemetry/sdk-trace-base, so it is not linked.
   linkDependency('@opentelemetry/api')
   linkDependency('@opentelemetry/exporter-trace-otlp-http')
-  linkDependency('@opentelemetry/sdk-trace-base')
 
-  const assertCoreIsNotDirectlyResolvable = `
+  const assertUndeclaredPackagesAreNotResolvable = ['@opentelemetry/core', '@opentelemetry/sdk-trace-base']
+    .map(
+      (name) => `
     try {
-      require.resolve('@opentelemetry/core')
-      throw new Error('@opentelemetry/core unexpectedly resolved from the fixture root')
+      require.resolve('${name}')
+      throw new Error('${name} unexpectedly resolved from the fixture root')
     } catch (error) {
       if (error.code !== 'MODULE_NOT_FOUND') throw error
     }
   `
+    )
+    .join('\n')
 
-  execFileSync(process.execPath, ['--eval', `${assertCoreIsNotDirectlyResolvable}\nrequire('@posthog/ai/otel')`], {
-    cwd: fixtureRoot,
-    stdio: 'inherit',
-  })
-  execFileSync(process.execPath, ['--input-type=module', '--eval', `await import('@posthog/ai/otel')`], {
-    cwd: fixtureRoot,
-    stdio: 'inherit',
-  })
+  execFileSync(
+    process.execPath,
+    [
+      '--eval',
+      `${assertUndeclaredPackagesAreNotResolvable}\nnew (require('@posthog/ai/otel').PostHogSpanProcessor)({ projectToken: 'phc_test' })`,
+    ],
+    {
+      cwd: fixtureRoot,
+      stdio: 'inherit',
+    }
+  )
+  execFileSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `const { PostHogSpanProcessor } = await import('@posthog/ai/otel'); new PostHogSpanProcessor({ projectToken: 'phc_test' })`,
+    ],
+    {
+      cwd: fixtureRoot,
+      stdio: 'inherit',
+    }
+  )
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true })
 }
