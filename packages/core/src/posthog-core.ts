@@ -78,14 +78,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   // cache for person properties to avoid duplicate $set events
   protected _cachedPersonProperties: string | null = null
 
-  constructor(apiKey: string, options?: PostHogCoreOptions) {
+  constructor(projectToken: string, options?: PostHogCoreOptions) {
     // Default for stateful mode is to not disable geoip. Only override if explicitly set
     const disableGeoipOption = options?.disableGeoip ?? false
 
     // Default for stateful mode is to timeout at 10s. Only override if explicitly set
     const featureFlagsRequestTimeoutMs = options?.featureFlagsRequestTimeoutMs ?? 10000 // 10 seconds
 
-    super(apiKey, { ...options, disableGeoip: disableGeoipOption, featureFlagsRequestTimeoutMs })
+    super(projectToken, { ...options, disableGeoip: disableGeoipOption, featureFlagsRequestTimeoutMs })
 
     this.sendFeatureFlagEvent = options?.sendFeatureFlagEvent ?? true
     this.disableRemoteFeatureFlags = options?.disableRemoteFeatureFlags ?? false
