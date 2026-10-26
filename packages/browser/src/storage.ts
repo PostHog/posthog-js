@@ -415,6 +415,13 @@ export const createLocalPlusCookieStore = (
 
     return {
         ...localStore,
+        _rawText: function (name) {
+            return [
+                cookieStore._get(name),
+                cookieStore._get(getCookiePersistedPropertiesMetadataName(name)),
+                localStore._get(name),
+            ].join('\u0000')
+        },
         _parse: function (name) {
             try {
                 let cookieValue: string | undefined

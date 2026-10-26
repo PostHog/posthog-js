@@ -1654,7 +1654,7 @@ export class PostHog implements PostHogInterface {
         }
 
         const channel = this._facebookClickIdChannel
-        this.persistence.refreshKey(channel.persistenceKey)
+        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
 
         // An unset clears the store for this event only: the cookie stays, so a later event reads it again.
@@ -1703,7 +1703,7 @@ export class PostHog implements PostHogInterface {
         }
 
         const channel = this._facebookBrowserIdChannel
-        this.persistence.refreshKey(channel.persistenceKey)
+        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
 
         // As for $fbc, an unset applies to this event only.
@@ -1732,7 +1732,7 @@ export class PostHog implements PostHogInterface {
         if (!this.persistence) {
             return
         }
-        this.persistence.refreshKey(channel.persistenceKey)
+        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
         if (stored?.value === value && !stored.delivered) {
             channel.register(value, true)

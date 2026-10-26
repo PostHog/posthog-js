@@ -367,6 +367,9 @@ export interface PersistentStore {
     _error: (error: any) => void
     _parse: (name: string) => any
     _get: (name: string) => any
+    // The raw text that `_parse` reads, for stores whose `_get` alone does not cover it.
+    // Equal snapshots mean `_parse` would return the same value.
+    _rawText?: (name: string) => string
     // Returns whether the write was accepted without throwing. Backends that
     // swallow quota/serialization errors return false so callers can avoid
     // caching a write that never landed. This is best-effort, not a durable
