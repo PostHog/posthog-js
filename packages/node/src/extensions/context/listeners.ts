@@ -2,7 +2,12 @@ import type { PostHogBackendClient } from '../../client'
 
 type ContextListener = (requestEntry: boolean) => void
 
-const listeners = new WeakMap<PostHogBackendClient, Set<ContextListener>>()
+type ContextListenerRegistry = WeakMap<PostHogBackendClient, Set<ContextListener>>
+
+// The CommonJS and ESM builds are separate module copies, so they share one registry through a global.
+const REGISTRY_KEY = Symbol.for('posthog-node.context-listeners')
+const registryHolder = globalThis as typeof globalThis & { [REGISTRY_KEY]?: ContextListenerRegistry }
+const listeners = (registryHolder[REGISTRY_KEY] ??= new WeakMap())
 
 export function addContextListener(client: PostHogBackendClient, listener: ContextListener): () => void {
   const callbacks = listeners.get(client) ?? new Set<ContextListener>()
