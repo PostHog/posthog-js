@@ -990,6 +990,7 @@
         "_urlTriggerStatus",
         "_urlTriggers",
         "_useCrossTabRefreshHardening",
+        "_usesCookieMetaIdentifierRefresh",
         "_validateEmail",
         "_validateIdentifyId",
         "_validateSampleRate",

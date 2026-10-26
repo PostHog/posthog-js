@@ -1356,12 +1356,13 @@ export class PostHogPersistence {
     }
 
     // A pending local change is not in storage yet, so storage does not match `props` until it is written.
-    private _rememberMetaIdentifierStorageSnapshot(snapshot?: string): void {
-        if (!this._storesIdentityInCookie || this._splitStorageEligible) {
-            return
-        }
-        this._metaIdentifierStorageSnapshot =
-            this._metaIdentifierChangePending.size === 0 ? (snapshot ?? this._storageSnapshot()) : undefined
+    private _rememberMetaIdentifierStorageSnapshot(snapshot = this._storageSnapshot()): void {
+        this._metaIdentifierStorageSnapshot = this._metaIdentifierChangePending.size === 0 ? snapshot : undefined
+    }
+
+    // The cookie store has no storage event, so it keeps the snapshot-gated refresh before writes.
+    private _usesCookieMetaIdentifierRefresh(): boolean {
+        return this._storesIdentityInCookie && !this._splitStorageEligible
     }
 
     private _storageSnapshot(): string | undefined {
@@ -1429,7 +1430,7 @@ export class PostHogPersistence {
             // event, the pre-write reconciliation and the cookie compare below. Only the
             // cookie store, capped at 4 KB, still re-reads here; sessionStorage and memory
             // have no siblings.
-            if (this._storesIdentityInCookie && !this._splitStorageEligible) {
+            if (this._usesCookieMetaIdentifierRefresh()) {
                 this.refreshMetaIdentifiers()
             }
         }
@@ -1468,7 +1469,7 @@ export class PostHogPersistence {
             this._localIdentityChangePending = false
             this._metaIdentifierChangePending.clear()
         }
-        if (writeResult === 'written') {
+        if (writeResult === 'written' && this._usesCookieMetaIdentifierRefresh()) {
             this._rememberMetaIdentifierStorageSnapshot()
         }
         if (crossTabPropertiesChanged) {
@@ -1503,7 +1504,7 @@ export class PostHogPersistence {
                 }
             })
         }
-        if (mainWriteResult === 'written') {
+        if (mainWriteResult === 'written' && this._usesCookieMetaIdentifierRefresh()) {
             this._rememberMetaIdentifierStorageSnapshot()
         }
         for (const group of PERSISTENCE_STORAGE_GROUPS) {
