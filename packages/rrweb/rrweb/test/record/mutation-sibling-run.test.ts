@@ -1,27 +1,23 @@
 // @vitest-environment jsdom
 //
-// Regression test for #5227: MutationBuffer must stay linear when many
-// sibling nodes mount under a single parent in one batch.
+// Guard on the new topological-order drain: when many sibling nodes
+// mount under a single parent in one batch, the per-node sibling-lookup
+// count must stay flat as the batch grows.
 //
-// Original repro: 50x35 PrimeVue DataTable (~13k nodes).
-// Second repro (2026-10-15): Svelte 5 + bits-ui Portal — ~50k empty
-// comment/text anchors as direct children of <body>, scaling at ~n^1.8
-// on posthog-js 1.438.7 (pre-fix).
+// The lookups counted here (`dom.previousSibling` / `dom.nextSibling` /
+// `dom.lastChild`) are introduced by the drain itself; the old
+// addList-based path did not call them at all, so counting these on the
+// old code would be ~0 and the assertion would misfire for the wrong
+// reason. This test is not a regression check against the old path, but
+// a scaling guard on the new drain: on the new path lookups per node
+// stay flat as n grows; a future change that regressed the drain to
+// super-linear per-node work would show up here as perNodeBig outpacing
+// perNodeSmall.
 //
-// The fail mode we are testing is the old `addList` tail-rescan walking
-// the sibling chain O(n) times per emission as it tries to resolve
-// parentId/nextId for queued nodes. We assert this by counting
-// `dom.previousSibling` / `dom.nextSibling` / `dom.lastChild` lookups
-// per node across two batch sizes:
-//   - On the fix: total lookups scale as O(n), so lookups/node stays
-//     flat as n grows.
-//   - Pre-fix: total scaled as ~n^1.8, so lookups/node grew ~63× for a
-//     10× batch — well above any CI noise.
-//
-// Earlier versions of this test asserted on `buffer.addedSet.size` at
-// the end, but `emit()` swaps in a fresh empty addedSet before the
-// drain, so that residue check can never fire. @TueHaulund flagged this
-// on review of 5f35b1da4.
+// Scaling intuition for the margin below: pre-fix total was roughly
+// n^1.8, i.e. n^0.8 per node, so a 10x batch size gave about a 6x
+// per-node growth. The assertion keeps a < 5x bound against batching
+// noise.
 
 import { afterEach, describe, expect, it } from 'vitest';
 import record from '../../src/record';
@@ -47,9 +43,7 @@ async function measure(n: number, shape: 'anchors' | 'mixed'): Promise<Row> {
   await settle();
 
   // Patch the three sibling-walk helpers the drain depends on and
-  // count calls between the batch append and the next settle. These
-  // are the hot-path lookups that scaled as ~n^1.8 on the pre-fix
-  // `addList` tail-rescan.
+  // count calls between the batch append and the next settle.
   const originalPrev = dom.previousSibling;
   const originalNext = dom.nextSibling;
   const originalLast = dom.lastChild;
@@ -97,7 +91,7 @@ async function measure(n: number, shape: 'anchors' | 'mixed'): Promise<Row> {
   return { n, lookupCalls, served };
 }
 
-describe('mutation buffer drain stays linear for long sibling runs (#5227)', () => {
+describe('mutation buffer drain stays linear for long sibling runs', () => {
   afterEach(() => {
     document.body.innerHTML = '';
   });
@@ -106,14 +100,12 @@ describe('mutation buffer drain stays linear for long sibling runs (#5227)', () 
     const small = await measure(500, 'anchors');
     const big = await measure(5000, 'anchors');
 
-    // Every added node must reach the emit sink. The old addList-based
-    // path dropped nodes whose parentId couldn't be resolved in-batch;
-    // the topological drain either resolves them or logs explicitly.
+    // Every added node must reach the emit sink.
     expect(small.served).toBeGreaterThanOrEqual(small.n);
     expect(big.served).toBeGreaterThanOrEqual(big.n);
 
-    // Lookups/node must stay flat for the fix to be O(n). The pre-fix
-    // path was ~n^1.8, so 10x batch size => ~63x per-node lookups. We
+    // Lookups/node must stay flat for the drain to be O(n). A 10x batch
+    // on a quadratic-ish path grows per-node work by about 6x; we
     // assert < 5x to keep margin against batching noise.
     const perNodeSmall = small.lookupCalls / small.n;
     const perNodeBig = big.lookupCalls / big.n;

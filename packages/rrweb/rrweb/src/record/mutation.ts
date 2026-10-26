@@ -392,10 +392,7 @@ export default class MutationBuffer {
     }
 
     // Fold movedSet into addedSet so a single topological-order drain
-    // handles both. Ported from upstream rrweb PR #1652 — the previous
-    // addList-based drain was O(n²) when many sibling nodes mounted in a
-    // single render (fixes posthog-js #5227 ~10 s main-thread freeze).
-    // https://github.com/rrweb-io/rrweb/pull/1652
+    // handles both.
     for (const n of this.movedSet) {
       if (
         isParentRemoved(this.removesSubTreeCache, n, this.mirror) &&
@@ -415,11 +412,8 @@ export default class MutationBuffer {
         n,
         this.mirror,
       );
-      // Upstream rrweb uses `isSelfOrAncestorInSet` here so a node that is
-      // itself in movedSet is never dropped even when its parent chain was
-      // removed in the same batch. We match that semantic — the previous
-      // ancestor-only check would occasionally drop a moved node whose
-      // former parent chain was torn down in the same emission.
+      // A node that is itself in movedSet is never dropped, even when its
+      // parent chain was removed in the same batch.
       const movedExempt =
         this.movedSet.has(n) || isAncestorInSet(this.movedSet, n);
       if ((inDroppedTree || parentWasRemoved) && !movedExempt) {
@@ -428,21 +422,30 @@ export default class MutationBuffer {
       }
     }
 
-    // O(n) topological-order drain of this.addedSet. Previous siblings and
-    // nextSibling walks are used to reach a node whose parentId is already
-    // in the mirror BEFORE touching its children, so pushAdd never has to
-    // defer a node onto a secondary queue that would need to be rescanned.
-    // Nodes whose parent cannot be resolved for this emission are recorded
-    // in missingParents so their descendants early-out via the same set
-    // (preserves the previous "escape the dead while loop" guarantee).
+    // Topological-order drain of this.addedSet. Previous siblings and
+    // nextSibling walks reach a node whose parentId is already in the
+    // mirror before touching its children, so pushAdd never has to drop
+    // a node that would otherwise need a rescan. Nodes whose parent
+    // cannot be resolved for this emission are recorded in missingParents
+    // so their descendants early-out via the same set.
     const missingParents = new Set<Node>();
     let n: Node | null = null;
     const iter = this.addedSet.values();
     let curr = iter.next();
     while (this.addedSet.size) {
-      if (n !== null && this.addedSet.has(dom.previousSibling(n) as Node)) {
-        // reuse the current row — n's previous sibling is next to serialize
-        n = dom.previousSibling(n) as Node;
+      // Reuse the current row — n's previous sibling is next to serialize.
+      // Probe past IGNORED_NODE siblings (slimDOM-filtered tags like <script>
+      // or comments interleaved with new siblings) so a mixed row doesn't
+      // force the drain back to walk-up/descend per node.
+      let backProbe: Node | null = null;
+      if (n !== null) {
+        backProbe = dom.previousSibling(n);
+        while (backProbe && this.mirror.getId(backProbe) === IGNORED_NODE) {
+          backProbe = dom.previousSibling(backProbe);
+        }
+      }
+      if (backProbe && this.addedSet.has(backProbe)) {
+        n = backProbe;
       } else {
         if (!this.addedSet.has(curr.value as Node)) {
           // iter protects us from re-walking tombstones left in the Set after
@@ -517,11 +520,10 @@ export default class MutationBuffer {
         continue;
       }
 
-      // pushAdd preserves every PostHog-specific guard that lived in the
-      // original addList-based path (isBlockedAtEmission, shadow-host
-      // reparenting, serializationOptions caching, canvasMaskingConfigured,
-      // iframe/stylesheet attach callbacks) and now reports back whether the
-      // node was actually serialized vs needing to be deferred by the caller.
+      // pushAdd handles isBlockedAtEmission, shadow-host reparenting,
+      // serializationOptions caching, canvasMaskingConfigured, and
+      // iframe/stylesheet attach callbacks, and reports back whether the
+      // node was serialized or dropped.
       const handled = pushAdd(n);
       if (!handled) {
         missingParents.add(n);
@@ -915,13 +917,10 @@ export default class MutationBuffer {
 
     // if n is added to set, there is no need to travel it and its' children again
     if (this.addedSet.has(n)) {
-      // re-insert n so the addedSet iteration order in the `emit` phase matches
-      // the latest DOM order; a stale position makes emit's out-of-order
-      // deferral list do far more work on large batches (upstream rrweb #1302).
-      // this only moves n itself - already-present children keep their earlier
-      // positions and aren't re-appended here, but emit's addList deferral
-      // re-derives parentId/nextId, so parent-before-child order still comes
-      // out correct.
+      // Re-insert n so the addedSet iteration order in emit() matches the
+      // latest DOM order. Only n itself moves; its already-present children
+      // keep their earlier positions. The drain re-derives parentId/nextId
+      // per node, so parent-before-child order still comes out correct.
       this.addedSet.delete(n);
       this.addedSet.add(n);
       return;

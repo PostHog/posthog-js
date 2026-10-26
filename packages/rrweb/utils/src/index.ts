@@ -246,8 +246,7 @@ export function textContent(n: Node): string | null {
 /**
  * Returns `node.previousSibling` through an untainted-prototype accessor so
  * Angular Zone or any third-party monkey-patch of `Node.prototype` cannot
- * silently redirect the mutation ordering. Added for the O(n) drain ported
- * from upstream rrweb PR #1652 (fixes posthog-js #5227).
+ * silently redirect the mutation-buffer drain's sibling walk.
  */
 export function previousSibling(n: Node): ChildNode | null {
   return getUntaintedAccessor('Node', n, 'previousSibling');

@@ -142,15 +142,11 @@ describe('mutation child traversal', () => {
     },
   );
 
-  // Regression test for posthog-js #5227: before porting upstream rrweb
-  // PR #1652 the addList-based drain in processBufferedMutations was O(n²)
-  // when a single render added many sibling nodes (e.g. a 50×35 table
-  // mounting ~13k nodes at once). The reporter observed ~10 s main-thread
-  // freezes. The new topological-order addedSet drain is O(n), so a large
-  // single-batch addition must both (a) complete without stalling the test
-  // runner and (b) emit every added node in a parent-before-child order
-  // the replay engine can consume.
-  it('emits every node in a single-render large-batch sibling addition (fixes #5227)', async () => {
+  // A single-render large-batch sibling addition must emit every added
+  // node, in a parent-before-child order the replay engine can consume,
+  // without stalling the test runner. 500 rows × (1 div + 3 spans + 3
+  // text nodes) = exactly 3500 adds expected.
+  it('emits every node in a single-render large-batch sibling addition in parent-before-child order', async () => {
     const events: Array<{ type: number }> = [];
     stop = record({
       emit: (event) => {
@@ -160,18 +156,13 @@ describe('mutation child traversal', () => {
     await settle();
     const destination = document.getElementById('destination')!;
 
-    // Mount 500 siblings each with 4 nested children (~2500 nodes) in one
-    // synchronous render — the shape #5227 reports as pathological.
     const batch = document.createDocumentFragment();
-    const expectedTexts: string[] = [];
     for (let i = 0; i < 500; i++) {
       const row = document.createElement('div');
       row.className = `row-${i}`;
       for (let j = 0; j < 3; j++) {
         const cell = document.createElement('span');
-        const text = `r${i}c${j}`;
-        cell.textContent = text;
-        expectedTexts.push(text);
+        cell.textContent = `r${i}c${j}`;
         row.appendChild(cell);
       }
       batch.appendChild(row);
@@ -180,9 +171,11 @@ describe('mutation child traversal', () => {
     destination.appendChild(batch);
     await settle();
 
-    // Collect every full-mutation payload emitted since the batch was appended.
-    const addsAfterBatch: Array<{ parentId: number; nextId: number | null }> =
-      [];
+    const addsAfterBatch: Array<{
+      id: number;
+      parentId: number;
+      nextId: number | null;
+    }> = [];
     for (const event of events) {
       if (event.type !== 3) continue;
       const data = (event as unknown as { data: { adds?: unknown[] } }).data;
@@ -190,24 +183,35 @@ describe('mutation child traversal', () => {
       for (const add of data.adds as Array<{
         parentId: number;
         nextId: number | null;
+        node: { id: number };
       }>) {
-        addsAfterBatch.push({ parentId: add.parentId, nextId: add.nextId });
+        addsAfterBatch.push({
+          id: add.node.id,
+          parentId: add.parentId,
+          nextId: add.nextId,
+        });
       }
     }
 
-    // The row+cell count that must have shipped as "add" mutations. Serialized
-    // text nodes nest inside cells and so are not counted here directly; the
-    // 2000 bound guards against the pre-fix regression where entire subtrees
-    // were silently dropped by the "escape the dead while loop" fallback once
-    // the addList rescan budget blew up.
-    expect(addsAfterBatch.length).toBeGreaterThan(1000);
+    // Exact count: 500 rows + 1500 cells + 1500 text nodes.
+    expect(addsAfterBatch.length).toBe(3500);
 
-    // Every emitted add must reference a parent that is also already in the
-    // mirror by the time the replay engine processes it — otherwise the
-    // replay would reject the mutation. parentId -1 or nextId -1 at this
-    // point would signal that pushAdd silently dropped a resolvable node.
+    // Every emitted add must reference a parent that was itself serialised
+    // earlier in the same emission (or already in the mirror). parentId
+    // -1 or an unseen parentId would signal that pushAdd silently dropped
+    // a resolvable node.
+    const seen = new Set<number>();
     for (const add of addsAfterBatch) {
       expect(add.parentId).not.toBe(-1);
+      // The destination (<aside id="destination">) was in the mirror
+      // before the batch, so its id is a valid parentId that doesn't
+      // appear in the adds. Only check parent-before-child for ids that
+      // are themselves added in this batch.
+      const addedParent = addsAfterBatch.some((a) => a.id === add.parentId);
+      if (addedParent) {
+        expect(seen.has(add.parentId)).toBe(true);
+      }
+      seen.add(add.id);
     }
   });
 });
