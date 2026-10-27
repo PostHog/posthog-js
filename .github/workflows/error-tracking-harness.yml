@@ -66,8 +66,8 @@ jobs:
         permissions:
             actions: read
             contents: read
-        uses: PostHog/error-tracking-harness/.github/workflows/subject-smoke.yml@ff43a6678a915f045b89a8741f74fba20467ef5e
+        uses: PostHog/error-tracking-harness/.github/workflows/subject-smoke.yml@65ee6a4c625cfa431d422d35c77ffba20111cd5b
         with:
             subject-artifact: error-tracking-subject
-            # Update after harness #18 publishes an image containing vite-8-autocapture.
-            harness-image: ghcr.io/posthog/error-tracking-harness@sha256:291c8246ab9a37922257a6c420c3c4bda190379b450157aab7892a8010959c12
+            # Build the same pinned harness revision without publishing an image.
+            harness-source-ref: 65ee6a4c625cfa431d422d35c77ffba20111cd5b
