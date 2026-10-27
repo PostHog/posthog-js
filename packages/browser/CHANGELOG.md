@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.440.0
+
+### Minor Changes
+
+- [#5406](https://github.com/PostHog/posthog-js/pull/5406) [`285d874`](https://github.com/PostHog/posthog-js/commit/285d874b7bc5914f3d7b0caa7006a3ba1a480b64) Thanks [@marandaneto](https://github.com/marandaneto)! - Add a single-tag browser SDK loader with URL or attribute tokens and optional deferred initialization.
+  (2026-10-27)
+
+### Patch Changes
+
+- Updated dependencies [[`96d7ff2`](https://github.com/PostHog/posthog-js/commit/96d7ff2e394126e2bd03a2422f60b5892a85d87f)]:
+  - @posthog/core@1.61.1
+
 ## 1.439.2
 
 ### Patch Changes
