@@ -1946,10 +1946,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (rawEvent.type === EventType.Meta) {
             const href = this._maskReplayUrl(rawEvent.data.href)
             this._lastHref = href
-            if (!href) {
+            if (!href && !this._instance.config.url_sanitization) {
                 return
             }
-            rawEvent.data.href = href
+            // Meta carries the viewport required by the player, independently of its URL.
+            rawEvent.data.href = href || ''
         } else {
             this._pageViewFallBack()
         }

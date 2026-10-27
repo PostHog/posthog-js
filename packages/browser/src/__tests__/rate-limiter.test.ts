@@ -235,6 +235,23 @@ describe('Rate Limiter', () => {
             }
         })
 
+        it.each([false, true])('sanitizes the warning page; omit=%s', (omit) => {
+            window!.history.replaceState({}, '', '/private/path?token=secret#private')
+            mockPostHog.config.url_sanitization = omit
+                ? {
+                      sanitize: () => {
+                          throw new Error('failure')
+                      },
+                  }
+                : { path: false }
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+            const message = mockPostHog.capture.mock.calls[0][1].$$client_ingestion_warning_message
+            expect(message).not.toContain('/private')
+            expect(message).not.toContain('token=secret')
+            if (omit) expect(message).not.toContain('triggered on')
+            else expect(message).toContain('triggered on http://localhost/')
+        })
+
         it('omits query strings and hashes from the warning page', () => {
             window!.history.replaceState({}, '', '/private/path?token=secret#private')
 

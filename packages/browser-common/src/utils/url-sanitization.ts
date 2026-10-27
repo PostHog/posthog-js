@@ -1,6 +1,6 @@
 import type { PostHogConfig } from '@posthog/types'
 import { stripUrlHash } from '@posthog/core'
-import { location } from './globals'
+import { document, location } from './globals'
 import { maskQueryParams } from './request-utils'
 import { sanitizeUrl } from './sanitize-url'
 
@@ -61,7 +61,7 @@ export function getRecordedUrl(
                 hash: options.hash ?? !config.disable_capture_url_hashes,
                 sanitize: options.sanitize,
             },
-            location?.href
+            document?.baseURI || location?.href
         )
         if (!sanitized) return undefined
         result = sanitized

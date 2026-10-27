@@ -195,6 +195,28 @@ describe('url_sanitization', () => {
         expect(getSearchInfo().ph_keyword).toBe('search-secret')
     })
 
+    it('resolves recorded relative links against the document base', () => {
+        const base = document.createElement('base')
+        base.href = 'https://external.example/store/'
+        document.head.appendChild(base)
+        try {
+            const element = document.createElement('a')
+            element.setAttribute('href', 'checkout?token=secret')
+            const { props } = autocapturePropertiesForElement(element, {
+                e: new MouseEvent('click'),
+                maskAllElementAttributes: false,
+                maskAllText: false,
+                elementsChainAsString: false,
+                disableCaptureUrlHashes: false,
+                sanitizeUrl: (url) => getRecordedUrl(url, { url_sanitization: { query: false } }),
+            })
+            expect(props.$elements[0].attr__href).toBe('https://external.example/store/checkout')
+            expect(props.$external_click_url).toBe('https://external.example/store/checkout')
+        } finally {
+            base.remove()
+        }
+    })
+
     it.each([false, true])('sanitizes SVG xlink URLs; omit=%s', (omit) => {
         const element = document.createElementNS('http://www.w3.org/2000/svg', 'a')
         element.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', 'https://example.com/private?token=secret')
