@@ -797,9 +797,9 @@ export class Autocapture implements Extension {
             if (
                 eventName === '$autocapture' &&
                 e.type === 'change' &&
+                !config.maskAllText &&
                 isValueInputElement(target) &&
                 isInputValueEligible(target, config) &&
-                !config.maskAllText &&
                 !target.querySelector('.ph-no-capture, .ph-sensitive')
             ) {
                 const allowlist = config.capture_value_css_selector_allowlist
