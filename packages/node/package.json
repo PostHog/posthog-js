@@ -16,6 +16,7 @@
     "lint": "oxlint --report-unused-disable-directives-severity error src",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "test:unit": "vitest run",
+    "test:benchmarks": "node --expose-gc --test --test-isolation=none benchmarks/benchmark.test.mjs",
     "test:edge-compat": "vitest run --config vitest.edge.config.ts",
     "prebuild": "node ../../tooling/write-version.mjs",
     "build": "rslib build",
