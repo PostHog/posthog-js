@@ -1,8 +1,4 @@
-name: Error tracking harness
-
-# Builds the sourcemap plugins from this checkout and runs them through PostHog/error-tracking-harness:
-# real posthog-cli releases, real bundlers, a mock PostHog, and an app whose exceptions must resolve.
-# The image is public and pinned by digest; bumping it is a one-line change below.
+name: Error tracking smoke
 
 on:
     pull_request:
@@ -25,8 +21,6 @@ jobs:
         uses: ./.github/workflows/check-affected.yml
         with:
             package-name: '@posthog/plugin-utils'
-            # The plugins and the SDK code that reads what they inject. Turbo follows plugin-utils'
-            # dependents only when they are declared dependencies, so list the rest here.
             additional-paths: |
                 packages/webpack-plugin/
                 packages/rollup-plugin/
@@ -38,58 +32,42 @@ jobs:
                 packages/browser/src/extensions/exception-autocapture/
                 packages/browser/src/entrypoints/exception-autocapture.ts
                 tooling/error-tracking-harness/
+                pnpm-workspace.yaml
                 .github/workflows/error-tracking-harness.yml
 
-    harness:
-        name: Plugins against real posthog-cli releases
+    pack:
+        name: Pack PR-built subject tarballs
         needs: affected
         if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.affected.outputs.is-affected != 'false') }}
         runs-on: ubuntu-24.04
-        timeout-minutes: 30
-        # Advisory while the matrix settles; make it required once it has been quiet for a while.
-        continue-on-error: true
+        timeout-minutes: 15
         permissions:
             contents: read
-        env:
-            # Digest of PostHog/error-tracking-harness at 63d841bc6959. Printed by its Image workflow.
-            HARNESS_IMAGE: ghcr.io/posthog/error-tracking-harness@sha256:291c8246ab9a37922257a6c420c3c4bda190379b450157aab7892a8010959c12
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - name: Setup environment
-              uses: ./.github/actions/setup
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup
               with:
                   build: false
-            - name: Select fixtures
-              id: fixtures
-              env:
-                  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-                  EVENT_NAME: ${{ github.event_name }}
-              run: |
-                  set -euo pipefail
-                  if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
-                      fixtures=$(tooling/error-tracking-harness/select-fixtures.sh --all)
-                  else
-                      # Checkout is shallow; a missing base must run the full matrix.
-                      if [[ -n "$BASE_SHA" && ! "$BASE_SHA" =~ ^0+$ ]] && ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
-                          git fetch --no-tags --depth=1 origin "$BASE_SHA" || echo 'Could not fetch base; running all fixtures.'
-                      fi
-                      fixtures=$(tooling/error-tracking-harness/select-fixtures.sh "${BASE_SHA:-0}" HEAD)
-                  fi
-                  echo "fixtures=$fixtures" >> "$GITHUB_OUTPUT"
-                  echo "Selected fixtures: $fixtures" >> "$GITHUB_STEP_SUMMARY"
-            - name: Pack the plugins and run the harness
-              env:
-                  SELECTED_FIXTURES: ${{ steps.fixtures.outputs.fixtures }}
-              run: tooling/error-tracking-harness/run-ci.sh "$RUNNER_TEMP/error-tracking-harness" --fixtures "$SELECTED_FIXTURES"
-            - name: Report
-              if: always()
-              run: |
-                  report="$RUNNER_TEMP/error-tracking-harness/report.md"
-                  if [ -f "$report" ]; then cat "$report" >> "$GITHUB_STEP_SUMMARY"; fi
+            - name: Pack direct and transitive dependencies
+              run: tooling/error-tracking-harness/pack.sh "$RUNNER_TEMP/error-tracking-subject"
             - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-              if: failure()
               with:
-                  name: error-tracking-harness
-                  path: ${{ runner.temp }}/error-tracking-harness
-                  retention-days: 7
-                  if-no-files-found: ignore
+                  name: error-tracking-subject
+                  path: ${{ runner.temp }}/error-tracking-subject/
+                  retention-days: 1
+                  if-no-files-found: error
+
+    smoke:
+        name: Smoke test packed plugins
+        needs: pack
+        if: ${{ !cancelled() && needs.pack.result == 'success' }}
+        permissions:
+            actions: read
+            contents: read
+        uses: PostHog/error-tracking-harness/.github/workflows/subject-smoke.yml@ff43a6678a915f045b89a8741f74fba20467ef5e
+        with:
+            subject-artifact: error-tracking-subject
+            # Update after harness #18 publishes an image containing vite-8-autocapture.
+            harness-image: ghcr.io/posthog/error-tracking-harness@sha256:291c8246ab9a37922257a6c420c3c4bda190379b450157aab7892a8010959c12

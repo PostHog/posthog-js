@@ -1,7 +1,0 @@
-# PR-specific derivative of the pinned harness. Registry access is permitted only
-# while resolving selected fixture dependencies; no lifecycle script executes here.
-ARG HARNESS_IMAGE
-FROM ${HARNESS_IMAGE}
-ARG FIXTURES
-COPY . /subject/
-RUN node /rig/harness/prepare-subject.mjs /subject/overrides.json "$FIXTURES"
