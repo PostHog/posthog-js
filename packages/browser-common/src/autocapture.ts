@@ -797,6 +797,7 @@ export class Autocapture implements Extension {
             if (
                 eventName === '$autocapture' &&
                 e.type === 'change' &&
+                config.capture_value_css_selector_allowlist &&
                 !config.maskAllText &&
                 isValueInputElement(target) &&
                 isInputValueEligible(target, config) &&

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { isUndefined } from '@posthog/core'
 import { Autocapture } from '../src/autocapture'
 import type { AutocaptureConfig, AutocaptureConfigSource } from '../src/autocapture-config'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../src/constants'
@@ -53,6 +54,29 @@ describe('shared autocapture', () => {
         extension.dispose()
         click(button)
         expect(client.capturedEvents).toHaveLength(1)
+    })
+
+    it.each<[string[] | undefined, boolean]>([
+        [undefined, false],
+        [[], false],
+        [['[data-ph-capture-value]'], true],
+    ])('requires client configuration to capture annotated field values: %j', (allowlist, capturesValue) => {
+        const client = createTestClient()
+        const { extension } = create({
+            remoteRequestsDisabled: true,
+            ...(isUndefined(allowlist) ? {} : { capture_value_css_selector_allowlist: allowlist }),
+        })
+        extension.setup(client)
+        document.body.innerHTML = '<input data-ph-capture-value />'
+        const input = document.querySelector('input')!
+        input.value = 'field value'
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+        expect(client.capturedEvents).toHaveLength(1)
+        if (capturesValue) {
+            expect(client.capturedEvents[0]?.properties).toHaveProperty('$input_value', 'field value')
+        } else {
+            expect(client.capturedEvents[0]?.properties).not.toHaveProperty('$input_value')
+        }
     })
 
     it('retains persisted opt-out after a failed remote request', () => {

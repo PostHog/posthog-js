@@ -1,5 +1,6 @@
 ---
 'posthog-js': minor
+'@posthog/browser-common': minor
 '@posthog/types': minor
 ---
 
