@@ -6,6 +6,7 @@ import {
     COOKIELESS_SENTINEL_VALUE,
     COOKIELESS_ON_REJECT,
     DEVICE_ID,
+    DISTINCT_ID,
     DEVICE_MODEL,
     PERSON_PROFILES_IDENTIFIED_ONLY,
     USER_STATE_ANONYMOUS,
@@ -1098,9 +1099,21 @@ export class PostHog implements PostHogInterface {
         // the same instance resumes on `pageshow`. Without this the page would stay marked as
         // unloading for the rest of its life, and every later unbatched capture would take the
         // beacon path on a fully active page.
-        addEventListener(window, 'pageshow', () => {
+        addEventListener(window, 'pageshow', (event) => {
             this._isPageUnloading = false
             if (!this._isShutdown) {
+                if ((event as PageTransitionEvent).persisted && this.persistence) {
+                    const previousDistinctId = this.persistence.get_property(DISTINCT_ID)
+                    const previousUserState = this.persistence.get_property(USER_STATE)
+                    this.persistence.load()
+                    if (
+                        !this._processCookieIdentityChange() &&
+                        (previousDistinctId !== this.persistence.get_property(DISTINCT_ID) ||
+                            previousUserState !== this.persistence.get_property(USER_STATE))
+                    ) {
+                        this._processIdentityChange()
+                    }
+                }
                 this._retryQueue?.resume()
             }
         })
@@ -2127,8 +2140,13 @@ export class PostHog implements PostHogInterface {
             return false
         }
 
+        this._processIdentityChange(reloadFeatureFlags)
+        return true
+    }
+
+    private _processIdentityChange(reloadFeatureFlags: boolean = true): void {
         this._cachedPersonProperties = null
-        if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
+        if (this.persistence?.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
             // Persistent event properties, including groups, are cleared while
             // reconciling the reset snapshot. Clear the separate session store
             // here before assembling an event under the anonymous identity.
@@ -2140,7 +2158,6 @@ export class PostHog implements PostHogInterface {
         if (reloadFeatureFlags) {
             this.reloadFeatureFlags()
         }
-        return true
     }
 
     /**
