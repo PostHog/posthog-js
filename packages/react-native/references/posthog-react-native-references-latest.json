@@ -25,12 +25,12 @@
             {
               "id": "add_to_app.(js|ts)",
               "name": "Add to App.(js|ts)",
-              "code": "\n\n// Add to App.(js|ts)\nimport { usePostHog, PostHogProvider } from 'posthog-react-native'\n\nexport function MyApp() {\n    return (\n        <PostHogProvider apiKey=\"<ph_project_api_key>\" options={{\n            host: '<ph_client_api_host>',\n        }}>\n            <MyComponent />\n        </PostHogProvider>\n    )\n}\n\n// And access the PostHog client via the usePostHog hook\nimport { usePostHog } from 'posthog-react-native'\n\nconst MyComponent = () => {\n    const posthog = usePostHog()\n\n    useEffect(() => {\n        posthog.capture(\"event_name\")\n    }, [posthog])\n}\n\n\n\n"
+              "code": "\n\n// Add to App.(js|ts)\nimport { usePostHog, PostHogProvider } from 'posthog-react-native'\n\nexport function MyApp() {\n    return (\n        <PostHogProvider projectToken=\"<ph_project_token>\" options={{\n            host: '<ph_client_api_host>',\n        }}>\n            <MyComponent />\n        </PostHogProvider>\n    )\n}\n\n// And access the PostHog client via the usePostHog hook\nimport { usePostHog } from 'posthog-react-native'\n\nconst MyComponent = () => {\n    const posthog = usePostHog()\n\n    useEffect(() => {\n        posthog.capture(\"event_name\")\n    }, [posthog])\n}\n\n\n\n"
             },
             {
               "id": "using_with_existing_client",
               "name": "Using with existing client",
-              "code": "\n\n// Using with existing client\nimport { PostHog } from 'posthog-react-native'\n\nconst posthog = new PostHog('<ph_project_api_key>', {\n    host: '<ph_client_api_host>'\n})\n\nexport function MyApp() {\n    return (\n        <PostHogProvider client={posthog}>\n            <MyComponent />\n        </PostHogProvider>\n    )\n}\n\n\n\n"
+              "code": "\n\n// Using with existing client\nimport { PostHog } from 'posthog-react-native'\n\nconst posthog = new PostHog('<ph_project_token>', {\n    host: '<ph_client_api_host>'\n})\n\nexport function MyApp() {\n    return (\n        <PostHogProvider client={posthog}>\n            <MyComponent />\n        </PostHogProvider>\n    )\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -39,7 +39,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ children, client, options, apiKey, autocapture, style, debug, }"
+              "name": "{ children, client, options, projectToken, apiKey, autocapture, style, debug, }"
             },
             {
               "description": "",
@@ -64,7 +64,7 @@
             {
               "id": "posthog.ts",
               "name": "posthog.ts",
-              "code": "\n\n// posthog.ts\nimport PostHog from 'posthog-react-native'\n\nexport const posthog = new PostHog('<ph_project_api_key>', {\n  host: '<ph_client_api_host>'\n})\n\n// Then you can access PostHog by importing your instance\n// Another file:\nimport { posthog } from './posthog'\n\nexport function MyApp1() {\n    useEffect(async () => {\n        posthog.capture('event_name')\n    }, [posthog])\n\n    return <View>Your app code</View>\n}\n\n\n\n"
+              "code": "\n\n// posthog.ts\nimport PostHog from 'posthog-react-native'\n\nexport const posthog = new PostHog('<ph_project_token>', {\n  host: '<ph_client_api_host>'\n})\n\n// Then you can access PostHog by importing your instance\n// Another file:\nimport { posthog } from './posthog'\n\nexport function MyApp1() {\n    useEffect(async () => {\n        posthog.capture('event_name')\n    }, [posthog])\n\n    return <View>Your app code</View>\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -73,7 +73,7 @@
               "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
               "isOptional": false,
               "type": "string",
-              "name": "apiKey"
+              "name": "projectToken"
             },
             {
               "description": "PostHog configuration options",
@@ -4050,9 +4050,10 @@
       "name": "PostHogProviderProps",
       "properties": [
         {
-          "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
+          "description": "Your PostHog project token. Ignored when `projectToken` is set.\nDeprecated: Use `projectToken` instead. This will be removed in the next major version.",
           "type": "string",
-          "name": "apiKey"
+          "name": "apiKey",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Autocapture configuration - can be a boolean or detailed options.\nWhen not set, the default behavior is: - `captureScreens`: true - `captureTouches`: false - `captureAppLifecycleEvents`: true\nSet to `true` to enable all autocapture features (including touches). Set to `false` to disable all autocapture features.",
@@ -4078,6 +4079,11 @@
           "description": "PostHog configuration options",
           "type": "PostHogOptions",
           "name": "options"
+        },
+        {
+          "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
+          "type": "string",
+          "name": "projectToken"
         },
         {
           "description": "Custom styles for the provider wrapper View",

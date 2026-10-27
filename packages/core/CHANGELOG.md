@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.61.0
+
+### Minor Changes
+
+- [#5436](https://github.com/PostHog/posthog-js/pull/5436) [`43ad061`](https://github.com/PostHog/posthog-js/commit/43ad061185c7f8b0a36ed87bb6a28214d4224e9d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add the `projectToken` prop to `PostHogProvider` and the `projectToken` property to the client, and deprecate the `apiKey` prop and property in favor of them. `apiKey` keeps working, and `projectToken` wins when both are set.
+  (2026-10-26)
+
 ## 1.60.1
 
 ### Patch Changes
