@@ -2508,10 +2508,11 @@ export interface PostHogConfig {
 
     /**
      * Private preview: invoke recorded fetch requests synchronously to preserve application error stacks.
-     * Only explicit `true` enables this behavior; otherwise Replay retains its legacy fetch ordering.
+     * Enabled by default in new cores; set to `false` to retain legacy fetch ordering.
+     * An old core without this option also retains legacy ordering when it loads a new recorder.
      * Applied when the recorder installs its network observers, not a live remote kill switch.
      *
-     * @default false
+     * @default true
      */
     __preview_replay_sync_fetch?: boolean
 

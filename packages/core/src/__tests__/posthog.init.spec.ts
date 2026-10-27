@@ -63,7 +63,7 @@ describe('PostHog Core', () => {
 
         expect(consoleErrorSpy).toHaveBeenCalledWith(
           '[PostHog]',
-          "You must pass your PostHog project's api key. The client will be disabled."
+          'You must pass your PostHog project token. The client will be disabled.'
         )
       } finally {
         consoleErrorSpy.mockRestore()

@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.17.0
+
+### Minor Changes
+
+- [#5438](https://github.com/PostHog/posthog-js/pull/5438) [`acdbdd2`](https://github.com/PostHog/posthog-js/commit/acdbdd2123cb379fae9f0615ee0e9ef627fbe8f9) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add per-item model attribution to offline evaluations and dataset execution conversion.
+  (2026-10-26)
+
 ## 8.16.3
 
 ### Patch Changes

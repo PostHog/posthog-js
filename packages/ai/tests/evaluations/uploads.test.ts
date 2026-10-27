@@ -135,7 +135,7 @@ it('The second chunk fails after the first is acknowledged', async () => {
   const fetch = mockFetch()
     .mockImplementationOnce((_url, init) => reply(uploadResponse(init.body)))
     .mockRejectedValueOnce(new Error('lost response'))
-  const item = new EvaluationItem({ input: 'shared' }),
+  const item = new EvaluationItem({ input: 'shared', modelVersion: 'model-b' }),
     run = client().resumeExperiment(ID)
   // Only the first result attaches the item. All later references still need it for recovery.
   const declarations = Array.from({ length: 2001 }, (_, i) => result(i === 0 ? item : item.id, randomUUID()))
@@ -144,6 +144,10 @@ it('The second chunk fails after the first is acknowledged', async () => {
   expect(error.completed.chunks).toHaveLength(1)
   expect(error.failedIndex).toBe(1000)
   expect(error.pendingResults).toHaveLength(1001)
+  expect(error.failedChunk.items).toEqual([item.toJSON()])
+  expect(
+    error.pendingResults.every((r) => r.item instanceof EvaluationItem && r.item.toJSON().model_version === 'model-b')
+  ).toBe(true)
   expect(error.persistence).toBe('unknown')
   expect(fetch).toHaveBeenCalledTimes(2)
   const failed = error.failedChunk
@@ -153,6 +157,7 @@ it('The second chunk fails after the first is acknowledged', async () => {
   await run.uploadResults(error.pendingResults)
   expect(fetch.mock.calls[1][1].body).toBe(fetch.mock.calls[2][1].body)
   expect(fetch).toHaveBeenCalledTimes(4)
+  for (let i = 0; i < 4; i++) expect(requestBody(fetch, i).items).toEqual([item.toJSON()])
 })
 it('Count mismatch leaves the experiment open', async () => {
   const fetch = mockFetch()
