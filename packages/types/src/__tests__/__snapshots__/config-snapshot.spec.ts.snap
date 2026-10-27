@@ -439,6 +439,7 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
   ],
   \\"properties_string_max_length\\": \\"number\\",
   \\"defaults\\": [
+    \\"\\\\\\"latest\\\\\\"\\",
     \\"\\\\\\"2026-08-30\\\\\\"\\",
     \\"\\\\\\"2026-08-29\\\\\\"\\",
     \\"\\\\\\"2026-06-25\\\\\\"\\",
