@@ -1,8 +1,57 @@
-import { createServer } from 'node:http'
+import { createServer, type IncomingHttpHeaders } from 'node:http'
 import { gunzipSync } from 'node:zlib'
 
+const API_KEY = 'phc_cassette_test'
+const LEGACY_CAPTURE_PATH = '/batch/'
+const V1_CAPTURE_PATHS = new Set(['/i/v1/analytics/events', '/i/v1/ai/events'])
+
+// Capture v1 per-event `options`, keyed by the legacy property each one replaces.
+const V1_OPTION_PROPERTIES: Record<string, string> = {
+  cookieless_mode: '$cookieless_mode',
+  disable_skew_correction: '$ignore_sent_at',
+  process_person_profile: '$process_person_profile',
+  product_tour_id: '$product_tour_id',
+}
+
+type CollectedEvent = { event: string; distinct_id: string; properties: Record<string, unknown> }
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** One capture v1 event in the legacy `/batch/` shape, so assertions hold for both wire formats. */
+function toLegacyEvent(item: unknown): unknown {
+  if (
+    !isObject(item) ||
+    typeof item.uuid !== 'string' ||
+    typeof item.timestamp !== 'string' ||
+    !isObject(item.options) ||
+    !isObject(item.properties)
+  )
+    throw new Error('Unexpected analytics event')
+  const { options, session_id, window_id, properties, ...event } = item
+  const legacyProperties: Record<string, unknown> = { ...properties }
+  for (const [option, value] of Object.entries(options))
+    legacyProperties[V1_OPTION_PROPERTIES[option] ?? option] = value
+  if (session_id !== undefined) legacyProperties.$session_id = session_id
+  if (window_id !== undefined) legacyProperties.$window_id = window_id
+  return { ...event, properties: legacyProperties }
+}
+
+/** The events of one capture request, from either the legacy `/batch/` or the capture v1 wire format. */
+function readEvents(isLegacy: boolean, headers: IncomingHttpHeaders, payload: Record<string, unknown>): unknown[] {
+  if (isLegacy) {
+    if (payload.api_key !== API_KEY || !Array.isArray(payload.batch)) throw new Error('Invalid analytics payload')
+    return payload.batch
+  }
+  if (headers.authorization !== `Bearer ${API_KEY}`) throw new Error('Invalid analytics credentials')
+  if (typeof payload.created_at !== 'string' || !Array.isArray(payload.batch))
+    throw new Error('Invalid analytics payload')
+  return payload.batch.map(toLegacyEvent)
+}
+
 export async function startCollector() {
-  const events: Array<{ event: string; distinct_id: string; properties: Record<string, unknown> }> = []
+  const events: CollectedEvent[] = []
   const errors: Error[] = []
   const server = createServer(async (request, response) => {
     try {
@@ -10,7 +59,9 @@ export async function startCollector() {
         response.end(JSON.stringify({ count: events.length }))
         return
       }
-      if (request.method !== 'POST' || request.url !== '/batch/') throw new Error('Unexpected collector request')
+      const isLegacy = request.url === LEGACY_CAPTURE_PATH
+      const isV1 = V1_CAPTURE_PATHS.has(request.url?.replace(/\/$/, '') ?? '')
+      if (request.method !== 'POST' || (!isLegacy && !isV1)) throw new Error('Unexpected collector request')
       const chunks: Buffer[] = []
       let size = 0
       for await (const chunk of request) {
@@ -23,18 +74,19 @@ export async function startCollector() {
       if (encoding && encoding !== 'gzip') throw new Error('Unsupported collector encoding')
       const bytes = encoding === 'gzip' ? gunzipSync(compressed, { maxOutputLength: 1024 * 1024 }) : compressed
       const payload = JSON.parse(bytes.toString('utf8'))
-      if (payload.api_key !== 'phc_cassette_test' || !Array.isArray(payload.batch))
-        throw new Error('Invalid analytics payload')
-      for (const item of payload.batch) {
+      if (!isObject(payload)) throw new Error('Invalid analytics payload')
+      for (const item of readEvents(isLegacy, request.headers, payload)) {
         if (
-          !['$ai_generation', '$ai_embedding'].includes(item.event) ||
+          !isObject(item) ||
+          !['$ai_generation', '$ai_embedding'].includes(item.event as string) ||
           typeof item.distinct_id !== 'string' ||
-          !item.properties
+          !isObject(item.properties)
         )
           throw new Error('Unexpected analytics event')
-        events.push(item)
+        events.push(item as CollectedEvent)
       }
-      response.end('{}')
+      response.setHeader('content-type', 'application/json')
+      response.end('{"results":{}}')
     } catch (error) {
       errors.push(error instanceof Error ? error : new Error(String(error)))
       response.statusCode = 500
