@@ -3062,6 +3062,11 @@
           "name": "disable_capture_url_hashes"
         },
         {
+          "description": "Sanitize SDK-recorded URL metadata before it is captured or persisted, including current URLs,\nreferrers, attribution derived from those URLs, autocapture links, and replay page/network metadata.\nExplicit component settings override legacy URL settings; omitted settings preserve their behavior.\nThe callback runs before component filtering and existing personal-data query masking.\nA failed callback omits the URL and its derived properties without throwing into your application.\nDoes not change pageview triggers, targeting, user-provided event properties, replay asset references,\nor previously persisted attribution. Configure before initialization to cover the first writes.",
+          "type": "UrlSanitizationOptions",
+          "name": "url_sanitization"
+        },
+        {
           "description": "Determines whether PostHog should save referrer information.",
           "type": "boolean",
           "name": "save_referrer"
