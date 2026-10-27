@@ -404,9 +404,6 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
 
             config.sessionReplayConfig.sampleRate = sdkReplayConfig["sampleRate"] as? NSNumber
 
-            let screenshotModeBackgroundCapture = sdkReplayConfig["screenshotModeBackgroundCapture"] as? Bool ?? false
-            config.sessionReplayConfig.screenshotModeBackgroundCapture = screenshotModeBackgroundCapture
-
             let endpoint = decideReplayConfig["endpoint"] as? String ?? ""
             if !endpoint.isEmpty {
                 config.snapshotEndpoint = endpoint
