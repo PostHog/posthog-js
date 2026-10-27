@@ -888,7 +888,7 @@ describe('refreshFlagDefinitions cron action', () => {
         // Statuses where the spec forbids a body (Response constructor throws on non-null body).
         const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304])
         return vi.fn(async (url: string | URL) => {
-            fetchCalls.push({ url: url.toString(), body: undefined })
+            fetchCalls.push({ url: url.toString(), headers: {}, body: undefined })
             const r = responses[Math.min(i, responses.length - 1)]
             i++
             const payload =
