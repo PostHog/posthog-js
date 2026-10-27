@@ -125,12 +125,13 @@
     },
     "overrides": [
         {
-            "files": ["compliance/node/v2/**"],
+            "files": ["compliance/node/v2/**", "compliance/node/adapter.mjs"],
             "env": { "node": true },
             "rules": {
                 "compat/compat": "off",
                 "posthog-js/no-direct-null-check": "off",
                 "posthog-js/no-direct-array-check": "off",
+                "posthog-js/no-direct-function-check": "off",
                 "posthog-js/no-direct-number-check": "off",
                 "posthog-js/no-direct-undefined-check": "off"
             }
