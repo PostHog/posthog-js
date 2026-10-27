@@ -358,6 +358,61 @@ async function checkBrowser(app, origin, oldAssets, output) {
   }
 }
 
+async function checkTurbopackRelease(app) {
+  const output = path.join(artifacts, 'next16-turbopack')
+  mkdirSync(output)
+  const next = createRequire(path.join(app, 'package.json')).resolve('next/dist/bin/next')
+  const runtimeFile = path.join(app, '.next/server/chunks/[turbopack]_runtime.js')
+  let firstRuntime
+  for (const releaseId of ['release-one', 'release-two']) {
+    // Do not reuse Next's webpack outputs/cache from the previous checks or the other release.
+    rmSync(path.join(app, '.next'), { recursive: true, force: true })
+    const workerLog = path.join(output, `${releaseId}-workers.jsonl`)
+    const cliLog = path.join(output, `${releaseId}-cli.jsonl`)
+    const env = cleanEnv({ FIXTURE_WORKER_LOG: workerLog, FIXTURE_CLI_LOG: cliLog, FIXTURE_TURBOPACK: '1' })
+    await run(process.execPath, [next, 'build'], {
+      cwd: app,
+      env: { ...env, FIXTURE_RELEASE: releaseId },
+      log: path.join(output, `${releaseId}-build.log`),
+    })
+    assert(
+      lines(workerLog).some((record) => record.turbopack === 'auto' && record.nativeDebugIds && record.uploadHook),
+      'Next 16 Turbopack worker did not enable native debug IDs and the upload hook'
+    )
+    const cliRecords = lines(cliLog)
+    assert(!cliRecords.some((row) => row.command === 'error'), 'Turbopack upload failed')
+    assert(cliRecords.some((row) => row.command === 'release' && row.releaseId === releaseId))
+    const uploads = cliRecords.filter((row) => row.command === 'upload').flatMap((row) => row.files)
+    assert(
+      uploads.some((row) => row.file.includes('/server/')),
+      'Missing server debug-ID upload'
+    )
+    for (const { file, sha256 } of uploads) {
+      assert.equal(digest(readFileSync(path.join(app, file))), sha256, 'CLI changed a native debug-ID asset')
+      assert(!existsSync(path.join(app, file + '.map')), 'Uploaded map was not deleted: ' + file)
+    }
+    const serverChunks = path.join(app, '.next/server/chunks')
+    assert(
+      globSync('*.js', { cwd: serverChunks }).some((file) =>
+        /\.y\(["']posthog-node-[^"']+["']\)/.test(readFileSync(path.join(serverChunks, file), 'utf8'))
+      ),
+      'Turbopack must externalize posthog-node from the server chunk'
+    )
+    const runtime = readFileSync(runtimeFile, 'utf8')
+    assert(runtime.includes(`/* posthog-server-release */${JSON.stringify(releaseId)}`))
+    assert.equal(runtime.match(/posthog-server-release/g)?.length, 1, 'Server runtime injected more than once')
+    assert(!existsSync(runtimeFile + '.map'), 'Server runtime map was not deleted')
+    if (firstRuntime) assert.notEqual(runtime, firstRuntime, 'Server bootstrap retained the old release')
+    else firstRuntime = runtime
+    const server = await serve(app, env, path.join(output, `${releaseId}-server.log`))
+    try {
+      report(path.join(output, `${releaseId}-server.json`), await checkServer(server.origin, releaseId))
+    } finally {
+      await stop(server)
+    }
+  }
+}
+
 async function checkFixture(name) {
   const app = path.join(workspace, name)
   const output = path.join(artifacts, name)
@@ -416,6 +471,7 @@ async function checkFixture(name) {
       await stop(server)
     }
   }
+  if (name === 'next16') await checkTurbopackRelease(app)
   const result = { next: version, seconds: (Date.now() - initial) / 1000 }
   report(path.join(output, 'summary.json'), result)
   console.log(`PASS Next ${version}: ${result.seconds.toFixed(1)}s`)

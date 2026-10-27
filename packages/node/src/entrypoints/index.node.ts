@@ -3,7 +3,6 @@ export * from '../exports'
 import { createModulerModifier } from '../extensions/error-tracking/modifiers/module.node'
 import { addSourceContext } from '../extensions/error-tracking/modifiers/context-lines.node'
 import { createRelativePathModifier } from '../extensions/error-tracking/modifiers/relative-path.node'
-import { getNextBuildReleaseId } from '../extensions/error-tracking/next-release.node'
 
 import type { PostHogFetchBodyBytes } from '@posthog/core'
 import { PostHogBackendClient } from '../client'
@@ -24,10 +23,6 @@ export class PostHog extends PostHogBackendClient {
   }
 
   protected initializeContext(): PostHogContext {
-    if (!CoreErrorTracking.getInjectedReleaseId()) {
-      const releaseId = getNextBuildReleaseId()
-      if (releaseId) (globalThis as typeof globalThis & { _posthogReleaseId?: string })._posthogReleaseId = releaseId
-    }
     return new PostHogContext()
   }
 
