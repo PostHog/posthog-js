@@ -215,6 +215,52 @@ test('shared rrweb tooling hashes without Git metadata or installed dependency d
     }
 })
 
+test('changing only the loader method generator invalidates the browser build cache', () => {
+    const fixture = mkdtempSync(resolve(tmpdir(), 'posthog-loader-build-inputs-'))
+    try {
+        const scripts = resolve(fixture, 'packages/browser/scripts')
+        mkdirSync(scripts, { recursive: true })
+        writeFileSync(
+            resolve(fixture, 'package.json'),
+            JSON.stringify({ name: 'loader-input-fixture', private: true, packageManager: rootPackage.packageManager })
+        )
+        writeFileSync(resolve(fixture, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n")
+        writeFileSync(
+            resolve(fixture, 'pnpm-lock.yaml'),
+            "lockfileVersion: '9.0'\nimporters:\n  .: {}\n  packages/browser: {}\n"
+        )
+        writeFileSync(
+            resolve(fixture, 'packages/browser/package.json'),
+            JSON.stringify({ name: 'posthog-js', scripts: { build: 'echo build' } })
+        )
+        writeFileSync(
+            resolve(fixture, 'turbo.json'),
+            JSON.stringify({ tasks: { build: { inputs: turbo.tasks.build.inputs } } })
+        )
+        const generator = resolve(scripts, 'loader-methods.mjs')
+        const original = readFileSync(resolve(root, 'packages/browser/scripts/loader-methods.mjs'), 'utf8')
+        writeFileSync(generator, original)
+        const control = resolve(scripts, 'check-sourcemap-ignore-list.js')
+        writeFileSync(control, 'export const marker = true\n')
+        const hash = () =>
+            JSON.parse(
+                execFileSync(
+                    resolve(root, 'node_modules/.bin/turbo'),
+                    ['run', 'build', '--filter=posthog-js', '--dry=json'],
+                    { cwd: fixture, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000 }
+                )
+            ).tasks[0].hash
+        const initial = hash()
+        writeFileSync(control, 'export const marker = false\n')
+        assert.notEqual(hash(), initial, 'the listed control script must change the cache key')
+        writeFileSync(control, 'export const marker = true\n')
+        writeFileSync(generator, original + '\n')
+        assert.notEqual(hash(), initial, 'the method generator must change the browser build cache key')
+    } finally {
+        rmSync(fixture, { recursive: true, force: true })
+    }
+})
+
 test('type checks use dependency builds without scheduling a second compilation graph', () => {
     const tasks = dryRun(['run', 'check-types'])
     assert.ok(!tasks.some((task) => task.task === 'prepublish'))

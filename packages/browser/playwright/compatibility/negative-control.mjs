@@ -34,7 +34,7 @@ const manifestPath = join(folder, 'manifest.json')
 const target = join(directory, 'goldens')
 const goldenInventory = () => (existsSync(target) ? inventoryTree(target, 'goldens') : null)
 const before = goldenInventory()
-const run = (name, operation, { comparisons = 'current,historical', scenarios = 'surveys' } = {}) => {
+const run = (name, operation, { modes = 'npm', comparisons = 'current,historical', scenarios = 'surveys' } = {}) => {
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
     const result = spawnSync(
         process.execPath,
@@ -45,7 +45,7 @@ const run = (name, operation, { comparisons = 'current,historical', scenarios = 
             '--engines',
             'chromium',
             '--modes',
-            'npm',
+            modes,
             '--comparisons',
             comparisons,
             '--scenarios',
@@ -160,12 +160,32 @@ for (const cell of networkReport.results) {
         }
     }
 }
+const loaderMarker = 'compatibility loader fault canary'
+writeFileSync(join(dist, 'loader.js'), `throw new Error(${JSON.stringify(loaderMarker)});\n`)
+manifest.inputIntegrity = inputInventory(manifest)
+run('loader-canary', 'update', { modes: 'loader', comparisons: 'current', scenarios: 'core' })
+const loaderReport = JSON.parse(readFileSync(join(folder, 'loader-canary/report.json')))
+assert.equal(loaderReport.completedRuns, 2)
+assert.equal(loaderReport.passed, false)
+for (const cell of loaderReport.results) {
+    assert.equal(cell.status, 'failed')
+    for (const run of cell.runs) {
+        const failure = JSON.parse(readFileSync(join(run.folder, 'failure.json')))
+        assert(failure.state.pageErrors.some((error) => error.message === loaderMarker))
+        assert(
+            failure.state.network.requests.some(
+                (request) => request.path === '/static/loader.js' && request.status === 200
+            )
+        )
+    }
+}
 const evidence = {
     passed: true,
     folder,
     integrityRejectedChangedBytes: true,
     browserEgressDenied: true,
     missingCurrentCaptureLogRejected: true,
+    throwingLoaderRejected: true,
     missingWebVitalsDeliveryRejected: vitalsReport.results.map((cell) => cell.coreFamily),
     missingReplayNetworkCaptureRejected: networkReport.results.map((cell) => cell.coreFamily),
     nativeThrowDetected: report.results.map((cell) => cell.coreFamily),

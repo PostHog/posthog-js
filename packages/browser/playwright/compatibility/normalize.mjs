@@ -25,6 +25,9 @@ const eventRoot =
 const eventEnvelope = new RegExp(`^${eventRoot}\\.(?:uuid|distinct_id)$`)
 const eventProperty = new RegExp(`^${eventRoot}\\.properties\\.[^.]+$`)
 const sdkProperties = new RegExp(`^${eventRoot}\\.properties$`)
+const replayNodeAttributes = new RegExp(
+    `^${eventRoot}\\.properties\\.\\$snapshot_data\\[\\d+\\]\\.data\\.node(?:\\.childNodes\\[\\d+\\])*\\.attributes$`
+)
 const storageRoot = /^api\.storage\.(?:local|session)\.[^.]+$/
 const storageProperty = /^api\.storage\.(?:local|session)\.[^.]+\.[^.]+(?:\[\d+\])?$/
 const storedSessionId =
@@ -202,6 +205,13 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                 childPath = `api.${value.method}`
             if (child === 'version' && /\.resourceLogs\[\d+\]\.scopeLogs\[\d+\]\.scope$/.test(path))
                 item = metadataVersion(item, version, 'core', childPath)
+            if (
+                child === 'data-config' &&
+                replayNodeAttributes.test(path) &&
+                value.src === `${origin}/static/loader.js?project_token=phc_COMPAT` &&
+                typeof item === 'string'
+            )
+                item = JSON.stringify(visit(JSON.parse(item), child, childPath))
             if (child === 'path' && /^network\.requests\[\d+\]$/.test(path) && typeof item === 'string')
                 item = item.replace(`/static/${version}/`, '/static/<core-version>/')
             if (
