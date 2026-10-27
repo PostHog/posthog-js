@@ -726,7 +726,7 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param alias the unique ID of the user before
    */
-  alias(data: { distinctId: string; alias: string }): void
+  alias(data: { distinctId: string; alias: string; options?: Record<string, JsonType> }): void
 
   /**
    * @description To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.
@@ -734,7 +734,7 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param alias the unique ID of the user before
    */
-  aliasImmediate(data: { distinctId: string; alias: string }): Promise<void>
+  aliasImmediate(data: { distinctId: string; alias: string; options?: Record<string, JsonType> }): Promise<void>
 
   /**
    * @description PostHog feature flags (https://posthog.com/docs/features/feature-flags)
