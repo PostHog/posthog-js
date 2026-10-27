@@ -73,7 +73,7 @@ jobs:
 
             - name: Render benchmark comparison
               if: ${{ !cancelled() && (steps.measure.outcome == 'success' || steps.measure.outcome == 'failure') }}
-              uses: PostHog/.github/.github/actions/benchmark-report@62bbf249cd14175adfa6eab19477b3c5df08245a # SDK benchmark reporting (PostHog/.github PR #84)
+              uses: PostHog/.github/.github/actions/benchmark-report@a9b17fcb0e7d962e924d33053f2e40257d674629 # SDK benchmark reporting (PostHog/.github PR #84)
               with:
                   mode: render
                   source-status: ${{ steps.measure.outcome }}
