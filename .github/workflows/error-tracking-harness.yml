@@ -50,6 +50,8 @@ jobs:
             - uses: ./.github/actions/setup
               with:
                   build: false
+            - name: Test PR report formatter
+              run: node --test tooling/error-tracking-harness/test-report.mjs
             - name: Pack direct and transitive dependencies
               run: tooling/error-tracking-harness/pack.sh "$RUNNER_TEMP/error-tracking-subject"
             - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -71,3 +73,87 @@ jobs:
             subject-artifact: error-tracking-subject
             # Build the same pinned harness revision without publishing an image.
             harness-source-ref: 65ee6a4c625cfa431d422d35c77ffba20111cd5b
+
+    report:
+        name: Post smoke results to PR
+        needs: [pack, smoke]
+        if: ${{ always() && github.event_name == 'pull_request' && needs.pack.result != 'skipped' && github.event.pull_request.head.repo.full_name == github.repository }}
+        runs-on: ubuntu-24.04
+        timeout-minutes: 5
+        permissions:
+            actions: read
+            pull-requests: write
+        steps:
+            # The write-capable job never checks out or runs PR code; the artifact is data only.
+            - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+              continue-on-error: true
+              with:
+                  name: subject-smoke-report
+                  path: ${{ runner.temp }}/smoke-report
+            - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  REPORT_FILE: ${{ runner.temp }}/smoke-report/summary.json
+                  SMOKE_RESULT: ${{ needs.smoke.result }}
+              with:
+                  script: |
+                      const fs = require('node:fs');
+                      const marker = '<!-- posthog-error-tracking-smoke -->';
+                      const pr = context.payload.pull_request;
+                      if (!pr || pr.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`) return;
+                      const { data: current } = await github.rest.pulls.get({ ...context.repo, pull_number: pr.number });
+                      if (current.head.sha !== pr.head.sha) {
+                          core.info('PR head has changed; do not overwrite a newer smoke report.');
+                          return;
+                      }
+                      const escape = (value, limit = 180) => String(value).slice(0, limit)
+                          .replace(/[&<>@`*_\[\]\\|\r\n]/g, char => `&#${char.charCodeAt(0)};`);
+                      const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+                      const expected = [
+                          ['rollup-4', 'baseline/smoke'],
+                          ['vite-8-autocapture', 'autoexception/baseline'],
+                          ['webpack-5.112', 'baseline/smoke'],
+                          ['next-14', 'next/smoke'],
+                          ['next-15', 'next/smoke'],
+                          ['nuxt-4', 'nuxt/smoke'],
+                      ];
+                      const lines = [marker, '## Error tracking smoke', '',
+                          `Commit: \`${pr.head.sha}\` · [CI run and artifacts](${runUrl})`, ''];
+                      let reportError;
+                      try {
+                          const file = process.env.REPORT_FILE;
+                          if (fs.statSync(file).size > 1024 * 1024) throw new Error('Report exceeds 1 MiB');
+                          const report = JSON.parse(fs.readFileSync(file, 'utf8'));
+                          if (!Array.isArray(report.results) || report.results.length !== expected.length ||
+                              ![report.total, report.passed, report.failed, report.skipped, report.uncovered].every(n => Number.isSafeInteger(n) && n >= 0) ||
+                              report.total !== expected.length || report.passed + report.failed !== report.total ||
+                              report.skipped !== 0 || report.uncovered !== 0) throw new Error('Incomplete or invalid smoke summary');
+                          const rows = new Map();
+                          for (const result of report.results) {
+                              const key = `${result.fixture}/${result.case}`;
+                              if (result.cli !== '0.18.11' || rows.has(key) || !expected.some(([fixture, kase]) => key === `${fixture}/${kase}`))
+                                  throw new Error('Unexpected smoke cell in summary');
+                              rows.set(key, result);
+                          }
+                          if (rows.size !== expected.length) throw new Error('Smoke summary is missing a fixture');
+                          if (report.passed !== expected.filter(([fixture, kase]) => rows.get(`${fixture}/${kase}`).ok === true).length)
+                              throw new Error('Smoke pass count differs from cell results');
+                          lines.push(`**${report.passed}/${report.total} passed** (0 skipped, 0 uncovered)`, '',
+                              '| Fixture | Result | First failure |', '| --- | --- | --- |');
+                          for (const [fixture, kase] of expected) {
+                              const result = rows.get(`${fixture}/${kase}`);
+                              const status = result.ok === true ? '✅ Passed' : '❌ Failed';
+                              const reason = result.ok === true ? '—' : escape(result.failures?.[0] ?? 'See run artifacts');
+                              lines.push(`| ${fixture} | ${status} | ${reason} |`);
+                          }
+                      } catch (error) {
+                          reportError = error;
+                          lines.push(`**⚠️ No valid smoke summary** (job: ${escape(process.env.SMOKE_RESULT)})`, '',
+                              `${escape(error.message)}. Inspect the [CI run](${runUrl}).`);
+                      }
+                      const body = lines.join('\n');
+                      const comments = await github.paginate(github.rest.issues.listComments,
+                          { ...context.repo, issue_number: pr.number, per_page: 100 });
+                      const existing = comments.find(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(marker));
+                      if (existing) await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+                      else await github.rest.issues.createComment({ ...context.repo, issue_number: pr.number, body });
+                      if (reportError && process.env.SMOKE_RESULT === 'success') core.setFailed('Successful smoke job produced no valid summary');
