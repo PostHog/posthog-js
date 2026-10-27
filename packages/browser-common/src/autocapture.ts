@@ -49,17 +49,20 @@ function isValueInputElement(element: Element): element is HTMLInputElement | HT
 }
 
 // Value privacy checks must cross shadow hosts and fail closed on incomplete ancestry.
-function isInputValueEligible(target: Element): boolean {
+function isInputValueEligible(target: Element, config: Readonly<AutocaptureConfig>): boolean {
     if (!shouldCaptureElement(target)) return false
+    const ignorelist = config.css_selector_ignorelist ?? DEFAULT_AUTOCAPTURE_IGNORE_LIST
     const seen = new Set<Element>()
     let element: Element | null = target
     while (element) {
-        const classes = getClassNames(element)
+        const current = element
+        const classes = getClassNames(current)
         if (
             seen.size >= MAX_DOM_ANCESTOR_DEPTH ||
             seen.has(element) ||
             includes(classes, 'ph-sensitive') ||
-            includes(classes, 'ph-no-capture')
+            includes(classes, 'ph-no-capture') ||
+            ignorelist.some((selector) => elementMatchesCSSSelector(current, selector))
         )
             return false
         seen.add(element)
@@ -791,7 +794,7 @@ export class Autocapture implements Extension {
                 eventName === '$autocapture' &&
                 e.type === 'change' &&
                 isValueInputElement(target) &&
-                isInputValueEligible(target) &&
+                isInputValueEligible(target, config) &&
                 !config.maskAllText &&
                 !target.querySelector('.ph-no-capture, .ph-sensitive')
             ) {
