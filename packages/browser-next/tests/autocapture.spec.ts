@@ -69,6 +69,19 @@ describe('autocapture', () => {
         ])
         if (mode === 'static') expect(client.getExtension('autocapture')).toBe(extension)
     })
+    it.each(['static', 'dynamic'])('keeps field values private with %s autocapture', async (mode) => {
+        const extension = autocapture()
+        const client = await create(mode === 'static' ? { autocapture: false, extensions: [extension] } : {})
+        const captured = vi.fn()
+        client.onEvent(captured)
+        document.body.innerHTML = '<input data-ph-capture-value />'
+        const input = document.querySelector('input')!
+        input.value = 'field value'
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+        expect(captured).toHaveBeenCalledOnce()
+        expect(captured.mock.calls[0]![0].properties).toMatchObject({ $event_type: 'change' })
+        expect(captured.mock.calls[0]![0].properties).not.toHaveProperty('$input_value')
+    })
     it('omits disabled and manual core autocapture', async () => {
         const disabled = await create({ autocapture: false })
         const core = await createCore(base)

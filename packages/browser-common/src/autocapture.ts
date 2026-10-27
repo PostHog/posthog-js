@@ -29,7 +29,7 @@ import type { RemoteConfigResult } from './types/remote-config'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 import type { AutocaptureConfig, AutocaptureConfigSource } from './autocapture-config'
 
-import { isBoolean, isFunction, isNull, stripUrlHash } from '@posthog/core'
+import { isArray, isBoolean, isFunction, isNull, stripUrlHash } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { convertToURL } from './utils/convert-to-url'
 import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
@@ -39,6 +39,42 @@ const getWindow = (): (Window & typeof globalThis) | undefined => (typeof window
 const getDocument = (): Document | undefined => (typeof document === 'undefined' ? undefined : document)
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
+const EXCLUDED_INPUT_TYPES = ['password', 'hidden', 'file', 'checkbox', 'button', 'submit', 'reset', 'image']
+
+function isValueInputElement(element: Element): element is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+    if (isTag(element, 'input')) {
+        return !includes(EXCLUDED_INPUT_TYPES, (element as HTMLInputElement).type)
+    }
+    return isTag(element, 'textarea') || (isTag(element, 'select') && !(element as HTMLSelectElement).multiple)
+}
+
+// Value privacy checks must cross shadow hosts and fail closed on incomplete ancestry.
+function isInputValueEligible(target: Element, config: Readonly<AutocaptureConfig>): boolean {
+    if (!shouldCaptureElement(target)) return false
+    const ignorelist = config.css_selector_ignorelist ?? DEFAULT_AUTOCAPTURE_IGNORE_LIST
+    const seen = new Set<Element>()
+    let element: Element | null = target
+    if (isTag(target, 'select')) {
+        const select = target as HTMLSelectElement
+        element = select.options[select.selectedIndex] || target
+    }
+    while (element) {
+        const current = element
+        const classes = getClassNames(current)
+        if (
+            seen.size >= MAX_DOM_ANCESTOR_DEPTH ||
+            seen.has(element) ||
+            includes(classes, 'ph-sensitive') ||
+            includes(classes, 'ph-no-capture') ||
+            ignorelist.some((selector) => elementMatchesCSSSelector(current, selector))
+        )
+            return false
+        seen.add(element)
+        const parent: ParentNode | null = element.assignedSlot || element.parentNode
+        element = isShadowRoot(parent) ? parent.host : parent && isElementNode(parent) ? parent : null
+    }
+    return true
+}
 
 const logger = createLogger('[AutoCapture]')
 
@@ -756,6 +792,30 @@ export class Autocapture implements Extension {
                     props['$clipboard_text_length'] = selectedText?.length ?? 0
                 }
                 props['$copy_type'] = clipType
+            }
+
+            if (
+                eventName === '$autocapture' &&
+                e.type === 'change' &&
+                config.capture_value_css_selector_allowlist &&
+                !config.maskAllText &&
+                isValueInputElement(target) &&
+                isInputValueEligible(target, config) &&
+                !target.querySelector('.ph-no-capture, .ph-sensitive')
+            ) {
+                const allowlist = config.capture_value_css_selector_allowlist
+                let captureValue = false
+                try {
+                    captureValue = isFunction(allowlist)
+                        ? !!allowlist(target)
+                        : isArray(allowlist) &&
+                          allowlist.some((selector) => elementMatchesCSSSelector(target, selector))
+                } catch (error) {
+                    logger.error('capture_value_css_selector_allowlist threw', error)
+                }
+                if (captureValue) {
+                    props['$input_value'] = target.value
+                }
             }
 
             this._client?.capture(eventName, props)
