@@ -271,6 +271,23 @@ describe('emails.send', () => {
     expect(cancel).toHaveBeenCalledTimes(1)
   })
 
+  it('times out a response body that stalls and cancels it', async () => {
+    makeClient({ emailRequestTimeoutMs: 1_000 })
+    const cancel = vi.fn()
+    fetch.mockResolvedValue({
+      status: 202,
+      headers: new Headers(),
+      text: () => new Promise(() => {}),
+      body: { cancel },
+    })
+
+    const pending = send({ maxRetries: 0 })
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect((await pending).error?.code).toBe('network_error')
+    expect(cancel).toHaveBeenCalledTimes(1)
+  })
+
   it('does not retry an acceptance without a message ID', async () => {
     replies = [{ status: 202, body: {} }, accepted()]
 
@@ -301,6 +318,16 @@ describe('emails.send', () => {
 
     expect(data).toBeNull()
     expect({ code: error?.code, name: error?.name }).toEqual({ code: 'client_disabled', name: 'application_error' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('sends nothing after shutdown and returns client_closed', async () => {
+    await posthog.shutdown()
+
+    const { data, error } = await sendAndSettle()
+
+    expect(data).toBeNull()
+    expect({ code: error?.code, name: error?.name }).toEqual({ code: 'client_closed', name: 'application_error' })
     expect(fetch).not.toHaveBeenCalled()
   })
 

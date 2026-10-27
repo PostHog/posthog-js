@@ -175,6 +175,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
   private _emails?: EmailSender
+  private _isShutdown = false
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
   /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
@@ -688,7 +689,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope. Sends go to
    * `appHost`, or to the PostHog Cloud app host of `host`. `send` resolves to `{ data, error }`
    * and does not reject. `data.id` is the queued email's message ID. A disabled client sends
-   * nothing and returns the error `client_disabled`.
+   * nothing and returns the error `client_disabled`. After `shutdown()`, the client sends nothing
+   * and returns the error `client_closed`.
    *
    * @example
    * ```ts
@@ -720,6 +722,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
           isDisabled: () => this.disabled,
+          isClosed: () => this._isShutdown,
           logger: this._logger,
           userAgent: this.getCustomUserAgent() || undefined,
         }
@@ -2966,6 +2969,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // super._shutdown spend from the same budget, so shutdown(500) can't take
     // ~1000ms by giving each phase a fresh full timeout.
     const shutdownDeadlineMs = Date.now() + (shutdownTimeoutMs ?? 30000)
+    this._isShutdown = true
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 

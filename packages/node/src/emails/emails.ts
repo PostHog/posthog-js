@@ -39,6 +39,7 @@ export interface EmailSenderConfig {
 export interface EmailSenderHooks {
   fetch: FetchLike
   isDisabled: () => boolean
+  isClosed: () => boolean
   logger: Logger
   userAgent?: string
 }
@@ -76,6 +77,12 @@ export class EmailSender implements Emails {
         throw new EmailError({
           code: 'client_disabled',
           message: 'The PostHog client is disabled, so no email was sent.',
+        })
+      }
+      if (this.hooks.isClosed()) {
+        throw new EmailError({
+          code: 'client_closed',
+          message: 'The PostHog client is shut down, so no email was sent.',
         })
       }
       const appHost = resolveAppHost(this.config.host, this.config.appHost)
@@ -175,12 +182,17 @@ export class EmailSender implements Emails {
         }
       })
       .catch(() => {})
+    let response: PostHogFetchResponse | undefined
     try {
-      const response = await Promise.race([fetchPromise, deadline])
+      response = await Promise.race([fetchPromise, deadline])
       const text = await Promise.race([response.text(), deadline])
       return { status: response.status, payload: parseJson(text), retryAfterMs: readRetryAfter(response) }
     } finally {
       clearTimeout(timer!)
+      if (controller.signal.aborted && response) {
+        // Release a body whose read passed the deadline. Do not await: an injected cancel may never settle.
+        void Promise.resolve(response.body?.cancel()).catch(() => {})
+      }
     }
   }
 }
