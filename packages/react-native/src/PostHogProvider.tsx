@@ -22,6 +22,12 @@ export interface PostHogProviderProps {
    * Your PostHog project token, which starts with `phc_`. Find it in your project settings:
    * https://us.posthog.com/settings/project-details#variables
    */
+  projectToken?: string
+  /**
+   * Your PostHog project token. Ignored when `projectToken` is set.
+   *
+   * @deprecated Use `projectToken` instead. This will be removed in the next major version.
+   */
   apiKey?: string
   /** An existing PostHog client instance */
   client?: PostHog
@@ -82,7 +88,7 @@ function PostHogNavigationHook({
  *
  * export function MyApp() {
  *     return (
- *         <PostHogProvider apiKey="<ph_project_api_key>" options={{
+ *         <PostHogProvider projectToken="<ph_project_token>" options={{
  *             host: '<ph_client_api_host>',
  *         }}>
  *             <MyComponent />
@@ -108,7 +114,7 @@ function PostHogNavigationHook({
  * // Using with existing client
  * import { PostHog } from 'posthog-react-native'
  *
- * const posthog = new PostHog('<ph_project_api_key>', {
+ * const posthog = new PostHog('<ph_project_token>', {
  *     host: '<ph_client_api_host>'
  * })
  *
@@ -129,6 +135,7 @@ export const PostHogProvider = ({
   children,
   client,
   options,
+  projectToken,
   apiKey,
   autocapture,
   style,
@@ -137,10 +144,12 @@ export const PostHogProvider = ({
   const captureAll = autocapture === true
   const captureNone = autocapture === false
 
+  const token = projectToken ?? apiKey
+
   const posthog = useMemo(() => {
-    if (client && apiKey) {
+    if (client && token) {
       console.warn(
-        'You have provided both a client and an apiKey to PostHogProvider. The apiKey will be ignored in favour of the client.'
+        'You have provided both a client and a projectToken to PostHogProvider. The projectToken will be ignored in favour of the client.'
       )
     }
 
@@ -154,8 +163,8 @@ export const PostHogProvider = ({
         options?.captureAppLifecycleEvents !== undefined ? options.captureAppLifecycleEvents : !captureNone,
     }
 
-    return new PostHog(apiKey ?? '', parsedOptions)
-  }, [client, apiKey]) // oxlint-disable-line react/exhaustive-deps
+    return new PostHog(token ?? '', parsedOptions)
+  }, [client, token]) // oxlint-disable-line react/exhaustive-deps
 
   const autocaptureOptions = useMemo(
     () => (autocapture && typeof autocapture !== 'boolean' ? autocapture : {}),

@@ -83,7 +83,7 @@ import {
     ToolbarParams,
     PostHogInterface,
 } from './types'
-import type { TreeShakeable } from '@posthog/types'
+import { CONFIG_DEFAULTS_DATES, type TreeShakeable } from '@posthog/types'
 import {
     _copyAndTruncateStrings,
     addEventListener,
@@ -253,6 +253,9 @@ const FLAG_CALLED_TRANSPORT_PROPERTY_KEYS = ['token', 'distinct_id', COOKIELESS_
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
+const LATEST_DEFAULTS_DATE = [...CONFIG_DEFAULTS_DATES].sort()[CONFIG_DEFAULTS_DATES.length - 1]
+
+// 'latest' sorts after ISO dates, so the comparisons below include all current and future default changes.
 const getSessionRecordingDefaults = (defaults?: ConfigDefaults): PostHogConfig['session_recording'] => {
     const sessionRecording: PostHogConfig['session_recording'] = {}
     if (!defaults || defaults === 'unset') {
@@ -327,7 +330,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
-    __preview_replay_sync_fetch: false, // Opt-in: preserve application stacks for recorded fetches
+    __preview_replay_sync_fetch: true, // Preserve application stacks for recorded fetches; old cores without this option retain legacy delegation
     __preview_external_dependency_versioned_paths: false,
     __preview_cookie_wins_on_conflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
@@ -1654,7 +1657,7 @@ export class PostHog implements PostHogInterface {
         }
 
         const channel = this._facebookClickIdChannel
-        this.persistence.refreshKey(channel.persistenceKey)
+        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
 
         // An unset clears the store for this event only: the cookie stays, so a later event reads it again.
@@ -1703,7 +1706,7 @@ export class PostHog implements PostHogInterface {
         }
 
         const channel = this._facebookBrowserIdChannel
-        this.persistence.refreshKey(channel.persistenceKey)
+        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
 
         // As for $fbc, an unset applies to this event only.
@@ -1732,7 +1735,7 @@ export class PostHog implements PostHogInterface {
         if (!this.persistence) {
             return
         }
-        this.persistence.refreshKey(channel.persistenceKey)
+        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
         if (stored?.value === value && !stored.delivered) {
             channel.register(value, true)
@@ -2177,7 +2180,7 @@ export class PostHog implements PostHogInterface {
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
         let properties = { ...eventProperties }
         properties['token'] = this.config.token
-        properties['$config_defaults'] = this.config.defaults
+        properties['$config_defaults'] = this.config.defaults === 'latest' ? LATEST_DEFAULTS_DATE : this.config.defaults
 
         if (this._inCookielessMode()) {
             // Set a flag to tell the plugin server to use cookieless server hash mode

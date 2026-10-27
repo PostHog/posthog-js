@@ -1,5 +1,42 @@
 # posthog-js
 
+## 1.439.0
+
+### Minor Changes
+
+- [#5405](https://github.com/PostHog/posthog-js/pull/5405) [`3150079`](https://github.com/PostHog/posthog-js/commit/31500798797e35187ca0a61bcf2af24d6ba45a96) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `defaults: 'latest'` to follow the newest defaults and report the applied date in events.
+  (2026-10-27)
+
+### Patch Changes
+
+- Updated dependencies [[`3150079`](https://github.com/PostHog/posthog-js/commit/31500798797e35187ca0a61bcf2af24d6ba45a96)]:
+  - @posthog/types@1.417.0
+
+## 1.438.24
+
+### Patch Changes
+
+- [#5279](https://github.com/PostHog/posthog-js/pull/5279) [`d47c184`](https://github.com/PostHog/posthog-js/commit/d47c184b03040d6034bb15e7f7a0dcbd9b9a909f) Thanks [@github-actions](https://github.com/apps/github-actions)! - Fix optional rating surveys with response-based branching when skipped.
+  (2026-10-26)
+- Updated dependencies [[`d47c184`](https://github.com/PostHog/posthog-js/commit/d47c184b03040d6034bb15e7f7a0dcbd9b9a909f)]:
+  - @posthog/browser-common@0.9.12
+
+## 1.438.23
+
+### Patch Changes
+
+- [#5335](https://github.com/PostHog/posthog-js/pull/5335) [`cb34fe0`](https://github.com/PostHog/posthog-js/commit/cb34fe03c49feb636ea4537f6f6b05144d163dac) Thanks [@hpouillot](https://github.com/hpouillot)! - Enable synchronous session replay fetch capture by default for new SDK versions.
+  (2026-10-26)
+- Updated dependencies [[`cb34fe0`](https://github.com/PostHog/posthog-js/commit/cb34fe03c49feb636ea4537f6f6b05144d163dac)]:
+  - @posthog/types@1.416.1
+
+## 1.438.22
+
+### Patch Changes
+
+- [#5429](https://github.com/PostHog/posthog-js/pull/5429) [`1034948`](https://github.com/PostHog/posthog-js/commit/103494838c69ebb9457bcaa6567a437118d7f1ec) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(browser): stop parsing the whole persistence entry on every capture() to refresh Meta identifiers. This made Interaction to Next Paint slower since 1.426.0, most of all on mobile and for projects with many feature flags.
+  (2026-10-26)
+
 ## 1.438.21
 
 ### Patch Changes

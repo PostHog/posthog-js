@@ -29,6 +29,8 @@ A full run comprises 525 cells / 1,050 executions: seven supported deployments Ã
 
 The `loader` mode dynamically inserts the production-packed `/static/loader.js?project_token=phc_COMPAT` tag with JSON configuration and default automatic initialization. Its native SDK request is held while public calls are queued. A public queue callback observes readiness because auto-init JSON cannot carry a `loaded` function. Each scenario independently requires exactly one loader request and one matching immutable core request with no forwarded query parameters. Deferred initialization remains covered by the focused static-loader Playwright tests.
 
+Browser engines execute in parallel against one prepared input manifest; each engine's cells and repetitions remain sequential. All engines finish and close before the combined matrix is validated.
+
 Follow the [snapshot update criteria in the browser contributor guide](../../CONTRIBUTING.md#deployment-compatibility-snapshots) before regenerating expectations.
 
 ## Evidence and reproducibility

@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.57.1",
+  "version": "5.57.2",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -54,6 +54,7 @@
     "@rslib/core": "catalog:",
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
+    "esbuild": "^0.25.0",
     "rxjs": "^7.8.0",
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:",

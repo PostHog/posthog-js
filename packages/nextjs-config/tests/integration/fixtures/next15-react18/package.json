@@ -1,5 +1,5 @@
 {
-  "name": "posthog-next14-integration",
+  "name": "posthog-next15-react18-integration",
   "private": true,
   "dependencies": {
     "next": "15.5.28",
