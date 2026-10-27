@@ -3,4 +3,4 @@
 '@posthog/types': minor
 ---
 
-Add field-level opt-in value capture to native autocapture change events.
+Add `$input_value` to autocapture `change` events for fields marked `data-ph-capture-value`, or matched by the new `autocapture.capture_value_css_selector_allowlist` option (CSS selectors or an `(element) => boolean` predicate).

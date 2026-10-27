@@ -120,6 +120,21 @@ describe('autocapture input values', () => {
         expect(capture.mock.calls[0][1]).toHaveProperty('$input_value', 'value')
     })
 
+    it('preserves the change event without a value when the opt-in predicate throws', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        const predicate = vi.fn(() => {
+            throw new Error('predicate failed')
+        })
+        configure({ capture_value_css_selector_allowlist: predicate })
+        const input = field('<input data-ph-capture-value />')
+        commit(input, 'value')
+        expect(predicate).toHaveBeenCalledWith(input)
+        expect(capture).toHaveBeenCalledTimes(1)
+        expect(capture.mock.calls[0][0]).toBe('$autocapture')
+        expect(capture.mock.calls[0][1]).toMatchObject({ $event_type: 'change' })
+        expect(capture.mock.calls[0][1]).not.toHaveProperty('$input_value')
+    })
+
     it.each([[], () => false])('does not capture values when the opt-in does not match: %s', (allowlist) => {
         configure({ capture_value_css_selector_allowlist: allowlist })
         commit(field('<input data-ph-capture-value />'), 'value')
