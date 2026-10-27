@@ -321,6 +321,22 @@ describe('emails.send', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('waits for a send in its retry backoff before shutdown resolves', async () => {
+    replies = [rejected(503, 'delivery_unavailable'), accepted()]
+    let shutDown = false
+
+    const pending = send()
+    await vi.advanceTimersByTimeAsync(0)
+    const shutdown = posthog.shutdown().then(() => (shutDown = true))
+    await vi.advanceTimersByTimeAsync(999)
+    expect(shutDown).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect((await pending).data?.id).toBe('msg_1')
+    await shutdown
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
   it('sends nothing after shutdown and returns client_closed', async () => {
     await posthog.shutdown()
 

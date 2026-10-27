@@ -2970,6 +2970,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // ~1000ms by giving each phase a fresh full timeout.
     const shutdownDeadlineMs = Date.now() + (shutdownTimeoutMs ?? 30000)
     this._isShutdown = true
+    // Sends that started before shutdown keep running alongside the flushes below, within the same budget.
+    const emailsDrained = this._emails?.drain()
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
@@ -2998,6 +3000,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         Math.max(0, shutdownDeadlineMs - Date.now())
       )
       this._traces.reset()
+    }
+    if (emailsDrained) {
+      await raceWithTimeout(emailsDrained, Math.max(0, shutdownDeadlineMs - Date.now()))
     }
     try {
       return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))

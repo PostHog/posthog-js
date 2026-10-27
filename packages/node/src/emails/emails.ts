@@ -64,13 +64,31 @@ interface Reply {
 export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
   private readonly hooks: EmailSenderHooks
+  private readonly inFlight = new Set<Promise<SendEmailResponse>>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
     this.hooks = hooks
   }
 
-  async send(options: SendEmailOptions): Promise<SendEmailResponse> {
+  send(options: SendEmailOptions): Promise<SendEmailResponse> {
+    const pending = this.sendUntracked(options)
+    this.inFlight.add(pending)
+    void pending.finally(() => this.inFlight.delete(pending))
+    return pending
+  }
+
+  /**
+   * Resolves when every send in flight, retries included, has settled.
+   * Kept apart from the client's pending-promise queue, so a send in its retry backoff does not hold back `flush()`.
+   */
+  async drain(): Promise<void> {
+    while (this.inFlight.size > 0) {
+      await Promise.all(this.inFlight)
+    }
+  }
+
+  private async sendUntracked(options: SendEmailOptions): Promise<SendEmailResponse> {
     try {
       const prepared = prepareSend(options, this.config.maxRetries)
       if (this.hooks.isDisabled()) {
