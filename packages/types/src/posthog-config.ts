@@ -99,6 +99,17 @@ export interface AutocaptureConfig {
      * When true, autocapture captures cut, copy, and paste interactions. Paste events do not contain pasted text.
      */
     capture_copied_text?: boolean
+
+    /**
+     * CSS selectors or a predicate opting individual native fields into value capture on change events.
+     * Selectors match the field itself, not its ancestors. An empty array disables value capture.
+     * String values are sent in $input_value and may be edited in before_send.
+     * Values are not automatically redacted; only opt in fields whose contents you intend to collect.
+     * Password fields, no-capture markers, sensitive-field exclusions, and mask_all_text still apply.
+     *
+     * @default ['[data-ph-capture-value]']
+     */
+    capture_value_css_selector_allowlist?: string[] | ((element: Element) => boolean)
 }
 
 export interface RageclickConfig {
