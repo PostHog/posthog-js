@@ -26,10 +26,20 @@ const fixtureCases = [
     ['webpack-5.112', 'baseline/smoke'],
     ['next-14', 'next/smoke'],
     ['next-15', 'next/smoke'],
+    ['next-16-webpack', 'next/smoke'],
+    ['next-16-turbopack', 'next/smoke'],
     ['nuxt-4', 'nuxt/smoke'],
 ]
 const sha = 'a'.repeat(40)
 const require = createRequire(import.meta.url)
+
+test('write-capable report job excludes Dependabot and audits egress before accessing artifacts', () => {
+    const reportJob = workflow.slice(workflow.findIndex((line) => line === '    report:')).join('\n')
+    assert.match(reportJob, /github\.event\.pull_request\.user\.login != 'dependabot\[bot\]'/)
+    const steps = reportJob.split('        steps:\n')[1]
+    assert.match(steps, /^\s*#.*\n\s*- uses: step-security\/harden-runner@[0-9a-f]{40}/)
+    assert.match(steps, /egress-policy: audit/)
+})
 
 async function report({ summary, currentSha = sha, comments = [], outcome = 'success' }) {
     const dir = mkdtempSync(path.join(tmpdir(), 'harness-comment-'))
@@ -74,8 +84,8 @@ async function report({ summary, currentSha = sha, comments = [], outcome = 'suc
 }
 
 const successful = () => ({
-    total: 6,
-    passed: 6,
+    total: 8,
+    passed: 8,
     failed: 0,
     skipped: 0,
     uncovered: 0,
@@ -85,7 +95,7 @@ const successful = () => ({
 test('new smoke results create one bounded PR comment, later runs update that comment', async () => {
     const first = await report({ summary: successful() })
     assert.equal(first.created.length, 1)
-    assert.match(first.created[0].body, /6\/6 passed/)
+    assert.match(first.created[0].body, /8\/8 passed/)
     assert.match(first.created[0].body, /vite-8-autocapture \| ✅ Passed/)
     assert.match(first.created[0].body, /actions\/runs\/123/)
     const next = await report({
@@ -99,16 +109,16 @@ test('new smoke results create one bounded PR comment, later runs update that co
 
 test('PR-supplied failure text is escaped; missing data never claims success', async () => {
     const summary = successful()
-    summary.passed = 5
+    summary.passed = 7
     summary.failed = 1
     summary.results[0] = { ...summary.results[0], ok: false, failures: ['boom | <script>@team</script>'] }
     const failed = await report({ summary })
-    assert.match(failed.created[0].body, /5\/6 passed/)
+    assert.match(failed.created[0].body, /7\/8 passed/)
     assert.doesNotMatch(failed.created[0].body, /<script>|@team/)
     assert.match(failed.created[0].body, /&#124;/)
     const missing = await report({ outcome: 'success' })
     assert.match(missing.created[0].body, /No valid smoke summary/)
-    assert.doesNotMatch(missing.created[0].body, /6\/6 passed/)
+    assert.doesNotMatch(missing.created[0].body, /8\/8 passed/)
     assert.equal(missing.errors.length, 1)
 })
 

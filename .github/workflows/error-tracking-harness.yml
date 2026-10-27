@@ -68,16 +68,16 @@ jobs:
         permissions:
             actions: read
             contents: read
-        uses: PostHog/error-tracking-harness/.github/workflows/subject-smoke.yml@65ee6a4c625cfa431d422d35c77ffba20111cd5b
+        uses: PostHog/error-tracking-harness/.github/workflows/subject-smoke.yml@37b54b2b55e0bc20c5c7740383dd771d8561f9f7
         with:
             subject-artifact: error-tracking-subject
-            # Image published from harness #18 merge commit 79afbc6a85417ac6548bcb63b2c3cd7924e87b74.
-            harness-image: ghcr.io/posthog/error-tracking-harness@sha256:d0eae57e9417293042e4772587f03f4dfdaa6e4ac247caa15e38d04d45cf995d
+            # Build harness #19 while its eight-fixture image is not yet published.
+            harness-source-ref: 37b54b2b55e0bc20c5c7740383dd771d8561f9f7
 
     report:
         name: Post smoke results to PR
         needs: [pack, smoke]
-        if: ${{ always() && github.event_name == 'pull_request' && needs.pack.result != 'skipped' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ always() && github.event_name == 'pull_request' && needs.pack.result != 'skipped' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' }}
         runs-on: ubuntu-24.04
         timeout-minutes: 5
         permissions:
@@ -85,6 +85,9 @@ jobs:
             pull-requests: write
         steps:
             # The write-capable job never checks out or runs PR code; the artifact is data only.
+            - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+              with:
+                  egress-policy: audit
             - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
               continue-on-error: true
               with:
@@ -114,6 +117,8 @@ jobs:
                           ['webpack-5.112', 'baseline/smoke'],
                           ['next-14', 'next/smoke'],
                           ['next-15', 'next/smoke'],
+                          ['next-16-webpack', 'next/smoke'],
+                          ['next-16-turbopack', 'next/smoke'],
                           ['nuxt-4', 'nuxt/smoke'],
                       ];
                       const lines = [marker, '## Error tracking smoke', '',
