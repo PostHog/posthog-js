@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.12.7
+
+### Patch Changes
+
+- [#5441](https://github.com/PostHog/posthog-js/pull/5441) [`39ff01a`](https://github.com/PostHog/posthog-js/commit/39ff01a86a20ca086e7b5dbbbd938e9d2115741b) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Upgrade the Android SDK to 3.72.9, which pulls in OkHttp 4.12.1 to block the compromised eMudhra intermediate certificates.
+  (2026-10-27)
+
 ## 2.12.6
 
 ### Patch Changes
