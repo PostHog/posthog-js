@@ -48,6 +48,10 @@ export const createAnalyticsExtension = (
     let driver: AnalyticsDriver | undefined
     let loading: Promise<void> | undefined
     let disposed = false
+    let settleDisposal: (() => void) | undefined
+    const disposal = new Promise<void>((resolve) => {
+        settleDisposal = resolve
+    })
     const teardownCallbacks = new Set<() => void>()
     let isTearingDown = false
     const beforeTeardown = () => {
@@ -167,7 +171,8 @@ export const createAnalyticsExtension = (
             await driver?.flush()
         },
         async deliverImmediate(message, canContinue) {
-            await ensureDelivery('immediate')
+            // A pending loader must not hold an immediate capture open after disposal.
+            await Promise.race([ensureDelivery('immediate'), disposal])
             let deliverImmediate: AnalyticsDriver['deliverImmediate'] | undefined
             try {
                 deliverImmediate = driver?.deliverImmediate
@@ -202,6 +207,7 @@ export const createAnalyticsExtension = (
         purge: () => buffer.purge(),
         dispose() {
             disposed = true
+            settleDisposal?.()
             teardownCallbacks.clear()
             if (driver) {
                 return driver.dispose()

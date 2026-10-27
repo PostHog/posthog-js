@@ -549,6 +549,40 @@ describe('captureImmediate', () => {
         }
     })
 
+    it('settles a pending immediate capture when shutdown disposes before delivery loads', async () => {
+        const requests: CapturedRequest[] = []
+        let releaseLoad: ((factory: typeof createAnalyticsDelivery) => void) | undefined
+        const load = vi.fn(
+            () =>
+                new Promise<typeof createAnalyticsDelivery>((resolve) => {
+                    releaseLoad = resolve
+                })
+        )
+        const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch: responseFetch(requests, () => ({ result: { result: 'ok' } })),
+            extensions: [createAnalyticsExtension({ load: 'lazy' }, load)],
+        })
+        let summary: CaptureSummary | undefined
+        void posthog.captureImmediate('pending', undefined, { uuid: 'pending-uuid' }).then((value) => {
+            summary = value
+        })
+        await vi.waitFor(() => expect(load).toHaveBeenCalled())
+
+        await posthog.shutdown(5)
+
+        await vi.waitFor(() => expect(summary).toBeDefined())
+        expectSummary(summary!, { submitted: 0, notPersisted: 0, allPersisted: false })
+        expect(summary!.error).toMatchObject({ name: 'PostHogCaptureError' })
+        releaseLoad?.(createAnalyticsDelivery)
+        await Promise.resolve()
+        expect(requests).toEqual([])
+    })
+
     it('aborts an in-flight immediate request during disposal', async () => {
         let started: (() => void) | undefined
         const requestStarted = new Promise<void>((resolve) => {
