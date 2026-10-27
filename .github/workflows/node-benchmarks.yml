@@ -9,21 +9,7 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    affected:
-        permissions:
-            contents: read
-        uses: ./.github/workflows/check-affected.yml
-        with:
-            package-name: posthog-node
-            additional-paths: |
-                .github/workflows/node-benchmarks.yml
-                .github/workflows/node-benchmark-report.yml
-                .github/workflows/check-affected.yml
-                .github/actions/is-affected/action.yaml
-
     benchmark:
-        needs: affected
-        if: needs.affected.outputs.is-affected == 'true'
         runs-on: ubuntu-24.04
         timeout-minutes: 30
         permissions:
@@ -87,7 +73,7 @@ jobs:
 
             - name: Render benchmark comparison
               if: ${{ !cancelled() && (steps.measure.outcome == 'success' || steps.measure.outcome == 'failure') }}
-              uses: PostHog/posthog-sdk-test-harness/.github/actions/benchmark-report@ef2507cce61b81327033aaa6ae5bcc8d96698121 # SDK benchmark reporting (harness PR #93)
+              uses: PostHog/.github/.github/actions/benchmark-report@62bbf249cd14175adfa6eab19477b3c5df08245a # SDK benchmark reporting (PostHog/.github PR #84)
               with:
                   mode: render
                   source-status: ${{ steps.measure.outcome }}
