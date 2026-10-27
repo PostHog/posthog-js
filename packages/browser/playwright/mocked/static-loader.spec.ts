@@ -165,6 +165,49 @@ test('JavaScript injection exposes a callable queue when the loader onload callb
 })
 
 for (const timing of ['before-core', 'after-core'] as const) {
+    test(`automatic mode supports named initialization ${timing}`, async ({ page }, testInfo) => {
+        const state = await install(page, testInfo, { delayCore: true })
+        if (timing === 'after-core') {
+            state.releaseCore()
+            await waitForSDK(page)
+        }
+        expect(
+            await page.evaluate((options) => {
+                const ph = (window as any).posthog
+                const secondary = ph.init(
+                    'phc_secondary',
+                    { ...options, api_host: 'https://us.i.posthog.com' },
+                    'secondary'
+                )
+                secondary.register({ instance_property: 'secondary' })
+                secondary.capture('named instance event')
+                ph.capture('primary instance event')
+                return secondary === ph.secondary
+            }, state.options)
+        ).toBe(true)
+        if (timing === 'before-core') {
+            state.releaseCore()
+        }
+        await waitForSDK(page)
+        await page.waitForFunction(() => (window as any).posthog.secondary?.__loaded)
+        for (const event of ['named instance event', 'primary instance event']) {
+            await expect.poll(() => state.events.filter((captured) => captured.event === event)).toHaveLength(1)
+        }
+        const secondary = state.events.find(({ event }) => event === 'named instance event')!
+        const primary = state.events.find(({ event }) => event === 'primary instance event')!
+        expect(secondary.properties.token).toBe('phc_secondary')
+        expect(secondary.properties.instance_property).toBe('secondary')
+        expect(secondary.properties).not.toHaveProperty('queued_property')
+        expect(primary.properties.token).toBe('phc_loader_test')
+        expect(primary.properties.queued_property).toBe('before-core')
+        expect(primary.properties).not.toHaveProperty('instance_property')
+        expect(await page.evaluate(() => (window as any).posthog.config.token)).toBe('phc_loader_test')
+        expect(state.coreRequests).toEqual([`https://us-assets.i.posthog.com/static/${version}/array.js`])
+        expect(state.errors).toEqual([])
+    })
+}
+
+for (const timing of ['before-core', 'after-core'] as const) {
     test(`deferred initialization accepts explicit configuration ${timing}`, async ({ page }, testInfo) => {
         const state = await install(page, testInfo, { dynamic: true, delayCore: true })
         await page.evaluate(

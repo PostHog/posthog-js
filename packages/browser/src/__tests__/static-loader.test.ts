@@ -83,8 +83,8 @@ describe('static script loader', () => {
         expect(ph.slice()).toEqual([['capture', 'after manual init']])
     })
 
-    it('keeps named initialization queues separate in deferred mode', async () => {
-        script.setAttribute('data-defer-init', 'true')
+    it.each([false, true])('keeps named initialization queues separate with deferred mode %j', async (deferInit) => {
+        script.setAttribute('data-defer-init', String(deferInit))
         await load()
         const ph = loaderWindow.posthog
         const first = ph.init('phc_named', {}, 'secondary')
@@ -93,7 +93,10 @@ describe('static script loader', () => {
         second.people.set({ plan: 'paid' })
         expect(second).toBe(first)
         expect(ph.secondary).toBe(first)
-        expect(ph._i).toEqual([
+        if (!deferInit) {
+            expect(ph._i[0]).toEqual(['phc_test', { api_host: 'https://us.i.posthog.com' }, 'posthog'])
+        }
+        expect(ph._i.slice(deferInit ? 0 : 1)).toEqual([
             ['phc_named', {}, 'secondary'],
             ['phc_named', {}, 'secondary'],
         ])
