@@ -1,4 +1,4 @@
-import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
+import { CaptureError, PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import ErrorTracking from '@/extensions/error-tracking'
 import type { IPostHog } from '@/types'
 import {
@@ -6,6 +6,7 @@ import {
   anyFlagsCall,
   anyLocalEvalCall,
   apiImplementation,
+  lastCaptureBatch,
   lastSentBatch,
   sentEvents,
   v1Response,
@@ -111,6 +112,10 @@ describe('PostHog Node.js', () => {
           timestamp: expect.any(String),
         },
       ])
+      // On the wire, `$lib`/`$lib_version` travel in the SDK info header, not in properties.
+      expect(lastCaptureBatch(mockedFetch)?.[0].properties).not.toHaveProperty('$lib')
+      const [, options] = mockedFetch.mock.calls.at(-1)!
+      expect((options as any).headers['PostHog-Sdk-Info']).toBe('posthog-node/1.2.3')
     })
 
     it('flush waits for pending captureException async work before flushing', async () => {
@@ -1044,7 +1049,9 @@ describe('PostHog Node.js', () => {
         await vi.advanceTimersByTimeAsync(0)
         expect(mockedFetch).toHaveBeenCalledTimes(1)
 
+        // The failed batch is reported and consumed, so two new events are needed to reach flushAt again.
         ph.capture({ event: 'offline-event-20', distinctId: '123' })
+        ph.capture({ event: 'offline-event-21', distinctId: '123' })
         await vi.advanceTimersByTimeAsync(0)
         expect(mockedFetch).toHaveBeenCalledTimes(2)
         rejectFetch.shift()!(new Error('network down'))
@@ -1205,16 +1212,15 @@ describe('PostHog Node.js', () => {
 
       ph.capture({ event: 'test-event', distinctId: '123' })
 
-      // shutdown() joins the promise queue (waits for capture's async prepareEventMessage),
-      // then flushes. The flush calls fetchWithRetry → hangingFetch → abort fires after 10ms.
-      // _flush() catch emits 'error' (posthog-core-stateless.ts:1159) and re-throws.
-      // doShutdown() catches the PostHogFetchError and returns cleanly.
+      // shutdown() waits for capture preparation, then flushes. The capture sender aborts the
+      // hanging request after requestTimeout and reports the batch on the error channel.
       await ph.shutdown()
 
-      expect(hangingFetch).toHaveBeenCalled()
+      expect(hangingFetch).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
-      expect(errors[0].name).toBe('PostHogFetchNetworkError')
-      expect(errors[0].error.name).toBe('AbortError')
+      expect(errors[0]).toBeInstanceOf(CaptureError)
+      expect(errors[0].endpoint).toBe('/i/v1/analytics/events')
+      expect(errors[0].cause.name).toBe('AbortError')
     }, 10000)
   })
 

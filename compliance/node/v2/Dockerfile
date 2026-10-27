@@ -18,6 +18,6 @@ WORKDIR /adapter
 COPY --from=build /output/consumer /consumer
 COPY --from=build /output/build.json /build.json
 COPY compliance/node/v2/binding.mjs compliance/node/v2/server.mjs compliance/node/v2/worker.mjs ./
-ENV POSTHOG_NODE_CONSUMER=/consumer HOST=0.0.0.0 PORT=8080 POSTHOG_CAPTURE_MODE=v0 POSTHOG_NODE_MODULE=cjs
+ENV POSTHOG_NODE_CONSUMER=/consumer HOST=0.0.0.0 PORT=8080 POSTHOG_NODE_MODULE=cjs
 USER node
 ENTRYPOINT ["node", "/adapter/server.mjs"]

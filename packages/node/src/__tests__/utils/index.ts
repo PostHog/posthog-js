@@ -1,14 +1,21 @@
 import { PostHogV2FlagsResponse } from '@posthog/core'
 import util from 'util'
 
+export const ANALYTICS_CAPTURE_PATH = '/i/v1/analytics/events'
+export const AI_CAPTURE_PATH = '/i/v1/ai/events'
+export const ANALYTICS_CAPTURE_URL = `http://example.com${ANALYTICS_CAPTURE_PATH}`
+export const AI_CAPTURE_URL = `http://example.com${AI_CAPTURE_PATH}`
+
 const LEGACY_CAPTURE_PATH = '/batch/'
-const V1_ANALYTICS_CAPTURE_PATH = '/i/v1/analytics/events'
-const ANALYTICS_CAPTURE_PATHS = [LEGACY_CAPTURE_PATH, V1_ANALYTICS_CAPTURE_PATH]
+const ANALYTICS_CAPTURE_PATHS = [LEGACY_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH]
 
 const isAnalyticsCaptureUrl = (url: unknown): boolean => {
   const { pathname } = new URL(String(url))
   return ANALYTICS_CAPTURE_PATHS.includes(pathname)
 }
+
+export const isCaptureUrl = (url: unknown): boolean =>
+  isAnalyticsCaptureUrl(url) || String(url).includes(AI_CAPTURE_PATH)
 
 /** Matches the analytics capture URL of either wire format: legacy `/batch/` or Capture V1. */
 export const anyCaptureUrl = expect.stringMatching(/^https?:\/\/[^/]+(\/batch\/|\/i\/v1\/analytics\/events)$/)
@@ -25,8 +32,35 @@ export function v1Response(results: Record<string, unknown> = {}): any {
   }
 }
 
+export function v413Response(): any {
+  return {
+    status: 413,
+    text: () => Promise.resolve('Content Too Large'),
+    json: () => Promise.resolve({ status: 'Content Too Large' }),
+    headers: { get: () => null },
+    body: null,
+  }
+}
+
 type FetchMock = { mock: { calls: any[][] } }
 type FetchCall = [string, any]
+
+/** Fetch calls whose URL contains `path`, as `[url, options]` tuples. */
+export const captureCalls = (fetchMock: FetchMock, path: string = ANALYTICS_CAPTURE_PATH): FetchCall[] =>
+  fetchMock.mock.calls.filter((call) => String(call[0]).includes(path)) as FetchCall[]
+
+/** The decoded (uncompressed) Capture V1 body of one fetch call. */
+export const captureBody = (call: FetchCall): any => JSON.parse(call[1].body)
+
+/** Capture V1 wire events from every capture request to `path`, in call order. */
+export const captureEvents = (fetchMock: FetchMock, path: string = ANALYTICS_CAPTURE_PATH): any[] =>
+  captureCalls(fetchMock, path).flatMap((call) => captureBody(call).batch)
+
+/** Capture V1 wire events from the most recent capture request to `path`, or `undefined` if none was sent. */
+export const lastCaptureBatch = (fetchMock: FetchMock, path: string = ANALYTICS_CAPTURE_PATH): any[] | undefined => {
+  const calls = captureCalls(fetchMock, path)
+  return calls.length ? captureBody(calls[calls.length - 1]).batch : undefined
+}
 
 /** Capture V1 per-event `options`, keyed by the legacy property each one replaces. */
 const V1_OPTION_PROPERTIES: Record<string, string> = {
@@ -62,7 +96,7 @@ function legacyPropertiesOf(v1Event: any, sdkInfo: string): Record<string, any> 
  */
 export function sentEventsOf([url, options]: FetchCall): any[] {
   const { batch } = JSON.parse(options.body)
-  if (new URL(url).pathname !== V1_ANALYTICS_CAPTURE_PATH) {
+  if (new URL(url).pathname !== ANALYTICS_CAPTURE_PATH) {
     return batch
   }
   return batch.map((v1Event: any) => {
@@ -109,7 +143,7 @@ export const apiImplementationV4 = (flagsResponse: PostHogV2FlagsResponse | Erro
           })
     }
 
-    if (isAnalyticsCaptureUrl(url)) {
+    if (isCaptureUrl(url)) {
       return Promise.resolve(v1Response())
     }
 
@@ -179,7 +213,7 @@ export const apiImplementation = ({
       }) as any
     }
 
-    if (isAnalyticsCaptureUrl(url)) {
+    if (isCaptureUrl(url)) {
       return Promise.resolve(v1Response())
     }
 

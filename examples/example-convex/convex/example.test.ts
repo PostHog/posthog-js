@@ -6,8 +6,8 @@ import { api, components } from './_generated/api.js'
 // Keep a guard above Jest's 5s default; scheduled functions are driven deterministically below.
 vi.setConfig({ testTimeout: 15000 })
 
-// posthog-node sends events to the legacy `/batch/` endpoint or the capture v1 analytics endpoint.
-const CAPTURE_PATHS = ['/batch/', '/i/v1/analytics/events']
+// posthog-node sends events to the capture v1 analytics endpoint.
+const CAPTURE_PATHS = ['/i/v1/analytics/events']
 
 // Collect all fetch calls for assertion
 let fetchCalls: Array<{ url: string; headers: Record<string, string>; body: unknown }> = []
@@ -60,11 +60,6 @@ function mockFetch(responseByUrl?: Record<string, unknown>, statusByUrl?: Record
 
 function batchCalls() {
     return fetchCalls.filter((c) => CAPTURE_PATHS.some((path) => new URL(c.url).pathname === path))
-}
-
-// The project key travels as `api_key` in a legacy body and as a bearer token in capture v1.
-function apiKeyOf(call: (typeof fetchCalls)[number]): string | undefined {
-    return (call.body as { api_key?: string }).api_key ?? call.headers.Authorization?.replace(/^Bearer /, '')
 }
 
 // Fails every capture request with `status`, whichever endpoint the client uses.
@@ -121,7 +116,9 @@ describe('capture', () => {
         await finishScheduledFunctions(t)
 
         expect(batchCalls().length).toBeGreaterThanOrEqual(1)
-        expect(apiKeyOf(batchCalls()[0])).toBe('phc_test_key')
+        // Capture v1 authenticates with a bearer token instead of an api_key in the body.
+        expect(batchCalls()[0].headers.Authorization).toBe('Bearer phc_test_key')
+        expect(batchCalls()[0].body).not.toHaveProperty('api_key')
 
         const event = firstBatchEvent()
         expect(event.distinct_id).toBe('user-123')

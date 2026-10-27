@@ -3,6 +3,9 @@ export * from './extensions/express'
 export * from './types'
 
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
+export { CaptureError } from './capture-v1/errors'
+export type { CaptureDroppedEvent, CaptureErrorParams } from './capture-v1/errors'
+export type { CaptureEndpoint } from './capture-v1/types'
 export type {
   FlagDefinitionCacheData,
   FlagDefinitionCacheInput,

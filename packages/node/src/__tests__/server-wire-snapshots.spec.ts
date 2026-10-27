@@ -4,8 +4,8 @@ import type { PostHogFetchOptions } from '@posthog/core'
 
 import { V1CaptureSender } from '@/capture-v1/sender'
 import { PostHog } from '@/entrypoints/index.node'
-import { v1Response } from './utils'
-import { v0Response } from './utils/v1-wiring'
+import { captureCalls, v1Response } from './utils'
+import { okResponse } from './utils/v1-wiring'
 
 type FetchCall = [string, PostHogFetchOptions]
 
@@ -61,7 +61,7 @@ describe('server wire snapshots', () => {
   beforeEach(() => {
     vi.setSystemTime(FIXED_NOW)
     mockedFetch.mockImplementation((url) =>
-      Promise.resolve((url as string).includes('/i/v1/analytics/events') ? v1Response() : v0Response())
+      Promise.resolve((url as string).includes('/i/v1/analytics/events') ? v1Response() : okResponse())
     )
   })
 
@@ -75,6 +75,7 @@ describe('server wire snapshots', () => {
     const sender = new V1CaptureSender(
       {
         host: 'https://us.example.test',
+        path: '/i/v1/analytics/events',
         apiKey: 'phc_capture_secret',
         libraryId: 'posthog-node',
         libraryVersion: '1.2.3',
@@ -137,23 +138,11 @@ describe('server wire snapshots', () => {
   })
 
   it('snapshots a deterministic complete captureException wire event', async () => {
-    const previousCaptureMode = process.env.POSTHOG_CAPTURE_MODE
-    process.env.POSTHOG_CAPTURE_MODE = 'v0'
-
-    let posthog: PostHog
-    try {
-      posthog = new PostHog('phc_exception_secret', {
-        host: 'https://us.example.test',
-        fetchRetryCount: 0,
-        disableCompression: true,
-      })
-    } finally {
-      if (previousCaptureMode === undefined) {
-        delete process.env.POSTHOG_CAPTURE_MODE
-      } else {
-        process.env.POSTHOG_CAPTURE_MODE = previousCaptureMode
-      }
-    }
+    const posthog = new PostHog('phc_exception_secret', {
+      host: 'https://us.example.test',
+      fetchRetryCount: 0,
+      disableCompression: true,
+    })
     clients.push(posthog)
 
     const error = new TypeError('database unavailable')
@@ -176,8 +165,15 @@ describe('server wire snapshots', () => {
     await (posthog as any).promiseQueue.join()
     await posthog.flush()
 
-    const call = mockedFetch.mock.calls.find(([url]) => (url as string).includes('/batch/')) as FetchCall
-    expect(snapshotRequest(call)).toMatchSnapshot()
+    const calls = captureCalls(mockedFetch)
+    expect(calls).toHaveLength(1)
+    const [url, options] = calls[0] as FetchCall
+    const headers = options.headers as Record<string, string>
+    // The client generates a fresh request id per batch, so pin its shape rather than its value.
+    expect(headers['PostHog-Request-Id']).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+    expect(
+      snapshotRequest([url, { ...options, headers: { ...headers, 'PostHog-Request-Id': '<generated>' } }])
+    ).toMatchSnapshot()
   })
 
   it('snapshots a maximal flags request body', async () => {
@@ -189,7 +185,7 @@ describe('server wire snapshots', () => {
           json: () => Promise.resolve({ flags: {}, errorsWhileComputingFlags: false }),
         } as any)
       }
-      return Promise.resolve(v0Response())
+      return Promise.resolve(okResponse())
     })
 
     const posthog = new PostHog('phc_flags_secret', {

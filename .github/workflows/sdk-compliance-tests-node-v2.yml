@@ -46,10 +46,6 @@ jobs:
         continue-on-error: true
         permissions:
             contents: read
-        strategy:
-            fail-fast: false
-            matrix:
-                mode: [v0, v1]
         defaults:
             run:
                 shell: bash
@@ -57,7 +53,6 @@ jobs:
             NODE_IMAGE: node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
             # Harness release 1.16.0; pin the published multi-platform image index.
             HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness-v2@sha256:14c539d87c758a8798d3681d26e081cd156b739052d4fdefc51065f92e7cd2f2
-            CAPTURE_MODE: ${{ matrix.mode }}
         steps:
             # Test the PR head or the triggering commit for push/manual runs.
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,7 +76,7 @@ jobs:
               timeout-minutes: 35
               run: |
                   bash compliance/node/v2/run-compliance.sh node-compliance:local "$HARNESS_IMAGE" \
-                    "$CAPTURE_MODE" "$RUNNER_TEMP/node-compliance/reports" \
+                    "$RUNNER_TEMP/node-compliance/reports" \
                     2>&1 | tee "$RUNNER_TEMP/node-compliance/run.log"
             - name: Run isolated acceptance profile
               if: steps.prepare.outcome == 'success'
@@ -89,14 +84,14 @@ jobs:
               timeout-minutes: 25
               run: |
                   bash compliance/node/v2/run-compliance.sh node-compliance:local "$HARNESS_IMAGE" \
-                    "$CAPTURE_MODE" "$RUNNER_TEMP/node-compliance/acceptance" acceptance \
+                    "$RUNNER_TEMP/node-compliance/acceptance" acceptance \
                     2>&1 | tee "$RUNNER_TEMP/node-compliance/acceptance-run.log"
             - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               if: always()
               continue-on-error: true
               timeout-minutes: 3
               with:
-                  name: node-v2-${{ matrix.mode }}
+                  name: node-v2-v1
                   path: ${{ runner.temp }}/node-compliance
                   if-no-files-found: error
                   retention-days: 14
@@ -121,8 +116,9 @@ jobs:
             - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               continue-on-error: true
               with:
-                  pattern: node-v2-*
-                  path: ${{ runner.temp }}/node-compliance-results
+                  # A download by name extracts into `path` itself, so name the folder the report reads.
+                  name: node-v2-v1
+                  path: ${{ runner.temp }}/node-compliance-results/node-v2-v1
             # No checkout or execution of code from the tested revision in this job.
             - name: Summarize results and update PR comment
               continue-on-error: true
@@ -167,9 +163,7 @@ jobs:
                       const lines = [marker, '# Node SDK compliance v2', '',
                           `Commit: ${sha}`, `[Workflow run and artifacts](${runUrl})`, ''];
                       for (const [mode, profile, suite, reports] of [
-                          ['v0', 'node-legacy', 'acceptance', 'acceptance'],
                           ['v1', 'node-analytics-v1', 'acceptance', 'acceptance'],
-                          ['v0', 'node-legacy', 'migration', 'reports'],
                           ['v1', 'node-analytics-v1', 'migration', 'reports'],
                       ]) {
                           lines.push(`## Capture ${mode} — ${suite}`, '');

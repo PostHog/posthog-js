@@ -1,9 +1,8 @@
 import { gunzipSync } from 'node:zlib'
 
-import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
-import { CaptureV1Error } from '@/capture-v1/errors'
-import { v1Response } from '../utils'
-import { V1_URL, V1WiringHarness, v0Response, waitForFlushTimer } from '../utils/v1-wiring'
+import { CaptureError, PostHog, PostHogOptions } from '@/entrypoints/index.node'
+import { ANALYTICS_CAPTURE_URL, AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, v1Response } from '../utils'
+import { V1WiringHarness, okResponse, waitForFlushTimer } from '../utils/v1-wiring'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
 
@@ -13,7 +12,6 @@ describe('capture v1 wiring (Node SDK)', () => {
   const harness = new V1WiringHarness()
   const mockedFetch = harness.fetch
   const makeClient = (options?: PostHogOptions): PostHog => harness.makeClient(options)
-  const makeV1Client = (options?: PostHogOptions): PostHog => harness.makeClient(options, 'v1')
   const callsTo = (fragment: string): [string, any][] => harness.callsTo(fragment)
   const eventsIn = (fragment: string): string[] => harness.eventsIn(fragment)
 
@@ -29,17 +27,37 @@ describe('capture v1 wiring (Node SDK)', () => {
     vi.clearAllMocks()
   })
 
-  describe('v0 mode (default)', () => {
-    it('sends every event to /batch/ and never touches the v1 endpoint', async () => {
-      const posthog = makeClient()
-      posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
-      posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt' } })
-      await waitForFlushTimer()
+  describe('POSTHOG_CAPTURE_MODE', () => {
+    const original = process.env.POSTHOG_CAPTURE_MODE
 
-      expect(callsTo('/i/v1/analytics/events')).toHaveLength(0)
-      const events = eventsIn('/batch/')
-      expect(events).toContain('custom')
-      expect(events).toContain('$ai_generation')
+    afterEach(() => {
+      if (original === undefined) {
+        delete process.env.POSTHOG_CAPTURE_MODE
+      } else {
+        process.env.POSTHOG_CAPTURE_MODE = original
+      }
+    })
+
+    it('warns once per client that the variable is ignored, and still sends to capture v1', async () => {
+      process.env.POSTHOG_CAPTURE_MODE = 'v0'
+      const posthog = makeClient()
+      posthog.capture({ distinctId: 'u', event: 'first', properties: {} })
+      posthog.capture({ distinctId: 'u', event: 'second', properties: {} })
+      await posthog.flush()
+
+      const warnings = (console.warn as vi.Mock).mock.calls.filter((call) =>
+        String(call[0]).includes('POSTHOG_CAPTURE_MODE')
+      )
+      expect(warnings).toEqual([['[PostHog] POSTHOG_CAPTURE_MODE is no longer read. Capture always uses capture v1.']])
+      expect(callsTo('/batch/')).toHaveLength(0)
+      expect(eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['first', 'second'])
+    })
+
+    it('does not warn when the variable is unset', () => {
+      delete process.env.POSTHOG_CAPTURE_MODE
+      makeClient()
+
+      expect(console.warn).not.toHaveBeenCalledWith(expect.stringContaining('POSTHOG_CAPTURE_MODE'))
     })
   })
 
@@ -72,27 +90,23 @@ describe('capture v1 wiring (Node SDK)', () => {
       }
     })
 
-    it('uses Node gzip for the legacy batch endpoint', async () => {
+    it.each([
+      ['capture()', ANALYTICS_CAPTURE_PATH],
+      ['captureAi()', AI_CAPTURE_PATH],
+    ] as const)('uses Node gzip for %s on %s', async (method, path) => {
       const posthog = makeClient({ disableCompression: false })
-      posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
+      const event = { distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt-4o-mini' } }
+      if (method === 'capture()') {
+        posthog.capture(event)
+      } else {
+        posthog.captureAi(event)
+      }
       await posthog.flush()
 
-      const [, options] = callsTo('/batch/')[0]
+      const [, options] = callsTo(path)[0]
       expect(options.headers['Content-Encoding']).toBe('gzip')
       expect(options.body).toBeInstanceOf(Uint8Array)
-      expect((await readCompressedBody(options.body)).batch[0].event).toBe('custom')
-      expect(compressionStreamSpy).not.toHaveBeenCalled()
-    })
-
-    it('uses Node gzip for the Capture V1 endpoint', async () => {
-      const posthog = makeV1Client({ disableCompression: false })
-      posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
-      await posthog.flush()
-
-      const [, options] = callsTo('/i/v1/analytics/events')[0]
-      expect(options.headers['Content-Encoding']).toBe('gzip')
-      expect(options.body).toBeInstanceOf(Uint8Array)
-      expect((await readCompressedBody(options.body)).batch[0].event).toBe('custom')
+      expect((await readCompressedBody(options.body)).batch[0].event).toBe('$ai_generation')
       expect(compressionStreamSpy).not.toHaveBeenCalled()
     })
 
@@ -115,17 +129,17 @@ describe('capture v1 wiring (Node SDK)', () => {
     })
   })
 
-  describe('v1 mode - batched path', () => {
+  describe('batched path', () => {
     it('sends a normal event to the v1 endpoint with Bearer auth and the v1 envelope', async () => {
-      const posthog = makeV1Client()
+      const posthog = makeClient()
       posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
       await waitForFlushTimer()
 
       expect(callsTo('/batch/')).toHaveLength(0)
-      const calls = callsTo('/i/v1/analytics/events')
+      const calls = callsTo(ANALYTICS_CAPTURE_PATH)
       expect(calls).toHaveLength(1)
       const [url, options] = calls[0]
-      expect(url).toBe(V1_URL)
+      expect(url).toBe(ANALYTICS_CAPTURE_URL)
       expect(options.headers['Authorization']).toBe('Bearer TEST_API_KEY')
       expect(options.headers['PostHog-Sdk-Info']).toBe('posthog-node/1.2.3')
       const body = JSON.parse(options.body)
@@ -134,83 +148,69 @@ describe('capture v1 wiring (Node SDK)', () => {
       expect(body.batch[0].options).toEqual({})
     })
 
-    it('routes $ai_* events to the legacy /batch/ endpoint', async () => {
-      const posthog = makeV1Client()
-      posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt' } })
-      await waitForFlushTimer()
-
-      expect(callsTo('/i/v1/analytics/events')).toHaveLength(0)
-      expect(eventsIn('/batch/')).toContain('$ai_generation')
-    })
-
-    it('splits a mixed batch across both endpoints with no loss or duplication', async () => {
-      const posthog = makeV1Client()
+    it('keeps $ai_* capture() events on the analytics endpoint, in the same request as other events', async () => {
+      const posthog = makeClient()
       posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
       posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt' } })
       await waitForFlushTimer()
 
-      expect(eventsIn('/i/v1/analytics/events')).toEqual(['custom'])
-      expect(eventsIn('/batch/')).toEqual(['$ai_generation'])
+      expect(callsTo(ANALYTICS_CAPTURE_PATH)).toHaveLength(1)
+      expect(eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['custom', '$ai_generation'])
+      expect(callsTo(AI_CAPTURE_PATH)).toHaveLength(0)
+      expect(callsTo('/batch/')).toHaveLength(0)
     })
   })
 
-  describe('v1 mode - immediate path', () => {
+  describe('immediate path', () => {
     it('sends an immediate non-AI event to the v1 endpoint', async () => {
-      const posthog = makeV1Client()
+      const posthog = makeClient()
       await posthog.captureImmediate({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
 
       expect(callsTo('/batch/')).toHaveLength(0)
-      expect(eventsIn('/i/v1/analytics/events')).toEqual(['custom'])
+      expect(eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['custom'])
     })
 
-    it('sends an immediate $ai_* event to the legacy endpoint', async () => {
-      const posthog = makeV1Client()
+    it('sends an immediate $ai_* event to the analytics endpoint', async () => {
+      const posthog = makeClient()
       await posthog.captureImmediate({ distinctId: 'u', event: '$ai_span', properties: { $ai_model: 'gpt' } })
 
-      expect(callsTo('/i/v1/analytics/events')).toHaveLength(0)
-      expect(eventsIn('/batch/')).toContain('$ai_span')
+      expect(eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['$ai_span'])
+      expect(callsTo(AI_CAPTURE_PATH)).toHaveLength(0)
+      expect(callsTo('/batch/')).toHaveLength(0)
     })
 
     it('sends immediate identify/alias/groupIdentify (special non-AI events) to the v1 endpoint', async () => {
-      const posthog = makeV1Client()
+      const posthog = makeClient()
 
       await posthog.identifyImmediate({ distinctId: 'u', properties: { name: 'a' } })
       await posthog.aliasImmediate({ distinctId: 'u', alias: 'anon-1' })
       await posthog.groupIdentifyImmediate({ groupType: 'company', groupKey: 'acme', properties: { plan: 'pro' } })
 
       expect(callsTo('/batch/')).toHaveLength(0)
-      expect(eventsIn('/i/v1/analytics/events')).toEqual(['$identify', '$create_alias', '$groupidentify'])
+      expect(eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['$identify', '$create_alias', '$groupidentify'])
     })
   })
 
-  describe('v1 mode - before_send interaction', () => {
-    it('routes an event renamed into $ai_* by before_send to the legacy endpoint', async () => {
-      const posthog = makeV1Client({
-        before_send: (event) => (event ? { ...event, event: '$ai_generation' } : event),
+  describe('before_send interaction', () => {
+    it.each([
+      ['into', 'custom', '$ai_generation'],
+      ['out of', '$ai_generation', 'renamed'],
+    ])('keeps an event renamed %s $ai_* by before_send on the analytics endpoint', async (_, original, renamed) => {
+      const posthog = makeClient({
+        before_send: (event) => (event ? { ...event, event: renamed } : event),
       })
-      posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
+      posthog.capture({ distinctId: 'u', event: original, properties: { x: 1 } })
       await waitForFlushTimer()
 
-      expect(callsTo('/i/v1/analytics/events')).toHaveLength(0)
-      expect(eventsIn('/batch/')).toContain('$ai_generation')
-    })
-
-    it('routes an event renamed out of $ai_* by before_send to the v1 endpoint', async () => {
-      const posthog = makeV1Client({
-        before_send: (event) => (event ? { ...event, event: 'renamed' } : event),
-      })
-      posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt' } })
-      await waitForFlushTimer()
-
-      expect(callsTo('/batch/')).toHaveLength(0)
-      expect(eventsIn('/i/v1/analytics/events')).toContain('renamed')
+      expect(eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual([renamed])
+      expect(callsTo(AI_CAPTURE_PATH)).toHaveLength(0)
     })
   })
 
-  describe('v1 mode - error surfacing', () => {
-    it('emits a CaptureV1Error on the error channel when the server drops an event', async () => {
+  describe('error surfacing', () => {
+    it('emits an exported CaptureError naming the analytics lane when the server drops an event', async () => {
       mockedFetch.mockImplementation((url, options) => {
-        if ((url as string).includes('/i/v1/analytics/events')) {
+        if ((url as string).includes(ANALYTICS_CAPTURE_PATH)) {
           const body = JSON.parse((options as any).body)
           const results: Record<string, unknown> = {}
           for (const event of body.batch) {
@@ -218,10 +218,10 @@ describe('capture v1 wiring (Node SDK)', () => {
           }
           return Promise.resolve(v1Response(results))
         }
-        return Promise.resolve(v0Response())
+        return Promise.resolve(okResponse())
       })
 
-      const posthog = makeV1Client()
+      const posthog = makeClient()
       const errors: Error[] = []
       posthog.on('error', (error) => errors.push(error))
 
@@ -229,8 +229,9 @@ describe('capture v1 wiring (Node SDK)', () => {
       await waitForFlushTimer()
 
       expect(errors).toHaveLength(1)
-      const error = errors[0] as CaptureV1Error
-      expect(error).toBeInstanceOf(CaptureV1Error)
+      const error = errors[0] as CaptureError
+      expect(error).toBeInstanceOf(CaptureError)
+      expect(error.endpoint).toBe(ANALYTICS_CAPTURE_PATH)
       expect(error.drops[0].details).toBe('billing')
     })
   })
