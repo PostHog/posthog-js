@@ -81,7 +81,7 @@ The measurement-control test allocates and collects approximately 15 MB of array
 
 Refresh runs also retain memory checkpoints after each five measured cycles. Their durations include those explicit collection requests and correctness checks and are not ordinary evaluation timing samples. Post-settling RSS alone does not prove a leak: V8 and the allocator may keep memory resident.
 
-Each worker has a two-minute timeout and a 512 MiB V8 old-space limit. **That is not a 512 MiB process RSS limit.** A confirmed V8 heap exhaustion is recorded as `oom`; an unexplained SIGKILL is `error`, not assumed OOM. Failed workloads have status and diagnostics rather than fabricated zero values. Completed measurements are written after each worker so later failures leave partial evidence.
+Each worker has a two-minute timeout and a 512 MiB V8 old-space limit. **That is not a 512 MiB process RSS limit.** A confirmed V8 heap exhaustion is recorded as `oom`; an unexplained SIGKILL is `error`, not assumed OOM. Failed workloads have status and diagnostics rather than fabricated zero values. Completed measurements are written after each worker so later failures leave partial evidence. The suite stops after two worker timeouts, after completing the current base/head pair, to reserve CI time for uploading diagnostics.
 
 ## Output and CI
 

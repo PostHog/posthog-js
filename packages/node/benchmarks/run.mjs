@@ -13,6 +13,7 @@ import { classifyExit, samplingOptions } from './measurement.mjs'
 const here = dirname(fileURLToPath(import.meta.url))
 const worker = join(here, 'worker.mjs')
 const heapLimitMb = 512
+const maxWorkerTimeouts = 2
 
 export async function runWorker(sdkDirectory, spec, pass, timeoutMs = 120000) {
   return new Promise((resolveResult) => {
@@ -108,7 +109,12 @@ async function documentFor(directory, role, pairId, suite) {
       build_digest: await treeDigest(join(directory, 'dist')),
       core_build: await coreBuildIdentity(directory),
       sdk_version: manifest.version,
-      resource_limits: { v8_old_space_mb: heapLimitMb, process_rss_limit_bytes: null, worker_timeout_ms: 120000 },
+      resource_limits: {
+        v8_old_space_mb: heapLimitMb,
+        process_rss_limit_bytes: null,
+        worker_timeout_ms: 120000,
+        max_worker_timeouts: maxWorkerTimeouts,
+      },
     },
     benchmarks: [],
   }
@@ -166,7 +172,7 @@ export function appendSample(benchmark, raw, repetition) {
   }
 }
 
-export async function main(args = process.argv.slice(2)) {
+export async function main(args = process.argv.slice(2), executeWorker = runWorker) {
   const { values } = parseArgs({
     args,
     options: {
@@ -212,6 +218,7 @@ export async function main(args = process.argv.slice(2)) {
       await writeFile(join(output, `${role}.json`), `${JSON.stringify(documents[role], null, 2)}\n`)
   }
   let failures = 0
+  let timeouts = 0
   for (const spec of specs) {
     const records = {}
     for (const role of ['base', 'head']) {
@@ -232,12 +239,14 @@ export async function main(args = process.argv.slice(2)) {
     for (let repetition = 0; repetition < repetitions; repetition++) {
       for (const pass of spec.passes) {
         for (const role of repetition % 2 ? ['head', 'base'] : ['base', 'head']) {
-          const raw = await runWorker(directories[role], spec, pass)
+          const raw = await executeWorker(directories[role], spec, pass)
           appendSample(records[role], { ...raw, pass }, repetition)
           if (raw.status !== 'ok') failures++
+          if (raw.status === 'timeout') timeouts++
           console.error(`${spec.id} ${pass} ${repetition + 1}/${repetitions} ${role}: ${raw.status}`)
           await save()
         }
+        if (timeouts >= maxWorkerTimeouts) return 1
       }
       if (records.base.status !== 'ok' || records.head.status !== 'ok') break
     }

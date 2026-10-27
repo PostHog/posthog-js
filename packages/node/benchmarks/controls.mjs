@@ -216,6 +216,31 @@ test('OOM requires runtime evidence, not just SIGKILL', () => {
   assert.equal(classifyExit({ timedOut: true, stderr: '' }), 'timeout')
 })
 
+test('repeated timeouts stop the suite and preserve both sides of the failed pair', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'posthog-bench-timeouts-'))
+  let calls = 0
+  try {
+    const code = await main(
+      ['--base', sdkDirectory, '--head', sdkDirectory, '--output', directory, '--smoke'],
+      async () => {
+        calls++
+        return { status: 'timeout', error: 'Worker did not complete' }
+      }
+    )
+    assert.equal(code, 1)
+    assert.equal(calls, 2)
+    for (const role of ['base', 'head']) {
+      const document = JSON.parse(await readFile(join(directory, `${role}.json`), 'utf8'))
+      assert.equal(document.benchmarks.length, 1)
+      assert.equal(document.benchmarks[0].status, 'timeout')
+      assert.deepEqual(document.benchmarks[0].metrics, [])
+      assert.equal(document.benchmarks[0].runs.length, 1)
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
 test('paired runner writes attributed documents with matching fixture identities', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'posthog-bench-results-'))
   try {
