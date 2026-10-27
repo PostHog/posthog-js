@@ -288,6 +288,20 @@ describe('emails.send', () => {
     expect(cancel).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the status and Retry-After when an error body cannot be read', async () => {
+    fetch.mockResolvedValue({
+      status: 429,
+      headers: new Headers({ 'Retry-After': '120' }),
+      text: () => Promise.reject(new TypeError('terminated')),
+      body: { cancel: vi.fn() },
+    })
+
+    const { error } = await sendAndSettle()
+
+    expect(error).toMatchObject({ code: 'api_error', statusCode: 429, retryAfterMs: 120_000 })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('does not retry an acceptance without a message ID', async () => {
     replies = [{ status: 202, body: {} }, accepted()]
 
@@ -335,6 +349,31 @@ describe('emails.send', () => {
     expect((await pending).data?.id).toBe('msg_1')
     await shutdown
     expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('flushes queued events while an email send is in its retry backoff', async () => {
+    // Compression runs on real I/O, which fake timers can't advance.
+    makeClient({ disableCompression: true })
+    replies = [rejected(503, 'delivery_unavailable'), accepted()]
+    const emailFetch = fetch.getMockImplementation()!
+    fetch.mockImplementation((url: string, options: unknown) =>
+      url.includes('/batch/')
+        ? Promise.resolve({ status: 200, text: async () => '{}', json: async () => ({}), headers: new Headers() })
+        : emailFetch(url, options)
+    )
+    const batchCalls = (): number => fetch.mock.calls.filter(([url]) => url.includes('/batch/')).length
+
+    const pending = send()
+    await vi.advanceTimersByTimeAsync(0)
+    posthog.capture({ distinctId: 'user_123', event: 'signed_up' })
+    const shutdown = posthog.shutdown()
+    await vi.advanceTimersByTimeAsync(500)
+    const batchCallsDuringBackoff = batchCalls()
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect((await pending).data?.id).toBe('msg_1')
+    await shutdown
+    expect(batchCallsDuringBackoff).toBe(1)
   })
 
   it('sends nothing after shutdown and returns client_closed', async () => {

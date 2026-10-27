@@ -3001,12 +3001,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       )
       this._traces.reset()
     }
-    if (emailsDrained) {
-      await raceWithTimeout(emailsDrained, Math.max(0, shutdownDeadlineMs - Date.now()))
-    }
+    const remainingMs = Math.max(0, shutdownDeadlineMs - Date.now())
+    // Wait for the email sends next to the core flush, not before it, so a slow send can't use up the budget for events.
+    const emailsSettled = emailsDrained ? raceWithTimeout(emailsDrained, remainingMs) : undefined
     try {
-      return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))
+      return await super._shutdown(remainingMs)
     } finally {
+      await emailsSettled
       this._distinctIdHasSentFlagCalls.clear()
       resolve?.()
     }

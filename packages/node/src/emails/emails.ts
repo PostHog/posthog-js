@@ -203,7 +203,17 @@ export class EmailSender implements Emails {
     let response: PostHogFetchResponse | undefined
     try {
       response = await Promise.race([fetchPromise, deadline])
-      const text = await Promise.race([response.text(), deadline])
+      let text: string
+      try {
+        text = await Promise.race([response.text(), deadline])
+      } catch (error) {
+        // An accepted send may already be queued, so a failed read stays a retryable network error.
+        if (response.status >= 200 && response.status < 300) {
+          throw error
+        }
+        // The status and Retry-After still decide the retry when an error body can't be read.
+        return { status: response.status, payload: null, retryAfterMs: readRetryAfter(response) }
+      }
       return { status: response.status, payload: parseJson(text), retryAfterMs: readRetryAfter(response) }
     } finally {
       clearTimeout(timer!)
