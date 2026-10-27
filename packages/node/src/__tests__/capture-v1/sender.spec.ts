@@ -413,7 +413,7 @@ describe('V1CaptureSender', () => {
   })
 
   describe('HTTP status classification', () => {
-    it.each([408, 500, 502, 503, 504])('retries retryable status %s then succeeds', async (status) => {
+    it.each([404, 408, 429, 500, 502, 503, 504])('retries retryable status %s then succeeds', async (status) => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(status)).mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
@@ -423,19 +423,32 @@ describe('V1CaptureSender', () => {
       expect(errors).toEqual([])
     })
 
-    it('treats 429 as terminal in v1 (no retry)', async () => {
-      const { sender, fetch, errors } = makeSender()
-      fetch.mockResolvedValueOnce(makeResponse(429, '', { 'Retry-After': '1' }))
+    it('waits for Retry-After on a 429 before retrying', async () => {
+      const { sender, fetch, errors, sleeps } = makeSender({ maxRetries: 1 })
+      fetch
+        .mockResolvedValueOnce(makeResponse(429, '', { 'Retry-After': '2' }))
+        .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       await sender.send(v1Events([msg('u1')]))
 
-      expect(fetch).toHaveBeenCalledTimes(1)
-      const error = errors[0] as CaptureError
-      expect(error.retryExhausted).toEqual(['u1'])
-      expect((error.cause as Error).message).toContain('429')
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(sleeps).toEqual([2000])
+      expect(errors).toEqual([])
     })
 
-    it.each([400, 401, 402, 404, 413, 415, 501])('treats non-retryable status %s as terminal', async (status) => {
+    it.each([404, 429])('reports %s with its status once the retries run out', async (status) => {
+      const { sender, fetch, errors } = makeSender({ maxRetries: 1 })
+      fetch.mockResolvedValue(makeResponse(status))
+
+      await sender.send(v1Events([msg('u1')]))
+
+      expect(fetch).toHaveBeenCalledTimes(2)
+      const error = errors[0] as CaptureError
+      expect(error.retryExhausted).toEqual(['u1'])
+      expect((error.cause as Error).message).toContain(String(status))
+    })
+
+    it.each([400, 401, 402, 413, 415, 501])('treats non-retryable status %s as terminal', async (status) => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(status))
 
