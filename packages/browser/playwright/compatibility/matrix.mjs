@@ -1,4 +1,5 @@
 import { differences } from './normalize.mjs'
+import { deploymentEntrypoints } from './golden.mjs'
 
 export async function runMatrix({ engines, modes, comparisons, scenarios, repeats, launch, runCell, onCell }) {
     const lanes = engines.map((engine) => ({ engine, runs: [], results: [], failures: [] }))
@@ -17,6 +18,7 @@ export async function runMatrix({ engines, modes, comparisons, scenarios, repeat
                 for (const mode of modes)
                     for (const comparison of comparisons)
                         for (const scenario of scenarios) {
+                            if (!deploymentEntrypoints(comparison, [mode]).length) continue
                             const cell = {
                                 browser: engine,
                                 entrypoint: mode,

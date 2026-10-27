@@ -22,6 +22,7 @@
                 "$TURBO_ROOT$/tooling/rrweb-build/index.ts",
                 "$TURBO_ROOT$/tooling/rrweb-build/vite.mjs",
                 "$TURBO_ROOT$/tooling/rrweb-build/package.json",
+                "scripts/loader-methods.mjs",
                 "scripts/check-mangled-property-consistency.js",
                 "scripts/check-sourcemap-ignore-list.js",
                 "terser-cross-bundle-properties.cjs",

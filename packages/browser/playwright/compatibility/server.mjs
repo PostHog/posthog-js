@@ -49,7 +49,13 @@ export function compatibilityServer(settings) {
     ].includes(settings.scenario)
     let flagSequence = 0
     const server = createMockServer({
-        barriers: ['config', 'flags', 'extensions', 'surveys', ...(settings.mode === 'snippet' ? ['core'] : [])],
+        barriers: [
+            'config',
+            'flags',
+            'extensions',
+            'surveys',
+            ...(['snippet', 'loader'].includes(settings.mode) ? ['core'] : []),
+        ],
         state: {
             sessionReplayEnabled: settings.scenario.startsWith('replay'),
             minimumDurationMilliseconds:
@@ -118,8 +124,11 @@ export function compatibilityServer(settings) {
                     body +=
                         '<script>document.getElementById("action").addEventListener("mousedown", (event) => event.preventDefault())</script>'
                 }
-                if (path === '/')
-                    body += `<script src="/harness.js"></script><script src="/${settings.mode === 'snippet' ? 'snippet' : 'consumer'}.js"></script>`
+                if (path === '/') {
+                    body += '<script src="/harness.js"></script>'
+                    if (settings.mode !== 'loader')
+                        body += `<script src="/${settings.mode === 'snippet' ? 'snippet' : 'consumer'}.js"></script>`
+                }
                 if (path === '/player') body += '<script src="/player.js"></script>'
                 return { body: body + '</body></html>', headers: { 'Content-Type': 'text/html' } }
             }
@@ -141,13 +150,14 @@ export function compatibilityServer(settings) {
                 )
                     return { status: 404, json: { error: 'Unknown artifact' } }
                 const isCore = filename === 'array.js'
-                await context.waitForBarrier(isCore ? 'core' : 'extensions')
+                const isLoader = filename === 'loader.js'
+                if (!isLoader) await context.waitForBarrier(isCore ? 'core' : 'extensions')
                 const failure = settings.scenario === 'extension-failure' && filename === 'surveys.js'
-                const fallback = settings.scenario === 'version-fallback' && parts.length === 4 && !isCore
+                const fallback = settings.scenario === 'version-fallback' && parts.length === 4 && !isCore && !isLoader
                 if (failure || fallback)
                     return { status: failure ? 503 : 404, json: { error: 'Controlled extension failure' } }
                 return {
-                    body: readFileSync(join(isCore ? settings.coreDist : settings.extensionDist, filename)),
+                    body: readFileSync(join(isCore || isLoader ? settings.coreDist : settings.extensionDist, filename)),
                     headers: { 'Content-Type': 'text/javascript' },
                 }
             }

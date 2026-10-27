@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { setImmediate } from 'node:timers/promises'
 import test from 'node:test'
-import { MATRIX, HISTORICAL_PACKAGES, buildGoldens } from './golden.mjs'
+import { MATRIX, HISTORICAL_PACKAGES, buildGoldens, deploymentEntrypoints } from './golden.mjs'
 import { runMatrix } from './matrix.mjs'
 
 function passed(observations = { value: 'same' }) {
@@ -71,6 +71,14 @@ test('engine lanes overlap while each lane keeps cells and repetitions sequentia
     assert.deepEqual(progress.at(-1), output.results)
 })
 
+test('parallel engines run the loader only with current cores', async () => {
+    const output = await runMatrix(options({ modes: ['loader'], comparisons: ['current', 'historical'] }))
+    assert.equal(output.runs.length, 6)
+    assert.equal(output.results.length, 3)
+    assert(output.runs.every((run) => run.coreFamily === 'current' && run.entrypoint === 'loader'))
+    assert.deepEqual(output.cellFailures, [])
+})
+
 test('the full matrix preserves ordered run evidence and coverage despite reverse engine completion', async () => {
     const gates = Object.fromEntries(MATRIX.browsers.map((engine) => [engine, Promise.withResolvers()]))
     const closed = []
@@ -111,17 +119,19 @@ test('the full matrix preserves ordered run evidence and coverage despite revers
         ]),
         settings.engines.flatMap((engine) =>
             settings.modes.flatMap((mode) =>
-                settings.comparisons.flatMap((comparison) =>
-                    settings.scenarios.flatMap((scenario) =>
-                        Array.from({ length: settings.repeats }, (_, repeat) => [
-                            engine,
-                            mode,
-                            comparison,
-                            scenario,
-                            repeat,
-                        ])
+                settings.comparisons
+                    .filter((comparison) => deploymentEntrypoints(comparison, [mode]).length)
+                    .flatMap((comparison) =>
+                        settings.scenarios.flatMap((scenario) =>
+                            Array.from({ length: settings.repeats }, (_, repeat) => [
+                                engine,
+                                mode,
+                                comparison,
+                                scenario,
+                                repeat,
+                            ])
+                        )
                     )
-                )
             )
         )
     )
@@ -143,13 +153,16 @@ test('the full matrix preserves ordered run evidence and coverage despite revers
         inputIntegrity: { expected: inventory, before: inventory, after: inventory },
         runs: output.runs,
     })
-    const cellCount =
-        settings.engines.length * settings.modes.length * settings.comparisons.length * settings.scenarios.length
+    const deploymentCount = settings.comparisons.reduce(
+        (count, comparison) => count + deploymentEntrypoints(comparison, settings.modes).length,
+        0
+    )
+    const cellCount = settings.engines.length * deploymentCount * settings.scenarios.length
     assert.equal(output.runs.length, cellCount * settings.repeats)
     assert.equal(output.results.length, cellCount)
     assert.equal(built.coverage, 'full')
     assert.equal(built.cellCount, cellCount)
-    assert.equal(Object.keys(built.files).length, settings.modes.length * settings.comparisons.length)
+    assert.equal(Object.keys(built.files).length, deploymentCount)
 })
 
 for (const stage of ['launch', 'run', 'close']) {

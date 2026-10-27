@@ -4,6 +4,57 @@ import { normalize } from './normalize.mjs'
 
 const context = { origin: 'http://127.0.0.1:1234', version: '1.354.0', extensionVersion: '1.438.2' }
 
+test('loader DOM config normalizes fixture origins while preserving configuration and unrelated attributes', () => {
+    const source = (origin, optedOut = false, script = 'loader') => ({
+        network: {
+            snapshots: [
+                {
+                    properties: {
+                        $snapshot_data: [
+                            {
+                                type: 2,
+                                data: {
+                                    node: {
+                                        tagName: 'script',
+                                        attributes: {
+                                            src: `${origin}/static/${script}.js?project_token=phc_COMPAT`,
+                                            'data-config': JSON.stringify({
+                                                api_host: origin,
+                                                ui_host: origin,
+                                                opt_out_capturing_by_default: optedOut,
+                                                session_recording: { maskAllInputs: true },
+                                            }),
+                                        },
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                },
+            ],
+        },
+    })
+    const first = normalize(source(context.origin), context)
+    const otherOrigin = 'http://127.0.0.1:5678'
+    assert.deepEqual(first, normalize(source(otherOrigin), { ...context, origin: otherOrigin }))
+    const config = JSON.parse(
+        first.network.snapshots[0].properties.$snapshot_data[0].data.node.attributes['data-config']
+    )
+    assert.equal(config.api_host, '<fixture-origin>')
+    assert.equal(config.ui_host, '<fixture-origin>')
+    assert.equal(config.opt_out_capturing_by_default, false)
+    assert.equal(config.session_recording.maskAllInputs, true)
+    assert.notDeepEqual(first, normalize(source(context.origin, true), context))
+    const unrelated = source(context.origin, false, 'application')
+    const rawConfig = unrelated.network.snapshots[0].properties.$snapshot_data[0].data.node.attributes['data-config']
+    assert.equal(
+        normalize(unrelated, context).network.snapshots[0].properties.$snapshot_data[0].data.node.attributes[
+            'data-config'
+        ],
+        rawConfig
+    )
+})
+
 test('Replay network normalization bounds native clocks without hiding captured content or malformed values', () => {
     const request = {
         name: `${context.origin}/__compat/replay-network/plain`,

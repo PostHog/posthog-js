@@ -165,7 +165,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 { origin: server.origin, config: legacyRecordingConfig }
             )
         await page.goto(server.origin, { waitUntil: 'domcontentloaded' })
-        if (mode !== 'snippet') await waitFor(() => window.__compat?.installed)
+        if (['npm', 'slim'].includes(mode)) await waitFor(() => window.__compat?.installed)
         await page.evaluate(
             ({ scenario, mode, comparison }) => {
                 window.__compat.mode = mode
@@ -174,6 +174,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             },
             { scenario, mode, comparison }
         )
+        await waitFor(() => window.__compat?.initialized)
         await release('core')
         await waitFor(() => window.__compat?.loaded)
         assert(
@@ -494,6 +495,24 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             )
             .toBe(1)
         const network = await received()
+        if (mode === 'loader') {
+            const bootstrap = network.requests.filter((request) => request.path === '/static/loader.js')
+            const coreRequests = network.requests.filter((request) => request.path.endsWith('/array.js'))
+            assert(
+                bootstrap.length === 1 &&
+                    bootstrap[0].status === 200 &&
+                    bootstrap[0].query.project_token?.length === 1 &&
+                    bootstrap[0].query.project_token[0] === 'phc_COMPAT',
+                'Missing or duplicate native loader request'
+            )
+            assert(
+                coreRequests.length === 1 &&
+                    coreRequests[0].status === 200 &&
+                    coreRequests[0].path === `/static/${core.version}/array.js` &&
+                    Object.keys(coreRequests[0].query).length === 0,
+                'Loader did not fetch exactly its matching immutable core without query parameters'
+            )
+        }
         if (scenario === 'replay') assertReplayNetworkCapture(network, server.inspect(), server.origin)
         if (scenario === 'web-vitals') assertWebVitalsDelivery(network)
         if (['surveys', 'surveys-auto'].includes(scenario)) {

@@ -57,7 +57,7 @@ Regenerate only to record intentional, reviewed SDK behavior or fixture/tooling 
 pnpm --filter posthog-js compatibility:update
 ```
 
-Review the resulting six-file diff with the code change, then run `compatibility:test` again. Do not regenerate to accept unexplained failures, nondeterminism or lost behavior. Updates require the complete matrix and equal repetitions; focused checks cannot update the expected set. See the suite README for prerequisites, selectors, coverage limits and evidence paths.
+Review the resulting seven-file diff with the code change, then run `compatibility:test` again. Do not regenerate to accept unexplained failures, nondeterminism or lost behavior. Updates require the complete matrix and equal repetitions; focused checks cannot update the expected set. See the suite README for prerequisites, selectors, coverage limits and evidence paths.
 
 ### Comparing `array.js` bundle size
 
