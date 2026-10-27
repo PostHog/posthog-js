@@ -26,11 +26,18 @@ Pod::Spec.new do |s|
   unless respond_to?(:spm_dependency, true)
     raise "#{s.name} requires React Native 0.75 or later: it resolves posthog-ios through Swift Package Manager with `spm_dependency`"
   end
-  # `spm_dependency` only looks for this pod's target in the main Pods project,
-  # so it can't find it when CocoaPods splits pods into separate projects.
+  # `spm_dependency` only looks for a target named exactly after this pod in the
+  # main Pods project, so it can't find it when CocoaPods splits pods into
+  # separate projects or scopes target names (`posthog-react-native-plugin-Pods-App`).
   podfile = Pod::Config.instance.podfile rescue nil
-  if podfile && Pod::Installer::InstallationOptions.from_podfile(podfile).generate_multiple_pod_projects
-    raise "#{s.name} doesn't support `generate_multiple_pod_projects`: React Native's `spm_dependency` can't add posthog-ios to a pod in a separate project. Remove that option from your Podfile's `install!` line."
+  if podfile
+    install_options = Pod::Installer::InstallationOptions.from_podfile(podfile)
+    if install_options.generate_multiple_pod_projects
+      raise "#{s.name} doesn't support `generate_multiple_pod_projects`: React Native's `spm_dependency` can't add posthog-ios to a pod in a separate project. Remove that option from your Podfile's `install!` line."
+    end
+    unless install_options.deduplicate_targets
+      raise "#{s.name} doesn't support `deduplicate_targets => false`: React Native's `spm_dependency` can't add posthog-ios to a scoped pod target. Remove that option from your Podfile's `install!` line."
+    end
   end
   spm_dependency(s,
     url: 'https://github.com/PostHog/posthog-ios.git',
