@@ -71,8 +71,8 @@ jobs:
         uses: PostHog/error-tracking-harness/.github/workflows/subject-smoke.yml@65ee6a4c625cfa431d422d35c77ffba20111cd5b
         with:
             subject-artifact: error-tracking-subject
-            # Build the same pinned harness revision without publishing an image.
-            harness-source-ref: 65ee6a4c625cfa431d422d35c77ffba20111cd5b
+            # Image published from harness #18 merge commit 79afbc6a85417ac6548bcb63b2c3cd7924e87b74.
+            harness-image: ghcr.io/posthog/error-tracking-harness@sha256:d0eae57e9417293042e4772587f03f4dfdaa6e4ac247caa15e38d04d45cf995d
 
     report:
         name: Post smoke results to PR
