@@ -1,5 +1,26 @@
 # posthog-js-lite
 
+## 4.13.1
+
+### Patch Changes
+
+- [#5365](https://github.com/PostHog/posthog-js/pull/5365) [`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` the next time they are read after opt in.
+  (2026-10-22)
+- Updated dependencies [[`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c)]:
+  - @posthog/core@1.59.4
+
+## 4.13.0
+
+### Minor Changes
+
+- [#5257](https://github.com/PostHog/posthog-js/pull/5257) [`2788b40`](https://github.com/PostHog/posthog-js/commit/2788b409d1649e3e2a901e86b4f60cfb8839dc57) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Change properties passed to `capture()` and the other event methods to override SDK context properties such as `$app_version`, `$os_name` and `$lib`, matching posthog-js and posthog-android
+  (2026-10-10)
+
+### Patch Changes
+
+- Updated dependencies [[`2788b40`](https://github.com/PostHog/posthog-js/commit/2788b409d1649e3e2a901e86b4f60cfb8839dc57)]:
+  - @posthog/core@1.58.0
+
 ## 4.12.1
 
 ### Patch Changes

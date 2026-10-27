@@ -108,6 +108,7 @@ describe('FunctionalTests / Feature Flags', () => {
                     distinct_id: 'test-id',
                     person_properties: {
                         $initial__kx: null,
+                        $initial_bfcid: null,
                         $initial_current_url: 'http://localhost/',
                         $initial_dclid: null,
                         $initial_epik: null,
@@ -224,6 +225,7 @@ describe('FunctionalTests / Feature Flags', () => {
                     groups: {},
                     person_properties: {
                         $initial__kx: null,
+                        $initial_bfcid: null,
                         $initial_current_url: 'http://localhost/',
                         $initial_dclid: null,
                         $initial_epik: null,
@@ -277,6 +279,7 @@ describe('FunctionalTests / Feature Flags', () => {
                     groups: {},
                     person_properties: {
                         $initial__kx: null,
+                        $initial_bfcid: null,
                         $initial_current_url: 'http://localhost/',
                         $initial_dclid: null,
                         $initial_epik: null,
@@ -364,6 +367,7 @@ describe('FunctionalTests / Feature Flags', () => {
                         groups: {},
                         person_properties: {
                             $initial__kx: null,
+                            $initial_bfcid: null,
                             $initial_current_url: 'http://localhost/',
                             $initial_dclid: null,
                             $initial_epik: null,
@@ -434,6 +438,7 @@ describe('FunctionalTests / Feature Flags', () => {
                     groups: { playlist: 'id:77' },
                     person_properties: {
                         $initial__kx: null,
+                        $initial_bfcid: null,
                         $initial_current_url: 'http://localhost/',
                         $initial_dclid: null,
                         $initial_epik: null,

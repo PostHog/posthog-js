@@ -198,6 +198,47 @@ describe('consentManager', () => {
         })
     })
 
+    describe('feature flag exposures before consent', () => {
+        it.each([
+            ['opt_in_capturing()', (ph: PostHog) => ph.opt_in_capturing({ captureEventName: false })],
+            // Consent written by another tab or a consent manager sharing the consent cookie
+            ['consent storage', (ph: PostHog) => ph.consent.optInOut(true)],
+        ])('sends $feature_flag_called for a flag read before consent is granted via %s', async (_, grantConsent) => {
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
+            posthog = await createPostHog({
+                opt_out_capturing_by_default: true,
+                capture_pageview: false,
+                bootstrap: { featureFlags: { 'beta-ui': true } },
+                before_send: beforeSendMock,
+            })
+
+            posthog.getFeatureFlag('beta-ui')
+            grantConsent(posthog)
+            posthog.getFeatureFlag('beta-ui')
+
+            const flagCalledEvents = beforeSendMock.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
+            expect(flagCalledEvents).toHaveLength(1)
+        })
+
+        it('sends $feature_flag_called for a flag an older SDK version marked as reported before consent', async () => {
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
+            posthog = await createPostHog({
+                opt_out_capturing_by_default: true,
+                capture_pageview: false,
+                bootstrap: { featureFlags: { 'beta-ui': true } },
+                before_send: beforeSendMock,
+            })
+            posthog.persistence!.register({ $flag_call_reported: { 'beta-ui': ['true'] } })
+
+            posthog.getFeatureFlag('beta-ui')
+            posthog.opt_in_capturing({ captureEventName: false })
+            posthog.getFeatureFlag('beta-ui')
+
+            const flagCalledEvents = beforeSendMock.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
+            expect(flagCalledEvents).toHaveLength(1)
+        })
+    })
+
     describe('reset() and consent', () => {
         it('warns when a caller directly resets after opting in and capturing changes from on to off', async () => {
             const beforeSendMock = vi.fn().mockImplementation((e) => e)

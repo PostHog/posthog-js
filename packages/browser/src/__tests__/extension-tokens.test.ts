@@ -3,7 +3,7 @@ import type { ExtensionToken } from '@posthog/browser-common'
 import type { Autocapture } from '../autocapture'
 import type { PostHogFeatureFlags } from '../posthog-featureflags'
 import type { PostHogLogs } from '../posthog-logs'
-import type { PostHogSurveys } from '../posthog-surveys'
+import type { BrowserSurveys } from '../browser-surveys'
 import { AutocaptureExtension, FeatureFlagsExtension, LogsExtension, SurveysExtension } from '../extension-tokens'
 
 describe('browser extension tokens', () => {
@@ -11,7 +11,7 @@ describe('browser extension tokens', () => {
         const autocapture: ExtensionToken<Autocapture> = AutocaptureExtension
         const featureFlags: ExtensionToken<PostHogFeatureFlags> = FeatureFlagsExtension
         const logs: ExtensionToken<PostHogLogs> = LogsExtension
-        const surveys: ExtensionToken<PostHogSurveys> = SurveysExtension
+        const surveys: ExtensionToken<BrowserSurveys> = SurveysExtension
 
         expect(autocapture).toBe('autocapture')
         expect(featureFlags).toBe('featureFlags')

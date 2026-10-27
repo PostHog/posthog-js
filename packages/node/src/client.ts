@@ -30,7 +30,14 @@ import {
   SyncSpanContextManager,
   uuidv7,
 } from '@posthog/core'
-import type { Metrics, Span, SpanContextManager, StartSpanOptions, TraceSdkContext } from '@posthog/core'
+import type {
+  Metrics,
+  Span,
+  SpanContextManager,
+  StartSpanOptions,
+  TraceSdkContext,
+  UnresolvedFlagReason,
+} from '@posthog/core'
 import {
   AllFlagsOptions,
   EventMessage,
@@ -62,6 +69,7 @@ import {
   RequiresServerEvaluation,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
+import { getActiveTraceProperties } from './extensions/error-tracking/trace-context'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
@@ -158,6 +166,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _v1Sender?: V1CaptureSender
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
+  /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
+  public readonly privacyMode: boolean
   private _aiCaptureRouteActive = false
 
   // Feature flag overrides for local testing/development
@@ -169,7 +179,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   // flag-definition loads) — both derive from the same per-team server config and converge.
   private _minimalFlagCalledEvents: boolean = false
 
-  distinctIdHasSentFlagCalls: Record<string, Set<string>>
+  // Insertion-ordered LRU of the `$feature_flag_called` keys already reported per distinct id.
+  // Map iteration order is insertion order, so the first entry is always the least recently used.
+  private _distinctIdHasSentFlagCalls: Map<string, Set<string>>
+
+  /**
+   * Snapshot of the `$feature_flag_called` dedupe state, keyed by distinct id.
+   * Adding or deleting keys on the returned object does not affect deduplication;
+   * assigning a whole object replaces the tracker.
+   * @internal
+   * @deprecated Not part of the public API; kept for backwards compatibility.
+   */
+  get distinctIdHasSentFlagCalls(): Record<string, Set<string>> {
+    return Object.fromEntries(this._distinctIdHasSentFlagCalls)
+  }
+
+  set distinctIdHasSentFlagCalls(value: Record<string, Set<string>>) {
+    this._distinctIdHasSentFlagCalls = new Map(Object.entries(value ?? {}))
+  }
 
   // waitUntil debounce state (per-instance)
   private _waitUntilCycle?: {
@@ -226,6 +253,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.options = normalizedOptions
     this.captureMode = resolveCaptureMode()
     this.enableFullAiCapture = normalizedOptions.enableFullAiCapture === true
+    this.privacyMode = normalizedOptions.privacyMode === true
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
@@ -242,10 +270,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this.options.waitUntilMaxWaitMs = Math.max(normalizedOptions.waitUntilMaxWaitMs, 0)
     }
 
-    if (!this.disabled && normalizedOptions.personalApiKey) {
-      if (normalizedOptions.personalApiKey.includes('phc_')) {
+    if (!this.disabled && (normalizedOptions.personalApiKey || normalizedOptions.flagDefinitionCacheProvider)) {
+      if (normalizedOptions.personalApiKey?.includes('phc_')) {
         throw new Error(
-          'Your Personal API key is invalid. These keys are prefixed with "phx_" and can be created in PostHog project settings.'
+          'A project API key ("phc_...") was provided as secretKey or personalApiKey. Pass the project API key as the first constructor argument. For local evaluation, set secretKey (or the deprecated personalApiKey alias) to a server-only Project Secret API Key ("phs_...") or Personal API Key ("phx_...") with feature flag read access.'
         )
       }
 
@@ -278,7 +306,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     this.errorTracking = new ErrorTracking(this, normalizedOptions, this._logger)
-    this.distinctIdHasSentFlagCalls = {}
+    this._distinctIdHasSentFlagCalls = new Map()
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
   }
 
@@ -2264,7 +2292,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Feature flags}
    *
    * @param distinctIdOrOptions - The user's distinct ID, or options when the distinctId comes from `withContext()`
-   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent.
+   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent; the snapshot's `unresolvedFlags` lists them with a reason.
    * @returns Promise that resolves to a `FeatureFlagEvaluations` snapshot
    */
   async evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
@@ -2450,12 +2478,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
+    // A flag a remote fallback or override resolved has a value, so it is not unresolved.
+    const unresolvedFlags: Record<string, UnresolvedFlagReason> = {}
+    for (const [key, reason] of Object.entries(localResult?.unresolved ?? {})) {
+      if (!Object.prototype.hasOwnProperty.call(records, key)) {
+        unresolvedFlags[key] = reason
+      }
+    }
+
     return new FeatureFlagEvaluations({
       host: this._getFeatureFlagEvaluationsHost(),
       distinctId: resolvedDistinctId,
       groups,
       disableGeoip,
       flags: records,
+      unresolvedFlags,
       requestId,
       evaluatedAt,
       flagDefinitionsLoadedAt: this.featureFlagsPoller?.getFlagDefinitionsLoadedAt(),
@@ -2494,20 +2531,27 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         : ''
     const featureFlagReportedKey = `${key}_${response}${groupSuffix}`
 
-    if (
-      distinctId in this.distinctIdHasSentFlagCalls &&
-      this.distinctIdHasSentFlagCalls[distinctId].has(featureFlagReportedKey)
-    ) {
+    const reported = this._distinctIdHasSentFlagCalls.get(distinctId) ?? new Set<string>()
+
+    // Re-insert so the distinct id moves to the most-recently-used end of the map.
+    this._distinctIdHasSentFlagCalls.delete(distinctId)
+    this._distinctIdHasSentFlagCalls.set(distinctId, reported)
+
+    if (reported.has(featureFlagReportedKey)) {
       return
     }
 
-    if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
-      this.distinctIdHasSentFlagCalls = {}
-    }
-    if (this.distinctIdHasSentFlagCalls[distinctId] instanceof Set) {
-      this.distinctIdHasSentFlagCalls[distinctId].add(featureFlagReportedKey)
-    } else {
-      this.distinctIdHasSentFlagCalls[distinctId] = new Set([featureFlagReportedKey])
+    reported.add(featureFlagReportedKey)
+
+    // Evict only the least recently used distinct ids. Clearing the whole tracker under capacity
+    // pressure would re-send `$feature_flag_called` for every active user at once. The current id
+    // is always kept, even when maxCacheSize is below 1.
+    while (this._distinctIdHasSentFlagCalls.size > Math.max(this.maxCacheSize, 1)) {
+      const lruDistinctId = this._distinctIdHasSentFlagCalls.keys().next().value
+      if (lruDistinctId === undefined) {
+        break
+      }
+      this._distinctIdHasSentFlagCalls.delete(lruDistinctId)
     }
 
     this.capture({
@@ -2637,7 +2681,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Reload feature flag definitions from the server for local evaluation.
+   * Reload feature flag definitions from the configured cache provider or PostHog for local evaluation.
    *
    * @example
    * ```ts
@@ -2897,7 +2941,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     try {
       return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))
     } finally {
-      this.distinctIdHasSentFlagCalls = {}
+      this._distinctIdHasSentFlagCalls.clear()
       resolve?.()
     }
   }
@@ -3236,6 +3280,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           ...(properties || {}),
         }
       : { ...(properties || {}) }
+
+    if (event === '$exception' && !('$trace_id' in mergedProperties || '$span_id' in mergedProperties)) {
+      Object.assign(mergedProperties, await getActiveTraceProperties())
+    }
 
     if (!mergedDistinctId) {
       mergedDistinctId = uuidv7()

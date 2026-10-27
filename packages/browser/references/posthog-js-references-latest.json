@@ -1061,7 +1061,7 @@
         {
           "category": "Privacy",
           "description": "Checks if the user has opted out of data capturing.",
-          "details": "Returns the current consent status for event tracking and data persistence.",
+          "details": "Returns the current consent status for event tracking and data persistence.\nIn cookieless `'always'` mode this returns `true`, because the SDK does not store data for the user. Events are still captured in this mode. To check if the SDK captures events, use `is_capturing()`.",
           "id": "has_opted_out_capturing",
           "showDocs": true,
           "title": "has_opted_out_capturing",
@@ -1339,7 +1339,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Register an event listener that runs when feature flags become available or when they change. If there are flags, the listener is called immediately in addition to being called on future changes. Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser.",
+          "description": "Register an event listener that runs when feature flags become available or when they change. If there are flags, the listener is called immediately in addition to being called on future changes. Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser, including when another open tab of your site stores new flags. Do not call `reloadFeatureFlags()` inside this callback: each reload in one tab triggers the callback in the other tabs, which can send flag requests in a loop.",
           "details": null,
           "id": "onFeatureFlags",
           "showDocs": true,
@@ -2555,7 +2555,7 @@
       "id": "DisplaySurveyOptions",
       "name": "DisplaySurveyOptions",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "DisplaySurveyPopoverOptions | DisplaySurveyInlineOptions"
     },
     {
@@ -2582,13 +2582,13 @@
           "name": "skipShownEvent"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "DisplaySurveyType",
       "name": "DisplaySurveyType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof DisplaySurveyType)[keyof typeof DisplaySurveyType]"
     },
     {
@@ -3329,7 +3329,7 @@
           "name": "properties_string_max_length"
         },
         {
-          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)\n- `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)\n- `'2026-08-30'`: Defaults from '2026-08-29' plus `session_recording.captureJsonLd` defaults to `true`",
+          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\nSet to `'latest'` to always use the newest defaults in the loaded SDK version.\nUnlike a pinned date, `'latest'` opts into future default changes when the SDK is upgraded,\nwhich may include breaking changes. Explicit configuration options still take precedence.\nEvents report the resolved date in `$config_defaults` when using `'latest'`.\n\n- `'latest'`: Use all default changes available in the loaded SDK version\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)\n- `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)\n- `'2026-08-30'`: Defaults from '2026-08-29' plus `session_recording.captureJsonLd` defaults to `true`",
           "type": "ConfigDefaults",
           "name": "defaults"
         },
@@ -5471,7 +5471,7 @@
       "id": "SurveyCallback",
       "name": "SurveyCallback",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(surveys: Survey[], context?: {\n    isLoaded: boolean;\n    error?: string;\n}) => void"
     },
     {
@@ -5496,7 +5496,7 @@
           "name": "prefillFromUrl"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyElement",
@@ -5551,34 +5551,34 @@
           "name": "text"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyEventName",
       "name": "SurveyEventName",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyEventName)[keyof typeof SurveyEventName]"
     },
     {
       "id": "SurveyEventProperties",
       "name": "SurveyEventProperties",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyEventProperties)[keyof typeof SurveyEventProperties]"
     },
     {
       "id": "SurveyEventType",
       "name": "SurveyEventType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyEventType)[keyof typeof SurveyEventType]"
     },
     {
       "id": "SurveyPosition",
       "name": "SurveyPosition",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyPosition)[keyof typeof SurveyPosition]"
     },
     {
@@ -5592,7 +5592,7 @@
       "id": "SurveyQuestionBranchingType",
       "name": "SurveyQuestionBranchingType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]"
     },
     {
@@ -5606,41 +5606,41 @@
       "id": "SurveyQuestionType",
       "name": "SurveyQuestionType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]"
     },
     {
       "id": "SurveyResponseValue",
       "name": "SurveyResponseValue",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveySchedule",
       "name": "SurveySchedule",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveySchedule)[keyof typeof SurveySchedule]"
     },
     {
       "id": "SurveyTabPosition",
       "name": "SurveyTabPosition",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyTabPosition)[keyof typeof SurveyTabPosition]"
     },
     {
       "id": "SurveyType",
       "name": "SurveyType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyType)[keyof typeof SurveyType]"
     },
     {
       "id": "SurveyWidgetType",
       "name": "SurveyWidgetType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {

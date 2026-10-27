@@ -213,6 +213,7 @@ export const MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES = [
   'qclid',
   'sccid',
   'oppref',
+  'bfcid',
   'irclid',
   '_kx',
 ] as const
@@ -252,8 +253,6 @@ export const MINIMAL_FLAG_CALLED_EVENT_PROPERTIES: readonly string[] = [
   '$lib_version',
   '$device_id',
   '$is_server',
-  // Runtime identity, kept for runtime breakdowns of flag calls
-  '$react_native_version',
 ]
 
 /**

@@ -1,5 +1,19 @@
 # @posthog/react-native-plugin
 
+## 2.12.7
+
+### Patch Changes
+
+- [#5441](https://github.com/PostHog/posthog-js/pull/5441) [`39ff01a`](https://github.com/PostHog/posthog-js/commit/39ff01a86a20ca086e7b5dbbbd938e9d2115741b) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Upgrade the Android SDK to 3.72.9, which pulls in OkHttp 4.12.1 to block the compromised eMudhra intermediate certificates.
+  (2026-10-27)
+
+## 2.12.6
+
+### Patch Changes
+
+- [#5271](https://github.com/PostHog/posthog-js/pull/5271) [`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27) Thanks [@posthog](https://github.com/apps/posthog)! - Report fatal JS crashes the JS error handler did not capture, such as React render errors on iOS, through native crash capture instead of dropping them (requires updating both `posthog-react-native` and `@posthog/react-native-plugin`). Apps with `errorTracking.autocapture.nativeCrashes` on and `uncaughtExceptions` off now get every fatal JS crash reported this way.
+  (2026-10-14)
+
 ## 2.12.5
 
 ### Patch Changes

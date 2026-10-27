@@ -1,0 +1,11 @@
+packages:
+  - next15-react18
+  - next15
+  - next16
+minimumReleaseAge: 10080
+overrides:
+  # Keep Next's browser data on a release that passes the fixture cooldown.
+  caniuse-lite: 1.0.30001816
+# Match the shipped CLI minimum; the downstream PostHog workspace also allows @posthog/* releases.
+minimumReleaseAgeExclude:
+  - '@posthog/cli@0.18.11'

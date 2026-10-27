@@ -1,5 +1,40 @@
 # @posthog/types
 
+## 1.417.0
+
+### Minor Changes
+
+- [#5405](https://github.com/PostHog/posthog-js/pull/5405) [`3150079`](https://github.com/PostHog/posthog-js/commit/31500798797e35187ca0a61bcf2af24d6ba45a96) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `defaults: 'latest'` to follow the newest defaults and report the applied date in events.
+  (2026-10-27)
+
+## 1.416.1
+
+### Patch Changes
+
+- [#5335](https://github.com/PostHog/posthog-js/pull/5335) [`cb34fe0`](https://github.com/PostHog/posthog-js/commit/cb34fe03c49feb636ea4537f6f6b05144d163dac) Thanks [@hpouillot](https://github.com/hpouillot)! - Correct the documented default for synchronous session replay fetch capture.
+  (2026-10-26)
+
+## 1.416.0
+
+### Minor Changes
+
+- [#5291](https://github.com/PostHog/posthog-js/pull/5291) [`7c10169`](https://github.com/PostHog/posthog-js/commit/7c10169546b1fcfcfff74d05d8d80ba1913b3543) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Attach trace exemplars to metrics recorded inside sampled spans.
+  (2026-10-13)
+
+## 1.415.3
+
+### Patch Changes
+
+- [#5281](https://github.com/PostHog/posthog-js/pull/5281) [`8f2d581`](https://github.com/PostHog/posthog-js/commit/8f2d5818a160040444807a7fc640aabd1ed324f5) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `before_send` callback types to accept non-null events while still allowing `null` returns to drop events.
+  (2026-10-12)
+
+## 1.415.2
+
+### Patch Changes
+
+- [#5200](https://github.com/PostHog/posthog-js/pull/5200) [`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8) Thanks [@hpouillot](https://github.com/hpouillot)! - fix(replay): add a private opt-in to preserve application stacks for failed fetch requests
+  (2026-10-08)
+
 ## 1.415.1
 
 ### Patch Changes

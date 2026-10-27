@@ -35,12 +35,7 @@ import {
   updateFlagValue,
 } from './featureFlagUtils'
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
-import {
-  applyCallerFeatureFlagOverrides,
-  maybeAdd,
-  PostHogCoreStateless,
-  QuotaLimitedFeature,
-} from './posthog-core-stateless'
+import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
 import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString, getEventUuid } from './utils'
 import { EventHint } from './error-tracking'
@@ -83,14 +78,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   // cache for person properties to avoid duplicate $set events
   protected _cachedPersonProperties: string | null = null
 
-  constructor(apiKey: string, options?: PostHogCoreOptions) {
+  constructor(projectToken: string, options?: PostHogCoreOptions) {
     // Default for stateful mode is to not disable geoip. Only override if explicitly set
     const disableGeoipOption = options?.disableGeoip ?? false
 
     // Default for stateful mode is to timeout at 10s. Only override if explicitly set
     const featureFlagsRequestTimeoutMs = options?.featureFlagsRequestTimeoutMs ?? 10000 // 10 seconds
 
-    super(apiKey, { ...options, disableGeoip: disableGeoipOption, featureFlagsRequestTimeoutMs })
+    super(projectToken, { ...options, disableGeoip: disableGeoipOption, featureFlagsRequestTimeoutMs })
 
     this.sendFeatureFlagEvent = options?.sendFeatureFlagEvent ?? true
     this.disableRemoteFeatureFlags = options?.disableRemoteFeatureFlags ?? false
@@ -233,15 +228,22 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   private enrichProperties(properties?: PostHogEventProperties): PostHogEventProperties {
     const userProperties = properties || {}
-    const enriched: PostHogEventProperties = {
+    return {
       ...this.props, // Persisted properties first
       ...this.sessionProps, // Followed by session properties
-      ...userProperties, // Followed by user specified properties
-      ...this.getCommonEventProperties(), // Followed by FF props
+      ...this.getCommonEventProperties(), // Followed by SDK context and FF props
+      ...userProperties, // User specified properties win over all of the above
       $session_id: this.getSessionId(),
     }
-    applyCallerFeatureFlagOverrides(enriched, userProperties)
-    return enriched
+  }
+
+  // enrichProperties already merged the common properties under the caller's, so only fill in
+  // the ones that are missing instead of overriding the caller.
+  protected mergeCommonEventProperties(properties: PostHogEventProperties): PostHogEventProperties {
+    return {
+      ...this.getCommonEventProperties(),
+      ...properties,
+    }
   }
 
   /**
@@ -1042,7 +1044,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
     const featureFlag = details?.flags[key]
     const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
-    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.flagCallReported[key]?.has(flagValue)
+    // An opted-out client drops the event, so marking the flag as reported would suppress the exposure after opt in.
+    const sendEvent =
+      (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.optedOut && !this.flagCallReported[key]?.has(flagValue)
 
     if (sendEvent) {
       const errors: string[] = []

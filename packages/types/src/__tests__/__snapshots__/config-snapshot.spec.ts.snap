@@ -439,6 +439,7 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
   ],
   \\"properties_string_max_length\\": \\"number\\",
   \\"defaults\\": [
+    \\"\\\\\\"latest\\\\\\"\\",
     \\"\\\\\\"2026-08-30\\\\\\"\\",
     \\"\\\\\\"2026-08-29\\\\\\"\\",
     \\"\\\\\\"2026-06-25\\\\\\"\\",
@@ -952,6 +953,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
   \\"addTracingHeaders\\": [
     \\"undefined\\",
     \\"string[]\\"
+  ],
+  \\"__preview_replay_sync_fetch\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
   ],
   \\"__add_tracing_headers\\": [
     \\"undefined\\",

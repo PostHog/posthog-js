@@ -475,19 +475,21 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
+export const CONFIG_DEFAULTS_DATES = Object.freeze([
+    '2026-08-30',
+    '2026-08-29',
+    '2026-06-25',
+    '2026-05-30',
+    '2026-01-30',
+    '2025-11-30',
+    '2025-05-24',
+] as const)
+
 /**
  * Configuration defaults snapshot used by `PostHogConfig.defaults`.
- * Later dates include all earlier default changes.
+ * Later dates include all earlier default changes. `latest` includes all changes in the loaded SDK version.
  */
-export type ConfigDefaults =
-    | '2026-08-30'
-    | '2026-08-29'
-    | '2026-06-25'
-    | '2026-05-30'
-    | '2026-01-30'
-    | '2025-11-30'
-    | '2025-05-24'
-    | 'unset'
+export type ConfigDefaults = 'latest' | (typeof CONFIG_DEFAULTS_DATES)[number] | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -1877,7 +1879,12 @@ export interface PostHogConfig {
     /**
      * Configuration defaults for breaking changes. When set to a specific date,
      * enables new default behaviors that were introduced on that date.
+     * Set to `'latest'` to always use the newest defaults in the loaded SDK version.
+     * Unlike a pinned date, `'latest'` opts into future default changes when the SDK is upgraded,
+     * which may include breaking changes. Explicit configuration options still take precedence.
+     * Events report the resolved date in `$config_defaults` when using `'latest'`.
      *
+     * - `'latest'`: Use all default changes available in the loaded SDK version
      * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
@@ -2498,6 +2505,16 @@ export interface PostHogConfig {
     addTracingHeaders?: string[]
 
     // ------- PREVIEW CONFIGS -------
+
+    /**
+     * Private preview: invoke recorded fetch requests synchronously to preserve application error stacks.
+     * Enabled by default in new cores; set to `false` to retain legacy fetch ordering.
+     * An old core without this option also retains legacy ordering when it loads a new recorder.
+     * Applied when the recorder installs its network observers, not a live remote kill switch.
+     *
+     * @default true
+     */
+    __preview_replay_sync_fetch?: boolean
 
     /**
      * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.

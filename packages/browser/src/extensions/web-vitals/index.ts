@@ -2,7 +2,7 @@ import { PostHog } from '../../posthog-core'
 import { PostHogConfig, RemoteConfigResult, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
-import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
+import { DOM_EVENT_VISIBILITYCHANGE, WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { window, location } from '@posthog/browser-common/utils/globals'
 import {
     assignableWindow,
@@ -10,6 +10,7 @@ import {
     WebVitalsCallbackFlavor,
     WebVitalsReportOpts,
 } from '../../utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 
@@ -242,25 +243,29 @@ export class WebVitalsAutocapture {
         return maskQueryParams(urlWithoutHash, paramsToMask, MASKED)
     }
 
-    private _flushToCapture = () => {
+    private _flushToCapture = (onPageHide = false) => {
         clearTimeout(this._delayedFlushTimer)
         this._delayedFlushTimer = undefined
         if (this._buffer.metrics.length === 0) {
             return
         }
 
-        this._instance.capture('$web_vitals', {
-            $current_url: this._buffer.url,
-            ...this._buffer.metrics.reduce(
-                (acc, metric) => ({
-                    ...acc,
-                    // the entire event so we can use it in the future e.g. includes google's rating
-                    [`$web_vitals_${metric.name}_event`]: { ...metric },
-                    [`$web_vitals_${metric.name}_value`]: metric.value,
-                }),
-                {}
-            ),
-        })
+        this._instance.capture(
+            '$web_vitals',
+            {
+                $current_url: this._buffer.url,
+                ...this._buffer.metrics.reduce(
+                    (acc, metric) => ({
+                        ...acc,
+                        // the entire event so we can use it in the future e.g. includes google's rating
+                        [`$web_vitals_${metric.name}_event`]: { ...metric },
+                        [`$web_vitals_${metric.name}_value`]: metric.value,
+                    }),
+                    {}
+                ),
+            },
+            onPageHide ? { transport: 'sendBeacon', send_instantly: true } : undefined
+        )
         this._buffer = { navigationKey: undefined, url: undefined, metrics: [], firstMetricTimestamp: undefined }
     }
 
@@ -422,6 +427,16 @@ export class WebVitalsAutocapture {
         if (this.allowedMetrics.indexOf('INP') > -1) {
             onINP(this._addToBuffer.bind(this), inpReportOpts)
         }
+
+        // Register after the web-vitals observers so their hidden-page callbacks
+        // can place final LCP, CLS and INP reports into the buffer before it drains.
+        const pageDocument = window?.document
+        addEventListener(pageDocument, DOM_EVENT_VISIBILITYCHANGE, () => {
+            if (pageDocument?.visibilityState === 'hidden') {
+                this._flushToCapture(true)
+            }
+        })
+        addEventListener(window, 'pagehide', () => this._flushToCapture(true))
 
         this._initialized = true
     }

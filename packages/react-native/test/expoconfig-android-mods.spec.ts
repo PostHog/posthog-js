@@ -97,6 +97,34 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     expect(readGradle('app/build.gradle')).toBe(app)
   })
 
+  it('starts node from the Android project root when resolving posthog.gradle', async () => {
+    await prebuild()
+    const app = readGradle('app/build.gradle')
+    const applyFromLines = app.split('\n').filter((line) => line.startsWith('apply from: new File('))
+    expect(applyFromLines).toHaveLength(1)
+    // a bare .execute() would run node wherever Gradle was launched, which can be outside the project
+    expect(applyFromLines[0]).toContain('.execute(null, rootDir).text.trim()')
+    expect(applyFromLines[0]).not.toContain('.execute().')
+  })
+
+  it('rewrites the resolver of a project prebuilt before it ran from the project root', async () => {
+    const legacyLine =
+      "apply from: new File([\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim())"
+    fs.writeFileSync(
+      path.join(projectRoot, 'android/app/build.gradle'),
+      `apply plugin: "com.android.application"\n\n${legacyLine}\n\nandroid {\n    namespace "com.example"\n}\n`
+    )
+
+    await prebuild()
+    const app = readGradle('app/build.gradle')
+    expect(app).not.toContain(legacyLine)
+    expect(app.split('apply from: new File(')).toHaveLength(2)
+    expect(app).toContain('.execute(null, rootDir).text.trim()')
+
+    await prebuild()
+    expect(readGradle('app/build.gradle')).toBe(app)
+  })
+
   it('upgrades a project prebuilt with a classpath that predates native symbols', async () => {
     fs.writeFileSync(
       path.join(projectRoot, 'android/build.gradle'),
@@ -138,22 +166,26 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     )
   })
 
-  it('does not apply the plugin for a Kotlin project Gradle file', async () => {
+  it('configures the plugin for a Kotlin project with a Groovy app Gradle file', async () => {
     fs.renameSync(path.join(projectRoot, 'android/build.gradle'), path.join(projectRoot, 'android/build.gradle.kts'))
     await prebuild()
-    expect(readGradle('build.gradle.kts')).toBe(projectGradle)
-    expect(readGradle('app/build.gradle')).not.toContain(applyLine)
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('project build.gradle is not groovy'))
+    expect(readGradle('build.gradle.kts')).toContain('classpath("com.posthog:posthog-android-gradle-plugin:')
+    expect(readGradle('app/build.gradle')).toContain(applyLine)
+    expect(warnings()).toEqual([expect.stringContaining('Added an onNewIntent override')])
   })
 
-  it('does not apply the native plugin for a Kotlin app Gradle file', async () => {
-    fs.renameSync(
-      path.join(projectRoot, 'android/app/build.gradle'),
-      path.join(projectRoot, 'android/app/build.gradle.kts')
+  it('configures the native plugin for a Groovy project with a Kotlin app Gradle file', async () => {
+    fs.rmSync(path.join(projectRoot, 'android/app/build.gradle'))
+    fs.writeFileSync(
+      path.join(projectRoot, 'android/app/build.gradle.kts'),
+      'plugins {\n    id("com.android.application")\n}\n\nandroid {\n    namespace = "com.example"\n}\n'
     )
     await prebuild()
     expect(readGradle('app/build.gradle.kts')).not.toContain(applyLine)
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('app build.gradle is not groovy'))
+    expect(readGradle('app/build.gradle.kts')).toContain('apply(plugin = "com.posthog.android")')
+    expect(readGradle('app/build.gradle.kts')).toContain('setProperty("uploadNativeSymbols", true)')
+    expect(readGradle('app/build.gradle.kts')).toContain('apply(from = File(')
+    expect(warnings()).toEqual([expect.stringContaining('Added an onNewIntent override')])
   })
 
   it('leaves native-symbol setup disabled when not requested', async () => {

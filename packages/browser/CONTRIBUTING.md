@@ -41,6 +41,24 @@ Run the following package commands from `packages/browser`:
 
 Focused runs do not replace the root [CI-aligned checks](../../CONTRIBUTING.md#ci-aligned-checks). Select relevant compatibility, build/watch, declaration, packaging, and live-browser checks when changing those contracts.
 
+### Deployment compatibility snapshots
+
+For changes to browser capture, extension lifecycle, loaders, public entrypoints or delivered payloads, run the [deployment compatibility suite](playwright/compatibility/README.md). It checks production-packed current and historical cores with current CDN extensions in Chromium, Firefox and WebKit. From the repository root:
+
+```sh
+pnpm --filter posthog-js compatibility:test
+```
+
+CI runs this read-only check and fails on snapshot differences. Inspect the semantic differences and retained raw evidence before deciding whether a change is a regression or an intended new expectation.
+
+Regenerate only to record intentional, reviewed SDK behavior or fixture/tooling changes, with the independent functional, privacy, delivery and loading assertions still passing:
+
+```sh
+pnpm --filter posthog-js compatibility:update
+```
+
+Review the resulting six-file diff with the code change, then run `compatibility:test` again. Do not regenerate to accept unexplained failures, nondeterminism or lost behavior. Updates require the complete matrix and equal repetitions; focused checks cannot update the expected set. See the suite README for prerequisites, selectors, coverage limits and evidence paths.
+
 ### Comparing `array.js` bundle size
 
 Run `pnpm bundle-size:array` from the repository root for a fast comparison of the current working tree against `origin/main`. Pass another git ref to change the baseline:

@@ -292,6 +292,12 @@ export class LocalFeatureFlagEvaluator {
           try {
             evaluationCache[depFlagKey] = await this.computeFlagValueLocally(depFlag, ctx)
           } catch (error) {
+            if (
+              error instanceof InconclusiveMatchError &&
+              Symbol.for('posthog.requiresServerRegexEvaluation') in error
+            ) {
+              throw error
+            }
             throw new InconclusiveMatchError(
               `Error evaluating flag dependency '${depFlagKey}' for flag '${targetFlagKey}': ${error}`
             )
@@ -318,9 +324,12 @@ export class LocalFeatureFlagEvaluator {
     const flagAggregation = flagFilters.aggregation_group_type_index
     const { groups, groupProperties } = ctx
     let isInconclusive = false
+    let regexError: InconclusiveMatchError | undefined
+    const deferredRegexValues = new Set<FeatureFlagValue>()
     let result: FeatureFlagValue | undefined = undefined
 
     for (const condition of flagConditions) {
+      let effectiveBucketingValue = bucketingValue
       try {
         const conditionAggregation =
           condition.aggregation_group_type_index !== undefined
@@ -328,7 +337,6 @@ export class LocalFeatureFlagEvaluator {
             : flagAggregation
 
         let effectiveProperties = properties
-        let effectiveBucketingValue = bucketingValue
 
         if (conditionAggregation !== flagAggregation) {
           if (conditionAggregation !== null && conditionAggregation !== undefined) {
@@ -364,14 +372,29 @@ export class LocalFeatureFlagEvaluator {
         if (e instanceof RequiresServerEvaluation) throw e
         if (e instanceof InconclusiveMatchError) {
           isInconclusive = true
+          if (Symbol.for('posthog.requiresServerRegexEvaluation') in e) {
+            regexError = e
+            const variants = flagFilters.multivariate?.variants || []
+            const override = condition.variant
+            deferredRegexValues.add(
+              override && variants.some((variant) => variant.key === override)
+                ? override
+                : (await this.getMatchingVariant(flag, effectiveBucketingValue)) || true
+            )
+          }
         } else {
           throw e
         }
       }
     }
 
-    if (result !== undefined) return result
+    if (result !== undefined) {
+      // A later match cannot choose a different value while an earlier regex rule is unresolved.
+      if (regexError && [...deferredRegexValues].some((value) => value !== result)) throw regexError
+      return result
+    }
     if (isInconclusive) {
+      if (regexError) throw regexError
       throw new InconclusiveMatchError("Can't determine if feature flag is enabled or not with given properties")
     }
     return false

@@ -1,5 +1,64 @@
 # @posthog/nextjs-config
 
+## 1.12.0
+
+### Minor Changes
+
+- [#5398](https://github.com/PostHog/posthog-js/pull/5398) [`88f8655`](https://github.com/PostHog/posthog-js/commit/88f8655708ccbb1c3d474f3f579c644524c5d190) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fail webpack, Next.js webpack, and Nuxt builds when PostHog cannot process or upload source maps; set `sourcemaps.failOnError: false` to log the error and continue the build instead.
+  (2026-10-23)
+
+### Patch Changes
+
+- Updated dependencies [[`88f8655`](https://github.com/PostHog/posthog-js/commit/88f8655708ccbb1c3d474f3f579c644524c5d190)]:
+  - @posthog/webpack-plugin@1.8.0
+
+## 1.11.6
+
+### Patch Changes
+
+- [#5386](https://github.com/PostHog/posthog-js/pull/5386) [`42bc585`](https://github.com/PostHog/posthog-js/commit/42bc585c68fade51403680b08af32f900a7b6db3) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Delete source maps when processing or uploading them fails while `sourcemaps.deleteAfterUpload` is enabled (the default), so they no longer ship in the build output; set `deleteAfterUpload: false` to keep them.
+  (2026-10-22)
+- Updated dependencies [[`23b287f`](https://github.com/PostHog/posthog-js/commit/23b287fb1b4fa7ecbeb9e3184292a9730718d5b9), [`45f6cd6`](https://github.com/PostHog/posthog-js/commit/45f6cd6b65bc4319a0887bfd83074e1a065c0962), [`21a2559`](https://github.com/PostHog/posthog-js/commit/21a2559271cde904a35311f4adc43fd924cbc025), [`42bc585`](https://github.com/PostHog/posthog-js/commit/42bc585c68fade51403680b08af32f900a7b6db3)]:
+  - posthog-js@1.438.17
+  - @posthog/webpack-plugin@1.7.4
+
+## 1.11.5
+
+### Patch Changes
+
+- [#5351](https://github.com/PostHog/posthog-js/pull/5351) [`4182940`](https://github.com/PostHog/posthog-js/commit/4182940bf5f715bef16a0740cc9d08354040bdd8) Thanks [@hpouillot](https://github.com/hpouillot)! - Require PostHog CLI 0.18.11 or newer within the 0.18 release line.
+  (2026-10-21)
+- Updated dependencies [[`4182940`](https://github.com/PostHog/posthog-js/commit/4182940bf5f715bef16a0740cc9d08354040bdd8)]:
+  - @posthog/webpack-plugin@1.7.3
+
+## 1.11.4
+
+### Patch Changes
+
+- [#5334](https://github.com/PostHog/posthog-js/pull/5334) [`0d2c39d`](https://github.com/PostHog/posthog-js/commit/0d2c39d923dd6241cc0ead320528f555ef02103d) Thanks [@hpouillot](https://github.com/hpouillot)! - Correctly instrument Next.js 16 builds using --webpack instead of treating them as Turbopack builds.
+  (2026-10-21)
+
+- [#5334](https://github.com/PostHog/posthog-js/pull/5334) [`0d2c39d`](https://github.com/PostHog/posthog-js/commit/0d2c39d923dd6241cc0ead320528f555ef02103d) Thanks [@hpouillot](https://github.com/hpouillot)! - Prevent stale webpack runtime caches in Next.js by compiling event release IDs before asset hashing.
+  (2026-10-21)
+- Updated dependencies [[`0d2c39d`](https://github.com/PostHog/posthog-js/commit/0d2c39d923dd6241cc0ead320528f555ef02103d)]:
+  - @posthog/webpack-plugin@1.7.2
+
+## 1.11.3
+
+### Patch Changes
+
+- [#5282](https://github.com/PostHog/posthog-js/pull/5282) [`9b7ef84`](https://github.com/PostHog/posthog-js/commit/9b7ef8478b7380dfa41c22cbeae2552caf88bdeb) Thanks [@marandaneto](https://github.com/marandaneto)! - Use the package’s own PostHog CLI to prevent sourcemap upload failures when an older CLI is installed elsewhere in a monorepo.
+  (2026-10-13)
+
+## 1.11.2
+
+### Patch Changes
+
+- [#5202](https://github.com/PostHog/posthog-js/pull/5202) [`7199f24`](https://github.com/PostHog/posthog-js/commit/7199f24296f458af1094fdf8a432ad108685fa28) Thanks [@hpouillot](https://github.com/hpouillot)! - Support immutable Next.js 16 Turbopack sourcemaps without rewriting build assets, and require a compatible posthog-js runtime for native debug and release IDs.
+  (2026-10-09)
+- Updated dependencies [[`7199f24`](https://github.com/PostHog/posthog-js/commit/7199f24296f458af1094fdf8a432ad108685fa28)]:
+  - @posthog/plugin-utils@2.0.1
+
 ## 1.11.1
 
 ### Patch Changes

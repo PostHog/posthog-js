@@ -380,6 +380,90 @@ describe('ConversationsManager', () => {
         })
     })
 
+    describe('reset or destroy while initialization is in flight', () => {
+        // Hold back the requests for one endpoint so the test can tear the manager down
+        // while they are pending and answer them afterwards; every other request keeps
+        // the default mock.
+        const deferRequests = (matches: (url: string, method: string) => boolean) => {
+            const pending: any[] = []
+            const defaultImpl = (mockPosthog._send_request as VitestMock).getMockImplementation()!
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                if (matches(options.url as string, options.method as string)) {
+                    pending.push(options)
+                    return
+                }
+                defaultImpl(options)
+            })
+            return { pending, defaultImpl }
+        }
+
+        const ticketRequestCount = () =>
+            (mockPosthog._send_request as VitestMock).mock.calls.filter((call) =>
+                (call[0].url as string).includes('/widget/tickets')
+            ).length
+
+        it('does not persist, render or poll when reset() runs during the initial tickets request', async () => {
+            const { pending: pendingTickets } = deferRequests(
+                (url, method) => url.includes('/widget/tickets') && method === 'GET'
+            )
+            const openTicket = {
+                id: 'ticket-stale',
+                status: 'open',
+                unread_count: 1,
+                created_at: '2023-01-01T00:00:00Z',
+                updated_at: '2023-01-01T00:00:00Z',
+            }
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushMicrotasks()
+            expect(pendingTickets).toHaveLength(1)
+
+            manager.reset()
+            const ticketRequestsAtReset = ticketRequestCount()
+
+            await act(async () => {
+                pendingTickets.forEach((options) =>
+                    options.callback({ statusCode: 200, json: { results: [openTicket], has_more: false } })
+                )
+            })
+            await flushMicrotasks()
+            await act(async () => {
+                vi.advanceTimersByTime(60_000)
+            })
+            await flushMicrotasks()
+
+            expect(manager['_persistence'].saveTicketId).not.toHaveBeenCalled()
+            expect(manager.getCurrentTicketId()).toBeNull()
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+            expect(mockPosthog.capture).not.toHaveBeenCalledWith('$conversations_widget_loaded', expect.anything())
+            expect(ticketRequestCount()).toBe(ticketRequestsAtReset)
+        })
+
+        it('does not finish initialization when destroy() runs during a URL restore', async () => {
+            const { pending: pendingRestore, defaultImpl } = deferRequests(
+                (url, method) => url.endsWith('/widget/restore') && method === 'POST'
+            )
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-destroyed')
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushMicrotasks()
+            expect(pendingRestore).toHaveLength(1)
+            ;(mockPosthog.capture as VitestMock).mockClear()
+
+            manager.destroy()
+            await act(async () => {
+                pendingRestore.forEach((options) => defaultImpl(options))
+            })
+            await flushPromises()
+
+            expect(manager['_persistence'].saveTicketId).not.toHaveBeenCalled()
+            expect(manager['_persistence'].setWidgetSessionId).not.toHaveBeenCalled()
+            expect(mockPosthog.capture).not.toHaveBeenCalledWith('$conversations_loaded', expect.anything())
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+            expect(window.location.search).toBe('')
+        })
+    })
+
     describe('show and hide', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)

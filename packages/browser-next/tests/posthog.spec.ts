@@ -255,8 +255,8 @@ describe('@posthog/browser core', () => {
                     event: 'signed_up',
                     distinct_id: posthog.distinctId,
                     timestamp: '2026-01-02T03:04:05.000Z',
-                    session_id: posthog.session.sessionId,
-                    window_id: posthog.session.windowId,
+                    session_id: posthog.session!.sessionId,
+                    window_id: posthog.session!.windowId,
                     options: {},
                     properties: {
                         dynamic: 'yes',
@@ -593,40 +593,48 @@ describe('@posthog/browser core', () => {
         }
     })
 
-    it('uses the bounded sender retry budget before disposal purges undelivered work', async () => {
-        vi.useFakeTimers()
-        try {
-            const fetch = vi
-                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
-                .mockResolvedValue(new Response('{}', { status: 503 }))
-            const posthog = await createPostHogWithAnalytics({
-                remoteConfig: localRemoteConfig,
-                projectToken: 'ph_test',
-                storage: false,
-                navigator: false,
-                fetch,
-            })
+    it.each([
+        { jitter: 0.5, attempts: 4, outcome: 'every retry starts inside the shutdown timeout' },
+        { jitter: 1, attempts: 3, outcome: 'the shutdown timeout cancels a retry that would start after it' },
+    ])(
+        'uses the bounded sender retry budget before disposal purges undelivered work: $outcome',
+        async ({ jitter, attempts }) => {
+            vi.useFakeTimers()
+            const random = vi.spyOn(Math, 'random').mockReturnValue(jitter)
+            try {
+                const fetch = vi
+                    .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
+                    .mockResolvedValue(new Response('{}', { status: 503 }))
+                const posthog = await createPostHogWithAnalytics({
+                    remoteConfig: localRemoteConfig,
+                    projectToken: 'ph_test',
+                    storage: false,
+                    navigator: false,
+                    fetch,
+                })
 
-            posthog.capture('disposed_during_backoff')
-            await vi.advanceTimersByTimeAsync(0)
-            expect(fetch).toHaveBeenCalledTimes(1)
-            expect(vi.getTimerCount()).toBe(1)
+                posthog.capture('disposed_during_backoff')
+                await vi.advanceTimersByTimeAsync(0)
+                expect(fetch).toHaveBeenCalledTimes(1)
+                expect(vi.getTimerCount()).toBe(1)
 
-            let disposalSettled = false
-            const disposal = Promise.resolve(posthog.dispose()).then(() => {
-                disposalSettled = true
-            })
-            await Promise.resolve()
-            expect(disposalSettled).toBe(false)
-            await vi.runOnlyPendingTimersAsync()
-            await disposal
+                let disposalSettled = false
+                const disposal = Promise.resolve(posthog.dispose()).then(() => {
+                    disposalSettled = true
+                })
+                await Promise.resolve()
+                expect(disposalSettled).toBe(false)
+                await vi.runOnlyPendingTimersAsync()
+                await disposal
 
-            expect(fetch).toHaveBeenCalledTimes(4)
-            expect(disposalSettled).toBe(true)
-        } finally {
-            vi.useRealTimers()
+                expect(fetch).toHaveBeenCalledTimes(attempts)
+                expect(disposalSettled).toBe(true)
+            } finally {
+                random.mockRestore()
+                vi.useRealTimers()
+            }
         }
-    })
+    )
 
     it('flushes below-threshold work before shutdown and disables future capture', async () => {
         const requests: SentRequest[] = []
@@ -729,7 +737,7 @@ describe('@posthog/browser core', () => {
 
             expect(settled).toBe(true)
             await posthog.capture('after_shutdown')
-            expect(posthog.session.sessionId).toBe('')
+            expect(posthog.session).toBeUndefined()
         } finally {
             vi.useRealTimers()
         }
@@ -894,7 +902,7 @@ describe('@posthog/browser core', () => {
             })
             const events: string[] = []
             posthog.onEvent(({ event }) => events.push(event))
-            const session = { ...posthog.session }
+            const session = posthog.session
             const persisted = new Map(storage.values)
             const properties = Object.defineProperty({}, 'hostile', {
                 enumerable: true,
@@ -934,7 +942,7 @@ describe('@posthog/browser core', () => {
             })
             const events: string[] = []
             posthog.onEvent(({ event }) => events.push(event))
-            const session = { ...posthog.session }
+            const session = posthog.session
             const persisted = new Map(storage.values)
             const properties = {
                 toJSON() {
@@ -997,11 +1005,11 @@ describe('@posthog/browser core', () => {
             })
             const events: string[] = []
             posthog.onEvent(({ event }) => events.push(event))
-            const session = { ...posthog.session }
+            const session = posthog.session
             const persisted = new Map(storage.values)
             vi.advanceTimersByTime(1_000)
 
-            for (const option of ['set', 'setOnce', 'uuid', 'timestamp']) {
+            for (const option of ['set', 'setOnce', 'uuid', 'timestamp', 'delivery']) {
                 const options = Object.defineProperty({}, option, {
                     get() {
                         throw new Error(`${option} getter failed`)
@@ -1298,7 +1306,7 @@ describe('@posthog/browser core', () => {
         expect(loader).toHaveBeenCalledTimes(1)
     })
 
-    it('blocks registration, requests, and persisted key-value mutation after disposal', async () => {
+    it('blocks registration and persisted key-value mutation after disposal', async () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
         const remoteConfig = createRemoteConfig()
@@ -1324,7 +1332,6 @@ describe('@posthog/browser core', () => {
         posthog.onEvent(({ event }) => events.push(event))
         posthog.onRemoteConfig(lateRemoteConfigListener)
         posthog.registerDynamicEventProperties(() => ({ after_dispose: true }))
-        await expect(posthog.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
         await posthog.capture('after_dispose')
         posthog.kv.set('after_dispose', true)
@@ -1388,8 +1395,8 @@ describe('@posthog/browser core', () => {
         await first.capture('first')
         await second.capture('second')
 
-        expect(second.session.sessionId).toBe(first.session.sessionId)
-        expect(second.session.windowId).not.toBe(first.session.windowId)
+        expect(second.session!.sessionId).toBe(first.session!.sessionId)
+        expect(second.session!.windowId).not.toBe(first.session!.windowId)
     })
 
     it('rotates an idle session when capture runs', async () => {
@@ -1443,10 +1450,10 @@ describe('@posthog/browser core', () => {
 
         expect(posthog.anonymousId).not.toBe(originalId)
         expect(posthog.distinctId).toBe(posthog.anonymousId)
-        expect(posthog.session.sessionId).toBe('')
+        expect(posthog.session).toBeUndefined()
         expect(sessions).toEqual([])
 
         await posthog.capture('after_reset')
-        expect(sessions).toEqual([`reset:${posthog.session.sessionId}`])
+        expect(sessions).toEqual([`reset:${posthog.session!.sessionId}`])
     })
 })

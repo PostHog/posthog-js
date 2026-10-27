@@ -866,7 +866,101 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
+        describe('network payload capture config', () => {
+            it.each([
+                ['uses server side setting if client side setting is not set', true, undefined, true],
+                ['uses client side setting when set to true', false, true, true],
+                ['uses client side setting when set to false - even if remotely enabled', true, false, false],
+                ['is disabled when both disabled', false, false, false],
+            ])(
+                '%s',
+                (
+                    _name: string,
+                    serverSide: boolean | undefined,
+                    clientSide: boolean | undefined,
+                    expected: boolean
+                ) => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
+                            networkPayloadCapture: { recordHeaders: serverSide, recordBody: serverSide },
+                        },
+                    })
+                    posthog.config.session_recording.recordHeaders = clientSide
+                    posthog.config.session_recording.recordBody = clientSide
+                    posthog.config.capture_performance = { network_timing: true }
+
+                    const networkPayloadCapture =
+                        sessionRecording['_lazyLoadedSessionRecording']['_networkPayloadCapture']
+                    expect(!!networkPayloadCapture?.recordHeaders).toBe(expected)
+                    expect(!!networkPayloadCapture?.recordBody).toBe(expected)
+                }
+            )
+
+            it('is undefined when the client disables headers, body and timing - even if remotely enabled', () => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        cache_timestamp: Date.now(),
+                        networkPayloadCapture: { recordHeaders: true, recordBody: true },
+                    },
+                })
+                posthog.config.session_recording.recordHeaders = false
+                posthog.config.session_recording.recordBody = false
+                posthog.config.capture_performance = { network_timing: false }
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_networkPayloadCapture']).toBeUndefined()
+            })
+        })
+
         describe('network capture plugin', () => {
+            it('is not installed when the client disables headers, body and timing - even if remotely enabled', () => {
+                const getRecordNetworkPlugin = vi.fn((options) => ({
+                    name: 'network',
+                    observer: undefined,
+                    options,
+                }))
+                assignableWindow.__PosthogExtensions__!.rrwebPlugins = {
+                    getRecordConsolePlugin: undefined,
+                    getRecordNetworkPlugin,
+                }
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        cache_timestamp: Date.now(),
+                        networkPayloadCapture: { recordHeaders: true, recordBody: true },
+                    },
+                })
+                posthog.config.session_recording.recordHeaders = false
+                posthog.config.session_recording.recordBody = false
+                posthog.config.capture_performance = false
+
+                const recorder = new LazyLoadedSessionRecording(posthog, true)
+                recorder['_forceAllowLocalhostNetworkCapture'] = true
+                recorder['_gatherRRWebPlugins']()
+
+                expect(getRecordNetworkPlugin).not.toHaveBeenCalled()
+            })
+
+            it.each([undefined, false, true, 'true', 1])(
+                'opts in only when the private init flag is true (%s)',
+                (flag) => {
+                    const getRecordNetworkPlugin = vi.fn((options) => ({
+                        name: 'network',
+                        observer: undefined,
+                        options,
+                    }))
+                    assignableWindow.__PosthogExtensions__!.rrwebPlugins = {
+                        getRecordConsolePlugin: undefined,
+                        getRecordNetworkPlugin,
+                    }
+                    Reflect.set(posthog.config, '__preview_replay_sync_fetch', flag)
+                    posthog.config.session_recording.recordBody = true
+                    const recorder = new LazyLoadedSessionRecording(posthog, true)
+                    recorder['_forceAllowLocalhostNetworkCapture'] = true
+                    recorder['_gatherRRWebPlugins']()
+                    expect(getRecordNetworkPlugin.mock.calls[0][0].captureFetchSynchronously).toBe(flag === true)
+                }
+            )
+
             it('filters ingestion paths when rewriteRequestPath is configured after the plugin starts', () => {
                 const getRecordNetworkPlugin = vi.fn((options: NetworkRecordOptions) => ({
                     name: 'network',

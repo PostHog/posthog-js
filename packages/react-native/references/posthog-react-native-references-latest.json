@@ -25,12 +25,12 @@
             {
               "id": "add_to_app.(js|ts)",
               "name": "Add to App.(js|ts)",
-              "code": "\n\n// Add to App.(js|ts)\nimport { usePostHog, PostHogProvider } from 'posthog-react-native'\n\nexport function MyApp() {\n    return (\n        <PostHogProvider apiKey=\"<ph_project_api_key>\" options={{\n            host: '<ph_client_api_host>',\n        }}>\n            <MyComponent />\n        </PostHogProvider>\n    )\n}\n\n// And access the PostHog client via the usePostHog hook\nimport { usePostHog } from 'posthog-react-native'\n\nconst MyComponent = () => {\n    const posthog = usePostHog()\n\n    useEffect(() => {\n        posthog.capture(\"event_name\")\n    }, [posthog])\n}\n\n\n\n"
+              "code": "\n\n// Add to App.(js|ts)\nimport { usePostHog, PostHogProvider } from 'posthog-react-native'\n\nexport function MyApp() {\n    return (\n        <PostHogProvider projectToken=\"<ph_project_token>\" options={{\n            host: '<ph_client_api_host>',\n        }}>\n            <MyComponent />\n        </PostHogProvider>\n    )\n}\n\n// And access the PostHog client via the usePostHog hook\nimport { usePostHog } from 'posthog-react-native'\n\nconst MyComponent = () => {\n    const posthog = usePostHog()\n\n    useEffect(() => {\n        posthog.capture(\"event_name\")\n    }, [posthog])\n}\n\n\n\n"
             },
             {
               "id": "using_with_existing_client",
               "name": "Using with existing client",
-              "code": "\n\n// Using with existing client\nimport { PostHog } from 'posthog-react-native'\n\nconst posthog = new PostHog('<ph_project_api_key>', {\n    host: '<ph_client_api_host>'\n})\n\nexport function MyApp() {\n    return (\n        <PostHogProvider client={posthog}>\n            <MyComponent />\n        </PostHogProvider>\n    )\n}\n\n\n\n"
+              "code": "\n\n// Using with existing client\nimport { PostHog } from 'posthog-react-native'\n\nconst posthog = new PostHog('<ph_project_token>', {\n    host: '<ph_client_api_host>'\n})\n\nexport function MyApp() {\n    return (\n        <PostHogProvider client={posthog}>\n            <MyComponent />\n        </PostHogProvider>\n    )\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -39,7 +39,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ children, client, options, apiKey, autocapture, style, debug, }"
+              "name": "{ children, client, options, projectToken, apiKey, autocapture, style, debug, }"
             },
             {
               "description": "",
@@ -64,7 +64,7 @@
             {
               "id": "posthog.ts",
               "name": "posthog.ts",
-              "code": "\n\n// posthog.ts\nimport PostHog from 'posthog-react-native'\n\nexport const posthog = new PostHog('<ph_project_api_key>', {\n  host: '<ph_client_api_host>'\n})\n\n// Then you can access PostHog by importing your instance\n// Another file:\nimport { posthog } from './posthog'\n\nexport function MyApp1() {\n    useEffect(async () => {\n        posthog.capture('event_name')\n    }, [posthog])\n\n    return <View>Your app code</View>\n}\n\n\n\n"
+              "code": "\n\n// posthog.ts\nimport PostHog from 'posthog-react-native'\n\nexport const posthog = new PostHog('<ph_project_token>', {\n  host: '<ph_client_api_host>'\n})\n\n// Then you can access PostHog by importing your instance\n// Another file:\nimport { posthog } from './posthog'\n\nexport function MyApp1() {\n    useEffect(async () => {\n        posthog.capture('event_name')\n    }, [posthog])\n\n    return <View>Your app code</View>\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -73,7 +73,7 @@
               "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
               "isOptional": false,
               "type": "string",
-              "name": "apiKey"
+              "name": "projectToken"
             },
             {
               "description": "PostHog configuration options",
@@ -823,7 +823,7 @@
         },
         {
           "category": "Privacy",
-          "description": "Opts the user in to data capture.\nBy default, PostHog has tracking enabled unless it is forcefully disabled by default using the option  defaultOptIn: false . Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called.",
+          "description": "Opts the user in to data capture.\nBy default, PostHog has tracking enabled unless it is forcefully disabled by default using the option  defaultOptIn: false . Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called. When opting in after an opt-out, session replay restarts in a new session if the app wanted it on at opt-out: `enableSessionReplay` is on, or the app called `startSessionRecording()`, and the app has not called `stopSessionRecording()` since. This holds even if replay was not recording at opt-out, for example while it waited for the linked flag or an event trigger. The linked flag, sampling and event triggers apply to the restart as usual. The promise resolves once session replay has been re-evaluated. A `startSessionRecording()` or `stopSessionRecording()` call made while opted out does not change this; to keep replay stopped, call `stopSessionRecording()` before `optOut()` or after `optIn()`.",
           "details": null,
           "id": "optIn",
           "showDocs": true,
@@ -845,7 +845,7 @@
         },
         {
           "category": "Privacy",
-          "description": "Opts the user out of data capture.\nYou can completely opt-out users from data capture. Once this has been called it is persisted and will be respected until optIn is called again or the reset function is called.",
+          "description": "Opts the user out of data capture.\nYou can completely opt-out users from data capture. Once this has been called it is persisted and will be respected until optIn is called again or the reset function is called. The promise resolves once session replay has stopped.",
           "details": null,
           "id": "optOut",
           "showDocs": true,
@@ -2320,7 +2320,7 @@
       "name": "BeforeSendFn",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "(event: CaptureEvent | null) => CaptureEvent | null"
+      "example": "(event: CaptureEvent) => CaptureEvent | null"
     },
     {
       "id": "CaptureEvent",
@@ -3348,7 +3348,7 @@
           "name": "$os_version"
         },
         {
-          "description": "React Native version like \"0.79.6\"",
+          "description": "React Native version like \"0.79.6\". Not set by default: the SDK sends it only on `Application Installed` and `Application Updated`",
           "type": "string | null | undefined",
           "name": "$react_native_version"
         },
@@ -3830,7 +3830,7 @@
           "name": "capturePushNotificationSubscriptions"
         },
         {
-          "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated. An object replaces the default App properties except `$react_native_version`, which is kept unless the object sets it (set it to `undefined` to remove it).",
+          "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated",
           "type": "PostHogCustomAppProperties | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)",
           "name": "customAppProperties"
         },
@@ -4045,9 +4045,10 @@
       "name": "PostHogProviderProps",
       "properties": [
         {
-          "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
+          "description": "Your PostHog project token. Ignored when `projectToken` is set.\nDeprecated: Use `projectToken` instead. This will be removed in the next major version.",
           "type": "string",
-          "name": "apiKey"
+          "name": "apiKey",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Autocapture configuration - can be a boolean or detailed options.\nWhen not set, the default behavior is: - `captureScreens`: true - `captureTouches`: false - `captureAppLifecycleEvents`: true\nSet to `true` to enable all autocapture features (including touches). Set to `false` to disable all autocapture features.",
@@ -4073,6 +4074,11 @@
           "description": "PostHog configuration options",
           "type": "PostHogOptions",
           "name": "options"
+        },
+        {
+          "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
+          "type": "string",
+          "name": "projectToken"
         },
         {
           "description": "Custom styles for the provider wrapper View",
@@ -4166,7 +4172,11 @@
           "name": "captureFatalException"
         },
         {
-          "type": "() => Promise<PostHogReactNativePluginMap>",
+          "type": "((message: string) => Promise<void>) & ((message: string) => Promise<void>)",
+          "name": "markFatalExceptionHandled"
+        },
+        {
+          "type": "(() => Promise<PostHogReactNativePluginMap>) & (() => Promise<{ [key: string]: any; }>)",
           "name": "getSessionReplayDebugProperties"
         },
         {
