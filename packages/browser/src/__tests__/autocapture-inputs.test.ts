@@ -243,6 +243,50 @@ describe('autocapture input values', () => {
         })
     })
 
+    describe.each(['option', 'optgroup'])('selected option privacy markers on %s', (location) => {
+        it.each<[string, AutocaptureConfig | undefined, boolean]>([
+            ['', undefined, true],
+            ['class="ph-no-autocapture"', undefined, false],
+            ['data-ph-no-autocapture', undefined, false],
+            ['class="custom-exclusion"', { css_selector_ignorelist: ['.custom-exclusion'] }, false],
+            ['class="custom-exclusion"', { css_selector_ignorelist: ['.other-exclusion'] }, true],
+            ['class="ph-no-autocapture"', { css_selector_ignorelist: ['.custom-exclusion'] }, true],
+            ['data-ph-no-autocapture', { css_selector_ignorelist: [] }, true],
+        ])('checks %s with config %j', (attributes, config, capturesValue) => {
+            if (config) configure(config)
+            const option = `<option ${location === 'option' ? attributes : ''} value="selected-value">Label</option>`
+            const options = location === 'optgroup' ? `<optgroup ${attributes}>${option}</optgroup>` : option
+            commit(field(`<select data-ph-capture-value>${options}</select>`), 'selected-value')
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture.mock.calls[0][1]).toMatchObject({ $event_type: 'change' })
+            if (capturesValue) {
+                expect(capture.mock.calls[0][1]).toHaveProperty('$input_value', 'selected-value')
+            } else {
+                expect(capture.mock.calls[0][1]).not.toHaveProperty('$input_value')
+            }
+        })
+
+        it('does not let an ignored unselected option suppress the selected value', () => {
+            const ignoredOption = `<option ${location === 'option' ? 'data-ph-no-autocapture' : ''} value="ignored">Ignored</option>`
+            const ignoredOptions =
+                location === 'optgroup' ? `<optgroup data-ph-no-autocapture>${ignoredOption}</optgroup>` : ignoredOption
+            commit(
+                field(
+                    `<select data-ph-capture-value>${ignoredOptions}<option value="selected-value">Label</option></select>`
+                ),
+                'selected-value'
+            )
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture.mock.calls[0][1]).toHaveProperty('$input_value', 'selected-value')
+        })
+    })
+
+    it('captures an empty select value when no option is selected', () => {
+        commit(field('<select data-ph-capture-value></select>'), '')
+        expect(capture).toHaveBeenCalledTimes(1)
+        expect(capture.mock.calls[0][1]).toHaveProperty('$input_value', '')
+    })
+
     it('respects sensitive descendants in a select', () => {
         commit(
             field('<select data-ph-capture-value><option class="ph-sensitive" value="private">label</option></select>'),

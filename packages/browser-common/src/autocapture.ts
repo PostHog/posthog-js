@@ -54,6 +54,10 @@ function isInputValueEligible(target: Element, config: Readonly<AutocaptureConfi
     const ignorelist = config.css_selector_ignorelist ?? DEFAULT_AUTOCAPTURE_IGNORE_LIST
     const seen = new Set<Element>()
     let element: Element | null = target
+    if (isTag(target, 'select')) {
+        const select = target as HTMLSelectElement
+        element = select.options[select.selectedIndex] || target
+    }
     while (element) {
         const current = element
         const classes = getClassNames(current)
