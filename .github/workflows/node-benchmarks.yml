@@ -17,6 +17,7 @@ jobs:
             package-name: posthog-node
             additional-paths: |
                 .github/workflows/node-benchmarks.yml
+                .github/workflows/node-benchmark-report.yml
                 .github/workflows/check-affected.yml
                 .github/actions/is-affected/action.yaml
 
@@ -76,12 +77,31 @@ jobs:
               run: pnpm --filter posthog-node test:benchmarks
 
             - name: Measure paired base and head
+              id: measure
               run: |
                   node packages/node/benchmarks/run.mjs \
                     --base "$BASE_WORKTREE/packages/node" \
                     --head "$GITHUB_WORKSPACE/packages/node" \
                     --output "$RESULTS" \
                     --repetitions 6
+
+            - name: Render benchmark comparison
+              if: ${{ !cancelled() && (steps.measure.outcome == 'success' || steps.measure.outcome == 'failure') }}
+              uses: PostHog/posthog-sdk-test-harness/.github/actions/benchmark-report@a558711336bd3b81be4a820ed10f26372fc568ed # SDK benchmark reporting (harness PR #93)
+              with:
+                  mode: render
+                  base-results: ${{ runner.temp }}/node-benchmark-results/base.json
+                  head-results: ${{ runner.temp }}/node-benchmark-results/head.json
+                  output-directory: ${{ runner.temp }}/node-benchmark-report
+
+            - name: Upload rendered comparison
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: node-benchmark-report
+                  path: ${{ runner.temp }}/node-benchmark-report
+                  if-no-files-found: ignore
+                  retention-days: 14
 
             - name: Upload raw benchmark results
               if: always()
