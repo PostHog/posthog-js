@@ -27,7 +27,7 @@ interface LegacySessionSourceProps {
 }
 
 interface CurrentSessionSourceProps {
-    r: string // Referring host
+    r: string | undefined // Referrer, omitted when URL sanitization fails
     u: string | undefined // full URL
 }
 
@@ -40,7 +40,8 @@ const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProp
     return getPersonInfo(
         posthog?.config.mask_personal_data_properties,
         posthog?.config.custom_personal_data_properties,
-        posthog?.config.disable_capture_url_hashes
+        posthog?.config.disable_capture_url_hashes,
+        posthog?.config.url_sanitization
     )
 }
 
@@ -88,8 +89,12 @@ export class SessionPropsManager {
         if (!p) {
             return {}
         }
-        if ('r' in p) {
-            return getPersonPropsFromInfo(p, this._instance.config.disable_capture_url_hashes)
+        if ('r' in p || 'u' in p) {
+            return getPersonPropsFromInfo(
+                p,
+                this._instance.config.disable_capture_url_hashes,
+                this._instance.config.url_sanitization
+            )
         } else {
             return {
                 $referring_domain: p.referringDomain,

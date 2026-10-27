@@ -3920,6 +3920,22 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('recording', () => {
+        it('applies the shared URL policy to replay metadata and omits failed URLs', () => {
+            posthog.config.url_sanitization = { path: false, query: false, hash: false }
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            const recorder = sessionRecording['_lazyLoadedSessionRecording']
+            expect(recorder['_maskReplayUrl']('https://example.com/private?token=secret#part')).toBe(
+                'https://example.com/'
+            )
+            posthog.config.url_sanitization = { hash: true }
+            posthog.config.disable_capture_url_hashes = true
+            expect(recorder['_maskReplayUrl']('https://example.com/path#part')).toBe('https://example.com/path#part')
+            posthog.config.url_sanitization.sanitize = () => {
+                throw new Error('failure')
+            }
+            expect(recorder['_maskReplayUrl']('https://example.com/private')).toBeUndefined()
+        })
+
         it('calls rrweb.record with the right options', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({

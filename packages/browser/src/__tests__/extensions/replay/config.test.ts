@@ -1,9 +1,73 @@
 import { defaultConfig } from '../../../posthog-core'
-import { buildNetworkRequestOptions } from '../../../extensions/replay/external/config'
+import { buildNetworkRequestOptions, isInitialMaskFallback } from '../../../extensions/replay/external/config'
 import { CapturedNetworkRequest } from '../../../types'
 
 describe('config', () => {
     describe('network request options', () => {
+        it('leaves server-timing labels intact while applying existing network cleaning', () => {
+            const config = defaultConfig()
+            const sanitize = vi.fn(() => {
+                throw new Error('failure')
+            })
+            config.url_sanitization = { sanitize }
+            const options = buildNetworkRequestOptions(config, {})
+            const request = { name: 'db', entryType: 'serverTiming', startTime: 1, duration: 2 }
+            expect(options.maskRequestFn!(request)).toEqual(request)
+            expect(sanitize).not.toHaveBeenCalled()
+        })
+
+        it('preserves only required initial timing metadata when URL sanitization fails', () => {
+            const config = defaultConfig()
+            config.url_sanitization = {
+                sanitize: () => {
+                    throw new Error('failure')
+                },
+            }
+            config.session_recording.maskCapturedNetworkRequestFn = (request) => {
+                request.startTime = 999
+                return request
+            }
+            const options = buildNetworkRequestOptions(config, {})
+            const cleaned = options.maskRequestFn!({
+                name: 'https://example.com/private?token=secret',
+                entryType: 'navigation',
+                startTime: 1,
+                duration: 2,
+                isInitial: true,
+                requestBody: 'secret',
+                responseBody: 'secret',
+                serverTiming: [{ name: 'secret', description: 'secret', duration: 1 }],
+            } as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: '',
+                entryType: 'navigation',
+                startTime: 1,
+                duration: 2,
+                endTime: undefined,
+                timeOrigin: undefined,
+                timestamp: undefined,
+                isInitial: true,
+            })
+            expect(isInitialMaskFallback(cleaned)).toBe(true)
+        })
+
+        it('sanitizes SDK-recorded network URLs after existing network cleaning', () => {
+            const config = defaultConfig()
+            config.url_sanitization = { path: false, query: false, hash: false }
+            const options = buildNetworkRequestOptions(config, {})
+            const request = {
+                name: 'https://example.com/private?token=secret#part',
+                entryType: 'resource',
+                startTime: 0,
+                duration: 1,
+            }
+            expect(options.maskRequestFn!(request)?.name).toBe('https://example.com/')
+            config.url_sanitization.sanitize = () => {
+                throw new Error('failure')
+            }
+            expect(options.maskRequestFn!(request)).toBeUndefined()
+        })
+
         describe('maskRequestFn', () => {
             it('can enable header recording remotely', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordHeaders: true })

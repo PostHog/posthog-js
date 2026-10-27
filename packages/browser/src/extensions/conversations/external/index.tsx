@@ -1,5 +1,6 @@
+import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
 import { render, h } from 'preact'
-import { isNumber, isNull, stripUrlHash } from '@posthog/core'
+import { isNumber, isNull } from '@posthog/core'
 import {
     ConversationsRemoteConfig,
     ConversationsWidgetState,
@@ -191,7 +192,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     private _currentUrl(): string | undefined {
         const href = window?.location?.href
-        return this._posthog.config.disable_capture_url_hashes ? stripUrlHash(href) : href
+        return getRecordedUrl(href, this._posthog.config)
     }
 
     /**

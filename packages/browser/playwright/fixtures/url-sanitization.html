@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+    <head>
+        <title>URL sanitization probe</title>
+    </head>
+    <body>
+        <a href="?token=synthetic-current-token&amp;utm_source=allowed#synthetic-hash">Continue</a>
+        <script type="module">
+            import posthog from '/dist/module.mjs'
+            window.urlProbe = posthog
+        </script>
+    </body>
+</html>

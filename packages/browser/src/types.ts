@@ -103,6 +103,7 @@ export type {
     SessionRecordingOptions,
     RequestQueueConfig,
     CapturePageviewOptions,
+    UrlSanitizationOptions,
     WebMCPCaptureConfig,
 } from '@posthog/types'
 

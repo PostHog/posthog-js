@@ -1,7 +1,8 @@
+import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
 import { PostHog } from '../../posthog-core'
 import { PostHogConfig, RemoteConfigResult, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { isArray, isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
+import { isArray, isBoolean, isNullish, isNumber, isUndefined, isObject } from '@posthog/core'
 import { DOM_EVENT_VISIBILITYCHANGE, WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { window, location } from '@posthog/browser-common/utils/globals'
 import {
@@ -11,8 +12,6 @@ import {
     WebVitalsReportOpts,
 } from '../../utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
-import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
-import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 
 const logger = createLogger('[Web Vitals]')
 
@@ -230,17 +229,7 @@ export class WebVitalsAutocapture {
             return undefined
         }
 
-        const urlWithoutHash = this._instance.config.disable_capture_url_hashes ? stripUrlHash(href) : href
-
-        // mask url query params
-        const maskPersonalDataProperties = this._instance.config.mask_personal_data_properties
-        const customPersonalDataProperties = this._instance.config.custom_personal_data_properties
-
-        const paramsToMask = maskPersonalDataProperties
-            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
-            : []
-
-        return maskQueryParams(urlWithoutHash, paramsToMask, MASKED)
+        return getRecordedUrl(href, this._instance.config, { maskQuery: true })
     }
 
     private _flushToCapture = (onPageHide = false) => {

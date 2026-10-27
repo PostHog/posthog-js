@@ -1,7 +1,8 @@
+import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
 import { PostHogLogs as SharedLogs } from '@posthog/browser-common/logs'
 import type { ConsoleLogsLoader } from '@posthog/browser-common/logs-types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { isNullish, stripUrlHash } from '@posthog/core'
+import { isNullish } from '@posthog/core'
 import type { LogSdkContext } from './types'
 import type { PostHog } from './posthog-core'
 import { LOAD_EXT_NOT_FOUND, LOGS_CAPTURE_ENABLED_SERVER_SIDE } from './constants'
@@ -77,9 +78,7 @@ function getSdkContext(instance: PostHog): LogSdkContext {
         if (!isNullish(lastActivityTimestamp)) context.lastActivityTimestamp = lastActivityTimestamp
     }
     if (assignableWindow?.location?.href) {
-        context.currentUrl = instance.config.disable_capture_url_hashes
-            ? stripUrlHash(assignableWindow.location.href)
-            : assignableWindow.location.href
+        context.currentUrl = getRecordedUrl(assignableWindow.location.href, instance.config)
     }
     if (instance.featureFlags) {
         const flags = instance.featureFlags.getFlags()

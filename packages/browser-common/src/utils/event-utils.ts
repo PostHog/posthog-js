@@ -1,8 +1,10 @@
 import { getTimezone } from './timezone'
 export { getTimezone } from './timezone'
-import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
+import { convertToURL, getQueryParam } from './request-utils'
 import { isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
-import type { Properties } from '@posthog/types'
+import type { Properties, UrlSanitizationOptions } from '@posthog/types'
+import { getRecordedUrl, PERSONAL_DATA_CAMPAIGN_PARAMS } from './url-sanitization'
+import type { RecordedUrlConfig } from './url-sanitization'
 import Config from '../config'
 import { SDK_DIST_CHANNEL } from '../constants'
 import { each, extend, stripEmptyProperties } from './general-utils'
@@ -23,30 +25,7 @@ const URL_REGEX_PREFIX = 'https?://(.*)'
 // CAMPAIGN_PARAMS and EVENT_TO_PERSON_PROPERTIES should be kept in sync with
 // https://github.com/PostHog/posthog/blob/master/plugin-server/src/utils/db/utils.ts#L60
 
-// The list of campaign parameters that could be considered personal data under e.g. GDPR.
-// These can be masked in URLs and properties before being sent to posthog.
-export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
-    'gclid', // google ads
-    'gclsrc', // google ads 360
-    'dclid', // google display ads
-    'gbraid', // google ads, web to app
-    'wbraid', // google ads, app to web
-    'fbclid', // facebook
-    'msclkid', // microsoft
-    'twclid', // twitter
-    'li_fat_id', // linkedin
-    'igshid', // instagram
-    'ttclid', // tiktok
-    'rdt_cid', // reddit
-    'epik', // pinterest
-    'qclid', // quora
-    'sccid', // snapchat
-    'oppref', // openai ads
-    'bfcid', // freebuff
-    'irclid', // impact
-    '_kx', // klaviyo
-]
-
+export { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from './url-sanitization'
 export const CAMPAIGN_PARAMS = [
     'utm_source',
     'utm_medium',
@@ -82,8 +61,6 @@ export const EVENT_TO_PERSON_PROPERTIES = [
     '$raw_user_agent',
 ]
 
-export const MASKED = '<masked>'
-
 // Campaign params that can be read from the cookie store
 export const COOKIE_CAMPAIGN_PARAMS = [
     'li_fat_id', // linkedin
@@ -92,19 +69,24 @@ export const COOKIE_CAMPAIGN_PARAMS = [
 export function getCampaignParams(
     customTrackedParams?: string[],
     maskPersonalDataProperties?: boolean,
-    customPersonalDataProperties?: string[] | undefined
+    customPersonalDataProperties?: string[] | undefined,
+    urlSanitization?: UrlSanitizationOptions
 ): Record<string, string> {
     if (!document) {
         return {}
     }
 
-    const paramsToMask = maskPersonalDataProperties
-        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
-        : []
-
     // Initially get campaign params from the URL
     const urlCampaignParams = _getCampaignParamsFromUrl(
-        maskQueryParams(document.URL, paramsToMask, MASKED),
+        getRecordedUrl(
+            document.URL,
+            {
+                url_sanitization: urlSanitization,
+                mask_personal_data_properties: maskPersonalDataProperties,
+                custom_personal_data_properties: customPersonalDataProperties,
+            },
+            { maskQuery: true, stripHash: false }
+        ) || '',
         customTrackedParams
     )
 
@@ -157,7 +139,7 @@ function _getSearchEngine(referrer: string): string | null {
     }
 }
 
-function _getSearchInfoFromReferrer(referrer: string): Record<string, any> {
+function _getSearchInfoFromReferrer(referrer: string, useRecordedReferrer = false): Record<string, any> {
     const search = _getSearchEngine(referrer)
     const param = search != 'yahoo' ? 'q' : 'p'
     const ret: Record<string, any> = {}
@@ -165,7 +147,7 @@ function _getSearchInfoFromReferrer(referrer: string): Record<string, any> {
     if (!isNull(search)) {
         ret['$search_engine'] = search
 
-        const keyword = document ? getQueryParam(document.referrer, param) : ''
+        const keyword = getQueryParam(useRecordedReferrer ? referrer : document?.referrer || '', param)
         if (keyword.length) {
             ret['ph_keyword'] = keyword
         }
@@ -174,12 +156,12 @@ function _getSearchInfoFromReferrer(referrer: string): Record<string, any> {
     return ret
 }
 
-export function getSearchInfo(): Record<string, any> {
-    const referrer = document?.referrer
+export function getSearchInfo(config: RecordedUrlConfig = {}): Record<string, any> {
+    const referrer = getRecordedUrl(document?.referrer, config, { stripHash: false })
     if (!referrer) {
         return {}
     }
-    return _getSearchInfoFromReferrer(referrer)
+    return _getSearchInfoFromReferrer(referrer, !!config.url_sanitization)
 }
 
 export function getBrowserLanguage(): string | undefined {
@@ -207,36 +189,45 @@ export function getReferringDomain(): string {
     return convertToURL(document.referrer)?.host || DIRECT
 }
 
-export function getReferrerInfo(): Record<string, any> {
-    return {
-        $referrer: getReferrer(),
-        $referring_domain: getReferringDomain(),
+export function getReferrerInfo(config: RecordedUrlConfig = {}): Record<string, any> {
+    if (!config.url_sanitization || !document?.referrer) {
+        return { $referrer: getReferrer(), $referring_domain: getReferringDomain() }
     }
+    const referrer = getRecordedUrl(document.referrer, config, { stripHash: false })
+    return referrer ? { $referrer: referrer, $referring_domain: convertToURL(referrer)?.host } : {}
 }
 
 export function getPersonInfo(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[],
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    urlSanitization?: UrlSanitizationOptions
 ) {
-    const paramsToMask = maskPersonalDataProperties
-        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
-        : []
+    const config = {
+        mask_personal_data_properties: maskPersonalDataProperties,
+        custom_personal_data_properties: customPersonalDataProperties,
+        disable_capture_url_hashes: disableCaptureUrlHashes,
+        url_sanitization: urlSanitization,
+    }
+    // Keep legacy truncation before query masking. Callbacks need the complete URL before truncation.
     const href = disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href
-    const url = href?.substring(0, 1000)
-    // we're being a bit more economical with bytes here because this is stored in the cookie
+    const input = urlSanitization ? location?.href : href?.substring(0, 1000)
+    const referrer = getRecordedUrl(document?.referrer, config, { stripHash: false })
+    const url = getRecordedUrl(input, config, { maskQuery: true, stripHash: false })
     return {
-        r: getReferrer().substring(0, 1000),
-        u: url ? maskQueryParams(url, paramsToMask, MASKED) : undefined,
+        r: document?.referrer ? referrer?.substring(0, 1000) : DIRECT,
+        u: urlSanitization ? url?.substring(0, 1000) : url,
     }
 }
 
 export function getPersonPropsFromInfo(
     info: Record<string, any>,
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    urlSanitization?: UrlSanitizationOptions
 ): Record<string, any> {
     const { r: referrer, u } = info
-    const url = disableCaptureUrlHashes ? stripUrlHash(u) : u
+    // Stored values were sanitized before persistence; do not run application callbacks again on reads.
+    const url = (urlSanitization?.hash ?? !disableCaptureUrlHashes) ? u : stripUrlHash(u)
     const referring_domain = referrer == null ? undefined : referrer == DIRECT ? DIRECT : convertToURL(referrer)?.host
 
     const props: Record<string, string | undefined> = {
@@ -252,7 +243,7 @@ export function getPersonPropsFromInfo(
         extend(props, campaignParams)
     }
     if (referrer) {
-        const searchInfo = _getSearchInfoFromReferrer(referrer)
+        const searchInfo = _getSearchInfoFromReferrer(referrer, !!urlSanitization)
         extend(props, searchInfo)
     }
     return props
@@ -260,9 +251,10 @@ export function getPersonPropsFromInfo(
 
 export function getInitialPersonPropsFromInfo(
     info: Record<string, any>,
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    urlSanitization?: UrlSanitizationOptions
 ): Record<string, any> {
-    const personProps = getPersonPropsFromInfo(info, disableCaptureUrlHashes)
+    const personProps = getPersonPropsFromInfo(info, disableCaptureUrlHashes, urlSanitization)
     const props: Record<string, any> = {}
     each(personProps, function (val: any, key: string) {
         props[`$initial_${stripLeadingDollar(key)}`] = val
@@ -291,14 +283,23 @@ export function getEventProperties(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[],
     detectGoogleSearchApp?: boolean,
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    urlSanitization?: UrlSanitizationOptions
 ): Properties {
     if (!userAgent) {
         return {}
     }
-    const paramsToMask = maskPersonalDataProperties
-        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
-        : []
+    const currentUrl = getRecordedUrl(
+        location?.href,
+        {
+            mask_personal_data_properties: maskPersonalDataProperties,
+            custom_personal_data_properties: customPersonalDataProperties,
+            disable_capture_url_hashes: disableCaptureUrlHashes,
+            url_sanitization: urlSanitization,
+        },
+        { maskQuery: true }
+    )
+    const recordedLocation = urlSanitization ? (currentUrl ? convertToURL(currentUrl) : undefined) : location
     const [os_name, os_version] = detectOS(userAgent)
     const [webviewApp, webviewAppVersion] = detectWebviewApp(userAgent)
     const browserHints = getBrowserDetectionHints()
@@ -344,13 +345,9 @@ export function getEventProperties(
             $timezone_offset: getTimezoneOffset(),
         }),
         {
-            $current_url: maskQueryParams(
-                disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href,
-                paramsToMask,
-                MASKED
-            ),
-            $host: location?.host,
-            $pathname: location?.pathname,
+            $current_url: currentUrl,
+            $host: recordedLocation?.host,
+            $pathname: recordedLocation?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
             $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints, browserOptions),
             $browser_language: getBrowserLanguage(),

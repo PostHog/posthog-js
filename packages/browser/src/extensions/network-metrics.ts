@@ -1,3 +1,4 @@
+import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
 import { isFunction, isString } from '@posthog/core'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
@@ -104,9 +105,11 @@ const record = (
             return
         }
         const error = fulfilled && !normalisedStatus ? undefined : errorType(normalisedStatus, failure)
+        const recordedUrl = getRecordedUrl(observed.url, instance.config, { stripHash: false })
+        const recordedLocation = recordedUrl ? convertToURL(recordedUrl) : undefined
         const attributes: MetricAttributes = {
             ...methodAttributes(request.method),
-            ...(url ? urlAttributes(url) : {}),
+            ...(recordedLocation ? urlAttributes(recordedLocation) : {}),
             ...(normalisedStatus ? { 'http.response.status_code': normalisedStatus } : {}),
             ...(error ? { 'error.type': error } : {}),
             ...config.attributes?.(request, { status: normalisedStatus, durationMs }),

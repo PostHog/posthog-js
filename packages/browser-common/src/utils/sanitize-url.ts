@@ -1,19 +1,30 @@
+import { isString } from '@posthog/core'
+import type { UrlSanitizationOptions } from '@posthog/types'
+
 /** Selects the URL components retained for capture. */
 export interface UrlCaptureOptions {
     /** Retain the pathname. Defaults to true. */
-    path?: boolean
+    path?: boolean | undefined
     /** Retain query parameters. Defaults to false. */
-    search?: boolean
+    search?: boolean | undefined
     /** Retain the fragment. Defaults to false. */
-    hash?: boolean
+    hash?: boolean | undefined
+    sanitize?: UrlSanitizationOptions['sanitize']
 }
 
 /** Shape an absolute URL for capture without modifying the input. Invalid URLs are omitted. */
-export function sanitizeUrl(url: URL | string, options: UrlCaptureOptions): string | undefined {
+export function sanitizeUrl(url: URL | string, options: UrlCaptureOptions, baseUrl?: string): string | undefined {
     try {
         // Missing URL support is handled by the catch below: omit the URL rather than capture it unsanitized.
         // oxlint-disable-next-line compat/compat
-        const result = new URL(String(url))
+        let result = new URL(String(url), baseUrl)
+        if (options.sanitize) {
+            const sanitized = options.sanitize(result)
+            // Do not coerce arbitrary objects (or promises) into URLs.
+            if (!isString(sanitized) && !(sanitized instanceof URL)) return undefined
+            // Callback string results must be absolute URLs, not relative to the original document.
+            result = new URL(String(sanitized))
+        }
         result.username = ''
         result.password = ''
         if (options.path === false) {

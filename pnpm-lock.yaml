@@ -711,6 +711,9 @@ importers:
 
   packages/next:
     dependencies:
+      '@posthog/browser-common':
+        specifier: workspace:^
+        version: link:../browser-common
       '@posthog/core':
         specifier: workspace:^
         version: link:../core

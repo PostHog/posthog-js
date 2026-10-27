@@ -25,6 +25,7 @@ type PostHogWithFlags = Pick<PostHogInterface, 'setPersonPropertiesForFlags'> & 
         | 'detect_google_search_app'
         | 'disable_capture_url_hashes'
         | 'custom_campaign_params'
+        | 'url_sanitization'
     >
 }
 
@@ -35,14 +36,16 @@ export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog:
             posthog.config.mask_personal_data_properties,
             posthog.config.custom_personal_data_properties,
             posthog.config.detect_google_search_app,
-            posthog.config.disable_capture_url_hashes
+            posthog.config.disable_capture_url_hashes,
+            posthog.config.url_sanitization
         ),
         getCampaignParams(
             posthog.config.custom_campaign_params,
             posthog.config.mask_personal_data_properties,
-            posthog.config.custom_personal_data_properties
+            posthog.config.custom_personal_data_properties,
+            posthog.config.url_sanitization
         ),
-        getReferrerInfo()
+        getReferrerInfo(posthog.config)
     )
     const personProperties: Record<string, string> = {}
     each(allProperties, function (v, k: string) {

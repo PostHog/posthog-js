@@ -1701,7 +1701,8 @@ export class PostHogPersistence {
         const campaignParams = getCampaignParams(
             this._config.custom_campaign_params,
             this._config.mask_personal_data_properties,
-            this._config.custom_personal_data_properties
+            this._config.custom_personal_data_properties,
+            this._config.url_sanitization
         )
         const hasCampaignParams = !isEmptyObject(stripEmptyProperties(campaignParams))
         if (hasCampaignParams) {
@@ -1711,11 +1712,11 @@ export class PostHogPersistence {
         return hasCampaignParams ? campaignParams : undefined
     }
     update_search_keyword(): void {
-        this.register(getSearchInfo())
+        this.register(getSearchInfo(this._config))
     }
 
     update_referrer_info(): void {
-        this.register_once(getReferrerInfo(), undefined)
+        this.register_once(getReferrerInfo(this._config), undefined)
     }
 
     set_initial_person_info(): void {
@@ -1727,13 +1728,14 @@ export class PostHogPersistence {
         const personInfo = getPersonInfo(
             this._config.mask_personal_data_properties,
             this._config.custom_personal_data_properties,
-            this._config.disable_capture_url_hashes
+            this._config.disable_capture_url_hashes,
+            this._config.url_sanitization
         )
         this.register_once(
             {
                 [INITIAL_PERSON_INFO]: this._storesIdentityInCookie
                     ? {
-                          r: truncateForCookie(personInfo.r),
+                          r: personInfo.r ? truncateForCookie(personInfo.r) : undefined,
                           u: personInfo.u ? truncateForCookie(personInfo.u) : undefined,
                       }
                     : personInfo,
@@ -1759,7 +1761,8 @@ export class PostHogPersistence {
         if (initialPersonInfo) {
             const initialPersonProps = getInitialPersonPropsFromInfo(
                 initialPersonInfo,
-                this._config.disable_capture_url_hashes
+                this._config.disable_capture_url_hashes,
+                this._config.url_sanitization
             )
             extend(p, initialPersonProps)
         }

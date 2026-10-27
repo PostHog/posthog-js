@@ -1,4 +1,5 @@
 import React from 'react'
+import type { PostHogConfig } from 'posthog-js'
 import { render } from '@testing-library/react'
 import { PostHogPageView } from '../src/pages/PostHogPageView'
 
@@ -6,7 +7,10 @@ const { mockCapture, mockUsePostHog, mockRouterState } = vi.hoisted(() => {
     const mockCapture = vi.fn()
     return {
         mockCapture,
-        mockUsePostHog: vi.fn(() => ({ capture: mockCapture, config: { disable_capture_url_hashes: false } })),
+        mockUsePostHog: vi.fn(() => ({
+            capture: mockCapture,
+            config: { disable_capture_url_hashes: false } as Partial<PostHogConfig>,
+        })),
         mockRouterState: { current: { asPath: '/initial', pathname: '/initial', isReady: true } },
     }
 })
@@ -25,6 +29,16 @@ describe('Pages PostHogPageView', () => {
         mockUsePostHog.mockReset()
         mockUsePostHog.mockReturnValue({ capture: mockCapture, config: { disable_capture_url_hashes: false } })
         mockRouterState.current = { asPath: '/initial', pathname: '/initial', isReady: true }
+    })
+
+    it('applies URL sanitization without changing pageview capture', () => {
+        mockUsePostHog.mockReturnValueOnce({
+            capture: mockCapture,
+            config: { url_sanitization: { path: false, query: false, hash: true }, disable_capture_url_hashes: true },
+        })
+        mockRouterState.current = { asPath: '/private?token=secret#fragment', pathname: '/private', isReady: true }
+        render(<PostHogPageView />)
+        expect(mockCapture).toHaveBeenCalledWith('$pageview', { $current_url: 'http://localhost/#fragment' })
     })
 
     it('captures a $pageview event on mount', () => {

@@ -2221,7 +2221,8 @@ export class PostHog implements PostHogInterface {
             this.config.mask_personal_data_properties,
             this.config.custom_personal_data_properties,
             this.config.detect_google_search_app,
-            this.config.disable_capture_url_hashes
+            this.config.disable_capture_url_hashes,
+            this.config.url_sanitization
         )
 
         if (this.sessionManager) {
@@ -2258,7 +2259,11 @@ export class PostHog implements PostHogInterface {
 
         let pageviewProperties: Record<string, any>
         if (eventName === EVENT_PAGEVIEW && !readOnly) {
-            pageviewProperties = this.pageViewManager.doPageView(timestamp, uuid)
+            pageviewProperties = this.pageViewManager.doPageView(
+                timestamp,
+                uuid,
+                this.config.url_sanitization ? { pathname: infoProperties.$pathname } : undefined
+            )
         } else if (eventName === EVENT_PAGELEAVE && !readOnly) {
             pageviewProperties = this.pageViewManager.doPageLeave(timestamp)
         } else {
