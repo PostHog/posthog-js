@@ -29,7 +29,11 @@ Pod::Spec.new do |s|
   # `spm_dependency` only looks for a target named exactly after this pod in the
   # main Pods project, so it can't find it when CocoaPods splits pods into
   # separate projects or scopes target names (`posthog-react-native-plugin-Pods-App`).
-  podfile = Pod::Config.instance.podfile rescue nil
+  # Read the Podfile only once CocoaPods has loaded it: autolinking evaluates this
+  # podspec while the Podfile is still loading, and `Pod::Config#podfile` would
+  # load it again. `pod install` re-evaluates this `:path` podspec afterwards, so
+  # the check still runs.
+  podfile = Pod::Config.instance.instance_variable_get(:@podfile) rescue nil
   if podfile
     install_options = Pod::Installer::InstallationOptions.from_podfile(podfile)
     if install_options.generate_multiple_pod_projects
