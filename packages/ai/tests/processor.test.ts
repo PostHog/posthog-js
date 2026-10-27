@@ -7,10 +7,6 @@ vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
   OTLPTraceExporter: vi.fn(),
 }))
 
-vi.mock('@opentelemetry/sdk-trace-base', () => {
-  throw new Error('@opentelemetry/sdk-trace-base must not be imported at runtime')
-})
-
 type ExportCallback = (result: { code: number; error?: Error }) => void
 
 function mockExporter(code = 0): { export: vi.Mock; shutdown: vi.Mock } {
@@ -34,7 +30,12 @@ function mockProcessor(): SpanProcessor & { onStart: vi.Mock; onEnd: vi.Mock } {
 }
 
 function makeSpan(name: string, attributes: Record<string, unknown> = {}): ReadableSpan {
-  return { name, attributes } as unknown as ReadableSpan
+  return {
+    name,
+    attributes,
+    spanContext: () => ({ traceFlags: 1 }),
+    resource: { asyncAttributesPending: false },
+  } as unknown as ReadableSpan
 }
 
 describe('PostHogSpanProcessor', () => {

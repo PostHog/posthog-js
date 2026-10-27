@@ -1,5 +1,5 @@
 import type { Attributes, AttributeValue } from '@opentelemetry/api'
-import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base'
+import type { ReadableSpan, TimedEvent } from './types'
 
 import { BinaryContentRedactor } from '../sanitization/binary_content_redactor'
 import { withAttributes } from './spans'

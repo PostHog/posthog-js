@@ -47,6 +47,7 @@ export default defineConfig([
   },
   ...providers.map((provider) => ({
     ...commonConfig,
+    shims: provider === 'otel',
     entry: { [`${provider}/index`]: `src/${provider}/index.ts` },
   })),
 ])

@@ -16,6 +16,7 @@
     "clean": "rimraf dist",
     "test:unit": "vitest run && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs && node tests/evaluations-module-load.cjs",
+    "test:otel-consumers": "node tests/otel-consumers.mjs",
     "test:gemini-consumers": "node tests/gemini-consumer-types.mjs",
     "test:cassettes": "vitest run --config harness/vitest.config.ts",
     "test:cassettes:offline": "node harness/run-offline.mjs",
@@ -81,6 +82,7 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0 <1.0.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
+    "@opentelemetry/sdk-trace": "^2.9.0 || ^3.0.0",
     "@ai-sdk/provider": "^2.0.0 || ^3.0.0 || ^4.0.0",
     "@openai/agents": "^0.8.0",
     "langchain": ">=1.5.5 <2.0.0",
@@ -115,6 +117,9 @@
       "optional": true
     },
     "@opentelemetry/sdk-trace-base": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-trace": {
       "optional": true
     },
     "@ai-sdk/provider": {
