@@ -1709,6 +1709,7 @@
         },
         {
           "category": "",
+          "description": "Returns the payload of every loaded flag, keyed by flag key.",
           "details": null,
           "id": "getFeatureFlagPayloads",
           "showDocs": true,
@@ -1720,7 +1721,7 @@
               "code": "// Generated example for getFeatureFlagPayloads\nposthog.getFeatureFlagPayloads();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [],
           "returnType": {
             "id": "PostHogFlagsResponse['featureFlagPayloads'] | undefined",
@@ -1765,6 +1766,7 @@
         },
         {
           "category": "",
+          "description": "Returns the value of every loaded flag, keyed by flag key.",
           "details": null,
           "id": "getFeatureFlags",
           "showDocs": true,
@@ -1776,7 +1778,7 @@
               "code": "// Generated example for getFeatureFlags\nposthog.getFeatureFlags();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [],
           "returnType": {
             "id": "PostHogFlagsResponse['featureFlags'] | undefined",
@@ -1786,6 +1788,7 @@
         },
         {
           "category": "",
+          "description": "Returns the values and payloads of every loaded flag, as two maps keyed by flag key.",
           "details": null,
           "id": "getFeatureFlagsAndPayloads",
           "showDocs": true,
@@ -1797,7 +1800,7 @@
               "code": "// Generated example for getFeatureFlagsAndPayloads\nposthog.getFeatureFlagsAndPayloads();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [],
           "returnType": {
             "id": "{\n        flags: PostHogFlagsResponse['featureFlags'] | undefined;\n        payloads: PostHogFlagsResponse['featureFlagPayloads'] | undefined;\n    }",
@@ -1916,6 +1919,7 @@
         },
         {
           "category": "",
+          "description": "Calls `cb` with the flag's value whenever flags load.",
           "details": null,
           "id": "onFeatureFlag",
           "showDocs": true,
@@ -1927,7 +1931,7 @@
               "code": "// Generated example for onFeatureFlag\nposthog.onFeatureFlag();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [
             {
               "description": "",
@@ -1978,6 +1982,7 @@
         },
         {
           "category": "",
+          "description": "Overrides the values of the given flags locally until cleared with `null`.",
           "details": null,
           "id": "overrideFeatureFlag",
           "showDocs": true,
@@ -1989,7 +1994,7 @@
               "code": "// Generated example for overrideFeatureFlag\nposthog.overrideFeatureFlag();"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [
             {
               "description": "",
