@@ -11,7 +11,7 @@ shift
 mkdir -p "$artifacts"
 
 # Prepare exactly the fixture set whose PR-built dependencies will enter the image.
-fixtures='next-14,next-15,next-16-turbopack,next-16-webpack,nuxt-4,rollup-4,vite-8,vite-8-sri,webpack-5.112,webpack-5.112-sri'
+fixtures='next-14,next-15,next-16-turbopack,next-16-webpack,nuxt-4,rollup-4,vite-8,vite-8-sri,vite-8-autocapture,webpack-5.112,webpack-5.112-sri'
 args=()
 while (( $# )); do
     case "$1" in
@@ -41,8 +41,11 @@ for fixture in "${names[@]}"; do
         nuxt-4)
             add_overrides @posthog/nuxt @posthog/plugin-utils posthog-node posthog-js \
                 @posthog/browser-common @posthog/core @posthog/types ;;
-        rollup-4|vite-8|vite-8-sri)
+        rollup-4|vite-8)
             add_overrides @posthog/rollup-plugin @posthog/plugin-utils posthog-node @posthog/core @posthog/types ;;
+        vite-8-autocapture|vite-8-sri)
+            add_overrides @posthog/rollup-plugin @posthog/plugin-utils posthog-js \
+                @posthog/browser-common @posthog/core @posthog/types ;;
         webpack-5.112|webpack-5.112-sri)
             add_overrides @posthog/webpack-plugin @posthog/plugin-utils posthog-node @posthog/core @posthog/types ;;
         *) echo "Unsupported fixture for local overrides: $fixture" >&2; exit 2 ;;

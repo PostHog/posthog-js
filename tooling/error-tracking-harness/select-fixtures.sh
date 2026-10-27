@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Print the fixtures affected by a diff. Unknown/shared paths fail open to the full matrix.
 set -euo pipefail
-all='next-14,next-15,next-16-turbopack,next-16-webpack,nuxt-4,rollup-4,vite-8,vite-8-sri,webpack-5.112,webpack-5.112-sri'
+all='next-14,next-15,next-16-turbopack,next-16-webpack,nuxt-4,rollup-4,vite-8,vite-8-sri,vite-8-autocapture,webpack-5.112,webpack-5.112-sri'
 
 if [[ ${1:-} == --all ]]; then
     echo "$all"
@@ -38,6 +38,6 @@ fi
 fixtures=()
 if [[ "$next" == true ]]; then fixtures+=(next-14 next-15 next-16-turbopack next-16-webpack); fi
 if [[ "$nuxt" == true ]]; then fixtures+=(nuxt-4); fi
-if [[ "$rollup" == true ]]; then fixtures+=(rollup-4 vite-8 vite-8-sri); fi
+if [[ "$rollup" == true ]]; then fixtures+=(rollup-4 vite-8 vite-8-sri vite-8-autocapture); fi
 if [[ "$webpack" == true ]]; then fixtures+=(webpack-5.112 webpack-5.112-sri); fi
 (IFS=,; echo "${fixtures[*]}")

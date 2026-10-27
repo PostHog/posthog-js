@@ -35,6 +35,8 @@ jobs:
                 packages/core/src/error-tracking/
                 packages/node/src/extensions/error-tracking/
                 packages/browser/src/posthog-exceptions.ts
+                packages/browser/src/extensions/exception-autocapture/
+                packages/browser/src/entrypoints/exception-autocapture.ts
                 tooling/error-tracking-harness/
                 .github/workflows/error-tracking-harness.yml
 
@@ -76,7 +78,9 @@ jobs:
                   echo "fixtures=$fixtures" >> "$GITHUB_OUTPUT"
                   echo "Selected fixtures: $fixtures" >> "$GITHUB_STEP_SUMMARY"
             - name: Pack the plugins and run the harness
-              run: tooling/error-tracking-harness/run-ci.sh "$RUNNER_TEMP/error-tracking-harness" --fixtures '${{ steps.fixtures.outputs.fixtures }}'
+              env:
+                  SELECTED_FIXTURES: ${{ steps.fixtures.outputs.fixtures }}
+              run: tooling/error-tracking-harness/run-ci.sh "$RUNNER_TEMP/error-tracking-harness" --fixtures "$SELECTED_FIXTURES"
             - name: Report
               if: always()
               run: |

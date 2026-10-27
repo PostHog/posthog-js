@@ -27,11 +27,12 @@ check() {
 
 check 'next-14,next-15,next-16-turbopack,next-16-webpack' packages/nextjs-config/src/plugin.ts
 check 'nuxt-4' packages/nuxt/src/module.ts
-check 'rollup-4,vite-8,vite-8-sri' packages/rollup-plugin/src/index.ts
+check 'rollup-4,vite-8,vite-8-sri,vite-8-autocapture' packages/rollup-plugin/src/index.ts
 check 'next-14,next-15,next-16-turbopack,next-16-webpack,webpack-5.112,webpack-5.112-sri' packages/webpack-plugin/src/index.ts
-check 'next-14,next-15,next-16-turbopack,next-16-webpack,rollup-4,vite-8,vite-8-sri,webpack-5.112,webpack-5.112-sri' packages/rollup-plugin/src/index.ts packages/webpack-plugin/src/index.ts
+check 'next-14,next-15,next-16-turbopack,next-16-webpack,rollup-4,vite-8,vite-8-sri,vite-8-autocapture,webpack-5.112,webpack-5.112-sri' packages/rollup-plugin/src/index.ts packages/webpack-plugin/src/index.ts
 check "$all" packages/rollup-plugin/src/index.ts packages/plugin-utils/src/index.ts
 check "$all" packages/core/src/error-tracking/index.ts
+check "$all" packages/browser/src/extensions/exception-autocapture/index.ts
 check "$all" .github/workflows/error-tracking-harness.yml
 check "$all"
 [[ $($selector 0000000000000000000000000000000000000000 HEAD) == "$all" ]]

@@ -45,7 +45,7 @@ export HARNESS_IMAGE
 cd "$work"
 printf "catalog:\n  '@posthog/cli': ~0.18.11\n" > pnpm-workspace.yaml
 "$runner" "$work/artifacts" --fixtures 'rollup-4,vite-8-sri' --list
-node -e 'const p=require("./artifacts/subject-context/overrides.json").packages; if (Object.keys(p).sort().join()!=="@posthog/cli,@posthog/core,@posthog/plugin-utils,@posthog/rollup-plugin,@posthog/types,posthog-node") process.exit(1)'
+node -e 'const p=require("./artifacts/subject-context/overrides.json").packages; if (Object.keys(p).sort().join()!=="@posthog/browser-common,@posthog/cli,@posthog/core,@posthog/plugin-utils,@posthog/rollup-plugin,@posthog/types,posthog-js,posthog-node") process.exit(1)'
 grep -q -- '--filter=@posthog/rollup-plugin' filters.txt
 grep -q -- '@posthog/cli@0.18.11' npm.txt
 if [[ -e artifacts/subject-context/unselected.tgz ]]; then exit 1; fi
@@ -54,6 +54,9 @@ if grep -q -- '--filter=@posthog/webpack-plugin' filters.txt; then exit 1; fi
 grep -q -- 'build -f tooling/error-tracking-harness/Dockerfile.subject' docker.txt
 grep -q -- '--network none' docker.txt
 grep -q -- '--fixtures rollup-4,vite-8-sri --list' docker.txt
+
+"$runner" "$work/artifacts" --fixtures 'vite-8-autocapture'
+node -e 'const p=require("./artifacts/subject-context/overrides.json").packages; if (Object.keys(p).sort().join()!=="@posthog/browser-common,@posthog/cli,@posthog/core,@posthog/plugin-utils,@posthog/rollup-plugin,@posthog/types,posthog-js") process.exit(1)'
 
 "$runner" "$work/artifacts" --fixtures 'next-14,webpack-5.112'
 node -e 'const p=require("./artifacts/subject-context/overrides.json").packages; if (Object.keys(p).sort().join()!=="@posthog/browser-common,@posthog/cli,@posthog/core,@posthog/nextjs-config,@posthog/plugin-utils,@posthog/types,@posthog/webpack-plugin,posthog-js,posthog-node") process.exit(1)'
