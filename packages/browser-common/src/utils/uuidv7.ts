@@ -206,9 +206,10 @@ class V7Generator {
 /** A global flag to force use of cryptographically strong RNG. */
 declare const UUIDV7_DENY_WEAK_RNG: boolean
 
-/** Stores `crypto.getRandomValues()` available in the environment. */
-const weakRandomValues = <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>>(buffer: T): T => {
-    // fall back on Math.random() unless the flag is set to true
+type RandomValuesFn = <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>>(buffer: T) => T
+
+/** Fills the buffer with `Math.random()` values unless `UUIDV7_DENY_WEAK_RNG` is set to true. */
+const weakRandomValues: RandomValuesFn = (buffer) => {
     // TRICKY: don't use the isUndefined method here as can't pass the reference
     if (typeof UUIDV7_DENY_WEAK_RNG !== 'undefined' && UUIDV7_DENY_WEAK_RNG) {
         throw new Error('no cryptographically strong RNG available')
@@ -221,11 +222,21 @@ const weakRandomValues = <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayB
 }
 
 // Select the browser capability only when a UUID is requested.
-let getRandomValues: typeof weakRandomValues | undefined
-const selectRandomValues = (): typeof weakRandomValues =>
-    typeof window !== 'undefined' && !isUndefined(window.crypto) && crypto.getRandomValues
-        ? (buffer) => crypto.getRandomValues(buffer)
-        : weakRandomValues
+let getRandomValues: RandomValuesFn | undefined
+const selectRandomValues = (): RandomValuesFn => {
+    if (typeof window !== 'undefined' && !isUndefined(window.crypto) && crypto.getRandomValues) {
+        // Firefox throws an `OperationError` when its random source fails. A UUID is generated for
+        // every captured event, so fall back instead of letting the throw escape into the host page.
+        return (buffer) => {
+            try {
+                return crypto.getRandomValues(buffer)
+            } catch {
+                return weakRandomValues(buffer)
+            }
+        }
+    }
+    return weakRandomValues
+}
 
 /**
  * Wraps `crypto.getRandomValues()` and compatibles to enable buffering; this
