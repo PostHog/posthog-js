@@ -1,5 +1,26 @@
 # @posthog/nuxt
 
+## 1.8.0
+
+### Minor Changes
+
+- [#5398](https://github.com/PostHog/posthog-js/pull/5398) [`88f8655`](https://github.com/PostHog/posthog-js/commit/88f8655708ccbb1c3d474f3f579c644524c5d190) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fail webpack, Next.js webpack, and Nuxt builds when PostHog cannot process or upload source maps; set `sourcemaps.failOnError: false` to log the error and continue the build instead.
+  (2026-10-23)
+
+## 1.7.93
+
+### Patch Changes
+
+- [#5391](https://github.com/PostHog/posthog-js/pull/5391) [`9166d01`](https://github.com/PostHog/posthog-js/commit/9166d01c0f85d731076ae9a6595d8c158512e3b4) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Delete public source maps when processing or uploading them fails while `sourcemaps.deleteAfterUpload` is enabled (the default), so they no longer ship in the build output; set `deleteAfterUpload: false` to keep them and retry the upload at the end of the build.
+  (2026-10-23)
+
+## 1.7.92
+
+### Patch Changes
+
+- [#5351](https://github.com/PostHog/posthog-js/pull/5351) [`4182940`](https://github.com/PostHog/posthog-js/commit/4182940bf5f715bef16a0740cc9d08354040bdd8) Thanks [@hpouillot](https://github.com/hpouillot)! - Require PostHog CLI 0.18.11 or newer within the 0.18 release line.
+  (2026-10-21)
+
 ## 1.7.91
 
 ### Patch Changes

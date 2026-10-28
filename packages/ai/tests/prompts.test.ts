@@ -1,4 +1,4 @@
-import { Prompts } from '../src/prompts'
+import { PromptFetchError, Prompts } from '../src/prompts'
 import type { PromptApiResponse } from '../src/types'
 
 // Mock fetch globally
@@ -64,6 +64,7 @@ describe('Prompts', () => {
           headers: {
             Authorization: 'Bearer phx_test_key',
           },
+          signal: expect.any(AbortSignal),
         }
       )
     })
@@ -91,6 +92,7 @@ describe('Prompts', () => {
           headers: {
             Authorization: 'Bearer phx_test_key',
           },
+          signal: expect.any(AbortSignal),
         }
       )
     })
@@ -115,6 +117,7 @@ describe('Prompts', () => {
           headers: {
             Authorization: 'Bearer phx_test_key',
           },
+          signal: expect.any(AbortSignal),
         }
       )
     })
@@ -142,6 +145,7 @@ describe('Prompts', () => {
           headers: {
             Authorization: 'Bearer phx_test_key',
           },
+          signal: expect.any(AbortSignal),
         }
       )
     })
@@ -413,24 +417,14 @@ describe('Prompts', () => {
       expect(mockFetch).toHaveBeenCalledTimes(3)
     })
 
-    it('should preserve the longer cooldown when overlapping refetches fail', async () => {
+    it('should share one request between overlapping refetches and honor its Retry-After', async () => {
       let resolveRateLimited!: (response: Response) => void
-      let rejectNetworkError!: (error: Error) => void
-      mockFetch
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockPromptResponse)))
-        .mockImplementationOnce(
-          () =>
-            new Promise<Response>((resolve) => {
-              resolveRateLimited = resolve
-            })
-        )
-        .mockImplementationOnce(
-          () =>
-            new Promise<Response>((_, reject) => {
-              rejectNetworkError = reject
-            })
-        )
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockPromptResponse)))
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(mockPromptResponse))).mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveRateLimited = resolve
+          })
+      )
 
       const prompts = new Prompts({
         personalApiKey: 'phx_test_key',
@@ -440,28 +434,70 @@ describe('Prompts', () => {
       await prompts.get('test-prompt')
       vi.advanceTimersByTime(1001)
 
-      const rateLimited = prompts.get('test-prompt')
-      const networkError = prompts.get('test-prompt')
-      expect(mockFetch).toHaveBeenCalledTimes(3)
+      const first = prompts.get('test-prompt')
+      const second = prompts.get('test-prompt')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
 
       resolveRateLimited(new Response(null, { status: 429, headers: new Headers({ 'Retry-After': '600' }) }))
-      expect((await rateLimited).source).toBe('stale_cache')
-      rejectNetworkError(new Error('Network error'))
-      expect((await networkError).source).toBe('stale_cache')
+      expect((await first).source).toBe('stale_cache')
+      expect((await second).source).toBe('stale_cache')
 
-      vi.advanceTimersByTime(61 * 1000)
+      vi.advanceTimersByTime(600 * 1000 - 1)
       expect((await prompts.get('test-prompt')).source).toBe('stale_cache')
-      expect(mockFetch).toHaveBeenCalledTimes(3)
+      expect(mockFetch).toHaveBeenCalledTimes(2)
 
-      vi.advanceTimersByTime(539 * 1000 - 1)
-      expect((await prompts.get('test-prompt')).source).toBe('stale_cache')
-      expect(mockFetch).toHaveBeenCalledTimes(3)
-
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(mockPromptResponse)))
       vi.advanceTimersByTime(1)
       expect((await prompts.get('test-prompt')).source).toBe('api')
-      expect(mockFetch).toHaveBeenCalledTimes(4)
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+    })
+
+    it('should coalesce concurrent cold-cache fetches of one key and keep other keys separate', async () => {
+      let resolveLatest!: (response: Response) => void
+      mockFetch
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveLatest = resolve
+            })
+        )
+        .mockResolvedValueOnce(new Response(JSON.stringify({ ...mockPromptResponse, version: 2 })))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      const latest = Promise.all([prompts.get('test-prompt'), prompts.get('test-prompt'), prompts.get('test-prompt')])
+      const versioned = prompts.get('test-prompt', { version: 2 })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      resolveLatest(new Response(JSON.stringify(mockPromptResponse)))
+      for (const result of await latest) {
+        expect(result.source).toBe('api')
+        expect(result.version).toBe(1)
+      }
+      expect((await versioned).version).toBe(2)
+
       expect((await prompts.get('test-prompt')).source).toBe('cache')
-      expect(mockFetch).toHaveBeenCalledTimes(4)
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('should time out a hung fetch and fall back', async () => {
+      mockFetch.mockImplementation(
+        (_url: string, init: RequestInit) =>
+          new Promise<Response>((_, reject) => {
+            init.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+          })
+      )
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      const withoutFallback = prompts.get('test-prompt')
+      vi.advanceTimersByTime(10_000)
+      await expect(withoutFallback).rejects.toThrow(PromptFetchError)
+      await expect(withoutFallback).rejects.toThrow('Timed out fetching prompt "test-prompt"')
+
+      const withFallback = prompts.get('test-prompt', { fallback: 'fallback prompt' })
+      vi.advanceTimersByTime(10_000)
+      expect(await withFallback).toMatchObject({ source: 'code_fallback', prompt: 'fallback prompt' })
     })
 
     it('should use fallback when no cache and fetch fails with warning', async () => {
@@ -685,6 +721,7 @@ describe('Prompts', () => {
           headers: {
             Authorization: 'Bearer phx_direct_key',
           },
+          signal: expect.any(AbortSignal),
         }
       )
     })

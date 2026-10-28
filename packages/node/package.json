@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.55.2",
+  "version": "5.57.2",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -47,20 +47,27 @@
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/context-async-hooks": "^2.2.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog/types": "workspace:^",
     "@rslib/core": "catalog:",
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
+    "esbuild": "^0.25.0",
     "rxjs": "^7.8.0",
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:",
     "typescript": "catalog:native"
   },
   "peerDependencies": {
+    "@opentelemetry/api": "^1.2.0",
     "rxjs": "^7.0.0"
   },
   "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    },
     "rxjs": {
       "optional": true
     }

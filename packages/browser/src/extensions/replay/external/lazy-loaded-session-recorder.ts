@@ -818,10 +818,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             recordHeaders: this._instance.config.session_recording?.recordHeaders,
             recordBody: this._instance.config.session_recording?.recordBody,
         }
+        // an explicit client `false` wins, as in buildNetworkRequestOptions. Otherwise a remote `true` still
+        // installs the plugin, and its performance observer records request urls even with network timing off
         const headersEnabled =
-            networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
+            networkPayloadCapture_client_side.recordHeaders !== false &&
+            (networkPayloadCapture_client_side.recordHeaders || networkPayloadCapture_server_side?.recordHeaders)
         const bodyEnabled =
-            networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
+            networkPayloadCapture_client_side.recordBody !== false &&
+            (networkPayloadCapture_client_side.recordBody || networkPayloadCapture_server_side?.recordBody)
         const clientNetworkTiming = networkTimingFromConfig(this._instance.config.capture_performance)
         const serverNetworkTiming = networkTimingFromConfig(networkPayloadCapture_server_side?.capturePerformance)
         const networkTimingEnabled = !!(isBoolean(clientNetworkTiming) ? clientNetworkTiming : serverNetworkTiming)
@@ -855,8 +859,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                             this._networkPayloadCapture,
                             isIngestionEndpoint
                         ),
-                        // This private init option is deliberately off by default, including for old
-                        // cores loading a new recorder from the unversioned CDN. Never infer it from a version.
+                        // Only new cores default this private option to true. Old cores loading the
+                        // unversioned recorder lack it and must retain legacy fetch delegation.
                         captureFetchSynchronously: this._instance.config.__preview_replay_sync_fetch === true,
                     })
                 )

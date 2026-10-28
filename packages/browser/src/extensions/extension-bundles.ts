@@ -118,7 +118,7 @@ export const MetricsExtensions = {
     metrics: PostHogMetrics,
 } as const satisfies ExtensionClasses
 
-/** WebMCP tool call capture. */
+/** WebMCP tool call capture. Add `ErrorTrackingExtensions` to report failed tool calls as `$exception`. */
 export const WebMCPExtensions = {
     webMCP: WebMCP,
 } as const satisfies ExtensionClasses

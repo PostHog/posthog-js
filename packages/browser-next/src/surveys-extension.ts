@@ -1,0 +1,267 @@
+import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
+import type { Client, Disposable, KeyValueStore, Extension } from '@posthog/browser-common'
+import { PostHogSurveys } from '@posthog/browser-common/surveys'
+import { type SurveysConfigSource, type SurveysManager } from '@posthog/browser-common/surveys-config'
+import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
+import { DEFAULT_DISPLAY_SURVEY_OPTIONS } from '@posthog/browser-common/utils/survey-utils'
+import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
+import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
+import type { AnalyticsExtension, AnalyticsTeardownSubscription } from './analytics-internal'
+import type { SurveysExtension } from './surveys-internal'
+import type { BrowserClient } from './browser-client'
+import type { FlagsExtension } from './flags-internal'
+import {
+    snapshotSurveysOptions,
+    type SurveysOptions,
+    type SurveyCallback,
+    type Survey,
+    type SurveyRenderReason,
+} from './surveys-options'
+
+type Renderer = { generateSurveys(host: SurveyRenderContext, enabled: boolean): SurveysManager | undefined }
+type AutocaptureSelectors = Extension & { setElementSelectors(selectors: Set<string>): void }
+
+export const createSurveys = (options: SurveysOptions, load: () => Promise<Renderer>): SurveysExtension => {
+    const config = snapshotSurveysOptions(options)
+    let elementSelectors = new Set<string>()
+    let eventReceiver: SurveyEventReceiver | undefined
+    const replaceTriggers = (surveys: Survey[]) => eventReceiver?.replace(surveys)
+    let client: BrowserClient | undefined
+    let runtimeHost: SurveyRenderContext | undefined
+    let remoteEnabled = false
+    let manual = false
+    let disposed = false
+    const pendingEligibility = new Set<(reason: SurveyRenderReason) => void>()
+    let manager: SurveysManager | undefined
+    let renderer: Renderer | undefined
+    let loading: Promise<Renderer> | undefined
+    let remoteSubscription: Disposable | undefined
+    let resetSubscription: Disposable | undefined
+    const getFlagsContext = () => client?.getExtension<FlagsExtension>('featureFlags')?.getSurveyContext?.()
+    const reset = () => {
+        shared.reset()
+    }
+    const loadRenderer = () => (loading ??= load().then((value) => (renderer = value)))
+    const source: SurveysConfigSource = {
+        get: () => ({
+            disableSurveys: disposed,
+            cookielessMode: false,
+            advancedEnableSurveys: manual,
+            requestTimeoutMs: config.requestTimeoutMs ?? 10000,
+            prefillFromUrl: config.prefillFromUrl ?? false,
+            automaticDisplay: config.automaticDisplay ?? true,
+            featureFlagEvaluation: getFlagsContext()?.remoteEvaluation ?? false,
+            overrideLanguage: config.overrideDisplayLanguage,
+            get_current_url: config.getCurrentUrl,
+            prepareStylesheet: config.prepareStylesheet,
+        }),
+        getExtensions: () => ({
+            generateSurveys:
+                renderer && runtimeHost
+                    ? () => {
+                          manager = renderer!.generateSurveys(runtimeHost!, remoteEnabled)
+                          if (!manager) throw new Error('Survey rendering requires a document')
+                          return manager
+                      }
+                    : undefined,
+            loadExternalDependency: (callback) => {
+                void loadRenderer()
+                    .then(() => {
+                        if (!disposed) callback()
+                    })
+                    .catch((error) => {
+                        loading = undefined
+                        if (!disposed) callback(error)
+                    })
+            },
+        }),
+    }
+    const shared = new (class extends PostHogSurveys {
+        protected override _createEventReceiver(value: Client, onActivationChanged?: () => void): SurveyEventReceiver {
+            eventReceiver = new SurveyEventReceiver(
+                value,
+                this,
+                {
+                    getActionUrl: () => (runtimeHost ? getTargetingUrl(runtimeHost) : undefined),
+                    setElementSelectors: (selectors) => {
+                        elementSelectors = new Set(selectors)
+                        value
+                            .getExtension<AutocaptureSelectors>('autocapture')
+                            ?.setElementSelectors(new Set(elementSelectors))
+                    },
+                },
+                onActivationChanged
+            )
+            return eventReceiver
+        }
+        protected override _registerSurveyTriggers(surveys: Survey[]): void {
+            replaceTriggers(surveys)
+        }
+        override loadIfEnabled(): void {
+            if ((remoteEnabled || manual) && typeof document !== 'undefined') super.loadIfEnabled()
+        }
+    })(source)
+    const ensureRenderer = async (): Promise<boolean> => {
+        if (disposed || !client || typeof document === 'undefined') return false
+        manual = true
+        try {
+            await loadRenderer()
+            if (disposed) return false
+            shared.loadIfEnabled()
+            return true
+        } catch (error) {
+            loading = undefined
+            client.logger.error('Survey renderer loading failed', error)
+            return false
+        }
+    }
+    const deliver =
+        (callback: SurveyCallback): SurveyCallback =>
+        (surveys, context) => {
+            if (disposed) return
+            try {
+                callback(surveys, context)
+            } catch (error) {
+                client?.logger.error('Survey callback failed', error)
+            }
+        }
+    const run = (callback: SurveyCallback, action: (callback: SurveyCallback) => void) => {
+        const notify = deliver(callback)
+        void ensureRenderer().then((ready) => {
+            if (disposed) return
+            try {
+                if (ready) action(notify)
+                else notify([], { isLoaded: false, error: 'Survey renderer unavailable' })
+            } catch (error) {
+                client?.logger.error('Survey operation failed', error)
+            }
+        })
+    }
+    let teardownSubscription: AnalyticsTeardownSubscription | undefined
+    const pagehide = () => {
+        if (!teardownSubscription?.deliveryAvailable) shared.handlePageUnload()
+    }
+    return {
+        name: 'surveys',
+        setup: async (value: BrowserClient) => {
+            client = value
+            await value.kv.initialize()
+            if (disposed) return
+            resetSubscription = value.onReset(reset)
+            const renderClient = Object.create(value) as Client
+            const read = (key: string) =>
+                key === STORED_PERSON_PROPERTIES_KEY ? getFlagsContext()?.personProperties : value.kv.get(key)
+            const renderKv: KeyValueStore = {
+                ...value.kv,
+                get: ((keys: string | readonly string[]) =>
+                    typeof keys === 'string'
+                        ? read(keys)
+                        : Object.fromEntries(keys.map((key) => [key, read(key)]))) as KeyValueStore['get'],
+            }
+            Object.defineProperty(renderClient, 'kv', { value: renderKv })
+            runtimeHost = {
+                client: renderClient,
+                get config() {
+                    return source.get()
+                },
+                surveys: shared,
+            }
+            remoteSubscription = value.onRemoteConfig((result) => {
+                if (result.ok) {
+                    const surveys = result.config.surveys
+                    remoteEnabled = surveys === true || (Array.isArray(surveys) && surveys.length > 0)
+                    if (remoteEnabled && !disposed) manager?.startAutomaticDisplay?.()
+                }
+            })
+            await shared.setup(value)
+            if (disposed) {
+                shared.dispose()
+                return
+            }
+            teardownSubscription = client
+                .getExtension<AnalyticsExtension>('analytics')
+                ?.onBeforeTeardown?.(() => shared.handlePageUnload())
+            // A missing delivery driver can admit abandonment, but cannot send during unload.
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
+            if (typeof window !== 'undefined') window.addEventListener('pagehide', pagehide)
+        },
+        getSurveys: (callback, forceReload) => run(callback, (notify) => shared.getSurveys(notify, forceReload)),
+        getActiveMatchingSurveys: (callback, forceReload) =>
+            run(callback, (notify) => shared.getActiveMatchingSurveys(notify, forceReload)),
+        displaySurvey: (id, settings) =>
+            run(
+                () => {},
+                () =>
+                    shared.getSurveys(() => {
+                        if (!disposed) shared.displaySurvey(id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ...settings })
+                    })
+            ),
+        canRenderSurvey: (id, forceReload) =>
+            new Promise<SurveyRenderReason>((resolve, reject) => {
+                const finish = (reason: SurveyRenderReason) => {
+                    pendingEligibility.delete(finish)
+                    resolve(reason)
+                }
+                if (disposed) {
+                    finish({ visible: false, disabledReason: 'Surveys unavailable' })
+                    return
+                }
+                pendingEligibility.add(finish)
+                void (async (): Promise<SurveyRenderReason> => {
+                    if (!(await ensureRenderer()))
+                        return { visible: false, disabledReason: 'Survey renderer unavailable' }
+                    return shared.canRenderSurveyAsync(id, forceReload ?? false)
+                })().then(finish, (error) => {
+                    pendingEligibility.delete(finish)
+                    reject(error)
+                })
+            }),
+        onSurveysLoaded: (callback) => {
+            let active = true
+            const notify = deliver((surveys, context) => {
+                if (active) callback(surveys, context)
+            })
+            const unsubscribe = shared.onSurveysLoaded(notify)
+            if (!client || typeof document === 'undefined') {
+                notify([], { isLoaded: false, error: 'Survey renderer unavailable' })
+            } else if (!disposed) {
+                manual = true
+                try {
+                    // Shared initialization owns load failures as well as success notifications.
+                    shared.loadIfEnabled()
+                } catch (error) {
+                    client.logger.error('Survey renderer loading failed', error)
+                }
+            }
+            return {
+                dispose: () => {
+                    active = false
+                    unsubscribe()
+                },
+            }
+        },
+        getElementSelectors: () => new Set(elementSelectors),
+        cancelPendingSurvey: (id) => {
+            if (!disposed) shared.cancelPendingSurvey(id)
+        },
+        reset,
+        dispose: () => {
+            if (disposed) return
+            disposed = true
+            elementSelectors.clear()
+            try {
+                client?.getExtension<AutocaptureSelectors>('autocapture')?.setElementSelectors?.(new Set())
+            } catch (error) {
+                client?.logger.error('Failed to clear survey action selectors', error)
+            }
+            for (const finish of pendingEligibility) {
+                finish({ visible: false, disabledReason: 'Surveys unavailable' })
+            }
+            remoteSubscription?.dispose()
+            resetSubscription?.dispose()
+            if (typeof window !== 'undefined') window.removeEventListener('pagehide', pagehide)
+            teardownSubscription?.dispose()
+            shared.dispose()
+        },
+    }
+}

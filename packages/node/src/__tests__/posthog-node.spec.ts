@@ -1746,6 +1746,8 @@ describe('PostHog Node.js', () => {
     })
 
     describe('sendFeatureFlags with property overrides', () => {
+      let digestSpy: vi.SpyInstance
+
       beforeEach(() => {
         const mockDecideFlags = {
           'basic-flag': true,
@@ -1854,6 +1856,17 @@ describe('PostHog Node.js', () => {
           }
           return apiImplementationWithoutDelay(url, opts)
         })
+
+        // Local evaluation uses asynchronous Web Crypto hashing, which can outlast a flush timer tick.
+        const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle)
+        digestSpy = vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(async (...args) => {
+          await waitWithRealTimers(50)
+          return digest(...args)
+        })
+      })
+
+      afterEach(() => {
+        digestSpy.mockRestore()
       })
 
       it('should fallback to remote evaluation when no local evaluation is available and onlyEvaluateLocally is not specified', async () => {
@@ -1935,7 +1948,7 @@ describe('PostHog Node.js', () => {
           groups: { organization: 'org123' },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         // Should make local evaluation call during initialization
         expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
@@ -1992,7 +2005,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2042,7 +2055,7 @@ describe('PostHog Node.js', () => {
           groups: { organization: 'org123' },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2079,7 +2092,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2337,7 +2350,7 @@ describe('PostHog Node.js', () => {
         )
       })
 
-      it('should work with explicit personProperties in sendFeatureFlags options', async () => {
+      it('waits for hashing before flushing explicit personProperties in sendFeatureFlags options', async () => {
         posthog = new PostHog('TEST_API_KEY', {
           host: 'http://example.com',
           flushAt: 1,
@@ -2346,38 +2359,69 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
-        posthog.capture({
-          distinctId: 'user123',
-          event: 'test event',
-          sendFeatureFlags: {
-            onlyEvaluateLocally: true,
-            personProperties: {
-              plan: 'premium',
-            },
-          },
-          properties: {
-            foo: 'bar',
-          },
+        let releaseHash!: () => void
+        const hashGate = new Promise<void>((resolve) => {
+          releaseHash = resolve
+        })
+        const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle)
+        const digestSpy = vi.spyOn(globalThis.crypto.subtle, 'digest')
+        const hashStarted = new Promise<void>((resolve) => {
+          digestSpy.mockImplementation(async (...args) => {
+            resolve()
+            await hashGate
+            return digest(...args)
+          })
         })
 
-        await waitForFlushTimer()
-
-        const batchEvents = getLastBatchEvents()
-        expect(batchEvents?.[0]).toEqual(
-          expect.objectContaining({
-            distinct_id: 'user123',
+        try {
+          posthog.capture({
+            distinctId: 'user123',
             event: 'test event',
-            properties: expect.objectContaining({
+            sendFeatureFlags: {
+              onlyEvaluateLocally: true,
+              personProperties: {
+                plan: 'premium',
+              },
+            },
+            properties: {
               foo: 'bar',
-              '$feature/basic-flag': true,
-              '$feature/person-property-flag': true, // Should be true due to explicit personProperties
-              $active_feature_flags: ['basic-flag', 'person-property-flag'],
-            }),
+            },
           })
-        )
+
+          let flushFinished = false
+          const flushing = posthog.flush().then(() => {
+            flushFinished = true
+          })
+          await hashStarted
+          await vi.advanceTimersByTimeAsync(0)
+          expect(flushFinished).toBe(false)
+          expect(mockedFetch).not.toHaveBeenCalledWith(
+            'http://example.com/batch/',
+            expect.objectContaining({ method: 'POST' })
+          )
+
+          releaseHash()
+          await flushing
+
+          const batchEvents = getLastBatchEvents()
+          expect(batchEvents?.[0]).toEqual(
+            expect.objectContaining({
+              distinct_id: 'user123',
+              event: 'test event',
+              properties: expect.objectContaining({
+                foo: 'bar',
+                '$feature/basic-flag': true,
+                '$feature/person-property-flag': true,
+                $active_feature_flags: ['basic-flag', 'person-property-flag'],
+              }),
+            })
+          )
+        } finally {
+          releaseHash()
+          digestSpy.mockRestore()
+        }
       })
 
       it('should work with explicit groupProperties in sendFeatureFlags options', async () => {
@@ -2389,8 +2433,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         posthog.capture({
           distinctId: 'user123',
@@ -2409,7 +2452,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2444,8 +2487,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         mockedFetch.mockClear()
 
@@ -2460,7 +2502,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         // Should not make any remote calls for flags
         expect(mockedFetch).not.toHaveBeenCalledWith(
@@ -2498,8 +2540,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         mockedFetch.mockClear()
 
@@ -2514,7 +2555,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         // Should make remote calls for flags
         expect(mockedFetch).toHaveBeenCalledWith(
@@ -2544,8 +2585,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         posthog.capture({
           distinctId: 'user123',
@@ -2556,7 +2596,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2580,8 +2620,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         await posthog.captureImmediate({
           distinctId: 'user123',
@@ -2621,8 +2660,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         posthog.capture({
           distinctId: 'user123',
@@ -2639,7 +2677,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(

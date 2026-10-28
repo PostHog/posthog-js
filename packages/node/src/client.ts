@@ -30,7 +30,14 @@ import {
   SyncSpanContextManager,
   uuidv7,
 } from '@posthog/core'
-import type { Metrics, Span, SpanContextManager, StartSpanOptions, TraceSdkContext } from '@posthog/core'
+import type {
+  Metrics,
+  Span,
+  SpanContextManager,
+  StartSpanOptions,
+  TraceSdkContext,
+  UnresolvedFlagReason,
+} from '@posthog/core'
 import {
   AllFlagsOptions,
   EventMessage,
@@ -62,6 +69,7 @@ import {
   RequiresServerEvaluation,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
+import { getActiveTraceProperties } from './extensions/error-tracking/trace-context'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
@@ -158,6 +166,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _v1Sender?: V1CaptureSender
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
+  /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
+  public readonly privacyMode: boolean
   private _aiCaptureRouteActive = false
 
   // Feature flag overrides for local testing/development
@@ -243,6 +253,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.options = normalizedOptions
     this.captureMode = resolveCaptureMode()
     this.enableFullAiCapture = normalizedOptions.enableFullAiCapture === true
+    this.privacyMode = normalizedOptions.privacyMode === true
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
@@ -259,8 +270,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this.options.waitUntilMaxWaitMs = Math.max(normalizedOptions.waitUntilMaxWaitMs, 0)
     }
 
-    if (!this.disabled && normalizedOptions.personalApiKey) {
-      if (normalizedOptions.personalApiKey.includes('phc_')) {
+    if (!this.disabled && (normalizedOptions.personalApiKey || normalizedOptions.flagDefinitionCacheProvider)) {
+      if (normalizedOptions.personalApiKey?.includes('phc_')) {
         throw new Error(
           'A project API key ("phc_...") was provided as secretKey or personalApiKey. Pass the project API key as the first constructor argument. For local evaluation, set secretKey (or the deprecated personalApiKey alias) to a server-only Project Secret API Key ("phs_...") or Personal API Key ("phx_...") with feature flag read access.'
         )
@@ -2281,7 +2292,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Feature flags}
    *
    * @param distinctIdOrOptions - The user's distinct ID, or options when the distinctId comes from `withContext()`
-   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent.
+   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent; the snapshot's `unresolvedFlags` lists them with a reason.
    * @returns Promise that resolves to a `FeatureFlagEvaluations` snapshot
    */
   async evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
@@ -2467,12 +2478,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
+    // A flag a remote fallback or override resolved has a value, so it is not unresolved.
+    const unresolvedFlags: Record<string, UnresolvedFlagReason> = {}
+    for (const [key, reason] of Object.entries(localResult?.unresolved ?? {})) {
+      if (!Object.prototype.hasOwnProperty.call(records, key)) {
+        unresolvedFlags[key] = reason
+      }
+    }
+
     return new FeatureFlagEvaluations({
       host: this._getFeatureFlagEvaluationsHost(),
       distinctId: resolvedDistinctId,
       groups,
       disableGeoip,
       flags: records,
+      unresolvedFlags,
       requestId,
       evaluatedAt,
       flagDefinitionsLoadedAt: this.featureFlagsPoller?.getFlagDefinitionsLoadedAt(),
@@ -2661,7 +2681,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Reload feature flag definitions from the server for local evaluation.
+   * Reload feature flag definitions from the configured cache provider or PostHog for local evaluation.
    *
    * @example
    * ```ts
@@ -3260,6 +3280,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           ...(properties || {}),
         }
       : { ...(properties || {}) }
+
+    if (event === '$exception' && !('$trace_id' in mergedProperties || '$span_id' in mergedProperties)) {
+      Object.assign(mergedProperties, await getActiveTraceProperties())
+    }
 
     if (!mergedDistinctId) {
       mergedDistinctId = uuidv7()

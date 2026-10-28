@@ -1,4 +1,4 @@
-import { SurveyPopup } from '../../../src/extensions/surveys'
+import { SurveyPopup } from '@posthog/browser-common/surveys-renderer'
 import {
     BasicSurveyQuestion,
     RatingSurveyQuestion,
@@ -6,7 +6,7 @@ import {
     SurveyQuestionType,
     SurveyType,
     MultipleSurveyQuestion,
-} from '../../../src/posthog-surveys-types'
+} from '@posthog/browser-common'
 
 const surveys = [
     {
@@ -161,15 +161,12 @@ const surveys = [
     },
 ]
 
-const fakePosthog = { capture: () => {} } as any
-
 export function List() {
     return (
         <div style={{ width: '100%', paddingLeft: '40px', paddingRight: '40px', display: 'flex', flexWrap: 'wrap' }}>
             {surveys.map((survey) => (
                 <div style={{ width: '33%', paddingTop: '40px' }}>
                     <SurveyPopup
-                        posthog={fakePosthog}
                         readOnly={true}
                         style={{
                             position: 'relative',

@@ -238,3 +238,61 @@ describe('PostHogSurveyProvider — autoPresentSurveys gating', () => {
     expect(queryByTestId('survey-modal')).toBeNull()
   })
 })
+
+describe('PostHogSurveyProvider — seenSurveyWaitPeriodInDays', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000
+  const waitPeriodSurvey = {
+    ...popoverSurvey,
+    id: 's-wait',
+    conditions: { seenSurveyWaitPeriodInDays: 7 },
+  } as unknown as Survey
+
+  const clientWithLastSeen = (surveys: Survey[], lastSeen: Date) => ({
+    ...makeClient(surveys),
+    getPersistedProperty: vi.fn((key: string) =>
+      key === 'survey_last_seen_date' ? lastSeen.toISOString() : undefined
+    ),
+  })
+
+  beforeEach(() => {
+    vi.useRealTimers()
+  })
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it('does not present a survey when another survey was seen within the wait period', async () => {
+    mockClient = clientWithLastSeen([waitPeriodSurvey], new Date(Date.now() - 2 * DAY_MS))
+    const { queryByTestId } = renderProvider(true)
+    await flush()
+
+    expect(queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+  })
+
+  it('presents the survey once the wait period has passed', async () => {
+    mockClient = clientWithLastSeen([waitPeriodSurvey], new Date(Date.now() - 10 * DAY_MS))
+    const { queryByTestId } = renderProvider(true)
+    await flush()
+
+    await waitFor(() => expect(queryByTestId('survey-modal')).not.toBeNull())
+  })
+
+  it('does not present a wait-period survey right after another survey is closed', async () => {
+    const otherSurvey = { ...popoverSurvey, id: 's-other' } as unknown as Survey
+    mockClient = makeClient([otherSurvey, waitPeriodSurvey])
+    const { queryByTestId } = renderProvider(true)
+    await flush()
+    expect(sendSurveyShownEvent).toHaveBeenLastCalledWith(expect.objectContaining({ id: 's-other' }), mockClient, null)
+
+    await act(async () => {
+      fireEvent.click(queryByTestId('survey-modal')!)
+      await Promise.resolve()
+    })
+    await flush()
+
+    expect(sendSurveyShownEvent).not.toHaveBeenCalledWith(expect.objectContaining({ id: 's-wait' }), mockClient, null)
+    expect(queryByTestId('survey-modal')).toBeNull()
+  })
+})

@@ -35,7 +35,7 @@ describe('identify option', () => {
     await cleanup()
   })
 
-  it('runs identify on the first tool call, stores the identity, and publishes an $identify event', async () => {
+  it('runs identify on the first tool call and stores the identity', async () => {
     const capture = new EventCapture()
     await capture.start()
 
@@ -55,14 +55,12 @@ describe('identify option', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     expect(identify).toHaveBeenCalledTimes(1)
-    const identifyEvent = capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.identify)
-    expect(identifyEvent?.resourceName).toBe('add_todo')
     expectIdentityStored(server, identity)
 
     await capture.stop()
   })
 
-  it('calls identify on every tool invocation but only publishes an event when the identity changes', async () => {
+  it('calls identify on every tool invocation and attributes each call without publishing $identify', async () => {
     const capture = new EventCapture()
     await capture.start()
     const identify = vi.fn(async () => ({ distinctId: 'user-1', properties: { name: 'Stable' } }))
@@ -76,13 +74,18 @@ describe('identify option', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     expect(identify).toHaveBeenCalledTimes(3)
-    const identifyEvents = capture.getEvents().filter((e) => e.eventType === MCPAnalyticsEventType.identify)
-    expect(identifyEvents).toHaveLength(1)
+    expect(capture.findCapturesByEvent('$identify')).toHaveLength(0)
+    const toolCalls = capture.findCapturesByEvent('$mcp_tool_call')
+    expect(toolCalls).toHaveLength(3)
+    for (const toolCall of toolCalls) {
+      expect(toolCall.distinct_id).toBe('user-1')
+      expect(toolCall.properties.$set).toEqual({ name: 'Stable' })
+    }
 
     await capture.stop()
   })
 
-  it('republishes $identify when the identity materially changes mid-session, then dedupes again', async () => {
+  it('stamps a changed identity onto the calls after the change', async () => {
     const capture = new EventCapture()
     await capture.start()
     // Same distinctId, but the plan changes on the second call and then holds.
@@ -98,10 +101,9 @@ describe('identify option', () => {
 
     await new Promise((r) => setTimeout(r, 50))
 
-    // One at first-seen, one when plan flips free→pro; the third call (still pro) dedupes.
     expect(identify).toHaveBeenCalledTimes(3)
-    const identifyEvents = capture.getEvents().filter((e) => e.eventType === MCPAnalyticsEventType.identify)
-    expect(identifyEvents).toHaveLength(2)
+    const plansSet = capture.findCapturesByEvent('$mcp_tool_call').map((e) => (e.properties.$set as any)?.plan)
+    expect(plansSet).toEqual(['free', 'pro', 'pro'])
     expectIdentityStored(server, { distinctId: 'user-1', properties: { plan: 'pro' } })
 
     await capture.stop()
@@ -132,14 +134,12 @@ describe('identify option', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     expect(identify).toHaveBeenCalledTimes(1)
-    const identifyEvent = capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.identify)
-    expect(identifyEvent?.resourceName).toBe('post_track_tool')
     expectIdentityStored(server, { distinctId: 'late-user', properties: { name: 'Late' } })
 
     await capture.stop()
   })
 
-  it('treats a null return as "no identity": no event published, no identity stored', async () => {
+  it('treats a null return as "no identity": no identity stored', async () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, fakePostHog(), { enableConversationId: false, identify: async () => null })
@@ -147,7 +147,6 @@ describe('identify option', () => {
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
 
-    expect(capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.identify)).toBeUndefined()
     const data = getServerTrackingData(server.server)
     expect(data?.identifiedSessions.get(data.sessionId!)).toBeUndefined()
 
@@ -165,7 +164,6 @@ describe('identify option', () => {
 
     const events = capture.getEvents()
     expect(events.filter((e) => e.eventType === MCPAnalyticsEventType.mcpToolsCall)).toHaveLength(2)
-    expect(events.find((e) => e.eventType === MCPAnalyticsEventType.identify)).toBeUndefined()
     for (const event of events) {
       expect(event.sessionId).toBeTruthy()
     }
@@ -266,7 +264,7 @@ describe('identify option', () => {
     await capture.stop()
   })
 
-  it('awaits async identify callbacks and records a non-zero duration on the $identify event', async () => {
+  it('awaits async identify callbacks before attributing the call', async () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, fakePostHog(), {
@@ -280,15 +278,12 @@ describe('identify option', () => {
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
 
-    const identifyEvent = capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.identify)
-    expect(identifyEvent?.duration).toBeGreaterThan(0)
+    expect(capture.findCapturesByEvent('$mcp_tool_call')[0].distinct_id).toBe('async-user')
 
     await capture.stop()
   })
 
   it('swallows errors thrown from identify so tool calls still succeed', async () => {
-    const capture = new EventCapture()
-    await capture.start()
     instrument(server, fakePostHog(), {
       enableConversationId: false,
       identify: async () => {
@@ -298,11 +293,6 @@ describe('identify option', () => {
 
     const result = await callAddTodo(client)
     expect(result.content[0].text).toContain('Added todo')
-
-    await new Promise((r) => setTimeout(r, 50))
-    expect(capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.identify)).toBeUndefined()
-
-    await capture.stop()
   })
 
   it('stores whatever identify returns — no schema validation', async () => {

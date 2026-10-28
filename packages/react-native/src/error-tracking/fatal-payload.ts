@@ -81,9 +81,15 @@ const isJsonValue = (value: unknown, depth = 0, ancestors: unknown[] = []): valu
   if (Array.isArray(value)) {
     return value.every((item) => isJsonValue(item, depth + 1, nextAncestors))
   }
-  return Object.keys(value as Record<string, unknown>).every((key) =>
-    isJsonValue((value as Record<string, unknown>)[key], depth + 1, nextAncestors)
-  )
+  return Object.keys(value as Record<string, unknown>).every((key) => {
+    const item = (value as Record<string, unknown>)[key]
+    // `JSON.stringify` omits object properties whose value is `undefined`, so one does not
+    // make the object unserializable. Treat it the same way: the key is dropped when the
+    // payload is serialized rather than failing the whole object. Without this, a single
+    // `undefined` deep in a value (for example `chunk_id` on a stack frame that is not in
+    // the chunk-id map) makes `boundedObject` skip the entire key it sits under.
+    return item === undefined || isJsonValue(item, depth + 1, nextAncestors)
+  })
 }
 
 // Return the longest prefix whose JSON string representation fits. Measure as we scan instead

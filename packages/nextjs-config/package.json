@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.11.2",
+  "version": "1.12.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -26,6 +26,8 @@
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "build": "rslib build",
     "test:unit": "vitest run --passWithNoTests",
+    "test:built": "node --test tests/cli-resolution.mjs tests/integration/assertions.spec.mjs",
+    "test:integration": "node tests/integration/run.mjs",
     "dev": "rslib build --watch",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },

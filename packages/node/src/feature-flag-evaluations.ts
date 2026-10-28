@@ -1,4 +1,4 @@
-import { FeatureFlagValue, JsonType } from '@posthog/core'
+import { FeatureFlagValue, JsonType, UnresolvedFlagReason } from '@posthog/core'
 
 import { FeatureFlagError } from './types'
 
@@ -73,6 +73,7 @@ export class FeatureFlagEvaluations {
   private readonly _groups: Record<string, string | number> | undefined
   private readonly _disableGeoip: boolean | undefined
   private readonly _flags: Record<string, EvaluatedFlagRecord>
+  private readonly _unresolvedFlags: Readonly<Record<string, UnresolvedFlagReason>>
   private readonly _requestId: string | undefined
   private readonly _evaluatedAt: number | undefined
   private readonly _flagDefinitionsLoadedAt: number | undefined
@@ -92,6 +93,7 @@ export class FeatureFlagEvaluations {
     groups?: Record<string, string | number>
     disableGeoip?: boolean
     flags: Record<string, EvaluatedFlagRecord>
+    unresolvedFlags?: Record<string, UnresolvedFlagReason>
     requestId?: string
     evaluatedAt?: number
     flagDefinitionsLoadedAt?: number
@@ -105,6 +107,7 @@ export class FeatureFlagEvaluations {
     this._groups = init.groups
     this._disableGeoip = init.disableGeoip
     this._flags = init.flags
+    this._unresolvedFlags = Object.freeze({ ...init.unresolvedFlags })
     this._requestId = init.requestId
     this._evaluatedAt = init.evaluatedAt
     this._flagDefinitionsLoadedAt = init.flagDefinitionsLoadedAt
@@ -217,6 +220,18 @@ export class FeatureFlagEvaluations {
   }
 
   /**
+   * Flags that have a loaded local definition but that neither local evaluation nor a remote
+   * fallback resolved, mapped to the reason local evaluation was inconclusive. These flags are
+   * absent from `keys`, and their accessors return undefined (`isEnabled` returns false). Reading
+   * this does not count as an access and does not fire any event.
+   *
+   * Always empty on snapshots returned by `only()` / `onlyAccessed()`.
+   */
+  get unresolvedFlags(): Readonly<Record<string, UnresolvedFlagReason>> {
+    return this._unresolvedFlags
+  }
+
+  /**
    * Build the `$feature/*` and `$active_feature_flags` event properties derived
    * from the current flag set. Called by `capture()` when an event is captured
    * with `flags: ...`.
@@ -247,6 +262,7 @@ export class FeatureFlagEvaluations {
       groups: this._groups,
       disableGeoip: this._disableGeoip,
       flags,
+      // `unresolvedFlags` is left out on purpose: slices carry no unresolved entries.
       requestId: this._requestId,
       evaluatedAt: this._evaluatedAt,
       flagDefinitionsLoadedAt: this._flagDefinitionsLoadedAt,
@@ -304,7 +320,8 @@ export class FeatureFlagEvaluations {
 
     // Build the comma-joined `$feature_flag_error` matching the single-flag path's
     // granularity: response-level errors (errors-while-computing, quota-limited) are
-    // combined with per-flag errors (flag-missing) so consumers can filter by type.
+    // combined with per-flag errors (flag-missing or local-evaluation-inconclusive) so consumers
+    // can filter by type.
     const errors: string[] = []
     if (this._errorsWhileComputing) {
       errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
@@ -313,7 +330,11 @@ export class FeatureFlagEvaluations {
       errors.push(FeatureFlagError.QUOTA_LIMITED)
     }
     if (flag === undefined) {
-      errors.push(FeatureFlagError.FLAG_MISSING)
+      errors.push(
+        Object.prototype.hasOwnProperty.call(this._unresolvedFlags, key)
+          ? FeatureFlagError.LOCAL_EVALUATION_INCONCLUSIVE
+          : FeatureFlagError.FLAG_MISSING
+      )
     }
     if (errors.length > 0) {
       properties.$feature_flag_error = errors.join(',')

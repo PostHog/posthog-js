@@ -1,7 +1,7 @@
 import { isArray, isError, isFile, isUndefined, safeJsonStringify } from '@posthog/core'
 
 import { each, errorToProperties } from './general-utils'
-import { document, location } from './globals'
+import { location } from './globals'
 import { logger } from './logger'
 
 const localDomains = ['localhost', '127.0.0.1']
@@ -38,21 +38,7 @@ export const jsonStringify = (data: any, space?: string | number): string => {
     }
 }
 
-/**
- * IE11 doesn't support `new URL`
- * so we can create an anchor element and use that to parse the URL
- * there's a lot of overlap between HTMLHyperlinkElementUtils and URL
- * meaning useful properties like `pathname` are available on both
- */
-export const convertToURL = (url: string): HTMLAnchorElement | null => {
-    const location = document?.createElement('a')
-    if (isUndefined(location)) {
-        return null
-    }
-
-    location.href = url
-    return location
-}
+export { convertToURL } from './convert-to-url'
 
 export const formDataToQuery = function (formdata: Record<string, any> | FormData, arg_separator = '&'): string {
     let use_val: string
@@ -85,7 +71,8 @@ export const getQueryParam = function (url: string, param: string): string {
     let keyValuePair
 
     for (let i = 0; i < queryParts.length; i++) {
-        const parts = queryParts[i]!.split('=')
+        // Split only on the first = so values that contain = (e.g. base64) are kept whole
+        const parts = queryParts[i]!.split(/=(.*)/)
         if (parts[0] === param) {
             keyValuePair = parts
             break
@@ -95,13 +82,14 @@ export const getQueryParam = function (url: string, param: string): string {
     if (!isArray(keyValuePair) || keyValuePair.length < 2) {
         return ''
     } else {
-        let result = keyValuePair[1]!
+        // Replace + with a space before decoding, so an encoded plus (%2B) stays a +
+        let result = keyValuePair[1]!.replace(/\+/g, ' ')
         try {
             result = decodeURIComponent(result)
         } catch {
             logger.error('Skipping decoding for malformed query param: ' + result)
         }
-        return result.replace(/\+/g, ' ')
+        return result
     }
 }
 

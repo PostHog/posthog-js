@@ -113,19 +113,31 @@
         capture_pageview: false,
         capture_pageleave: false,
         autocapture: ['autocapture', 'forms', 'links', 'rage-clicks', 'dead-clicks'].includes(lab.scenario),
-        disable_session_recording: lab.scenario !== 'replay',
-        disable_surveys: !['surveys', 'extension-failure', 'delayed-loading', 'version-fallback'].includes(
-            lab.scenario
-        ),
-        disable_surveys_automatic_display: true,
-        capture_performance: false,
+        disable_session_recording: !lab.scenario.startsWith('replay'),
+        disable_surveys: ![
+            'surveys',
+            'surveys-auto',
+            'extension-failure',
+            'delayed-loading',
+            'version-fallback',
+        ].includes(lab.scenario),
+        disable_surveys_automatic_display: lab.scenario !== 'surveys-auto',
+        capture_performance:
+            lab.scenario === 'web-vitals'
+                ? {
+                      web_vitals: true,
+                      web_vitals_allowed_metrics: ['FCP'],
+                      web_vitals_delayed_flush_ms: 100,
+                      web_vitals_attribution: false,
+                  }
+                : false,
         capture_dead_clicks: lab.scenario === 'dead-clicks',
         enable_heatmaps: false,
         ...(lab.scenario === 'heatmaps' ? { capture_heatmaps: { flush_interval_milliseconds: 1000 } } : {}),
         ...(['rage-clicks', 'heatmaps'].includes(lab.scenario) ? { rageclick: true } : {}),
         enable_recording_console_log: false,
         opt_out_useragent_filter: true,
-        request_batching: lab.scenario === 'unload',
+        request_batching: ['unload', 'replay-bounce'].includes(lab.scenario),
         strict_script_versioning:
             lab.scenario === 'version-fallback' && lab.comparison === 'current' ? 'fallback' : false,
         session_recording: {
@@ -133,10 +145,13 @@
             maskTextSelector: '.ph-mask',
             recordCrossOriginIframes: false,
             blockClass: 'ph-no-capture',
+            ...(lab.scenario === 'replay' ? { recordHeaders: true, recordBody: true } : {}),
         },
         ...(lab.scenario === 'logs' ? { logs: { captureConsoleLogs: true, flushIntervalMs: 1000 } } : {}),
         ...(lab.mode === 'slim' ? { __extensionClasses: lab.extensions } : {}),
         loaded: (ph) => {
+            // Exercise native network capture on the loopback fixture, as in the focused Replay tests.
+            if (lab.scenario === 'replay') ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
             lab.ph = ph
             lab.loaded = true
             lab.probe('loaded')
@@ -144,7 +159,24 @@
     })
     lab.initialize = (scenario) => {
         lab.scenario = scenario
-        if (lab.mode === 'snippet') {
+        if (lab.mode === 'loader') {
+            const { loaded, ...config } = lab.options()
+            const script = document.createElement('script')
+            script.src = '/static/loader.js?project_token=phc_COMPAT'
+            script.crossOrigin = 'anonymous'
+            script.setAttribute('data-config', JSON.stringify(config))
+            script.onload = () => {
+                lab.ph = window.posthog
+                lab.probe('before-init')
+                lab.probe('init-return')
+                // Auto-init accepts JSON only; observe readiness through the public SDK queue.
+                lab.ph.push(function () {
+                    loaded(this)
+                })
+                lab.initialized = true
+            }
+            document.head.appendChild(script)
+        } else if (lab.mode === 'snippet') {
             lab.ph = window.posthog
             lab.phase = 'snippet-init-call'
             lab.call('init', ['phc_COMPAT', lab.options()], 'snippet.init')

@@ -68,12 +68,10 @@ describe('per-server logger isolation', () => {
       expect(sessionA).toBeDefined()
       expect(sessionB).toBeDefined()
 
-      expect(logsA.some((message) => message.includes(`Identified session ${sessionA}`))).toBe(true)
       expect(logsA.some((message) => message.includes('sink-a'))).toBe(true)
       expect(logsA.join('\n')).not.toContain(String(sessionB))
       expect(logsA.join('\n')).not.toContain('sink-b')
 
-      expect(logsB.some((message) => message.includes(`Identified session ${sessionB}`))).toBe(true)
       expect(logsB.some((message) => message.includes('sink-b'))).toBe(true)
       expect(logsB.join('\n')).not.toContain(String(sessionA))
       expect(logsB.join('\n')).not.toContain('sink-a')
