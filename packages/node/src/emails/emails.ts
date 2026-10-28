@@ -10,7 +10,7 @@ import {
 import { EmailError } from './errors'
 import type { EmailWarning, Emails, SendEmailOptions, SendEmailResponse, SendEmailResult } from './types'
 
-const SEND_PATH = '/api/projects/@current/messaging_templates/{templateId}/send/'
+const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const US_APP_HOST = 'https://us.posthog.com'
 const EU_APP_HOST = 'https://eu.posthog.com'
 const CLOUD_APP_HOSTS: Record<string, string> = {
@@ -257,12 +257,16 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
     throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
   }
 
-  const payload: Record<string, unknown> = { to, message_data: templateData ?? {} }
+  const payload: Record<string, unknown> = {
+    template: { id: templateId.toLowerCase() },
+    to,
+    message_data: templateData ?? {},
+  }
   if (distinctId !== undefined) {
     payload.identifiers = { distinct_id: distinctId }
   }
   return {
-    path: SEND_PATH.replace('{templateId}', templateId.toLowerCase()),
+    path: SEND_PATH,
     body: safeJsonStringify(payload),
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: maxRetries ?? defaultMaxRetries,

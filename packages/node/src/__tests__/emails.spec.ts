@@ -4,7 +4,7 @@ vi.mock('../version', () => ({ version: '1.2.3' }))
 
 const SECRET_KEY = 'phs_test_secret'
 const TEMPLATE_ID = '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b'
-const SEND_URL = `https://us.posthog.com/api/projects/@current/messaging_templates/${TEMPLATE_ID}/send/`
+const SEND_URL = 'https://us.posthog.com/api/projects/@current/messaging/send/email/'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 type Reply = Error | { status: number; body?: unknown; headers?: Record<string, string> }
@@ -101,6 +101,7 @@ describe('emails.send', () => {
       'User-Agent': 'posthog-node/1.2.3',
     })
     expect(JSON.parse(options.body)).toEqual({
+      template: { id: TEMPLATE_ID },
       to: 'user@example.com',
       message_data: { name: 'Ada', expiresAt: '2026-11-20T00:00:00.000Z' },
       ...extraBody,
@@ -112,7 +113,11 @@ describe('emails.send', () => {
 
     await posthog.withContext({ distinctId: 'context_user' }, () => send())
 
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ to: 'user@example.com', message_data: {} })
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+      template: { id: TEMPLATE_ID },
+      to: 'user@example.com',
+      message_data: {},
+    })
   })
 
   it.each([
@@ -129,7 +134,7 @@ describe('emails.send', () => {
 
     await send()
 
-    expect(fetch.mock.calls[0][0]).toBe(`${expected}/api/projects/@current/messaging_templates/${TEMPLATE_ID}/send/`)
+    expect(fetch.mock.calls[0][0]).toBe(`${expected}/api/projects/@current/messaging/send/email/`)
   })
 
   it.each([
