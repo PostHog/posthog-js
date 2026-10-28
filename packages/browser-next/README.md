@@ -34,6 +34,52 @@ const posthog = await createPostHog({
 
 Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no delivery dynamic-import reference. Both modes retain the analytics extension and its buffer. `getExtension('analytics')` returns the same instance before and after delivery loads; its presence alone does not indicate that delivery is available. Analytics initializes before other configured extensions so they can capture during setup. Other extensions retain their configured order.
 
+## Classic script installation (draft CDN distribution)
+
+The CDN build supports a plain external classic script in ordinary, `async`, or `defer` placement. The proposed asset namespace is `/static/browser/<exact-version-or-major>/`; availability depends on CDN deployment. For example, once deployed:
+
+```html
+<script async src="https://us-assets.i.posthog.com/static/browser/0/script.js?projectToken=YOUR_PROJECT_TOKEN"></script>
+```
+
+The first response embeds the client core. Optional implementations load through native bundler-generated script chunks relative to that script's directory, including when assets and the page have different origins. Publish the entire `dist-cdn` tree together, keeping hashed chunks available during alias updates. Query parameters and fragments are not forwarded to chunk URLs. When the installing script has a CSP nonce, deferred chunk scripts inherit it. The asset host is not the ingestion host: the SDK's US ingestion default still applies. Set `apiHost` explicitly for EU ingestion or a proxy, URL-encoding its value, for example `&amp;apiHost=https%3A%2F%2Feu.i.posthog.com` in HTML.
+
+Only these query options are supported; omitted options use the existing factory defaults:
+
+| Option                                                               | Values                                                                                      |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `projectToken`                                                       | Required, nonempty project token                                                            |
+| `apiHost`                                                            | Absolute HTTP(S) API base, optionally with a proxy path; no credentials, query, or fragment |
+| `capturePageview`, `optOutByDefault`, `debug`, `disableBotDetection` | Literal `true` or `false`                                                                   |
+| `storage`, `flags`, `logs`, `surveys`, `autocapture`                 | Literal `false` to disable the corresponding default                                        |
+
+Unknown parameters are ignored. Invalid recognized values prevent installation and log a generic diagnostic without the URL or token. This query interface does not accept objects, callbacks, or extensions; use the npm factory for those configurations.
+
+After the existing `createPostHog()` factory resolves, the script assigns `window.posthog` and dispatches `posthog:ready` on `window`, with the client in `event.detail`. Readiness includes extension setup, not remote configuration, flag evaluation, or successful event delivery. An early consumer subscribes to the event; a late consumer checks the global:
+
+```js
+function onPostHogReady(client) {
+    client.capture('signed_up')
+}
+if (window.posthog) {
+    onPostHogReady(window.posthog)
+} else {
+    window.addEventListener('posthog:ready', (event) => onPostHogReady(event.detail), { once: true })
+}
+```
+
+There is no pre-load capture queue. Concurrent tags share an in-flight installation reservation: the first valid tag wins, even if later tags specify different options. Any existing `posthog` property (including a reserved undefined property or a legacy stub) prevents installation, without initialization or a new ready event. If another installer claims the global during initialization, the unpublished client is disposed rather than overwriting it. A failed installation releases its reservation so a subsequent tag can retry. Failed optional chunks retain the factory's existing failure isolation; ready can still expose a usable core. Consent and capture admission remain unchanged.
+
+Build and validate locally after building workspace dependencies:
+
+```sh
+pnpm --filter @posthog/browser build:cdn
+pnpm --filter @posthog/browser bundle-size:cdn
+pnpm --filter @posthog/browser test:snippet
+```
+
+`dist-cdn/script.js`, its hashed `chunks/`, and source maps are CDN-only artifacts, outside the npm package's `dist` graph. `test:snippet` serves the exact generated scripts in plain HTML from a separate nested asset origin, and verifies real Capture V1 delivery against the checked-in SDK mock server in Chromium, Firefox, and WebKit. All browser requests are restricted to the local fixture origins. Attribution reports distinguish actual minified/compressed artifact sizes from transformed module sizes before minification.
+
 ## Autocapture
 
 Autocapture loads dynamically during initialization by default. Code loading alone does not enable collection: it waits for the initial remote configuration outcome and a known server opt-in (or a retained opt-in after a failed refresh). Consent, bot filtering, and local privacy exclusions still apply. `autocapture: false` omits automatic inclusion; it does not disable another product's configuration or an explicitly supplied autocapture instance.
