@@ -1,6 +1,5 @@
 import { PostHog } from '@/entrypoints/index.node'
-import { apiImplementation } from './utils'
-import { waitForPromises } from './utils'
+import { apiImplementation, lastSentBatch, sentEvents, v1Response, waitForPromises } from './utils'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
@@ -12,14 +11,7 @@ const waitForFlush = async (): Promise<void> => {
   await waitForPromises()
 }
 
-const getLastBatchEvents = (): any[] | undefined => {
-  const call = mockedFetch.mock.calls
-    .slice()
-    .reverse()
-    .find((x) => (x[0] as string).includes('/batch/'))
-  if (!call) return undefined
-  return JSON.parse((call[1] as any).body as any).batch
-}
+const getLastBatchEvents = (): any[] | undefined => lastSentBatch(mockedFetch)
 
 describe('PostHog Context', () => {
   let posthog: PostHog
@@ -35,11 +27,7 @@ describe('PostHog Context', () => {
       disableCompression: true,
     })
 
-    mockedFetch.mockResolvedValue({
-      status: 200,
-      text: () => Promise.resolve('ok'),
-      json: () => Promise.resolve({ status: 'ok' }),
-    } as any)
+    mockedFetch.mockResolvedValue(v1Response())
   })
 
   afterEach(async () => {
@@ -200,13 +188,7 @@ describe('PostHog Context', () => {
 
     await waitForFlush()
 
-    const allEvents: any[] = []
-    mockedFetch.mock.calls.forEach((call) => {
-      if ((call[0] as string).includes('/batch/')) {
-        const batch = JSON.parse((call[1] as any).body as any).batch
-        allEvents.push(...batch)
-      }
-    })
+    const allEvents = sentEvents(mockedFetch)
 
     expect(allEvents).toHaveLength(50)
 
@@ -254,13 +236,7 @@ describe('PostHog Context', () => {
 
     await waitForFlush()
 
-    const allEvents: any[] = []
-    mockedFetch.mock.calls.forEach((call) => {
-      if ((call[0] as string).includes('/batch/')) {
-        const batch = JSON.parse((call[1] as any).body as any).batch
-        allEvents.push(...batch)
-      }
-    })
+    const allEvents = sentEvents(mockedFetch)
 
     expect(allEvents).toHaveLength(4)
 

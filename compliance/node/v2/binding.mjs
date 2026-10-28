@@ -104,9 +104,9 @@ const optionProperties = {
     process_person_profile: '$process_person_profile',
     product_tour_id: '$product_tour_id',
 }
-function capture(args, captureMode) {
+function capture(args) {
     if (!own(args, 'options')) return rename(args, captureFields, '/capture')
-    if (captureMode !== 'v1' || !object(args.options)) unsupported('/capture/options')
+    if (!object(args.options)) unsupported('/capture/options')
     checkKeys(args.options, Object.keys(optionProperties), '/capture/options')
     const mapped = rename(
         Object.fromEntries(Object.entries(args).filter(([key]) => key !== 'options')),
@@ -223,9 +223,8 @@ async function snapshotReads(snapshot, reads) {
     return { results }
 }
 export class Binding {
-    constructor(PostHog, captureMode = 'v0') {
+    constructor(PostHog) {
         this.PostHog = PostHog
-        this.captureMode = captureMode
         this.client = undefined
         this.exceptions = new Map()
     }
@@ -253,8 +252,7 @@ export class Binding {
             if (this.client === undefined)
                 return failure('unsupported_binding', 'before-setup', 'This instance API requires public construction')
             if (route === '/capture' || route === '/capture_ai') {
-                const mapped =
-                    route === '/capture' ? capture(args, this.captureMode) : rename(args, captureFields, route)
+                const mapped = route === '/capture' ? capture(args) : rename(args, captureFields, route)
                 if (own(mapped, 'timestamp')) mapped.timestamp = timestamp(mapped.timestamp)
                 if (own(mapped, 'sendFeatureFlags'))
                     mapped.sendFeatureFlags = rename(

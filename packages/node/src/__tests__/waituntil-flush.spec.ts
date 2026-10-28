@@ -1,5 +1,7 @@
 import { PostHog } from '@/entrypoints/index.node'
 
+import { captureRequests, sentEventsOf, v1Response } from './utils'
+
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
@@ -7,9 +9,7 @@ const DEBOUNCE_MS = 50
 const HALF_DEBOUNCE_MS = DEBOUNCE_MS / 2
 
 function getFlushedBatches(): any[][] {
-  return mockedFetch.mock.calls
-    .filter((c) => (c[0] as string).includes('/batch/'))
-    .map((c) => JSON.parse((c[1] as any).body).batch)
+  return captureRequests(mockedFetch).map(sentEventsOf)
 }
 
 describe('flush combines events and spans', () => {
@@ -25,7 +25,7 @@ describe('flush combines events and spans', () => {
         order.push('traces-done')
         return { status: 200, text: () => Promise.resolve('{}'), json: () => Promise.resolve({}) } as any
       }
-      throw new Error('events endpoint down')
+      return v1Response()
     })
     const posthog = new PostHog('key', {
       host: 'http://example.com',
@@ -34,6 +34,8 @@ describe('flush combines events and spans', () => {
       traces: { serviceName: 'svc' },
       disableCompression: true,
     })
+    // Fail the send seam itself: only the legacy sender throws when the events request fails.
+    vi.spyOn(posthog as any, 'sendBatch').mockRejectedValue(new Error('events endpoint down'))
     posthog.capture({ distinctId: 'u', event: 'e' })
     posthog.startSpan('s').end()
 
@@ -72,11 +74,7 @@ describe('waitUntil debounced flush', () => {
         waitUntilDebounceMs: DEBOUNCE_MS,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
     })
 
     afterEach(async () => {
@@ -142,7 +140,7 @@ describe('waitUntil debounced flush', () => {
       })
       mockedFetch.mockImplementationOnce(async () => {
         await delivery
-        return { status: 200, text: async () => 'ok', json: async () => ({ status: 'ok' }) } as any
+        return v1Response()
       })
 
       try {
@@ -248,11 +246,7 @@ describe('waitUntil debounced flush', () => {
         waitUntilMaxWaitMs: MAX_DEBOUNCE_MS,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
     })
 
     afterEach(async () => {
@@ -332,11 +326,7 @@ describe('waitUntil debounced flush', () => {
         waitUntil: mockWaitUntil,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
     })
 
     afterEach(async () => {
@@ -570,11 +560,7 @@ describe('waitUntil debounced flush', () => {
         waitUntilDebounceMs: DEBOUNCE_MS,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
 
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
       posthog.capture({ distinctId: 'user-1', event: 'event_2' })
@@ -606,11 +592,7 @@ describe('waitUntil debounced flush', () => {
         waitUntilDebounceMs: DEBOUNCE_MS,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
 
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
       posthog.capture({ distinctId: 'user-1', event: 'event_2' })
@@ -642,11 +624,7 @@ describe('waitUntil debounced flush', () => {
         waitUntilDebounceMs: 200,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
     })
 
     afterEach(async () => {

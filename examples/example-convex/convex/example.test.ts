@@ -6,21 +6,24 @@ import { api, components } from './_generated/api.js'
 // Keep a guard above Jest's 5s default; scheduled functions are driven deterministically below.
 vi.setConfig({ testTimeout: 15000 })
 
+// posthog-node sends events to the capture v1 analytics endpoint.
+const CAPTURE_PATHS = ['/i/v1/analytics/events']
+
 // Collect all fetch calls for assertion
-let fetchCalls: Array<{ url: string; body: unknown }> = []
+let fetchCalls: Array<{ url: string; headers: Record<string, string>; body: unknown }> = []
 const originalFetch = global.fetch
 
 function mockFetch(responseByUrl?: Record<string, unknown>, statusByUrl?: Record<string, number>) {
     fetchCalls = []
     return vi.fn(async (url: string | URL, init?: RequestInit) => {
         const urlStr = url.toString()
+        const headers = (init?.headers ?? {}) as Record<string, string>
         const status = Object.entries(statusByUrl ?? {}).find(([pattern]) => urlStr.includes(pattern))?.[1] ?? 200
         let body: unknown
         if (init?.body) {
             let rawText: string
             if (init.body instanceof Blob) {
-                const headers = init.headers as Record<string, string> | undefined
-                if (headers?.['Content-Encoding'] === 'gzip') {
+                if (headers['Content-Encoding'] === 'gzip') {
                     const ds = new DecompressionStream('gzip')
                     rawText = await new Response(init.body.stream().pipeThrough(ds)).text()
                 } else {
@@ -35,7 +38,7 @@ function mockFetch(responseByUrl?: Record<string, unknown>, statusByUrl?: Record
                 body = rawText
             }
         }
-        fetchCalls.push({ url: urlStr, body })
+        fetchCalls.push({ url: urlStr, headers, body })
 
         if (responseByUrl) {
             for (const [pattern, response] of Object.entries(responseByUrl)) {
@@ -56,7 +59,12 @@ function mockFetch(responseByUrl?: Record<string, unknown>, statusByUrl?: Record
 }
 
 function batchCalls() {
-    return fetchCalls.filter((c) => c.url.includes('/batch'))
+    return fetchCalls.filter((c) => CAPTURE_PATHS.some((path) => new URL(c.url).pathname === path))
+}
+
+// Fails every capture request with `status`, whichever endpoint the client uses.
+function captureStatus(status: number): Record<string, number> {
+    return Object.fromEntries(CAPTURE_PATHS.map((path) => [path, status]))
 }
 
 function flagsCalls() {
@@ -71,9 +79,7 @@ function firstBatchEvent(): Record<string, unknown> {
 }
 
 function allBatchEvents(): Record<string, unknown>[] {
-    return batchCalls().flatMap(
-        (call) => (call.body as { batch: Record<string, unknown>[] }).batch
-    )
+    return batchCalls().flatMap((call) => (call.body as { batch: Record<string, unknown>[] }).batch)
 }
 
 async function finishScheduledFunctions(t: ReturnType<typeof initConvexTest>) {
@@ -110,8 +116,9 @@ describe('capture', () => {
         await finishScheduledFunctions(t)
 
         expect(batchCalls().length).toBeGreaterThanOrEqual(1)
-        const batch = batchCalls()[0].body as { api_key: string }
-        expect(batch.api_key).toBe('phc_test_key')
+        // Capture v1 authenticates with a bearer token instead of an api_key in the body.
+        expect(batchCalls()[0].headers.Authorization).toBe('Bearer phc_test_key')
+        expect(batchCalls()[0].body).not.toHaveProperty('api_key')
 
         const event = firstBatchEvent()
         expect(event.distinct_id).toBe('user-123')
@@ -483,7 +490,9 @@ describe('getFeatureFlag (local eval)', () => {
                     filters: {
                         groups: [
                             {
-                                properties: [{ key: 'email', value: ['user@acme.com'], operator: 'exact', type: 'person' }],
+                                properties: [
+                                    { key: 'email', value: ['user@acme.com'], operator: 'exact', type: 'person' },
+                                ],
                                 rollout_percentage: 100,
                             },
                         ],
@@ -786,9 +795,7 @@ describe('getAllFlags (local eval)', () => {
     })
 
     test('respects flagKeys filter', async () => {
-        global.fetch = mockFetch(
-            definitionsResponse([flagDef('flag-a'), flagDef('flag-b'), flagDef('flag-c')])
-        )
+        global.fetch = mockFetch(definitionsResponse([flagDef('flag-a'), flagDef('flag-b'), flagDef('flag-c')]))
         const t = initConvexTest()
         await loadDefinitions(t)
 
@@ -872,15 +879,13 @@ describe('refreshFlagDefinitions cron action', () => {
     const noArgs = {}
 
     /** Builds a fetch mock whose responses are picked per call from the supplied sequence. */
-    function sequencedFetch(
-        responses: Array<{ status: number; body?: unknown; headers?: Record<string, string> }>
-    ) {
+    function sequencedFetch(responses: Array<{ status: number; body?: unknown; headers?: Record<string, string> }>) {
         fetchCalls = []
         let i = 0
         // Statuses where the spec forbids a body (Response constructor throws on non-null body).
         const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304])
         return vi.fn(async (url: string | URL) => {
-            fetchCalls.push({ url: url.toString(), body: undefined })
+            fetchCalls.push({ url: url.toString(), headers: {}, body: undefined })
             const r = responses[Math.min(i, responses.length - 1)]
             i++
             const payload =
@@ -964,9 +969,7 @@ describe('refreshFlagDefinitions cron action', () => {
         await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)
 
         // Now PostHog flaps cold-cache 503s. Cache is < 5min old so we keep what we have.
-        global.fetch = sequencedFetch([
-            { status: 503, body: 'Required data not found in cache.' },
-        ])
+        global.fetch = sequencedFetch([{ status: 503, body: 'Required data not found in cache.' }])
         const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)) as {
             status: string
         }
@@ -988,9 +991,7 @@ describe('refreshFlagDefinitions cron action', () => {
             // Jump 6 minutes forward; the cached defs now count as stale.
             vi.setSystemTime(new Date(Date.now() + 6 * 60 * 1000))
 
-            global.fetch = sequencedFetch([
-                { status: 503, body: 'Required data not found in cache.' },
-            ])
+            global.fetch = sequencedFetch([{ status: 503, body: 'Required data not found in cache.' }])
             const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)) as {
                 status: string
             }
@@ -1101,7 +1102,7 @@ describe('evaluateFlag (remote)', () => {
     })
 
     test('returns the flag value when telemetry fails', async () => {
-        global.fetch = mockFetch(flagsResponse({ 'test-flag': 'variant-a' }), { '/batch': 400 })
+        global.fetch = mockFetch(flagsResponse({ 'test-flag': 'variant-a' }), captureStatus(400))
         const t = initConvexTest()
 
         const value = await t.action(components.posthog.lib.evaluateFlag, {
@@ -1198,10 +1199,7 @@ describe('evaluateAllFlags (remote)', () => {
 
     test('returns all flags and payloads', async () => {
         global.fetch = mockFetch(
-            flagsResponse(
-                { 'flag-a': true, 'flag-b': 'variant', 'flag-c': false },
-                { 'flag-a': { config: 'value' } }
-            )
+            flagsResponse({ 'flag-a': true, 'flag-b': 'variant', 'flag-c': false }, { 'flag-a': { config: 'value' } })
         )
         const t = initConvexTest()
 
@@ -1220,7 +1218,7 @@ describe('evaluateAllFlags (remote)', () => {
     })
 
     test('returns all flags when telemetry fails', async () => {
-        global.fetch = mockFetch(flagsResponse({ 'flag-a': true }), { '/batch': 400 })
+        global.fetch = mockFetch(flagsResponse({ 'flag-a': true }), captureStatus(400))
         const t = initConvexTest()
 
         const result = await t.action(components.posthog.lib.evaluateAllFlags, {

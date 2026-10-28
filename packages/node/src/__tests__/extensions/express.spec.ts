@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import type { IncomingHttpHeaders } from 'node:http'
 import { PostHog } from '@/entrypoints/index.node'
+import { anyCaptureUrl, lastSentBatch, v1Response } from '../utils'
 import { setupExpressErrorHandler, setupExpressRequestContext } from '@/extensions/express'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
@@ -12,13 +13,8 @@ const waitForFlushTimer = async (posthog: PostHog): Promise<void> => {
 }
 
 const getLastBatchEvents = (): any[] | undefined => {
-  expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
-
-  const call = [...mockedFetch.mock.calls].reverse().find((x) => (x[0] as string).includes('/batch/'))
-  if (!call) {
-    return undefined
-  }
-  return JSON.parse((call[1] as any).body as any).batch
+  expect(mockedFetch).toHaveBeenCalledWith(anyCaptureUrl, expect.objectContaining({ method: 'POST' }))
+  return lastSentBatch(mockedFetch)
 }
 
 const createMockRequest = (overrides?: {
@@ -80,11 +76,7 @@ describe('Express extension', () => {
   beforeEach(() => {
     posthog = createPostHog()
 
-    mockedFetch.mockResolvedValue({
-      status: 200,
-      text: () => Promise.resolve('ok'),
-      json: () => Promise.resolve({ status: 'ok' }),
-    } as any)
+    mockedFetch.mockResolvedValue(v1Response())
   })
 
   afterEach(async () => {
