@@ -414,6 +414,65 @@ describe('PostHogConversations', () => {
 
             expect(conversations.isAvailable()).toBe(false)
         })
+
+        describe('when reset() runs while the bundle is loading', () => {
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                } as ConversationsRemoteConfig,
+            }
+            let finishLoading: () => void
+            let initConversations: VitestMock
+
+            beforeEach(() => {
+                initConversations = vi.fn().mockReturnValue(mockManager)
+                assignableWindow.__PosthogExtensions__!.loadExternalDependency = vi.fn((_instance, _path, callback) => {
+                    finishLoading = () => {
+                        assignableWindow.__PosthogExtensions__!.initConversations = initConversations
+                        callback(null)
+                    }
+                })
+            })
+
+            it('re-checks consent before finishing initialization', () => {
+                mockPostHog.config.cookieless_mode = 'on_reject'
+                conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
+
+                conversations.reset()
+                ;(mockPostHog.consent.isOptedOut as VitestMock).mockReturnValue(true)
+                // core replays the cached remote config after reset
+                conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
+                finishLoading()
+
+                expect(initConversations).not.toHaveBeenCalled()
+                expect(conversations.isAvailable()).toBe(false)
+                expect(conversations.getUnavailableReason()).toBe('consent_opted_out')
+            })
+
+            it('initializes once with the replayed config', () => {
+                conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
+
+                conversations.reset()
+                conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
+                finishLoading()
+
+                expect(initConversations).toHaveBeenCalledTimes(1)
+                expect(conversations.isAvailable()).toBe(true)
+                expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).toHaveBeenCalledTimes(1)
+            })
+
+            it('stays unloaded when no remote config arrives after the reset', () => {
+                conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
+
+                conversations.reset()
+                finishLoading()
+
+                expect(initConversations).not.toHaveBeenCalled()
+                expect(conversations.isAvailable()).toBe(false)
+                expect(conversations.getUnavailableReason()).toBe('remote_config_pending')
+            })
+        })
     })
 
     describe('API methods', () => {

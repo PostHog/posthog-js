@@ -1,4 +1,3 @@
-import { PostHog } from 'posthog-node'
 import type OpenAIOrignal from 'openai'
 import type AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ResponseCreateParamsWithTools } from 'openai/lib/ResponsesParser'
@@ -13,6 +12,9 @@ import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
 import { redactBase64DataUrl } from './sanitization'
 import { isFullAiCaptureEnabled, type FullAiCaptureGate } from './captureAiEvent'
+import { isPrivacyModeEnabled, type PrivacyModeGate } from './privacyMode'
+
+export { isPrivacyModeEnabled }
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -202,6 +204,11 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
           content.push({ type: 'text', text: choice.message.content })
         }
 
+        // A refused request carries its text in `refusal` and leaves `content` empty
+        if (choice.message.refusal) {
+          content.push({ type: 'refusal', refusal: choice.message.refusal })
+        }
+
         if (choice.message.tool_calls) {
           for (const toolCall of choice.message.tool_calls) {
             // Custom tools carry their free-form text in `custom.input`, with no `function` object.
@@ -386,10 +393,7 @@ export const mergeSystemPrompt = (params: MessageCreateParams & MonitoringParams
   return params.messages
 }
 
-export const isPrivacyModeEnabled = (client: PostHog, privacyMode: boolean): boolean =>
-  Boolean((client as any).privacy_mode || privacyMode)
-
-export const withPrivacyMode = (client: PostHog, privacyMode: boolean, input: any): any => {
+export const withPrivacyMode = (client: PrivacyModeGate, privacyMode: boolean, input: any): any => {
   return isPrivacyModeEnabled(client, privacyMode) ? null : input
 }
 

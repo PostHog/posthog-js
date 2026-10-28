@@ -1,8 +1,12 @@
 # @posthog/browser
 
-An experimental PostHog client for modern browsers.
+An experimental PostHog client for modern browsers. The API is not yet stable.
 
-The client installs one analytics extension with a bounded in-memory buffer during initialization. By default, the first successfully admitted event lazily loads its queue scheduling and Capture Analytics V1 delivery machinery. Consent-denied, bot-filtered, and rejected events do not load delivery.
+```sh
+npm install @posthog/browser
+```
+
+The client installs one analytics extension with a bounded in-memory buffer during initialization. By default, the first successfully admitted event lazily loads its queue scheduling and Capture Analytics V1 delivery machinery. Consent-denied, bot-filtered, and rejected events do not load delivery. Feature flags, logs, surveys orchestration, and autocapture dynamically load during initialization by default; their capture and display behavior retains its own consent and remote-configuration gates. Survey rendering is a further deferred chunk.
 
 ```ts
 import { createPostHog } from '@posthog/browser'
@@ -33,6 +37,84 @@ const posthog = await createPostHog({
 ```
 
 Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no delivery dynamic-import reference. Both modes retain the analytics extension and its buffer. `getExtension('analytics')` returns the same instance before and after delivery loads; its presence alone does not indicate that delivery is available. Analytics initializes before other configured extensions so they can capture during setup. Other extensions retain their configured order.
+
+## Classic script installation (draft CDN distribution)
+
+The CDN build supports a plain external classic script in ordinary, `async`, or `defer` placement. The proposed asset namespace is `/static/browser/<exact-version-or-major>/`; availability depends on CDN deployment. For example, once deployed:
+
+```html
+<script async src="https://us-assets.i.posthog.com/static/browser/0/script.js?projectToken=YOUR_PROJECT_TOKEN"></script>
+```
+
+The first response embeds the client core. Optional implementations load through native bundler-generated script chunks relative to that script's directory, including when assets and the page have different origins. Publish the entire `dist-cdn` tree together, keeping hashed chunks available during alias updates. Query parameters and fragments are not forwarded to chunk URLs. When the installing script has a CSP nonce, deferred chunk scripts inherit it. The asset host is not the ingestion host: the SDK's US ingestion default still applies. Set `apiHost` explicitly for EU ingestion or a proxy, URL-encoding its value, for example `&amp;apiHost=https%3A%2F%2Feu.i.posthog.com` in HTML.
+
+Only these query options are supported; omitted options use the existing factory defaults:
+
+| Option                                                               | Values                                                                                      |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `projectToken`                                                       | Required, nonempty project token                                                            |
+| `apiHost`                                                            | Absolute HTTP(S) API base, optionally with a proxy path; no credentials, query, or fragment |
+| `capturePageview`, `optOutByDefault`, `debug`, `disableBotDetection` | Literal `true` or `false`                                                                   |
+| `storage`, `flags`, `logs`, `surveys`, `autocapture`                 | Literal `false` to disable the corresponding default                                        |
+
+Unknown parameters are ignored. Invalid recognized values prevent installation and log a generic diagnostic without the URL or token. This query interface does not accept objects, callbacks, or extensions; use the npm factory for those configurations.
+
+After the existing `createPostHog()` factory resolves, the script assigns `window.posthog` and dispatches `posthog:ready` on `window`, with the client in `event.detail`. Readiness includes extension setup, not remote configuration, flag evaluation, or successful event delivery. An early consumer subscribes to the event; a late consumer checks the global:
+
+```js
+function onPostHogReady(client) {
+    client.capture('signed_up')
+}
+if (window.posthog) {
+    onPostHogReady(window.posthog)
+} else {
+    window.addEventListener('posthog:ready', (event) => onPostHogReady(event.detail), { once: true })
+}
+```
+
+There is no pre-load capture queue. Concurrent tags share an in-flight installation reservation: the first valid tag wins, even if later tags specify different options. Any existing `posthog` property (including a reserved undefined property or a legacy stub) prevents installation, without initialization or a new ready event. If another installer claims the global during initialization, the unpublished client is disposed rather than overwriting it. A failed installation releases its reservation so a subsequent tag can retry. Failed optional chunks retain the factory's existing failure isolation; ready can still expose a usable core. Consent and capture admission remain unchanged.
+
+Build and validate locally after building workspace dependencies:
+
+```sh
+pnpm --filter @posthog/browser build:cdn
+pnpm --filter @posthog/browser bundle-size:cdn
+pnpm --filter @posthog/browser test:snippet
+```
+
+`dist-cdn/script.js`, its hashed `chunks/`, and source maps are CDN-only artifacts, outside the npm package's `dist` graph. `test:snippet` serves the exact generated scripts in plain HTML from a separate nested asset origin, and verifies real Capture V1 delivery against the checked-in SDK mock server in Chromium, Firefox, and WebKit. All browser requests are restricted to the local fixture origins. Attribution reports distinguish actual minified/compressed artifact sizes from transformed module sizes before minification.
+
+## Autocapture
+
+Autocapture loads dynamically during initialization by default. Code loading alone does not enable collection: it waits for the initial remote configuration outcome and a known server opt-in (or a retained opt-in after a failed refresh). Consent, bot filtering, and local privacy exclusions still apply. `autocapture: false` omits automatic inclusion; it does not disable another product's configuration or an explicitly supplied autocapture instance.
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    autocapture: { maskAllText: true, cssSelectorAllowlist: ['button', 'a'] },
+})
+```
+
+For static inclusion without a runtime module request:
+
+```ts
+import { autocapture } from '@posthog/browser/autocapture'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    extensions: [autocapture({ maskAllText: true })],
+})
+```
+
+An explicit instance takes precedence over the top-level option. The manual core entrypoint never imports autocapture automatically. Both paths use the same options and shared DOM implementation:
+
+- `urlAllowlist` / `urlIgnorelist` accept strings or regular expressions; `getCurrentUrl` supplies the URL used for matching. Ignore rules override allow rules.
+- `domEventAllowlist`, `elementAllowlist`, `cssSelectorAllowlist`, `cssSelectorIgnorelist`, and `elementAttributeIgnorelist` restrict capture. A custom CSS ignorelist replaces the `.ph-no-autocapture` / `[data-ph-no-autocapture]` defaults; include them explicitly to retain those exclusions. `.ph-no-capture` remains an unconditional exclusion.
+- `maskAllText` and `maskAllElementAttributes` default to false; sensitive value filtering remains active. `disableCaptureUrlHashes` defaults to true.
+- `captureCopiedText` defaults to false. Enabling it captures cut/copy/paste interactions; pasted text is never included.
+- `rageclick` accepts false, true, or an options object. Enabled by default, it ignores text-selection surfaces and navigation/stepper content (`next`, `previous`, `prev`, `>`, `<`, `+`, `-`, `−`, `–`). Options are `cssSelectorIgnorelist`, `contentIgnorelist`, `ignoreTextSelection`, `thresholdPx` (30), `clickCount` (3), and `timeoutMs` (1000). Explicit true uses these same defaults.
+
+Configuration arrays and regular expressions are snapshotted before asynchronous loading; callbacks remain callable. Disposal removes all DOM listeners. Survey selector metadata follows the same consent, masking, and exclusion checks as ordinary autocapture; it does not bypass them.
 
 ## Feature flags
 
@@ -181,7 +263,7 @@ Await client creation before using extension controls.
 
 The manual core entrypoint never loads surveys automatically. Extension lookup returns undefined when surveys is omitted or fails setup. Without a document, rendering is unavailable. Disposal removes renderer listeners, polling, pending displays, and rendered elements. Survey abandonment uses analytics' existing pagehide keepalive handoff when delivery is initialized; an analytics module still loading during pagehide cannot send it.
 
-Definitions and event activation state use the host-provided surveys KV namespace in the core persistence record. Survey interaction state—seen markers, partial answers, and abandonment markers—uses dedicated browser localStorage, independently of configured SDK persistence, including `storage: false`. Partial answers fall back to memory when localStorage writes fail; abandonment is skipped when its marker cannot be read. Client reset clears persisted extension data, runtime state, and localStorage seen markers, partial answers, and the last-seen date. Abandonment markers are retained, matching legacy survey reset behavior. Event targeting works through admitted captures; DOM-action selector targeting requires a compatible autocapture extension.
+Definitions and event activation state use the host-provided surveys KV namespace in the core persistence record. Survey interaction state—seen markers, partial answers, and abandonment markers—uses dedicated browser localStorage, independently of configured SDK persistence, including `storage: false`. Partial answers fall back to memory when localStorage writes fail; abandonment is skipped when its marker cannot be read. Client reset clears persisted extension data, runtime state, and localStorage seen markers, partial answers, and the last-seen date. Abandonment markers are retained, matching legacy survey reset behavior. Event targeting works through admitted captures; DOM-action selector targeting uses the installed autocapture extension, including the default dynamic instance. Cached definitions hydrate their triggers without requiring a refresh. Selectors registered before autocapture setup are retained; later successful definition snapshots replace the selector set, while failed refreshes retain it. Both extension orders are supported. Matching retains the shared exact-target semantics, including SVG attribution to its enclosing control. URL-constrained actions use survey targeting context when the event has no URL; this local fallback does not add URL data to the captured event.
 
 ## Capture and delivery
 
@@ -217,7 +299,5 @@ Consent is stored separately from identity under `__ph_opt_in_out_<project-token
 Session and window IDs are created on the first successfully admitted capture. Rejected work does not create or advance them. Idle timeout, maximum length, and reset rotate both IDs. Same-origin tabs share the active session while retaining distinct window IDs; ordinary reloads preserve the window ID and copied tab storage receives a new one. Session rotation is activity-driven and starts no core timer.
 
 A compact in-memory token bucket admits 10 events per second with a burst of 100 and emits a bypassed aggregate ingestion warning when a runaway loop first reaches the limit. `shutdown(timeoutMs)` stops new work, makes one bounded normal flush attempt, removes timers and lifecycle listeners, and is idempotent. `dispose()` uses the same shutdown path.
-
-This package is private while the API and capture behavior remain experimental.
 
 See [Bundle architecture](./ARCHITECTURE.md) for package boundaries, tree-shaking rules, and bundle review.

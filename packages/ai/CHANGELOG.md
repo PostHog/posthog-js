@@ -1,5 +1,36 @@
 # posthog-ai
 
+## 8.17.0
+
+### Minor Changes
+
+- [#5438](https://github.com/PostHog/posthog-js/pull/5438) [`acdbdd2`](https://github.com/PostHog/posthog-js/commit/acdbdd2123cb379fae9f0615ee0e9ef627fbe8f9) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add per-item model attribution to offline evaluations and dataset execution conversion.
+  (2026-10-26)
+
+## 8.16.3
+
+### Patch Changes
+
+- [#5353](https://github.com/PostHog/posthog-js/pull/5353) [`6970c88`](https://github.com/PostHog/posthog-js/commit/6970c88fad3500e385d5d33f8f6cf30684224be5) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture streamed OpenAI-compatible tool calls that arrive without an index.
+  (2026-10-23)
+
+## 8.16.2
+
+### Patch Changes
+
+- [#5385](https://github.com/PostHog/posthog-js/pull/5385) [`faacff0`](https://github.com/PostHog/posthog-js/commit/faacff022eb958e3c2180c6d9867f5568fdf4237) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Apply the client `privacyMode` option to AI integrations, keep prompts out of errors, provider metadata and OTel spans in privacy mode, and redact MCP tool credentials
+  (2026-10-23)
+- Updated dependencies [[`faacff0`](https://github.com/PostHog/posthog-js/commit/faacff022eb958e3c2180c6d9867f5568fdf4237), [`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d)]:
+  - posthog-node@5.57.1
+  - @posthog/core@1.60.1
+
+## 8.16.1
+
+### Patch Changes
+
+- [#5355](https://github.com/PostHog/posthog-js/pull/5355) [`e027825`](https://github.com/PostHog/posthog-js/commit/e027825e387902b79e84703ca32ca4afbc0446b8) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture the refusal text of OpenAI chat completions, streamed or not, in `$ai_output_choices` instead of an empty output.
+  (2026-10-22)
+
 ## 8.16.0
 
 ### Minor Changes

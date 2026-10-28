@@ -249,12 +249,110 @@ function exactMatchString(value: unknown): string {
   return serializeJsonValue(value)
 }
 
-function isValidRegex(regex: string): boolean {
+// Both engines treat escaped spaces and ASCII punctuation as literals, except Rust's \< and \> word boundaries.
+const LITERAL_ESCAPED_PUNCTUATION = /[\x20-\x2f:;=?@\x5b-\x60\x7b-\x7e]/
+
+function getPortableRegexClasses(pattern: string): string[] | null {
+  const classes: string[] = []
+  let classStart = -1
+  let previousToken = ''
+  for (let index = 0; index < pattern.length; index++) {
+    const character = pattern[index]
+    if (character.charCodeAt(0) > 0x7f) return null
+    if (character === '\\') {
+      const escaped = pattern[++index]
+      if (escaped === undefined) break
+      if (escaped === 'x') {
+        if (!/^[\da-f]{2}$/i.test(pattern.slice(index + 1, index + 3))) return null
+        index += 2
+      } else if (!'dDsSwWbBfnrtv'.includes(escaped) && !LITERAL_ESCAPED_PUNCTUATION.test(escaped)) {
+        return null
+      }
+      // Word boundaries can exhaust the service's backtracking limit even for short ASCII values.
+      if (classStart === -1 && 'bB'.includes(escaped)) return null
+      previousToken = 'literal'
+      continue
+    }
+
+    if (character === '[') {
+      if (classStart !== -1) return null
+      classStart = index
+    } else if (character === ']' && classStart !== -1) {
+      const contentStart = classStart + (pattern[classStart + 1] === '^' ? 2 : 1)
+      if (index === contentStart) return null
+      classes.push(pattern.slice(classStart, index + 1))
+      classStart = -1
+      previousToken = 'literal'
+      continue
+    } else if (classStart !== -1) {
+      if (['&&', '--', '~~'].includes(pattern.slice(index, index + 2))) return null
+      continue
+    } else if (character === '(' && pattern[index + 1] === '?') {
+      if (pattern[index + 2] !== ':') return null
+      index += 2
+    } else if (character === '{') {
+      // Rust reads `{n}` with nothing before it as literal text. JavaScript rejects it.
+      // The flags service rejects repetition counts above 4,294,967,295. JavaScript accepts them.
+      const repetition = /^\{(\d+)(?:,(\d*))?\}/.exec(pattern.slice(index))
+      if (
+        !repetition ||
+        ['', '|', '('].includes(previousToken) ||
+        repetition.slice(1).some((count) => Number(count) > 0xffffffff)
+      ) {
+        return null
+      }
+    } else if ('*+?}'.includes(character) && (pattern[index + 1] === '+' || pattern[index + 1] === '{')) {
+      return null
+    }
+    // JavaScript rejects a repeated anchor such as `^?`. Rust accepts it.
+    // Rust rejects a repeated empty group such as `(?:)*`. JavaScript accepts it.
+    if ('*+?{'.includes(character) && ['^', '$', 'empty group'].includes(previousToken)) return null
+    previousToken = character === ')' && ['(', 'empty group'].includes(previousToken) ? 'empty group' : character
+  }
+  return classes
+}
+
+// Adapters must preserve regex uncertainty across variant rules without changing missing-context fallback.
+function regexRequiresServerEvaluation(message: string): InconclusiveMatchError {
+  const error = new InconclusiveMatchError(message)
+  Object.defineProperty(error, Symbol.for('posthog.requiresServerRegexEvaluation'), { value: true })
+  return error
+}
+
+function matchFeatureFlagRegex(pattern: string, value: string): boolean | null {
+  if (pattern === '') return true
+
+  // Rust uses Unicode scalar semantics and additional syntax. Keep local matching to the shared ASCII subset.
+  const characterClasses = getPortableRegexClasses(pattern)
+  if (characterClasses === null) {
+    throw regexRequiresServerEvaluation('Regex syntax requires server evaluation')
+  }
+
+  let regex: RegExp
   try {
-    new RegExp(regex)
-    return true
+    regex = new RegExp(pattern)
+  } catch (error) {
+    if (error instanceof SyntaxError) return null
+    throw regexRequiresServerEvaluation('Regex compilation requires server evaluation')
+  }
+  for (const characterClass of characterClasses) {
+    try {
+      // Strict parsing rejects legacy JS ranges such as [\s-9], which the flags service does not accept.
+      new RegExp(characterClass, 'u')
+    } catch {
+      throw regexRequiresServerEvaluation('Regex character class syntax requires server evaluation')
+    }
+  }
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index]
+    if (character.charCodeAt(0) > 0x7f || character === '\r') {
+      throw regexRequiresServerEvaluation('Regex matching for Unicode or carriage returns requires server evaluation')
+    }
+  }
+  try {
+    return regex.test(value)
   } catch {
-    return false
+    throw regexRequiresServerEvaluation('Regex execution requires server evaluation')
   }
 }
 
@@ -562,9 +660,11 @@ function matchPropertyValue(
     case 'not_ends_with':
       return !asciiLowercase(overrideValue).endsWith(asciiLowercase(value))
     case 'regex':
-      return isValidRegex(String(value)) && String(overrideValue).match(String(value)) !== null
-    case 'not_regex':
-      return isValidRegex(String(value)) && String(overrideValue).match(String(value)) === null
+    case 'not_regex': {
+      const matched = matchFeatureFlagRegex(String(value), String(overrideValue))
+      if (matched === null) return false
+      return operator === 'regex' ? matched : !matched
+    }
     case 'gt':
     case 'gte':
     case 'lt':

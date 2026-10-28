@@ -11,6 +11,10 @@ This is a pnpm monorepo containing multiple PostHog JavaScript SDKs and developm
 - TypeScript Catalogs: `catalog:native` pins `7.0.2`; the default `catalog:` retains `5.8.2` for legacy tooling (see `pnpm-workspace.yaml`)
 - Main Branch: `main`
 
+## Commit signing
+
+This repo requires all commits to be signed. To configure commit signing, see the [PostHog handbook](https://posthog.com/handbook/engineering/security#commit-signing). Set `commit.gpgsign` to `true` in your git config so that every commit is signed, not only the ones you sign by hand.
+
 ## Tooling
 
 - Install [corepack](https://github.com/nodejs/corepack), if it is not already available
@@ -41,7 +45,7 @@ The repository contains the following top-level packages in `./packages/`:
 | `core/`                      | `@posthog/core`                      | Shared core functionality used by multiple SDKs          |
 | `browser/`                   | `posthog-js`                         | Main browser SDK for capturing events and usage          |
 | `browser-common/`            | `@posthog/browser-common`            | Internal shared browser utilities and extensions         |
-| `browser-next/`              | `@posthog/browser`                   | Private experimental browser SDK                         |
+| `browser-next/`              | `@posthog/browser`                   | Experimental browser SDK                                 |
 | `web/`                       | `posthog-js-lite`                    | Lightweight browser SDK                                  |
 | `ai/`                        | `@posthog/ai`                        | AI integrations for Node.js                              |
 | `convex/`                    | `@posthog/convex`                    | Convex.dev component                                     |

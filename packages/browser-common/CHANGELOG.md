@@ -1,5 +1,57 @@
 # @posthog/browser-common
 
+## 0.10.1
+
+### Patch Changes
+
+- [#5222](https://github.com/PostHog/posthog-js/pull/5222) [`6d12d24`](https://github.com/PostHog/posthog-js/commit/6d12d24ed24b2846415dbd95fc5d7ccf57779a99) Thanks [@posthog](https://github.com/apps/posthog)! - Fall back to `Math.random` when `crypto.getRandomValues` throws, so UUID generation no longer breaks capture.
+  (2026-10-28)
+
+## 0.10.0
+
+### Minor Changes
+
+- [#5269](https://github.com/PostHog/posthog-js/pull/5269) [`950d034`](https://github.com/PostHog/posthog-js/commit/950d03423605d1567c90a3f27f50d4603a89ae45) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `$input_value` to autocapture `change` events for fields marked `data-ph-capture-value`, or matched by the new `autocapture.capture_value_css_selector_allowlist` option (CSS selectors or an `(element) => boolean` predicate).
+  (2026-10-28)
+
+### Patch Changes
+
+- Updated dependencies [[`950d034`](https://github.com/PostHog/posthog-js/commit/950d03423605d1567c90a3f27f50d4603a89ae45)]:
+  - @posthog/types@1.418.0
+
+## 0.9.12
+
+### Patch Changes
+
+- [#5279](https://github.com/PostHog/posthog-js/pull/5279) [`d47c184`](https://github.com/PostHog/posthog-js/commit/d47c184b03040d6034bb15e7f7a0dcbd9b9a909f) Thanks [@github-actions](https://github.com/apps/github-actions)! - Fix optional rating surveys with response-based branching when skipped.
+  (2026-10-26)
+
+## 0.9.11
+
+### Patch Changes
+
+- [#5346](https://github.com/PostHog/posthog-js/pull/5346) [`f91145d`](https://github.com/PostHog/posthog-js/commit/f91145de49347be34de2a0dcd0f5741f1f6ec428) Thanks [@sebxt](https://github.com/sebxt)! - Reject a prefilled survey rating of 0 on rating scales that start at 1.
+  (2026-10-23)
+
+- [#5399](https://github.com/PostHog/posthog-js/pull/5399) [`02616e1`](https://github.com/PostHog/posthog-js/commit/02616e1ffb93c71dde2804f691e2c10d5016755b) Thanks [@ARXHHHH](https://github.com/ARXHHHH)! - Ship the IE11 `Math.trunc` and `Number.isInteger` polyfills only in `array.full.es5.js`, so the modern bundles no longer trigger Lighthouse's "Legacy JavaScript" audit.
+  (2026-10-23)
+- Updated dependencies [[`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d)]:
+  - @posthog/core@1.60.1
+
+## 0.9.10
+
+### Patch Changes
+
+- [#5292](https://github.com/PostHog/posthog-js/pull/5292) [`d73e6c7`](https://github.com/PostHog/posthog-js/commit/d73e6c7169319105780bef7b07a93247f6126968) Thanks [@sarmah-rup](https://github.com/sarmah-rup)! - Read query params with form-encoding rules: an encoded plus (`%2B`) is kept as `+` instead of becoming a space, and values that contain `=` are no longer cut off. This fixes UTM, click ID and search keyword properties such as `utm_term=c%2B%2B`.
+  (2026-10-23)
+
+## 0.9.9
+
+### Patch Changes
+
+- [#4994](https://github.com/PostHog/posthog-js/pull/4994) [`bcd33ce`](https://github.com/PostHog/posthog-js/commit/bcd33ce0f8c9658e0e37c336ced7968960228fbd) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share autocapture across browser SDKs while preserving existing event capture behavior.
+  (2026-10-22)
+
 ## 0.9.8
 
 ### Patch Changes

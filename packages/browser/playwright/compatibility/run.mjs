@@ -2,8 +2,9 @@
 import { createRequire } from 'node:module'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { normalize, differences, decodeReplay } from './normalize.mjs'
+import { normalize, decodeReplay } from './normalize.mjs'
 import { parseOptions, selection } from './options.mjs'
+import { runMatrix } from './matrix.mjs'
 import { assertLoaderProof } from './loader-proof.mjs'
 import { interactionScenarios, exerciseInteractions } from './interaction-cases.mjs'
 import { replayLifecycleScenarios, exerciseReplayLifecycle } from './replay-cases.mjs'
@@ -164,7 +165,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 { origin: server.origin, config: legacyRecordingConfig }
             )
         await page.goto(server.origin, { waitUntil: 'domcontentloaded' })
-        if (mode !== 'snippet') await waitFor(() => window.__compat?.installed)
+        if (['npm', 'slim'].includes(mode)) await waitFor(() => window.__compat?.installed)
         await page.evaluate(
             ({ scenario, mode, comparison }) => {
                 window.__compat.mode = mode
@@ -173,6 +174,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             },
             { scenario, mode, comparison }
         )
+        await waitFor(() => window.__compat?.initialized)
         await release('core')
         await waitFor(() => window.__compat?.loaded)
         assert(
@@ -460,7 +462,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             await player.close()
         }
         if (interactionCase)
-            ui = await exerciseInteractions({ scenario, page, received, expect, origin: server.origin })
+            ui = await exerciseInteractions({ scenario, page, received, expect, origin: server.origin, comparison })
         await waitFor(() => window.__compat.promises.every((promise) => promise.state !== 'pending'))
         if (replayLifecycleCase)
             ({ replay, api } = await exerciseReplayLifecycle({
@@ -493,6 +495,24 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             )
             .toBe(1)
         const network = await received()
+        if (mode === 'loader') {
+            const bootstrap = network.requests.filter((request) => request.path === '/static/loader.js')
+            const coreRequests = network.requests.filter((request) => request.path.endsWith('/array.js'))
+            assert(
+                bootstrap.length === 1 &&
+                    bootstrap[0].status === 200 &&
+                    bootstrap[0].query.project_token?.length === 1 &&
+                    bootstrap[0].query.project_token[0] === 'phc_COMPAT',
+                'Missing or duplicate native loader request'
+            )
+            assert(
+                coreRequests.length === 1 &&
+                    coreRequests[0].status === 200 &&
+                    coreRequests[0].path === `/static/${core.version}/array.js` &&
+                    Object.keys(coreRequests[0].query).length === 0,
+                'Loader did not fetch exactly its matching immutable core without query parameters'
+            )
+        }
         if (scenario === 'replay') assertReplayNetworkCapture(network, server.inspect(), server.origin)
         if (scenario === 'web-vitals') assertWebVitalsDelivery(network)
         if (['surveys', 'surveys-auto'].includes(scenario)) {
@@ -593,57 +613,21 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
     }
 }
 
-const runs = [],
-    results = [],
-    cellFailures = [],
-    browserVersions = {}
-for (const engine of selectedEngines) {
-    let browser
-    try {
-        browser = await playwright[engine].launch({ headless: true })
-        browserVersions[engine] = browser.version()
-    } catch (error) {
-        cellFailures.push({ engine, error: error.message })
-        continue
-    }
-    try {
-        for (const mode of selectedModes)
-            for (const comparison of selectedComparisons)
-                for (const scenario of selectedScenarios) {
-                    const cell = {
-                        browser: engine,
-                        entrypoint: mode,
-                        coreFamily: comparison,
-                        scenario,
-                    }
-                    const result = { ...cell, status: 'passed', runs: [], differences: [] }
-                    let expected
-                    for (let repeat = 0; repeat < repeats; repeat++) {
-                        const run = {
-                            ...cell,
-                            repeat,
-                            ...(await runCell(browser, { engine, mode, comparison, scenario, repeat })),
-                        }
-                        runs.push(run)
-                        result.runs.push({ ...run, observations: undefined })
-                        if (run.status !== 'passed') result.status = 'failed'
-                        else if (!expected) expected = run.observations
-                        else {
-                            const diff = differences(expected, run.observations)
-                            if (diff.length) {
-                                result.status = 'failed'
-                                result.differences.push({ label: run.label, count: diff.length, differences: diff })
-                            }
-                        }
-                    }
-                    results.push(result)
-                    write(join(output, 'progress.json'), results)
-                    console.log(`${result.status.toUpperCase()} ${engine}/${mode}/${comparison}/${scenario}`)
-                }
-    } finally {
-        await browser.close()
-    }
-}
+const { runs, results, cellFailures, browserVersions } = await runMatrix({
+    engines: selectedEngines,
+    modes: selectedModes,
+    comparisons: selectedComparisons,
+    scenarios: selectedScenarios,
+    repeats,
+    launch: (engine) => playwright[engine].launch({ headless: true }),
+    runCell,
+    onCell(result, progress) {
+        write(join(output, 'progress.json'), progress)
+        console.log(
+            `${result.status.toUpperCase()} ${result.browser}/${result.entrypoint}/${result.coreFamily}/${result.scenario}`
+        )
+    },
+})
 let goldenResult, input, error
 try {
     const after = verifyInputs(manifest)

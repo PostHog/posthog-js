@@ -1,5 +1,26 @@
 # @posthog/core
 
+## 1.61.1
+
+### Patch Changes
+
+- [#5431](https://github.com/PostHog/posthog-js/pull/5431) [`96d7ff2`](https://github.com/PostHog/posthog-js/commit/96d7ff2e394126e2bd03a2422f60b5892a85d87f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Deprecate `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` in favor of `getAllFeatureFlags()`, `onFeatureFlag()` in favor of `onFeatureFlags()`, the `cb` option of `reloadFeatureFlags()` in favor of `reloadFeatureFlagsAsync()`, and `overrideFeatureFlag()` in favor of `updateFlags()`. In React Native, also deprecate the `useFeatureFlagWithPayload()` hook in favor of `useFeatureFlagResult()`. They continue to work.
+  (2026-10-27)
+
+## 1.61.0
+
+### Minor Changes
+
+- [#5436](https://github.com/PostHog/posthog-js/pull/5436) [`43ad061`](https://github.com/PostHog/posthog-js/commit/43ad061185c7f8b0a36ed87bb6a28214d4224e9d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add the `projectToken` prop to `PostHogProvider` and the `projectToken` property to the client, and deprecate the `apiKey` prop and property in favor of them. `apiKey` keeps working, and `projectToken` wins when both are set.
+  (2026-10-26)
+
+## 1.60.1
+
+### Patch Changes
+
+- [#5354](https://github.com/PostHog/posthog-js/pull/5354) [`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back instead of returning inconsistent local regex flag results for Unicode and advanced patterns.
+  (2026-10-23)
+
 ## 1.60.0
 
 ### Minor Changes

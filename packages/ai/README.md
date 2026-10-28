@@ -9,6 +9,18 @@ SDK usage examples and code snippets live in the official documentation so they 
 - [AI observability installation docs](https://posthog.com/docs/ai-observability/installation)
 - [AI observability docs](https://posthog.com/docs/ai-observability)
 
+## Privacy mode
+
+Create the client with `new PostHog(key, { privacyMode: true })` to turn on privacy mode for every integration.
+Per-call `privacyMode` settings can turn it on for one call, but cannot turn it off.
+
+In privacy mode, events carry no prompts, outputs, or tool inputs and results.
+`$ai_error` holds only the error class, HTTP status, provider error code, parameter name, request ID, and cause classes.
+Exception autocapture skips these errors, and Vercel AI SDK events omit provider metadata.
+For OpenTelemetry, pass `privacyMode: true` to `PostHogTraceExporter`, or to `PostHogSpanProcessor` when its `client` is not in privacy mode.
+
+Remote MCP tool `headers` and `authorization` values are always replaced with `[REDACTED]`.
+
 ## Gemini Interactions
 
 `PostHogGoogleGenAI.interactions.create` traces foreground model calls with `@google/genai` 2.18 or later in the 2.x series.
@@ -135,6 +147,14 @@ UUID before iteration. `snapshot.iterItems({ pageSize, signal })` fetches one pa
 repeated iteration starts again at the same revision. Keep the client open until reads finish.
 Use the snapshot's `revisionId` for the experiment, even when individual items were introduced
 in earlier revisions. Source output and trace provenance never become a new execution's output.
+
+Set `modelVersion` on `new EvaluationItem({ modelVersion, output })` or
+`EvaluationItem.fromDatasetItem(row, { modelVersion, output })` to identify the model used for
+that execution. Each item can override the experiment's `modelVersion`; omitted or null values
+inherit the experiment default on the server. Dataset metadata never supplies this model.
+Model identifiers must be nonempty strings of at most 255 characters and are preserved without
+trimming. Explicit models survive serialization, retries, and recovery. Changing a model requires
+a new item UUID because model attribution is part of the immutable execution declaration.
 
 `scorers` provides create/get/list/update/createVersion/getVersion/listVersions. Configurations
 are typed by `kind`: `boolean`, `numeric`, or `categorical`. Store `currentVersionId` to pin a

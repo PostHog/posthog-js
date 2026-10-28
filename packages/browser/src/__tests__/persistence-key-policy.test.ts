@@ -819,7 +819,7 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
         'set_event_timer',
         'remove_event_timer',
         'set_property',
-        'refreshKey',
+        '_refreshKeys',
     ])
 
     const visit = (node: ts.Node) => {

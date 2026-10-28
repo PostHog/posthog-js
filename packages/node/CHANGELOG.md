@@ -1,5 +1,31 @@
 # posthog-node
 
+## 5.58.0
+
+### Minor Changes
+
+- [#5314](https://github.com/PostHog/posthog-js/pull/5314) [`096131d`](https://github.com/PostHog/posthog-js/commit/096131dc7cf6115217996ff8fccace5598ed1e31) Thanks [@pauldambra](https://github.com/pauldambra)! - Add an optional OpenTelemetry context processor, and an optional `signal` that ends a context's lifetime.
+  (2026-10-28)
+
+## 5.57.2
+
+### Patch Changes
+
+- [#5422](https://github.com/PostHog/posthog-js/pull/5422) [`b5036c4`](https://github.com/PostHog/posthog-js/commit/b5036c46ccef4f653a9cb13b32543e3fa2a45c6d) Thanks [@posthog](https://github.com/apps/posthog)! - fix: esbuild no longer fails to bundle posthog-node when the optional `@opentelemetry/api` peer is not installed
+  (2026-10-25)
+
+## 5.57.1
+
+### Patch Changes
+
+- [#5385](https://github.com/PostHog/posthog-js/pull/5385) [`faacff0`](https://github.com/PostHog/posthog-js/commit/faacff022eb958e3c2180c6d9867f5568fdf4237) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Apply the client `privacyMode` option to AI integrations, keep prompts out of errors, provider metadata and OTel spans in privacy mode, and redact MCP tool credentials
+  (2026-10-23)
+
+- [#5354](https://github.com/PostHog/posthog-js/pull/5354) [`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back instead of returning inconsistent local regex flag results for Unicode and advanced patterns.
+  (2026-10-23)
+- Updated dependencies [[`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d)]:
+  - @posthog/core@1.60.1
+
 ## 5.57.0
 
 ### Minor Changes

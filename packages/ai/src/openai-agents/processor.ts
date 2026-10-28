@@ -18,7 +18,15 @@ import type {
   SpeechGroupSpanData,
   MCPListToolsSpanData,
 } from '@openai/agents'
-import { MAX_OUTPUT_SIZE, toContentString, truncate, utf8ByteLength, withPrivacyMode } from '../utils'
+import {
+  MAX_OUTPUT_SIZE,
+  isPrivacyModeEnabled,
+  toContentString,
+  truncate,
+  utf8ByteLength,
+  withPrivacyMode,
+} from '../utils'
+import { summarizeErrorForPrivacy } from '../serializeError'
 import { version } from '../../package.json'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 import { captureAiEvent, isFullAiCaptureEnabled } from '../captureAiEvent'
@@ -290,7 +298,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
 
     return {
       $ai_is_error: true,
-      $ai_error: errorMessage,
+      $ai_error: isPrivacyModeEnabled(this._client, this._privacyMode) ? summarizeErrorForPrivacy(error) : errorMessage,
       $ai_error_type: errorType,
     }
   }

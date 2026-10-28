@@ -552,12 +552,8 @@ describe('shared console logs', () => {
             // initial log to warm up the jit
             host.console.log(largeBodyObject)
 
-            const wrappedStart = performance.now()
             const iterations = 50
-            for (let i = 0; i < iterations; i++) {
-                host.console.log(largeBodyObject)
-            }
-            const wrappedTime = (performance.now() - wrappedStart) / iterations
+            const wrappedTime = measureTrimmedMean(iterations, () => host.console.log(largeBodyObject))
 
             expect(wrappedTime).toBeLessThanOrEqual(50)
             expect(mockEmit).toHaveBeenCalledTimes(iterations + 1)
@@ -578,13 +574,8 @@ describe('shared console logs', () => {
             // initial log to warm up the jit
             host.console.log(lotsOfKeysObject)
 
-            const wrappedStart = performance.now()
-            const iterations = 25
-            for (let i = 0; i < iterations; i++) {
-                host.console.log(lotsOfKeysObject)
-            }
-
-            const wrappedTime = (performance.now() - wrappedStart) / iterations
+            const iterations = 40
+            const wrappedTime = measureTrimmedMean(iterations, () => host.console.log(lotsOfKeysObject))
 
             expect(wrappedTime).toBeLessThanOrEqual(100)
             expect(mockEmit).toHaveBeenCalledTimes(iterations + 1)
@@ -596,13 +587,8 @@ describe('shared console logs', () => {
 
             initialize()
 
-            // Test wrapped console.log performance
-            const wrappedStart = performance.now()
             const iterations = 1000
-            for (let i = 0; i < iterations; i++) {
-                host.console.log(smallObject)
-            }
-            const wrappedTime = (performance.now() - wrappedStart) / iterations
+            const wrappedTime = measureTrimmedMean(iterations, () => host.console.log(smallObject))
 
             expect(wrappedTime).toBeLessThanOrEqual(0.1)
             expect(mockEmit).toHaveBeenCalledTimes(iterations)
@@ -614,13 +600,8 @@ describe('shared console logs', () => {
 
             initialize()
 
-            // Test wrapped console.log performance
-            const wrappedStart = performance.now()
             const iterations = 1000
-            for (let i = 0; i < iterations; i++) {
-                host.console.log(mediumObject)
-            }
-            const wrappedTime = (performance.now() - wrappedStart) / iterations
+            const wrappedTime = measureTrimmedMean(iterations, () => host.console.log(mediumObject))
 
             expect(wrappedTime).toBeLessThanOrEqual(0.1)
             expect(mockEmit).toHaveBeenCalledTimes(iterations)
@@ -643,3 +624,17 @@ describe('shared console logs', () => {
         })
     })
 })
+
+// Time each call separately and return the mean (ms) of the fastest 90% of calls, so a few
+// GC pauses or CPU-contention spikes on a shared CI runner don't fail the test.
+function measureTrimmedMean(iterations: number, fn: () => void): number {
+    const samples: number[] = []
+    for (let i = 0; i < iterations; i++) {
+        const start = performance.now()
+        fn()
+        samples.push(performance.now() - start)
+    }
+    samples.sort((a, b) => a - b)
+    const kept = samples.slice(0, Math.ceil(samples.length * 0.9))
+    return kept.reduce((sum, ms) => sum + ms, 0) / kept.length
+}

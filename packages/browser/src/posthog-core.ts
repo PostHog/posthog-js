@@ -6,6 +6,7 @@ import {
     COOKIELESS_SENTINEL_VALUE,
     COOKIELESS_ON_REJECT,
     DEVICE_ID,
+    DISTINCT_ID,
     DEVICE_MODEL,
     PERSON_PROFILES_IDENTIFIED_ONLY,
     USER_STATE_ANONYMOUS,
@@ -83,7 +84,7 @@ import {
     ToolbarParams,
     PostHogInterface,
 } from './types'
-import type { TreeShakeable } from '@posthog/types'
+import { CONFIG_DEFAULTS_DATES, type TreeShakeable } from '@posthog/types'
 import {
     _copyAndTruncateStrings,
     addEventListener,
@@ -253,6 +254,9 @@ const FLAG_CALLED_TRANSPORT_PROPERTY_KEYS = ['token', 'distinct_id', COOKIELESS_
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
+const LATEST_DEFAULTS_DATE = [...CONFIG_DEFAULTS_DATES].sort()[CONFIG_DEFAULTS_DATES.length - 1]
+
+// 'latest' sorts after ISO dates, so the comparisons below include all current and future default changes.
 const getSessionRecordingDefaults = (defaults?: ConfigDefaults): PostHogConfig['session_recording'] => {
     const sessionRecording: PostHogConfig['session_recording'] = {}
     if (!defaults || defaults === 'unset') {
@@ -327,7 +331,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
-    __preview_replay_sync_fetch: false, // Opt-in: preserve application stacks for recorded fetches
+    __preview_replay_sync_fetch: true, // Preserve application stacks for recorded fetches; old cores without this option retain legacy delegation
     __preview_external_dependency_versioned_paths: false,
     __preview_cookie_wins_on_conflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
@@ -1095,9 +1099,21 @@ export class PostHog implements PostHogInterface {
         // the same instance resumes on `pageshow`. Without this the page would stay marked as
         // unloading for the rest of its life, and every later unbatched capture would take the
         // beacon path on a fully active page.
-        addEventListener(window, 'pageshow', () => {
+        addEventListener(window, 'pageshow', (event) => {
             this._isPageUnloading = false
             if (!this._isShutdown) {
+                if ((event as PageTransitionEvent).persisted && this.persistence) {
+                    const previousDistinctId = this.persistence.get_property(DISTINCT_ID)
+                    const previousUserState = this.persistence.get_property(USER_STATE)
+                    this.persistence.load()
+                    if (
+                        !this._processCookieIdentityChange() &&
+                        (previousDistinctId !== this.persistence.get_property(DISTINCT_ID) ||
+                            previousUserState !== this.persistence.get_property(USER_STATE))
+                    ) {
+                        this._processIdentityChange()
+                    }
+                }
                 this._retryQueue?.resume()
             }
         })
@@ -1654,7 +1670,7 @@ export class PostHog implements PostHogInterface {
         }
 
         const channel = this._facebookClickIdChannel
-        this.persistence.refreshKey(channel.persistenceKey)
+        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
 
         // An unset clears the store for this event only: the cookie stays, so a later event reads it again.
@@ -1703,7 +1719,7 @@ export class PostHog implements PostHogInterface {
         }
 
         const channel = this._facebookBrowserIdChannel
-        this.persistence.refreshKey(channel.persistenceKey)
+        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
 
         // As for $fbc, an unset applies to this event only.
@@ -1732,7 +1748,7 @@ export class PostHog implements PostHogInterface {
         if (!this.persistence) {
             return
         }
-        this.persistence.refreshKey(channel.persistenceKey)
+        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
         if (stored?.value === value && !stored.delivered) {
             channel.register(value, true)
@@ -1777,6 +1793,9 @@ export class PostHog implements PostHogInterface {
         }
 
         if (!this.is_capturing()) {
+            logger.info(
+                `Event "${event_name}" was not captured because capturing is disabled (opted out or consent pending).`
+            )
             return
         }
 
@@ -1797,6 +1816,9 @@ export class PostHog implements PostHogInterface {
         // We drop bot events unless the preview flag to send bot pageviews is enabled
         // or the user has explicitly opted out of useragent filtering
         if (shouldDropBotEvent) {
+            logger.info(
+                `Event "${event_name}" was not captured because the user agent looks like a bot. Set \`opt_out_useragent_filter: true\` to capture it.`
+            )
             return
         }
 
@@ -2118,8 +2140,13 @@ export class PostHog implements PostHogInterface {
             return false
         }
 
+        this._processIdentityChange(reloadFeatureFlags)
+        return true
+    }
+
+    private _processIdentityChange(reloadFeatureFlags: boolean = true): void {
         this._cachedPersonProperties = null
-        if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
+        if (this.persistence?.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
             // Persistent event properties, including groups, are cleared while
             // reconciling the reset snapshot. Clear the separate session store
             // here before assembling an event under the anonymous identity.
@@ -2131,7 +2158,6 @@ export class PostHog implements PostHogInterface {
         if (reloadFeatureFlags) {
             this.reloadFeatureFlags()
         }
-        return true
     }
 
     /**
@@ -2171,7 +2197,7 @@ export class PostHog implements PostHogInterface {
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
         let properties = { ...eventProperties }
         properties['token'] = this.config.token
-        properties['$config_defaults'] = this.config.defaults
+        properties['$config_defaults'] = this.config.defaults === 'latest' ? LATEST_DEFAULTS_DATE : this.config.defaults
 
         if (this._inCookielessMode()) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
@@ -3953,6 +3979,14 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        // conversations.reset() drops the remote config the extension was loaded with, and no new
+        // remote-config request follows a reset, so hand it the cached result again. Otherwise the
+        // widget stays unavailable until the next page load. When consent is still missing (e.g. the
+        // cookieless opt-in transition), loadIfEnabled() waits and opt_in_capturing() loads it.
+        if (this._lastRemoteConfig) {
+            this.conversations?.onRemoteConfig(this._lastRemoteConfig)
+        }
+
         // Reload feature flags for the reset user, just like identify()
         // does when the distinct_id changes.
         this.reloadFeatureFlags()
@@ -4912,6 +4946,9 @@ export class PostHog implements PostHogInterface {
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == COOKIELESS_ON_REJECT) {
             this.surveys?.loadIfEnabled()
+            // Conversations doesn't load while opted out in cookieless mode; its remote config was
+            // replayed by _reset() above (or arrived while opted out), so load it now.
+            this.conversations?.loadIfEnabled()
         }
 
         // Don't capture if captureEventName is null or false
@@ -5011,6 +5048,9 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Returns the current consent status for event tracking and data persistence.
+     *
+     * In cookieless `'always'` mode this returns `true`, because the SDK does not store data for the user. Events are
+     * still captured in this mode. To check if the SDK captures events, use `is_capturing()`.
      *
      * @example
      * ```js

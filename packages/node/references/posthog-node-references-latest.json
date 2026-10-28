@@ -2098,6 +2098,11 @@
           "description": "If true, replaces the current context entirely. If false, merges with the existing context (new values override existing ones).   false",
           "type": "boolean",
           "name": "fresh"
+        },
+        {
+          "description": "Ends this context and its inherited scopes when aborted, without cancelling the callback. An already aborted signal starts no active context. A fresh context has an independent lifetime.",
+          "type": "AbortSignal",
+          "name": "signal"
         }
       ],
       "path": "src/extensions/context/types.ts"
@@ -3727,6 +3732,7 @@
           "releaseTag": "deprecated"
         },
         {
+          "description": "Redact prompts, outputs and error details from every event that the PostHog AI\nintegrations (`@posthog/ai`) capture with this client. Per-call privacy settings\ncan only add redaction. Defaults to false.",
           "type": "boolean",
           "name": "privacyMode"
         },
