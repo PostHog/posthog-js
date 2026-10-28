@@ -194,8 +194,10 @@ dispatchers also enable model capture and conversation correlation by default.
 The reasoning behind these defaults is in [ADR-0013](./docs/adr/0013-analytics-capture-is-on-by-default.md).
 
 Set `sendInitializeEvent: false` to stop sending `$mcp_initialize`. Many clients reconnect before
-every few tool calls, so this event can outnumber `$mcp_tool_call`. Nothing else changes: tool
-calls keep their sessions and client identity.
+every few tool calls, so this event can outnumber `$mcp_tool_call`. Nothing else changes in what
+the SDK sends: tool calls keep their sessions and client identity. In PostHog, MCP onboarding and
+the users and sessions tiles of the default MCP dashboard read `$mcp_initialize`. They show no data
+while the option is off.
 
 ```ts
 instrument(server, posthog, { sendInitializeEvent: false })
