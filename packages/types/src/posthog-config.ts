@@ -1474,13 +1474,12 @@ export interface PostHogConfig {
     disable_capture_url_hashes: boolean
 
     /**
-     * Sanitize SDK-recorded URL metadata before it is captured or persisted, including current URLs,
-     * referrers, attribution derived from those URLs, autocapture links, and replay page/network metadata.
-     * Explicit component settings override legacy URL settings; omitted settings preserve their behavior.
+     * Sanitize current event URLs, referrers (including initial/session referrers), previous-pageview
+     * pathnames, autocapture links, Web Vitals and log page URLs, and Next.js pageview URLs.
+     * Referrers are sanitized before persistence. Configure in init() to cover the first writes.
+     * Path and query default to included; omitted hash inherits disable_capture_url_hashes.
      * The callback runs before component filtering and existing personal-data query masking.
-     * A failed callback omits the URL and its derived properties without throwing into your application.
-     * Does not change pageview triggers, targeting, user-provided event properties, replay asset references,
-     * or previously persisted attribution. Configure before initialization to cover the first writes.
+     * A failed callback omits the URL and its derived host/pathname without throwing into your application.
      *
      * @default undefined
      */

@@ -1701,8 +1701,7 @@ export class PostHogPersistence {
         const campaignParams = getCampaignParams(
             this._config.custom_campaign_params,
             this._config.mask_personal_data_properties,
-            this._config.custom_personal_data_properties,
-            this._config.url_sanitization
+            this._config.custom_personal_data_properties
         )
         const hasCampaignParams = !isEmptyObject(stripEmptyProperties(campaignParams))
         if (hasCampaignParams) {
@@ -1712,7 +1711,7 @@ export class PostHogPersistence {
         return hasCampaignParams ? campaignParams : undefined
     }
     update_search_keyword(): void {
-        this.register(getSearchInfo(this._config))
+        this.register(getSearchInfo())
     }
 
     update_referrer_info(): void {
@@ -1761,8 +1760,7 @@ export class PostHogPersistence {
         if (initialPersonInfo) {
             const initialPersonProps = getInitialPersonPropsFromInfo(
                 initialPersonInfo,
-                this._config.disable_capture_url_hashes,
-                this._config.url_sanitization
+                this._config.disable_capture_url_hashes
             )
             extend(p, initialPersonProps)
         }

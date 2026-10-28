@@ -11,7 +11,9 @@ declare global {
 const source = '/playwright/fixtures/url-sanitization.html?token=synthetic-referrer-token#synthetic-fragment'
 
 for (const persistence of ['localStorage', 'localStorage+cookie', 'cookie', 'sessionStorage'] as const) {
-    test(`sanitizes before persistence and preserves reload continuity with ${persistence}`, async ({ page }) => {
+    test(`sanitizes referrers before persistence and preserves reload continuity with ${persistence}`, async ({
+        page,
+    }) => {
         await page.goto(source)
         await page.getByRole('link', { name: 'Continue' }).click()
         await page.waitForURL('**/url-sanitization.html?token=synthetic-current-token**')
@@ -54,18 +56,16 @@ for (const persistence of ['localStorage', 'localStorage+cookie', 'cookie', 'ses
         const before = await init()
         expect(before.referrer).toContain('/playwright/fixtures/url-sanitization.html?token=synthetic-referrer-token')
         expect(before.referrer).not.toContain('synthetic-fragment')
-        expect(before.initial).toEqual({ u: 'http://localhost:2345/', r: 'http://localhost:2345/' })
+        expect(before.initial.r).toBe('http://localhost:2345/')
         expect(before.sessionProps).toEqual(before.initial)
-        expect(before.stored).not.toMatch(
-            /synthetic-referrer-token|synthetic-current-token|private-source|private-preview|synthetic-hash/
-        )
+        expect(before.stored).not.toContain('synthetic-referrer-token')
         await page.reload()
         await page.waitForFunction(() => !!window.urlProbe)
         const after = await init()
         expect(after.id).toBe(before.id)
         expect(after.session).toBe(before.session)
-        expect(after.stored).not.toMatch(
-            /synthetic-referrer-token|synthetic-current-token|private-source|private-preview|synthetic-hash/
-        )
+        expect(after.initial.r).toBe('http://localhost:2345/')
+        expect(after.sessionProps.r).toBe('http://localhost:2345/')
+        expect(after.stored).not.toContain('synthetic-referrer-token')
     })
 }

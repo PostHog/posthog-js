@@ -43,28 +43,23 @@ describe('url_sanitization', () => {
         return instance
     }
 
-    it('sanitizes initial and session persistence even when before_send drops every event', async () => {
+    it('sanitizes current URLs and persisted referrers even when before_send drops every event', async () => {
         const posthog = await create({ url_sanitization: { path: false, query: false, hash: false } })
         posthog.capture('probe')
-        const serialized = JSON.stringify({
-            persistent: posthog.persistence.props,
-            session: posthog.sessionPersistence.props,
-        })
-        expect(serialized).not.toMatch(/current-secret|referrer-secret|search-secret|private-preview|private-referrer/)
-        expect(posthog.persistence.props.$initial_person_info).toEqual({
-            u: 'http://localhost/',
-            r: 'https://www.google.com/',
-        })
-        expect(posthog.persistence.props.$client_session_props.props).toEqual({
-            u: 'http://localhost/',
-            r: 'https://www.google.com/',
-        })
-        expect(posthog.sessionPersistence.props.ph_keyword).toBeUndefined()
-        expect(posthog.sessionPersistence.props.utm_source).toBeUndefined()
+        const props = posthog.calculateEventProperties('probe', {}, new Date())
+        expect(props.$current_url).toBe('http://localhost/')
+        expect(props.$pathname).toBe('/')
+        expect(props.$host).toBe('localhost')
+        expect(props.$referrer).toBe('https://www.google.com/')
+        expect(props.$referring_domain).toBe('www.google.com')
+        expect(posthog.persistence.props.$initial_person_info.r).toBe('https://www.google.com/')
+        expect(posthog.persistence.props.$client_session_props.props.r).toBe('https://www.google.com/')
+        expect(posthog.persistence.get_initial_props().$initial_referrer).toBe('https://www.google.com/')
+        expect(props.$session_entry_referrer).toBe('https://www.google.com/')
         expect(posthog.get_distinct_id()).toBeTruthy()
     })
 
-    it('covers session and keyword writes with both attribution saving flags disabled', async () => {
+    it('sanitizes session referrers with both attribution saving flags disabled', async () => {
         const posthog = await create({
             save_campaign_params: false,
             save_referrer: false,
@@ -73,10 +68,9 @@ describe('url_sanitization', () => {
         posthog.capture('probe')
         expect(posthog.persistence.props.$initial_person_info).toBeUndefined()
         expect(posthog.persistence.props.$client_session_props.props.r).toBe('https://www.google.com/private-referrer')
-        expect(posthog.sessionPersistence.props.ph_keyword).toBeUndefined()
     })
 
-    it('restores sanitized session URLs when the referrer was omitted before serialization', async () => {
+    it('restores session properties when the referrer was omitted before serialization', async () => {
         const posthog = await create({
             url_sanitization: {
                 sanitize: (url) => {
@@ -103,7 +97,7 @@ describe('url_sanitization', () => {
         expect(second.get_session_id()).toBe(sessionId)
     })
 
-    it('allows public paths and validated campaign values through the callback', async () => {
+    it('rewrites current URLs and referrers through the callback', async () => {
         const posthog = await create({
             url_sanitization: {
                 hash: false,
@@ -116,14 +110,15 @@ describe('url_sanitization', () => {
                 },
             },
         })
-        const result = posthog.capture('probe')
-        expect(posthog.persistence.props.$initial_person_info.u).toBe('http://localhost/public?utm_source=allowed')
-        expect(posthog.sessionPersistence.props.utm_source).toBe('allowed')
-        expect(posthog.sessionPersistence.props.ph_keyword).toBeUndefined()
-        expect(result).toBeUndefined() // default test transport drops events
+        posthog.capture('probe')
+        const props = posthog.calculateEventProperties('probe', {}, new Date())
+        expect(props.$current_url).toBe('http://localhost/public?utm_source=allowed')
+        expect(props.$pathname).toBe('/public')
+        expect(posthog.persistence.props.$initial_person_info.r).toBe('https://www.google.com/public')
+        expect(props.$session_entry_referrer).toBe('https://www.google.com/public')
     })
 
-    it('omits failed URLs and derived event, session, and initial properties without throwing', async () => {
+    it('omits failed current URLs and referrers without throwing', async () => {
         const posthog = await create({
             url_sanitization: {
                 sanitize: () => {
@@ -136,9 +131,10 @@ describe('url_sanitization', () => {
         expect(properties.$current_url).toBeUndefined()
         expect(properties.$pathname).toBeUndefined()
         expect(properties.$referrer).toBeUndefined()
-        expect(properties.$session_entry_url).toBeUndefined()
-        expect(properties.$initial_current_url).toBeUndefined()
-        expect(posthog.sessionPersistence.props.ph_keyword).toBeUndefined()
+        expect(properties.$host).toBeUndefined()
+        expect(properties.$referring_domain).toBeUndefined()
+        expect(properties.$session_entry_referrer).toBeUndefined()
+        expect(posthog.persistence.get_initial_props().$initial_referrer).toBeUndefined()
         expect(posthog.pageViewManager._currentPageview?.pathname).toBeUndefined()
     })
 
@@ -158,7 +154,7 @@ describe('url_sanitization', () => {
         expect(props.$current_url).toBe(current)
     })
 
-    it('sanitizes referrer query values before deriving keywords and domains', () => {
+    it('masks configured personal-data query values in referrers', () => {
         const config = {
             url_sanitization: {},
             mask_personal_data_properties: true,
@@ -167,16 +163,13 @@ describe('url_sanitization', () => {
         expect(getReferrerInfo(config).$referrer).toBe(
             'https://www.google.com/private-referrer?q=<masked>&token=<masked>'
         )
-        expect(getSearchInfo(config).ph_keyword).toBe('<masked>')
     })
 
-    it('honors explicit hash inclusion in current, initial and session event URLs', async () => {
+    it('honors explicit hash inclusion in current event URLs', async () => {
         const posthog = await create({ disable_capture_url_hashes: true, url_sanitization: { hash: true } })
         posthog.capture('probe')
         const props = posthog.calculateEventProperties('probe', {}, new Date())
         expect(props.$current_url).toBe(current)
-        expect(posthog.persistence.get_initial_props().$initial_current_url).toBe(current)
-        expect(props.$session_entry_url).toBe(current)
     })
 
     it('removes private paths from previous-pageview metadata', async () => {

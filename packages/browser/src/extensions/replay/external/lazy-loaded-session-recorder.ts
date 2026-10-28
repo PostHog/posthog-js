@@ -1,4 +1,3 @@
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
 import type { recordOptions, rrwebRecord as rrwebRecordType } from '../types/rrweb'
 import { RECORDING_REMOTE_CONFIG_TTL_MS } from '../../../constants'
 export { RECORDING_REMOTE_CONFIG_TTL_MS } from '../../../constants'
@@ -878,10 +877,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _maskReplayUrl(url: string, forceStripHash: boolean = false): string | undefined {
-        if (this._instance.config.url_sanitization) {
-            const masked = this._maskUrl(url)
-            return masked ? getRecordedUrl(masked, this._instance.config, { maskQuery: true }) : undefined
-        }
         const href = forceStripHash ? stripUrlHash(url) : this._stripUrlHash(url)
         const paramsToMask = this._instance.config.mask_personal_data_properties
             ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(this._instance.config.custom_personal_data_properties || [])]
@@ -976,9 +971,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // while still applying query masking. This path was already hashless before disable_capture_url_hashes.
             // oxlint-disable-next-line compat/compat
             const url = new URL(window.location.href)
-            const currentUrl = this._maskReplayUrl(
-                this._instance.config.url_sanitization ? url.href : url.origin + url.pathname + url.search
-            )
+            const currentUrl = this._maskReplayUrl(url.origin + url.pathname + url.search)
             if (this._lastHref !== currentUrl) {
                 this._lastHref = currentUrl
                 this._tryAddCustomEvent('$url_changed', { href: currentUrl })
@@ -1137,10 +1130,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
             this._flushBuffer()
             this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason, {
-                [triggerType === 'url' ? 'matchedUrl' : 'matchedEvent']:
-                    triggerType === 'url' && this._instance.config.url_sanitization
-                        ? getRecordedUrl(matchDetail, this._instance.config)
-                        : matchDetail,
+                [triggerType === 'url' ? 'matchedUrl' : 'matchedEvent']: matchDetail,
             })
         } finally {
             this._isActivatingTrigger = false
@@ -1946,11 +1936,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (rawEvent.type === EventType.Meta) {
             const href = this._maskReplayUrl(rawEvent.data.href)
             this._lastHref = href
-            if (!href && !this._instance.config.url_sanitization) {
+            if (!href) {
                 return
             }
-            // Meta carries the viewport required by the player, independently of its URL.
-            rawEvent.data.href = href || ''
+            rawEvent.data.href = href
         } else {
             this._pageViewFallBack()
         }

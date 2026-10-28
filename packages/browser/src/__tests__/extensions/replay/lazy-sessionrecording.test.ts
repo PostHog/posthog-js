@@ -3920,22 +3920,6 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('recording', () => {
-        it('applies the shared URL policy to replay metadata and omits failed URLs', () => {
-            posthog.config.url_sanitization = { path: false, query: false, hash: false }
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-            const recorder = sessionRecording['_lazyLoadedSessionRecording']
-            expect(recorder['_maskReplayUrl']('https://example.com/private?token=secret#part')).toBe(
-                'https://example.com/'
-            )
-            posthog.config.url_sanitization = { hash: true }
-            posthog.config.disable_capture_url_hashes = true
-            expect(recorder['_maskReplayUrl']('https://example.com/path#part')).toBe('https://example.com/path#part')
-            posthog.config.url_sanitization.sanitize = () => {
-                throw new Error('failure')
-            }
-            expect(recorder['_maskReplayUrl']('https://example.com/private')).toBeUndefined()
-        })
-
         it('calls rrweb.record with the right options', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -8236,31 +8220,6 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('URL masking with maskCapturedNetworkRequestFn', () => {
-        it('retains replay viewport metadata when URL sanitization fails', () => {
-            posthog.config.url_sanitization = {
-                sanitize: () => {
-                    throw new Error('failure')
-                },
-            }
-            addRRwebToWindow()
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-            sessionRecording['_onScriptLoaded']()
-            releaseInteractionHold()
-            _emit(
-                createMetaSnapshot({
-                    data: { href: 'https://example.com/private?token=secret', width: 1280, height: 720 },
-                })
-            )
-            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
-            expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
-                expect.objectContaining({
-                    $snapshot_data: [expect.objectContaining({ data: { href: '', width: 1280, height: 720 } })],
-                }),
-                expect.anything()
-            )
-        })
-
         it('masks personal data query params and hashes in rrweb meta URLs', () => {
             posthog.config.mask_personal_data_properties = true
             posthog.config.disable_capture_url_hashes = true

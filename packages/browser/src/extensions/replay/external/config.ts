@@ -1,4 +1,3 @@
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../../types'
 import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
@@ -259,17 +258,6 @@ function scrubPayloads(capturedRequest: CapturedNetworkRequest | undefined): Cap
 
 const initialMaskFallbackRequests = new WeakSet<CapturedNetworkRequest>()
 
-const initialRequestMetadata = (request: CapturedNetworkRequest): CapturedNetworkRequest => ({
-    name: '',
-    entryType: request.entryType,
-    startTime: request.startTime,
-    duration: request.duration,
-    endTime: request.endTime,
-    timeOrigin: request.timeOrigin,
-    timestamp: request.timestamp,
-    isInitial: true,
-})
-
 export const isInitialMaskFallback = (request: CapturedNetworkRequest | undefined): boolean =>
     !!request && initialMaskFallbackRequests.has(request)
 
@@ -341,8 +329,17 @@ export const buildNetworkRequestOptions = (
               // Initial entries are required performance metadata, but their URL is still customer data.
               // Keep only required, non-content fields before invoking the callback because callbacks may
               // mutate their argument. In particular, do not copy customer-controlled server timing data.
-              const requiredInitialMetadata = cleanedRequest.isInitial
-                  ? initialRequestMetadata(cleanedRequest)
+              const requiredInitialMetadata: CapturedNetworkRequest | undefined = cleanedRequest.isInitial
+                  ? {
+                        name: '',
+                        entryType: cleanedRequest.entryType,
+                        startTime: cleanedRequest.startTime,
+                        duration: cleanedRequest.duration,
+                        endTime: cleanedRequest.endTime,
+                        timeOrigin: cleanedRequest.timeOrigin,
+                        timestamp: cleanedRequest.timestamp,
+                        isInitial: true,
+                    }
                   : undefined
               const maskedRequest = instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest)
 
@@ -355,22 +352,6 @@ export const buildNetworkRequestOptions = (
               return maskedRequest ?? undefined
           }
         : (data) => scrubPayloads(enforcedCleaningFn(data))
-
-    const maskRequest = config.maskRequestFn
-    config.maskRequestFn = (data) => {
-        const requiredMetadata =
-            data.isInitial && instanceConfig.url_sanitization ? initialRequestMetadata(data) : undefined
-        const masked = maskRequest?.(data)
-        if (!masked || !instanceConfig.url_sanitization || !masked.name || masked.entryType === 'serverTiming')
-            return masked
-        const name = getRecordedUrl(masked.name, instanceConfig, { stripHash: false })
-        if (name) return { ...masked, name }
-        if (requiredMetadata) {
-            initialMaskFallbackRequests.add(requiredMetadata)
-            return requiredMetadata
-        }
-        return undefined
-    }
 
     return {
         ...defaultNetworkOptions,

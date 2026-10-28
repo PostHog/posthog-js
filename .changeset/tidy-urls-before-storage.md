@@ -5,4 +5,4 @@
 '@posthog/next': patch
 ---
 
-Add shared URL sanitization for SDK-recorded URL metadata before capture and persistence.
+Add configurable URL sanitization for current event URLs, persisted referrers, previous-pageview pathnames, autocapture links, Web Vitals and log page URLs, and Next.js pageviews.

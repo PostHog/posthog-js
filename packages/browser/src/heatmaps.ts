@@ -1,4 +1,3 @@
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
 import RageClick from './extensions/rageclick'
 import { DeadClickCandidate, Properties, RemoteConfigResult } from './types'
 import { PostHog } from './posthog-core'
@@ -10,12 +9,14 @@ import {
     shouldCaptureRageclick,
 } from '@posthog/browser-common/utils/autocapture-utils'
 import { DOM_EVENT_BEFOREUNLOAD, DOM_EVENT_VISIBILITYCHANGE, HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
-import { isNumber, isNullish, isEmptyObject, isObject } from '@posthog/core'
+import { isNumber, isNullish, isEmptyObject, isObject, stripUrlHash } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from '@posthog/browser-common/utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 import { includes } from '@posthog/core'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
+import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 import type { Extension } from './extensions/types'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
@@ -287,8 +288,17 @@ export class Heatmaps implements Extension {
             return
         }
 
-        const url = getRecordedUrl(window.location.href, this._config, { maskQuery: true })
-        if (!url) return
+        const href = this._config.disable_capture_url_hashes ? stripUrlHash(window.location.href) : window.location.href
+
+        // mask url query params
+        const maskPersonalDataProperties = this._config.mask_personal_data_properties
+        const customPersonalDataProperties = this._config.custom_personal_data_properties
+
+        const paramsToMask = maskPersonalDataProperties
+            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+            : []
+
+        const url = maskQueryParams(href, paramsToMask, MASKED)
 
         this._buffer = this._buffer || {}
 

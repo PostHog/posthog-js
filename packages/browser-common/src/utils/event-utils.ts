@@ -1,9 +1,9 @@
 import { getTimezone } from './timezone'
 export { getTimezone } from './timezone'
-import { convertToURL, getQueryParam } from './request-utils'
+import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
 import { isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
 import type { Properties, UrlSanitizationOptions } from '@posthog/types'
-import { getRecordedUrl, PERSONAL_DATA_CAMPAIGN_PARAMS } from './url-sanitization'
+import { getRecordedUrl, PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from './url-sanitization'
 import type { RecordedUrlConfig } from './url-sanitization'
 import Config from '../config'
 import { SDK_DIST_CHANNEL } from '../constants'
@@ -69,24 +69,19 @@ export const COOKIE_CAMPAIGN_PARAMS = [
 export function getCampaignParams(
     customTrackedParams?: string[],
     maskPersonalDataProperties?: boolean,
-    customPersonalDataProperties?: string[] | undefined,
-    urlSanitization?: UrlSanitizationOptions
+    customPersonalDataProperties?: string[] | undefined
 ): Record<string, string> {
     if (!document) {
         return {}
     }
 
+    const paramsToMask = maskPersonalDataProperties
+        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+        : []
+
     // Initially get campaign params from the URL
     const urlCampaignParams = _getCampaignParamsFromUrl(
-        getRecordedUrl(
-            document.URL,
-            {
-                url_sanitization: urlSanitization,
-                mask_personal_data_properties: maskPersonalDataProperties,
-                custom_personal_data_properties: customPersonalDataProperties,
-            },
-            { maskQuery: true, stripHash: false }
-        ) || '',
+        maskQueryParams(document.URL, paramsToMask, MASKED),
         customTrackedParams
     )
 
@@ -139,7 +134,7 @@ function _getSearchEngine(referrer: string): string | null {
     }
 }
 
-function _getSearchInfoFromReferrer(referrer: string, useRecordedReferrer = false): Record<string, any> {
+function _getSearchInfoFromReferrer(referrer: string): Record<string, any> {
     const search = _getSearchEngine(referrer)
     const param = search != 'yahoo' ? 'q' : 'p'
     const ret: Record<string, any> = {}
@@ -147,7 +142,7 @@ function _getSearchInfoFromReferrer(referrer: string, useRecordedReferrer = fals
     if (!isNull(search)) {
         ret['$search_engine'] = search
 
-        const keyword = getQueryParam(useRecordedReferrer ? referrer : document?.referrer || '', param)
+        const keyword = document ? getQueryParam(document.referrer, param) : ''
         if (keyword.length) {
             ret['ph_keyword'] = keyword
         }
@@ -156,12 +151,12 @@ function _getSearchInfoFromReferrer(referrer: string, useRecordedReferrer = fals
     return ret
 }
 
-export function getSearchInfo(config: RecordedUrlConfig = {}): Record<string, any> {
-    const referrer = getRecordedUrl(document?.referrer, config, { stripHash: false })
+export function getSearchInfo(): Record<string, any> {
+    const referrer = document?.referrer
     if (!referrer) {
         return {}
     }
-    return _getSearchInfoFromReferrer(referrer, !!config.url_sanitization)
+    return _getSearchInfoFromReferrer(referrer)
 }
 
 export function getBrowserLanguage(): string | undefined {
@@ -209,25 +204,24 @@ export function getPersonInfo(
         disable_capture_url_hashes: disableCaptureUrlHashes,
         url_sanitization: urlSanitization,
     }
-    // Keep legacy truncation before query masking. Callbacks need the complete URL before truncation.
     const href = disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href
-    const input = urlSanitization ? location?.href : href?.substring(0, 1000)
     const referrer = getRecordedUrl(document?.referrer, config, { stripHash: false })
-    const url = getRecordedUrl(input, config, { maskQuery: true, stripHash: false })
+    const paramsToMask = maskPersonalDataProperties
+        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+        : []
+    const url = href?.substring(0, 1000)
     return {
         r: document?.referrer ? referrer?.substring(0, 1000) : DIRECT,
-        u: urlSanitization ? url?.substring(0, 1000) : url,
+        u: url ? maskQueryParams(url, paramsToMask, MASKED) : undefined,
     }
 }
 
 export function getPersonPropsFromInfo(
     info: Record<string, any>,
-    disableCaptureUrlHashes: boolean = false,
-    urlSanitization?: UrlSanitizationOptions
+    disableCaptureUrlHashes: boolean = false
 ): Record<string, any> {
     const { r: referrer, u } = info
-    // Stored values were sanitized before persistence; do not run application callbacks again on reads.
-    const url = (urlSanitization?.hash ?? !disableCaptureUrlHashes) ? u : stripUrlHash(u)
+    const url = disableCaptureUrlHashes ? stripUrlHash(u) : u
     const referring_domain = referrer == null ? undefined : referrer == DIRECT ? DIRECT : convertToURL(referrer)?.host
 
     const props: Record<string, string | undefined> = {
@@ -243,7 +237,7 @@ export function getPersonPropsFromInfo(
         extend(props, campaignParams)
     }
     if (referrer) {
-        const searchInfo = _getSearchInfoFromReferrer(referrer, !!urlSanitization)
+        const searchInfo = _getSearchInfoFromReferrer(referrer)
         extend(props, searchInfo)
     }
     return props
@@ -251,10 +245,9 @@ export function getPersonPropsFromInfo(
 
 export function getInitialPersonPropsFromInfo(
     info: Record<string, any>,
-    disableCaptureUrlHashes: boolean = false,
-    urlSanitization?: UrlSanitizationOptions
+    disableCaptureUrlHashes: boolean = false
 ): Record<string, any> {
-    const personProps = getPersonPropsFromInfo(info, disableCaptureUrlHashes, urlSanitization)
+    const personProps = getPersonPropsFromInfo(info, disableCaptureUrlHashes)
     const props: Record<string, any> = {}
     each(personProps, function (val: any, key: string) {
         props[`$initial_${stripLeadingDollar(key)}`] = val

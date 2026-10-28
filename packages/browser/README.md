@@ -73,7 +73,7 @@ Opted-in values are not automatically redacted. Use the synchronous `before_send
 
 ## URL sanitization
 
-`url_sanitization` controls SDK-recorded URL metadata before it enters events or browser persistence. It applies to current URLs, referrers, derived attribution, autocapture links, and replay page/network metadata. It does not control pageview triggers.
+`url_sanitization` controls current event URLs and their host/pathname, referrers (including initial/session referrers), previous-pageview pathnames, autocapture links, Web Vitals and log page URLs, and Next.js pageview URLs. Referrers are sanitized before they enter browser persistence.
 
 ```js
 posthog.init('phc_TOKEN', {
@@ -88,9 +88,9 @@ posthog.init('phc_TOKEN', {
 })
 ```
 
-Path and query inclusion default to `true`. Omitted `hash` inherits `disable_capture_url_hashes`; explicit component settings take precedence. The optional callback receives a fresh `URL` and returns an absolute URL string or `URL`. It runs before component filtering and existing personal-data query masking. A throw or invalid return omits the URL and its derived values without throwing into application code.
+Path and query inclusion default to `true`. Omitted `hash` inherits `disable_capture_url_hashes`; explicit component settings take precedence. The optional callback receives a fresh `URL` and returns an absolute URL string or `URL`. It runs before component filtering and existing personal-data query masking. A throw or invalid return omits the URL and its derived host/pathname without throwing into application code.
 
-Configure this in `init()` to cover initial persistence writes. Changes affect future writes only, not previously stored attribution. Arbitrary user-provided event properties and replay asset references (such as image and stylesheet URLs) remain outside this policy; existing replay masking controls still apply.
+Configure this in `init()` to cover the first referrer persistence writes. Changes affect future writes; previously persisted values are retained.
 
 ## Surveys and capture
 

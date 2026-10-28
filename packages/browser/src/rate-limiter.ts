@@ -1,4 +1,3 @@
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
 import { CAPTURE_RATE_LIMIT } from './constants'
 import type { PostHog } from './posthog-core'
 import { RequestResponse } from './types'
@@ -104,7 +103,7 @@ export class RateLimiter {
         if (!this._isPropertyAllowed('$current_url') || !this._isPropertyAllowed('$pathname') || !location?.pathname) {
             return undefined
         }
-        return getRecordedUrl(`${location.origin ?? ''}${location.pathname}`, this.instance.config)
+        return `${location.origin ?? ''}${location.pathname}`
     }
 
     private _captureWarning(droppedSinceLastWarning: number): boolean {
