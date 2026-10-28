@@ -3,35 +3,11 @@ import { document } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getQueryParam } from '@posthog/browser-common/utils/request-utils'
 import type { PostHogConfig } from '@posthog/types'
-import { version } from '../../package.json'
 import { assignableWindow } from '../utils/globals'
-import methods from 'virtual:posthog-loader-methods'
+import { createPostHogStub, QueuedInit } from '../utils/loader-stub'
+import { getVersionedScriptURL } from '../utils/loader-script'
 
 const logger = createLogger('[Loader]')
-
-type QueuedCall = [string, ...unknown[]]
-type QueuedInit = [string, Partial<PostHogConfig>, string]
-
-function createStub(instanceName = 'posthog') {
-    const stub = Object.assign([] as QueuedCall[], { people: [] as QueuedCall[] })
-    for (const method of methods.split(' ')) {
-        const [namespace, nestedMethod] = method.split('.')
-        const queue = nestedMethod ? stub.people : stub
-        const name = nestedMethod || namespace
-        Object.defineProperty(queue, name, {
-            configurable: true,
-            enumerable: true,
-            writable: true,
-            value: (...args: unknown[]) => {
-                queue.push([name, ...args])
-            },
-        })
-    }
-    const name = instanceName === 'posthog' ? 'posthog' : 'posthog.' + instanceName
-    Object.defineProperty(stub, 'toString', { value: () => name + ' (stub)', configurable: true })
-    Object.defineProperty(stub.people, 'toString', { value: () => name + '.people (stub)', configurable: true })
-    return stub
-}
 
 function getAutoInit(script: HTMLScriptElement, origin: string): QueuedInit | undefined {
     // Putting the token in the URL path would require additional routing; a query keeps this file shared.
@@ -77,52 +53,29 @@ function load(): void {
     if (!document || !script || !('src' in script) || !script.src) {
         return
     }
-    if (assignableWindow.posthog?.__SV || isFunction(assignableWindow.posthog?.init)) {
+    const existing = assignableWindow.posthog
+    const pendingBootstrap = existing?.__SV === 1 && existing.__loaderPending === true
+    if (!pendingBootstrap && (existing?.__SV || isFunction(existing?.init))) {
         return
     }
 
     const url = document.createElement('a')
     url.href = script.src
-    const deferInit = script.getAttribute('data-defer-init') === 'true'
-    // Deferred mode leaves token and configuration entirely to the explicit init() call.
-    const initialization = deferInit ? undefined : getAutoInit(script, url.protocol + '//' + url.host)
-    if (!deferInit && !initialization) {
-        return
+    if (pendingBootstrap) {
+        // Keep the same queue so calls made during the loader download survive the handoff.
+        existing.__loaderPending = false
+    } else {
+        const deferInit = script.getAttribute('data-defer-init') === 'true'
+        // Deferred mode leaves token and configuration entirely to the explicit init() call.
+        const initialization = deferInit ? undefined : getAutoInit(script, url.protocol + '//' + url.host)
+        if (!deferInit && !initialization) {
+            return
+        }
+        assignableWindow.posthog = createPostHogStub(initialization)
     }
 
-    const posthog = Object.assign(createStub(), {
-        __SV: 1,
-        _i: initialization ? [initialization] : [],
-    })
-    Object.defineProperty(posthog, 'init', {
-        value: (token: string, config: Partial<PostHogConfig> = {}, name?: string) => {
-            const instanceName = name || 'posthog'
-            const existing = Object.getOwnPropertyDescriptor(posthog, instanceName)?.value
-            const instance = instanceName === 'posthog' ? posthog : existing || createStub(instanceName)
-            if (instanceName !== 'posthog' && !existing) {
-                Object.defineProperty(posthog, instanceName, {
-                    value: instance,
-                    configurable: true,
-                    enumerable: true,
-                    writable: true,
-                })
-            }
-            posthog._i.push([token, config, instanceName])
-            return instance
-        },
-    })
-    assignableWindow.posthog = posthog
-
-    const directory = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1)
-    // Cached mutable loaders must keep using their own release, not a separately cached SDK alias.
-    const versionedDirectory = /\/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\/$/.test(directory)
-        ? directory
-        : directory.replace(/\/static\/\d+\/$/, '/static/') + version + '/'
-    url.pathname = versionedDirectory + 'array.js'
-    url.search = ''
-    url.hash = ''
     const core = document.createElement('script')
-    core.src = url.href
+    core.src = getVersionedScriptURL(url, 'array.js')
     core.async = true
     core.crossOrigin = 'anonymous'
     core.nonce = script.nonce

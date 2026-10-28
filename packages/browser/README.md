@@ -63,6 +63,40 @@ Fatal automatic-initialization configuration errors are reported even when debug
 
 The loader forwards its CSP nonce to the SDK script. Your CSP must still allow the SDK, its extensions, and event ingestion. An existing legacy stub or live global instance takes precedence: the loader never replaces it or switches its project token.
 
+### Nonblocking hosted loading
+
+To keep application startup independent of the analytics host while preserving early SDK calls, serve the SDK's `dist/loader-bootstrap.js` from your application's own origin. Copy it from the installed `posthog-js` package during your build rather than maintaining a separate bootstrap or method list:
+
+```sh
+cp node_modules/posthog-js/dist/loader-bootstrap.js public/scripts/posthog-bootstrap.js
+```
+
+Load this local file before initialization and application scripts. Set `data-loader-src` to the hosted loader URL:
+
+```html
+<script
+    src="/scripts/posthog-bootstrap.js"
+    data-loader-src="https://us-assets.i.posthog.com/static/1/loader.js"
+></script>
+<script>
+    posthog.init('phc_TOKEN', {
+        api_host: 'https://us.i.posthog.com',
+        defaults: '2026-08-30',
+        before_send: function (event) {
+            return event.event === 'private event' ? null : event
+        },
+    })
+    posthog.capture('early event')
+</script>
+<script async src="/app.js"></script>
+```
+
+The local bootstrap immediately exposes the same generated queued methods as the hosted loader. It resolves mutable loader URLs under `/static/` or `/static/<major>/` to its own immutable release, avoiding older cached loaders that do not support queue handoff. It downloads that hosted loader asynchronously with automatic initialization disabled. The hosted loader adopts the existing queue and downloads its matching immutable SDK asynchronously. Explicit initialization, function-valued configuration, named instances, and calls made during either download are preserved. Both injected scripts use anonymous CORS and inherit the local script's CSP nonce.
+
+Do not add `async` or `defer` to the local bootstrap if subsequent scripts need the queue immediately. It must be available with your application assets; only the analytics-host downloads are independent of application startup. A stalled or failed analytics download leaves calls queued without marking the SDK ready. This does not buffer browser interactions or errors before SDK listeners start, and the hosted loader still adds a network request before the SDK download.
+
+Explicitly versioned loader URLs are preserved. When setting one, use the same release as the copied bootstrap. Older loaders without bootstrap handoff support treat the bootstrap as an existing installation and do not download the SDK. Recopy the bootstrap when updating your installed SDK so its generated method list stays current. Do not combine this installation with the legacy snippet or a separately initialized npm SDK.
+
 ## Input value autocapture
 
 Native `$autocapture` change events support field-level opt-in value capture for eligible inputs, textareas, and single-selects. Values are read from the control's `.value` when the browser emits `change`.
