@@ -65,14 +65,14 @@ Feature flag requests are unchanged.
 
 ## Removed and renamed
 
-| 5.x                                                                                                             | 6.0                                                                                                                                     |
-| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `POSTHOG_CAPTURE_MODE` environment variable                                                                     | Not read. Capture v1 is the only path. The client logs one warning when the variable is set.                                            |
-| `CaptureV1Error` (the error name in capture v1 mode)                                                            | `CaptureError`, exported from `posthog-node`. There is no alias.                                                                        |
-| `captureException(error, distinctId, properties, uuid, flags)`                                                  | `captureException(error, { distinctId, properties, options, uuid, flags, level })`. The positional form still works in 6.x.             |
-| `captureExceptionImmediate(error, distinctId, properties, flags)`                                               | `captureExceptionImmediate(error, { distinctId, properties, options, uuid, flags, level })`. The positional form still works in 6.x.    |
-| `prepareEventMessage()` returns `{ distinctId, event, properties, options: { uuid, timestamp, disableGeoip } }` | Returns a flat message: `{ distinctId, event, properties, options, uuid, timestamp, disableGeoip }`. `options` holds the event options. |
-| `fetchRetryDelay` set capture retry waits                                                                       | Capture ignores it. See [Retries](#retries).                                                                                            |
+| 5.x                                                                                                             | 6.0                                                                                                                                                                                         |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POSTHOG_CAPTURE_MODE` environment variable                                                                     | Not read. Capture v1 is the only path. The client logs one warning when the variable is set.                                                                                                |
+| `CaptureV1Error` (the error name in capture v1 mode)                                                            | `CaptureError`, exported from `posthog-node`. There is no alias.                                                                                                                            |
+| `captureException(error, distinctId, properties, uuid, flags)`                                                  | `captureException(error, { distinctId, properties, options, uuid, flags, level })`. JavaScript positional calls still work in 6.x. TypeScript callers must use the options object.          |
+| `captureExceptionImmediate(error, distinctId, properties, flags)`                                               | `captureExceptionImmediate(error, { distinctId, properties, options, uuid, flags, level })`. JavaScript positional calls still work in 6.x. TypeScript callers must use the options object. |
+| `prepareEventMessage()` returns `{ distinctId, event, properties, options: { uuid, timestamp, disableGeoip } }` | Returns a flat message: `{ distinctId, event, properties, options, uuid, timestamp, disableGeoip }`. `options` holds the event options.                                                     |
+| `fetchRetryDelay` set capture retry waits                                                                       | Capture ignores it. See [Retries](#retries).                                                                                                                                                |
 
 ### `captureException()`
 
@@ -315,10 +315,11 @@ Capture rejects a whole request when one event has a broken field.
 
 ## Logs
 
-The SDK's own logs no longer contain event content.
+The SDK's own logs no longer print whole events or `before_send` error messages.
 
 - Debug mode logs event names, uuids and counts instead of whole events.
 - A `before_send` error is logged with the error's type, not its message.
+- In debug mode, a capture error can still include the server or proxy response text.
 - The failed-batch line, the invalid uuid warning, the invalid timestamp warning and the session id warning never include event values.
 - Log-based alerts that match 5.x log text will stop matching. Listen for `'error'` instead.
 
