@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.418.0
+
+### Minor Changes
+
+- [#5269](https://github.com/PostHog/posthog-js/pull/5269) [`950d034`](https://github.com/PostHog/posthog-js/commit/950d03423605d1567c90a3f27f50d4603a89ae45) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `$input_value` to autocapture `change` events for fields marked `data-ph-capture-value`, or matched by the new `autocapture.capture_value_css_selector_allowlist` option (CSS selectors or an `(element) => boolean` predicate).
+  (2026-10-28)
+
 ## 1.417.0
 
 ### Minor Changes
