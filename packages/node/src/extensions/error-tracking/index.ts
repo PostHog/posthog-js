@@ -1,4 +1,4 @@
-import { addUncaughtExceptionListener, addUnhandledRejectionListener } from './autocapture'
+import { addExceptionAutocaptureListeners } from './autocapture'
 import { PostHogBackendClient } from '@/client'
 import type { ContextData } from '../context/types'
 import { snapshotEventContext } from '../context/event-context'
@@ -78,8 +78,7 @@ export default class ErrorTracking {
 
   private startAutocaptureIfEnabled(): void {
     if (this.isEnabled()) {
-      addUncaughtExceptionListener(this.onException.bind(this), this.onFatalError.bind(this))
-      addUnhandledRejectionListener(this.onException.bind(this))
+      addExceptionAutocaptureListeners(this.onException.bind(this), this.onFatalError.bind(this))
     }
   }
 

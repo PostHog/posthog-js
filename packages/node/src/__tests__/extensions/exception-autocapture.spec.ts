@@ -1,6 +1,7 @@
 import ErrorTracking from '@/extensions/error-tracking'
 import { PostHog } from '@/entrypoints/index.node'
 import {
+  addExceptionAutocaptureListeners,
   addUncaughtExceptionListener,
   addUnhandledRejectionListener,
   getUnhandledRejectionMode,
@@ -21,6 +22,10 @@ type ChildResult = {
 type ChildScenario =
   | 'no-application-listener'
   | 'unhandled-rejection-listener'
+  | 'late-unhandled-rejection-listener'
+  | 'removed-unhandled-rejection-listener'
+  | 'rethrowing-unhandled-rejection-listener'
+  | 'late-rethrowing-unhandled-rejection-listener'
   | 'uncaught-exception-listener'
   | 'mutated-node-options'
   | 'mutated-exec-argv'
@@ -64,6 +69,54 @@ function runUnhandledRejectionChild({
 
 function captureCount(result: ChildResult): number {
   return result.stdout.match(/^posthog-capture:/gm)?.length ?? 0
+}
+
+type Listener = (...args: any[]) => unknown
+
+// Replaces the process listener registry, so tests can add host listeners and emit events without touching the runner.
+function stubProcessListeners(hostRejectionListeners: Listener[] = []) {
+  const registry = new Map<string | symbol, Listener[]>([['unhandledRejection', [...hostRejectionListeners]]])
+  const get = (event: string | symbol): Listener[] => registry.get(event) ?? []
+  const emit = (event: string | symbol, ...args: unknown[]): void => get(event).forEach((listener) => listener(...args))
+
+  vi.spyOn(global.process, 'listeners').mockImplementation(((event: string | symbol) => [
+    ...get(event),
+  ]) as typeof process.listeners)
+  vi.spyOn(global.process, 'on').mockImplementation(((event: string | symbol, listener: Listener) => {
+    registry.set(event, [...get(event), listener])
+    return global.process
+  }) as typeof process.on)
+  vi.spyOn(global.process, 'removeListener').mockImplementation(((event: string | symbol, listener: Listener) => {
+    registry.set(
+      event,
+      get(event).filter((registered) => registered !== listener)
+    )
+    return global.process
+  }) as typeof process.removeListener)
+
+  return {
+    rejectionListenerCount: (): number => get('unhandledRejection').length,
+    emit,
+    // Matches EventEmitter: newListener before the listener is added, removeListener after it is removed.
+    addHostRejectionListener(listener: Listener): void {
+      emit('newListener', 'unhandledRejection', listener)
+      registry.set('unhandledRejection', [...get('unhandledRejection'), listener])
+    },
+    removeHostRejectionListener(listener: Listener): void {
+      registry.set(
+        'unhandledRejection',
+        get('unhandledRejection').filter((registered) => registered !== listener)
+      )
+      emit('removeListener', 'unhandledRejection', listener)
+    },
+  }
+}
+
+const UNHANDLED_REJECTION_HINT = {
+  mechanism: {
+    type: 'onunhandledrejection',
+    handled: false,
+  },
 }
 
 describe('exception autocapture', () => {
@@ -137,16 +190,90 @@ describe('exception autocapture', () => {
     expect(onSpy).not.toHaveBeenCalledWith('uncaughtException', expect.any(Function))
   })
 
-  it.each(['throw', 'strict', 'warn-with-error-code'] as const)(
-    'should not install an unhandled-rejection listener in %s mode',
+  it('should not install an unhandled-rejection listener in strict mode', () => {
+    const onSpy = vi.spyOn(global.process, 'on').mockReturnValue(global.process)
+
+    addUnhandledRejectionListener(() => {}, 'strict')
+
+    expect(onSpy).not.toHaveBeenCalled()
+  })
+
+  it.each(['throw', 'warn-with-error-code'] as const)(
+    'should not install an unhandled-rejection listener in %s mode without a host listener',
     (mode) => {
-      const onSpy = vi.spyOn(global.process, 'on').mockReturnValue(global.process)
+      const processListeners = stubProcessListeners()
 
       addUnhandledRejectionListener(() => {}, mode)
 
-      expect(onSpy).not.toHaveBeenCalled()
+      expect(processListeners.rejectionListenerCount()).toBe(0)
     }
   )
+
+  it.each(['throw', 'warn-with-error-code'] as const)(
+    'should capture unhandled rejections in %s mode when a host listener exists before init',
+    (mode) => {
+      const capture = vi.fn()
+      const hostListener = vi.fn()
+      const processListeners = stubProcessListeners([hostListener])
+      const reason = new Error('host handled rejection')
+
+      addUnhandledRejectionListener(capture, mode)
+      processListeners.emit('unhandledRejection', reason, Promise.resolve())
+
+      expect(processListeners.rejectionListenerCount()).toBe(2)
+      expect(capture).toHaveBeenCalledTimes(1)
+      expect(capture).toHaveBeenCalledWith(reason, UNHANDLED_REJECTION_HINT)
+      expect(hostListener).toHaveBeenCalledWith(reason, expect.any(Promise))
+    }
+  )
+
+  it('should start capturing when a host listener is added after init and stop when the last one is removed', () => {
+    const capture = vi.fn()
+    const firstHostListener = vi.fn()
+    const secondHostListener = vi.fn()
+    const processListeners = stubProcessListeners()
+    addUnhandledRejectionListener(capture, 'throw')
+    expect(processListeners.rejectionListenerCount()).toBe(0)
+
+    processListeners.addHostRejectionListener(firstHostListener)
+    processListeners.addHostRejectionListener(secondHostListener)
+    expect(processListeners.rejectionListenerCount()).toBe(3)
+
+    const reason = new Error('late host rejection')
+    processListeners.emit('unhandledRejection', reason, Promise.resolve())
+    expect(capture).toHaveBeenCalledTimes(1)
+    expect(capture).toHaveBeenCalledWith(reason, UNHANDLED_REJECTION_HINT)
+
+    processListeners.removeHostRejectionListener(firstHostListener)
+    expect(processListeners.rejectionListenerCount()).toBe(2)
+
+    processListeners.removeHostRejectionListener(secondHostListener)
+    expect(processListeners.rejectionListenerCount()).toBe(0)
+  })
+
+  it('should not capture a rejection again when a host listener rethrows it', () => {
+    const capture = vi.fn()
+    const onFatal = vi.fn()
+    const processListeners = stubProcessListeners([vi.fn()])
+    addExceptionAutocaptureListeners(capture, onFatal, 'throw')
+    const reason = new Error('rethrown rejection')
+
+    processListeners.emit('unhandledRejection', reason, Promise.resolve())
+    processListeners.emit('uncaughtException', reason, 'uncaughtException')
+
+    expect(capture).toHaveBeenCalledTimes(1)
+    expect(capture).toHaveBeenCalledWith(reason, UNHANDLED_REJECTION_HINT)
+    expect(onFatal).toHaveBeenCalledWith(reason)
+
+    const laterError = new Error('later uncaught exception')
+    processListeners.emit('uncaughtException', laterError, 'uncaughtException')
+    expect(capture).toHaveBeenLastCalledWith(laterError, {
+      mechanism: {
+        type: 'onuncaughtexception',
+        handled: false,
+      },
+    })
+  })
 
   it.each(['warn', 'none'] as const)('should install an unhandled-rejection listener in %s mode', (mode) => {
     const onSpy = vi.spyOn(global.process, 'on').mockReturnValue(global.process)
@@ -359,16 +486,73 @@ describe('exception autocapture', () => {
     expect(captureCount(withSdk)).toBe(0)
   })
 
-  it('should leave application unhandled-rejection handling untouched in throw mode', async () => {
-    const result = await runUnhandledRejectionChild({ mode: 'throw', scenario: 'unhandled-rejection-listener' })
+  it.each([
+    ['before', 'throw', 'unhandled-rejection-listener'],
+    ['after', 'throw', 'late-unhandled-rejection-listener'],
+    ['before', 'warn-with-error-code', 'unhandled-rejection-listener'],
+    ['after', 'warn-with-error-code', 'late-unhandled-rejection-listener'],
+  ] as const)(
+    'should capture once when the application adds an unhandled-rejection listener %s init in %s mode',
+    async (_order, mode, scenario) => {
+      const [withoutSdk, withSdk] = await Promise.all([
+        runUnhandledRejectionChild({ mode, scenario, withSdk: false }),
+        runUnhandledRejectionChild({ mode, scenario }),
+      ])
 
-    expect(result.signal).toBeNull()
-    expect(result.code).toBe(0)
-    expect(captureCount(result)).toBe(0)
-    expect(result.stdout).toContain('unhandled-listener:Child process rejection')
-    expect(result.stdout).toContain('completed')
-    expect(result.stderr).toBe('')
+      for (const result of [withoutSdk, withSdk]) {
+        expect(result.signal).toBeNull()
+        expect(result.code).toBe(0)
+        expect(result.stdout).toContain('unhandled-listener:Child process rejection')
+        expect(result.stdout).toContain('completed')
+        expect(result.stderr).toBe('')
+      }
+      expect(captureCount(withoutSdk)).toBe(0)
+      expect(captureCount(withSdk)).toBe(1)
+      expect(withSdk.stdout).toContain('posthog-capture:onunhandledrejection:Child process rejection')
+    }
+  )
+
+  it('should restore the default fatal rejection when the application removes its listener', async () => {
+    const [withoutSdk, withSdk] = await Promise.all([
+      runUnhandledRejectionChild({ mode: 'throw', scenario: 'removed-unhandled-rejection-listener', withSdk: false }),
+      runUnhandledRejectionChild({ mode: 'throw', scenario: 'removed-unhandled-rejection-listener' }),
+    ])
+
+    for (const result of [withoutSdk, withSdk]) {
+      expect(result.signal).toBeNull()
+      expect(result.code).toBe(1)
+      expect(result.stdout).not.toContain('unhandled-listener')
+      expect(result.stdout).not.toContain('completed')
+      expect(result.stderr).toContain('Child process rejection')
+    }
+    expect(captureCount(withoutSdk)).toBe(0)
+    expect(captureCount(withSdk)).toBe(1)
+    expect(withSdk.stdout).toContain('posthog-capture:onunhandledrejection:Child process rejection')
   })
+
+  it.each([
+    ['before init', 'rethrowing-unhandled-rejection-listener', 'onuncaughtexception'],
+    ['after init', 'late-rethrowing-unhandled-rejection-listener', 'onunhandledrejection'],
+  ] as const)(
+    'should capture once when an application listener added %s rethrows the rejection',
+    async (_order, scenario, mechanism) => {
+      const [withoutSdk, withSdk] = await Promise.all([
+        runUnhandledRejectionChild({ mode: 'throw', scenario, withSdk: false }),
+        runUnhandledRejectionChild({ mode: 'throw', scenario }),
+      ])
+
+      for (const result of [withoutSdk, withSdk]) {
+        expect(result.signal).toBeNull()
+        expect(result.code).toBe(1)
+        expect(result.stdout).toContain('rethrowing-listener:Child process rejection')
+        expect(result.stdout).not.toContain('completed')
+        expect(result.stderr).toContain('Child process rejection')
+      }
+      expect(captureCount(withoutSdk)).toBe(0)
+      expect(captureCount(withSdk)).toBe(1)
+      expect(withSdk.stdout).toContain(`posthog-capture:${mechanism}:Child process rejection`)
+    }
+  )
 
   it('captures aggregate children in one event with Node frame modifiers', async () => {
     const ph = new PostHog('TEST_API_KEY', { host: 'http://example.com' })

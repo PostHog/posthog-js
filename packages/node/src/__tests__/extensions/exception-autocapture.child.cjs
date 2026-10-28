@@ -3,10 +3,19 @@ const { PostHog } = require('../../../dist/entrypoints/index.node.js')
 const scenario = process.argv[2]
 const withSdk = process.argv[3] === 'with-sdk'
 
-if (scenario === 'unhandled-rejection-listener') {
-  process.on('unhandledRejection', (reason) => {
-    process.stdout.write(`unhandled-listener:${reason.message}\n`)
-  })
+function logRejection(reason) {
+  process.stdout.write(`unhandled-listener:${reason.message}\n`)
+}
+
+function rethrowRejection(reason) {
+  process.stdout.write(`rethrowing-listener:${reason.message}\n`)
+  throw reason
+}
+
+if (scenario === 'unhandled-rejection-listener' || scenario === 'removed-unhandled-rejection-listener') {
+  process.on('unhandledRejection', logRejection)
+} else if (scenario === 'rethrowing-unhandled-rejection-listener') {
+  process.on('unhandledRejection', rethrowRejection)
 } else if (scenario === 'uncaught-exception-listener') {
   process.on('uncaughtException', (error, origin) => {
     process.stdout.write(`uncaught-listener:${origin}:${error.message}\n`)
@@ -29,6 +38,14 @@ if (posthog) {
     process.stdout.write(`posthog-capture:${exception.mechanism.type}:${exception.value}\n`)
     return Promise.resolve()
   }
+}
+
+if (scenario === 'late-unhandled-rejection-listener') {
+  process.on('unhandledRejection', logRejection)
+} else if (scenario === 'late-rethrowing-unhandled-rejection-listener') {
+  process.on('unhandledRejection', rethrowRejection)
+} else if (scenario === 'removed-unhandled-rejection-listener') {
+  process.removeListener('unhandledRejection', logRejection)
 }
 
 process.once('beforeExit', async () => {
