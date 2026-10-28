@@ -5,6 +5,11 @@ import { AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, captureEvents } from '../utils
 import { V1WiringHarness } from '../utils/v1-wiring'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
+// A pass-through spy, so the tests below see which uuids the crypto-backed generator produced.
+vi.mock('@/capture-v1/uuid', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/capture-v1/uuid')>()
+  return { ...actual, eventUuidv7: vi.fn(actual.eventUuidv7) }
+})
 
 const CANONICAL = '0198c0de-1234-7abc-8def-0123456789ab'
 const WARNING = '[PostHog] Replaced an invalid event uuid with a generated one; uuids must be RFC 4122 strings'
@@ -140,6 +145,26 @@ describe('event uuids on the client', () => {
     expect(captureEvents(harness.fetch, AI_CAPTURE_PATH).map((event) => event.uuid)).toEqual([returned])
     expect(uuidWarnings()).toEqual(warnings)
   })
+
+  it.each(['capture', 'captureImmediate'] as const)(
+    '%s takes a missing uuid from the crypto-backed generator',
+    async (method) => {
+      const generated = vi.mocked(eventUuidv7)
+      generated.mockClear()
+      const posthog = harness.makeClient()
+
+      if (method === 'capture') {
+        posthog.capture({ distinctId: 'u', event: 'plain', properties: {} })
+      } else {
+        await posthog.captureImmediate({ distinctId: 'u', event: 'plain', properties: {} })
+      }
+      await posthog.flush()
+
+      const [uuid] = captureEvents(harness.fetch, ANALYTICS_CAPTURE_PATH).map((event) => event.uuid)
+      expect(uuid).toMatch(UUID_V7)
+      expect(generated.mock.results.map((result) => result.value)).toContain(uuid)
+    }
+  )
 
   it('warns once per bad call', async () => {
     const posthog = harness.makeClient()

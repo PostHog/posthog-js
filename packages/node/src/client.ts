@@ -548,7 +548,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _prepareLaneMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties | null {
     const { _invalidUuidWarned, ...captureOptions } = (options ?? {}) as LaneCaptureOptions
     // before_send already ran, so this is the hook's uuid; check it again, warning at most once per call.
-    const uuid = this._canonicalEventUuid(captureOptions.uuid, !_invalidUuidWarned)
+    // A missing uuid is generated here, not by core's generator.
+    const uuid = this._canonicalEventUuid(captureOptions.uuid, !_invalidUuidWarned) ?? eventUuidv7()
     const prepared = this.processBeforeEnqueue(this.prepareMessage(message, { ...captureOptions, uuid }))
     return prepared === null ? null : this.normalizeMessage(prepared)
   }
