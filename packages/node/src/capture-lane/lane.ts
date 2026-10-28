@@ -2,7 +2,7 @@ import { type Logger, type PostHogEventProperties, safeSetTimeout } from '@posth
 
 import { CaptureError, CaptureLossTally, type CaptureDroppedEvent, describeCaptureLoss } from '../capture-v1/errors'
 import type { V1SendOptions } from '../capture-v1/sender'
-import { type SerializedV1Event, serializeV1Event } from '../capture-v1/serialize'
+import { type SerializedV1Event, serializeV1Event, wireProblem } from '../capture-v1/serialize'
 import type { CaptureEndpoint } from '../capture-v1/types'
 
 /** Upper bound on the uuids one local-drop report lists; the message still carries the full count. */
@@ -51,13 +51,22 @@ interface QueuedEvent extends SerializedV1Event {
   message: PostHogEventProperties
 }
 
+type LocalDropReason = 'queueFull' | 'tooLarge' | 'invalid'
+
 interface LocalDropTally {
   queueFull: number
   tooLarge: number
+  invalid: number
   sample: CaptureDroppedEvent[]
 }
 
-const emptyTally = (): LocalDropTally => ({ queueFull: 0, tooLarge: 0, sample: [] })
+const emptyTally = (): LocalDropTally => ({ queueFull: 0, tooLarge: 0, invalid: 0, sample: [] })
+
+const LOCAL_DROP_DETAILS: Record<LocalDropReason, string> = {
+  queueFull: 'queue full',
+  tooLarge: 'event too large',
+  invalid: 'invalid event',
+}
 
 /**
  * One capture endpoint's in-memory queue, flush timer, `flushAt` trigger, batching and
@@ -96,6 +105,11 @@ export class CaptureLane {
 
   enqueue(message: PostHogEventProperties): void {
     const event: QueuedEvent = { ...serializeV1Event(message), message }
+    if (wireProblem(message)) {
+      this.recordLocalDrop(event, 'invalid')
+      this.armFlushTimer()
+      return
+    }
     if (this.isTooLarge(event)) {
       this.recordLocalDrop(event, 'tooLarge')
       // Nothing may follow to flush, and the flush cycle is what reports the drop.
@@ -117,9 +131,10 @@ export class CaptureLane {
   /** Sends one event now, without queueing. Delivery failures are reported, not thrown. */
   async sendImmediate(message: PostHogEventProperties): Promise<void> {
     const event = serializeV1Event(message)
-    if (this.isTooLarge(event)) {
+    const reason = wireProblem(message) ? 'invalid' : this.isTooLarge(event) ? 'tooLarge' : undefined
+    if (reason) {
       const tally = emptyTally()
-      this.addToTally(tally, event, 'tooLarge')
+      this.addToTally(tally, event, reason)
       this.reportTally(tally)
       return
     }
@@ -264,14 +279,14 @@ export class CaptureLane {
     return bytes > this.config.maxEventBytes
   }
 
-  private recordLocalDrop(event: SerializedV1Event, reason: 'queueFull' | 'tooLarge'): void {
+  private recordLocalDrop(event: SerializedV1Event, reason: LocalDropReason): void {
     this.addToTally(this.localDrops, event, reason)
   }
 
-  private addToTally(tally: LocalDropTally, event: SerializedV1Event, reason: 'queueFull' | 'tooLarge'): void {
+  private addToTally(tally: LocalDropTally, event: SerializedV1Event, reason: LocalDropReason): void {
     tally[reason]++
     if (tally.sample.length < MAX_REPORTED_LOCAL_DROPS) {
-      tally.sample.push({ uuid: event.uuid, details: reason === 'queueFull' ? 'queue full' : 'event too large' })
+      tally.sample.push({ uuid: event.uuid, details: LOCAL_DROP_DETAILS[reason] })
     }
   }
 
@@ -297,7 +312,7 @@ export class CaptureLane {
       errors.push(error)
       loss.add('still queued when shutdown ended', leftovers.length)
     }
-    const total = tally.queueFull + tally.tooLarge
+    const total = tally.queueFull + tally.tooLarge + tally.invalid
     if (total > 0) {
       const { maxQueueSize, maxEventBytes, maxEventBytesOf } = this.config
       const reasons: string[] = []
@@ -308,12 +323,16 @@ export class CaptureLane {
         const measured = maxEventBytesOf === 'properties' ? 'properties larger' : 'larger'
         reasons.push(`${tally.tooLarge} with ${measured} than ${maxEventBytes} bytes`)
       }
+      if (tally.invalid > 0) {
+        reasons.push(`${tally.invalid} with a missing, empty or malformed event name or id`)
+      }
       const error = new CaptureError({ endpoint, requestId: '', drops: tally.sample, retryExhausted: [] })
       error.message = `Dropped ${total} event(s) for ${endpoint} before sending: ${reasons.join(', ')}`
       errors.push(error)
       loss.add(`dropped because the queue was full (${maxQueueSize} events)`, tally.queueFull)
       const measured = maxEventBytesOf === 'properties' ? 'their properties were' : 'they were'
       loss.add(`dropped because ${measured} larger than ${maxEventBytes} bytes`, tally.tooLarge)
+      loss.add('dropped because the event name or an id was missing, empty or malformed', tally.invalid)
     }
     if (errors.length > 0) {
       this.safely(() => this.hooks.onLocalDrops(errors, describeCaptureLoss(endpoint, loss)))

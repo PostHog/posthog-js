@@ -48,11 +48,17 @@ export function readEventOptions(value: unknown): V1EventOptions | undefined {
  * caller passed one); numbers are treated as epoch milliseconds. Invalid values
  * fall back to "now" so a bad timestamp never rejects the whole batch.
  */
+function replaceUnparseableTimestamp(): string {
+  // console.warn, not the client logger: the logger only prints in debug mode, and the event's time changes. Never logs the value.
+  console.warn('[PostHog] replacing an unparseable event timestamp with the current time')
+  return new Date().toISOString()
+}
+
 function toRfc3339(timestamp: unknown): string {
   if (typeof timestamp === 'string') {
     const asDate = new Date(timestamp)
     if (Number.isNaN(asDate.getTime())) {
-      return new Date().toISOString()
+      return replaceUnparseableTimestamp()
     }
 
     const normalized = asDate.toISOString()
@@ -62,7 +68,7 @@ function toRfc3339(timestamp: unknown): string {
       : normalized
   }
   if (timestamp instanceof Date) {
-    return Number.isNaN(timestamp.getTime()) ? new Date().toISOString() : timestamp.toISOString()
+    return Number.isNaN(timestamp.getTime()) ? replaceUnparseableTimestamp() : timestamp.toISOString()
   }
   const asDate = timestamp == null ? new Date() : new Date(timestamp as string | number)
   return Number.isNaN(asDate.getTime()) ? new Date().toISOString() : asDate.toISOString()

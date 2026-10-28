@@ -171,6 +171,31 @@ describe('CaptureLane', () => {
       expect(localDrops.map((error) => error.drops)).toEqual([[{ uuid: 'uover', details: 'event too large' }]])
     })
 
+    it.each([
+      ['an empty name', { ...msg('bad'), event: '' }],
+      ['a malformed distinct id', { ...msg('bad'), distinct_id: 'user\ud800' }],
+    ])('drops a queued event with %s and reports it without sending', async (_name, bad) => {
+      const { lane, batches, localDrops } = makeLane()
+
+      lane.enqueue(bad)
+      lane.enqueue(msg('good'))
+      await lane.flush()
+
+      expect(batches).toEqual([['ugood']])
+      expect(localDrops).toHaveLength(1)
+      expect(localDrops[0].drops).toEqual([{ uuid: 'ubad', details: 'invalid event' }])
+      expect(localDrops[0].message).toContain('1 with a missing, empty or malformed event name or id')
+    })
+
+    it('drops an immediate event with an empty name and reports it without sending', async () => {
+      const { lane, send, localDrops } = makeLane()
+
+      await lane.sendImmediate({ ...msg(1), event: '' })
+
+      expect(send).not.toHaveBeenCalled()
+      expect(localDrops[0].drops).toEqual([{ uuid: 'u1', details: 'invalid event' }])
+    })
+
     it('drops an oversized immediate event and reports it without sending', async () => {
       const { lane, send, localDrops } = makeLane({ maxEventBytes: 100 })
 

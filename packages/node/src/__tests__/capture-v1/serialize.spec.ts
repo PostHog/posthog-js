@@ -1,6 +1,6 @@
 import { type PostHogEventProperties, safeJsonStringify } from '@posthog/core'
 
-import { buildV1Body, serializeV1Event } from '@/capture-v1/serialize'
+import { buildV1Body, serializeV1Event, wireProblem } from '@/capture-v1/serialize'
 import { buildV1Event } from '@/capture-v1/transform'
 
 const utf8Bytes = (value: string): number => Buffer.byteLength(value, 'utf8')
@@ -25,7 +25,7 @@ const MESSAGES: [string, PostHogEventProperties][] = [
       properties: { $session_id: 's1', $window_id: 'w1', $cookieless_mode: true, nested: { a: [1, 2] } },
     }),
   ],
-  ['multibyte characters', message({ event: 'café ☕', properties: { emoji: '🦔🦔', euro: '€', lone: '\ud800' } })],
+  ['multibyte characters', message({ event: 'café ☕', properties: { emoji: '🦔🦔', euro: '€' } })],
 ]
 
 describe('serializeV1Event', () => {
@@ -39,6 +39,23 @@ describe('serializeV1Event', () => {
     expect(serialized.uuid).toBe(input.uuid)
     expect(serialized.bytes).toBe(utf8Bytes(serialized.json))
     expect(serialized.propertiesBytes).toBe(utf8Bytes(safeJsonStringify(buildV1Event(input).properties)))
+  })
+
+  it('repairs lone surrogates in property strings to U+FFFD and leaves pairs and escaped backslashes alone', () => {
+    const serialized = serializeV1Event(
+      message({
+        properties: { lone: 'a\ud800b', low: '\udc00', pair: '🦔', text: '\\ud800', nested: { x: ['\udbff'] } },
+      })
+    )
+
+    expect(JSON.parse(serialized.json).properties).toEqual({
+      lone: 'a\ufffdb',
+      low: '\ufffd',
+      pair: '🦔',
+      text: '\\ud800',
+      nested: { x: ['\ufffd'] },
+    })
+    expect(serialized.bytes).toBe(utf8Bytes(serialized.json))
   })
 
   it('counts bytes, not UTF-16 code units', () => {
@@ -70,5 +87,22 @@ describe('buildV1Body', () => {
       created_at: 'now',
       batch: [],
     })
+  })
+})
+
+describe('wireProblem', () => {
+  it.each<[string, PostHogEventProperties, boolean]>([
+    ['a valid event', message(), false],
+    ['an empty name', message({ event: '' }), true],
+    ['a missing name', message({ event: undefined }), true],
+    ['a non-string name', message({ event: { name: 'x' } as unknown as string }), true],
+    ['a lone surrogate in the name', message({ event: 'e\ud800' }), true],
+    ['a lone surrogate in the distinct id', message({ distinct_id: '\udc00user' }), true],
+    ['a lone surrogate in the session id', message({ properties: { $session_id: 's\ud800' } }), true],
+    ['a lone surrogate in the window id', message({ properties: { $window_id: 'w\ud800' } }), true],
+    ['a lone surrogate in another property', message({ properties: { other: '\ud800' } }), false],
+    ['a valid surrogate pair in the name', message({ event: 'hog 🦔' }), false],
+  ])('%s', (_name, input, invalid) => {
+    expect(wireProblem(input) !== undefined).toBe(invalid)
   })
 })
