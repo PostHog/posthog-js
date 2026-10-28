@@ -67,7 +67,7 @@ dependencies {
   // The React Native Gradle plugin provides the version.
   implementation "com.facebook.react:react-android"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-  implementation "com.posthog:posthog-android:3.74.2"
+  implementation "com.posthog:posthog-android:4.0.0"
 
   testImplementation "junit:junit:4.13.2"
   testImplementation "org.json:json:20250517"
