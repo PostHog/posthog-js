@@ -1198,7 +1198,7 @@ export async function handleInitializeRequest(
   if (mintedSessionId) {
     upgradeMintedTokenToNegotiated(server, mintedSessionId, requestSessionInfo, negotiatedProtocolVersion, data.logger)
   }
-  if (data.options.captureInitialize !== false) {
+  if (data.options.sendInitializeEvent !== false) {
     captureEvent(server, event, data.logger, {
       ...requestAttribution,
       protocolVersion: negotiatedProtocolVersion,

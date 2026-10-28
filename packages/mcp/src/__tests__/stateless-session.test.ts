@@ -331,8 +331,8 @@ describe('Stateless session minting', () => {
     })
   })
 
-  describe('captureInitialize: false', () => {
-    const OFF: MCPAnalyticsOptions = { captureInitialize: false }
+  describe('sendInitializeEvent: false', () => {
+    const OFF: MCPAnalyticsOptions = { sendInitializeEvent: false }
     const callTool = { method: 'tools/call', params: { name: 'get_plan', arguments: {} } }
 
     it('sends no $mcp_initialize but still mints the token another pod resolves', async () => {
