@@ -1,6 +1,6 @@
 # Node SDK benchmarks
 
-PR-only, paired measurements of built Node SDKs. The benchmark implementation comes from one checkout and loads each target through its own package entry point in a fresh process. No SDK runtime source is changed by the runner.
+PR-only, paired measurements of built Node SDKs. The benchmark implementation comes from one checkout and loads each target through its own package entry point in a fresh process. No SDK runtime source is changed by the runner. Suite version 2 implements [SDK benchmark specification v1](https://github.com/PostHog/.github/blob/main/.github/workflows/sdk-benchmark-specification.md) (`suite.specification=sdk-benchmarks/v1`); the result schema remains version 1.
 
 ## Run locally
 
@@ -28,32 +28,40 @@ The runner does not install dependencies or build targets. Rebuild after changin
 
 ## Workloads
 
-| Workload                                        | Public path                                        | Measurement                                                     |
-| ----------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------- |
-| Nine single-flag cases                          | `getFeatureFlag`                                   | Elapsed time/op, process CPU/op, estimated allocated bytes/op   |
-| All flags: 10, 100, 1,000                       | `getAllFlags`                                      | Same metrics, per complete all-flags call                       |
-| Sustained 1,000-flag evaluation                 | Eight overlapping `getAllFlags` calls              | RSS observations, lifetime peak RSS, post-settling heap/RSS     |
-| Forty definition refreshes                      | `reloadFeatureFlags`, then validated `getAllFlags` | Memory checkpoints every five refreshes and at the end          |
-| Capture: 32-byte and 4,096-byte string property | `capture`                                          | Asynchronous preparation/enqueue time and allocations per event |
-| Capture and drain: 10,000 events                | `capture` plus `flush` every 100 events            | Memory under bounded queue/drain load                           |
+The full profile contains 20 workloads. All listed flag evaluation passes use the same operation counts, including allocation sampling.
 
-The mixed flag fixture includes boolean, rollout, variant, person-property, regex, cohort, early/late/no-match, and inactive flags. Sixteen identities have independently calculated expected values. Setup and post-measurement checks validate every identity, including false and variant results. Refresh generations change boolean/cohort outcomes and regex patterns; checks detect a refresh that fetched but failed to replace definitions.
+| Workload ID                                            | Full operations                          | Passes                     |
+| ------------------------------------------------------ | ---------------------------------------- | -------------------------- |
+| `flags.single.<case>` (nine cases)                     | 16,000, with 10 definitions              | timing, allocation         |
+| `flags.all.10`                                         | 1,600                                    | timing, allocation         |
+| `flags.all.100`, `flags.all.1000`                      | 160 each                                 | timing, allocation         |
+| `flags.load.1000`                                      | 1,600, concurrency 8                     | memory                     |
+| `flags.refresh.1000`                                   | 40 refreshes                             | memory                     |
+| `capture.enqueue.32`, `capture.enqueue.4096`           | 1,000 events each                        | timing, allocation         |
+| `capture.drain.steady.32`, `capture.drain.steady.4096` | 1,000 events each, flush every 100       | timing, allocation, memory |
+| `capture.drain.burst.32`, `capture.drain.burst.4096`   | 1,000 events each, flush once at the end | timing, allocation, memory |
+
+Smoke uses 160 single evaluations, 16 all-flags evaluations, 32 load evaluations, four refreshes, and 200 events per capture workload. Steady smoke flushes at 100 and 200; burst smoke flushes only at 200. Capture denominators count capture calls, not flush calls.
+
+The mixed flag fixture includes boolean, rollout, variant, person-property, regex, cohort, early/late/no-match, and inactive flags. Sixteen identities have independently calculated expected values. Setup and post-measurement checks validate every identity, including false and variant results. Every measured flag phase starts at generation 0, restored through the public reload API after verified warmup. Refresh generations 1–40 (1–4 for smoke) change boolean/cohort outcomes and regex patterns. Each refresh must fetch definitions; full correctness sweeps occur before and after measurement, not inside the refresh loop. Controls independently check each changing generation and reject fetched but stale definitions.
 
 `getFeatureFlag` is currently deprecated but remains a supported public path. Its once-per-process warning occurs during setup, outside timing. This suite measures those named APIs; it does not imply coverage of `evaluateFlags` snapshots or remote evaluation.
 
 ### Transport and lifecycle
 
-A deterministic adapter supplied through the public `fetch` option serves `/flags/definitions` and accepts uncompressed v0 `/batch/` requests. Other requests fail validation. Definition bodies are parsed anew on loading and refresh. The adapter keeps delivery counters, not captured event history.
+A deterministic adapter supplied through the public `fetch` option serves `/flags/definitions` and accepts uncompressed v0 `/batch/` requests. Other requests fail validation. Definition bodies are parsed anew on loading and refresh. The adapter keeps delivery counters and a preallocated bounded sequence bitmap, not captured event history.
 
-This isolates SDK costs from sockets, server scheduling, and production. It is not an HTTP integration benchmark. Refresh-memory measurements include fixture generation and the current serialized definition body in the process; prior fixture generations are not retained by the adapter. Capture/drain measurements include the adapter's batch parsing, while enqueue-only timing/allocation passes flush and verify delivery after measurement.
+This isolates SDK costs from sockets, server scheduling, and production. It is not an HTTP integration benchmark. Refresh-memory measurements include fixture generation and the current serialized definition body in the process; prior fixture generations are not retained by the adapter. Completed-delivery measurements include capture preparation, serialization, public flush completion and the adapter's parsing and validation overhead. Their `completion_boundary=completed_delivery` verification never flushes again. Enqueue-only timing/allocation passes flush and verify delivery after measurement.
 
-Delivered event counts, per-identity counts, and exact payload contents must match the workload; queue overflow, identity redistribution, or payload loss fails validation. Capture calls return `void`, so each batch of 100 calls includes an event-loop turn to complete asynchronous preparation/enqueue work. The enqueue pass does not measure just the synchronous method return, and it does not include its final flush.
+Caller fixtures are constructed before measurement. Event i is named `benchmark`, uses `benchmark-user-<i modulo 16>`, and owns separate properties containing `plan=pro`, integer `sequence=i`, and exactly 32 or 4,096 ASCII `x` payload characters. Previously submitted properties are never mutated by later calls. Receivers require every sequence exactly once with its matching identity, payload and plan; balanced loss/duplication fails even when total and per-user counts match. Delivery order is unrestricted.
 
-Automatic flush timers and flag polling are disabled through public options. Manual refresh and flush use normal SDK lifecycle methods; the runner does not replace internal queues, flag state, or evaluators. Eight overlapping asynchronous evaluations are event-loop concurrency, not eight CPU workers.
+Capture calls return `void`, so each group of 100 calls includes an event-loop turn to complete asynchronous preparation/enqueue work. Enqueue reports `completion_boundary=prepared_enqueue`, not synchronous API return, and excludes its final flush. Steady and burst describe the explicit caller flush schedule, not HTTP request counts or a requirement that events remain queued.
+
+Compression, automatic flush timers and flag polling are disabled through public options. The automatic flush count (`flushAt`) is 100,000, queue capacity (`maxQueueSize`) is 100,001, and maximum count-based batch size (`maxBatchSize`) is 100,000. Native size-based transport behavior remains active. Manual refresh and flush use normal SDK lifecycle methods; the runner does not replace internal queues, flag state, or evaluators. Eight overlapping asynchronous evaluations are event-loop concurrency, not eight CPU workers.
 
 ## Measurement methods
 
-Each revision/workload/pass/repetition runs in a separate process. Base and head alternate first position between repetitions and never run concurrently. Warmup, correctness checks, and settling precede measurement. Timing, allocation profiling, and memory observation run as separate passes.
+Each revision/workload/pass/repetition runs in a separate process. Base and head alternate first position between repetitions and never run concurrently. Warmup uses two refreshes, or min(operations, 32) for 1,000-flag evaluations, or min(operations, 160) otherwise. Warmup delivery is fully flushed and verified before capture counters and receiver state reset; the measured sequence restarts at zero independently of warmup count. Flag state resets to generation 0. Correctness checks and settling precede measurement. Timing, allocation profiling, and memory observation run as separate passes.
 
 ### Time
 
@@ -75,11 +83,11 @@ The measurement-control test allocates and collects approximately 15 MB of array
 ### Memory
 
 - `idle_process_rss`: after definitions, checks, warmup, and settling.
-- `observed_workload_peak_rss`: highest RSS observed at operation checkpoints or immediately after work. This can miss spikes between checkpoints.
+- `observed_workload_peak_rss`: highest RSS observed before work, at operation checkpoints or immediately after work. This can miss spikes between checkpoints.
 - `process_lifetime_peak_rss`: Node's process high-water mark, converted from KiB to bytes. Includes import, fixture setup, correctness checks, and warmup; it is not a workload-only peak.
 - `post_settling_process_rss` and `post_settling_heap_used`: after two explicit GC requests separated by event-loop turns.
 
-Refresh runs also retain memory checkpoints after each five measured cycles. Their durations include those explicit collection requests and correctness checks and are not ordinary evaluation timing samples. Post-settling RSS alone does not prove a leak: V8 and the allocator may keep memory resident.
+Memory checkpoints occur after each 32 completed load evaluations, every refresh, or each 100 captures, including a final partial group if needed. Positions are unique and increasing. Steady checkpoints follow the scheduled flush; burst checkpoints precede its final flush, with a separate after-work snapshot covering completed delivery. No forced GC runs inside measured work or checkpoint callbacks. Natural GC remains enabled; explicit settling occurs before work and after the after-work snapshot, with final correctness sweeps after the post-settling snapshot. Post-settling RSS alone does not prove a leak: V8 and the allocator may keep memory resident.
 
 Each worker has a two-minute timeout and a 512 MiB V8 old-space limit. **That is not a 512 MiB process RSS limit.** A confirmed V8 heap exhaustion is recorded as `oom`; an unexplained SIGKILL is `error`, not assumed OOM. Failed workloads have status and diagnostics rather than fabricated zero values. Completed measurements are written after each worker so later failures leave partial evidence. The suite stops after two worker timeouts, after completing the current base/head pair, to reserve CI time for uploading diagnostics.
 

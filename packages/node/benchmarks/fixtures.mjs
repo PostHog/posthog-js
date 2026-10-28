@@ -135,17 +135,23 @@ export function workloads(smoke = false) {
       id: `capture.enqueue.${payload_bytes}`,
       mode: 'capture',
       payload_bytes,
-      operations: smoke ? 100 : 2000,
+      operations: smoke ? 200 : 1000,
       concurrency: 1,
+      completion_boundary: 'prepared_enqueue',
       passes: ['timing', 'allocation'],
     })),
-    {
-      id: 'capture.drain.4096',
-      mode: 'drain',
-      payload_bytes: 4096,
-      operations: smoke ? 200 : 10000,
-      concurrency: 1,
-      passes: ['memory'],
-    },
+    ...['steady', 'burst'].flatMap((drain_strategy) =>
+      [32, 4096].map((payload_bytes) => ({
+        id: `capture.drain.${drain_strategy}.${payload_bytes}`,
+        mode: 'drain',
+        payload_bytes,
+        operations: smoke ? 200 : 1000,
+        concurrency: 1,
+        drain_strategy,
+        flush_every: drain_strategy === 'steady' ? 100 : smoke ? 200 : 1000,
+        completion_boundary: 'completed_delivery',
+        passes: ['timing', 'allocation', 'memory'],
+      }))
+    ),
   ]
 }

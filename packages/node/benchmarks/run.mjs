@@ -199,7 +199,8 @@ export async function main(args = process.argv.slice(2), executeWorker = runWork
   const pairId = randomUUID()
   const suite = {
     id: 'node-sdk-performance',
-    version: 1,
+    version: 2,
+    specification: 'sdk-benchmarks/v1',
     source_commit: git(here, 'rev-parse', 'HEAD'),
     source_digest: await treeDigest(here),
     profile: values.smoke ? 'smoke' : 'full',
@@ -207,7 +208,10 @@ export async function main(args = process.argv.slice(2), executeWorker = runWork
     allocation_sampling: samplingOptions,
     transport: 'public fetch adapter; in-process JSON; no network',
     settling: 'two explicit GC requests separated by event-loop turns',
-    memory_sampling: 'operation checkpoints; lifetime high-water mark includes setup and warmup',
+    memory_sampling:
+      'every 32 load evaluations, every refresh, every 100 captures, and final operation; no forced GC during work; lifetime high-water mark includes setup and warmup',
+    warmup:
+      'two refreshes; otherwise min(operations, 32 for 1000 flags or 160); verified then phase reset and generation 0 reload',
   }
   const directories = { base: resolve(values.base), head: resolve(values.head) }
   const documents = {}
