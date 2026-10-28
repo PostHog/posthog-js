@@ -1609,20 +1609,19 @@ export abstract class PostHogCoreStateless {
 
     const url = `${this.host}${this.getBatchEndpointPath(route)}`
 
+    // Serialized once, so a retry resends the events as the first attempt sent them, even if the
+    // app changes a nested property value while the retry waits.
+    const serializedBatch = safeJsonStringify(batch)
+
     // Built again for every attempt: capture corrects clock skew against `sent_at`, so a
     // stamp reused across retries would move every event in the batch later by the retry wait.
     const buildFetchOptions = async (): Promise<PostHogFetchOptions> => {
-      const data: Record<string, any> = {
+      const envelope = safeJsonStringify({
         api_key: this.projectToken,
-        batch,
         sent_at: currentISOTime(),
-      }
-
-      if (this.historicalMigration) {
-        data.historical_migration = true
-      }
-
-      const payload = safeJsonStringify(data)
+        ...(this.historicalMigration && { historical_migration: true }),
+      })
+      const payload = `{"batch":${serializedBatch},${envelope.slice(1)}`
       const gzippedPayload = !this.disableCompression ? await this.compressPayload(payload) : null
       return {
         method: 'POST',
