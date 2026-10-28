@@ -1,5 +1,7 @@
 import { addUncaughtExceptionListener, addUnhandledRejectionListener } from './autocapture'
 import { PostHogBackendClient } from '@/client'
+import type { ContextData } from '../context/types'
+import { snapshotEventContext } from '../context/event-context'
 import { isObject } from '@posthog/core'
 import { EventMessage, PostHogOptions } from '@/types'
 import type { Logger } from '@posthog/core'
@@ -87,8 +89,10 @@ export default class ErrorTracking {
     hint: CoreErrorTracking.EventHint,
     distinctId?: string,
     additionalProperties?: Record<string | number, any>,
-    level?: CoreErrorTracking.SeverityLevel
+    level?: CoreErrorTracking.SeverityLevel,
+    context?: ContextData
   ): Promise<EventMessage> {
+    const applyContextSnapshot = snapshotEventContext(context)
     const properties: EventMessage['properties'] = {}
     for (const [key, value] of Object.entries(additionalProperties ?? {})) {
       if (!RESERVED_EXCEPTION_PROPERTIES.has(key)) {
@@ -103,7 +107,7 @@ export default class ErrorTracking {
       exceptionProperties.$exception_level = exceptionLevel
     }
 
-    return {
+    return applyContextSnapshot({
       event: '$exception',
       // The client resolves a missing id: the context id, else a personless id.
       distinctId: distinctId,
@@ -112,7 +116,7 @@ export default class ErrorTracking {
         ...properties,
       },
       _originatedFromCaptureException: true,
-    }
+    })
   }
 
   private startAutocaptureIfEnabled(): void {
@@ -129,7 +133,11 @@ export default class ErrorTracking {
           const eventMessage = await ErrorTracking.buildEventMessage(
             this.client.getErrorPropertiesBuilder(),
             exception,
-            hint
+            hint,
+            undefined,
+            undefined,
+            undefined,
+            this.client.getContext()
           )
           const exceptionProperties = eventMessage.properties
           const exceptionType = exceptionProperties?.$exception_list[0]?.type ?? 'Exception'

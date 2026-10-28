@@ -5,6 +5,7 @@ import { addProperty, getFirstHeaderValue, readPostHogTracingHeaders } from './t
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import type { Request, Response } from 'express'
 import type { ContextData } from './context/types'
+import { notifyContextListeners } from './context/listeners'
 
 type ExpressMiddleware = (req: Request, res: Response, next: () => void) => void
 
@@ -34,7 +35,10 @@ function getClientIp(req: Request): string | undefined {
 }
 
 function buildRequestContextData(posthog: PostHogBackendClient, req: Request): Partial<ContextData> {
-  const { sessionId, distinctId } = readPostHogTracingHeaders(posthog.options, req.headers)
+  const headers = readPostHogTracingHeaders(posthog.options, req.headers)
+  const context = posthog.getContext()
+  const sessionId = context?.sessionId ?? headers.sessionId
+  const distinctId = context?.distinctId ?? headers.distinctId
   const properties: Record<string, any> = {}
   const disableCaptureUrlHashes = posthog.options.disable_capture_url_hashes === true
 
@@ -66,7 +70,10 @@ export function setupExpressRequestContext(
 
 function posthogRequestContext(posthog: PostHogBackendClient): ExpressMiddleware {
   return (req, _res, next): void => {
-    posthog.withContext(buildRequestContextData(posthog, req), () => next())
+    posthog.withContext(buildRequestContextData(posthog, req), () => {
+      notifyContextListeners(posthog, true)
+      next()
+    })
   }
 }
 
@@ -122,7 +129,9 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
           error,
           hint,
           contextData.distinctId,
-          additionalProperties
+          additionalProperties,
+          undefined,
+          posthog.getContext()
         ),
         // Downstream error handlers can choose a different status, even asynchronously.
         getResponseStatusCode(res),

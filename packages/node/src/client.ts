@@ -82,6 +82,8 @@ import { canonicalizeUuid, eventUuidv7 } from './capture-v1/uuid'
 import { readEventOptions } from './capture-v1/transform'
 import { fillOptions, fillProperties, isUnsetProperty, snapshotLayer } from './event-defaults'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
+import { notifyContextListeners } from './extensions/context/listeners'
+import { getEventContext } from './extensions/context/event-context'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -3206,7 +3208,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return fn()
     }
 
-    return this.context.run(data, fn, options)
+    return this.context.run(
+      data,
+      () => {
+        notifyContextListeners(this)
+        return fn()
+      },
+      options
+    )
   }
 
   /**
@@ -3245,6 +3254,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   enterContext(data: Partial<ContextData>, options?: ContextOptions): void {
     this.context?.enter(data as ContextData, options)
+    notifyContextListeners(this)
   }
 
   /**
@@ -3612,7 +3622,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       { syntheticException },
       distinctId,
       properties,
-      level
+      level,
+      this.getContext()
     )
     return { ...msg, options, uuid, flags }
   }
@@ -3663,7 +3674,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const callOptions = readEventOptions(props.options)
 
     // Read every layer now, before the first await, so later changes never reach this event.
-    const contextData = this.context?.get()
+    const contextData = getEventContext(props, this.context?.get())
     const contextProperties = snapshotLayer(contextData?.properties)
     const contextOptions = snapshotLayer(contextData?.options)
     const globalProperties = snapshotLayer(this.props)
