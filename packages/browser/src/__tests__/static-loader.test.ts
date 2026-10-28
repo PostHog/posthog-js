@@ -288,38 +288,6 @@ describe('static script loader', () => {
         expect(injectedScripts()).toHaveLength(0)
     })
 
-    it('adopts a pending SDK bootstrap without replacing queued calls or configuration', async () => {
-        const beforeSend = vi.fn()
-        const config = { api_host: '/ingest', before_send: beforeSend, opt_out_capturing_by_default: true }
-        const secondary = Object.assign([['capture', 'named event']], { people: [['set', { plan: 'paid' }]] })
-        const queue = Object.assign([['capture', 'early event']], {
-            __SV: 1,
-            __loaderPending: true,
-            _i: [
-                ['phc_manual', config, 'posthog'],
-                ['phc_secondary', config, 'secondary'],
-            ],
-            init: vi.fn(),
-            people: [],
-            secondary,
-        })
-        loaderWindow.posthog = queue
-
-        await load()
-
-        expect(loaderWindow.posthog).toBe(queue)
-        expect(queue.slice()).toEqual([['capture', 'early event']])
-        expect(queue._i).toHaveLength(2)
-        expect(queue._i[0][1]).toBe(config)
-        expect(queue.secondary).toBe(secondary)
-        expect(injectedScripts()).toHaveLength(1)
-        expect(injectedScripts()[0].src).toBe(`https://us-assets.i.posthog.com/static/${version}/array.js`)
-
-        vi.resetModules()
-        await load()
-        expect(injectedScripts()).toHaveLength(1)
-    })
-
     it('does not reinitialize or inject a second core when executed twice', async () => {
         await load()
         const first = loaderWindow.posthog

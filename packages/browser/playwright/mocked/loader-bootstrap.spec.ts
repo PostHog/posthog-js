@@ -4,9 +4,9 @@ import { version } from '../../package.json'
 
 type CapturedEvent = { event: string; properties: Record<string, unknown> }
 
-for (const stage of ['loader', 'core'] as const) {
+for (const assetHost of ['https://us-assets.i.posthog.com', 'https://eu-assets.i.posthog.com', '/ingest']) {
     for (const fail of [false, true]) {
-        test(`application stays interactive during a ${fail ? 'failed' : 'delayed'} ${stage} download`, async ({
+        test(`application stays interactive during a ${fail ? 'failed' : 'delayed'} SDK download from ${assetHost}`, async ({
             page,
         }) => {
             const events: CapturedEvent[] = []
@@ -32,7 +32,7 @@ for (const stage of ['loader', 'core'] as const) {
             }
             const html = `<!doctype html><html><head></head><body>
                 <button id="probe">Test interaction</button><output id="result"></output>
-                <script src="/bootstrap.js" data-loader-src="https://us-assets.i.posthog.com/static/1/loader.js"></script>
+                <script src="/bootstrap.js" data-asset-host="${assetHost}"></script>
                 <script src="/init.js"></script>
                 <script async src="/app.js"></script>
             </body></html>`
@@ -77,23 +77,11 @@ for (const stage of ['loader', 'core'] as const) {
                             window.appReady = true;`,
                     })
                 }
-                const downloadStage = url.pathname.endsWith('/loader.js')
-                    ? 'loader'
-                    : url.pathname.endsWith('/array.js')
-                      ? 'core'
-                      : undefined
-                if (downloadStage) {
-                    downloads.push(url.pathname)
-                    if (downloadStage === stage) await held
-                    if (fail && downloadStage === stage) return route.fulfill({ status: 404, body: '', headers })
-                    return route.fulfill({
-                        path: path.resolve(
-                            __dirname,
-                            '../../dist',
-                            downloadStage === 'loader' ? 'loader.js' : 'array.js'
-                        ),
-                        headers,
-                    })
+                if (url.pathname.endsWith('/loader.js') || url.pathname.endsWith('/array.js')) {
+                    downloads.push(request.url())
+                    await held
+                    if (fail) return route.fulfill({ status: 404, body: '', headers })
+                    return route.fulfill({ path: path.resolve(__dirname, '../../dist/array.js'), headers })
                 }
                 if (url.pathname.endsWith('/e/') && request.method() === 'POST') {
                     const payload = request.postDataJSON()
@@ -106,9 +94,7 @@ for (const stage of ['loader', 'core'] as const) {
             try {
                 await page.goto('https://customer.example/', { waitUntil: 'domcontentloaded' })
                 await page.waitForFunction(() => (window as any).appReady)
-                await expect
-                    .poll(() => downloads.some((url) => url.endsWith(stage === 'loader' ? '/loader.js' : '/array.js')))
-                    .toBe(true)
+                await expect.poll(() => downloads.length).toBe(1)
                 await page.click('#probe')
                 await expect(page.locator('#result')).toHaveText('clicked')
                 expect(await page.evaluate(() => (window as any).posthog.__loaded)).toBeUndefined()
@@ -132,8 +118,9 @@ for (const stage of ['loader', 'core'] as const) {
                         'before-download'
                     )
                     expect(events.find(({ event }) => event === 'named event')?.properties.token).toBe('phc_secondary')
-                    expect(downloads).toEqual([`/static/${version}/loader.js`, `/static/${version}/array.js`])
                 }
+                const resolvedHost = assetHost === '/ingest' ? 'https://customer.example/ingest' : assetHost
+                expect(downloads).toEqual([`${resolvedHost}/static/${version}/array.js`])
                 expect(errors).toEqual([])
             } finally {
                 release()

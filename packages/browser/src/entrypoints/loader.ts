@@ -53,29 +53,22 @@ function load(): void {
     if (!document || !script || !('src' in script) || !script.src) {
         return
     }
-    const existing = assignableWindow.posthog
-    const pendingBootstrap = existing?.__SV === 1 && existing.__loaderPending === true
-    if (!pendingBootstrap && (existing?.__SV || isFunction(existing?.init))) {
+    if (assignableWindow.posthog?.__SV || isFunction(assignableWindow.posthog?.init)) {
         return
     }
 
     const url = document.createElement('a')
     url.href = script.src
-    if (pendingBootstrap) {
-        // Keep the same queue so calls made during the loader download survive the handoff.
-        existing.__loaderPending = false
-    } else {
-        const deferInit = script.getAttribute('data-defer-init') === 'true'
-        // Deferred mode leaves token and configuration entirely to the explicit init() call.
-        const initialization = deferInit ? undefined : getAutoInit(script, url.protocol + '//' + url.host)
-        if (!deferInit && !initialization) {
-            return
-        }
-        assignableWindow.posthog = createPostHogStub(initialization)
+    const deferInit = script.getAttribute('data-defer-init') === 'true'
+    // Deferred mode leaves token and configuration entirely to the explicit init() call.
+    const initialization = deferInit ? undefined : getAutoInit(script, url.protocol + '//' + url.host)
+    if (!deferInit && !initialization) {
+        return
     }
+    assignableWindow.posthog = createPostHogStub(initialization)
 
     const core = document.createElement('script')
-    core.src = getVersionedScriptURL(url, 'array.js')
+    core.src = getVersionedScriptURL(url)
     core.async = true
     core.crossOrigin = 'anonymous'
     core.nonce = script.nonce

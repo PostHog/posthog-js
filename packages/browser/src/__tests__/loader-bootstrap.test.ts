@@ -14,7 +14,7 @@ describe('local loader bootstrap', () => {
         document.head.innerHTML = ''
         script = document.createElement('script')
         script.src = '/scripts/posthog-bootstrap.js'
-        script.setAttribute('data-loader-src', 'https://us-assets.i.posthog.com/static/1/loader.js')
+        script.setAttribute('data-asset-host', 'https://us-assets.i.posthog.com')
         document.head.appendChild(script)
         vi.spyOn(document, 'currentScript', 'get').mockReturnValue(script)
         vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -26,9 +26,31 @@ describe('local loader bootstrap', () => {
         document.head.innerHTML = ''
     })
 
-    const hostedLoader = () => document.querySelector<HTMLScriptElement>('script[data-defer-init]')!
+    const injectedCore = () => document.querySelector<HTMLScriptElement>('script[src$="array.js"]')!
 
-    it('exposes generated methods before the asynchronous hosted loader downloads', async () => {
+    it('downloads the matching SDK directly without a hosted-loader request', async () => {
+        await bootstrap()
+        const downloads = Array.from(document.querySelectorAll<HTMLScriptElement>('script'))
+            .filter((element) => element !== script)
+            .map((element) => element.src)
+        expect(downloads).toEqual([`https://us-assets.i.posthog.com/static/${version}/array.js`])
+        expect(injectedCore().async).toBe(true)
+        expect(injectedCore().crossOrigin).toBe('anonymous')
+    })
+
+    it('reports copied token-bearing script URLs instead of silently ignoring their token', async () => {
+        script.setAttribute(
+            'data-asset-host',
+            'https://us-assets.i.posthog.com/static/loader.js?project_token=phc_wrong'
+        )
+        await bootstrap()
+        expect(console.error).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('posthog.init()'))
+        expect(console.error).not.toHaveBeenCalledWith(expect.any(String), expect.stringContaining('phc_wrong'))
+        expect(loaderWindow.posthog).toBeUndefined()
+        expect(document.querySelectorAll('script')).toHaveLength(1)
+    })
+
+    it('exposes generated methods before the SDK downloads', async () => {
         await bootstrap()
         const ph = loaderWindow.posthog
         expect(ph.__loaded).toBeUndefined()
@@ -43,43 +65,31 @@ describe('local loader bootstrap', () => {
             'captureTraceMetric',
         ])
         expect(ph.people.slice()).toEqual([['set', { plan: 'paid' }]])
-        expect(hostedLoader().src).toBe(`https://us-assets.i.posthog.com/static/${version}/loader.js`)
-        expect(hostedLoader().async).toBe(true)
-        expect(hostedLoader().crossOrigin).toBe('anonymous')
-        expect(document.querySelectorAll('script')).toHaveLength(2)
     })
 
     it.each([
-        [
-            'https://eu-assets.i.posthog.com/static/loader.js?cache=1#hash',
-            `https://eu-assets.i.posthog.com/static/${version}/loader.js`,
-        ],
-        ['https://proxy.example/ingest/static/1/loader.js', `https://proxy.example/ingest/static/${version}/loader.js`],
-        [
-            'https://us-assets.i.posthog.com/static/1.500.0/loader.js',
-            'https://us-assets.i.posthog.com/static/1.500.0/loader.js',
-        ],
-    ])('resolves %s to a versioned loader', async (source, expected) => {
-        script.setAttribute('data-loader-src', source)
+        ['https://eu-assets.i.posthog.com', `https://eu-assets.i.posthog.com/static/${version}/array.js`],
+        [' https://us-assets.i.posthog.com/ ', `https://us-assets.i.posthog.com/static/${version}/array.js`],
+        ['https://proxy.example/ingest', `https://proxy.example/ingest/static/${version}/array.js`],
+        ['https://proxy.example/ingest/', `https://proxy.example/ingest/static/${version}/array.js`],
+        ['/ingest', `http://localhost/ingest/static/${version}/array.js`],
+    ])('loads the bootstrap release from asset host %s', async (source, expected) => {
+        script.setAttribute('data-asset-host', source)
         await bootstrap()
-        expect(hostedLoader().src).toBe(expected)
+        expect(injectedCore().src).toBe(expected)
     })
 
-    it('hands off the same primary and named queues with function-valued configuration', async () => {
+    it('preserves primary and named queues with function-valued configuration while the SDK downloads', async () => {
         await bootstrap()
         const ph = loaderWindow.posthog
         const beforeSend = vi.fn((event) => event)
         const config = { api_host: '/ingest', before_send: beforeSend, opt_out_capturing_by_default: true }
         expect(ph.init('phc_primary', config)).toBe(ph)
         ph.register({ queued: true })
-        ph.capture('before loader')
+        ph.capture('early event')
         const secondary = ph.init('phc_secondary', config, 'secondary')
         secondary.capture('named event')
         secondary.people.set_once({ plan: 'paid' })
-
-        const loader = hostedLoader()
-        vi.spyOn(document, 'currentScript', 'get').mockReturnValue(loader)
-        await import('../entrypoints/loader')
 
         expect(loaderWindow.posthog).toBe(ph)
         expect(ph.secondary).toBe(secondary)
@@ -90,28 +100,19 @@ describe('local loader bootstrap', () => {
         expect(ph._i[0][1].before_send).toBe(beforeSend)
         expect(ph.slice()).toEqual([
             ['register', { queued: true }],
-            ['capture', 'before loader'],
+            ['capture', 'early event'],
         ])
         expect(secondary.slice()).toEqual([['capture', 'named event']])
         expect(secondary.people.slice()).toEqual([['set_once', { plan: 'paid' }]])
-        const core = document.querySelector<HTMLScriptElement>('script[src$="array.js"]')!
-        expect(core.src).toBe(`https://us-assets.i.posthog.com/static/${version}/array.js`)
-        expect(core.async).toBe(true)
-        ph.capture('during core download')
-        expect(ph[2]).toEqual(['capture', 'during core download'])
     })
 
-    it('passes the CSP nonce through both asynchronous downloads', async () => {
+    it('passes the CSP nonce to the asynchronous SDK download', async () => {
         script.nonce = 'bootstrap-nonce'
         await bootstrap()
-        const loader = hostedLoader()
-        expect(loader.nonce).toBe('bootstrap-nonce')
-        vi.spyOn(document, 'currentScript', 'get').mockReturnValue(loader)
-        await import('../entrypoints/loader')
-        expect(document.querySelector<HTMLScriptElement>('script[src$="array.js"]')!.nonce).toBe('bootstrap-nonce')
+        expect(injectedCore().nonce).toBe('bootstrap-nonce')
     })
 
-    it('does not replace a pending queue or download another loader when executed twice', async () => {
+    it('does not replace a pending queue or download another SDK when executed twice', async () => {
         await bootstrap()
         const ph = loaderWindow.posthog
         ph.init('phc_test', {})
@@ -134,11 +135,24 @@ describe('local loader bootstrap', () => {
         }
     )
 
-    it.each([null, '', '   '])('reports a missing loader URL (%j) without creating a queue', async (source) => {
-        if (isNull(source)) script.removeAttribute('data-loader-src')
-        else script.setAttribute('data-loader-src', source)
+    it.each([null, '', '   '])('reports a missing asset host (%j) without creating a queue', async (source) => {
+        if (isNull(source)) script.removeAttribute('data-asset-host')
+        else script.setAttribute('data-asset-host', source)
         await bootstrap()
-        expect(console.error).toHaveBeenCalled()
+        expect(console.error).toHaveBeenCalledWith(expect.any(String), 'Missing data-asset-host')
+        expect(loaderWindow.posthog).toBeUndefined()
+        expect(document.querySelectorAll('script')).toHaveLength(1)
+    })
+
+    it.each([
+        'https://us-assets.i.posthog.com/static/loader.js',
+        'https://us-assets.i.posthog.com?cache=1',
+        'https://us-assets.i.posthog.com#fragment',
+        'javascript:void(0)',
+    ])('reports invalid asset host %s without injecting a script', async (source) => {
+        script.setAttribute('data-asset-host', source)
+        await bootstrap()
+        expect(console.error).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('posthog.init()'))
         expect(loaderWindow.posthog).toBeUndefined()
         expect(document.querySelectorAll('script')).toHaveLength(1)
     })

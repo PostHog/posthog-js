@@ -15,24 +15,30 @@ function bootstrap(): void {
     if (assignableWindow.posthog?.__SV || isFunction(assignableWindow.posthog?.init)) {
         return
     }
-    const source = script.getAttribute('data-loader-src')?.trim()
+    const source = script.getAttribute('data-asset-host')?.trim()
     if (!source) {
-        logger.critical('Missing data-loader-src')
+        logger.critical('Missing data-asset-host')
         return
     }
 
-    assignableWindow.posthog = Object.assign(createPostHogStub(), { __loaderPending: true })
     const url = document.createElement('a')
     url.href = source
-    const loader = document.createElement('script')
-    // Pin mutable aliases to this bootstrap's release, which supports its queue handoff.
-    loader.src = getVersionedScriptURL(url, 'loader.js')
-    loader.async = true
-    loader.crossOrigin = 'anonymous'
-    loader.nonce = script.nonce
-    loader.setAttribute('data-defer-init', 'true')
-    loader.onerror = () => logger.error('Failed to load the PostHog loader')
-    script.parentNode?.insertBefore(loader, script.nextSibling)
+    if (!/^https?:$/.test(url.protocol) || url.search || url.hash || /\.js\/?$/i.test(url.pathname)) {
+        logger.critical(
+            'Set data-asset-host to an HTTP(S) asset host or proxy prefix, not a script URL, query, or fragment. Pass the project token to posthog.init().'
+        )
+        return
+    }
+
+    assignableWindow.posthog = createPostHogStub()
+    url.pathname = url.pathname.replace(/\/+$/, '') + '/static/'
+    const core = document.createElement('script')
+    core.src = getVersionedScriptURL(url)
+    core.async = true
+    core.crossOrigin = 'anonymous'
+    core.nonce = script.nonce
+    core.onerror = () => logger.error('Failed to load the PostHog SDK')
+    script.parentNode?.insertBefore(core, script.nextSibling)
 }
 
 bootstrap()
