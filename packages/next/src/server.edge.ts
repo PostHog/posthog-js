@@ -1,5 +1,7 @@
 import { captureNextRequestError } from './server/captureRequestError.js'
 import { getOrCreateEdgeClient } from './server/clientCache.edge.js'
+import { wrapProxy } from './server/withPostHogProxy.js'
+import type { NextProxyArgs } from './server/withPostHogProxy.js'
 import type {
     NextOnRequestError,
     NextRequestErrorContext,
@@ -28,6 +30,18 @@ export async function captureRequestError(
 }
 
 export const onRequestError: NextOnRequestError = captureRequestError
+
+/**
+ * Wraps a Next.js `proxy` (or `middleware`) function to capture the errors it throws with the
+ * edge build of `posthog-node`, then rethrows them. Errors it captures are marked, so
+ * `onRequestError` skips them.
+ */
+export function withPostHogProxy<TArgs extends NextProxyArgs, TResult>(
+    proxy: (...args: TArgs) => TResult,
+    options: OnRequestErrorOptions = {}
+): (...args: TArgs) => Promise<Awaited<TResult>> {
+    return wrapProxy(proxy, options, captureRequestError)
+}
 
 export type {
     NextOnRequestError,

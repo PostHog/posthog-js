@@ -2,6 +2,8 @@ import 'server-only'
 
 import { captureNextRequestError } from './captureRequestError.js'
 import { getOrCreateNodeClient } from './clientCache.node.js'
+import { wrapProxy } from './withPostHogProxy.js'
+import type { NextProxyArgs } from './withPostHogProxy.js'
 import type {
     NextOnRequestError,
     NextRequestErrorContext,
@@ -53,6 +55,28 @@ export async function captureRequestError(
  * to capture server-side errors by default.
  */
 export const onRequestError: NextOnRequestError = captureRequestError
+
+/**
+ * Wraps a Next.js `proxy` (or `middleware`) function to capture the errors it throws with
+ * `posthog-node`, then rethrows them. Next.js 16 does not report proxy errors to
+ * `onRequestError`. Errors it captures are marked, so `onRequestError` skips them.
+ *
+ * @example
+ * ```ts
+ * // proxy.ts
+ * import { withPostHogProxy } from '@posthog/next'
+ *
+ * export const proxy = withPostHogProxy(async (request) => {
+ *     // ...
+ * })
+ * ```
+ */
+export function withPostHogProxy<TArgs extends NextProxyArgs, TResult>(
+    proxy: (...args: TArgs) => TResult,
+    options: OnRequestErrorOptions = {}
+): (...args: TArgs) => Promise<Awaited<TResult>> {
+    return wrapProxy(proxy, options, captureRequestError)
+}
 
 function isNodeRuntime(): boolean {
     // Next.js sets NEXT_RUNTIME to `edge` or `nodejs` inside instrumentation.
