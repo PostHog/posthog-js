@@ -5,6 +5,8 @@ vi.mock('../version', () => ({ version: '1.2.3' }))
 const SECRET_KEY = 'phs_test_secret'
 const TEMPLATE_ID = '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b'
 const SEND_URL = 'https://us.posthog.com/api/projects/@current/messaging/send/email/'
+const MESSAGE_ID = '01a18356-c56c-0001-e494-7666bc915188'
+const STATUS_URL = `https://us.posthog.com/api/projects/@current/messaging/emails/${MESSAGE_ID}/`
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 type Reply = Error | { status: number; body?: unknown; headers?: Record<string, string> }
@@ -20,7 +22,7 @@ const rejected = (status: number, code?: string, headers: Record<string, string>
   headers,
 })
 
-describe('emails.send', () => {
+describe('emails', () => {
   vi.useFakeTimers()
 
   let posthog: PostHog
@@ -406,5 +408,83 @@ describe('emails.send', () => {
     expect(data).toBeNull()
     expect(error).toMatchObject({ code, name: 'validation_error' })
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  describe('get', () => {
+    const statusReply = (fields: Record<string, unknown> = {}): Reply => ({
+      status: 200,
+      body: {
+        id: MESSAGE_ID,
+        status: 'bounced',
+        created_at: '2026-10-28T16:27:44.364000Z',
+        status_at: '2026-10-28T16:30:02.100000Z',
+        reason: 'hard',
+        ...fields,
+      },
+    })
+
+    it('reads the status of a sent email from the app host', async () => {
+      replies = [statusReply()]
+
+      const { data, error } = await posthog.emails.get(MESSAGE_ID.toUpperCase())
+
+      expect(error).toBeNull()
+      expect(data).toEqual({
+        id: MESSAGE_ID,
+        status: 'bounced',
+        createdAt: '2026-10-28T16:27:44.364000Z',
+        statusAt: '2026-10-28T16:30:02.100000Z',
+        reason: 'hard',
+      })
+      const [url, options] = fetch.mock.calls[0]
+      expect(url).toBe(STATUS_URL)
+      expect(options.method).toBe('GET')
+      expect(options.body).toBeUndefined()
+      expect(options.headers).toEqual({
+        Authorization: `Bearer ${SECRET_KEY}`,
+        Accept: 'application/json',
+        'User-Agent': 'posthog-node/1.2.3',
+      })
+    })
+
+    it('reads a null reason', async () => {
+      replies = [statusReply({ status: 'sent', reason: null })]
+
+      const { data } = await posthog.emails.get(MESSAGE_ID)
+
+      expect(data).toMatchObject({ status: 'sent', reason: null })
+    })
+
+    it.each([
+      ['an unknown ID without a retry', [rejected(404, 'not_found')], MESSAGE_ID, 'not_found', 'not_found', 1],
+      ['an ID that is not a UUID without a request', [], 'msg_1', 'invalid_message_id', 'validation_error', 0],
+      [
+        'a status reply without a status',
+        [statusReply({ status: null })],
+        MESSAGE_ID,
+        'api_error',
+        'application_error',
+        1,
+      ],
+    ])('reports %s', async (_name, queued, id, code, name, requests) => {
+      replies = queued
+
+      const { data, error } = await posthog.emails.get(id)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code, name })
+      expect(fetch).toHaveBeenCalledTimes(requests)
+    })
+
+    it('retries an unavailable service', async () => {
+      replies = [rejected(503), statusReply()]
+
+      const pending = posthog.emails.get(MESSAGE_ID)
+      await vi.runAllTimersAsync()
+      const { data } = await pending
+
+      expect(data?.status).toBe('bounced')
+      expect(fetch).toHaveBeenCalledTimes(2)
+    })
   })
 })

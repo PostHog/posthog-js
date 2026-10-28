@@ -8,9 +8,18 @@ import {
 } from '@posthog/core'
 
 import { EmailError } from './errors'
-import type { EmailWarning, Emails, SendEmailOptions, SendEmailResponse, SendEmailResult } from './types'
+import type {
+  EmailStatus,
+  EmailWarning,
+  Emails,
+  GetEmailResponse,
+  SendEmailOptions,
+  SendEmailResponse,
+  SendEmailResult,
+} from './types'
 
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
+const STATUS_PATH = '/api/projects/@current/messaging/emails/{messageId}/'
 const US_APP_HOST = 'https://us.posthog.com'
 const EU_APP_HOST = 'https://eu.posthog.com'
 const CLOUD_APP_HOSTS: Record<string, string> = {
@@ -58,13 +67,14 @@ interface Reply {
 }
 
 /**
- * Sends one transactional email per call to the messaging template send API on the app host.
- * Owns the attempt loop, so every attempt carries the same idempotency key.
+ * Sends one transactional email per call to the messaging send API on the app host, and reads
+ * the status of a sent email. Owns the attempt loop, so every attempt of a send carries the same
+ * idempotency key.
  */
 export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
   private readonly hooks: EmailSenderHooks
-  private readonly inFlight = new Set<Promise<SendEmailResponse>>()
+  private readonly inFlight = new Set<Promise<unknown>>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
@@ -72,14 +82,21 @@ export class EmailSender implements Emails {
   }
 
   send(options: SendEmailOptions): Promise<SendEmailResponse> {
-    const pending = this.sendUntracked(options)
+    return this.track(this.sendUntracked(options))
+  }
+
+  get(id: string): Promise<GetEmailResponse> {
+    return this.track(this.getUntracked(id))
+  }
+
+  private track<T>(pending: Promise<T>): Promise<T> {
     this.inFlight.add(pending)
     void pending.finally(() => this.inFlight.delete(pending))
     return pending
   }
 
   /**
-   * Resolves when every send in flight, retries included, has settled.
+   * Resolves when every send and status read in flight, retries included, has settled.
    * Kept apart from the client's pending-promise queue, so a send in its retry backoff does not hold back `flush()`.
    */
   async drain(): Promise<void> {
@@ -91,70 +108,92 @@ export class EmailSender implements Emails {
   private async sendUntracked(options: SendEmailOptions): Promise<SendEmailResponse> {
     try {
       const prepared = prepareSend(options, this.config.maxRetries)
-      if (this.hooks.isDisabled()) {
-        throw new EmailError({
-          code: 'client_disabled',
-          message: 'The PostHog client is disabled, so no email was sent.',
-        })
+      const { appHost, secretKey } = this.connect(
+        'no email was sent',
+        'Sending email needs secretKey, a project secret API key with the hog_flow:write scope.'
+      )
+      const headers = this.headers(secretKey, {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': prepared.idempotencyKey,
+      })
+      const result = await this.withRetries(prepared.maxRetries, async () =>
+        parseSendReply(await this.request(appHost + prepared.path, 'POST', headers, prepared.body))
+      )
+      for (const warning of result.warnings) {
+        this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
       }
-      if (this.hooks.isClosed()) {
-        throw new EmailError({
-          code: 'client_closed',
-          message: 'The PostHog client is shut down, so no email was sent.',
-        })
-      }
-      const appHost = resolveAppHost(this.config.host, this.config.appHost)
-      if (!appHost) {
-        // A custom host is often an ingestion proxy, which must not receive the secret key.
-        throw new EmailError({
-          code: 'missing_app_host',
-          message:
-            "The client's host is not PostHog Cloud, so the client can't tell where to send email. Set appHost to your PostHog app host on the client.",
-        })
-      }
-      const secretKey = this.config.secretKey?.trim()
-      if (!secretKey) {
-        throw new EmailError({
-          code: 'missing_secret_key',
-          message: 'Sending email needs secretKey, a project secret API key with the hog_flow:write scope.',
-        })
-      }
-      return { data: await this.deliver(appHost, secretKey, prepared), error: null }
+      return { data: result, error: null }
     } catch (error) {
-      if (error instanceof EmailError) {
-        return { data: null, error }
-      }
-      return {
-        data: null,
-        error: new EmailError({
-          code: 'unexpected_error',
-          message: 'Sending the email failed unexpectedly.',
-          cause: error,
-        }),
-      }
+      return { data: null, error: asEmailError(error, 'Sending the email failed unexpectedly.') }
     }
   }
 
-  private async deliver(appHost: string, secretKey: string, prepared: PreparedSend): Promise<SendEmailResult> {
-    const url = appHost + prepared.path
+  private async getUntracked(id: string): Promise<GetEmailResponse> {
+    try {
+      if (typeof id !== 'string' || !UUID_PATTERN.test(id)) {
+        throw invalid('invalid_message_id', 'id must be the message ID that send() returned.', 'id')
+      }
+      const { appHost, secretKey } = this.connect(
+        'no email status was read',
+        'Reading an email status needs secretKey, a project secret API key with the hog_flow:read or hog_flow:write scope.'
+      )
+      const url = appHost + STATUS_PATH.replace('{messageId}', id.toLowerCase())
+      const headers = this.headers(secretKey, {})
+      const status = await this.withRetries(this.config.maxRetries, async () =>
+        parseStatusReply(await this.request(url, 'GET', headers))
+      )
+      return { data: status, error: null }
+    } catch (error) {
+      return { data: null, error: asEmailError(error, 'Reading the email status failed unexpectedly.') }
+    }
+  }
+
+  private connect(nothingDone: string, missingSecretKey: string): { appHost: string; secretKey: string } {
+    if (this.hooks.isDisabled()) {
+      throw new EmailError({
+        code: 'client_disabled',
+        message: `The PostHog client is disabled, so ${nothingDone}.`,
+      })
+    }
+    if (this.hooks.isClosed()) {
+      throw new EmailError({
+        code: 'client_closed',
+        message: `The PostHog client is shut down, so ${nothingDone}.`,
+      })
+    }
+    const appHost = resolveAppHost(this.config.host, this.config.appHost)
+    if (!appHost) {
+      // A custom host is often an ingestion proxy, which must not receive the secret key.
+      throw new EmailError({
+        code: 'missing_app_host',
+        message:
+          "The client's host is not PostHog Cloud, so the client can't tell where to send email. Set appHost to your PostHog app host on the client.",
+      })
+    }
+    const secretKey = this.config.secretKey?.trim()
+    if (!secretKey) {
+      throw new EmailError({ code: 'missing_secret_key', message: missingSecretKey })
+    }
+    return { appHost, secretKey }
+  }
+
+  private headers(secretKey: string, extra: Record<string, string>): Record<string, string> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${secretKey}`,
       Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'Idempotency-Key': prepared.idempotencyKey,
+      ...extra,
     }
     if (this.hooks.userAgent) {
       headers['User-Agent'] = this.hooks.userAgent
     }
+    return headers
+  }
 
+  private async withRetries<T>(maxRetries: number, attemptOnce: () => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       let error: EmailError
       try {
-        const result = parseReply(await this.request(url, headers, prepared.body))
-        for (const warning of result.warnings) {
-          this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
-        }
-        return result
+        return await attemptOnce()
       } catch (caught) {
         error =
           caught instanceof EmailError
@@ -165,16 +204,21 @@ export class EmailSender implements Emails {
                 cause: caught,
               })
       }
-      const delayMs = retryDelayMs(error, attempt, prepared.maxRetries)
+      const delayMs = retryDelayMs(error, attempt, maxRetries)
       if (delayMs === undefined) {
         throw error
       }
-      // A plain timer, not an unref'd one: the caller awaits the send, so the process must stay up for the retry.
+      // A plain timer, not an unref'd one: the caller awaits the request, so the process must stay up for the retry.
       await new Promise((resolve) => setTimeout(resolve, delayMs))
     }
   }
 
-  private async request(url: string, headers: Record<string, string>, body: string): Promise<Reply> {
+  private async request(
+    url: string,
+    method: 'GET' | 'POST',
+    headers: Record<string, string>,
+    body?: string
+  ): Promise<Reply> {
     const controller = new AbortController()
     const timeoutMs = this.config.requestTimeoutMs
     let timer: ReturnType<typeof setTimeout>
@@ -190,7 +234,12 @@ export class EmailSender implements Emails {
       }, timeoutMs)
     })
     const fetchPromise = Promise.resolve().then(() =>
-      this.hooks.fetch(url, { method: 'POST', headers, body, signal: controller.signal })
+      this.hooks.fetch(url, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body }),
+        signal: controller.signal,
+      })
     )
     void fetchPromise
       .then((lateResponse) => {
@@ -311,11 +360,15 @@ function text(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined
 }
 
-function parseReply({ status, payload, retryAfterMs }: Reply): SendEmailResult {
-  const fields = (payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}) as Record<
+function replyFields(payload: unknown): Record<string, unknown> {
+  return (payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}) as Record<
     string,
     unknown
   >
+}
+
+function parseSendReply({ status, payload, retryAfterMs }: Reply): SendEmailResult {
+  const fields = replyFields(payload)
   if (status >= 200 && status < 300) {
     const id = text(fields.message_id)
     if (!id) {
@@ -339,7 +392,30 @@ function parseReply({ status, payload, retryAfterMs }: Reply): SendEmailResult {
     }
     return { id, replayed: fields.replayed === true, warnings }
   }
-  throw new EmailError({
+  throw replyError(fields, status, retryAfterMs)
+}
+
+function parseStatusReply({ status, payload, retryAfterMs }: Reply): EmailStatus {
+  const fields = replyFields(payload)
+  if (status < 200 || status >= 300) {
+    throw replyError(fields, status, retryAfterMs)
+  }
+  const id = text(fields.id)
+  const deliveryStatus = text(fields.status)
+  const createdAt = text(fields.created_at)
+  const statusAt = text(fields.status_at)
+  if (!id || !deliveryStatus || !createdAt || !statusAt) {
+    throw new EmailError({
+      code: 'api_error',
+      message: 'PostHog answered without an email status.',
+      statusCode: status,
+    })
+  }
+  return { id, status: deliveryStatus, createdAt, statusAt, reason: text(fields.reason) ?? null }
+}
+
+function replyError(fields: Record<string, unknown>, status: number, retryAfterMs: number | undefined): EmailError {
+  return new EmailError({
     code: text(fields.code) ?? 'api_error',
     message: text(fields.detail) ?? `PostHog answered HTTP ${status}.`,
     statusCode: status,
@@ -351,8 +427,12 @@ function parseReply({ status, payload, retryAfterMs }: Reply): SendEmailResult {
   })
 }
 
+function asEmailError(error: unknown, message: string): EmailError {
+  return error instanceof EmailError ? error : new EmailError({ code: 'unexpected_error', message, cause: error })
+}
+
 function isRetryable(error: EmailError): boolean {
-  // Every request carries an idempotency key, so a retry can't queue a second email.
+  // A send carries an idempotency key, so a retry can't queue a second email. A status read changes nothing.
   if (error.statusCode === undefined) {
     return error.code === 'network_error'
   }

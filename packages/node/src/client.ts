@@ -684,13 +684,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * The `posthog.emails` API: sends transactional email from PostHog email templates.
+   * The `posthog.emails` API: sends transactional email from PostHog email templates, and reads
+   * the status of each email it sent.
    *
-   * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope. Sends go to
-   * `appHost`, or to the PostHog Cloud app host of `host`. `send` resolves to `{ data, error }`
-   * and does not reject. `data.id` is the queued email's message ID. A disabled client sends
-   * nothing and returns the error `client_disabled`. After `shutdown()`, the client sends nothing
-   * and returns the error `client_closed`.
+   * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope. A key with only
+   * `hog_flow:read` can read statuses but not send. Requests go to `appHost`, or to the PostHog
+   * Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and do not reject.
+   * `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
+   * and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
+   * returns the error `client_closed`.
    *
    * @example
    * ```ts
@@ -705,6 +707,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * if (error) {
    *   console.error(error.code, error.message)
    * }
+   *
+   * const status = await client.emails.get(data.id) // later, for example from a job
    * ```
    *
    * {@label Emails}
