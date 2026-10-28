@@ -38,6 +38,22 @@ describe('captureAiEvent routing', () => {
     expect(client.capture).toHaveBeenCalledWith(event)
   })
 
+  it.each([
+    ['6.0.0', true],
+    ['6.2.1', true],
+    ['7.0.0-beta.1', true],
+    ['5.57.1', false],
+    ['not-a-version', false],
+  ])('posthog-node %s uses the AI lane without the opt-in: %s', async (version, aiLane) => {
+    const client = makeClient({ getLibraryVersion: () => version })
+    captureAiEvent(client, event)
+    await captureAiEventImmediate(client, event)
+    expect(client.captureAi).toHaveBeenCalledTimes(aiLane ? 1 : 0)
+    expect(client.captureAiImmediate).toHaveBeenCalledTimes(aiLane ? 1 : 0)
+    expect(client.capture).toHaveBeenCalledTimes(aiLane ? 0 : 1)
+    expect(client.captureImmediate).toHaveBeenCalledTimes(aiLane ? 0 : 1)
+  })
+
   it('immediate variant mirrors the routing', async () => {
     const optedIn = makeClient({ enableFullAiCapture: true })
     await captureAiEventImmediate(optedIn, event)
