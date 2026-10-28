@@ -8,7 +8,7 @@ describe('built static loader', () => {
         const source = fs.readFileSync(path.join(dist, 'loader.js'))
         const map = JSON.parse(fs.readFileSync(path.join(dist, 'loader.js.map'), 'utf8'))
 
-        expect(gzipSync(source).byteLength).toBeLessThan(3 * 1024)
+        expect(gzipSync(new Uint8Array(source)).byteLength).toBeLessThan(3 * 1024)
         expect(map.sources.some((file: string) => file.includes('posthog-core') || file.includes('/extensions/'))).toBe(
             false
         )

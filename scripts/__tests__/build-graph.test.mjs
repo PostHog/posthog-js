@@ -271,6 +271,7 @@ test('type checks use dependency builds without scheduling a second compilation 
 
 test('the browser type check hashes the sibling sources that its test typecheck compiles', () => {
     const task = dryRun(['run', 'check-types']).find((task) => task.taskId === 'posthog-js#check-types')
+    assert.equal(task.command, 'pnpm typecheck && pnpm test:typecheck')
     const inputs = Object.keys(task.inputs)
     for (const file of ['browser-next/src/lane.ts', 'browser-common/tests/helpers/client-conformance.ts']) {
         assert.ok(
