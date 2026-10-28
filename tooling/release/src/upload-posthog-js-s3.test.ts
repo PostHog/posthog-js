@@ -124,6 +124,31 @@ test('inferContentType restores aws-cli style MIME inference for release assets'
     assert.equal(inferContentType('/tmp/assets/unknown.custom-extension'), undefined)
 })
 
+test('collectReleaseAssets publishes the static loader in every release namespace', async () => {
+    const distDir = await fs.mkdtemp(path.join(os.tmpdir(), 'posthog-js-loader-'))
+    try {
+        await fs.writeFile(path.join(distDir, 'loader.js'), '')
+        await fs.writeFile(path.join(distDir, 'loader.js.map'), '{}')
+        const assets = await collectReleaseAssets(distDir)
+        const plans = buildAssetUploadPlans('1.438.21', assets)
+        for (const [uploads, prefix] of [
+            [plans.immutable, 'static/1.438.21/'],
+            [plans.majorAlias, 'static/1/'],
+            [plans.compatibility, 'static/'],
+        ] as const) {
+            assert.deepEqual(
+                uploads.map(({ key, contentType }) => ({ key, contentType })),
+                [
+                    { key: `${prefix}loader.js`, contentType: 'application/javascript' },
+                    { key: `${prefix}loader.js.map`, contentType: 'application/json' },
+                ]
+            )
+        }
+    } finally {
+        await fs.rm(distDir, { recursive: true, force: true })
+    }
+})
+
 test('collectReleaseAssets includes browser source maps from the dist root', async () => {
     const distDir = await fs.mkdtemp(path.join(os.tmpdir(), 'posthog-js-dist-'))
 
@@ -249,7 +274,7 @@ test('assertNoCompatibilityVersionNamespaceCollisions rejects compatibility keys
     )
 })
 
-test('assertCanUploadImmutableAssets refuses to replace an existing release by default', async () => {
+test('assertCanUploadImmutableAssets fails closed when an existing asset differs', async () => {
     const uploads = [
         {
             key: 'static/1.370.0/array.js',
@@ -267,10 +292,11 @@ test('assertCanUploadImmutableAssets refuses to replace an existing release by d
 
     await assert.rejects(
         () =>
-            assertCanUploadImmutableAssets('us-assets.i.posthog.com', uploads, false, async (_bucket, key) =>
-                key.endsWith('/array.js')
-            ),
-        /Refusing to overwrite existing immutable release assets.*--force-overwrite/
+            assertCanUploadImmutableAssets('us-assets.i.posthog.com', uploads, false, async (_bucket, upload) => {
+                if (upload.key.endsWith('/array.js')) throw new Error('Release asset checksum differs')
+                return false
+            }),
+        /Release asset checksum differs/
     )
 })
 

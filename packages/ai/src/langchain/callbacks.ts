@@ -1,5 +1,6 @@
 import { EventMessage, PostHog } from 'posthog-node'
-import { withPrivacyMode, getModelParams, toContentString } from '../utils'
+import { withPrivacyMode, getModelParams, toContentString, isPrivacyModeEnabled } from '../utils'
+import { redactMcpToolCredentials } from '../mcpCredentials'
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import { version } from '../../package.json'
 import type { Serialized } from '@langchain/core/load/serializable'
@@ -10,7 +11,7 @@ import type { DocumentInterface } from '@langchain/core/documents'
 import { ToolCall } from '@langchain/core/messages/tool'
 import { BaseMessage } from '@langchain/core/messages'
 import { sanitizeLangChain } from '../sanitization'
-import { stringifyError } from '../serializeError'
+import { formatAiError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 import { isObject } from '../typeGuards'
 import { responsesStopReason } from '../openai/utils'
@@ -394,6 +395,10 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return parentRunId
   }
 
+  private _isPrivacyModeEnabled(): boolean {
+    return isPrivacyModeEnabled(this.client, this.privacyMode)
+  }
+
   private _safeCapture(message: EventMessage): void {
     try {
       captureAiEvent(this.client, message)
@@ -464,7 +469,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
           )
         }
       } else {
-        eventProperties['$ai_error'] = stringifyError(outputs)
+        eventProperties['$ai_error'] = formatAiError(outputs, this._isPrivacyModeEnabled())
         eventProperties['$ai_is_error'] = true
       }
     } else if (outputs !== undefined) {
@@ -535,12 +540,12 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     if (run.tools) {
-      eventProperties['$ai_tools'] = run.tools
+      eventProperties['$ai_tools'] = redactMcpToolCredentials(run.tools)
     }
 
     if (output instanceof Error) {
       eventProperties['$ai_http_status'] = (output as any).status || 500
-      eventProperties['$ai_error'] = stringifyError(output)
+      eventProperties['$ai_error'] = formatAiError(output, this._isPrivacyModeEnabled())
       eventProperties['$ai_is_error'] = true
     } else {
       // Handle token usage

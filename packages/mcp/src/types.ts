@@ -165,10 +165,14 @@ export interface MCPAnalyticsOptions {
    */
   captureModel?: boolean | MCPAnalyticsModelOptions
   /**
+   * Send `$mcp_initialize` for each `initialize` handshake. On by default.
+   * Set to `false` to stop sending it. Nothing else changes.
+   */
+  sendInitializeEvent?: boolean
+  /**
    * Identify the calling user. Returning a non-null value sets `distinct_id` and `$set`
    * on subsequent events for the session. Object form is treated as a static identity.
-   * A standalone `$identify` event is published once per session — at `initialize`, or
-   * when a long-lived server sees the identity appear or change — never per tool call.
+   * The SDK publishes no standalone `$identify` event.
    */
   identify?:
     | ((request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<UserIdentity | null>)

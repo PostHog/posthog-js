@@ -142,6 +142,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _isWidgetRendered: boolean = false
     private _hasProcessedRestoreToken: boolean = false
     private _initializeWidgetPromise: Promise<void> | null = null
+    // Bumped by destroy() (and so by reset()). Async initialization captures it before
+    // awaiting a request and stops if it changed, so a manager torn down mid-request
+    // doesn't persist state, render, or start polling afterwards.
+    private _lifecycleGeneration: number = 0
     // View state management for ticket list vs message view
     private _currentView: WidgetView = 'messages'
     private _tickets: Ticket[] = []
@@ -478,6 +482,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             clearRestoreTokenFromUrl()
             setTimeout(clearRestoreTokenFromUrl, 0)
 
+            const generation = this._lifecycleGeneration
             this._restoreFromTokenWithRetry(restoreToken)
                 .catch((error) => {
                     if (!isConversationsError(error)) {
@@ -486,6 +491,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 })
                 .finally(() => {
                     clearRestoreTokenFromUrl()
+                    if (generation !== this._lifecycleGeneration) {
+                        return
+                    }
                     this._completeInitialization()
                 })
             return
@@ -537,6 +545,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     private async _restoreFromToken(restoreToken: string): Promise<RestoreFromTokenResponse> {
         const token = this._config.token
+        const generation = this._lifecycleGeneration
 
         const payload: RestoreFromTokenPayload = {
             restore_token: restoreToken,
@@ -580,6 +589,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         if (data.status !== 'success') {
             logger.info('Restore token was not accepted', { status: data.status, code: data.code })
+            return data
+        }
+
+        if (generation !== this._lifecycleGeneration) {
+            logger.info('Conversations destroyed during restore, discarding the result')
             return data
         }
 
@@ -635,8 +649,16 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Get initial user traits (from PostHog person properties or saved)
         const initialUserTraits = this._getInitialUserTraits()
 
+        const generation = this._lifecycleGeneration
+
         // Determine initial view based on ticket count
         const { view: initialView, tickets } = await this._determineInitialView()
+
+        // destroy()/reset() ran while the tickets request was in flight
+        if (generation !== this._lifecycleGeneration) {
+            logger.info('Conversations destroyed during widget initialization, not rendering')
+            return
+        }
         this._currentView = initialView
 
         // Render the widget with initial view
@@ -1082,12 +1104,18 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private async _determineInitialView(): Promise<{ view: WidgetView; tickets: Ticket[] }> {
         try {
             const identityBefore = this._posthog.config.identity_distinct_id
+            const generation = this._lifecycleGeneration
             const response = await this.getTickets()
 
             // If identity changed while the request was in-flight, discard this
             // stale response -- setIdentity/clearIdentity already triggered a
             // fresh _loadTicketsAndReconcileView() with the correct credentials.
-            if (this._posthog.config.identity_distinct_id !== identityBefore) {
+            // Also discard it if the manager was destroyed/reset meanwhile, so the
+            // ticket id isn't written back to the storage reset() just cleared.
+            if (
+                this._posthog.config.identity_distinct_id !== identityBefore ||
+                generation !== this._lifecycleGeneration
+            ) {
                 return { view: 'messages', tickets: [] }
             }
 
@@ -1576,6 +1604,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Clean up the widget
      */
     destroy(): void {
+        this._lifecycleGeneration++
         this._stopPolling()
         this._stopReattachWatcher()
         if (window) {

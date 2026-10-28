@@ -78,8 +78,8 @@ if (MODE === 'perrequest') {
   // behaviour a v2 operator opts into — the only way ctx.sessionId is ever set.
   const server = instrumented()
   const transport = new NodeStreamableHTTPServerTransport({
-    // undefined ⇒ stateless: no handshake required, so the modern era works
-    // with a long-lived server. That is the control for the per-request case.
+    // A stateless transport can handle only one request. The longlived matrix
+    // rows set STATEFUL=1 so the legacy handshake and tool calls share it.
     sessionIdGenerator: STATEFUL ? () => randomUUID() : undefined,
     responseMode: 'json',
   })

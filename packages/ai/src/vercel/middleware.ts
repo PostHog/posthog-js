@@ -21,6 +21,7 @@ import {
   toContentString,
   calculateWebSearchCount,
   getModelParams,
+  isPrivacyModeEnabled,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
 import { redactBase64DataUrl, sanitizeVercel } from '../sanitization'
@@ -493,13 +494,15 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
     },
   }
 
+  const privacyMode = isPrivacyModeEnabled(phClient, mergedOptions.posthogPrivacyMode)
+
   // Shared `captureAiGeneration` options for every call site in this wrapper.
   const baseOptions = {
     distinctId: mergedOptions.posthogDistinctId,
     traceId,
     properties: mergedOptions.posthogProperties,
     groups: mergedOptions.posthogGroups,
-    privacyMode: mergedOptions.posthogPrivacyMode,
+    privacyMode,
     modelOverride: mergedOptions.posthogModelOverride,
     providerOverride: mergedOptions.posthogProviderOverride,
     costOverride: mergedOptions.posthogCostOverride,
@@ -537,9 +540,10 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
           // Extract raw response for providers that include detailed usage metadata
           // For Gemini, candidatesTokensDetails is in result.response.body.usageMetadata
+          // Provider metadata can carry content, such as Google grounding search queries.
           const rawUsageData: Record<string, unknown> = {
             usage: result.usage,
-            providerMetadata,
+            ...(privacyMode ? {} : { providerMetadata }),
           }
 
           // Include response body usageMetadata if it contains detailed token breakdown (e.g., candidatesTokensDetails)
@@ -577,9 +581,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...baseOptions,
             model: modelId,
             provider: provider,
-            input: mergedOptions.posthogPrivacyMode
-              ? ''
-              : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
+            input: privacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: content,
             latency,
             baseURL,
@@ -596,10 +598,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           await captureAiGeneration(phClient, {
             ...baseOptions,
             model: modelId,
-            provider: model.provider,
-            input: mergedOptions.posthogPrivacyMode
-              ? ''
-              : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
+            provider: extractProvider(model),
+            input: privacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: [],
             latency: (Date.now() - startTime) / 1000,
             baseURL,
@@ -781,7 +781,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
               const finalUsage = {
                 ...usage,
                 webSearchCount,
-                rawUsage: { usage, providerMetadata },
+                rawUsage: privacyMode ? { usage } : { usage, providerMetadata },
               }
               adjustAnthropicV3CacheTokens(model, modelId, provider, finalUsage)
 
@@ -797,9 +797,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 ...baseOptions,
                 model: modelId,
                 provider: provider,
-                input: mergedOptions.posthogPrivacyMode
-                  ? ''
-                  : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
+                input: privacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
                 output,
                 latency,
                 timeToFirstToken,
@@ -861,9 +859,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...baseOptions,
             model: modelId,
             provider: provider,
-            input: mergedOptions.posthogPrivacyMode
-              ? ''
-              : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
+            input: privacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: [],
             latency: (Date.now() - startTime) / 1000,
             baseURL,

@@ -367,35 +367,6 @@ describe('concurrent request attribution', () => {
     })
   })
 
-  it("uses each request's pre-await session source when deciding whether to publish identify", async () => {
-    const identifyAStarted = deferred()
-    const releaseIdentifyA = deferred()
-    const server = createServer({
-      identify: async (request) => {
-        const requestLabel = String(request.params?.arguments?.requestLabel)
-        if (requestLabel === 'A') {
-          identifyAStarted.resolve()
-          await releaseIdentifyA.promise
-        }
-        return { distinctId: `user-${requestLabel}` }
-      },
-    })
-    const tokenB = encodeSessionId({ sessionId: 'ses_b', clientName: 'client-b', clientVersion: '2.0.0' })
-
-    const requestA = invokeTool(server, 'A')
-    await identifyAStarted.promise
-    await invokeTool(server, 'B', {
-      requestInfo: { headers: { 'mcp-session-id': tokenB } },
-    })
-    releaseIdentifyA.resolve()
-    await requestA
-    await flushCaptures()
-
-    const identifyCaptures = capture.findCapturesByEvent('$identify')
-    expect(identifyCaptures).toHaveLength(1)
-    expect(identifyCaptures[0].distinct_id).toBe('user-A')
-  })
-
   it('keeps a delayed initialize token and shared state scoped to their requests', async () => {
     const initializeMetadataStarted = deferred()
     const releaseInitializeMetadata = deferred()

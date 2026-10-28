@@ -1,6 +1,7 @@
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
 import type { Client, ExtensionToken } from '@posthog/browser-common'
+import type { BrowserClient, ConsentChangeInfo } from '../src/browser-client'
 
 import { analytics as createAnalytics } from '../src/analytics'
 import { createPostHog, type Extension, type RemoteConfig } from '../src/core'
@@ -37,6 +38,69 @@ const flagExtension = (events: string[]): FlagCapability => {
 }
 
 describe('@posthog/browser extensions', () => {
+    it('notifies extensions of consent changes without replaying initial state', async () => {
+        const changes: ConsentChangeInfo[] = []
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            remoteConfig: localRemoteConfig,
+            extensions: [
+                {
+                    name: 'consent-observer',
+                    setup(client: BrowserClient) {
+                        client.onConsentChange((change) => changes.push(change))
+                    },
+                },
+            ],
+        })
+        expect(changes).toEqual([])
+        posthog.optOut()
+        posthog.optIn()
+        expect(changes).toEqual([
+            { current: 'denied', previous: 'implicit' },
+            { current: 'granted', previous: 'denied' },
+        ])
+        await posthog.shutdown()
+    })
+
+    it('exposes session notifications through the shared client', async () => {
+        const listener = vi.fn()
+        let subscription: { dispose(): void } | undefined
+        const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            capturePageview: false,
+            fetch: createFetch([]),
+            extensions: [
+                analytics(),
+                {
+                    name: 'session-consumer',
+                    setup(client) {
+                        subscription = client.onSession(listener)
+                    },
+                },
+            ],
+        })
+        expect(subscription).toBeDefined()
+        expect(listener).not.toHaveBeenCalled()
+        await posthog.capture('first')
+        expect(listener).not.toHaveBeenCalled()
+        await posthog.reset()
+        await posthog.capture('new-session')
+        expect(listener).toHaveBeenCalledWith(posthog.session!.sessionId)
+        expect(listener).toHaveBeenCalledTimes(1)
+        await posthog.capture('same-session')
+        expect(listener).toHaveBeenCalledTimes(1)
+        subscription!.dispose()
+        await posthog.reset()
+        await posthog.capture('unsubscribed')
+        expect(listener).toHaveBeenCalledTimes(1)
+        await posthog.dispose()
+    })
+
     it('installs an extension and exposes its capability', async () => {
         const requests: SentRequest[] = []
         const events: string[] = []
@@ -205,10 +269,16 @@ describe('@posthog/browser extensions', () => {
         expect(Object.isFrozen(client?.initialPersonProperties.initial)).toBe(true)
         expect(client?.canCapture).toBe(true)
 
+        expect(client?.isOptedOut).toBe(false)
+        expect(posthog.isOptedOut).toBe(false)
         posthog.optOut()
         expect(client?.deviceId).toBe(initialAnonymousId)
+        expect(client?.isOptedOut).toBe(true)
+        expect(posthog.isOptedOut).toBe(true)
         expect(client?.canCapture).toBe(false)
         posthog.optIn()
+        expect(client?.isOptedOut).toBe(false)
+        expect(posthog.isOptedOut).toBe(false)
         expect(client?.canCapture).toBe(true)
         const postConsentAnonymousId = posthog.anonymousId
         expect(client?.deviceId).toBe(postConsentAnonymousId)

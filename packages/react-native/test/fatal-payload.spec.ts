@@ -83,6 +83,38 @@ describe('fatal exception payload', () => {
     expect(payload.properties.kept).toBe('yes')
   })
 
+  it('keeps a stack trace when a frame carries an undefined key', () => {
+    // `ErrorPropertiesBuilder` sets `frame.chunk_id = chunkIdMap[frame.filename]`, which is
+    // `undefined` for any frame whose file is not in the map. `JSON.stringify` omits such a
+    // key, so the frame is still serializable; the fatal path must not drop the stack for it.
+    const payload = build({
+      properties: {
+        $exception_level: 'fatal',
+        $exception_list: [
+          {
+            type: 'Error',
+            value: 'boom',
+            mechanism: { handled: false, type: 'onerror', synthetic: false },
+            stacktrace: {
+              type: 'raw',
+              frames: [
+                { platform: 'hermes', filename: 'index.android.bundle', function: 'onPress', chunk_id: 'abc' },
+                { platform: 'hermes', filename: 'native', function: 'callFunction', chunk_id: undefined },
+              ],
+            },
+          },
+        ],
+      } as never,
+    })
+
+    const stacktrace = (payload.properties.$exception_list as never as Array<Record<string, any>>)[0].stacktrace
+    expect(stacktrace).toBeDefined()
+    expect(stacktrace.frames).toHaveLength(2)
+    expect(stacktrace.frames[1].function).toBe('callFunction')
+    // The undefined key itself is simply absent once the payload is serialized.
+    expect(JSON.parse(JSON.stringify(stacktrace.frames[1]))).not.toHaveProperty('chunk_id')
+  })
+
   it('keeps session and release attribution when a large flag set fills the budget', () => {
     // boundedObject fills in key order, so without an explicit priority a big `$feature/*`
     // set pushes whatever sorts after it off the end — including the session linkage and

@@ -754,6 +754,38 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['foo']).toBe('bar')
   })
 
+  test('captures function and custom tool calls from a non-streaming chat completion and skips unknown ones', async () => {
+    mockOpenAiChatResponse.choices[0].finish_reason = 'tool_calls'
+    mockOpenAiChatResponse.choices[0].message = {
+      role: 'assistant',
+      content: null,
+      refusal: null,
+      tool_calls: [
+        { id: 'call_fn', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+        { id: 'call_custom', type: 'custom', custom: { name: 'run_sql', input: 'SELECT 1' } },
+        { id: 'call_unknown', type: 'future_tool' } as never,
+      ],
+    }
+
+    const response = await client.chat.completions.create({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(response).toBe(mockOpenAiChatResponse)
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_output_choices']).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'function', id: 'call_fn', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+          { type: 'function', id: 'call_custom', function: { name: 'run_sql', arguments: 'SELECT 1' } },
+        ],
+      },
+    ])
+  })
+
   describe('response service tier', () => {
     test('prefers the response tier for non-streaming chat completions', async () => {
       mockOpenAiChatResponse.service_tier = 'flex'

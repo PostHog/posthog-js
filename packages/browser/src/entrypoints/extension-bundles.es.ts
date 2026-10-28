@@ -14,3 +14,4 @@ export const ExperimentsExtensions = bundles.ExperimentsExtensions as typeof Bun
 export const ConversationsExtensions = bundles.ConversationsExtensions as typeof BundleTypes.ConversationsExtensions
 export const LogsExtensions = bundles.LogsExtensions as typeof BundleTypes.LogsExtensions
 export const MetricsExtensions = bundles.MetricsExtensions as typeof BundleTypes.MetricsExtensions
+export const WebMCPExtensions = bundles.WebMCPExtensions as typeof BundleTypes.WebMCPExtensions
