@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.84.3
+
+### Patch Changes
+
+- [#5466](https://github.com/PostHog/posthog-js/pull/5466) [`8c136a8`](https://github.com/PostHog/posthog-js/commit/8c136a8608187dc77b97cc4724639755b37d3c85) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix: capture touch autocapture events on React Native's new architecture (Fabric), where the touched element is only reachable through `target.__internalInstanceHandle`
+  (2026-10-28)
+
 ## 4.84.2
 
 ### Patch Changes
