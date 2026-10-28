@@ -788,7 +788,8 @@ export async function handleListToolsRequest(
     extra,
     event,
     logger,
-    requestAttribution
+    requestAttribution,
+    data?.options.sendToolsListEvent !== false
   )
   const tools = response.tools
 
@@ -806,7 +807,9 @@ export async function handleListToolsRequest(
     event.error = captureException('No tools were sent to MCP client.')
     event.isError = true
     event.duration = Date.now() - startTime.getTime()
-    captureToolsListEvent(server, event, data.logger, requestAttribution)
+    if (data.options.sendToolsListEvent !== false) {
+      captureEvent(server, event, data.logger, requestAttribution)
+    }
     return response
   }
 
@@ -814,16 +817,10 @@ export async function handleListToolsRequest(
   event.listedToolNames = collectListedToolNames(tools)
   event.isError = false
   event.duration = Date.now() - startTime.getTime()
-  captureToolsListEvent(server, event, data.logger, requestAttribution)
-  return response
-}
-
-/** Sends `$mcp_tools_list` unless the host set `sendToolsListEvent: false`. */
-function captureToolsListEvent(...args: Parameters<typeof captureEvent>): void {
-  if (getServerTrackingData(args[0])?.options.sendToolsListEvent === false) {
-    return
+  if (data.options.sendToolsListEvent !== false) {
+    captureEvent(server, event, data.logger, requestAttribution)
   }
-  captureEvent(...args)
+  return response
 }
 
 function cacheToolAnalyticsParameterOwnership(
@@ -860,7 +857,8 @@ async function getTracedToolsList(
   extra: CompatibleRequestHandlerExtra | undefined,
   event: McpEvent,
   logger: LoggerFn,
-  requestAttribution: SessionInfo
+  requestAttribution: SessionInfo,
+  sendToolsListEvent: boolean
 ): Promise<CompatibleToolsListLike> {
   try {
     const data = getServerTrackingData(server)
@@ -965,7 +963,9 @@ async function getTracedToolsList(
     event.error = captureException(error)
     event.isError = true
     event.duration = event.timestamp ? Date.now() - event.timestamp.getTime() : 0
-    captureToolsListEvent(server, event, logger, requestAttribution)
+    if (sendToolsListEvent) {
+      captureEvent(server, event, logger, requestAttribution)
+    }
     throw error
   }
 }
