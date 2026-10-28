@@ -37,8 +37,10 @@ const state = {
     pendingEvents: 0,
     reportedDrops: [],
     logLines: [],
-    // Event names per uuid in capture order, so a reported drop can name its event (a duplicate uuid has several).
-    uuidNames: new Map(),
+    // Event names per uuid in send order (from requests) and in call order (from captureAi), so a reported drop can
+    // name its event; a duplicate uuid has several names. Kept apart so one event is never counted twice.
+    sentNames: new Map(),
+    calledNames: new Map(),
 }
 
 function resetCounters() {
@@ -49,7 +51,8 @@ function resetCounters() {
     state.pendingEvents = 0
     state.reportedDrops = []
     state.logLines = []
-    state.uuidNames = new Map()
+    state.sentNames = new Map()
+    state.calledNames = new Map()
 }
 
 // The SDK logs through console; /state returns those lines (log_capture).
@@ -61,16 +64,16 @@ for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
     }
 }
 
-function rememberName(uuid, event) {
+function rememberName(names, uuid, event) {
     if (uuid) {
-        state.uuidNames.set(uuid, [...(state.uuidNames.get(uuid) ?? []), event])
+        names.set(uuid, [...(names.get(uuid) ?? []), event])
     }
 }
 
 function recordDrops(error) {
     const duplicatesSeen = new Map()
     for (const { uuid, details } of error?.drops ?? []) {
-        const names = state.uuidNames.get(uuid) ?? []
+        const names = state.sentNames.get(uuid) ?? state.calledNames.get(uuid) ?? []
         let index = 0
         if (details === 'duplicate_event_uuid') {
             // Capture keeps the first copy, so the dropped copies are the later names, in order.
@@ -87,10 +90,12 @@ const PADDING_KEY = '$test_padding'
 function padProperties(properties, size, marker = '') {
     const padded = { ...properties, [PADDING_KEY]: '' }
     const fill = size - Buffer.byteLength(JSON.stringify(padded), 'utf8')
-    if (fill < marker.length) {
+    // The marker's bytes as written in JSON, escapes included, without its quotes.
+    const markerBytes = Buffer.byteLength(JSON.stringify(marker), 'utf8') - 2
+    if (fill < markerBytes) {
         throw new Error(`pad_properties_to_bytes ${size} is smaller than the properties`)
     }
-    padded[PADDING_KEY] = marker + 'x'.repeat(fill - marker.length)
+    padded[PADDING_KEY] = marker + 'x'.repeat(fill - markerBytes)
     return padded
 }
 
@@ -222,7 +227,7 @@ app.post('/init', async (req, res) => {
                 const attempt = Number(headerValue(fetchOptions?.headers, 'posthog-attempt') ?? 1)
                 if (attempt === 1) {
                     for (const event of events) {
-                        rememberName(event.uuid, event.event)
+                        rememberName(state.sentNames, event.uuid, event.event)
                     }
                 }
                 state.requestsMade.push({
@@ -278,10 +283,8 @@ app.post('/capture_ai', (req, res) => {
 
     try {
         const uuid = state.client.captureAi(captureMessage(req.body))
-        // A local drop is never sent, so name it from the call.
-        if (uuid && !state.uuidNames.has(uuid)) {
-            rememberName(uuid, req.body.event)
-        }
+        // A local drop is never sent, so it is named from the call.
+        rememberName(state.calledNames, uuid, req.body.event)
         state.totalEventsCaptured++
         state.pendingEvents++
         res.json({ success: true, uuid: uuid ?? null })
