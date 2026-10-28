@@ -282,6 +282,14 @@ export type PostHogOptions = Omit<
    */
   maxQueueSize?: number
   /**
+   * Whether the Express and NestJS integrations read the `X-POSTHOG-DISTINCT-ID` and
+   * `X-POSTHOG-SESSION-ID` request headers into the request context. A distinct id or session id
+   * you pass explicitly always wins over these headers, and they are never used for authentication.
+   *
+   * @default true
+   */
+  captureTracingHeaders?: boolean
+  /**
    * How many times a capture request is retried after its first attempt, on both capture lanes.
    * Waits start at 100 ms and double each retry, with jitter, up to 30 seconds; a `Retry-After`
    * header can raise a wait. Only HTTP 404, 408, 429, 500, 502, 503 and 504 and network errors are retried.

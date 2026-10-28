@@ -127,6 +127,28 @@ describe('Express extension', () => {
       expect(event.properties.$ip).toBe('10.0.0.1')
     })
 
+    it('ignores the tracing headers when captureTracingHeaders is false', async () => {
+      await posthog.shutdown()
+      posthog = createPostHog({ captureTracingHeaders: false })
+      const middleware = createRequestContextMiddleware(posthog)
+      const req = createMockRequest({
+        headers: { 'x-posthog-session-id': 'session-123', 'x-posthog-distinct-id': 'user-456' },
+        originalUrl: '/api/test',
+        method: 'GET',
+        path: '/api/test',
+      })
+
+      middleware(req, createMockResponse(), () => {
+        posthog.capture({ event: 'handler_event' })
+      })
+      await waitForFlushTimer(posthog)
+
+      const event = getLastBatchEvents()!.find((e: any) => e.event === 'handler_event')
+      expect(event.distinct_id).not.toBe('user-456')
+      expect(event.properties.$session_id).toBeUndefined()
+      expect(event.properties.$request_path).toBe('/api/test')
+    })
+
     it.each([
       {
         name: 'strips request path search and preserves URL hash by default',

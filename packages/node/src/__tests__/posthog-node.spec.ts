@@ -624,6 +624,18 @@ describe('PostHog Node.js', () => {
       expect(batchEvents?.[0].properties).not.toHaveProperty('remove_me')
     })
 
+    it('logs event names, never event content, in debug mode', async () => {
+      const infoSpy = vi.spyOn((posthog as any)._logger, 'info').mockImplementation(() => {})
+      posthog.debug(true)
+      posthog.capture({ distinctId: 'user', event: 'debug-event', properties: { secret: 'SECRET-VALUE' } })
+      await waitForFlushTimer()
+
+      const logged = JSON.stringify(infoSpy.mock.calls)
+      expect(logged).toContain('flush')
+      expect(logged).not.toContain('SECRET-VALUE')
+      infoSpy.mockRestore()
+    })
+
     it('should warn if capture is called with a string', () => {
       posthog.debug(true)
       // @ts-expect-error - Testing the warning when passing a string instead of an object
@@ -822,7 +834,8 @@ describe('PostHog Node.js', () => {
       await waitForFlushTimer()
 
       expect(sentinel).not.toHaveBeenCalled()
-      expect(loggerSpy).toHaveBeenCalledWith("Error in before_send function for event 'test-event':", error)
+      expect(loggerSpy).toHaveBeenCalledWith("Error in before_send function for event 'test-event' (Error)")
+      expect(JSON.stringify(loggerSpy.mock.calls)).not.toContain(error.message)
       expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
       loggerSpy.mockRestore()
     })
@@ -1614,6 +1627,26 @@ describe('PostHog Node.js', () => {
       })
 
       expect(posthog.options.personalApiKey).toEqual('TEST_SECRET_KEY')
+    })
+
+    it.each([
+      ['an empty key', '  ', 'No project API key was passed'],
+      ['a personal key', 'phx_SECRET_PERSONAL_KEY', 'A personal API key ("phx_...") was passed'],
+    ])('disables the client and logs one error for %s', async (_name, apiKey, reason) => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      mockedFetch.mockClear()
+
+      posthog = new PostHog(apiKey, { host: 'http://example.com', flushAt: 1, flushInterval: 0 })
+      posthog.capture({ distinctId: 'user', event: 'disabled-event' })
+      await waitForPromises()
+
+      expect(posthog.isDisabled).toBe(true)
+      expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
+      const keyErrors = errorSpy.mock.calls.filter(([line]) => String(line).includes('so the client is disabled'))
+      expect(keyErrors).toHaveLength(1)
+      expect(keyErrors[0][0]).toContain(reason)
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('SECRET_PERSONAL_KEY')
+      errorSpy.mockRestore()
     })
 
     it('should not start local evaluation polling or fetch flags when api key is missing', async () => {
