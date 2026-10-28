@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.59.0
+
+### Minor Changes
+
+- [#5252](https://github.com/PostHog/posthog-js/pull/5252) [`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a) Thanks [@andehen](https://github.com/andehen)! - Reads from an `evaluateFlags()` snapshot now honor `sendFeatureFlagEvent: false`, and `isEnabled()` / `getFlag()` accept a `sendFeatureFlagEvents` option that overrides it for one read. If you set `sendFeatureFlagEvent: false` and rely on snapshot reads for experiment exposures, pass `sendFeatureFlagEvents: true` on those reads.
+  (2026-10-28)
+
+### Patch Changes
+
+- Updated dependencies [[`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a)]:
+  - @posthog/core@1.61.2
+
 ## 5.58.0
 
 ### Minor Changes

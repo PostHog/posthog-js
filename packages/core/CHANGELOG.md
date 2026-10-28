@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.61.2
+
+### Patch Changes
+
+- [#5252](https://github.com/PostHog/posthog-js/pull/5252) [`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a) Thanks [@andehen](https://github.com/andehen)! - Document that `sendFeatureFlagEvent` is also the default for posthog-node `evaluateFlags()` snapshot reads.
+  (2026-10-28)
+
 ## 1.61.1
 
 ### Patch Changes
