@@ -1,4 +1,4 @@
-import { canonicalizeUuid } from '@/capture-v1/uuid'
+import { canonicalizeUuid, eventUuidv7 } from '@/capture-v1/uuid'
 import type { PostHogOptions } from '@/entrypoints/index.node'
 
 import { AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, captureEvents } from '../utils'
@@ -149,5 +149,23 @@ describe('event uuids on the client', () => {
     await posthog.flush()
 
     expect(uuidWarnings()).toEqual([[WARNING], [WARNING]])
+  })
+})
+
+describe('eventUuidv7', () => {
+  it('takes its random bits from crypto.getRandomValues, never Math.random', () => {
+    const cryptoSpy = vi.spyOn(globalThis.crypto, 'getRandomValues')
+    const mathSpy = vi.spyOn(Math, 'random')
+
+    const uuids = Array.from({ length: 50 }, () => eventUuidv7())
+
+    expect(cryptoSpy).toHaveBeenCalled()
+    expect(mathSpy).not.toHaveBeenCalled()
+    expect(new Set(uuids).size).toBe(uuids.length)
+    for (const uuid of uuids) {
+      expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    }
+    cryptoSpy.mockRestore()
+    mathSpy.mockRestore()
   })
 })

@@ -26,7 +26,6 @@ import {
   raceWithTimeout,
   safeSetTimeout,
   SyncSpanContextManager,
-  uuidv7,
 } from '@posthog/core'
 import type {
   Metrics,
@@ -79,7 +78,7 @@ import { CaptureLane, type CaptureLaneConfig } from './capture-lane/lane'
 import { AI_MAX_PROPERTIES_BYTES, ANALYTICS_MAX_EVENT_BYTES, CAPTURE_BATCH_TARGET_BYTES } from './capture-lane/limits'
 import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
 import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
-import { canonicalizeUuid } from './capture-v1/uuid'
+import { canonicalizeUuid, eventUuidv7 } from './capture-v1/uuid'
 import { readEventOptions } from './capture-v1/transform'
 import { fillOptions, fillProperties, isUnsetProperty, snapshotLayer } from './event-defaults'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
@@ -570,7 +569,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // console.warn, not this._logger: the logger only prints in debug mode, and the event loses its uuid.
       console.warn('[PostHog] Replaced an invalid event uuid with a generated one; uuids must be RFC 4122 strings')
     }
-    return uuidv7()
+    return eventUuidv7()
   }
 
   /**
@@ -1384,7 +1383,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (this.disabled) {
       return undefined
     }
-    const uuid = this._canonicalEventUuid(props.uuid) ?? uuidv7()
+    const uuid = this._canonicalEventUuid(props.uuid) ?? eventUuidv7()
     void this._sendPreparedAiEvent({ ...props, uuid }, false)
     return uuid
   }
@@ -1403,7 +1402,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (this.disabled) {
       return undefined
     }
-    const uuid = this._canonicalEventUuid(props.uuid) ?? uuidv7()
+    const uuid = this._canonicalEventUuid(props.uuid) ?? eventUuidv7()
     await this._sendPreparedAiEvent({ ...props, uuid }, true)
     return uuid
   }
@@ -3671,7 +3670,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const resolvedDistinctId =
       presentDistinctId(distinctId) ?? presentDistinctId(contextData?.distinctId) ?? prepareOptions.fallbackDistinctId
-    const eventDistinctId = resolvedDistinctId ?? uuidv7()
+    const eventDistinctId = resolvedDistinctId ?? eventUuidv7()
 
     const eventProperties: PostHogEventProperties = { ...(properties || {}) }
     if (prepareOptions.distinctIdProperty) {
