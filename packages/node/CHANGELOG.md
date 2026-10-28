@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.58.0
+
+### Minor Changes
+
+- [#5314](https://github.com/PostHog/posthog-js/pull/5314) [`096131d`](https://github.com/PostHog/posthog-js/commit/096131dc7cf6115217996ff8fccace5598ed1e31) Thanks [@pauldambra](https://github.com/pauldambra)! - Add an optional OpenTelemetry context processor, and an optional `signal` that ends a context's lifetime.
+  (2026-10-28)
+
 ## 5.57.2
 
 ### Patch Changes

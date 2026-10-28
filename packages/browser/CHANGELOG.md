@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.441.2
+
+### Patch Changes
+
+- [#5421](https://github.com/PostHog/posthog-js/pull/5421) [`34833f2`](https://github.com/PostHog/posthog-js/commit/34833f2df9a6252a6dd03bcc19ca6af755a23953) Thanks [@frostfire575](https://github.com/frostfire575)! - Session replay releases a removed shadow DOM host as soon as it leaves the page, instead of keeping it and its detached subtree in memory until the next full snapshot.
+  (2026-10-28)
+
 ## 1.441.1
 
 ### Patch Changes
