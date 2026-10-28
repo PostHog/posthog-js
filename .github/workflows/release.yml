@@ -856,6 +856,283 @@ jobs:
               if: ${{ steps.dispatch-posthog-upgrade.outcome == 'failure' }}
               run: exit 1
 
+    check-posthog-browser-version:
+        name: Check @posthog/browser version for S3
+        needs: [version-bump]
+        runs-on: ubuntu-latest
+        if: always() && needs.version-bump.outputs.commit-hash != ''
+        permissions:
+            contents: read
+        outputs:
+            version-changed: ${{ steps.check-version.outputs.version-changed }}
+            committed-version: ${{ steps.check-version.outputs.committed-version }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  fetch-depth: 2
+
+            - name: Check @posthog/browser version
+              id: check-version
+              run: |
+                  set -euo pipefail
+                  previous_version=$(git show HEAD^:packages/browser-next/package.json | jq -r '.version')
+                  jq -r --arg previous "$previous_version" \
+                      '"committed-version=\(.version)", "version-changed=\(.version != $previous)"' \
+                      packages/browser-next/package.json >> "$GITHUB_OUTPUT"
+
+    build-posthog-browser-s3-artifacts:
+        name: Build @posthog/browser assets for S3
+        needs: [version-bump, check-posthog-browser-version]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.check-posthog-browser-version.result == 'success' &&
+            needs.check-posthog-browser-version.outputs.version-changed == 'true'
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  fetch-depth: 1
+
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+
+            - name: Build @posthog/browser dependencies
+              run: pnpm turbo run build --filter='@posthog/browser^...'
+
+            - name: Build @posthog/browser
+              run: pnpm --filter @posthog/browser build:cdn
+
+            - name: Require script.js entry
+              run: test -s packages/browser-next/dist-cdn/script.js
+
+            - name: Upload @posthog/browser artifact
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: posthog-browser-dist
+                  path: packages/browser-next/dist-cdn/
+                  include-hidden-files: true
+                  retention-days: 30
+                  if-no-files-found: error
+
+    upload-posthog-browser-s3-immutable:
+        name: Upload immutable @posthog/browser assets to S3 (${{ matrix.region.name }})
+        needs: [version-bump, check-posthog-browser-version, build-posthog-browser-s3-artifacts]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.check-posthog-browser-version.result == 'success' &&
+            needs.check-posthog-browser-version.outputs.version-changed == 'true' &&
+            needs.build-posthog-browser-s3-artifacts.result == 'success'
+        environment: 'S3 Upload'
+        permissions:
+            contents: read
+            id-token: write
+        strategy:
+            fail-fast: false
+            matrix:
+                region:
+                    - { name: us, bucket: us-assets.i.posthog.com, aws_region: us-east-1 }
+                    - { name: eu, bucket: eu-assets.i.posthog.com, aws_region: eu-central-1 }
+        steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+              with:
+                  egress-policy: audit
+
+            - name: Checkout release tooling
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  sparse-checkout: |
+                      .npmrc
+                      package.json
+                      patches
+                      pnpm-lock.yaml
+                      pnpm-workspace.yaml
+                      tooling/release
+
+            - name: Setup Node.js
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+
+            - name: Setup pnpm
+              uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+              with:
+                  cache: false
+                  install: false
+
+            - name: Install release tooling dependencies
+              run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
+
+            - name: Download @posthog/browser artifact
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: posthog-browser-dist
+                  path: packages/browser-next/dist-cdn
+
+            - name: Configure AWS credentials (US)
+              if: matrix.region.name == 'us'
+              uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Configure AWS credentials (EU)
+              if: matrix.region.name == 'eu'
+              uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Upload and verify immutable browser assets
+              env:
+                  BUCKET: ${{ matrix.region.bucket }}
+                  VERSION: ${{ needs.check-posthog-browser-version.outputs.committed-version }}
+              run: node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --immutable-only
+
+    upload-posthog-browser-s3:
+        name: Promote @posthog/browser S3 aliases (${{ matrix.region.name }})
+        needs:
+            [
+                version-bump,
+                check-posthog-browser-version,
+                build-posthog-browser-s3-artifacts,
+                upload-posthog-browser-s3-immutable,
+            ]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.check-posthog-browser-version.result == 'success' &&
+            needs.check-posthog-browser-version.outputs.version-changed == 'true' &&
+            needs.upload-posthog-browser-s3-immutable.result == 'success'
+        environment: 'S3 Upload'
+        permissions:
+            contents: read
+            id-token: write
+        strategy:
+            fail-fast: false
+            matrix:
+                region:
+                    - { name: us, bucket: us-assets.i.posthog.com, aws_region: us-east-1 }
+                    - { name: eu, bucket: eu-assets.i.posthog.com, aws_region: eu-central-1 }
+        steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+              with:
+                  egress-policy: audit
+
+            - name: Checkout release tooling
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  sparse-checkout: |
+                      .npmrc
+                      package.json
+                      patches
+                      pnpm-lock.yaml
+                      pnpm-workspace.yaml
+                      tooling/release
+
+            - name: Setup Node.js
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+
+            - name: Setup pnpm
+              uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+              with:
+                  cache: false
+                  install: false
+
+            - name: Install release tooling dependencies
+              run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
+
+            - name: Download @posthog/browser artifact
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: posthog-browser-dist
+                  path: packages/browser-next/dist-cdn
+
+            - name: Configure AWS credentials (US)
+              if: matrix.region.name == 'us'
+              uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Configure AWS credentials (EU)
+              if: matrix.region.name == 'eu'
+              uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Reject superseded browser alias promotion
+              if: ${{ !contains(needs.check-posthog-browser-version.outputs.committed-version, '-') }}
+              env:
+                  VERSION: ${{ needs.check-posthog-browser-version.outputs.committed-version }}
+              run: |
+                  set -euo pipefail
+                  git fetch --no-tags --depth=1 origin main
+                  main_version=$(git show FETCH_HEAD:packages/browser-next/package.json | jq -r '.version')
+                  if [ "$VERSION" != "$main_version" ]; then
+                      echo "::error::Refusing superseded alias promotion: $VERSION; main is $main_version"
+                      exit 1
+                  fi
+
+            - name: Verify immutable assets and promote browser aliases
+              env:
+                  BUCKET: ${{ matrix.region.bucket }}
+                  VERSION: ${{ needs.check-posthog-browser-version.outputs.committed-version }}
+              run: node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --aliases-only
+
+    notify-posthog-browser-s3-failed:
+        name: Notify @posthog/browser S3 failure
+        needs:
+            [
+                notify-approval-needed,
+                check-posthog-browser-version,
+                build-posthog-browser-s3-artifacts,
+                upload-posthog-browser-s3-immutable,
+                upload-posthog-browser-s3,
+            ]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            (
+                needs.check-posthog-browser-version.result == 'failure' ||
+                needs.build-posthog-browser-s3-artifacts.result == 'failure' ||
+                needs.upload-posthog-browser-s3-immutable.result == 'failure' ||
+                needs.upload-posthog-browser-s3.result == 'failure'
+            )
+        permissions: {}
+        steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+              with:
+                  egress-policy: audit
+
+            - name: Notify Slack - @posthog/browser S3 failed
+              continue-on-error: true
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ `@posthog/browser` S3 release failed. <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>'
+                  emoji_reaction: 'x'
+
     check-browser-version:
         name: Check posthog-js version for S3
         needs: [version-bump, notify-approval-needed]
