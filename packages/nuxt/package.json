@@ -19,6 +19,10 @@
     ".": {
       "types": "./dist/types.d.mts",
       "import": "./dist/module.mjs"
+    },
+    "./server": {
+      "types": "./dist/runtime/server.d.ts",
+      "node": "./dist/runtime/server.js"
     }
   },
   "main": "./dist/module.mjs",
@@ -31,7 +35,7 @@
     "build": "nuxt-module-build build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
     "lint": "oxlint --report-unused-disable-directives-severity error .",
-    "test:unit": "node tests/vue-plugin.test.mjs && node tests/nitro-plugin.test.mjs && node tests/sourcemaps-ssr.test.mjs && node tests/wait-for-packages.test.mjs && node tests/nuxt5-consumer.test.mjs"
+    "test:unit": "node tests/vue-plugin.test.mjs && node tests/nitro-plugin.test.mjs && node tests/server-context.test.mjs && node tests/sourcemaps-ssr.test.mjs && node tests/wait-for-packages.test.mjs && node tests/nuxt5-consumer.test.mjs"
   },
   "dependencies": {
     "@posthog/cli": "catalog:",
@@ -50,6 +54,9 @@
     "eslint-plugin-regexp": "2.10.0",
     "typescript": "catalog:",
     "nitro": "3.0.260610-beta",
-    "nitropack": "2.13.4"
+    "nitropack": "2.13.4",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/context-async-hooks": "^2.2.0",
+    "@opentelemetry/sdk-trace-base": "^2.10.0"
   }
 }
