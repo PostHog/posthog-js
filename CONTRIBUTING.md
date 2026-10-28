@@ -45,7 +45,7 @@ The repository contains the following top-level packages in `./packages/`:
 | `core/`                      | `@posthog/core`                      | Shared core functionality used by multiple SDKs          |
 | `browser/`                   | `posthog-js`                         | Main browser SDK for capturing events and usage          |
 | `browser-common/`            | `@posthog/browser-common`            | Internal shared browser utilities and extensions         |
-| `browser-next/`              | `@posthog/browser`                   | Private experimental browser SDK                         |
+| `browser-next/`              | `@posthog/browser`                   | Experimental browser SDK                                 |
 | `web/`                       | `posthog-js-lite`                    | Lightweight browser SDK                                  |
 | `ai/`                        | `@posthog/ai`                        | AI integrations for Node.js                              |
 | `convex/`                    | `@posthog/convex`                    | Convex.dev component                                     |
