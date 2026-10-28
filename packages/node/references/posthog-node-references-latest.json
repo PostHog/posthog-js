@@ -2109,6 +2109,13 @@
       "path": "../core/src/cookie.ts"
     },
     {
+      "id": "EmailDeliveryStatus",
+      "name": "EmailDeliveryStatus",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "\"queued\" | \"sent\" | \"failed\" | \"delivered\" | \"bounced\" | \"complained\""
+    },
+    {
       "id": "EmailErrorName",
       "name": "EmailErrorName",
       "properties": [],
@@ -2162,6 +2169,37 @@
       "id": "Emails",
       "name": "Emails",
       "properties": [],
+      "path": "src/emails/types.ts"
+    },
+    {
+      "id": "EmailStatus",
+      "name": "EmailStatus",
+      "properties": [
+        {
+          "description": "When PostHog queued the email, as an ISO 8601 timestamp.",
+          "type": "string",
+          "name": "createdAt"
+        },
+        {
+          "description": "The message ID that `send()` returned.",
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "description": "Why a failed email was not sent, such as `provider_error` or `recipient_suppressed`, or the bounce type of a bounced email: `hard`, `soft` or `unknown`. Null otherwise.",
+          "type": "string | null",
+          "name": "reason"
+        },
+        {
+          "type": "EmailDeliveryStatus | (string & {})",
+          "name": "status"
+        },
+        {
+          "description": "When the email reached its current status, as an ISO 8601 timestamp.",
+          "type": "string",
+          "name": "statusAt"
+        }
+      ],
       "path": "src/emails/types.ts"
     },
     {
@@ -2677,6 +2715,13 @@
       "properties": [],
       "path": "src/types.ts",
       "example": "string | number | (string | number)[] | boolean"
+    },
+    {
+      "id": "GetEmailResponse",
+      "name": "GetEmailResponse",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "{\n    data: EmailStatus;\n    error: null;\n} | {\n    data: null;\n    error: EmailError;\n}"
     },
     {
       "id": "GetFlagsResult",
