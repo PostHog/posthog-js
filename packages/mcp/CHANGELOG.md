@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.25.0
+
+### Minor Changes
+
+- [#5404](https://github.com/PostHog/posthog-js/pull/5404) [`68336df`](https://github.com/PostHog/posthog-js/commit/68336dfb097a78e08041c77f72bbcc59b6958e04) Thanks [@gesh](https://github.com/gesh)! - Add a `sendToolsListEvent` option. It is on by default. Set it to `false` to stop sending `$mcp_tools_list`.
+  (2026-10-28)
+
 ## 0.24.0
 
 ### Minor Changes
