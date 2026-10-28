@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mkdtemp, mkdir, rm, writeFile, readFile, realpath } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile, readFile, realpath, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cases, definitions, digest, expectedFlags, users, workloads } from './fixtures.mjs'
 import { classifyExit, memory, sampleAllocations, samplingOptions, settle, timeOperations } from './measurement.mjs'
-import { appendSample, coreBuildIdentity, main, runWorker } from './run.mjs'
+import { appendSample, coreBuildIdentity, main, runWorker, selectWorkloads, validateShardManifest } from './run.mjs'
 import { createWorkload, transport } from './workload.mjs'
 
 const sdkDirectory = fileURLToPath(new URL('../', import.meta.url))
@@ -348,6 +348,178 @@ test('full and smoke inventories match sdk-benchmarks/v1 counts, parameters and 
     ]
     assert.equal(inventory.length, 20)
     assert.deepEqual(inventory, expected)
+  }
+})
+
+test('shards.json exactly partitions full and smoke inventories into the fixed groups', async () => {
+  const manifest = JSON.parse(await readFile(new URL('./shards.json', import.meta.url), 'utf8'))
+  validateShardManifest(manifest)
+  assert.deepEqual(
+    manifest.shards.map((shard) => shard.id),
+    ['flags-single', 'flags-scaling', 'flags-memory', 'capture']
+  )
+  for (const smoke of [false, true]) {
+    const inventory = workloads(smoke)
+    const groups = [inventory.slice(0, 9), inventory.slice(9, 12), inventory.slice(12, 14), inventory.slice(14)]
+    for (const [index, shard] of manifest.shards.entries()) {
+      assert.deepEqual(
+        shard.workloads,
+        groups[index].map((spec) => spec.id)
+      )
+      assert.deepEqual(selectWorkloads(manifest, { smoke, shard: shard.id }), groups[index])
+    }
+    assert.deepEqual(selectWorkloads(manifest, { smoke }), inventory)
+    assert.deepEqual(selectWorkloads(manifest, { smoke, filter: 'flags.all.' }), groups[1])
+  }
+})
+
+test('manifest validation rejects missing, extra, duplicate and unsafe shard declarations', async () => {
+  const manifest = JSON.parse(await readFile(new URL('./shards.json', import.meta.url), 'utf8'))
+  for (const mutate of [
+    (value) => {
+      value.manifest_version = 2
+    },
+    (value) => {
+      value.sdk = 'posthog-python'
+    },
+    (value) => {
+      value.extra = true
+    },
+    (value) => {
+      value.shards = []
+    },
+    (value) => {
+      value.shards = Array(17).fill(value.shards[0])
+    },
+    (value) => {
+      value.shards[0].extra = true
+    },
+    (value) => {
+      value.shards[0].id = '../escape'
+    },
+    (value) => {
+      value.shards[0].id = 'a'.repeat(65)
+    },
+    (value) => {
+      value.shards[0].id = value.shards[1].id
+    },
+    (value) => {
+      value.shards[0].workloads = []
+    },
+    (value) => {
+      value.shards[0].workloads.pop()
+    },
+    (value) => {
+      value.shards[0].workloads.push('unknown')
+    },
+    (value) => {
+      value.shards[0].workloads.push(value.shards[0].workloads[0])
+    },
+    (value) => {
+      value.shards[0].workloads.push(value.shards[1].workloads[0])
+    },
+    (value) => {
+      value.shards[0].workloads[0] = null
+    },
+  ]) {
+    const invalid = structuredClone(manifest)
+    mutate(invalid)
+    assert.throws(() => validateShardManifest(invalid), { code: 'ERR_ASSERTION' })
+  }
+})
+
+test('runner rejects unknown shards and shard/filter combinations before execution', async () => {
+  for (const selection of [
+    ['--shard', 'unknown'],
+    ['--shard', ''],
+    ['--shard', 'flags-single', '--filter', 'flags.'],
+    ['--shard', 'flags-single', '--filter', ''],
+    ['--filter', 'unknown'],
+  ]) {
+    await assert.rejects(
+      main(['--base', 'missing', '--head', 'missing', '--output', 'missing', ...selection], async () => {
+        assert.fail('Invalid selections must not start workers')
+      }),
+      /Unknown shard|cannot be combined|No matching workloads/
+    )
+  }
+})
+
+test('shard invocations retain six alternating sequential pairs and common suite metadata', async () => {
+  const manifest = JSON.parse(await readFile(new URL('./shards.json', import.meta.url), 'utf8'))
+  const directory = await mkdtemp(join(tmpdir(), 'posthog-bench-shards-'))
+  const headDirectory = join(directory, 'head-sdk')
+  const pairIds = new Set()
+  let suite
+  try {
+    await symlink(sdkDirectory, headDirectory, 'dir')
+    for (const shard of manifest.shards) {
+      const calls = []
+      let active = false
+      const output = join(directory, shard.id)
+      assert.equal(
+        await main(
+          ['--base', sdkDirectory, '--head', headDirectory, '--output', output, '--smoke', '--shard', shard.id],
+          async (target, spec, pass) => {
+            assert.equal(active, false, 'Workers must not overlap')
+            active = true
+            await new Promise((resolve) => setImmediate(resolve))
+            calls.push([spec.id, pass, target === headDirectory ? 'head' : 'base'])
+            active = false
+            return {
+              status: 'ok',
+              operations: spec.operations,
+              elapsed_time_per_op: 1,
+              process_cpu_time_per_op: 1,
+              estimated_bytes: 1,
+              before: { rss: 1 },
+              observed_peak_rss: 1,
+              process_lifetime_peak_rss: 1,
+              after_settling: { rss: 1, heap_used: 1 },
+            }
+          }
+        ),
+        0
+      )
+      const specs = selectWorkloads(manifest, { smoke: true, shard: shard.id })
+      assert.deepEqual(
+        calls,
+        specs.flatMap((spec) =>
+          Array.from({ length: 6 }, (_, repetition) =>
+            spec.passes.flatMap((pass) =>
+              (repetition % 2 ? ['head', 'base'] : ['base', 'head']).map((role) => [spec.id, pass, role])
+            )
+          ).flat()
+        )
+      )
+      const base = JSON.parse(await readFile(join(output, 'base.json'), 'utf8'))
+      const head = JSON.parse(await readFile(join(output, 'head.json'), 'utf8'))
+      assert.equal(base.execution.pair_id, head.execution.pair_id)
+      assert.ok(!pairIds.has(base.execution.pair_id), 'Each invocation needs a distinct pair ID')
+      pairIds.add(base.execution.pair_id)
+      suite ??= base.suite
+      for (const document of [base, head]) {
+        assert.deepEqual(document.suite, suite)
+        assert.equal(document.suite.repetitions, 6)
+        assert.equal(document.execution.shard_id, shard.id)
+        assert.deepEqual(
+          document.benchmarks.map((benchmark) => benchmark.id),
+          shard.workloads
+        )
+        for (const [index, benchmark] of document.benchmarks.entries()) {
+          assert.equal(benchmark.runs.length, specs[index].passes.length * 6)
+          for (const metric of benchmark.metrics.filter((metric) => metric.status === 'ok')) {
+            assert.deepEqual(
+              metric.samples.map((sample) => sample.repetition),
+              [0, 1, 2, 3, 4, 5]
+            )
+          }
+        }
+      }
+    }
+    assert.equal(pairIds.size, 4)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
 })
 
