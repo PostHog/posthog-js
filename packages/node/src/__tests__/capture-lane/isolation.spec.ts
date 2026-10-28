@@ -151,6 +151,23 @@ describe('capture lane isolation (Node SDK)', () => {
     expect(errors[0].message).toContain('2 because the queue was full (2 events)')
   })
 
+  it('keeps a captureAiMaxQueueSize below flushAt as set', async () => {
+    const ai = holdLane(harness, AI_CAPTURE_PATH)
+    const posthog = harness.makeClient({ flushAt: 20, captureAiMaxQueueSize: 2 })
+    const errors: CaptureError[] = []
+    posthog.on('error', (error) => errors.push(error))
+
+    for (let i = 0; i < 6; i++) {
+      posthog.captureAi({ distinctId: 'u', event: `$ai_${i}`, properties: {} })
+    }
+    ai.release()
+    await posthog.flush()
+
+    // Synchronous captures fill the queue before a flush runs, so it keeps the newest 2 and drops the rest.
+    expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_4', '$ai_5'])
+    expect(errors.map((error) => error.message).join(' ')).toContain('4 because the queue was full (2 events)')
+  })
+
   it.each<[string, Record<string, number>, number, number]>([
     ['the defaults', {}, 10_000, 30_000],
     ['requestTimeout on the analytics lane only', { requestTimeout: 200 }, 200, 30_000],

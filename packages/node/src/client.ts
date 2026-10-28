@@ -595,16 +595,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private _captureLaneConfig(endpoint: CaptureEndpoint): CaptureLaneConfig {
     const isAi = endpoint === AI_CAPTURE_ENDPOINT
+    // The AI queue cap bounds memory for large events, so it is kept as set and the AI lane flushes no later than when
+    // its queue is full. The analytics queue keeps its floor at flushAt, so the flushAt trigger can always fire.
+    const flushAt = isAi ? Math.min(this.flushAt, this._captureSettings.ai.maxQueueSize) : this.flushAt
     return {
       endpoint,
-      flushAt: this.flushAt,
+      flushAt,
       flushIntervalMs: this.options.flushInterval ?? 5000,
-      maxBatchSize: Math.max(this.flushAt, this.options.maxBatchSize ?? 100),
-      // Never below flushAt, or the flushAt trigger could never fire.
-      maxQueueSize: Math.max(
-        this.flushAt,
-        isAi ? this._captureSettings.ai.maxQueueSize : (this.options.maxQueueSize ?? 10000)
-      ),
+      maxBatchSize: Math.max(flushAt, this.options.maxBatchSize ?? 100),
+      maxQueueSize: isAi
+        ? this._captureSettings.ai.maxQueueSize
+        : Math.max(this.flushAt, this.options.maxQueueSize ?? 10000),
       targetBatchBytes: CAPTURE_BATCH_TARGET_BYTES,
       maxEventBytes: isAi ? AI_MAX_PROPERTIES_BYTES : ANALYTICS_MAX_EVENT_BYTES,
       maxEventBytesOf: isAi ? 'properties' : 'event',
