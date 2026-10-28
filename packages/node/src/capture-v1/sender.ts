@@ -15,6 +15,32 @@ const DEFAULT_MAX_BACKOFF_MS = 30_000
 
 // Retry waits and request deadlines use ref'd timers, unlike safeSetTimeout, so an
 // awaited flush or shutdown keeps the process alive until the send finishes.
+/** Settles with `work`, or rejects with an `AbortError` as soon as `signal` aborts. */
+async function raceAbort<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) {
+    return work
+  }
+  let onAbort!: () => void
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => {
+      const abortError = new Error('Capture V1 request aborted while compressing the body')
+      abortError.name = 'AbortError'
+      abortError.cause = signal.reason
+      reject(abortError)
+    }
+    if (signal.aborted) {
+      onAbort()
+    } else {
+      signal.addEventListener('abort', onAbort, { once: true })
+    }
+  })
+  try {
+    return await Promise.race([work, aborted])
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+  }
+}
+
 function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const onAbort = (): void => {
@@ -257,7 +283,8 @@ export class V1CaptureSender {
     const headers = this.buildHeaders(attempt, requestId)
     let body: string | Blob | PostHogFetchBodyBytes = payload
     if (this.config.compressionEnabled) {
-      const compressed = await this.compress(payload, this.config.isDebug)
+      // Compression runs on the libuv pool, so a busy pool must not hold the request past an external deadline.
+      const compressed = await raceAbort(this.compress(payload, this.config.isDebug), externalSignal)
       if (compressed !== null) {
         body = compressed
         headers['Content-Encoding'] = 'gzip'

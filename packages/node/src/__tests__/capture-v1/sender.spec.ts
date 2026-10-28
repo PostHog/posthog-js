@@ -231,6 +231,20 @@ describe('V1CaptureSender', () => {
       expect(typeof fetch.mock.calls[0][1].body).toBe('string')
     })
 
+    it('stops waiting for compression when the external signal aborts, and returns the batch as unsent', async () => {
+      const compress = vi.fn(() => new Promise<null>(() => {}))
+      const { sender, fetch } = makeSender({ compressionEnabled: true }, { compress })
+      const controller = new AbortController()
+      const events = v1Events([msg('u1')])
+
+      const sending = sender.send(events, { signal: controller.signal, keepUnsent: true })
+      await vi.waitFor(() => expect(compress).toHaveBeenCalledTimes(1))
+      controller.abort(new Error('shutdown deadline'))
+
+      expect((await sending).map((event) => event.uuid)).toEqual(['u1'])
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
     it('does not compress when disabled', async () => {
       const compress = vi.fn()
       const { sender, fetch } = makeSender({ compressionEnabled: false }, { compress })
