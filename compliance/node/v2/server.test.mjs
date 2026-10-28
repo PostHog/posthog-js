@@ -142,7 +142,8 @@ for (const mode of ['v1'])
                 const event = request.body.batch[0]
                 assert.equal(event.event, expectedEvent)
                 assert.equal(event.distinct_id, distinctId)
-                assert.equal(event.properties.$geoip_disable, undefined)
+                // posthog-node 6 sends a per-call disableGeoip: false as $geoip_disable: false.
+                assert.equal(event.properties.$geoip_disable, false)
                 if (route === '/identify') assert.deepEqual(event.properties.$set, set)
                 else if (route === '/alias') assert.equal(event.properties.alias, 'user-123')
                 else {
