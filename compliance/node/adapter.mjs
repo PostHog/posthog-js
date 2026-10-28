@@ -35,6 +35,10 @@ const state = {
     lastError: null,
     requestsMade: [],
     pendingEvents: 0,
+    reportedDrops: [],
+    logLines: [],
+    // Event names per uuid in capture order, so a reported drop can name its event (a duplicate uuid has several).
+    uuidNames: new Map(),
 }
 
 function resetCounters() {
@@ -43,6 +47,51 @@ function resetCounters() {
     state.lastError = null
     state.requestsMade = []
     state.pendingEvents = 0
+    state.reportedDrops = []
+    state.logLines = []
+    state.uuidNames = new Map()
+}
+
+// The SDK logs through console; /state returns those lines (log_capture).
+for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
+    const write = console[level].bind(console)
+    console[level] = (...args) => {
+        state.logLines.push(args.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' '))
+        write(...args)
+    }
+}
+
+function rememberName(uuid, event) {
+    if (uuid) {
+        state.uuidNames.set(uuid, [...(state.uuidNames.get(uuid) ?? []), event])
+    }
+}
+
+function recordDrops(error) {
+    const duplicatesSeen = new Map()
+    for (const { uuid, details } of error?.drops ?? []) {
+        const names = state.uuidNames.get(uuid) ?? []
+        let index = 0
+        if (details === 'duplicate_event_uuid') {
+            // Capture keeps the first copy, so the dropped copies are the later names, in order.
+            index = 1 + (duplicatesSeen.get(uuid) ?? 0)
+            duplicatesSeen.set(uuid, index)
+        }
+        state.reportedDrops.push({ uuid, event: names[index] ?? names[0] ?? null, details: details ?? null })
+    }
+}
+
+const PADDING_KEY = '$test_padding'
+
+// One ASCII padding property makes the properties' compact JSON exactly `size` bytes (generated_payloads).
+function padProperties(properties, size, marker = '') {
+    const padded = { ...properties, [PADDING_KEY]: '' }
+    const fill = size - Buffer.byteLength(JSON.stringify(padded), 'utf8')
+    if (fill < marker.length) {
+        throw new Error(`pad_properties_to_bytes ${size} is smaller than the properties`)
+    }
+    padded[PADDING_KEY] = marker + 'x'.repeat(fill - marker.length)
+    return padded
 }
 
 async function discardClient() {
@@ -90,11 +139,14 @@ function parseEvents(fetchOptions) {
     return Array.isArray(parsed?.batch) ? parsed.batch : []
 }
 
-function captureMessage({ distinct_id, event, properties, timestamp, options, uuid }) {
+function captureMessage({ distinct_id, event, properties, timestamp, options, uuid, pad_properties_to_bytes, marker }) {
     return {
         distinctId: distinct_id,
         event,
-        properties: properties || {},
+        properties:
+            pad_properties_to_bytes === undefined
+                ? properties || {}
+                : padProperties(properties || {}, pad_properties_to_bytes, marker),
         timestamp: timestamp ? new Date(timestamp) : undefined,
         // Options and caller uuids go to the SDK unchanged; the SDK owns validation.
         options,
@@ -115,6 +167,11 @@ app.get('/health', (req, res) => {
             'bounded_retries',
             'disable_geoip',
             'historical_migration',
+            'reported_drops',
+            'log_capture',
+            'generated_payloads',
+            'property_layers',
+            'fail_open',
             `encoding_${COMPRESSION}`,
         ],
     })
@@ -130,6 +187,8 @@ app.post('/init', async (req, res) => {
         enable_compression,
         disable_geoip,
         historical_migration,
+        super_properties,
+        before_send,
     } = req.body
 
     await discardClient()
@@ -148,10 +207,24 @@ app.post('/init', async (req, res) => {
         captureAiCompression: compression,
         disableGeoip: disable_geoip ?? false,
         historicalMigration: historical_migration ?? undefined,
+        ...(before_send
+            ? {
+                  before_send: (event) => ({
+                      ...event,
+                      properties: { ...event.properties, ...before_send.set_properties },
+                  }),
+              }
+            : {}),
         fetch: async (url, fetchOptions) => {
             const response = await fetch(url, fetchOptions)
             try {
                 const events = parseEvents(fetchOptions)
+                const attempt = Number(headerValue(fetchOptions?.headers, 'posthog-attempt') ?? 1)
+                if (attempt === 1) {
+                    for (const event of events) {
+                        rememberName(event.uuid, event.event)
+                    }
+                }
                 state.requestsMade.push({
                     timestamp_ms: Date.now(),
                     status_code: response.status,
@@ -171,7 +244,11 @@ app.post('/init', async (req, res) => {
     })
     state.client.on('error', (error) => {
         state.lastError = error?.message ?? String(error)
+        recordDrops(error)
     })
+    if (super_properties) {
+        await state.client.register(super_properties)
+    }
 
     res.json({ success: true })
 })
@@ -201,6 +278,10 @@ app.post('/capture_ai', (req, res) => {
 
     try {
         const uuid = state.client.captureAi(captureMessage(req.body))
+        // A local drop is never sent, so name it from the call.
+        if (uuid && !state.uuidNames.has(uuid)) {
+            rememberName(uuid, req.body.event)
+        }
         state.totalEventsCaptured++
         state.pendingEvents++
         res.json({ success: true, uuid: uuid ?? null })
@@ -239,6 +320,8 @@ app.get('/state', (req, res) => {
         total_retries: state.requestsMade.filter((r) => r.retry_attempt > 0).length,
         last_error: state.lastError,
         requests_made: state.requestsMade,
+        reported_drops: state.reportedDrops,
+        log_lines: state.logLines,
     })
 })
 
