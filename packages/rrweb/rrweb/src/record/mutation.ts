@@ -839,6 +839,15 @@ export default class MutationBuffer {
         break;
       }
       case 'childList': {
+        // Runs before the blocked-parent return so hosts removed from a
+        // blocked container are released too. Still attached by the time the
+        // batch is processed means moved, not removed.
+        m.removedNodes.forEach((n) => {
+          if (!inDom(n)) {
+            this.shadowDomManager.removeShadowRootsIn(n);
+          }
+        });
+
         /**
          * Parent is blocked, ignore all child mutations
          */
