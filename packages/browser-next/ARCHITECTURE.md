@@ -511,7 +511,7 @@ Each optional-feature check must report these values:
 Extend the bundle-size script when you add a new public entry point.
 Fail the check when a forbidden product or dependency enters the root graph.
 
-Add a stored baseline before the first public release. Review each later increase against that baseline.
+Review initial and total bundle measurements for runtime changes.
 An increase needs a user benefit and a short size explanation.
 
 ## 13. Review procedure
