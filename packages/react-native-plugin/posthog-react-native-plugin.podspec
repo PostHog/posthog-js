@@ -28,7 +28,8 @@ Pod::Spec.new do |s|
   end
   # `spm_dependency` only looks for a target named exactly after this pod in the
   # main Pods project, so it can't find it when CocoaPods splits pods into
-  # separate projects or scopes target names (`posthog-react-native-plugin-Pods-App`).
+  # separate projects or scopes target names (`posthog-react-native-plugin-Pods-App`,
+  # `posthog-react-native-plugin-iOS15.1`).
   # Read the Podfile only once CocoaPods has loaded it: autolinking evaluates this
   # podspec while the Podfile is still loading, and `Pod::Config#podfile` would
   # load it again. `pod install` re-evaluates this `:path` podspec afterwards, so
@@ -41,6 +42,13 @@ Pod::Spec.new do |s|
     end
     unless install_options.deduplicate_targets
       raise "#{s.name} doesn't support `deduplicate_targets => false`: React Native's `spm_dependency` can't add posthog-ios to a scoped pod target. Remove that option from your Podfile's `install!` line."
+    end
+    # App targets with different platforms or linkage each get their own scoped pod target.
+    app_targets = podfile.target_definition_list.reject(&:abstract?).select do |target|
+      target.platform && target.dependencies.any? { |dependency| dependency.root_name == s.name }
+    end
+    if app_targets.map { |target| [target.platform, target.build_type.to_hash] }.uniq.length > 1
+      raise "#{s.name} doesn't support app targets with different platforms or `use_frameworks!` linkage: React Native's `spm_dependency` can't add posthog-ios to a scoped pod target. Give #{app_targets.map(&:name).join(', ')} the same `platform` and `use_frameworks!` in your Podfile."
     end
   end
   spm_dependency(s,
