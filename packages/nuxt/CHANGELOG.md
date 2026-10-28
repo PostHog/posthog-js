@@ -1,5 +1,18 @@
 # @posthog/nuxt
 
+## 1.9.0
+
+### Minor Changes
+
+- [#5315](https://github.com/PostHog/posthog-js/pull/5315) [`e4df2d5`](https://github.com/PostHog/posthog-js/commit/e4df2d57bb242c2d5c107f4f8b0a9edc8557a749) Thanks [@pauldambra](https://github.com/pauldambra)! - Add optional server request context and access to the existing server client for OpenTelemetry span enrichment.
+  (2026-10-28)
+
+### Patch Changes
+
+- Updated dependencies [[`096131d`](https://github.com/PostHog/posthog-js/commit/096131dc7cf6115217996ff8fccace5598ed1e31), [`34833f2`](https://github.com/PostHog/posthog-js/commit/34833f2df9a6252a6dd03bcc19ca6af755a23953)]:
+  - posthog-node@5.58.0
+  - posthog-js@1.441.2
+
 ## 1.8.0
 
 ### Minor Changes
