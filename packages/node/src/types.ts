@@ -175,7 +175,9 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   flushInterval?: number
   /**
-   * The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)
+   * The maximum number of analytics events held in memory waiting to be sent (must be higher than `flushAt`).
+   * When the queue is full, the oldest event is dropped and reported through the `'error'` event.
+   * `captureAi` events have their own queue and do not count toward this limit.
    *
    * @default 10000
    */

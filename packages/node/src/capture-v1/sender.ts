@@ -1,19 +1,60 @@
 import {
   type FetchLike,
-  type PostHogEventProperties,
   type PostHogFetchBodyBytes,
   type PostHogFetchOptions,
   type PostHogFetchResponse,
   gzipCompress,
-  safeJsonStringify,
   uuidv7,
 } from '@posthog/core'
 
 import { CaptureError, type CaptureDroppedEvent, type CaptureErrorParams } from './errors'
-import { buildV1Batch } from './transform'
-import type { CaptureEndpoint, V1BatchResponse, V1Event } from './types'
+import { type SerializedV1Event, buildV1Body } from './serialize'
+import type { CaptureEndpoint, V1BatchResponse } from './types'
 
 const DEFAULT_MAX_BACKOFF_MS = 30_000
+
+// Retry waits and request deadlines use ref'd timers, unlike safeSetTimeout, so an
+// awaited flush or shutdown keeps the process alive until the send finishes.
+/** Settles with `work`, or rejects with an `AbortError` as soon as `signal` aborts. */
+async function raceAbort<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) {
+    return work
+  }
+  let onAbort!: () => void
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => {
+      const abortError = new Error('Capture V1 request aborted while compressing the body')
+      abortError.name = 'AbortError'
+      abortError.cause = signal.reason
+      reject(abortError)
+    }
+    if (signal.aborted) {
+      onAbort()
+    } else {
+      signal.addEventListener('abort', onAbort, { once: true })
+    }
+  })
+  try {
+    return await Promise.race([work, aborted])
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+  }
+}
+
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      resolve()
+    }
+    // A lane reuses one signal for every send, so a finished wait must not leave its listener behind.
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
 
 /** HTTP statuses the v1 backend wants retried. 429 is intentionally terminal in v1. */
 const RETRYABLE_STATUSES = new Set([408, 500, 502, 503, 504])
@@ -46,7 +87,8 @@ export interface V1CaptureSenderHooks {
   /** Surfaces partial/terminal delivery failures on the client error channel. */
   onError: (error: Error) => void
   now?: () => number
-  sleep?: (ms: number) => Promise<void>
+  /** Waits between attempts. The sender stops waiting when `signal` aborts, even if this does not. */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
   generateRequestId?: () => string
   compress?: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
 }
@@ -71,15 +113,15 @@ interface V1CaptureAttempt {
 }
 
 /**
- * Sends already-normalized events to one Capture V1 lane (`config.path`),
+ * Sends already-serialized events to one Capture V1 lane (`config.path`),
  * owning the full attempt loop: per-event partial retry, exponential backoff
  * clamped against `Retry-After`, v1 status classification, and surfacing drops
  * / undelivered events on the error channel. Used by both the batched and
  * immediate send paths.
  *
  * Never throws for a handled outcome: after exhausting its own attempt budget it
- * reports the failure via `onError` and resolves, so the caller's queue treats
- * the batch as consumed (the internal budget replaces the core queue-level retry).
+ * reports the failure via `onError` and resolves. Only events that never got an
+ * HTTP response can come back to the caller, and only with `keepUnsent`.
  */
 export class V1CaptureSender {
   private readonly config: V1CaptureSenderConfig
@@ -87,7 +129,7 @@ export class V1CaptureSender {
   private readonly fetchFn: FetchLike
   private readonly onError: (error: Error) => void
   private readonly now: () => number
-  private readonly sleep: (ms: number) => Promise<void>
+  private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>
   private readonly generateRequestId: () => string
   private readonly compress: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
 
@@ -97,47 +139,50 @@ export class V1CaptureSender {
     this.fetchFn = hooks.fetch
     this.onError = hooks.onError
     this.now = hooks.now ?? Date.now
-    // Retry waits and request deadlines use ref'd timers, unlike safeSetTimeout, so an
-    // awaited flush or shutdown keeps the process alive until the send finishes.
-    this.sleep = hooks.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
+    this.sleep = hooks.sleep ?? abortableSleep
     this.generateRequestId = hooks.generateRequestId ?? uuidv7
     this.compress = hooks.compress ?? gzipCompress
   }
 
-  async sendV1Batch(messages: PostHogEventProperties[]): Promise<void> {
-    if (messages.length === 0) {
-      return
+  /** Sends `events` and resolves with the ones to queue again (always empty unless `keepUnsent`). */
+  async send<T extends SerializedV1Event>(events: T[], options: V1SendOptions = {}): Promise<T[]> {
+    if (events.length === 0) {
+      return []
     }
 
+    const { signal, keepUnsent = false } = options
     const requestId = this.generateRequestId()
     // created_at is generated once and stays stable across every retry.
     const createdAt = new Date(this.now()).toISOString()
-    const { batch } = buildV1Batch(messages, {
-      createdAt,
-      historicalMigration: this.config.historicalMigration,
-    })
-
     const url = `${this.config.host}${this.config.path}`
     const drops: CaptureDroppedEvent[] = []
-    let pending = batch
+    let pending = events
+
+    const unsent = (cause: unknown): T[] => {
+      if (keepUnsent) {
+        this.surfacePartialDrops(requestId, drops)
+        return pending
+      }
+      this.surfaceBatchFailure(requestId, drops, pending, cause)
+      return []
+    }
 
     // Guard against a misconfigured budget (e.g. fetchRetryCount: -1): always make
     // at least one attempt so a bad config surfaces a delivery error instead of
     // silently dropping the batch without ever sending or calling onError.
     const maxAttempts = Math.max(1, this.config.maxAttempts)
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (signal?.aborted) {
+        return unsent(signal.reason)
+      }
       const isLastAttempt = attempt === maxAttempts
-      const payload = safeJsonStringify({
-        created_at: createdAt,
-        ...(this.config.historicalMigration ? { historical_migration: true } : {}),
-        batch: pending,
-      })
+      const payload = buildV1Body(pending, { createdAt, historicalMigration: this.config.historicalMigration })
 
       let captureAttempt: V1CaptureAttempt | undefined
       let retryDelayMs: number | undefined
       try {
-        captureAttempt = await this.sendOnce(url, payload, attempt, requestId)
-        const { response, signal } = captureAttempt
+        captureAttempt = await this.sendOnce(url, payload, attempt, requestId, signal)
+        const { response, signal: attemptSignal } = captureAttempt
         const { status } = response
         if (status < 200 || status >= 300) {
           if (!isLastAttempt && RETRYABLE_STATUSES.has(status)) {
@@ -146,32 +191,41 @@ export class V1CaptureSender {
             retryDelayMs = this.backoffDelay(attempt, retryAfterMs)
           } else {
             const httpError = await this.buildHttpError(response, status, captureAttempt.waitFor)
-            return this.surfaceBatchFailure(requestId, drops, pending, httpError)
+            this.surfaceBatchFailure(requestId, drops, pending, httpError)
+            return []
           }
         } else {
           let parsed: V1BatchResponse
           try {
             parsed = await captureAttempt.waitFor(this.parseResponse(response))
           } catch (error) {
-            if (signal.aborted) {
+            if (attemptSignal.aborted) {
               throw error
             }
             // A 2xx we cannot parse is terminal — re-sending against a broken success would loop forever.
-            return this.surfaceBatchFailure(
+            this.surfaceBatchFailure(
               requestId,
               drops,
               pending,
               new Error(`Capture V1 returned an unparseable ${status} response body`)
             )
+            return []
           }
 
           const retryable = this.classify(pending, parsed, drops)
           if (retryable.length === 0) {
-            return this.surfacePartialDrops(requestId, drops)
+            this.surfacePartialDrops(requestId, drops)
+            return []
           }
           if (isLastAttempt) {
-            this.onError(this.captureError({ requestId, drops, retryExhausted: retryable.map((event) => event.uuid) }))
-            return
+            this.onError(
+              this.captureError({
+                requestId,
+                drops,
+                retryExhausted: retryable.map((event) => event.uuid),
+              })
+            )
+            return []
           }
           pending = retryable
           // A 200 partial-retry body can also carry Retry-After (e.g. rate-limited
@@ -185,8 +239,8 @@ export class V1CaptureSender {
         }
         // Connection/timeouts, including a timeout while consuming the response body,
         // are retried until the budget runs out.
-        if (isLastAttempt) {
-          return this.surfaceBatchFailure(requestId, drops, pending, transportError)
+        if (isLastAttempt || signal?.aborted) {
+          return unsent(transportError)
         }
         retryDelayMs = this.backoffDelay(attempt)
       } finally {
@@ -194,16 +248,43 @@ export class V1CaptureSender {
       }
 
       if (retryDelayMs !== undefined) {
-        await this.sleep(retryDelayMs)
+        await this.sleepUnlessAborted(retryDelayMs, signal)
       }
+    }
+    return []
+  }
+
+  private async sleepUnlessAborted(ms: number, signal: AbortSignal | undefined): Promise<void> {
+    if (!signal) {
+      return this.sleep(ms)
+    }
+    if (signal.aborted) {
+      return
+    }
+    let onAbort!: () => void
+    const aborted = new Promise<void>((resolve) => {
+      onAbort = resolve
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+    try {
+      await Promise.race([this.sleep(ms, signal), aborted])
+    } finally {
+      signal.removeEventListener('abort', onAbort)
     }
   }
 
-  private async sendOnce(url: string, payload: string, attempt: number, requestId: string): Promise<V1CaptureAttempt> {
+  private async sendOnce(
+    url: string,
+    payload: string,
+    attempt: number,
+    requestId: string,
+    externalSignal: AbortSignal | undefined
+  ): Promise<V1CaptureAttempt> {
     const headers = this.buildHeaders(attempt, requestId)
     let body: string | Blob | PostHogFetchBodyBytes = payload
     if (this.config.compressionEnabled) {
-      const compressed = await this.compress(payload, this.config.isDebug)
+      // Compression runs on the libuv pool, so a busy pool must not hold the request past an external deadline.
+      const compressed = await raceAbort(this.compress(payload, this.config.isDebug), externalSignal)
       if (compressed !== null) {
         body = compressed
         headers['Content-Encoding'] = 'gzip'
@@ -214,21 +295,45 @@ export class V1CaptureSender {
     const controller = new AbortController()
     let timeoutPhase = 'waiting for response headers'
     let timer: ReturnType<typeof setTimeout> | undefined
+    let onExternalAbort: (() => void) | undefined
+    const stopListening = (): void => {
+      if (onExternalAbort) {
+        externalSignal?.removeEventListener('abort', onExternalAbort)
+      }
+    }
     // hooks.fetch is user-injectable, so it may ignore an abort signal while
     // resolving headers or reading the body. Race both phases against the same
     // deadline rather than relying only on standards-compliant fetch behavior.
     const deadline = new Promise<never>((_resolve, reject) => {
+      const abortWith = (error: Error): void => {
+        // Reject first so this phase-specific error wins even when an abort-aware
+        // custom fetch rejects synchronously from the abort event.
+        reject(error)
+        controller.abort(error)
+      }
       timer = setTimeout(() => {
         const timeoutError = new Error(
           `Capture V1 request timed out ${timeoutPhase} after ${this.config.requestTimeoutMs}ms`
         )
         timeoutError.name = 'AbortError'
-        // Reject first so this phase-specific error wins even when an abort-aware
-        // custom fetch rejects synchronously from the abort event.
-        reject(timeoutError)
-        controller.abort(timeoutError)
+        abortWith(timeoutError)
       }, this.config.requestTimeoutMs)
+      if (externalSignal) {
+        onExternalAbort = () => {
+          const abortError = new Error(`Capture V1 request aborted ${timeoutPhase}`)
+          abortError.name = 'AbortError'
+          abortError.cause = externalSignal.reason
+          abortWith(abortError)
+        }
+        if (externalSignal.aborted) {
+          onExternalAbort()
+        } else {
+          externalSignal.addEventListener('abort', onExternalAbort, { once: true })
+        }
+      }
     })
+    // Keeps an early abort from surfacing as an unhandled rejection before the race below observes it.
+    deadline.catch(() => {})
     try {
       const fetchPromise = this.fetchFn(url, { method: 'POST', headers, body, signal: controller.signal })
       let responseAccepted = false
@@ -258,6 +363,7 @@ export class V1CaptureSender {
           }
           cleanedUp = true
           clearTimeout(timer)
+          stopListening()
           if (controller.signal.aborted) {
             // The attempt deadline has already elapsed, so cleanup cannot wait
             // for a custom response body's cancellation promise to settle.
@@ -267,6 +373,7 @@ export class V1CaptureSender {
       }
     } catch (error) {
       clearTimeout(timer)
+      stopListening()
       throw error
     }
   }
@@ -293,9 +400,13 @@ export class V1CaptureSender {
    * a terminal failure, `retry` is returned for the next attempt, and
    * `ok`/`warning`/unknown/absent are terminal successes.
    */
-  private classify(pending: V1Event[], parsed: V1BatchResponse, drops: CaptureDroppedEvent[]): V1Event[] {
+  private classify<T extends SerializedV1Event>(
+    pending: T[],
+    parsed: V1BatchResponse,
+    drops: CaptureDroppedEvent[]
+  ): T[] {
     const results = parsed.results ?? {}
-    const retryable: V1Event[] = []
+    const retryable: T[] = []
     for (const event of pending) {
       const result = results[event.uuid]
       if (!result) {
@@ -370,7 +481,7 @@ export class V1CaptureSender {
   private surfaceBatchFailure(
     requestId: string,
     drops: CaptureDroppedEvent[],
-    pending: V1Event[],
+    pending: SerializedV1Event[],
     cause: unknown
   ): void {
     this.onError(this.captureError({ requestId, drops, retryExhausted: pending.map((event) => event.uuid), cause }))

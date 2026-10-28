@@ -528,6 +528,7 @@
         },
         {
           "category": "",
+          "description": "Sends all queued events and spans, and resolves when every send has finished. It does not reject when delivery fails: those failures arrive on the `'error'` event.",
           "details": null,
           "id": "flush",
           "showDocs": true,
@@ -3754,7 +3755,7 @@
           "name": "flushInterval"
         },
         {
-          "description": "The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)",
+          "description": "The maximum number of analytics events held in memory waiting to be sent (must be higher than `flushAt`).\nWhen the queue is full, the oldest event is dropped and reported through the `'error'` event.\n`captureAi` events have their own queue and do not count toward this limit.",
           "type": "number",
           "name": "maxQueueSize"
         },

@@ -1,6 +1,6 @@
 import type { JsonType, PostHogEventProperties } from '@posthog/core'
 
-import type { V1Batch, V1Event, V1EventOptions } from './types'
+import type { V1Event, V1EventOptions } from './types'
 
 /**
  * Coerce a value to a boolean the way the capture server does, or return
@@ -149,19 +149,4 @@ export function buildV1Event(message: PostHogEventProperties): V1Event {
     options,
     properties,
   }
-}
-
-/** Build a Capture V1 batch envelope from already-normalized queued messages. */
-export function buildV1Batch(
-  messages: PostHogEventProperties[],
-  { createdAt, historicalMigration }: { createdAt: string; historicalMigration?: boolean }
-): V1Batch {
-  const batch: V1Batch = {
-    created_at: createdAt,
-    batch: messages.map(buildV1Event),
-  }
-  if (historicalMigration) {
-    batch.historical_migration = true
-  }
-  return batch
 }
