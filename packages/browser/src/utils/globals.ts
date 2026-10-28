@@ -247,6 +247,8 @@ export interface LazyLoadedConversationsInterface {
     // Widget control
     show: () => void
     hide: () => void
+    open: () => void
+    close: () => void
     isVisible: () => boolean
 
     // Lifecycle

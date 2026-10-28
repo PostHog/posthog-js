@@ -24,6 +24,8 @@ describe('PostHogConversations', () => {
         mockManager = {
             show: vi.fn(),
             hide: vi.fn(),
+            open: vi.fn(),
+            close: vi.fn(),
             reset: vi.fn(),
             setIdentity: vi.fn(),
             clearIdentity: vi.fn(),
@@ -511,6 +513,90 @@ describe('PostHogConversations', () => {
                 const newConversations = new PostHogConversations(mockPostHog)
 
                 expect(() => newConversations.hide()).not.toThrow()
+            })
+        })
+
+        describe('open', () => {
+            it('should call open on the manager', () => {
+                conversations.open()
+
+                expect(mockManager.open).toHaveBeenCalled()
+            })
+
+            it('should not throw if manager is not loaded', () => {
+                const newConversations = new PostHogConversations(mockPostHog)
+
+                expect(() => newConversations.open()).not.toThrow()
+            })
+        })
+
+        describe('close', () => {
+            it('should call close on the manager', () => {
+                conversations.close()
+
+                expect(mockManager.close).toHaveBeenCalled()
+            })
+
+            it('should not throw if manager is not loaded', () => {
+                const newConversations = new PostHogConversations(mockPostHog)
+
+                expect(() => newConversations.close()).not.toThrow()
+            })
+        })
+
+        describe('before the bundle loads', () => {
+            const remoteConfig = {
+                ok: true,
+                config: {
+                    conversations: { enabled: true, token: 'test-token' },
+                } as RemoteConfig,
+            }
+
+            it('runs a queued open() once the bundle loads', () => {
+                const late = new PostHogConversations(mockPostHog)
+                ;(mockManager.open as VitestMock).mockClear()
+
+                late.open()
+                expect(mockManager.open).not.toHaveBeenCalled()
+
+                late.onRemoteConfig(remoteConfig)
+
+                expect(mockManager.open).toHaveBeenCalledTimes(1)
+            })
+
+            it('keeps the latest queued action', () => {
+                const late = new PostHogConversations(mockPostHog)
+                ;(mockManager.open as VitestMock).mockClear()
+                ;(mockManager.close as VitestMock).mockClear()
+
+                late.open()
+                late.close()
+                late.onRemoteConfig(remoteConfig)
+
+                expect(mockManager.open).not.toHaveBeenCalled()
+                expect(mockManager.close).toHaveBeenCalledTimes(1)
+            })
+
+            it('drops a queued open() when conversations are disabled', () => {
+                const late = new PostHogConversations(mockPostHog)
+                ;(mockManager.open as VitestMock).mockClear()
+
+                late.open()
+                late.onRemoteConfig({ ok: true, config: { conversations: false } as RemoteConfig })
+                late.onRemoteConfig(remoteConfig)
+
+                expect(mockManager.open).not.toHaveBeenCalled()
+            })
+
+            it('drops a queued open() on reset', () => {
+                const late = new PostHogConversations(mockPostHog)
+                ;(mockManager.open as VitestMock).mockClear()
+
+                late.open()
+                late.reset()
+                late.onRemoteConfig(remoteConfig)
+
+                expect(mockManager.open).not.toHaveBeenCalled()
             })
         })
     })

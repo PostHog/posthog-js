@@ -431,6 +431,20 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     }
 
     /**
+     * Open the chat panel.
+     */
+    open() {
+        this.show()
+    }
+
+    /**
+     * Close the chat panel. The launcher button stays visible.
+     */
+    close() {
+        this.hide()
+    }
+
+    /**
      * Get user traits (either provided via form or from props)
      */
     getUserTraits(): UserProvidedTraits | null {
