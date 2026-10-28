@@ -356,6 +356,55 @@ describe('PostHogSurveyProvider — popup delay', () => {
     expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    { remote: 10, local: 0, override: true, expected: 0 },
+    { remote: 10, local: 2, override: true, expected: 2 },
+    { remote: 10, local: 2, override: false, expected: 10 },
+    { remote: undefined, local: 2, override: false, expected: 2 },
+    { remote: 0, local: 2, override: false, expected: 0 },
+    { remote: undefined, local: undefined, override: false, expected: 0 },
+  ])(
+    'uses delay $expected with remote=$remote, local=$local, override=$override',
+    async ({ remote, local, override, expected }) => {
+      mockClient = makeClient([delayedSurvey('precedence', remote)])
+      const view = render(
+        <PostHogSurveyProvider
+          client={mockClient}
+          defaultSurveyAppearance={{ surveyPopupDelaySeconds: local }}
+          overrideAppearanceWithDefault={override}
+        >
+          <div />
+        </PostHogSurveyProvider>
+      )
+      await loadSurveys()
+      if (expected > 0) {
+        await advance(expected * 1000 - 1)
+        expect(view.queryByTestId('survey-modal')).toBeNull()
+        expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+        await advance(1)
+      }
+      expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('precedence')
+      expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('ignores remote delays when ordering candidates with appearance overrides enabled', async () => {
+    mockClient = makeClient([delayedSurvey('first', 10), delayedSurvey('second', 1)])
+    const view = render(
+      <PostHogSurveyProvider
+        client={mockClient}
+        defaultSurveyAppearance={{ surveyPopupDelaySeconds: 0 }}
+        overrideAppearanceWithDefault
+      >
+        <div />
+      </PostHogSurveyProvider>
+    )
+    await loadSurveys()
+    // Both effective delays are zero, so preserve their original order.
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('first')
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
   it('waits the full delay and chooses the shortest delay without mutating the definitions', async () => {
     const surveys = [delayedSurvey('slow', 10), delayedSurvey('fast', 2)]
     mockClient = makeClient(surveys)

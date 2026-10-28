@@ -126,6 +126,9 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
 
   const flags = useFeatureFlags(posthog)
   const [userLanguage, setUserLanguage] = useState(() => detectUserLanguage(posthog))
+  const defaultSurveyAppearance = useMemo(() => props?.defaultSurveyAppearance ?? {}, [props?.defaultSurveyAppearance])
+
+  const overrideAppearanceWithDefault = props?.overrideAppearanceWithDefault
 
   useEffect(() => {
     const updateLanguage = () => setUserLanguage(detectUserLanguage(posthog))
@@ -213,7 +216,12 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
     const nextSurvey = popoverSurveys[0]
     if (!nextSurvey) return
 
-    const delaySeconds = nextSurvey.appearance?.surveyPopupDelaySeconds ?? 0
+    const defaultDelay =
+      defaultSurveyAppearance?.surveyPopupDelaySeconds ?? defaultSurveyAppearance.surveyPopupDelaySeconds ?? 0
+
+    const delaySeconds = overrideAppearanceWithDefault
+      ? defaultDelay
+      : (nextSurvey.appearance?.surveyPopupDelaySeconds ?? defaultDelay)
 
     if (delaySeconds <= 0) {
       setActiveSurvey(nextSurvey)
@@ -240,7 +248,19 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
     }, delaySeconds * 1000)
 
     return () => clearTimeout(surveyActivationTimeoutId)
-  }, [activeSurvey, flags, surveys, seenSurveys, lastSeenSurveyDate, activatedSurveys, isReady, posthog, progressStore])
+  }, [
+    activeSurvey,
+    flags,
+    surveys,
+    seenSurveys,
+    lastSeenSurveyDate,
+    defaultSurveyAppearance,
+    overrideAppearanceWithDefault,
+    activatedSurveys,
+    isReady,
+    posthog,
+    progressStore,
+  ])
 
   const translatedActiveSurvey = useMemo(() => {
     return activeSurvey ? applySurveyTranslationForUser(activeSurvey, posthog, userLanguage) : undefined
@@ -248,15 +268,14 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
 
   // Merge survey appearance so that components and hooks can use a consistent model
   const surveyAppearance = useMemo<SurveyAppearanceTheme>(() => {
-    if (props.overrideAppearanceWithDefault || !translatedActiveSurvey) {
+    if (overrideAppearanceWithDefault || !translatedActiveSurvey) {
       return {
         ...defaultSurveyAppearance,
-        ...(props.defaultSurveyAppearance ?? {}),
       }
     }
     return {
       ...defaultSurveyAppearance,
-      ...(props.defaultSurveyAppearance ?? {}),
+      ...(defaultSurveyAppearance ?? {}),
       ...(translatedActiveSurvey.survey.appearance ?? {}),
       // If submitButtonColor is set by PostHog, ensure submitButtonTextColor is also set to contrast
       ...(translatedActiveSurvey.survey.appearance?.submitButtonColor
@@ -267,7 +286,7 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
           }
         : {}),
     }
-  }, [translatedActiveSurvey, props.defaultSurveyAppearance, props.overrideAppearanceWithDefault])
+  }, [translatedActiveSurvey, defaultSurveyAppearance, overrideAppearanceWithDefault])
 
   const activeSession = useMemo(
     () =>
