@@ -1285,6 +1285,138 @@ describe('evaluateFlags', () => {
         expect(flags.unresolvedFlags).toEqual(unresolvedFlags)
       }
     )
+
+    it('lets a later condition resolve the flag when an unexpected error follows a filter that cannot be checked', async () => {
+      const dependsOnBeta = {
+        key: 'beta',
+        type: 'flag',
+        value: true,
+        operator: 'flag_evaluates_to',
+        dependency_chain: ['beta'],
+      }
+      await setupWithDefinitions([
+        alwaysOn('checkout', {
+          filters: {
+            groups: [
+              { properties: [missingPlan, dependsOnBeta], rollout_percentage: 100 },
+              { properties: [], rollout_percentage: 100 },
+            ],
+          },
+        }),
+        alwaysOn('beta', { id: 3 }),
+      ])
+      vi.spyOn((posthog as any).featureFlagsPoller, 'evaluateFlagDependency').mockRejectedValue(new Error('unexpected'))
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.getFlag('checkout')).toBe(true)
+      expect(flags.unresolvedFlags).toEqual({})
+    })
+
+    describe('a dependency that only the server can evaluate', () => {
+      const dependentFlag = (): Record<string, any> =>
+        alwaysOn('target', {
+          id: 4,
+          filters: {
+            groups: [
+              {
+                properties: [
+                  { key: 'dep', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: ['dep'] },
+                ],
+                rollout_percentage: 100,
+                variant: 'a',
+              },
+              { properties: [], rollout_percentage: 100, variant: 'b' },
+            ],
+            multivariate: {
+              variants: [
+                { key: 'a', rollout_percentage: 50 },
+                { key: 'b', rollout_percentage: 50 },
+              ],
+            },
+          },
+        })
+      const dependencyFlag = (property: Record<string, any>): Record<string, any> =>
+        alwaysOn('dep', { id: 5, filters: { groups: [{ properties: [property], rollout_percentage: 100 }] } })
+      const remoteTargetResponse = (): PostHogV2FlagsResponse => ({
+        flags: {
+          target: {
+            key: 'target',
+            enabled: true,
+            variant: 'a',
+            reason: { code: 'condition_match', condition_index: 0, description: 'Matched condition set 1' },
+            metadata: { id: 4, version: 1, payload: undefined, description: undefined },
+          },
+        },
+        errorsWhileComputingFlags: false,
+        requestId: 'request-id-1',
+      })
+
+      it.each([
+        ['requested alone', ['target']],
+        ['requested with all flags', undefined],
+      ])('falls back to the server instead of choosing a later variant, with the flag %s', async (_, flagKeys) => {
+        await setupWithDefinitions([dependencyFlag(staticCohort), dependentFlag()], remoteTargetResponse())
+
+        const flags = await posthog.evaluateFlags('user-123', { flagKeys })
+
+        expect(flags.getFlag('target')).toBe('a')
+        expect(remoteFlagCalls()).toHaveLength(1)
+      })
+
+      it('reports the flag as an unresolved dependency in local-only evaluation', async () => {
+        await setupWithDefinitions([dependencyFlag(staticCohort), dependentFlag()])
+
+        const flags = await posthog.evaluateFlags('user-123', { flagKeys: ['target'], onlyEvaluateLocally: true })
+
+        expect(flags.getFlag('target')).toBeUndefined()
+        expect(flags.unresolvedFlags).toEqual({ target: 'unresolved_dependency' })
+      })
+
+      const dependsOnDep = {
+        key: 'dep',
+        type: 'flag',
+        value: true,
+        operator: 'flag_evaluates_to',
+        dependency_chain: ['dep'],
+      }
+      it.each([
+        ['the dependency first', [dependsOnDep, unknownTierOperator]],
+        ['the unsupported filter first', [unknownTierOperator, dependsOnDep]],
+      ])('reports a cohort with an unsupported filter as unsupported_definition, with %s', async (_, values) => {
+        await setupWithDefinitions(
+          [
+            dependencyFlag(staticCohort),
+            alwaysOn('target', {
+              id: 4,
+              filters: { groups: [{ properties: [{ key: 'id', type: 'cohort', value: 3 }], rollout_percentage: 100 }] },
+            }),
+          ],
+          undefined,
+          { cohorts: { '3': { type: 'AND', values } } }
+        )
+
+        const flags = await posthog.evaluateFlags('user-123', {
+          flagKeys: ['target'],
+          onlyEvaluateLocally: true,
+          personProperties: { tier: 'gold' },
+        })
+
+        expect(flags.unresolvedFlags).toEqual({ target: 'unsupported_definition' })
+      })
+
+      it('resolves locally when the dependency resolves locally', async () => {
+        await setupWithDefinitions([dependencyFlag(missingPlan), dependentFlag()])
+
+        const flags = await posthog.evaluateFlags('user-123', {
+          flagKeys: ['target'],
+          personProperties: { plan: 'pro' },
+        })
+
+        expect(flags.getFlag('target')).toBe('a')
+        expect(remoteFlagCalls()).toHaveLength(0)
+      })
+    })
   })
 
   describe('overrides', () => {

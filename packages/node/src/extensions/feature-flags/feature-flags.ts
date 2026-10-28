@@ -67,10 +67,11 @@ function setCustomErrorPrototype(error: Error, constructor: new (message: string
 }
 
 class RequiresServerEvaluation extends Error {
-  // Server-side data such as a static cohort is never available locally.
-  readonly reason: UnresolvedFlagReason = 'unsupported_definition'
-
-  constructor(message: string) {
+  constructor(
+    message: string,
+    // Server-side data such as a static cohort is never available locally.
+    readonly reason: UnresolvedFlagReason = 'unsupported_definition'
+  ) {
     super(message)
     setCustomErrorPrototype(this, RequiresServerEvaluation)
   }
@@ -551,6 +552,14 @@ class FeatureFlagsPoller {
             const depResult = await this.computeFlagValueLocally(depFlag, evaluationContext)
             evaluationCache[depFlagKey] = depResult
           } catch (error) {
+            // Only the server knows this dependency's value, and that value can decide which
+            // condition of the dependent flag matches, so the dependent flag falls back too.
+            if (error instanceof RequiresServerEvaluation) {
+              throw new RequiresServerEvaluation(
+                `Flag dependency '${depFlagKey}' for flag '${targetFlagKey}' requires server evaluation: ${error.message}`,
+                'unresolved_dependency'
+              )
+            }
             throw preserveRegexUncertainty(
               new InconclusiveMatchError(
                 `Error evaluating flag dependency '${depFlagKey}' for flag '${targetFlagKey}': ${error}`,
@@ -680,8 +689,19 @@ class FeatureFlagsPoller {
         }
       } catch (e) {
         if (e instanceof RequiresServerEvaluation) {
-          // Static cohort or other missing server-side data - must fallback to API
-          throw e
+          // Static cohort or other missing server-side data - must fallback to API.
+          // The fallback skips later conditions, so a higher reason in them comes from the definition.
+          let definitionReason: UnresolvedFlagReason | undefined
+          try {
+            definitionReason = getDefinitionUnresolvedReason(flag, evaluationContext.definitions!)
+          } catch {
+            // A malformed definition must not turn the server fallback into an evaluation error.
+          }
+          const reason = pickUnresolvedReason(
+            pickUnresolvedReason(inconclusiveReason, e.reason),
+            definitionReason ?? e.reason
+          )
+          throw reason === e.reason ? e : new RequiresServerEvaluation(e.message, reason)
         } else if (e instanceof InconclusiveMatchError) {
           // Evaluation error (bad regex, invalid date, missing property, etc.)
           // Track that we had an inconclusive match, but try other conditions
@@ -792,6 +812,11 @@ class FeatureFlagsPoller {
             if (Symbol.for('posthog.requiresServerRegexEvaluation') in e) regexError = e
             inconclusiveReason = pickUnresolvedReason(inconclusiveReason, e.reason)
             continue
+          }
+          // After a filter that could not be checked, stop the condition there as inconclusive,
+          // so an unexpected error does not stop later conditions from resolving the flag.
+          if (inconclusiveReason !== undefined) {
+            break
           }
           throw e
         }
