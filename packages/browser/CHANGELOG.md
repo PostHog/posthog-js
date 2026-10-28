@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.441.1
+
+### Patch Changes
+
+- [#5222](https://github.com/PostHog/posthog-js/pull/5222) [`6d12d24`](https://github.com/PostHog/posthog-js/commit/6d12d24ed24b2846415dbd95fc5d7ccf57779a99) Thanks [@posthog](https://github.com/apps/posthog)! - Fall back to `Math.random` when `crypto.getRandomValues` throws, so UUID generation no longer breaks capture.
+  (2026-10-28)
+- Updated dependencies [[`6d12d24`](https://github.com/PostHog/posthog-js/commit/6d12d24ed24b2846415dbd95fc5d7ccf57779a99)]:
+  - @posthog/browser-common@0.10.1
+
 ## 1.441.0
 
 ### Minor Changes

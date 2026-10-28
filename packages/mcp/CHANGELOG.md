@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.24.0
+
+### Minor Changes
+
+- [#5401](https://github.com/PostHog/posthog-js/pull/5401) [`8faad6a`](https://github.com/PostHog/posthog-js/commit/8faad6aa2508b38959cbd27196aa805bf6fa5ab7) Thanks [@gesh](https://github.com/gesh)! - Add a `sendInitializeEvent` option. It is on by default. Set it to `false` to stop sending `$mcp_initialize`.
+  (2026-10-28)
+
 ## 0.23.0
 
 ### Minor Changes
