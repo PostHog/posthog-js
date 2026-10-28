@@ -680,8 +680,12 @@ export class ConversationsManager implements ConversationsManagerInterface {
         const initialState: ConversationsWidgetState = forcedState ?? persistedState
         this._widgetState = initialState
 
-        if (initialState !== persistedBefore) {
+        // close() writes storage immediately, so compare against the current value when saving
+        // and against the pre-startup value when deciding whether the visible state changed.
+        if (initialState !== persistedState) {
             this._persistence.saveWidgetState(initialState)
+        }
+        if (initialState !== persistedBefore) {
             this._posthog.capture('$conversations_widget_state_changed', {
                 state: initialState,
                 view: this._currentView,
@@ -1407,6 +1411,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         if (this._isWidgetRendered) {
+            // The widget reports the change after its next render, which a hide() in the same tick skips.
+            this._persistence.saveWidgetState('open')
             this._widgetRef?.open()
             return
         }
@@ -1421,6 +1427,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     close(): void {
         if (this._isWidgetRendered) {
+            // The widget reports the change after its next render, which a hide() in the same tick skips.
+            this._persistence.saveWidgetState('closed')
             this._widgetRef?.close()
             return
         }

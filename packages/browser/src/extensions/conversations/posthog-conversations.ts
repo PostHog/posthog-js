@@ -246,6 +246,9 @@ export class PostHogConversations implements Extension {
      * Hide the conversations widget completely (button and chat panel)
      */
     hide(): void {
+        if (this._pendingPanelAction === 'open') {
+            this._pendingPanelAction = null
+        }
         if (!this._conversationsManager) {
             return
         }

@@ -598,6 +598,28 @@ describe('PostHogConversations', () => {
 
                 expect(mockManager.open).not.toHaveBeenCalled()
             })
+
+            it('drops a queued open() when hide() follows it', () => {
+                const late = new PostHogConversations(mockPostHog)
+                ;(mockManager.open as VitestMock).mockClear()
+
+                late.open()
+                late.hide()
+                late.onRemoteConfig(remoteConfig)
+
+                expect(mockManager.open).not.toHaveBeenCalled()
+            })
+
+            it('keeps a queued close() when hide() follows it', () => {
+                const late = new PostHogConversations(mockPostHog)
+                ;(mockManager.close as VitestMock).mockClear()
+
+                late.close()
+                late.hide()
+                late.onRemoteConfig(remoteConfig)
+
+                expect(mockManager.close).toHaveBeenCalledTimes(1)
+            })
         })
     })
 

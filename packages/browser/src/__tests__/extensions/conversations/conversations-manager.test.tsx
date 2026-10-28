@@ -704,6 +704,69 @@ describe('ConversationsManager', () => {
             expect(manager['_persistence'].saveWidgetState).toHaveBeenCalledWith('closed')
             expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
         })
+
+        describe('with persisted widget state', () => {
+            let storedState: 'open' | 'closed' | null
+
+            beforeEach(() => {
+                storedState = null
+                ;(manager['_persistence'].loadWidgetState as VitestMock).mockImplementation(() => storedState)
+                ;(manager['_persistence'].saveWidgetState as VitestMock).mockImplementation(
+                    (state: 'open' | 'closed') => {
+                        storedState = state
+                    }
+                )
+            })
+
+            it('saves the final open state when close() then open() run during startup', async () => {
+                storedState = 'open'
+                act(() => {
+                    manager.hide()
+                    manager.show()
+                    manager.close()
+                    manager.open()
+                })
+                await flushPromises()
+
+                expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument()
+                expect(storedState).toBe('open')
+            })
+
+            it('saves the closed state when close() is followed by hide() on a rendered widget', async () => {
+                act(() => {
+                    manager.open()
+                })
+                expect(storedState).toBe('open')
+
+                act(() => {
+                    manager.close()
+                    manager.hide()
+                })
+                expect(storedState).toBe('closed')
+
+                act(() => {
+                    manager.show()
+                })
+                await flushPromises()
+
+                expect(screen.getByRole('button', { name: 'Open chat', exact: true })).toBeInTheDocument()
+            })
+
+            it('saves the open state when open() is followed by hide() on a rendered widget', async () => {
+                act(() => {
+                    manager.open()
+                    manager.hide()
+                })
+                expect(storedState).toBe('open')
+
+                act(() => {
+                    manager.show()
+                })
+                await flushPromises()
+
+                expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument()
+            })
+        })
     })
 
     describe('re-attach on SPA navigation', () => {
