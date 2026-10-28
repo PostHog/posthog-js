@@ -1,4 +1,6 @@
 import { platform, release } from 'node:os'
+import { EventEmitter } from 'node:events'
+import { setupExpressRequestContext } from '@/extensions/express'
 import { PostHog } from '@/entrypoints/index.node'
 import type { OtlpSpan, OtlpTracesPayload } from '@posthog/types'
 import { waitForPromises } from './utils'
@@ -293,6 +295,30 @@ describe('PostHog traces', () => {
       const [span] = sentSpans()
       expect(attributeOf(span, 'posthogDistinctId')).toEqual({ stringValue: 'user-123' })
       expect(attributeOf(span, 'sessionId')).toEqual({ stringValue: 'session-123' })
+    })
+
+    it('keeps request IDs on spans that start after the response', async () => {
+      const app = { use: vi.fn() }
+      setupExpressRequestContext(posthog, app)
+      const response = new EventEmitter()
+      app.use.mock.calls[0][0](
+        { headers: { 'x-posthog-session-id': 'request-session', 'x-posthog-distinct-id': 'request-user' } },
+        response,
+        () => {
+          posthog.withContext({ properties: { nested: true } }, () => {
+            const span = posthog.startSpan('request-work')
+            response.emit('finish')
+            span.end()
+            posthog.startSpan('detached-work').end()
+          })
+        }
+      )
+      await flushTraces()
+      for (const span of sentSpans()) {
+        expect(attributeOf(span, 'sessionId')).toEqual({ stringValue: 'request-session' })
+        expect(attributeOf(span, 'posthogDistinctId')).toEqual({ stringValue: 'request-user' })
+      }
+      expect(sentSpans()).toHaveLength(2)
     })
 
     it('omits the keys outside a request context', async () => {
