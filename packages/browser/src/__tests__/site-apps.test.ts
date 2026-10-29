@@ -5,8 +5,7 @@ import { SiteApps } from '../site-apps'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHog, defaultConfig as makeDefaultConfig } from '../posthog-core'
-import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
-import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
+import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHogConfig, Properties, CaptureResult, RemoteConfig } from '../types'
 import { assignableWindow } from '../utils/globals'
 import '../entrypoints/external-scripts-loader'
@@ -65,7 +64,7 @@ describe('SiteApps', () => {
             }),
             get_distinct_id: vi.fn().mockImplementation(() => 'distinctid'),
             _send_request: vi.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
-            featureFlags: new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig)),
+            featureFlags: new PostHogFeatureFlags(posthog),
             requestRouter: new RequestRouter(posthog),
             getGroups: () => ({ organization: '5' }),
             on: vi.fn(),
