@@ -40,6 +40,8 @@ export class V1WiringHarness {
       host: 'http://example.com',
       fetchRetryCount: 0,
       disableCompression: true,
+      // The AI lane ignores disableCompression.
+      captureAiCompression: 'none',
       ...options,
     })
     this.clients.push(client)

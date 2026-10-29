@@ -74,12 +74,9 @@ import { V1CaptureSender, type V1CaptureSenderConfig } from './capture-v1/sender
 import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from './capture-v1/types'
 import type { CaptureError } from './capture-v1/errors'
 import { CaptureLane, type CaptureLaneConfig } from './capture-lane/lane'
-import {
-  AI_MAX_PROPERTIES_BYTES,
-  AI_MAX_QUEUE_SIZE,
-  ANALYTICS_MAX_EVENT_BYTES,
-  CAPTURE_BATCH_TARGET_BYTES,
-} from './capture-lane/limits'
+import { AI_MAX_PROPERTIES_BYTES, ANALYTICS_MAX_EVENT_BYTES, CAPTURE_BATCH_TARGET_BYTES } from './capture-lane/limits'
+import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
+import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -168,6 +165,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   // Created on first use, so a client that never calls captureAi has no AI lane.
   private readonly _captureLanes = new Map<CaptureEndpoint, CaptureLane>()
+  private readonly _captureSettings: CaptureSettings
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
   /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
@@ -255,6 +253,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     this.options = normalizedOptions
     this.warnIfCaptureModeSet()
+    // console.error, not this._logger: the logger only prints in debug mode, and a bad option changes delivery.
+    this._captureSettings = resolveCaptureSettings(normalizedOptions, (message) =>
+      console.error(`[PostHog] ${message}`)
+    )
     this.enableFullAiCapture = normalizedOptions.enableFullAiCapture === true
     this.privacyMode = normalizedOptions.privacyMode === true
     this.context = this.initializeContext()
@@ -573,11 +575,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const endpoint = route === AI_CAPTURE_ROUTE ? AI_CAPTURE_ENDPOINT : ANALYTICS_CAPTURE_ENDPOINT
     let lane = this._captureLanes.get(endpoint)
     if (!lane) {
+      const compressor = this.captureCompressor()
       lane = new CaptureLane(this._captureLaneConfig(endpoint), {
-        sender: new V1CaptureSender(this.captureSenderConfig(endpoint), {
+        sender: new V1CaptureSender(this.captureSenderConfig(endpoint, compressor), {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
           onError: (error) => this._events.emit('error', error),
-          compress: (payload) => this.compressPayload(payload),
+          compress: (payload, codec) => compressor.compress(payload, codec),
         }),
         onLocalDrops: (error) => this._reportLocalCaptureDrops(error),
         onError: (error) => this._events.emit('error', error),
@@ -592,13 +595,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private _captureLaneConfig(endpoint: CaptureEndpoint): CaptureLaneConfig {
     const isAi = endpoint === AI_CAPTURE_ENDPOINT
+    // The AI queue cap bounds memory for large events, so it is kept as set and the AI lane flushes no later than when
+    // its queue is full. The analytics queue keeps its floor at flushAt, so the flushAt trigger can always fire.
+    const flushAt = isAi ? Math.min(this.flushAt, this._captureSettings.ai.maxQueueSize) : this.flushAt
     return {
       endpoint,
-      flushAt: this.flushAt,
+      flushAt,
       flushIntervalMs: this.options.flushInterval ?? 5000,
-      maxBatchSize: Math.max(this.flushAt, this.options.maxBatchSize ?? 100),
-      // Never below flushAt, or the flushAt trigger could never fire.
-      maxQueueSize: Math.max(this.flushAt, isAi ? AI_MAX_QUEUE_SIZE : (this.options.maxQueueSize ?? 10000)),
+      maxBatchSize: Math.max(flushAt, this.options.maxBatchSize ?? 100),
+      maxQueueSize: isAi
+        ? this._captureSettings.ai.maxQueueSize
+        : Math.max(this.flushAt, this.options.maxQueueSize ?? 10000),
       targetBatchBytes: CAPTURE_BATCH_TARGET_BYTES,
       maxEventBytes: isAi ? AI_MAX_PROPERTIES_BYTES : ANALYTICS_MAX_EVENT_BYTES,
       maxEventBytesOf: isAi ? 'properties' : 'event',
@@ -614,8 +621,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  /** Every lane shares the client's retry, timeout and compression settings. */
-  private captureSenderConfig(path: CaptureEndpoint): V1CaptureSenderConfig {
+  /**
+   * Compresses capture request bodies. The edge build uses CompressionStream; the Node
+   * entrypoint overrides this with node:zlib.
+   *
+   * @internal
+   */
+  protected captureCompressor(): CaptureCompressor {
+    return webCompressor
+  }
+
+  private captureSenderConfig(path: CaptureEndpoint, compressor: CaptureCompressor): V1CaptureSenderConfig {
+    const laneSettings = path === AI_CAPTURE_ENDPOINT ? this._captureSettings.ai : this._captureSettings.analytics
+    const compression = resolveCaptureCodec(laneSettings.compression, compressor, (fallback) =>
+      this._logger.debug(`zstd compression is not available in this runtime; ${path} uses ${fallback} instead`)
+    )
     return {
       host: this.host,
       path,
@@ -624,11 +644,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       libraryVersion: this.getLibraryVersion(),
       userAgent: this.getCustomUserAgent() || undefined,
       historicalMigration: this.historicalMigration,
-      compressionEnabled: !this.disableCompression,
-      requestTimeoutMs: this.requestTimeout,
-      // 1 initial attempt + fetchRetryCount retries.
-      maxAttempts: (this.options.fetchRetryCount ?? 3) + 1,
-      initialRetryDelayMs: this.options.fetchRetryDelay ?? 3000,
+      compression,
+      requestTimeoutMs: laneSettings.requestTimeoutMs,
+      maxRetries: this._captureSettings.maxRetries,
       isDebug: this.isDebug,
     }
   }

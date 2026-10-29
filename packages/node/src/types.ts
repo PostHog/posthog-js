@@ -166,7 +166,16 @@ export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
 
 export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 
-export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
+export type PostHogOptions = Omit<
+  PostHogCoreOptions,
+  | 'before_send'
+  | 'flushInterval'
+  | 'maxQueueSize'
+  | 'fetchRetryCount'
+  | 'fetchRetryDelay'
+  | 'disableCompression'
+  | 'requestTimeout'
+> & {
   persistence?: 'memory'
   /**
    * The interval in milliseconds between periodic flushes
@@ -177,11 +186,74 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
   /**
    * The maximum number of analytics events held in memory waiting to be sent (must be higher than `flushAt`).
    * When the queue is full, the oldest event is dropped and reported through the `'error'` event.
-   * `captureAi` events have their own queue and do not count toward this limit.
+   * `captureAi` events have their own queue, sized by `captureAiMaxQueueSize`, and do not count toward this limit.
    *
    * @default 10000
    */
   maxQueueSize?: number
+  /**
+   * How many times a capture request is retried after its first attempt, on both capture lanes.
+   * Waits start at 100 ms and double each retry, with jitter, up to 30 seconds; a `Retry-After`
+   * header can raise a wait. Only HTTP 404, 408, 429, 500, 502, 503 and 504 and network errors are retried.
+   * When not set, `fetchRetryCount` is used.
+   *
+   * @default 3
+   */
+  captureMaxRetries?: number
+  /**
+   * How many times HTTP requests are retried. Capture requests use `captureMaxRetries` when it is set.
+   *
+   * @default 3
+   */
+  fetchRetryCount?: number
+  /**
+   * The delay between HTTP request retries in milliseconds. Capture requests do not use it:
+   * see `captureMaxRetries` for their retry waits.
+   *
+   * @default 3000
+   */
+  fetchRetryDelay?: number
+  /**
+   * How analytics capture requests compress their body. `'deflate'` is zlib-wrapped. `'zstd'` needs
+   * Node 22.15 or later and falls back to `'gzip'` elsewhere, including the edge build. When not set,
+   * `disableCompression: true` means `'none'`.
+   *
+   * @default 'gzip'
+   */
+  captureCompression?: 'none' | 'gzip' | 'deflate' | 'zstd'
+  /**
+   * How `captureAi` requests compress their body, with the same values as `captureCompression`.
+   * It does not read `captureCompression` or `disableCompression`.
+   *
+   * @default 'gzip'
+   */
+  captureAiCompression?: 'none' | 'gzip' | 'deflate' | 'zstd'
+  /**
+   * Timeout in milliseconds for any calls. `captureAi` requests use `captureAiRequestTimeoutMs`.
+   *
+   * @default 10000
+   */
+  requestTimeout?: number
+  /**
+   * The maximum number of `captureAi` events held in memory waiting to be sent. When the queue is
+   * full, the oldest AI event is dropped and reported through the `'error'` event.
+   *
+   * @default 1000
+   */
+  captureAiMaxQueueSize?: number
+  /**
+   * Timeout in milliseconds for each `captureAi` request. Analytics capture requests use `requestTimeout`.
+   *
+   * @default 30000
+   */
+  captureAiRequestTimeoutMs?: number
+  /**
+   * Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it
+   * is set, and `captureAi` requests use `captureAiCompression`.
+   *
+   * @default false
+   */
+  disableCompression?: boolean
   /**
    * Configuration for the `posthog.metrics` API (count, gauge, histogram).
    * Set `serviceName` so series can be filtered per service in the Metrics UI.
