@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.85.0
+
+### Minor Changes
+
+- [#5243](https://github.com/PostHog/posthog-js/pull/5243) [`a96d286`](https://github.com/PostHog/posthog-js/commit/a96d286acf5b313af96beea1ebd7ce1b0a66c153) Thanks [@cacheflow](https://github.com/cacheflow)! - Respect survey popup delays while prioritizing surveys with saved responses.
+  (2026-10-29)
+
 ## 4.84.3
 
 ### Patch Changes
