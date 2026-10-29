@@ -104,11 +104,13 @@ export const maskQueryParams = function <T extends string | undefined>(
         return url as any
     }
 
-    const splitHash = url.split('#')
+    // Split only on the first # and the first ?, so a hash or query containing another # or ?
+    // is kept whole instead of being cut off
+    const splitHash = url.split(/#(.*)/)
     const withoutHash: string = splitHash[0] || ''
     const hash = splitHash[1]
 
-    const splitQuery: string[] = withoutHash.split('?')
+    const splitQuery: string[] = withoutHash.split(/\?(.*)/)
     const queryString: string = splitQuery[1]!
     const urlWithoutQueryAndHash: string = splitQuery[0]!
     const queryParts = (queryString || '').split('&')
@@ -117,11 +119,19 @@ export const maskQueryParams = function <T extends string | undefined>(
     const paramStrings: string[] = []
 
     for (let i = 0; i < queryParts.length; i++) {
-        const keyValuePair = queryParts[i]!.split('=')
-        if (!isArray(keyValuePair)) {
-            continue
-        } else if (maskedParams.includes(keyValuePair[0]!)) {
-            paramStrings.push(keyValuePair[0] + '=' + mask)
+        // Check nested keys too, but mask a listed value through to the next &.
+        const pieces = queryParts[i]!.split('?')
+        let j = 0
+        while (j < pieces.length && !maskedParams.includes(pieces[j]!.split('=')[0]!)) {
+            j++
+        }
+        if (j < pieces.length) {
+            paramStrings.push(
+                pieces
+                    .slice(0, j)
+                    .concat(pieces[j]!.split('=')[0] + '=' + mask)
+                    .join('?')
+            )
         } else {
             paramStrings.push(queryParts[i]!)
         }
