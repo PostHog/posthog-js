@@ -68,6 +68,13 @@ if (scenario === 'late-unhandled-rejection-listener') {
     process.stdout.write(`rethrowing-listener:${reason}\n`)
     throw reason
   })
+} else if (scenario === 'immediate-capture-in-uncaught-listener') {
+  // Added after init, so autocapture captures the exception first and captureExceptionImmediate skips the duplicate.
+  process.on('uncaughtException', async (error) => {
+    await posthog?.captureExceptionImmediate(error)
+    process.stdout.write('exiting\n')
+    process.exit(0)
+  })
 } else if (scenario === 'error-hook-listener') {
   // Like Nitro: the host's listener hands the rejection to an error hook, which an integration passes to
   // captureException a microtask later.
@@ -84,7 +91,11 @@ if (scenario !== 'exits-without-shutdown' && scenario !== 'flush-then-exit') {
   })
 }
 
-if (scenario === 'flush-then-exit') {
+if (scenario === 'immediate-capture-in-uncaught-listener') {
+  setTimeout(() => {
+    throw new Error('Child process exception')
+  }, 10)
+} else if (scenario === 'flush-then-exit') {
   // The end of a serverless invocation: flush, then the runtime freezes or ends the instance.
   Promise.reject(new Error('Child process rejection'))
   setTimeout(() => posthog?.flush().then(() => process.exit(0)) ?? process.exit(0), 20)

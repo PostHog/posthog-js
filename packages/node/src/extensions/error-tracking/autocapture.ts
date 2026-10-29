@@ -87,14 +87,36 @@ const STARTUP_UNHANDLED_REJECTION_MODE = getUnhandledRejectionMode()
 export type AutocaptureClient = {
   // Clients with the same project token and host send to the same project, so only one of them captures.
   key: string
-  // context: the client's request context when the error happened, for captures made later.
-  capture: (exception: unknown, hint: CoreErrorTracking.EventHint, context?: ContextData) => void
+  capture: (exception: unknown, hint: CoreErrorTracking.EventHint) => void
+  // Each client keeps its own request context, set with withContext.
   getContext: () => ContextData | undefined
-  flush: () => Promise<void>
+  // Sends what the client holds, without waiting for rejections in their grace period.
+  drain: () => Promise<void>
   // Sends what the client still holds. Called before a fatal exit.
   shutdown: () => Promise<void>
   // The client's waitUntil option: keeps a serverless runtime alive until the promise settles.
   keepAlive?: (promise: Promise<unknown>) => void
+}
+
+type ContextRunner = <T>(run: () => T) => T
+
+type AsyncHooksModule = { AsyncLocalStorage?: { snapshot?: () => ContextRunner } }
+
+// Captures the async context the error happened in: every AsyncLocalStorage, so the request context of each client
+// and the active OpenTelemetry span. A capture made later runs in it, and so reports that request and that span, or
+// none, never those of whatever code triggered the capture.
+function snapshotAsyncContext(): ContextRunner {
+  try {
+    const process = globalThis.process as { getBuiltinModule?: (id: string) => unknown } | undefined
+    const asyncHooks = process?.getBuiltinModule?.('node:async_hooks') as AsyncHooksModule | undefined
+    const snapshot = asyncHooks?.AsyncLocalStorage?.snapshot?.()
+    if (snapshot) {
+      return snapshot
+    }
+  } catch {
+    // A runtime without AsyncLocalStorage.snapshot has nothing to restore.
+  }
+  return (run) => run()
 }
 
 const UNHANDLED_REJECTION_HINT: CoreErrorTracking.EventHint = {
@@ -132,11 +154,13 @@ type PendingRejection = {
   timer: ReturnType<typeof setTimeout>
   // The event-loop turn in which Node reported the rejection.
   turn: number
-  // Each project's request context when the rejection happened.
-  contexts: Map<string, ContextData | undefined>
+  // Runs the capture in the async context the rejection happened in.
+  runInContext: ContextRunner
   // Projects that already received it: through captureException, or from a client that shut down during the grace
   // period.
   capturedKeys: Set<string>
+  // The clients that captured it, which a flush on another client of the same project also drains.
+  owners: Set<AutocaptureClient>
   // Settles once the rejection is captured or handled.
   settled: Promise<void>
   settle: () => void
@@ -152,16 +176,19 @@ type AutocaptureState = {
   pending: Map<Promise<unknown>, PendingRejection>
   // Next.js 16 can hand one rejection to the same listener twice.
   seenRejections: WeakSet<Promise<unknown>>
-  // The projects each reason was captured for during this turn of the event loop. A host that rethrows a rejection,
-  // or a runtime that reports it twice, delivers the same reason again before the turn ends. Primitives compare by
-  // value. A separate occurrence of the same error object comes in a later turn and is captured again.
-  capturedThisTurn: Map<unknown, Set<string>>
+  // The projects each reason was captured for during this turn of the event loop, and the client that captured it. A
+  // host that rethrows a rejection, or a runtime that reports it twice, delivers the same reason again before the
+  // turn ends. Primitives compare by value. A separate occurrence of the same error object comes in a later turn and
+  // is captured again.
+  capturedThisTurn: Map<unknown, Map<string, AutocaptureClient | undefined>>
   // The projects each error reached through captureException during this turn. An app that captures an error and
   // rethrows it hands autocapture the same occurrence.
   capturedByAppThisTurn: Map<unknown, Set<string>>
   turn: number
   turnResetScheduled: boolean
   calledFatalError: boolean
+  // One keep-alive per client with the waitUntil option, however many rejections are pending.
+  keepAliveCycles: Map<AutocaptureClient, Promise<void>>
   rejectionHandledListener: PostHogListener & ((promise: Promise<unknown>) => void)
   removeListeners: () => void
 }
@@ -223,11 +250,13 @@ function isAbortError(reason: unknown): boolean {
   }
 }
 
-// One client per project: a running one if there is one, otherwise the last one that shut down.
+// One client per project: a running one if there is one, otherwise the last one that shut down. Among running
+// clients, the one whose request context is active here, since no other client of the project can see it.
 function captureTargets(state: AutocaptureState): AutocaptureClient[] {
   const targets = new Map<string, AutocaptureClient>()
   for (const client of state.clients) {
-    if (!targets.has(client.key)) {
+    const chosen = targets.get(client.key)
+    if (!chosen || (chosen.getContext() === undefined && client.getContext() !== undefined)) {
       targets.set(client.key, client)
     }
   }
@@ -259,7 +288,6 @@ function scheduleTurnReset(state: AutocaptureState): void {
 }
 
 type DispatchOptions = {
-  contexts?: Map<string, ContextData | undefined>
   // Captures through these clients instead of one per project.
   targets?: AutocaptureClient[]
   skipKeys?: Set<string>
@@ -270,17 +298,19 @@ type DispatchOptions = {
 
 // Sends the exception to every project once, unless this occurrence already reached it, or the app captured the error
 // itself in this turn (it caught, captured and rethrew it).
+// Returns the clients that captured it.
 function dispatch(
   state: AutocaptureState,
   exception: unknown,
   hint: CoreErrorTracking.EventHint,
-  { contexts, targets = captureTargets(state), skipKeys, ignoreTurn }: DispatchOptions = {}
-): void {
+  { targets = captureTargets(state), skipKeys, ignoreTurn }: DispatchOptions = {}
+): AutocaptureClient[] {
   if (isFrameworkControlFlow(exception)) {
-    return
+    return []
   }
-  const capturedThisTurn = state.capturedThisTurn.get(exception) ?? new Set<string>()
+  const capturedThisTurn = state.capturedThisTurn.get(exception) ?? new Map<string, AutocaptureClient | undefined>()
   const capturedByApp = state.capturedByAppThisTurn.get(exception)
+  const owners: AutocaptureClient[] = []
 
   for (const client of targets) {
     if (skipKeys?.has(client.key) || (!ignoreTurn && capturedThisTurn.has(client.key))) {
@@ -289,12 +319,14 @@ function dispatch(
     if (capturedByApp?.has(client.key)) {
       continue
     }
-    capturedThisTurn.add(client.key)
-    client.capture(exception, hint, contexts?.get(client.key))
+    capturedThisTurn.set(client.key, client)
+    client.capture(exception, hint)
+    owners.push(client)
   }
 
   state.capturedThisTurn.set(exception, capturedThisTurn)
   scheduleTurnReset(state)
+  return owners
 }
 
 // Node prints PromiseRejectionHandledWarning, with the rejection's id, only when no listener takes 'rejectionHandled'.
@@ -320,12 +352,16 @@ function capturePendingRejection(
   if (!pending) {
     return
   }
-  dispatch(state, pending.reason, UNHANDLED_REJECTION_HINT, {
-    contexts: pending.contexts,
-    targets: forClient ? [forClient] : undefined,
-    skipKeys: pending.capturedKeys,
-    ignoreTurn: true,
-  })
+  const owners = pending.runInContext(() =>
+    dispatch(state, pending.reason, UNHANDLED_REJECTION_HINT, {
+      targets: forClient ? [forClient] : undefined,
+      skipKeys: pending.capturedKeys,
+      ignoreTurn: true,
+    })
+  )
+  for (const owner of owners) {
+    pending.owners.add(owner)
+  }
   if (forClient) {
     pending.capturedKeys.add(forClient.key)
     return
@@ -409,7 +445,7 @@ function wasCapturedThisTurn(state: AutocaptureState, exception: unknown): boole
 
 // Marks an exception as handled for this turn without capturing it, so the uncaught-exception handler skips it too.
 function skipThisTurn(state: AutocaptureState, exception: unknown): void {
-  state.capturedThisTurn.set(exception, new Set(captureTargets(state).map((client) => client.key)))
+  state.capturedThisTurn.set(exception, new Map(captureTargets(state).map((client) => [client.key, undefined])))
   scheduleTurnReset(state)
 }
 
@@ -462,19 +498,19 @@ function deferRejection(state: AutocaptureState, reason: unknown, promise: Promi
   timer.unref?.()
   let settle = (): void => undefined
   const settled = new Promise<void>((resolve) => (settle = resolve))
-  const targets = captureTargets(state)
   state.pending.set(promise, {
     reason,
     timer,
     turn: state.turn,
-    contexts: new Map(targets.map((client) => [client.key, client.getContext()])),
-    capturedKeys: new Set(),
+    runInContext: snapshotAsyncContext(),
+    // An async function that captured the error and then threw it: the explicit capture came first, in this turn.
+    capturedKeys: new Set(state.capturedByAppThisTurn.get(reason)),
+    owners: new Set(),
     settled,
     settle,
   })
-  // A serverless runtime would otherwise freeze the instance before the grace period ends.
-  for (const client of targets) {
-    client.keepAlive?.(settled.then(() => client.flush()))
+  for (const client of state.clients) {
+    keepAliveUntilSent(state, client)
   }
   syncRejectionHandledListener(state)
   // Ends the turn, so that a later throw of the same reason is told apart from a rethrow.
@@ -534,6 +570,28 @@ function makeRejectionHandledHandler(state: AutocaptureState): PostHogListener &
   })
 }
 
+// A serverless runtime would otherwise freeze the instance before a pending rejection is captured and sent. One
+// keep-alive per client covers every rejection pending for it, including those that arrive while it waits.
+function keepAliveUntilSent(state: AutocaptureState, client: AutocaptureClient): void {
+  if (!client.keepAlive || state.keepAliveCycles.has(client)) {
+    return
+  }
+  const cycle = (async () => {
+    while (pendingFor(state, client).length > 0) {
+      await waitForPendingRejections(client)
+    }
+    await client.drain()
+  })()
+    .catch(() => undefined)
+    .finally(() => state.keepAliveCycles.delete(client))
+  state.keepAliveCycles.set(client, cycle)
+  client.keepAlive(cycle)
+}
+
+function pendingFor(state: AutocaptureState, client: AutocaptureClient): PendingRejection[] {
+  return [...state.pending.values()].filter((pending) => !pending.capturedKeys.has(client.key))
+}
+
 // Next.js 16 moves every unhandledRejection listener into a queue behind one filtering listener, and patches
 // process.on and process.listeners so that later listeners join that queue too. The filter drops rejections from
 // prerenders Next has aborted on purpose. A listener left on the process in front of the filter would capture those,
@@ -582,7 +640,7 @@ function installListeners(state: AutocaptureState): () => void {
       }
       capturePendingRejections(state)
       for (const client of captureTargets(state)) {
-        client.flush().catch(() => undefined)
+        client.drain().catch(() => undefined)
       }
     })
   )
@@ -684,6 +742,7 @@ export function startExceptionAutocapture(
       seenRejections: new WeakSet(),
       capturedThisTurn: new Map(),
       capturedByAppThisTurn: new Map(),
+      keepAliveCycles: new Map(),
       turn: 0,
       turnResetScheduled: false,
       calledFatalError: false,
@@ -714,16 +773,30 @@ export function startExceptionAutocapture(
 
 /**
  * Waits until every rejection in its grace period that this client's project has not received yet is captured or
- * handled, at most the grace period. A flush that follows then sends the captured ones, before a serverless runtime
- * freezes or ends the instance. Sending them early instead would report rejections the app was about to handle.
+ * handled, at most the grace period, then sends what other clients of the project captured. A flush of this client
+ * that follows sends the rest, before a serverless runtime freezes or ends the instance. Sending them early instead
+ * would report rejections the app was about to handle.
  */
 export async function waitForPendingRejections(client: AutocaptureClient): Promise<void> {
   const state = posthogGlobal[STATE_KEY]
   if (!state) {
     return
   }
-  const waiting = [...state.pending.values()].filter((pending) => !pending.capturedKeys.has(client.key))
+  const waiting = pendingFor(state, client)
   await Promise.all(waiting.map((pending) => pending.settled))
+  const owners = new Set(waiting.flatMap((pending) => [...pending.owners]))
+  owners.delete(client)
+  await Promise.all([...owners].map((owner) => owner.drain().catch(() => undefined)))
+}
+
+/**
+ * Sends the event autocapture made for this error in this turn, when captureException skipped it as a duplicate.
+ * captureExceptionImmediate promises the exception is sent when it resolves, and an app's uncaught-exception
+ * listener often exits right after.
+ */
+export async function sendAutocapturedEvent(error: unknown, key: string): Promise<void> {
+  const owner = posthogGlobal[STATE_KEY]?.capturedThisTurn.get(error)?.get(key)
+  await owner?.drain()
 }
 
 /**

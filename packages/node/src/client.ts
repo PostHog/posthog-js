@@ -356,6 +356,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this._flushKeepingRuntimeAlive(false)
   }
 
+  /** @internal Sends what is queued, without waiting for unhandled rejections in their grace period. */
+  _flushQueued(): Promise<void> {
+    return this._flushKeepingRuntimeAlive(false)
+  }
+
   private _flushKeepingRuntimeAlive(skipThrottledSpans: boolean): Promise<void> {
     const flushPromise = this._flushEventsAndSpans(skipThrottledSpans)
     const waitUntil = this.options.waitUntil
@@ -3255,19 +3260,25 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     additionalProperties?: Record<string | number, any>,
     flags?: FeatureFlagEvaluations
   ): Promise<void> {
-    if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
-      const syntheticException = new Error('PostHog syntheticException')
-      return this.addPendingPromise(
-        ErrorTracking.buildEventMessage(
-          this.getErrorPropertiesBuilder(),
-          error,
-          { syntheticException },
-          distinctId,
-          additionalProperties,
-          this.getContext()
-        ).then((msg) => this.captureImmediate({ ...msg, flags }))
-      )
+    if (ErrorTracking.isPreviouslyCapturedError(error)) {
+      return
     }
+    if (!this.errorTracking.claimExplicitCapture(error)) {
+      // Exception autocapture already captured this occurrence. It is still sent before this resolves, since an app's
+      // uncaught-exception listener often exits right after.
+      return this.errorTracking.sendAutocapturedEvent(error)
+    }
+    const syntheticException = new Error('PostHog syntheticException')
+    return this.addPendingPromise(
+      ErrorTracking.buildEventMessage(
+        this.getErrorPropertiesBuilder(),
+        error,
+        { syntheticException },
+        distinctId,
+        additionalProperties,
+        this.getContext()
+      ).then((msg) => this.captureImmediate({ ...msg, flags }))
+    )
   }
 
   public async prepareEventMessage(props: EventMessage): Promise<{

@@ -1,4 +1,9 @@
-import { claimExplicitCapture, startExceptionAutocapture, waitForPendingRejections } from './autocapture'
+import {
+  claimExplicitCapture,
+  sendAutocapturedEvent,
+  startExceptionAutocapture,
+  waitForPendingRejections,
+} from './autocapture'
 import type { AutocaptureClient } from './autocapture'
 import { PostHogBackendClient } from '@/client'
 import type { ContextData } from '../context/types'
@@ -90,9 +95,9 @@ export default class ErrorTracking {
     if (this.isEnabled()) {
       this._autocaptureClient = {
         key: this.destinationKey,
-        capture: (exception, hint, context) => this.onException(exception, hint, context),
+        capture: (exception, hint) => this.onException(exception, hint),
         getContext: () => this.client.getContext(),
-        flush: () => this.client.flush(),
+        drain: () => this.client._flushQueued(),
         shutdown: () => this.client.shutdown(SHUTDOWN_TIMEOUT),
         keepAlive: this._waitUntil ? (promise) => this.keepAlive(promise) : undefined,
       }
@@ -124,12 +129,12 @@ export default class ErrorTracking {
     return claimExplicitCapture(error, this.destinationKey)
   }
 
-  // context: the request context when the exception happened, which a capture made later no longer runs in.
-  private onException(
-    exception: unknown,
-    hint: CoreErrorTracking.EventHint,
-    context: ContextData | undefined = this.client.getContext()
-  ): void {
+  /** Sends the event autocapture made for an error that captureExceptionImmediate skipped as a duplicate. */
+  sendAutocapturedEvent(error: unknown): Promise<void> {
+    return sendAutocapturedEvent(error, this.destinationKey)
+  }
+
+  private onException(exception: unknown, hint: CoreErrorTracking.EventHint): void {
     this.client.addPendingPromise(
       (async () => {
         if (!ErrorTracking.isPreviouslyCapturedError(exception)) {
@@ -139,7 +144,7 @@ export default class ErrorTracking {
             hint,
             undefined,
             undefined,
-            context
+            this.client.getContext()
           )
           const exceptionProperties = eventMessage.properties
           const exceptionType = exceptionProperties?.$exception_list[0]?.type ?? 'Exception'
