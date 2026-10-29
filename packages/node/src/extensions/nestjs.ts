@@ -3,7 +3,7 @@ import { Observable, throwError } from 'rxjs'
 import { catchError } from 'rxjs/operators'
 
 import ErrorTracking from './error-tracking'
-import { addProperty, getFirstHeaderValue, getPostHogTracingHeaderValues } from './tracing-headers'
+import { addProperty, getFirstHeaderValue, readPostHogTracingHeaders } from './tracing-headers'
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import { PostHogBackendClient } from '../client'
 
@@ -75,7 +75,7 @@ export class PostHogInterceptor implements NestInterceptor {
     const response = httpHost.getResponse()
 
     const headers = (request?.headers ?? {}) as IncomingHttpHeaders
-    const { sessionId, distinctId } = getPostHogTracingHeaderValues(headers)
+    const { sessionId, distinctId } = readPostHogTracingHeaders(this.posthog.options, headers)
 
     const properties: Record<string, any> = {}
     const disableCaptureUrlHashes = this.posthog.options.disable_capture_url_hashes === true

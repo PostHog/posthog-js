@@ -117,6 +117,32 @@ function normalizeApiKey(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+/** Why a project API key disables the client, or undefined when it is usable. Never includes the key. */
+function apiKeyProblem(apiKey: string): string | undefined {
+  if (!apiKey) {
+    return 'No project API key was passed'
+  }
+  if (apiKey.startsWith('phx_')) {
+    return 'A personal API key ("phx_...") was passed where the project API key ("phc_...") belongs'
+  }
+  return undefined
+}
+
+/** A content-free summary of an emitted event's payload for debug logs: names, uuids and counts only. */
+function summarizeForDebugLog(payload: unknown): unknown {
+  if (Array.isArray(payload)) {
+    return `${payload.length} item(s)`
+  }
+  if (payload instanceof Error) {
+    return `${payload.name}: ${payload.message}`
+  }
+  if (payload && typeof payload === 'object' && typeof (payload as { event?: unknown }).event === 'string') {
+    const { event, uuid } = payload as { event: string; uuid?: unknown }
+    return uuid === undefined ? { event } : { event, uuid }
+  }
+  return undefined
+}
+
 function normalizePersonalApiKey(value?: unknown): string | undefined {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || undefined
@@ -385,8 +411,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   constructor(apiKey: string, options: PostHogOptions = {}) {
     const normalizedApiKey = normalizeApiKey(apiKey)
+    const keyProblem = apiKeyProblem(normalizedApiKey)
     const normalizedOptions = {
       ...options,
+      disabled: options.disabled || keyProblem !== undefined,
       // Node's default is higher than the shared core default (1000) because backend
       // workloads are more likely to burst-enqueue synchronously ahead of a flush.
       // Applied after the spread with a nullish fallback so a wrapper forwarding
@@ -400,6 +428,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     super(normalizedApiKey, normalizedOptions)
 
     this.options = normalizedOptions
+    if (keyProblem) {
+      // console.error, not this._logger: the logger only prints in debug mode, and the client sends nothing.
+      console.error(`[PostHog] ${keyProblem}, so the client is disabled.`)
+    }
     this.warnIfCaptureModeSet()
     // console.error, not this._logger: the logger only prints in debug mode, and a bad option changes delivery.
     this._captureSettings = resolveCaptureSettings(normalizedOptions, (message) =>
@@ -1194,6 +1226,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   debug(enabled: boolean = true): void {
     super.debug(enabled)
     this.featureFlagsPoller?.debug(enabled)
+  }
+
+  protected describeDebugPayload(payload: unknown): unknown {
+    return summarizeForDebugLog(payload)
   }
 
   private _warnIfInvalidCapture(
@@ -3740,7 +3776,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           this._logger.warn(message)
         }
       } catch (error) {
-        this._logger.error(`Error in before_send function for event '${eventMessage.event}':`, error)
+        // The error's message can carry the data the hook was redacting, so only its type is logged.
+        const errorType = error instanceof Error ? error.name : typeof error
+        this._logger.error(`Error in before_send function for event '${eventMessage.event}' (${errorType})`)
         return null
       }
     }

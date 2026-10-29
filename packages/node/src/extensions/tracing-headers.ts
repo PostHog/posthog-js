@@ -50,6 +50,14 @@ export function sanitizeTracingHeaderValue(value: HeaderValue): string | undefin
   return sanitized.length > TRACING_HEADER_MAX_LENGTH ? sanitized.slice(0, TRACING_HEADER_MAX_LENGTH) : sanitized
 }
 
+/** The tracing header values, or none when the client's `captureTracingHeaders` is `false`. */
+export function readPostHogTracingHeaders(
+  options: { captureTracingHeaders?: boolean },
+  headers?: IncomingHttpHeaders
+): PostHogTracingHeaderValues {
+  return options.captureTracingHeaders === false ? {} : getPostHogTracingHeaderValues(headers)
+}
+
 export function getPostHogTracingHeaderValues(headers?: IncomingHttpHeaders): PostHogTracingHeaderValues {
   if (!headers) {
     return {}
