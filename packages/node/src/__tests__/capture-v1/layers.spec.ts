@@ -726,7 +726,10 @@ describe('layered event values', () => {
       ['no level', { distinctId: 'u' }, 'error'],
       ['level fatal', { level: 'fatal' }, 'fatal'],
       ['level debug', { level: 'debug' }, 'debug'],
-      ['an unknown level', { level: 'critical' as CaptureExceptionOptions['level'] }, 'error'],
+      ['an alias of fatal', { level: 'critical' as CaptureExceptionOptions['level'] }, 'fatal'],
+      ['an upper-case level', { level: 'WARNING' as CaptureExceptionOptions['level'] }, 'warning'],
+      ['an alias of warning', { level: 'warn' as CaptureExceptionOptions['level'] }, 'warning'],
+      ['an unknown level', { level: 'bogus' as CaptureExceptionOptions['level'] }, 'error'],
       ['level with a $exception_level property', { level: 'info', properties: { $exception_level: 'fatal' } }, 'info'],
     ])('sends $exception_level for %s', async (_label, options, expected) => {
       const event = await sendOne((client) => client.captureException(new Error('boom'), options))
@@ -774,16 +777,36 @@ describe('layered event values', () => {
         expect(console.error).toHaveBeenCalledTimes(1)
       })
 
-      it('logs the deprecation error once per process', async () => {
+      it('logs the deprecation error once per method per process', async () => {
         const client = harness.makeClient()
         legacy(client).captureException(new Error('one'), 'u')
         legacy(client).captureException(new Error('two'), 'u', { a: 1 })
         await legacy(client).captureExceptionImmediate(new Error('three'), 'u')
+        await legacy(client).captureExceptionImmediate(new Error('four'), 'u')
         await client.flush()
 
-        expect(wireEvents()).toHaveLength(3)
-        expect(console.error).toHaveBeenCalledTimes(1)
-        expect(console.error).toHaveBeenCalledWith(DEPRECATION_ERROR('captureException'))
+        expect(wireEvents()).toHaveLength(4)
+        expect((console.error as vi.Mock).mock.calls).toEqual([
+          [DEPRECATION_ERROR('captureException')],
+          [DEPRECATION_ERROR('captureExceptionImmediate')],
+        ])
+      })
+
+      it('warns once when arguments follow the options object, and ignores them', async () => {
+        const client = harness.makeClient()
+        legacy(client).captureException(new Error('one'), { distinctId: 'u' }, { ignored: 1 })
+        legacy(client).captureException(new Error('two'), { distinctId: 'u' }, { ignored: 2 })
+        await client.flush()
+
+        const events = wireEvents()
+        expect(events.map((event) => event.distinct_id)).toEqual(['u', 'u'])
+        expect(events.every((event) => !('ignored' in event.properties))).toBe(true)
+        expect(console.warn).toHaveBeenCalledWith(
+          '[PostHog] captureException(error, options) ignores the arguments after the options object.'
+        )
+        expect(
+          (console.warn as vi.Mock).mock.calls.filter((call) => String(call[0]).includes('ignores the arguments'))
+        ).toHaveLength(1)
       })
     })
 

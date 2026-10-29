@@ -161,10 +161,16 @@ function readCaptureExceptionArgs(
   legacyHasUuid: boolean
 ): CaptureExceptionOptions {
   if (typeof second !== 'string' && (rest.length === 0 || isPlainObject(second))) {
+    if (rest.length > 0) {
+      emitDeprecationWarningOnce(
+        `${method} extra arguments`,
+        `${method}(error, options) ignores the arguments after the options object.`
+      )
+    }
     return isPlainObject(second) ? (second as CaptureExceptionOptions) : {}
   }
   emitDeprecationWarningOnce(
-    'captureException positional arguments',
+    `${method} positional arguments`,
     `${method}(error, distinctId, properties) is deprecated: pass an object instead, e.g. ` +
       `${method}(error, { distinctId, properties }). The old form will be removed in the next major version.`,
     console.error
