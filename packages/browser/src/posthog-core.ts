@@ -1730,6 +1730,8 @@ export class PostHog implements PostHogInterface {
         if (!this.persistence) {
             return
         }
+        // A sibling may have stored a newer value since this request was sent.
+        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
         if (stored?.value === value && !stored.delivered) {
             channel.register(value, true)
@@ -1893,6 +1895,7 @@ export class PostHog implements PostHogInterface {
                 unset: propertyUnset.indexOf(property) !== -1 || optionUnset.indexOf(property) !== -1,
             }
         }
+        this.persistence.refreshMetaIdentifiersBeforeCapture()
         const fbcCallerValue = callerValueFor(FACEBOOK_CLICK_ID)
         const fbpCallerValue = callerValueFor(FACEBOOK_BROWSER_ID)
         const metaIdentifiers = [

@@ -1,7 +1,7 @@
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { PERSISTENCE_FACEBOOK_BROWSER_ID, PERSISTENCE_FACEBOOK_CLICK_ID } from '../constants'
-import type { PostHogConfig } from '../types'
+import type { CaptureResult, PostHogConfig } from '../types'
 
 // capture() runs inside click handlers, so its work adds directly to Interaction to Next Paint.
 // Parsing the whole persistence entry on each capture made INP regress (#5428).
@@ -48,6 +48,35 @@ const siblingSubdomainWritesCookie = (storageKey: string, patch: (cookie: Record
     const cookie = JSON.parse(cookieText)
     patch(cookie)
     document.cookie = `${storageKey}=${encodeURIComponent(JSON.stringify(cookie))}; path=/`
+}
+
+const META_RATE_LIMITING = { events_per_second: 1000, events_burst_limit: 1000 }
+
+// Holds each capture request until the test answers it, so delivery can be confirmed late.
+const setupMetaCapture = (config: Partial<PostHogConfig>, token: string = uuidv7(), name: string = token) => {
+    const events: CaptureResult[] = []
+    const posthog = defaultPostHog().init(
+        token,
+        {
+            person_profiles: 'always',
+            request_batching: false,
+            rate_limiting: META_RATE_LIMITING,
+            before_send: (event) => {
+                if (event) {
+                    events.push(event)
+                }
+                return event
+            },
+            ...config,
+        },
+        name
+    )!
+    const pendingResponses: (() => void)[] = []
+    vi.spyOn(posthog, '_send_retriable_request').mockImplementation((options) => {
+        pendingResponses.push(() => options.callback?.({ statusCode: 200 }))
+    })
+    const lastEvent = () => events[events.length - 1]
+    return { posthog, events, lastEvent, pendingResponses, storageKey: `ph_${token}_posthog` }
 }
 
 describe('capture() hot path', () => {
@@ -252,6 +281,125 @@ describe('capture() hot path', () => {
         expect(posthog.persistence!.props).not.toHaveProperty(PERSISTENCE_FACEBOOK_CLICK_ID)
         posthog.persistence!.register({ unrelated: 'change' })
         expect(readEntry(storageKey)).not.toHaveProperty(PERSISTENCE_FACEBOOK_CLICK_ID)
+    })
+
+    it('sends the $fbc a sibling subdomain wrote to the shared cookie before the debounced write (persistence: cookie)', () => {
+        const { posthog, lastEvent, storageKey } = setupMetaCapture({
+            persistence: 'cookie',
+            persistence_save_debounce_ms: 250,
+        })
+        const persistence = posthog.persistence!
+        persistence.register({
+            [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: 'fb.1.1700000000000.delivered', delivered: true },
+        })
+        persistence.flush()
+        const sibling = { value: 'fb.1.1700000000001.sibling', delivered: false }
+
+        siblingSubdomainWritesCookie(storageKey, (cookie) => (cookie[PERSISTENCE_FACEBOOK_CLICK_ID] = sibling))
+        posthog.capture('after sibling write')
+
+        expect(lastEvent().$set?.$fbc).toBe(sibling.value)
+    })
+
+    it('sends the $fbc the shared cookie fills before the debounced write (persistence: localStorage+cookie)', () => {
+        const { posthog, lastEvent, storageKey } = setupMetaCapture({
+            persistence: 'localStorage+cookie',
+            persistence_save_debounce_ms: 250,
+        })
+        posthog.persistence!.flush()
+        const sibling = { value: 'fb.1.1700000000001.subdomain', delivered: false }
+
+        siblingSubdomainWritesCookie(storageKey, (cookie) => (cookie[PERSISTENCE_FACEBOOK_CLICK_ID] = sibling))
+        posthog.capture('after sibling write')
+
+        expect(lastEvent().$set?.$fbc).toBe(sibling.value)
+    })
+
+    it.each<PostHogConfig['persistence']>(['localStorage', 'cookie'])(
+        'keeps a sibling $fbc that landed while our request was in flight pending (persistence: %s)',
+        (persistence) => {
+            const { posthog, lastEvent, pendingResponses, storageKey } = setupMetaCapture({ persistence })
+            const ours = { value: 'fb.1.1700000000000.ours', delivered: false }
+            const sibling = { value: 'fb.1.1700000000001.sibling', delivered: false }
+            posthog.persistence!.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: ours })
+            posthog.capture('sends ours')
+            expect(lastEvent().$set?.$fbc).toBe(ours.value)
+
+            // No storage event reaches this tab before the response does.
+            if (persistence === 'cookie') {
+                siblingSubdomainWritesCookie(storageKey, (cookie) => (cookie[PERSISTENCE_FACEBOOK_CLICK_ID] = sibling))
+            } else {
+                siblingWrites(storageKey, (entry) => (entry[PERSISTENCE_FACEBOOK_CLICK_ID] = sibling))
+            }
+            pendingResponses.forEach((respond) => respond())
+            posthog.persistence!.register({ unrelated: 'change' })
+
+            expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(sibling)
+            const stored =
+                persistence === 'cookie' ? posthog.persistence!['_storage']._parse(storageKey) : readEntry(storageKey)
+            expect(stored[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(sibling)
+            posthog.capture('sends the sibling value')
+            expect(lastEvent().$set?.$fbc).toBe(sibling.value)
+        }
+    )
+
+    it('sends the $fbc another frame wrote to the shared sessionStorage', () => {
+        const token = uuidv7()
+        const config: Partial<PostHogConfig> = {
+            persistence: 'sessionStorage',
+            bootstrap: { distinctID: 'frame-user' },
+        }
+        const first = setupMetaCapture(config, token, `${token}-first`)
+        const second = setupMetaCapture(config, token, `${token}-second`)
+        const fbc = { value: 'fb.1.1700000000000.other-frame', delivered: false }
+
+        first.posthog.persistence!.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: fbc })
+        first.posthog.persistence!.flush()
+        second.posthog.capture('in the second frame')
+
+        expect(second.lastEvent().$set?.$fbc).toBe(fbc.value)
+    })
+
+    it('does not write back a $fbc after a sibling reset removed the entry', () => {
+        const token = uuidv7()
+        const p = setupMetaCapture({ persistence: 'localStorage' }, token, `${token}-p`)
+        const originalUrl = window.location.href
+        window.history.replaceState(null, '', '/?fbclid=first-click')
+        try {
+            p.posthog.capture('landed from an ad')
+            expect(p.lastEvent().$set?.$fbc).toMatch(/\.first-click$/)
+            p.posthog.persistence!.flush()
+        } finally {
+            window.history.replaceState(null, '', originalUrl)
+        }
+
+        const q = setupMetaCapture(
+            { persistence: 'localStorage', persistence_save_debounce_ms: 250 },
+            token,
+            `${token}-q`
+        )
+        q.posthog.persistence!.flush()
+        q.posthog.reset()
+        expect(localStorage.getItem(p.storageKey)).toBeNull()
+
+        p.posthog.capture('after the sibling reset')
+
+        expect(readEntry(p.storageKey)).not.toHaveProperty(PERSISTENCE_FACEBOOK_CLICK_ID)
+        expect(p.lastEvent().$set?.$fbc).toBeUndefined()
+    })
+
+    it('keeps a cookie-only $fbc on the first write when localStorage has no entry yet', () => {
+        const token = uuidv7()
+        const storageKey = `ph_${token}_posthog`
+        const fbc = { value: 'fb.1.1700000000000.cookie-only', delivered: false }
+        document.cookie = `${storageKey}=${encodeURIComponent(
+            JSON.stringify({ distinct_id: 'cookie-user', [PERSISTENCE_FACEBOOK_CLICK_ID]: fbc })
+        )}; path=/`
+
+        const { posthog } = setupMetaCapture({ persistence: 'localStorage+cookie' }, token)
+
+        expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbc)
+        expect(readEntry(storageKey)[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbc)
     })
 
     it('does not read the persistence entry while persistence is disabled', () => {
