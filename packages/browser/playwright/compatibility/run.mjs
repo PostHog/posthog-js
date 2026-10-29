@@ -8,6 +8,7 @@ import { runMatrix } from './matrix.mjs'
 import { assertLoaderProof } from './loader-proof.mjs'
 import { interactionScenarios, exerciseInteractions } from './interaction-cases.mjs'
 import { replayLifecycleScenarios, exerciseReplayLifecycle } from './replay-cases.mjs'
+import { trackReplayCompression } from './replay-compression.mjs'
 import { exerciseReplayNetwork, assertReplayNetworkCapture, freezeReplayDate } from './replay-network.mjs'
 import { compatibilityServer } from './server.mjs'
 import {
@@ -121,6 +122,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
     const interactionCase = interactionScenarios.includes(scenario)
     const replayLifecycleCase = replayLifecycleScenarios.includes(scenario)
     const controlledClock = interactionCase || replayLifecycleCase
+    if (replayLifecycleCase) await page.addInitScript(trackReplayCompression)
     if (controlledClock) {
         await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
         await page.clock.pauseAt(new Date('2024-01-01T00:00:01Z'))
