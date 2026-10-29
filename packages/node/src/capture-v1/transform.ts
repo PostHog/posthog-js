@@ -36,7 +36,9 @@ export function readEventOptions(value: unknown): V1EventOptions | undefined {
     return { ...value }
   }
   // console.error, not the client logger: the logger only prints in debug mode, and the event loses its options.
-  console.error('[PostHog] options must be an object; sending the event without its options')
+  console.error(
+    `[PostHog] options must be an object, got ${jsonTypeName(value as JsonType)}; sending the event without its options`
+  )
   return undefined
 }
 

@@ -4,7 +4,8 @@ import { EventMessage, PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, captureEvents } from '../utils'
 import { V1WiringHarness } from '../utils/v1-wiring'
 
-const OPTIONS_ERROR = '[PostHog] options must be an object; sending the event without its options'
+const UUID = '0199c3e8-4c7b-7e2e-9f21-2b6d5a1c9e04'
+const OPTIONS_ERROR = /^\[PostHog\] options must be an object, got \w+; sending the event without its options$/
 
 describe('per-event capture options', () => {
   vi.useFakeTimers()
@@ -26,7 +27,7 @@ describe('per-event capture options', () => {
   })
 
   const optionsErrors = (): unknown[][] =>
-    (console.error as vi.Mock).mock.calls.filter((call) => call[0] === OPTIONS_ERROR)
+    (console.error as vi.Mock).mock.calls.filter((call) => OPTIONS_ERROR.test(String(call[0])))
 
   /** Sends one event through `client` and returns the single wire event it produced on `path`. */
   const sendOne = async (
@@ -202,6 +203,8 @@ describe('per-event capture options', () => {
         $set_once: { first: 'caller' },
         $groups: { company: 'caller' },
         plain: 'caller',
+        cart: { items: ['caller'] },
+        user: { email: 'caller@example.com', name: 'caller' },
       }
       const snapshot = structuredClone({ options, properties })
 
@@ -213,6 +216,8 @@ describe('per-event capture options', () => {
           e!.properties!.$set_once.first = 'hook'
           e!.properties!.$groups.company = 'hook'
           e!.properties!.plain = 'hook'
+          e!.properties!.cart.items.push('hook')
+          delete e!.properties!.user.email
           return e
         },
       })
@@ -224,7 +229,70 @@ describe('per-event capture options', () => {
         $set_once: { first: 'hook' },
         $groups: { company: 'hook' },
         plain: 'hook',
+        cart: { items: ['caller', 'hook'] },
+        user: { name: 'caller' },
       })
+    })
+
+    it('cannot change register() defaults for later events', async () => {
+      let first = true
+      const posthog = makeClient({
+        before_send: (e) => {
+          if (first) {
+            e!.properties!.app.version = 'hook'
+            first = false
+          }
+          return e
+        },
+      })
+      await posthog.register({ app: { version: 'caller' } })
+
+      posthog.capture({ distinctId: 'u', event: 'first' })
+      posthog.capture({ distinctId: 'u', event: 'second' })
+      await posthog.flush()
+
+      expect(wireEvents().map((event) => event.properties.app.version)).toEqual(['hook', 'caller'])
+    })
+
+    it('gets an options object when the caller passes none', async () => {
+      const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }), {
+        before_send: (e) => {
+          e!.options!.process_person_profile = false
+          return e
+        },
+      })
+
+      expect(event.options).toStrictEqual({ process_person_profile: false })
+      expect(console.error).not.toHaveBeenCalled()
+    })
+
+    it.each<[string, (client: PostHog, properties: Record<string, any>) => unknown, string]>([
+      [
+        'capture',
+        (c, properties) => c.capture({ distinctId: 'u', event: 'e', properties, uuid: UUID, timestamp: new Date(0) }),
+        ANALYTICS_CAPTURE_PATH,
+      ],
+      [
+        'captureAi',
+        (c, properties) =>
+          c.captureAi({ distinctId: 'u', event: '$ai_span', properties, uuid: UUID, timestamp: new Date(0) }),
+        AI_CAPTURE_PATH,
+      ],
+    ])('a pass-through hook leaves the %s wire event unchanged', async (_method, send, path) => {
+      const properties = () => ({
+        nested: { list: [1, { deep: null }], empty_object: {}, empty_array: [] },
+        nothing: null,
+        when: new Date(0),
+      })
+
+      for (const client of [makeClient(), makeClient({ before_send: (e) => e })]) {
+        await send(client, properties())
+        await client.flush()
+      }
+
+      const events = captureEvents(harness.fetch, path)
+      expect(events).toHaveLength(2)
+      expect(events[1]).toStrictEqual(events[0])
     })
 
     it.each<[string, (client: PostHog, properties: Record<string, any>) => unknown]>([

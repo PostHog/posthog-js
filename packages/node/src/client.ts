@@ -134,25 +134,50 @@ function normalizeHost(value?: unknown): string {
   return normalizedValue || DEFAULT_NODE_HOST
 }
 
-/** Property values the SDK passes to `before_send` by reference unless copied. */
-const NESTED_HOOK_PROPERTIES = ['$set', '$set_once', '$groups', '$group_set']
-
 /**
- * A copy of the event for `before_send`, so a hook that mutates its properties cannot change the
- * caller's objects. `options` needs no copy here: `readEventOptions` already made one.
+ * A copy of the event for `before_send`, so a hook that mutates it cannot change the caller's
+ * objects or the `register()` and context defaults. Plain objects and arrays are copied all the
+ * way down; class instances (`Date`, `Buffer`, custom classes) stay shared. The hook always gets
+ * an `options` object it can write to.
  */
 function isolateForBeforeSend(eventMessage: EventMessage): EventMessage {
-  const isolated: EventMessage = { ...eventMessage }
-  if (isPlainObject(eventMessage.properties)) {
-    const properties = { ...eventMessage.properties }
-    for (const key of NESTED_HOOK_PROPERTIES) {
-      if (isPlainObject(properties[key])) {
-        properties[key] = { ...properties[key] }
-      }
-    }
-    isolated.properties = properties
-  }
+  const isolated = copyPlainValues(eventMessage, new WeakMap()) as EventMessage
+  isolated.options ??= {}
   return isolated
+}
+
+/** Only objects with no prototype or `Object.prototype`: a copy keeps no class or `toJSON` method. */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+// `seen` keeps a circular value circular, so it still fails at serialization as it would without a hook.
+function copyPlainValues(value: unknown, seen: WeakMap<object, unknown>): unknown {
+  if (!Array.isArray(value) && !isPlainRecord(value)) {
+    return value
+  }
+  const known = seen.get(value)
+  if (known !== undefined) {
+    return known
+  }
+  if (Array.isArray(value)) {
+    const copy: unknown[] = new Array(value.length)
+    seen.set(value, copy)
+    value.forEach((item, index) => {
+      copy[index] = copyPlainValues(item, seen)
+    })
+    return copy
+  }
+  const copy: Record<string, unknown> = Object.getPrototypeOf(value) === null ? Object.create(null) : {}
+  seen.set(value, copy)
+  for (const key of Object.keys(value)) {
+    copy[key] = copyPlainValues(value[key], seen)
+  }
+  return copy
 }
 
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {

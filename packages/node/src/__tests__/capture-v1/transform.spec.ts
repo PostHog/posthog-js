@@ -127,19 +127,21 @@ describe('capture v1 transform', () => {
       expect(error).not.toHaveBeenCalled()
     })
 
-    it.each<[string, JsonType]>([
-      ['an array', ['process_person_profile']],
-      ['a string', 'process_person_profile'],
-      ['a number', 0],
-      ['a boolean', true],
-    ])('logs one error for %s options and still lifts the legacy properties', (_label, options) => {
+    it.each<[string, JsonType, string]>([
+      ['an array', ['process_person_profile'], 'array'],
+      ['a string', 'process_person_profile', 'string'],
+      ['a number', 0, 'number'],
+      ['a boolean', true, 'boolean'],
+    ])('logs one error for %s options and still lifts the legacy properties', (_label, options, typeName) => {
       const error = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       const event = buildV1Event(baseMessage({ options, properties: { $cookieless_mode: true, keep: 'me' } }))
 
       expect(event.options).toStrictEqual({ cookieless_mode: true })
       expect(event.properties).toStrictEqual({ keep: 'me' })
-      expect(error.mock.calls).toEqual([['[PostHog] options must be an object; sending the event without its options']])
+      expect(error.mock.calls).toEqual([
+        [`[PostHog] options must be an object, got ${typeName}; sending the event without its options`],
+      ])
     })
   })
 
