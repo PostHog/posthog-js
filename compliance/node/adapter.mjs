@@ -233,7 +233,7 @@ app.post('/init', async (req, res) => {
                 state.requestsMade.push({
                     timestamp_ms: Date.now(),
                     status_code: response.status,
-                    retry_attempt: Math.max(0, Number(headerValue(fetchOptions?.headers, 'posthog-attempt') ?? 1) - 1),
+                    retry_attempt: Math.max(0, attempt - 1),
                     event_count: events.length,
                     uuid_list: events.map((e) => e.uuid).filter(Boolean),
                 })
