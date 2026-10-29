@@ -25,7 +25,7 @@ You need to change code or configuration if your app does any of these:
 - passes a personal API key (`phx_...`) as the project API key
 - reads event content from the SDK's debug log, or alerts on SDK log text
 - sends AI events with `captureAi()` and tunes the AI queue, timeout or compression
-- uses `sendFeatureFlags` together with a `before_send` hook that drops events
+- uses `sendFeatureFlags` together with a `before_send` hook that drops events or edits `groups` or `sendFeatureFlags`
 - uses `@posthog/convex`, `@posthog/next` or `@posthog/nuxt` (stay on posthog-node 5 for now)
 
 ## Reverse proxies and self-hosted PostHog
@@ -240,7 +240,7 @@ These changes follow from this order:
 - `before_send` gets its own copy of the event's plain objects and arrays. Changing a nested value no longer changes your objects or the `register()` and context values, as it could in 5.x. Class instances, such as `Date`, are not copied.
 - `$geoip_disable` and `$groups` are set before `before_send`, so to change them, edit the properties. Changing the message's `disableGeoip` or `groups` field has no effect.
 - A `before_send` hook that throws drops the event, as in 5.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing.
-- With `sendFeatureFlags`, the `/flags` request now runs before `before_send` and uses the event's own distinct id, even for an event the hook then drops. To avoid that request, call `evaluateFlags()` yourself and pass the snapshot as `flags`.
+- With `sendFeatureFlags`, the `/flags` request now runs before `before_send` and uses the event's own distinct id, even for an event the hook then drops. Changes the hook makes to the message's `groups` or `sendFeatureFlags` no longer reach that request, as editing those objects in place could in 5.x. To avoid that request, call `evaluateFlags()` yourself and pass the snapshot as `flags`.
 - Context and `register()` properties and options now reach `identify`, `alias` and `groupIdentify` events, not only `capture`.
 
 ## GeoIP
