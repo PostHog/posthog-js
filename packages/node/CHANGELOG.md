@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.60.0
+
+### Minor Changes
+
+- [#5270](https://github.com/PostHog/posthog-js/pull/5270) [`4b25f7f`](https://github.com/PostHog/posthog-js/commit/4b25f7f1d8fff0e442f6cf9403beec2b4a96b743) Thanks [@DanielVisca](https://github.com/DanielVisca)! - The Express and NestJS integrations can read the session ID, and the distinct ID of an identified user, from the posthog-js cookie when a request has no tracing headers, so backend events link to browser sessions on same-site requests without frontend configuration. Turn it on with the `readPostHogCookie` option.
+  (2026-10-29)
+
 ## 5.59.0
 
 ### Minor Changes
