@@ -347,7 +347,24 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         return value
       })
 
-      return preserveProviderPromise(parentPromise, wrappedPromise, {
+      const capturedPromise = wrappedPromise.catch(async (error: any) => {
+        await captureAiGeneration(this.phClient, {
+          ...posthogParams,
+          model: anthropicParams.model,
+          provider: 'anthropic',
+          input: this.formatInputForPostHog(anthropicParams, posthogParams.privacyMode),
+          output: [],
+          latency: (Date.now() - startTime) / 1000,
+          baseURL: this.baseURL,
+          modelParameters: getModelParams(body),
+          httpStatus: error?.status ? error.status : 500,
+          usage: {},
+          error: error,
+        })
+        throw error
+      })
+
+      return preserveProviderPromise(parentPromise, capturedPromise, {
         requestIdHeader: 'request-id',
         workspaceIdHeader: 'anthropic-workspace-id',
       })
