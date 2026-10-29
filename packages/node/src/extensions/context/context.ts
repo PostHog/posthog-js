@@ -33,6 +33,10 @@ export class PostHogContext implements IPostHogContext {
         ...(current.properties || {}),
         ...(context.properties || {}),
       },
+      options: {
+        ...(current.options || {}),
+        ...(context.options || {}),
+      },
     }
   }
 }

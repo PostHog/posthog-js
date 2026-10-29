@@ -47,8 +47,6 @@ describe('flags v2', () => {
           $feature_flag_response: undefined,
           $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
           $feature_flag_evaluated_at: expect.any(Number),
-          $lib: posthog.getLibraryId(),
-          $lib_version: posthog.getLibraryVersion(),
           locally_evaluated: false,
         },
       })
@@ -163,8 +161,6 @@ describe('flags v2', () => {
             $feature_flag_reason: expectedReason,
             $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
             $feature_flag_evaluated_at: expect.any(Number),
-            $lib: posthog.getLibraryId(),
-            $lib_version: posthog.getLibraryVersion(),
             locally_evaluated: false,
           },
         })
@@ -346,8 +342,6 @@ describe('flags v1', () => {
           '$feature/non-existent-flag': undefined,
           $feature_flag: 'non-existent-flag',
           $feature_flag_response: undefined,
-          $lib: posthog.getLibraryId(),
-          $lib_version: posthog.getLibraryVersion(),
           locally_evaluated: false,
         },
       })
@@ -1376,8 +1370,6 @@ describe('minimal $feature_flag_called events', () => {
           '$feature_flag_evaluated_at',
           'locally_evaluated',
           '$groups',
-          '$lib',
-          '$lib_version',
           '$is_server',
           '$geoip_disable',
         ].sort()
@@ -1563,8 +1555,6 @@ describe('minimal $feature_flag_called events', () => {
           '$feature_flag_reason',
           '$feature_flag_evaluated_at',
           'locally_evaluated',
-          '$lib',
-          '$lib_version',
           '$is_server',
           '$geoip_disable',
         ].sort()

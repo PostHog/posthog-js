@@ -573,8 +573,6 @@ describe('evaluateFlags', () => {
           '$feature_flag_request_id',
           '$feature_flag_evaluated_at',
           'locally_evaluated',
-          '$lib',
-          '$lib_version',
           '$is_server',
           '$geoip_disable',
         ].sort()
