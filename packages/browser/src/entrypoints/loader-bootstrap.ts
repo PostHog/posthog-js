@@ -23,9 +23,16 @@ function bootstrap(): void {
 
     const url = document.createElement('a')
     url.href = source
-    if (!/^https?:$/.test(url.protocol) || url.search || url.hash || /\.js\/?$/i.test(url.pathname)) {
+    if (
+        !/^(https?:\/\/|\/)/i.test(source) ||
+        !/^https?:$/.test(url.protocol) ||
+        /\/static(\/|$)/.test(url.pathname) ||
+        url.search ||
+        url.hash ||
+        /\.js\/?$/i.test(url.pathname)
+    ) {
         logger.critical(
-            'Set data-asset-host to an HTTP(S) asset host or proxy prefix, not a script URL, query, or fragment. Pass the project token to posthog.init().'
+            'Use an http(s):// asset host or /proxy prefix without /static, a script filename, query, or fragment. Pass the project token to posthog.init().'
         )
         return
     }

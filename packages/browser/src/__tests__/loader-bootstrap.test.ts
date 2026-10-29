@@ -73,6 +73,9 @@ describe('local loader bootstrap', () => {
         ['https://proxy.example/ingest', `https://proxy.example/ingest/static/${version}/array.js`],
         ['https://proxy.example/ingest/', `https://proxy.example/ingest/static/${version}/array.js`],
         ['/ingest', `http://localhost/ingest/static/${version}/array.js`],
+        ['http://proxy.example:8080/ingest', `http://proxy.example:8080/ingest/static/${version}/array.js`],
+        ['/static-proxy', `http://localhost/static-proxy/static/${version}/array.js`],
+        ['/', `http://localhost/static/${version}/array.js`],
     ])('loads the bootstrap release from asset host %s', async (source, expected) => {
         script.setAttribute('data-asset-host', source)
         await bootstrap()
@@ -149,6 +152,12 @@ describe('local loader bootstrap', () => {
         'https://us-assets.i.posthog.com?cache=1',
         'https://us-assets.i.posthog.com#fragment',
         'javascript:void(0)',
+        'us-assets.i.posthog.com',
+        'ingest',
+        'https://us-assets.i.posthog.com/static',
+        'https://us-assets.i.posthog.com/static/1',
+        '/static/1',
+        'https://proxy.example/ingest/static/1.441.2',
     ])('reports invalid asset host %s without injecting a script', async (source) => {
         script.setAttribute('data-asset-host', source)
         await bootstrap()

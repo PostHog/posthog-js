@@ -71,7 +71,7 @@ To keep application startup independent of the analytics host while preserving e
 cp node_modules/posthog-js/dist/loader-bootstrap.js public/scripts/posthog-bootstrap.js
 ```
 
-Load this local file before initialization and application scripts. Set `data-asset-host` to the asset origin or a reverse-proxy prefix, not a script URL. Use `https://eu-assets.i.posthog.com` for EU assets, or a relative prefix such as `/ingest` for a same-origin proxy.
+Load this local file before initialization and application scripts. Set `data-asset-host` to an asset origin or reverse-proxy prefix starting with `http://`, `https://`, or `/`, not a bare hostname or page-relative path. Use `https://eu-assets.i.posthog.com` for EU assets, or a root-relative prefix such as `/ingest` for a same-origin proxy. Do not include `/static` or a script filename; the bootstrap appends the versioned SDK path.
 
 ```html
 <script src="/scripts/posthog-bootstrap.js" data-asset-host="https://us-assets.i.posthog.com"></script>
