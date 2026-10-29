@@ -1,7 +1,12 @@
 import ErrorTracking from './error-tracking'
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
-import { addProperty, getFirstHeaderValue, readPostHogTracingHeaders } from './tracing-headers'
+import {
+  addProperty,
+  getFirstHeaderValue,
+  getPostHogCookieReadOptions,
+  readPostHogTracingHeaders,
+} from './tracing-headers'
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import type { Request, Response } from 'express'
 import type { ContextData } from './context/types'
@@ -35,7 +40,7 @@ function getClientIp(req: Request): string | undefined {
 }
 
 function buildRequestContextData(posthog: PostHogBackendClient, req: Request): Partial<ContextData> {
-  const headers = readPostHogTracingHeaders(posthog.options, req.headers)
+  const headers = readPostHogTracingHeaders(posthog.options, req.headers, getPostHogCookieReadOptions(posthog))
   const context = posthog.getContext()
   const sessionId = context?.sessionId ?? headers.sessionId
   const distinctId = context?.distinctId ?? headers.distinctId
