@@ -23,6 +23,11 @@ const egress = spawnSync(process.execPath, ['--test', join(directory, 'egress.br
 })
 assert.equal(egress.status, 0, 'Browser egress control failed')
 const manifest = await prepare(join(folder, 'artifacts'))
+const compression = spawnSync(process.execPath, ['--test', join(directory, 'replay-compression.browser-test.mjs')], {
+    stdio: 'inherit',
+    env: { ...process.env, COMPATIBILITY_COMPRESSION_MANIFEST: join(folder, 'artifacts/manifest.json') },
+})
+assert.equal(compression.status, 0, 'Delayed native replay compression changed snapshots')
 const core = manifest.sources.candidate
 const dist = join(folder, 'cdn')
 cpSync(core.dist, dist, { recursive: true })
@@ -184,6 +189,7 @@ const evidence = {
     folder,
     integrityRejectedChangedBytes: true,
     browserEgressDenied: true,
+    delayedReplayCompressionStable: true,
     missingCurrentCaptureLogRejected: true,
     throwingLoaderRejected: true,
     missingWebVitalsDeliveryRejected: vitalsReport.results.map((cell) => cell.coreFamily),
