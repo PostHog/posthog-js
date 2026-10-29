@@ -193,7 +193,7 @@ describe('emails', () => {
     [429, 'quota_limited', 'monthly_quota_exceeded'],
     [503, 'delivery_unavailable', 'service_unavailable'],
     [500, undefined, 'application_error'],
-  ])('keeps the HTTP %s code %s with the Resend name %s', async (status, code, name) => {
+  ])('keeps the HTTP %s code %s with the name %s', async (status, code, name) => {
     replies = [rejected(status, code)]
 
     const { error } = await send({ maxRetries: 0 })

@@ -1,5 +1,5 @@
 /**
- * Resend's error names, so code migrated from Resend that branches on `name` keeps working.
+ * A coarse category of the failure, for code that branches on the kind of failure rather than the exact `code`.
  */
 export type EmailErrorName =
   | 'validation_error'
@@ -28,8 +28,8 @@ export interface EmailErrorParams {
 /**
  * PostHog did not queue the email, or the client could not tell whether it did.
  *
- * Branch on `code`, PostHog's stable error code, or on `name`, which uses Resend's error
- * names. The message never contains the secret key or the request body.
+ * Branch on `code`, PostHog's stable error code, or on `name`, a coarse category of the
+ * failure. The message never contains the secret key or the request body.
  */
 export class EmailError extends Error {
   override name: EmailErrorName
