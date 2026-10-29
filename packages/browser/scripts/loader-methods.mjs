@@ -17,7 +17,7 @@ const callableName = (member) => {
 export function getLoaderMethods(source) {
     const file = ts.createSourceFile('posthog-core.ts', source, ts.ScriptTarget.Latest, true)
     const api = file.statements.find((node) => ts.isClassDeclaration(node) && node.name?.text === 'PostHog')
-    if (!api) {
+    if (!api || !ts.isClassDeclaration(api)) {
         throw new Error('Cannot generate loader methods: PostHog class not found')
     }
 
