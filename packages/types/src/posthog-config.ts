@@ -1475,7 +1475,7 @@ export interface PostHogConfig {
 
     /**
      * Sanitize current event URLs, referrers (including initial/session referrers), previous-pageview
-     * pathnames, autocapture links, Web Vitals and log page URLs, and Next.js pageview URLs.
+     * pathnames, autocapture links, and Web Vitals and log page URLs.
      * Referrers are sanitized before persistence. Configure in init() to cover the first writes.
      * Path and query default to included; omitted hash inherits disable_capture_url_hashes.
      * The callback runs before component filtering and existing personal-data query masking.

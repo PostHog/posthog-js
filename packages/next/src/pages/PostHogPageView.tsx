@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/router.js'
 import { usePostHog } from '@posthog/react'
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
+import { stripUrlHash } from '@posthog/core'
 import { getCurrentUrl } from '../shared/browser.js'
 
 export interface PostHogPageViewProps {
@@ -44,12 +44,14 @@ export function PostHogPageView({ captureRouteTemplate = false }: PostHogPageVie
 
     useEffect(() => {
         const currentUrl = getCurrentUrl(router.asPath)
-        if (!posthog || !router.isReady || !currentUrl) {
+        const currentUrlWithoutHash =
+            posthog?.config?.disable_capture_url_hashes === true && currentUrl ? stripUrlHash(currentUrl) : currentUrl
+        if (!posthog || !router.isReady || !currentUrlWithoutHash) {
             return
         }
 
         posthog.capture('$pageview', {
-            $current_url: getRecordedUrl(currentUrl, posthog.config || {}),
+            $current_url: currentUrlWithoutHash,
             ...(captureRouteTemplate ? { $route: router.pathname.replace(/\[\[\.\.\.([^\]]+)\]\]/g, '[...$1]') } : {}),
         })
     }, [router.asPath, router.pathname, router.isReady, posthog, captureRouteTemplate])

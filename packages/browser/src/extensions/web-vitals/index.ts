@@ -1,4 +1,4 @@
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
+import { getRecordedUrl } from '../../utils/url-sanitization'
 import { PostHog } from '../../posthog-core'
 import { PostHogConfig, RemoteConfigResult, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'

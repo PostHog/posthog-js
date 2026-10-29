@@ -1,4 +1,4 @@
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
+import { getRecordedUrl } from '../utils/url-sanitization'
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'

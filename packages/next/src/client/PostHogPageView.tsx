@@ -5,7 +5,6 @@ import { useParams, usePathname, useSearchParams } from 'next/navigation.js'
 import { usePostHog } from '@posthog/react'
 import { isArray } from '@posthog/core'
 import { getCurrentUrl } from '../shared/browser.js'
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
 
 export interface PostHogPageViewProps {
     /**
@@ -153,7 +152,7 @@ function PageViewTracker({ params }: PageViewTrackerProps = {}) {
         }
 
         posthog.capture('$pageview', {
-            $current_url: getRecordedUrl(currentUrl, posthog.config || {}, { stripHash: false }),
+            $current_url: currentUrl,
             ...(routeTemplate ? { $route: routeTemplate } : {}),
         })
     }, [pathname, searchParams, posthog, routeTemplate])

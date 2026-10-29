@@ -1,5 +1,5 @@
 import { isObject } from '@posthog/core'
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
+import { getRecordedUrl } from './utils/url-sanitization'
 
 import { Autocapture } from './autocapture'
 import type { AutocaptureConfig, AutocaptureConfigSource } from './autocapture-config'

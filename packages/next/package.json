@@ -76,7 +76,6 @@
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "dependencies": {
-        "@posthog/browser-common": "workspace:^",
         "@posthog/core": "workspace:^",
         "@posthog/react": "workspace:^",
         "posthog-js": "workspace:^",

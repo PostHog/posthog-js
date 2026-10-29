@@ -1,4 +1,4 @@
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
+import { getRecordedUrl } from './utils/url-sanitization'
 import { PostHogLogs as SharedLogs } from '@posthog/browser-common/logs'
 import type { ConsoleLogsLoader } from '@posthog/browser-common/logs-types'
 import { createLogger } from '@posthog/browser-common/utils/logger'

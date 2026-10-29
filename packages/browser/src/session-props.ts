@@ -10,6 +10,7 @@
  */
 import { getPersonInfo, getPersonPropsFromInfo } from '@posthog/browser-common/utils/event-utils'
 import type { SessionIdManager } from './sessionid'
+import { getUrlSanitizer } from './utils/url-sanitization'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
@@ -41,7 +42,7 @@ const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProp
         posthog?.config.mask_personal_data_properties,
         posthog?.config.custom_personal_data_properties,
         posthog?.config.disable_capture_url_hashes,
-        posthog?.config.url_sanitization
+        posthog ? getUrlSanitizer(posthog.config) : undefined
     )
 }
 

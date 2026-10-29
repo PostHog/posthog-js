@@ -1,5 +1,4 @@
 import React from 'react'
-import type { PostHogConfig } from 'posthog-js'
 import { render } from '@testing-library/react'
 import { PostHogPageView } from '../src/client/PostHogPageView'
 
@@ -7,7 +6,7 @@ const { mockCapture, mockUsePostHog, mockNavigation } = vi.hoisted(() => {
     const mockCapture = vi.fn()
     return {
         mockCapture,
-        mockUsePostHog: vi.fn(() => ({ capture: mockCapture, config: {} as Partial<PostHogConfig> })),
+        mockUsePostHog: vi.fn(() => ({ capture: mockCapture })),
         mockNavigation: {
             pathname: '/initial',
             searchParams: new URLSearchParams(),
@@ -38,17 +37,6 @@ describe('PostHogPageView', () => {
         mockNavigation.searchParams = new URLSearchParams()
         mockNavigation.params = {}
         mockNavigation.useParams = () => mockNavigation.params
-    })
-
-    it('applies URL sanitization without changing pageview capture', () => {
-        mockUsePostHog.mockReturnValueOnce({
-            capture: mockCapture,
-            config: { url_sanitization: { path: false, query: false, hash: true }, disable_capture_url_hashes: true },
-        })
-        mockNavigation.pathname = '/private'
-        mockNavigation.searchParams = new URLSearchParams('token=secret')
-        render(<PostHogPageView />)
-        expect(mockCapture).toHaveBeenCalledWith('$pageview', { $current_url: 'http://localhost/' })
     })
 
     it('captures a $pageview event on mount', () => {

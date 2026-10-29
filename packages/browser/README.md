@@ -73,7 +73,7 @@ Opted-in values are not automatically redacted. Use the synchronous `before_send
 
 ## URL sanitization
 
-`url_sanitization` controls current event URLs and their host/pathname, referrers (including initial/session referrers), previous-pageview pathnames, autocapture links, Web Vitals and log page URLs, and Next.js pageview URLs. Referrers are sanitized before they enter browser persistence.
+`url_sanitization` controls current event URLs and their host/pathname, referrers (including initial/session referrers), previous-pageview pathnames, autocapture links, and Web Vitals and log page URLs. Referrers are sanitized before they enter browser persistence.
 
 ```js
 posthog.init('phc_TOKEN', {

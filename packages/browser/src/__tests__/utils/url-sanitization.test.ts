@@ -1,8 +1,7 @@
-/* oxlint-disable compat/compat -- Tests run in Node with native URL and Promise support. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getRecordedUrl } from '../../src/utils/url-sanitization'
-import * as globals from '../../src/utils/globals'
-import type { UrlSanitizationOptions } from '@posthog/types'
+import { getRecordedUrl } from '../../utils/url-sanitization'
+import * as globals from '@posthog/browser-common/utils/globals'
+import type { UrlSanitizationOptions } from '../../types'
 
 const url = 'https://example.com/private?token=secret&gclid=ad#section'
 
@@ -36,7 +35,6 @@ describe('recorded URL policy', () => {
         const unusual = 'https://EXAMPLE.com:443/path?x=%2b#part'
         expect(getRecordedUrl(unusual, {})).toBe(unusual)
         expect(getRecordedUrl(url, { disable_capture_url_hashes: true })).toBe(url.split('#')[0])
-        expect(getRecordedUrl(url, { disable_capture_url_hashes: true }, { stripHash: false })).toBe(url)
         expect(getRecordedUrl(url, { mask_personal_data_properties: true }, { maskQuery: true })).toBe(
             'https://example.com/private?token=secret&gclid=<masked>#section'
         )

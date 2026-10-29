@@ -7,7 +7,7 @@ import {
     getSearchInfo,
 } from '@posthog/browser-common/utils/event-utils'
 import { autocapturePropertiesForElement } from '@posthog/browser-common/autocapture'
-import { getRecordedUrl } from '@posthog/browser-common/utils/url-sanitization'
+import { getRecordedUrl, getUrlSanitizer } from '../utils/url-sanitization'
 import * as globals from '@posthog/browser-common/utils/globals'
 import type { PostHogConfig, UrlSanitizationOptions } from '../types'
 
@@ -160,7 +160,7 @@ describe('url_sanitization', () => {
             mask_personal_data_properties: true,
             custom_personal_data_properties: ['q', 'token'],
         }
-        expect(getReferrerInfo(config).$referrer).toBe(
+        expect(getReferrerInfo(getUrlSanitizer(config)).$referrer).toBe(
             'https://www.google.com/private-referrer?q=<masked>&token=<masked>'
         )
     })

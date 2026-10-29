@@ -98,6 +98,7 @@ import {
 import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
 import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils'
 import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
+import { getUrlSanitizer } from './utils/url-sanitization'
 import { document, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
 import { logger } from '@posthog/browser-common/utils/logger'
@@ -2222,7 +2223,7 @@ export class PostHog implements PostHogInterface {
             this.config.custom_personal_data_properties,
             this.config.detect_google_search_app,
             this.config.disable_capture_url_hashes,
-            this.config.url_sanitization
+            getUrlSanitizer(this.config)
         )
 
         if (this.sessionManager) {
