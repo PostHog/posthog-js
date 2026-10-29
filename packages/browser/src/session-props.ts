@@ -10,6 +10,7 @@
  */
 import { getPersonInfo, getPersonPropsFromInfo } from '@posthog/browser-common/utils/event-utils'
 import type { SessionIdManager } from './sessionid'
+import { getUrlSanitizer } from './utils/url-sanitization'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
@@ -27,7 +28,7 @@ interface LegacySessionSourceProps {
 }
 
 interface CurrentSessionSourceProps {
-    r: string // Referring host
+    r: string | undefined // Referrer, omitted when URL sanitization fails
     u: string | undefined // full URL
 }
 
@@ -40,7 +41,8 @@ const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProp
     return getPersonInfo(
         posthog?.config.mask_personal_data_properties,
         posthog?.config.custom_personal_data_properties,
-        posthog?.config.disable_capture_url_hashes
+        posthog?.config.disable_capture_url_hashes,
+        posthog ? getUrlSanitizer(posthog.config) : undefined
     )
 }
 
@@ -88,7 +90,7 @@ export class SessionPropsManager {
         if (!p) {
             return {}
         }
-        if ('r' in p) {
+        if ('r' in p || 'u' in p) {
             return getPersonPropsFromInfo(p, this._instance.config.disable_capture_url_hashes)
         } else {
             return {

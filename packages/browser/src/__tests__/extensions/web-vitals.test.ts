@@ -1411,6 +1411,29 @@ describe('web vitals', () => {
                 })
             })
 
+            it.each([false, true])('sanitizes metric page URLs; omit=%s', (omit) => {
+                posthog.set_config({
+                    url_sanitization: omit
+                        ? {
+                              sanitize: () => {
+                                  throw new Error('failure')
+                              },
+                          }
+                        : { query: false },
+                })
+                emitAllMetrics()
+                if (omit) {
+                    expect(beforeSendMock).not.toHaveBeenCalled()
+                    return
+                }
+                const props = beforeSendMock.mock.lastCall![0].properties
+                const expected = 'http://localhost/'
+                expect(props.$current_url).toBe(expected)
+                for (const metric of ['LCP', 'CLS', 'FCP', 'INP']) {
+                    expect(props[`$web_vitals_${metric}_event`].$current_url).toBe(expected)
+                }
+            })
+
             it('masks properties accordingly', async () => {
                 emitAllMetrics()
 

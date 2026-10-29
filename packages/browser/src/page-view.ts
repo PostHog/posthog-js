@@ -74,11 +74,19 @@ export class PageViewManager {
         this._unsubscribeSessionId = undefined
     }
 
-    doPageView(timestamp: Date, pageViewId?: string): PageViewEventProperties {
+    doPageView(
+        timestamp: Date,
+        pageViewId?: string,
+        recordedLocation?: { pathname: string | undefined }
+    ): PageViewEventProperties {
         const response = this._previousPageViewProperties(timestamp, pageViewId)
 
         // On a pageview we reset the contexts
-        this._currentPageview = { pathname: window?.location.pathname ?? '', pageViewId, timestamp }
+        this._currentPageview = {
+            pathname: recordedLocation ? recordedLocation.pathname : (window?.location.pathname ?? ''),
+            pageViewId,
+            timestamp,
+        }
         this._instance.scrollManager.resetContext()
 
         return response

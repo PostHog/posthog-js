@@ -140,6 +140,30 @@ describe('posthog-logs', () => {
             logs = createLogs(mockPostHog)
         })
 
+        it.each([false, true])('sanitizes the log page URL; omit=%s', (omit) => {
+            const previousUrl = window.location.href
+            window.history.replaceState({}, '', '/private?token=secret#private')
+            try {
+                mockPostHog.config.url_sanitization = omit
+                    ? {
+                          sanitize: () => {
+                              throw new Error('failure')
+                          },
+                      }
+                    : { path: false, query: false, hash: false }
+                logs.captureLog({ body: 'probe' })
+                logs.flushLogs('fetch')
+                const request = vi.mocked(mockPostHog._send_request).mock.calls.at(-1)![0]
+                const attributes = (request.data as any).resourceLogs[0].scopeLogs[0].logRecords[0].attributes
+                expect(attributes.find((attribute: any) => attribute.key === 'url.full')).toEqual(
+                    omit ? undefined : { key: 'url.full', value: { stringValue: 'http://localhost/' } }
+                )
+            } finally {
+                logs.dispose()
+                window.history.replaceState({}, '', previousUrl)
+            }
+        })
+
         describe('shared extension lifecycle', () => {
             it('maps callback and explicit transports without changing legacy request options', async () => {
                 logs.captureLog({ body: 'callback request' })

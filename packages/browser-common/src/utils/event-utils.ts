@@ -207,26 +207,29 @@ export function getReferringDomain(): string {
     return convertToURL(document.referrer)?.host || DIRECT
 }
 
-export function getReferrerInfo(): Record<string, any> {
-    return {
-        $referrer: getReferrer(),
-        $referring_domain: getReferringDomain(),
+export function getReferrerInfo(sanitizeUrl?: (url: string) => string | undefined): Record<string, any> {
+    if (!sanitizeUrl || !document?.referrer) {
+        return { $referrer: getReferrer(), $referring_domain: getReferringDomain() }
     }
+    const referrer = sanitizeUrl(document.referrer)
+    return referrer ? { $referrer: referrer, $referring_domain: convertToURL(referrer)?.host } : {}
 }
 
 export function getPersonInfo(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[],
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    sanitizeReferrer?: (url: string) => string | undefined
 ) {
     const paramsToMask = maskPersonalDataProperties
         ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
         : []
     const href = disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href
     const url = href?.substring(0, 1000)
+    const referrer = sanitizeReferrer && document?.referrer ? sanitizeReferrer(document.referrer) : getReferrer()
     // we're being a bit more economical with bytes here because this is stored in the cookie
     return {
-        r: getReferrer().substring(0, 1000),
+        r: referrer?.substring(0, 1000),
         u: url ? maskQueryParams(url, paramsToMask, MASKED) : undefined,
     }
 }
@@ -291,7 +294,8 @@ export function getEventProperties(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[],
     detectGoogleSearchApp?: boolean,
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    sanitizeUrl?: (url: string) => string | undefined
 ): Properties {
     if (!userAgent) {
         return {}
@@ -299,6 +303,10 @@ export function getEventProperties(
     const paramsToMask = maskPersonalDataProperties
         ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
         : []
+    const currentUrl = sanitizeUrl
+        ? location?.href && sanitizeUrl(location.href)
+        : maskQueryParams(disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href, paramsToMask, MASKED)
+    const recordedLocation = sanitizeUrl ? (currentUrl ? convertToURL(currentUrl) : undefined) : location
     const [os_name, os_version] = detectOS(userAgent)
     const [webviewApp, webviewAppVersion] = detectWebviewApp(userAgent)
     const browserHints = getBrowserDetectionHints()
@@ -344,13 +352,9 @@ export function getEventProperties(
             $timezone_offset: getTimezoneOffset(),
         }),
         {
-            $current_url: maskQueryParams(
-                disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href,
-                paramsToMask,
-                MASKED
-            ),
-            $host: location?.host,
-            $pathname: location?.pathname,
+            $current_url: currentUrl,
+            $host: recordedLocation?.host,
+            $pathname: recordedLocation?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
             $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints, browserOptions),
             $browser_language: getBrowserLanguage(),

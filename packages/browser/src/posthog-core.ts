@@ -98,6 +98,7 @@ import {
 import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
 import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils'
 import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
+import { getUrlSanitizer } from './utils/url-sanitization'
 import { document, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
 import { logger } from '@posthog/browser-common/utils/logger'
@@ -2221,7 +2222,8 @@ export class PostHog implements PostHogInterface {
             this.config.mask_personal_data_properties,
             this.config.custom_personal_data_properties,
             this.config.detect_google_search_app,
-            this.config.disable_capture_url_hashes
+            this.config.disable_capture_url_hashes,
+            getUrlSanitizer(this.config)
         )
 
         if (this.sessionManager) {
@@ -2258,7 +2260,11 @@ export class PostHog implements PostHogInterface {
 
         let pageviewProperties: Record<string, any>
         if (eventName === EVENT_PAGEVIEW && !readOnly) {
-            pageviewProperties = this.pageViewManager.doPageView(timestamp, uuid)
+            pageviewProperties = this.pageViewManager.doPageView(
+                timestamp,
+                uuid,
+                this.config.url_sanitization ? { pathname: infoProperties.$pathname } : undefined
+            )
         } else if (eventName === EVENT_PAGELEAVE && !readOnly) {
             pageviewProperties = this.pageViewManager.doPageLeave(timestamp)
         } else {

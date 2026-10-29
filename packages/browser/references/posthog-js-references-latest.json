@@ -3062,6 +3062,11 @@
           "name": "disable_capture_url_hashes"
         },
         {
+          "description": "Sanitize current event URLs, referrers (including initial/session referrers), previous-pageview\npathnames, autocapture links, and Web Vitals and log page URLs.\nReferrers are sanitized before persistence. Configure in init() to cover the first writes.\nPath and query default to included; omitted hash inherits disable_capture_url_hashes.\nThe callback runs before component filtering and existing personal-data query masking.\nA failed callback omits the URL and its derived host/pathname without throwing into your application.",
+          "type": "UrlSanitizationOptions",
+          "name": "url_sanitization"
+        },
+        {
           "description": "Determines whether PostHog should save referrer information.",
           "type": "boolean",
           "name": "save_referrer"

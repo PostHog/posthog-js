@@ -1275,6 +1275,21 @@ export interface WebMCPCaptureConfig {
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
 type NextOptions = { revalidate: false | 0 | number; tags: string[] }
 
+/** Controls SDK-recorded URL metadata, independently of pageview capture triggers. */
+export interface UrlSanitizationOptions {
+    /** Include the pathname. Defaults to true. */
+    path?: boolean
+    /** Include query parameters. Defaults to true. */
+    query?: boolean
+    /** Include the fragment. When omitted, inherits `disable_capture_url_hashes`. */
+    hash?: boolean
+    /**
+     * Rewrite a URL before component filtering and personal-data query masking.
+     * Return an absolute URL or URL string. Throwing or returning an invalid value omits the URL.
+     */
+    sanitize?: (url: URL) => URL | string
+}
+
 /**
  * Selects which same-page URL changes automatically capture a `$pageview`.
  * Each option defaults to `false` when omitted.
@@ -1457,6 +1472,18 @@ export interface PostHogConfig {
      * @default false when `config.defaults` is unset or earlier than `'2026-06-25'`, otherwise `true`
      */
     disable_capture_url_hashes: boolean
+
+    /**
+     * Sanitize current event URLs, referrers (including initial/session referrers), previous-pageview
+     * pathnames, autocapture links, and Web Vitals and log page URLs.
+     * Referrers are sanitized before persistence. Configure in init() to cover the first writes.
+     * Path and query default to included; omitted hash inherits disable_capture_url_hashes.
+     * The callback runs before component filtering and existing personal-data query masking.
+     * A failed callback omits the URL and its derived host/pathname without throwing into your application.
+     *
+     * @default undefined
+     */
+    url_sanitization?: UrlSanitizationOptions
 
     /**
      * Determines whether PostHog should save referrer information.

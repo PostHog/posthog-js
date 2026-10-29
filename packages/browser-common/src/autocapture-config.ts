@@ -6,6 +6,7 @@ export interface AutocaptureConfig extends DomAutocaptureConfig {
     maskAllElementAttributes: boolean
     maskAllText: boolean
     disableCaptureUrlHashes: boolean
+    sanitizeUrl?: ((url: string) => string | undefined) | undefined
     getCurrentUrl?: (defaultUrl: string) => string
     remoteRequestsDisabled: boolean
 }

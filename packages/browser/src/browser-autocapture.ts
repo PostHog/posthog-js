@@ -1,4 +1,5 @@
 import { isObject } from '@posthog/core'
+import { getRecordedUrl } from './utils/url-sanitization'
 
 import { Autocapture } from './autocapture'
 import type { AutocaptureConfig, AutocaptureConfigSource } from './autocapture-config'
@@ -9,6 +10,8 @@ const DEFAULT_INPUT_TEXT_ALLOWLIST = ['[data-ph-capture-value]']
 class BrowserAutocaptureConfigSource implements AutocaptureConfigSource {
     constructor(private readonly _instance: PostHog) {}
 
+    private readonly _sanitizeUrl = (url: string): string | undefined => getRecordedUrl(url, this._instance.config)
+
     refresh(target: AutocaptureConfig): void {
         const config = this._instance.config
         const autocapture = isObject(config.autocapture) ? config.autocapture : undefined
@@ -18,6 +21,7 @@ class BrowserAutocaptureConfigSource implements AutocaptureConfigSource {
         target.maskAllElementAttributes = config.mask_all_element_attributes
         target.maskAllText = config.mask_all_text
         target.disableCaptureUrlHashes = config.disable_capture_url_hashes
+        target.sanitizeUrl = config.url_sanitization ? this._sanitizeUrl : undefined
         target.getCurrentUrl = config.get_current_url
         target.remoteRequestsDisabled = this._instance._shouldDisableFlags()
         target.url_allowlist = autocapture?.url_allowlist

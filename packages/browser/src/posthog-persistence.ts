@@ -67,6 +67,7 @@ import {
     getSearchInfo,
 } from '@posthog/browser-common/utils/event-utils'
 import { logger } from '@posthog/browser-common/utils/logger'
+import { getUrlSanitizer } from './utils/url-sanitization'
 import { stripLeadingDollar, isEmptyObject, isObject } from '@posthog/core'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
@@ -1715,7 +1716,7 @@ export class PostHogPersistence {
     }
 
     update_referrer_info(): void {
-        this.register_once(getReferrerInfo(), undefined)
+        this.register_once(getReferrerInfo(getUrlSanitizer(this._config)), undefined)
     }
 
     set_initial_person_info(): void {
@@ -1727,13 +1728,14 @@ export class PostHogPersistence {
         const personInfo = getPersonInfo(
             this._config.mask_personal_data_properties,
             this._config.custom_personal_data_properties,
-            this._config.disable_capture_url_hashes
+            this._config.disable_capture_url_hashes,
+            getUrlSanitizer(this._config)
         )
         this.register_once(
             {
                 [INITIAL_PERSON_INFO]: this._storesIdentityInCookie
                     ? {
-                          r: truncateForCookie(personInfo.r),
+                          r: personInfo.r ? truncateForCookie(personInfo.r) : undefined,
                           u: personInfo.u ? truncateForCookie(personInfo.u) : undefined,
                       }
                     : personInfo,

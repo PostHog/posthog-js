@@ -98,6 +98,30 @@ describe('Autocapture behavior', () => {
             div2.appendChild(password)
         })
 
+        it.each(['href', 'xlink:href'])('applies the URL policy before truncating %s attributes', (attribute) => {
+            const link = document.createElementNS('http://www.w3.org/2000/svg', 'a')
+            const href = 'https://example.com/' + 'a'.repeat(1100) + '#original'
+            link.setAttribute(attribute, href)
+            const sanitize = vi.fn(() => 'https://example.com/public#retained')
+            expect(getPropertiesFromElement(link, false, false, undefined, true, sanitize)['attr__' + attribute]).toBe(
+                'https://example.com/public#retained'
+            )
+            expect(sanitize).toHaveBeenCalledWith(href)
+            expect(getPropertiesFromElement(link, false, false, undefined, true, () => undefined)).not.toHaveProperty(
+                'attr__' + attribute
+            )
+        })
+
+        it.each(['href', 'xlink:href'])('preserves legacy hash handling for %s attributes', (attribute) => {
+            const link = document.createElementNS('http://www.w3.org/2000/svg', 'a')
+            const href = 'https://example.com/page#section'
+            link.setAttribute(attribute, href)
+            expect(getPropertiesFromElement(link, false, false, undefined, true)['attr__' + attribute]).toBe(
+                attribute === 'href' ? 'https://example.com/page' : href
+            )
+            expect(getPropertiesFromElement(link, false, false, undefined, false)['attr__' + attribute]).toBe(href)
+        })
+
         it('should contain the proper tag name', () => {
             const props = getPropertiesFromElement(div, false, false, undefined)
 

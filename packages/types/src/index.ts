@@ -87,6 +87,7 @@ export type {
     NetworkMetricsRequest,
     NetworkMetricsResponse,
     CapturePageviewOptions,
+    UrlSanitizationOptions,
     WebMCPCaptureConfig,
     PostHogConfig,
 } from './posthog-config'

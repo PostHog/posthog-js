@@ -125,6 +125,30 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
+  \\"url_sanitization\\": [
+    \\"undefined\\",
+    {
+      \\"path\\": [
+        \\"undefined\\",
+        \\"false\\",
+        \\"true\\"
+      ],
+      \\"query\\": [
+        \\"undefined\\",
+        \\"false\\",
+        \\"true\\"
+      ],
+      \\"hash\\": [
+        \\"undefined\\",
+        \\"false\\",
+        \\"true\\"
+      ],
+      \\"sanitize\\": [
+        \\"undefined\\",
+        \\"(url: URL) => string | URL\\"
+      ]
+    }
+  ],
   \\"save_referrer\\": [
     \\"false\\",
     \\"true\\"

@@ -29,7 +29,7 @@ import type { RemoteConfigResult } from './types/remote-config'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 import type { AutocaptureConfig, AutocaptureConfigSource } from './autocapture-config'
 
-import { isArray, isBoolean, isFunction, isNull, stripUrlHash } from '@posthog/core'
+import { isArray, isBoolean, isFunction, isNull, isUndefined, stripUrlHash } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { convertToURL } from './utils/convert-to-url'
 import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
@@ -124,12 +124,22 @@ export function getDefaultProperties(eventType: string): Properties {
     }
 }
 
+function getCapturedHref(
+    href: string,
+    disableCaptureUrlHashes: boolean,
+    sanitizeUrl?: (url: string) => string | undefined
+): string | undefined {
+    if (sanitizeUrl) return sanitizeUrl(href)
+    return disableCaptureUrlHashes ? stripUrlHash(href) : href
+}
+
 export function getPropertiesFromElement(
     elem: Element,
     maskAllAttributes: boolean,
     maskText: boolean,
     elementAttributeIgnorelist: string[] | undefined,
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    sanitizeUrl?: (url: string) => string | undefined
 ): Properties {
     const tag_name = elem.tagName.toLowerCase()
     const props: Properties = {
@@ -164,10 +174,11 @@ export function getPropertiesFromElement(
                 // so we strip them.
                 value = splitClassString(value).join(' ')
             }
-            props['attr__' + attr.name] = limitText(
-                1024,
-                attr.name === 'href' && disableCaptureUrlHashes ? stripUrlHash(value) : value
-            )
+            const isLink = attr.name === 'href' || attr.name === 'xlink:href'
+            const recordedValue = isLink
+                ? getCapturedHref(value, attr.name === 'href' && disableCaptureUrlHashes, sanitizeUrl)
+                : value
+            if (!isUndefined(recordedValue)) props['attr__' + attr.name] = limitText(1024, recordedValue)
         }
     })
 
@@ -195,6 +206,7 @@ export function autocapturePropertiesForElement(
         elementAttributeIgnoreList,
         elementsChainAsString,
         disableCaptureUrlHashes,
+        sanitizeUrl,
     }: {
         e: Event
         maskAllElementAttributes: boolean
@@ -202,6 +214,7 @@ export function autocapturePropertiesForElement(
         elementAttributeIgnoreList?: string[] | undefined
         elementsChainAsString: boolean
         disableCaptureUrlHashes: boolean
+        sanitizeUrl?: ((url: string) => string | undefined) | undefined
     }
 ): { props: Properties; explicitNoCapture?: boolean; target?: Element } {
     if (!isElementNode(target)) {
@@ -265,9 +278,7 @@ export function autocapturePropertiesForElement(
             const hrefAttr = el.getAttribute('href')
             href =
                 shouldCaptureEl && !!hrefAttr && shouldCaptureValue(hrefAttr)
-                    ? disableCaptureUrlHashes
-                        ? stripUrlHash(hrefAttr)
-                        : hrefAttr
+                    ? getCapturedHref(hrefAttr, disableCaptureUrlHashes, sanitizeUrl) || false
                     : false
         }
 
@@ -283,7 +294,8 @@ export function autocapturePropertiesForElement(
                 maskAllElementAttributes,
                 maskAllText,
                 elementAttributeIgnoreList,
-                disableCaptureUrlHashes
+                disableCaptureUrlHashes,
+                sanitizeUrl
             )
         )
 
@@ -767,6 +779,7 @@ export class Autocapture implements Extension {
                 elementAttributeIgnoreList: config.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
                 disableCaptureUrlHashes: config.disableCaptureUrlHashes,
+                sanitizeUrl: config.sanitizeUrl,
             })
 
             if (explicitNoCapture) {

@@ -71,6 +71,27 @@ Value capture is a separate field-level opt-in: fields marked `data-ph-capture-v
 
 Opted-in values are not automatically redacted. Use the synchronous `before_send` hook to edit or remove `$input_value`, or drop the event. Password, hidden, file, checkbox, and action inputs are excluded from value enrichment. Existing sensitive-field exclusions, no-capture markers, and `mask_all_text` remain protected.
 
+## URL sanitization
+
+`url_sanitization` controls current event URLs and their host/pathname, referrers (including initial/session referrers), previous-pageview pathnames, autocapture links, and Web Vitals and log page URLs. Referrers are sanitized before they enter browser persistence.
+
+```js
+posthog.init('phc_TOKEN', {
+    url_sanitization: {
+        query: false,
+        hash: false,
+        sanitize: (url) => {
+            if (url.pathname.startsWith('/reset/')) url.pathname = '/reset/'
+            return url
+        },
+    },
+})
+```
+
+Path and query inclusion default to `true`. Omitted `hash` inherits `disable_capture_url_hashes`; explicit component settings take precedence. The optional callback receives a fresh `URL` and returns an absolute URL string or `URL`. It runs before component filtering and existing personal-data query masking. A throw or invalid return omits the URL and its derived host/pathname without throwing into application code.
+
+Configure this in `init()` to cover the first referrer persistence writes. Changes affect future writes; previously persisted values are retained.
+
 ## Surveys and capture
 
 Built-in surveys stay hidden while event capture is disabled, including before consent when `opt_out_capturing_by_default` is enabled. This applies to automatic display, `displaySurvey()` (including `ignoreConditions`), and `renderSurvey()`. Delayed surveys recheck capture before appearing.

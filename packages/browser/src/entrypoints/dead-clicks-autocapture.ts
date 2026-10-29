@@ -1,3 +1,4 @@
+import { getRecordedUrl } from '../utils/url-sanitization'
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
@@ -851,6 +852,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                     // TRICKY: it appears that we were moving to elementsChainAsString, but the UI still depends on elements, so :shrug:
                     elementsChainAsString: false,
                     disableCaptureUrlHashes: this.instance.config.disable_capture_url_hashes,
+                    sanitizeUrl: this.instance.config.url_sanitization
+                        ? (url) => getRecordedUrl(url, this.instance.config)
+                        : undefined,
                 }).props,
                 [`${prefix}_scroll_delay_ms`]: click.scrollDelayMs,
                 [`${prefix}_mutation_delay_ms`]: click.mutationDelayMs,
