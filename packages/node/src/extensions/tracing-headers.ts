@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http'
-import { cookieStoreFromHeader, getPostHogCookieName, isOptedOut } from '@posthog/core'
+import { cookieStoreFromHeader, getConsentCookieName, getPostHogCookieName, isNoLike, isYesLike } from '@posthog/core'
 
 const TRACING_HEADER_MAX_LENGTH = 1000
 // posthog-js defaults. The browser starts a new session after this much inactivity or session length.
@@ -106,9 +106,11 @@ export function getPostHogCookieValues(
     if (typeof cookieHeader !== 'string') {
       return {}
     }
-    const cookies = cookieStoreFromHeader(cookieHeader)
+    // The adapter keeps the last duplicate, while the browser reads the first.
+    const cookies = cookieStoreFromHeader(cookieHeader.split(';').reverse().join(';'))
     const raw = cookies.get(getPostHogCookieName(apiKey))?.value
-    if (!raw || isOptedOut(cookies, apiKey, { opt_out_capturing_by_default: optOutCapturingByDefault })) {
+    const consent = cookies.get(getConsentCookieName(apiKey))?.value ?? ''
+    if (!raw || isNoLike(consent) || (optOutCapturingByDefault && !isYesLike(consent))) {
       return {}
     }
     const data = JSON.parse(raw)

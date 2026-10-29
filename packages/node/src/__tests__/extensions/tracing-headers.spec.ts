@@ -177,6 +177,35 @@ describe('tracing headers', () => {
       })
     })
 
+    it.each([
+      ['', true, false],
+      ['unexpected', true, false],
+      ['', false, true],
+      ['unexpected', false, true],
+      ['yes', true, true],
+      ['no', false, false],
+    ])('applies consent %j with opt-out default %s', (consent, optOutCapturingByDefault, linked) => {
+      const cookie = `${cookieFor({ distinct_id: 'user', $sesid: [now, 'session', now] })}; __ph_opt_in_out_token=${consent}`
+      expect(getPostHogCookieValues(cookie, 'token', now, 30 * minute, optOutCapturingByDefault)).toEqual(
+        linked ? { distinctId: 'user', sessionId: 'session' } : {}
+      )
+    })
+
+    it.each([
+      ['0', '1', false, false],
+      ['1', '0', true, true],
+      ['', '1', true, false],
+      ['unexpected', '1', true, false],
+    ])(
+      'uses the first duplicate consent value %j before %j with opt-out default %s',
+      (first, second, optOutCapturingByDefault, linked) => {
+        const cookie = `${cookieFor({ distinct_id: 'user', $sesid: [now, 'session', now] })}; __ph_opt_in_out_token=${first}; __ph_opt_in_out_token=${second}`
+        expect(getPostHogCookieValues(cookie, 'token', now, 30 * minute, optOutCapturingByDefault)).toEqual(
+          linked ? { distinctId: 'user', sessionId: 'session' } : {}
+        )
+      }
+    )
+
     it('keeps a session idle past 30 minutes when the idle timeout is longer', () => {
       const cookie = cookieFor({ distinct_id: 'anon', $sesid: [now - 45 * minute, 'session', now - 45 * minute] })
       expect(getPostHogCookieValues(cookie, 'token', now, 60 * minute)).toEqual({
