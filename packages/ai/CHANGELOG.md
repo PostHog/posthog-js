@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.17.2
+
+### Patch Changes
+
+- [#5439](https://github.com/PostHog/posthog-js/pull/5439) [`a22cbec`](https://github.com/PostHog/posthog-js/commit/a22cbecd47f5a727747e1113c5c0be992cbeda1d) Thanks [@posthog](https://github.com/apps/posthog)! - Fix `@posthog/ai/otel` so that it loads with OpenTelemetry JS 3.x, which has no `@opentelemetry/sdk-trace-base`.
+  (2026-10-29)
+
 ## 8.17.1
 
 ### Patch Changes
