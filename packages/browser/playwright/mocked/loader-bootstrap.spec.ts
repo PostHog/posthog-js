@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import { version } from '../../package.json'
 
 type CapturedEvent = { event: string; properties: Record<string, unknown> }
+const majorVersion = version.split('.')[0]
 
 for (const assetHost of ['https://us-assets.i.posthog.com', 'https://eu-assets.i.posthog.com', '/ingest']) {
     for (const fail of [false, true]) {
@@ -12,6 +14,9 @@ for (const assetHost of ['https://us-assets.i.posthog.com', 'https://eu-assets.i
             const events: CapturedEvent[] = []
             const errors: string[] = []
             const downloads: string[] = []
+            const bootstrapSource = readFileSync(path.resolve(__dirname, '../../dist/loader-bootstrap.js'), 'utf8')
+            const coreSource = readFileSync(path.resolve(__dirname, '../../dist/array.js'), 'utf8')
+            let revision = 1
             let release = () => {}
             const held = new Promise<void>((resolve) => {
                 release = resolve
@@ -48,7 +53,7 @@ for (const assetHost of ['https://us-assets.i.posthog.com', 'https://eu-assets.i
                     return route.fulfill({ contentType: 'text/html', body: html })
                 }
                 if (url.pathname === '/bootstrap.js') {
-                    return route.fulfill({ path: path.resolve(__dirname, '../../dist/loader-bootstrap.js') })
+                    return route.fulfill({ contentType: 'application/javascript', body: bootstrapSource })
                 }
                 if (url.pathname === '/init.js') {
                     return route.fulfill({
@@ -81,7 +86,11 @@ for (const assetHost of ['https://us-assets.i.posthog.com', 'https://eu-assets.i
                     downloads.push(request.url())
                     await held
                     if (fail) return route.fulfill({ status: 404, body: '', headers })
-                    return route.fulfill({ path: path.resolve(__dirname, '../../dist/array.js'), headers })
+                    return route.fulfill({
+                        contentType: 'application/javascript',
+                        body: `${coreSource}\nwindow.__bootstrapCoreRevision = ${revision};`,
+                        headers,
+                    })
                 }
                 if (url.pathname.endsWith('/e/') && request.method() === 'POST') {
                     const payload = request.postDataJSON()
@@ -120,7 +129,22 @@ for (const assetHost of ['https://us-assets.i.posthog.com', 'https://eu-assets.i
                     expect(events.find(({ event }) => event === 'named event')?.properties.token).toBe('phc_secondary')
                 }
                 const resolvedHost = assetHost === '/ingest' ? 'https://customer.example/ingest' : assetHost
-                expect(downloads).toEqual([`${resolvedHost}/static/${version}/array.js`])
+                const aliasURL = `${resolvedHost}/static/${majorVersion}/array.js`
+                expect(downloads).toEqual([aliasURL])
+                if (!fail) {
+                    expect(await page.evaluate(() => (window as any).__bootstrapCoreRevision)).toBe(1)
+                    revision = 2
+                    events.length = 0
+                    await page.reload({ waitUntil: 'domcontentloaded' })
+                    await page.waitForFunction(
+                        () => (window as any).__bootstrapCoreRevision === 2 && (window as any).posthog.__loaded
+                    )
+                    for (const event of ['early event', 'named event']) {
+                        await expect.poll(() => events.filter((captured) => captured.event === event)).toHaveLength(1)
+                    }
+                    expect(events.filter(({ event }) => event === 'private event')).toEqual([])
+                    expect(downloads).toEqual([aliasURL, aliasURL])
+                }
                 expect(errors).toEqual([])
             } finally {
                 release()

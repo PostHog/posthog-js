@@ -1,9 +1,9 @@
 import { isFunction } from '@posthog/core'
 import { document } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
+import { version } from '../../package.json'
 import { assignableWindow } from '../utils/globals'
 import { createPostHogStub } from '../utils/loader-stub'
-import { getVersionedScriptURL } from '../utils/loader-script'
 
 const logger = createLogger('[Loader bootstrap]')
 
@@ -38,9 +38,9 @@ function bootstrap(): void {
     }
 
     assignableWindow.posthog = createPostHogStub()
-    url.pathname = url.pathname.replace(/\/+$/, '') + '/static/'
+    url.pathname = url.pathname.replace(/\/+$/, '') + `/static/${version.split('.')[0]}/array.js`
     const core = document.createElement('script')
-    core.src = getVersionedScriptURL(url)
+    core.src = url.href
     core.async = true
     core.crossOrigin = 'anonymous'
     core.nonce = script.nonce

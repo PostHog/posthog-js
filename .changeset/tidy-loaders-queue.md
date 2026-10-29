@@ -2,4 +2,4 @@
 'posthog-js': minor
 ---
 
-Add a local bootstrap that preserves early SDK calls while loading hosted analytics without blocking application startup.
+Add a local bootstrap that queues early SDK calls and loads auto-updating SDK releases asynchronously without blocking application startup.
