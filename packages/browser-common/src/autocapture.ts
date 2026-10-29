@@ -124,6 +124,15 @@ export function getDefaultProperties(eventType: string): Properties {
     }
 }
 
+function getCapturedHref(
+    href: string,
+    disableCaptureUrlHashes: boolean,
+    sanitizeUrl?: (url: string) => string | undefined
+): string | undefined {
+    if (sanitizeUrl) return sanitizeUrl(href)
+    return disableCaptureUrlHashes ? stripUrlHash(href) : href
+}
+
 export function getPropertiesFromElement(
     elem: Element,
     maskAllAttributes: boolean,
@@ -166,12 +175,9 @@ export function getPropertiesFromElement(
                 value = splitClassString(value).join(' ')
             }
             const isLink = attr.name === 'href' || attr.name === 'xlink:href'
-            const recordedValue =
-                isLink && sanitizeUrl
-                    ? sanitizeUrl(value)
-                    : attr.name === 'href' && disableCaptureUrlHashes
-                      ? stripUrlHash(value)
-                      : value
+            const recordedValue = isLink
+                ? getCapturedHref(value, attr.name === 'href' && disableCaptureUrlHashes, sanitizeUrl)
+                : value
             if (!isUndefined(recordedValue)) props['attr__' + attr.name] = limitText(1024, recordedValue)
         }
     })
@@ -272,11 +278,7 @@ export function autocapturePropertiesForElement(
             const hrefAttr = el.getAttribute('href')
             href =
                 shouldCaptureEl && !!hrefAttr && shouldCaptureValue(hrefAttr)
-                    ? (sanitizeUrl
-                          ? sanitizeUrl(hrefAttr)
-                          : disableCaptureUrlHashes
-                            ? stripUrlHash(hrefAttr)
-                            : hrefAttr) || false
+                    ? getCapturedHref(hrefAttr, disableCaptureUrlHashes, sanitizeUrl) || false
                     : false
         }
 

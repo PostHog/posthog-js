@@ -1,12 +1,36 @@
 /* oxlint-disable compat/compat -- Tests run in Node with native URL and Promise support. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getRecordedUrl } from '../../src/utils/url-sanitization'
+import * as globals from '../../src/utils/globals'
 import type { UrlSanitizationOptions } from '@posthog/types'
 
 const url = 'https://example.com/private?token=secret&gclid=ad#section'
 
 describe('recorded URL policy', () => {
-    afterEach(() => vi.unstubAllGlobals())
+    afterEach(() => {
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    it('resolves relative URLs against the document base, falling back to the page URL', () => {
+        const page = 'https://example.com/pages/start'
+        const document = vi.spyOn(globals, 'document', 'get')
+        vi.spyOn(globals, 'location', 'get').mockReturnValue(new URL(page) as unknown as Location)
+        document.mockReturnValue({ baseURI: 'https://cdn.example.com/assets/' } as Document)
+        expect(getRecordedUrl('next?token=secret', { url_sanitization: { query: false } })).toBe(
+            'https://cdn.example.com/assets/next'
+        )
+        document.mockReturnValue(undefined)
+        expect(getRecordedUrl('next?token=secret', { url_sanitization: { query: false } })).toBe(
+            'https://example.com/pages/next'
+        )
+    })
+
+    it.each([undefined, ''])('preserves an empty URL (%s) without calling the sanitizer', (url) => {
+        const sanitize = vi.fn()
+        expect(getRecordedUrl(url, { url_sanitization: { sanitize } })).toBe(url)
+        expect(sanitize).not.toHaveBeenCalled()
+    })
 
     it('preserves legacy URL bytes and producer-specific masking', () => {
         const unusual = 'https://EXAMPLE.com:443/path?x=%2b#part'
