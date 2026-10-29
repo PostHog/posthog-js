@@ -1,4 +1,5 @@
-import { addExceptionAutocaptureListeners } from './autocapture'
+import { claimExplicitCapture, startExceptionAutocapture, waitForPendingRejections } from './autocapture'
+import type { AutocaptureClient } from './autocapture'
 import { PostHogBackendClient } from '@/client'
 import type { ContextData } from '../context/types'
 import { snapshotEventContext } from '../context/event-context'
@@ -15,11 +16,15 @@ export default class ErrorTracking {
   private _exceptionAutocaptureEnabled: boolean
   private _rateLimiter: BucketedRateLimiter<string>
   private _logger: Logger
+  private _autocaptureClient?: AutocaptureClient
+  private _stopAutocapture?: () => void
+  private _waitUntil?: (promise: Promise<unknown>) => void
 
   constructor(client: PostHogBackendClient, options: PostHogOptions, _logger: Logger) {
     this.client = client
     this._exceptionAutocaptureEnabled = options.enableExceptionAutocapture || false
     this._logger = _logger
+    this._waitUntil = options.waitUntil
 
     // Burst protection is scoped PER EXCEPTION TYPE: the rate limiter is keyed by exception type
     // (see `consumeRateLimit(exceptionType)` below), so each distinct type gets its own fresh
@@ -76,13 +81,55 @@ export default class ErrorTracking {
     })
   }
 
+  // Clients with the same project token and host send to the same project.
+  private get destinationKey(): string {
+    return `${this.client.apiKey}@${this.client.host}`
+  }
+
   private startAutocaptureIfEnabled(): void {
     if (this.isEnabled()) {
-      addExceptionAutocaptureListeners(this.onException.bind(this), this.onFatalError.bind(this))
+      this._autocaptureClient = {
+        key: this.destinationKey,
+        capture: (exception, hint, context) => this.onException(exception, hint, context),
+        getContext: () => this.client.getContext(),
+        flush: () => this.client.flush(),
+        shutdown: () => this.client.shutdown(SHUTDOWN_TIMEOUT),
+        keepAlive: this._waitUntil ? (promise) => this.keepAlive(promise) : undefined,
+      }
+      this._stopAutocapture = startExceptionAutocapture(this._autocaptureClient)
     }
   }
 
-  private onException(exception: unknown, hint: CoreErrorTracking.EventHint): void {
+  /** Waits until the unhandled rejections in their grace period are captured or handled, so that a flush sends them. */
+  async waitForPendingRejections(): Promise<void> {
+    if (this._autocaptureClient) {
+      await waitForPendingRejections(this._autocaptureClient)
+    }
+  }
+
+  private keepAlive(promise: Promise<unknown>): void {
+    try {
+      this._waitUntil?.(promise.catch(() => undefined))
+    } catch {
+      // waitUntil may throw outside a request context.
+    }
+  }
+
+  /**
+   * Whether captureException should capture this error. False when exception autocapture already sent the same error
+   * object to this project, for example when a framework passes an error from its own process listener to an error
+   * hook that calls captureException.
+   */
+  claimExplicitCapture(error: unknown): boolean {
+    return claimExplicitCapture(error, this.destinationKey)
+  }
+
+  // context: the request context when the exception happened, which a capture made later no longer runs in.
+  private onException(
+    exception: unknown,
+    hint: CoreErrorTracking.EventHint,
+    context: ContextData | undefined = this.client.getContext()
+  ): void {
     this.client.addPendingPromise(
       (async () => {
         if (!ErrorTracking.isPreviouslyCapturedError(exception)) {
@@ -92,7 +139,7 @@ export default class ErrorTracking {
             hint,
             undefined,
             undefined,
-            this.client.getContext()
+            context
           )
           const exceptionProperties = eventMessage.properties
           const exceptionType = exceptionProperties?.$exception_list[0]?.type ?? 'Exception'
@@ -109,17 +156,13 @@ export default class ErrorTracking {
     )
   }
 
-  private async onFatalError(exception: Error): Promise<void> {
-    console.error(exception)
-    await this.client.shutdown(SHUTDOWN_TIMEOUT)
-    globalThis.process.exit(1)
-  }
-
   isEnabled(): boolean {
     return !this.client.isDisabled && this._exceptionAutocaptureEnabled
   }
 
   shutdown(): void {
     this._rateLimiter.stop()
+    this._stopAutocapture?.()
+    this._stopAutocapture = undefined
   }
 }

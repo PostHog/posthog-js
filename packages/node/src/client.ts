@@ -350,6 +350,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   override async flush(): Promise<void> {
+    // A rejection in its grace period would miss this flush, which can be the last before a serverless runtime freezes
+    // the instance. Waiting for it, at most the grace period, also keeps out the ones the app handles in that time.
+    await this.errorTracking.waitForPendingRejections()
     return this._flushKeepingRuntimeAlive(false)
   }
 
@@ -3195,7 +3198,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     uuid?: EventMessage['uuid'],
     flags?: FeatureFlagEvaluations
   ): void {
-    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+    if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
         ErrorTracking.buildEventMessage(
@@ -3252,7 +3255,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     additionalProperties?: Record<string | number, any>,
     flags?: FeatureFlagEvaluations
   ): Promise<void> {
-    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+    if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       return this.addPendingPromise(
         ErrorTracking.buildEventMessage(
