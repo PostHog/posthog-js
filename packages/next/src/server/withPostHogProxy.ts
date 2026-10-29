@@ -1,29 +1,36 @@
 import { isFunction } from '@posthog/core'
+import type { NextFetchEvent, NextRequest } from 'next/server.js'
 import { isNextControlFlowError } from '../shared/identity.js'
-import { markErrorAsCaptured } from './captureRequestError.js'
+import { claimProxyError, settleProxyError } from './captureRequestError.js'
 import type { NextRequestErrorContext, NextRequestErrorRequest, OnRequestErrorOptions } from './onRequestError.types.js'
 
-/** The arguments Next.js passes to a proxy (middleware) function: the request, then for example the fetch event. */
-export type NextProxyArgs = [request: Request, ...rest: unknown[]]
+/** A Next.js `proxy` (or `middleware`) function. */
+export type NextProxyHandler<TResult> = (request: NextRequest, event: NextFetchEvent) => TResult
 
-type CaptureRequestError = (
+/** Sends a request error to PostHog and resolves to whether it reached posthog-node. */
+type SendRequestError = (
     error: unknown,
     request: NextRequestErrorRequest,
     context: NextRequestErrorContext,
-    options?: OnRequestErrorOptions
-) => Promise<void>
+    options: OnRequestErrorOptions
+) => Promise<boolean>
 
-export function wrapProxy<TArgs extends NextProxyArgs, TResult>(
-    proxy: (...args: TArgs) => TResult,
+// How long a failing proxy waits for its exception to reach PostHog before Next.js handles the error. posthog-node
+// can retry for much longer when PostHog is slow or unreachable; the capture carries on after this, kept alive
+// with event.waitUntil where the platform supports it.
+const PROXY_CAPTURE_TIMEOUT_MS = 2000
+
+export function wrapProxy<TResult>(
+    proxy: NextProxyHandler<TResult>,
     options: OnRequestErrorOptions,
-    captureRequestError: CaptureRequestError
-): (...args: TArgs) => Promise<Awaited<TResult>> {
-    return async (...args: TArgs): Promise<Awaited<TResult>> => {
+    sendRequestError: SendRequestError
+): NextProxyHandler<Promise<Awaited<TResult>>> {
+    return async (request, event): Promise<Awaited<TResult>> => {
         try {
-            return await proxy(...args)
+            return await proxy(request, event)
         } catch (error) {
             if (!isNextControlFlowError(error)) {
-                await captureProxyError(error, args[0], options, captureRequestError)
+                await captureProxyError(error, request, event, options, sendRequestError)
             }
             throw error
         }
@@ -32,22 +39,31 @@ export function wrapProxy<TArgs extends NextProxyArgs, TResult>(
 
 async function captureProxyError(
     error: unknown,
-    request: Request,
+    request: Request | undefined,
+    event: NextFetchEvent | undefined,
     options: OnRequestErrorOptions,
-    captureRequestError: CaptureRequestError
+    sendRequestError: SendRequestError
 ): Promise<void> {
-    try {
-        await captureRequestError(
-            error,
-            toRequestErrorRequest(request),
-            { routePath: '/proxy', routeType: 'proxy' },
-            options
-        )
-    } catch {
-        // Capture failures are already reported; the proxy error must still reach Next.js.
+    // Next.js 15 and earlier, and Next.js 16 for edge middleware.ts, also report the error to onRequestError once
+    // it is rethrown. The claim makes onRequestError skip it, even while this capture is still running.
+    if (!claimProxyError(error)) {
+        return
     }
-    // Next.js 15 and earlier also report edge middleware errors to onRequestError, which skips marked errors.
-    markErrorAsCaptured(error)
+    const capture = sendRequestError(error, toRequestErrorRequest(request), getProxyErrorContext(event), options).then(
+        (captured) => settleProxyError(error, captured),
+        // Not expected, as sending reports its own failures; the proxy error must still reach Next.js.
+        () => settleProxyError(error, false)
+    )
+    keepAlive(event, capture)
+    await waitAtMost(capture, PROXY_CAPTURE_TIMEOUT_MS)
+}
+
+// Next.js labels middleware errors `middleware` before version 16 and `proxy` from 16 on. The wrapper cannot tell
+// the version, so it names the file it wraps, from the event's source page (`/middleware`, `/src/proxy`, ...).
+// That matches Next.js for proxy.ts, and for middleware.ts before 16.
+function getProxyErrorContext(event: NextFetchEvent | undefined): NextRequestErrorContext {
+    const routeType = event?.sourcePage?.endsWith('/middleware') ? 'middleware' : 'proxy'
+    return { routerKind: 'Pages Router', routePath: `/${routeType}`, routeType }
 }
 
 // Matches the request shape Next.js passes to onRequestError for middleware errors.
@@ -77,5 +93,32 @@ function getPathWithSearch(url: string | undefined): string | undefined {
         return `${pathname}${search}`
     } catch {
         return undefined
+    }
+}
+
+function keepAlive(event: NextFetchEvent | undefined, promise: Promise<unknown>): void {
+    if (!event || !isFunction(event.waitUntil)) {
+        return
+    }
+    try {
+        event.waitUntil(promise)
+    } catch {
+        // waitUntil can throw outside a request context.
+    }
+}
+
+async function waitAtMost(promise: Promise<unknown>, timeoutMs: number): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+        // oxlint-disable-next-line compat/compat
+        await Promise.race([
+            promise,
+            // oxlint-disable-next-line compat/compat
+            new Promise<void>((resolve) => {
+                timer = setTimeout(resolve, timeoutMs)
+            }),
+        ])
+    } finally {
+        clearTimeout(timer)
     }
 }

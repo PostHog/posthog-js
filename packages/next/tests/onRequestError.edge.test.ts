@@ -10,6 +10,8 @@ vi.mock('posthog-node', () => ({
     PostHog: mockPostHog,
 }))
 
+import { NextRequest } from 'next/server'
+import type { NextFetchEvent } from 'next/server'
 import { captureRequestError, createOnRequestError, onRequestError, withPostHogProxy } from '../src/server.edge'
 
 describe('Next.js onRequestError edge runtime', () => {
@@ -116,14 +118,15 @@ describe('Next.js onRequestError edge runtime', () => {
 
     it('captures edge middleware errors once with withPostHogProxy and rethrows them', async () => {
         const error = new Error('edge middleware failed')
-        const middleware = withPostHogProxy((_request: Request) => {
+        const middleware = withPostHogProxy(() => {
             throw error
         })
-        const request = new Request('https://edge.example.com/account?session=secret', {
+        const request = new NextRequest('https://edge.example.com/account?session=secret', {
             headers: { host: 'edge.example.com' },
         })
+        const event = { sourcePage: '/middleware', waitUntil: vi.fn() } as unknown as NextFetchEvent
 
-        await expect(middleware(request)).rejects.toBe(error)
+        await expect(middleware(request, event)).rejects.toBe(error)
         // Next.js 15 and earlier report edge middleware errors to onRequestError after the middleware throws.
         await onRequestError(
             error,
@@ -138,8 +141,36 @@ describe('Next.js onRequestError edge runtime', () => {
             expect.objectContaining({
                 $current_url: 'https://edge.example.com/account',
                 $request_path: '/account',
-                nextjs_route_type: 'proxy',
+                nextjs_router_kind: 'Pages Router',
+                nextjs_route_path: '/middleware',
+                nextjs_route_type: 'middleware',
             })
+        )
+        expect((error as Error & Record<string, unknown>).__posthog_previously_captured_error).toBe(true)
+    })
+
+    it('leaves an edge middleware error to onRequestError when the wrapper skips it', async () => {
+        const error = new Error('edge middleware failed')
+        const middleware = withPostHogProxy(
+            () => {
+                throw error
+            },
+            { disabled: true }
+        )
+        const event = { sourcePage: '/middleware', waitUntil: vi.fn() } as unknown as NextFetchEvent
+
+        await expect(middleware(new NextRequest('https://edge.example.com/account'), event)).rejects.toBe(error)
+        await onRequestError(
+            error,
+            { path: '/account', method: 'GET', headers: {} },
+            { routerKind: 'Pages Router', routePath: '/middleware', routeType: 'middleware' }
+        )
+
+        expect(mockCaptureExceptionImmediate).toHaveBeenCalledTimes(1)
+        expect(mockCaptureExceptionImmediate).toHaveBeenCalledWith(
+            error,
+            undefined,
+            expect.objectContaining({ nextjs_route_type: 'middleware' })
         )
     })
 })

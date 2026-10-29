@@ -1,9 +1,9 @@
 import 'server-only'
 
-import { captureNextRequestError } from './captureRequestError.js'
+import { captureNextRequestError, sendNextRequestError } from './captureRequestError.js'
 import { getOrCreateNodeClient } from './clientCache.node.js'
 import { wrapProxy } from './withPostHogProxy.js'
-import type { NextProxyArgs } from './withPostHogProxy.js'
+import type { NextProxyHandler } from './withPostHogProxy.js'
 import type {
     NextOnRequestError,
     NextRequestErrorContext,
@@ -58,8 +58,11 @@ export const onRequestError: NextOnRequestError = captureRequestError
 
 /**
  * Wraps a Next.js `proxy` (or `middleware`) function to capture the errors it throws with
- * `posthog-node`, then rethrows them. Next.js 16 does not report proxy errors to
- * `onRequestError`. Errors it captures are marked, so `onRequestError` skips them.
+ * `posthog-node`, then rethrows them. Next.js 16 does not report `proxy.ts` errors to
+ * `onRequestError`, and Next.js 15 does not report Node.js middleware errors. Where Next.js
+ * does report the error as well, `onRequestError` skips it, so it is captured once.
+ *
+ * A failing request waits up to 2 seconds for the capture before Next.js handles the error.
  *
  * @example
  * ```ts
@@ -71,11 +74,23 @@ export const onRequestError: NextOnRequestError = captureRequestError
  * })
  * ```
  */
-export function withPostHogProxy<TArgs extends NextProxyArgs, TResult>(
-    proxy: (...args: TArgs) => TResult,
+export function withPostHogProxy<TResult>(
+    proxy: NextProxyHandler<TResult>,
     options: OnRequestErrorOptions = {}
-): (...args: TArgs) => Promise<Awaited<TResult>> {
-    return wrapProxy(proxy, options, captureRequestError)
+): NextProxyHandler<Promise<Awaited<TResult>>> {
+    return wrapProxy(proxy, options, sendProxyError)
+}
+
+async function sendProxyError(
+    error: unknown,
+    request: NextRequestErrorRequest,
+    context: NextRequestErrorContext,
+    options: OnRequestErrorOptions
+): Promise<boolean> {
+    if (!isNodeRuntime()) {
+        return false
+    }
+    return sendNextRequestError(error, request, context, options, getOrCreateNodeClient)
 }
 
 function isNodeRuntime(): boolean {
