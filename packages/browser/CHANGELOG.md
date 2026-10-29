@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.442.1
+
+### Patch Changes
+
+- [#5341](https://github.com/PostHog/posthog-js/pull/5341) [`de6b06f`](https://github.com/PostHog/posthog-js/commit/de6b06f8a53faac5113ba979aa48472e6965a2b5) Thanks [@sebxt](https://github.com/sebxt)! - Keep the rest of the URL when masking personal data query params and a query value contains `?` or the hash contains `#`.
+  (2026-10-29)
+- Updated dependencies [[`de6b06f`](https://github.com/PostHog/posthog-js/commit/de6b06f8a53faac5113ba979aa48472e6965a2b5)]:
+  - @posthog/browser-common@0.10.2
+
 ## 1.442.0
 
 ### Minor Changes
