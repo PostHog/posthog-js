@@ -88,8 +88,9 @@ posthog.captureException(error, {
 })
 ```
 
-- The positional form logs one deprecation error per process. It will be removed in the next major version.
-- `level` sets `$exception_level`. The default is `'error'`, and an unknown value is ignored.
+- The positional form logs one deprecation error per method per process. It will be removed in the next major version.
+- Arguments after the options object are ignored, with one warning per process.
+- `level` sets `$exception_level`. It is read case-insensitively, and `critical`, `alert` and `emergency` mean `fatal`, `warn` means `warning`, `notice` means `info` and `trace` means `debug`, as in posthog-python. The default is `'error'`, and an unknown value is ignored.
 - Exception properties the SDK owns, such as `$exception_list` and `$exception_level`, are ignored in `properties`. Use `level` instead.
 
 ### `prepareEventMessage()`
@@ -235,7 +236,9 @@ For example, `register({ $set: { plan: 'free', source: 'web' } })` and a call wi
 These changes follow from this order:
 
 - A `$is_server`, `$geoip_disable` or feature flag property set on the event, in context or with `register()` now wins over the SDK's value. In 5.x the SDK overwrote some of them.
-- `before_send` now sees `$is_server`, `$geoip_disable`, feature flag properties, trace ids and `options`. In 5.x it ran before the SDK added them. To change an option in `before_send`, edit `options`.
+- `before_send` now sees `$is_server`, `$geoip_disable`, feature flag properties, trace ids and `options`. In 5.x it ran before the SDK added them. To change an option in `before_send`, edit `options`, which is always an object.
+- `before_send` gets its own copy of the event's plain objects and arrays. Changing a nested value no longer changes your objects or the `register()` and context values, as it could in 5.x. Class instances, such as `Date`, are not copied.
+- `$geoip_disable` and `$groups` are set before `before_send`, so to change them, edit the properties. Changing the message's `disableGeoip` or `groups` field has no effect.
 - A `before_send` hook that throws drops the event, as in 5.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing.
 - With `sendFeatureFlags`, the `/flags` request now runs before `before_send` and uses the event's own distinct id, even for an event the hook then drops. To avoid that request, call `evaluateFlags()` yourself and pass the snapshot as `flags`.
 - Context and `register()` properties and options now reach `identify`, `alias` and `groupIdentify` events, not only `capture`.
