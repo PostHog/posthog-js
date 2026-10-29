@@ -1,15 +1,9 @@
 import type { EmailError } from './errors'
 
-/**
- * Options for `posthog.emails.send()`.
- */
-export interface SendEmailOptions {
+/** What every send takes, whatever its form. */
+export interface SendEmailBase {
   /** One recipient email address. */
   to: string
-  /** The UUID of an email template made transactional in PostHog. */
-  templateId: string
-  /** Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`. */
-  templateData?: Record<string, unknown>
   /**
    * The recipient's distinct ID in your product. The email's events go to this person.
    * Without it, they go to a person whose distinct ID is the email address.
@@ -17,14 +11,59 @@ export interface SendEmailOptions {
   distinctId?: string
   /**
    * 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted
-   * queues nothing and returns the first send's result. Without it, the client makes a
-   * UUID that covers its own retries. Pass a key derived from what the email is for, such
-   * as `welcome:user_123`, to cover retries outside this call too.
+   * queues nothing and returns the first send's result. The same key with other options sends
+   * nothing and returns `invalid_idempotent_request`. Without it, the client makes a UUID that
+   * covers its own retries. Pass a key derived from what the email is for, such as
+   * `welcome:user_123`, to cover retries outside this call too.
    */
   idempotencyKey?: string
+  /**
+   * Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,
+   * bounced) as events of the recipient. Defaults to `true`. A project whose admin turned
+   * engagement capture off captures nothing, whatever the send asks.
+   */
+  captureEngagement?: boolean
   /** Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. */
   maxRetries?: number
 }
+
+/** A template made transactional in PostHog, sent by its ID. */
+export interface TemplateEmailForm {
+  /** The UUID of an email template made transactional in PostHog. */
+  templateId: string
+  /** Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`. */
+  templateData?: Record<string, unknown>
+}
+
+interface CodeEmailFields {
+  /**
+   * Names the email, such as `'password-reset'`, so its metrics, logs and status group under it
+   * in PostHog. Letters, digits, hyphens and underscores, at most 400.
+   */
+  templateKey: string
+  subject: string
+  /** A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender. */
+  from?: string
+  replyTo?: string | string[]
+}
+
+/**
+ * Email content your code rendered, such as React Email output, named by a key. PostHog sends it
+ * as is and never stores it. Needs `html`, `text` or both. PostHog derives a missing `text` from
+ * the `html`.
+ */
+export type CodeEmailForm = CodeEmailFields & ({ html: string; text?: string } | { html?: string; text: string })
+
+type Without<T> = { [K in keyof T]?: never }
+
+export type SendTemplateEmailOptions = SendEmailBase &
+  TemplateEmailForm &
+  Without<CodeEmailFields & { html: string; text: string }>
+
+export type SendCodeEmailOptions = SendEmailBase & CodeEmailForm & Without<TemplateEmailForm>
+
+/** Options for `posthog.emails.send()`: a template made in PostHog, or content from your code. */
+export type SendEmailOptions = SendTemplateEmailOptions | SendCodeEmailOptions
 
 /** A warning PostHog returned with a queued email. */
 export interface EmailWarning {
@@ -84,12 +123,12 @@ export interface EmailStatus {
 export type GetEmailResponse = { data: EmailStatus; error: null } | { data: null; error: EmailError }
 
 /**
- * The `posthog.emails` API: sends transactional email from PostHog email templates, and reads
- * the status of each email it sent.
+ * The `posthog.emails` API: sends transactional email from PostHog email templates or from
+ * content your code rendered, and reads the status of each email it sent.
  */
 export interface Emails {
   /**
-   * Queue one email from a transactional email template.
+   * Queue one email, from a transactional email template or from content your code rendered.
    *
    * Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the email,
    * not that it was delivered. Network errors, rate limits, an in-flight idempotency key and

@@ -9,13 +9,17 @@ import {
 
 import { EmailError } from './errors'
 import type {
+  CodeEmailForm,
   EmailStatus,
   EmailWarning,
   Emails,
   GetEmailResponse,
+  SendEmailBase,
   SendEmailOptions,
   SendEmailResponse,
   SendEmailResult,
+  SendTemplateEmailOptions,
+  TemplateEmailForm,
 } from './types'
 
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
@@ -32,6 +36,46 @@ const CLOUD_APP_HOSTS: Record<string, string> = {
 const MAX_RETRY_DELAY_MS = 30_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
+const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
+
+type EveryField<Form> = Record<keyof Form, true>
+type UncheckedSend = { [Field in keyof SendTemplateEmailOptions]?: unknown }
+
+interface SendForm {
+  name: 'templateId' | 'templateKey'
+  fields: ReadonlySet<string>
+  why: string
+  howToSend: string
+}
+
+const SHARED_FIELDS: EveryField<SendEmailBase> = {
+  to: true,
+  distinctId: true,
+  idempotencyKey: true,
+  captureEngagement: true,
+  maxRetries: true,
+}
+const TEMPLATE_FIELDS: EveryField<TemplateEmailForm> = { templateId: true, templateData: true }
+const CODE_FIELDS: EveryField<CodeEmailForm> = {
+  templateKey: true,
+  subject: true,
+  from: true,
+  replyTo: true,
+  html: true,
+  text: true,
+}
+const TEMPLATE_FORM: SendForm = {
+  name: 'templateId',
+  fields: fieldSet(SHARED_FIELDS, TEMPLATE_FIELDS),
+  why: 'A template made in PostHog sets its own sender, subject and content.',
+  howToSend: 'send a template made in PostHog with templateId',
+}
+const CODE_FORM: SendForm = {
+  name: 'templateKey',
+  fields: fieldSet(SHARED_FIELDS, CODE_FIELDS),
+  why: 'A send with templateKey takes its content from your code.',
+  howToSend: 'send content from your code with templateKey',
+}
 
 export const DEFAULT_EMAIL_REQUEST_TIMEOUT_MS = 15_000
 export const DEFAULT_EMAIL_REQUEST_MAX_RETRIES = 2
@@ -43,6 +87,7 @@ export interface EmailSenderConfig {
   appHost?: string
   requestTimeoutMs: number
   maxRetries: number
+  migratedFrom?: string
 }
 
 export interface EmailSenderHooks {
@@ -81,8 +126,8 @@ export class EmailSender implements Emails {
     this.hooks = hooks
   }
 
-  send(options: SendEmailOptions): Promise<SendEmailResponse> {
-    return this.track(this.sendUntracked(options))
+  send(options: SendEmailOptions, ...unexpected: unknown[]): Promise<SendEmailResponse> {
+    return this.track(this.sendUntracked(options, unexpected))
   }
 
   get(id: string): Promise<GetEmailResponse> {
@@ -105,8 +150,9 @@ export class EmailSender implements Emails {
     }
   }
 
-  private async sendUntracked(options: SendEmailOptions): Promise<SendEmailResponse> {
+  private async sendUntracked(options: SendEmailOptions, unexpected: unknown[]): Promise<SendEmailResponse> {
     try {
+      refuseSecondArgument(unexpected)
       const prepared = prepareSend(options, this.config.maxRetries)
       const { appHost, secretKey } = this.connect(
         'no email was sent',
@@ -185,6 +231,9 @@ export class EmailSender implements Emails {
     }
     if (this.hooks.userAgent) {
       headers['User-Agent'] = this.hooks.userAgent
+    }
+    if (this.config.migratedFrom) {
+      headers['X-PostHog-Migrated-From'] = this.config.migratedFrom
     }
     return headers
   }
@@ -274,21 +323,22 @@ export class EmailSender implements Emails {
   }
 }
 
+function refuseSecondArgument(unexpected: unknown[]): void {
+  if (unexpected.some((argument) => argument !== undefined)) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: 'send takes one options object, so no email was sent. Put idempotencyKey and every other option in it.',
+    })
+  }
+}
+
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
-  const fallback: Partial<SendEmailOptions> = {}
-  const { to, templateId, templateData, distinctId, idempotencyKey, maxRetries } = options ?? fallback
+  const send: UncheckedSend = options ?? {}
+  const { to, distinctId, idempotencyKey, captureEngagement, maxRetries } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
   }
-  if (typeof templateId !== 'string' || !UUID_PATTERN.test(templateId)) {
-    throw invalid('invalid_template_id', "templateId must be the template's UUID.", 'templateId')
-  }
-  if (
-    templateData !== undefined &&
-    (typeof templateData !== 'object' || templateData === null || Array.isArray(templateData))
-  ) {
-    throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
-  }
+  const content = contentOf(send)
   if (distinctId !== undefined && (typeof distinctId !== 'string' || !distinctId)) {
     throw invalid('invalid_distinct_id', 'distinctId must be a nonempty string.', 'distinctId')
   }
@@ -302,15 +352,11 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
       'idempotencyKey'
     )
   }
-  if (maxRetries !== undefined && !(Number.isInteger(maxRetries) && maxRetries >= 0)) {
+  if (maxRetries !== undefined && !isRetryCount(maxRetries)) {
     throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
   }
 
-  const payload: Record<string, unknown> = {
-    template: { id: templateId.toLowerCase() },
-    to,
-    message_data: templateData ?? {},
-  }
+  const payload: Record<string, unknown> = { ...content, to, capture_engagement: captureEngagement ?? true }
   if (distinctId !== undefined) {
     payload.identifiers = { distinct_id: distinctId }
   }
@@ -318,8 +364,91 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
     path: SEND_PATH,
     body: safeJsonStringify(payload),
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
-    maxRetries: maxRetries ?? defaultMaxRetries,
+    maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
+}
+
+function isRetryCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function contentOf(send: UncheckedSend): Record<string, unknown> {
+  if ((send.templateId === undefined) === (send.templateKey === undefined)) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: 'Send either templateId, or templateKey with subject and html or text.',
+    })
+  }
+  return send.templateKey === undefined ? templateContent(send) : codeContent(send)
+}
+
+function templateContent(send: UncheckedSend): Record<string, unknown> {
+  const { templateId, templateData } = send
+  if (typeof templateId !== 'string' || !UUID_PATTERN.test(templateId)) {
+    throw invalid('invalid_template_id', "templateId must be the template's UUID.", 'templateId')
+  }
+  if (
+    templateData !== undefined &&
+    (typeof templateData !== 'object' || templateData === null || Array.isArray(templateData))
+  ) {
+    throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
+  }
+  refuseFieldsOutside(send, TEMPLATE_FORM, CODE_FORM)
+  return { template: { id: templateId.toLowerCase() }, message_data: templateData ?? {} }
+}
+
+function codeContent(send: UncheckedSend): Record<string, unknown> {
+  const { templateKey, subject, html, text, from, replyTo } = send
+  if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
+    throw invalid(
+      'invalid_template_key',
+      'templateKey can only have letters, digits, hyphens (-) and underscores (_), at most 400.',
+      'templateKey'
+    )
+  }
+  refuseFieldsOutside(send, CODE_FORM, TEMPLATE_FORM)
+  if (typeof subject !== 'string') {
+    throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
+  }
+  if (html !== undefined && typeof html !== 'string') {
+    throw invalid('invalid_form', 'html must be a string.', 'html')
+  }
+  if (text !== undefined && typeof text !== 'string') {
+    throw invalid('invalid_form', 'text must be a string.', 'text')
+  }
+  if (html === undefined && text === undefined) {
+    throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
+  }
+  return {
+    template_key: templateKey,
+    subject,
+    ...(html !== undefined && { html }),
+    ...(text !== undefined && { text }),
+    ...(from !== undefined && { from }),
+    ...(replyTo !== undefined && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
+  }
+}
+
+function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
+  const field = Object.entries(send).find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
+  if (field === undefined) {
+    return
+  }
+  const message = `A send with ${form.name} doesn't take ${field}, so no email was sent.`
+  if (!otherForm.fields.has(field)) {
+    throw new EmailError({ code: 'invalid_form', message, field, fix: `Remove ${field} and send again.` })
+  }
+  throw new EmailError({
+    code: 'invalid_form',
+    message,
+    field,
+    why: form.why,
+    fix: `Remove ${field}, or ${otherForm.howToSend}.`,
+  })
+}
+
+function fieldSet(...groups: object[]): ReadonlySet<string> {
+  return new Set(groups.flatMap((group) => Object.keys(group)))
 }
 
 function invalid(code: string, message: string, field: string): EmailError {
