@@ -854,6 +854,20 @@ describe('PostHog Feature Flags v4', () => {
         }
       )
 
+      it('should stop sending reads made while opted out once a capture listener changes the identity', async () => {
+        posthog.optOut()
+        posthog.getFeatureFlag('feature-1')
+        posthog.getFeatureFlag('feature-2')
+        posthog.on('capture', () => posthog.identify('other-user'))
+        posthog.optIn()
+        await waitForPromises()
+
+        const flagCalledEvents = mocks.fetch.mock.calls
+          .flatMap((call) => parseBody(call)?.batch ?? [])
+          .filter((e: any) => e.event === '$feature_flag_called')
+        expect(flagCalledEvents).toHaveLength(1)
+      })
+
       describe('$feature_flag_has_experiment', () => {
         const mockFlagsWithMetadata = (metadata: Record<string, any>): void => {
           mocks.fetch.mockImplementation((url) => {

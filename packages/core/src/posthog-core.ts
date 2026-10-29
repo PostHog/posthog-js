@@ -162,7 +162,13 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     this.wrap(() => {
       const pending = this.flagCallsPendingOptIn
       this.flagCallsPendingOptIn = new Set()
-      pending.forEach((key) => this._getFeatureFlagResult(key, { sendEvent: true }))
+      const distinctId = this.getDistinctId()
+      pending.forEach((key) => {
+        // A capture listener can call identify() during this loop
+        if (this.getDistinctId() === distinctId) {
+          this._getFeatureFlagResult(key, { sendEvent: true })
+        }
+      })
     })
   }
 

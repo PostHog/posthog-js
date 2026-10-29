@@ -1029,11 +1029,11 @@ export class PostHogFeatureFlags implements Extension {
         ) {
             return
         }
-        const distinctId = this._client.distinctId
         this._sendingFlagCallsPendingCapture = true
         try {
             this._flagCallsPendingCapture.forEach((readBy, key) => {
-                if (readBy === distinctId) {
+                // Check the identity for each read, because a capture listener can call identify() during this loop.
+                if (readBy === this._client?.distinctId) {
                     // The read leaves the pending map once it is evaluated. A read that returns early, for example on
                     // an expired flag cache, stays pending for the next capture.
                     this.getFeatureFlagResult(key)
