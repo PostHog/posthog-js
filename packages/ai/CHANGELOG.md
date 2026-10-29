@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.17.1
+
+### Patch Changes
+
+- [#5478](https://github.com/PostHog/posthog-js/pull/5478) [`aa4ed5d`](https://github.com/PostHog/posthog-js/commit/aa4ed5deb82510af1b684988e4fe83739f02b7c2) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture an `$ai_generation` error event when an OpenAI, Azure OpenAI or Anthropic call with `stream: true` fails before the stream opens (for example a 401, 429 or invalid model). Before, only the non-streaming call captured those errors.
+  (2026-10-29)
+
 ## 8.17.0
 
 ### Minor Changes
