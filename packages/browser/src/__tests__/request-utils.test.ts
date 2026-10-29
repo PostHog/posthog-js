@@ -140,6 +140,24 @@ describe('request utils', () => {
                 'https://www.example.com/?next=/cart?query=<masked>&other=2',
             ],
             [
+                'masks the whole value of a listed param that contains a question mark',
+                'https://www.example.com/?query=https://y.com/cb?code=1&other=2',
+                ['query'],
+                'https://www.example.com/?query=<masked>&other=2',
+            ],
+            [
+                'masks a sensitive suffix without an equals sign',
+                'https://www.example.com/?gclid=public?SECRET&other=2',
+                ['gclid'],
+                'https://www.example.com/?gclid=<masked>&other=2',
+            ],
+            [
+                'masks the whole value after a nested listed param',
+                'https://www.example.com/?next=/cart?query=public?SECRET?code=1&other=2',
+                ['query'],
+                'https://www.example.com/?next=/cart?query=<masked>&other=2',
+            ],
+            [
                 'keeps a hash that contains another #',
                 'https://www.example.com/?query=1#/route#section',
                 ['query'],

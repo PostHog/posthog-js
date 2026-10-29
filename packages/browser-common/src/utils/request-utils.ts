@@ -125,23 +125,25 @@ export const maskQueryParams = function <T extends string | undefined>(
     const splitQuery: string[] = withoutHash.split(/\?(.*)/)
     const queryString: string = splitQuery[1]!
     const urlWithoutQueryAndHash: string = splitQuery[0]!
-    // Also split on any further ?, keeping the separators, so a param that follows one is still masked
-    const queryParts = (queryString || '').split(/([&?])/)
+    const queryParts = (queryString || '').split('&')
 
     // use an array of strings rather than an object to preserve ordering and duplicates
     const paramStrings: string[] = []
 
     for (let i = 0; i < queryParts.length; i++) {
-        if (i % 2 === 1) {
-            // a separator captured by the split
-            paramStrings.push(queryParts[i]!)
-            continue
+        // Check nested keys too, but mask a listed value through to the next &.
+        const pieces = queryParts[i]!.split('?')
+        let j = 0
+        while (j < pieces.length && !maskedParams.includes(pieces[j]!.split('=')[0]!)) {
+            j++
         }
-        const keyValuePair = queryParts[i]!.split('=')
-        if (!isArray(keyValuePair)) {
-            continue
-        } else if (maskedParams.includes(keyValuePair[0]!)) {
-            paramStrings.push(keyValuePair[0] + '=' + mask)
+        if (j < pieces.length) {
+            paramStrings.push(
+                pieces
+                    .slice(0, j)
+                    .concat(pieces[j]!.split('=')[0] + '=' + mask)
+                    .join('?')
+            )
         } else {
             paramStrings.push(queryParts[i]!)
         }
@@ -149,7 +151,7 @@ export const maskQueryParams = function <T extends string | undefined>(
 
     let result = urlWithoutQueryAndHash
     if (queryString != null) {
-        result += '?' + paramStrings.join('')
+        result += '?' + paramStrings.join('&')
     }
     if (hash != null) {
         result += '#' + hash
