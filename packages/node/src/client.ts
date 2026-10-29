@@ -117,6 +117,17 @@ function normalizePersonalApiKey(value?: unknown): string | undefined {
   return normalizedValue || undefined
 }
 
+/** Capture options plus a flag that the caller's uuid was already replaced, with its one warning. */
+type LaneCaptureOptions = PostHogCaptureOptions & { _invalidUuidWarned?: boolean }
+
+function isUnsetUuid(uuid: unknown): boolean {
+  return uuid === undefined || uuid === null || uuid === ''
+}
+
+function isInvalidUuid(uuid: unknown): boolean {
+  return !isUnsetUuid(uuid) && (typeof uuid !== 'string' || canonicalizeUuid(uuid) === undefined)
+}
+
 function normalizeHost(value?: unknown): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || DEFAULT_NODE_HOST
@@ -367,9 +378,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   private _prepareLaneMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties | null {
-    // Runs after before_send, which can change the uuid.
-    const uuid = this._canonicalEventUuid(options?.uuid)
-    const prepared = this.processBeforeEnqueue(this.prepareMessage(message, { ...options, uuid }))
+    const { _invalidUuidWarned, ...captureOptions } = (options ?? {}) as LaneCaptureOptions
+    // before_send already ran, so this is the hook's uuid; check it again, warning at most once per call.
+    const uuid = this._canonicalEventUuid(captureOptions.uuid, !_invalidUuidWarned)
+    const prepared = this.processBeforeEnqueue(this.prepareMessage(message, { ...captureOptions, uuid }))
     return prepared === null ? null : this.normalizeMessage(prepared)
   }
 
@@ -377,16 +389,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * The canonical form of a caller's event uuid, or undefined when there is none to keep. An
    * invalid uuid is replaced with a generated one and a warning that never repeats the value.
    */
-  private _canonicalEventUuid(uuid: unknown): string | undefined {
-    if (uuid === undefined || uuid === null || uuid === '') {
+  private _canonicalEventUuid(uuid: unknown, warnIfInvalid = true): string | undefined {
+    if (isUnsetUuid(uuid)) {
       return undefined
     }
     const canonical = typeof uuid === 'string' ? canonicalizeUuid(uuid) : undefined
     if (canonical !== undefined) {
       return canonical
     }
-    // console.warn, not this._logger: the logger only prints in debug mode, and the event loses its uuid.
-    console.warn('[PostHog] Replaced an invalid event uuid with a generated one; uuids must be RFC 4122 strings')
+    if (warnIfInvalid) {
+      // console.warn, not this._logger: the logger only prints in debug mode, and the event loses its uuid.
+      console.warn('[PostHog] Replaced an invalid event uuid with a generated one; uuids must be RFC 4122 strings')
+    }
     return uuidv7()
   }
 
@@ -1015,6 +1029,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     prepareOptions?: { includeContextProperties?: boolean },
     explicitRoute?: string
   ): Promise<void> {
+    const invalidUuidWarned = isInvalidUuid(props.uuid)
     const uuid = this._canonicalEventUuid(props.uuid)
     if (uuid !== props.uuid) {
       props = { ...props, uuid }
@@ -1022,10 +1037,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this.addPendingPromise(
       this._prepareEventMessage(props, prepareOptions)
         .then(({ distinctId, event, properties, options }) => {
-          const captureOptions: PostHogCaptureOptions = {
+          const captureOptions: LaneCaptureOptions = {
             timestamp: options.timestamp,
             disableGeoip: options.disableGeoip,
             uuid: options.uuid,
+            _invalidUuidWarned: invalidUuidWarned,
           }
           const message = {
             distinctId,

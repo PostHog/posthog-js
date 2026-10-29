@@ -113,6 +113,13 @@ describe('event uuids on the client', () => {
     expect(uuidWarnings()).toEqual(warnings)
   })
 
+  it('warns once when the caller and before_send set different invalid uuids', async () => {
+    const sent = await wireUuid('bad-uuid', { before_send: (event) => event && { ...event, uuid: 'other-bad-uuid' } })
+
+    expect(sent).toMatch(UUID_V7)
+    expect(uuidWarnings()).toEqual([[WARNING]])
+  })
+
   it('warns once when the caller and before_send both keep an invalid uuid', async () => {
     const sent = await wireUuid('bad-uuid', { before_send: (event) => event })
 
