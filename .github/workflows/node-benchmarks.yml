@@ -109,7 +109,7 @@ jobs:
                   merge-multiple: false
 
             - name: Collect and render benchmark comparison
-              uses: PostHog/.github/.github/actions/benchmark-report@9b34fde6b26df7d874b85d2de09904b4ab701234 # SDK benchmark reporting (PostHog/.github PR #84)
+              uses: PostHog/.github/.github/actions/benchmark-report@4842a4f21a1c60e05e4ebe5ed5f69f39c247aece # SDK benchmark reporting (PostHog/.github PR #84)
               with:
                   mode: collect
                   source-status: ${{ needs.benchmark.result }}

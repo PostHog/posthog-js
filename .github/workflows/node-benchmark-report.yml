@@ -13,7 +13,7 @@ jobs:
             contents: read
             actions: read
             pull-requests: write
-        uses: PostHog/.github/.github/workflows/sdk-benchmark-report.yml@36c59a0045926b2dc82566cafb96721a0e808673 # SDK benchmark workflow (PostHog/.github PR #84)
+        uses: PostHog/.github/.github/workflows/sdk-benchmark-report.yml@3f246f68984d70e68aa54b2f7dd2d26a02c54f3f # SDK benchmark workflow (PostHog/.github PR #84)
         with:
             workflow-path: .github/workflows/node-benchmarks.yml
             artifact-name: node-benchmark-results
