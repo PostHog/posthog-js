@@ -397,6 +397,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const shouldTransitionToIdentified = idWasSupplied && !identityChanged && !this._isIdentified()
 
       if (identityChanged) {
+        // Reads made while opted out belong to the previous identity
+        this.flagCallsPendingOptIn = new Set()
         // We keep the AnonymousId to be used by flags calls and identify to link the previousId
         this.setPersistedProperty(PostHogPersistedProperty.AnonymousId, previousDistinctId)
         this.setPersistedProperty(PostHogPersistedProperty.DistinctId, distinctId)
@@ -1056,7 +1058,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const featureFlag = details?.flags[key]
     const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
     const sendEventRequested = options.sendEvent ?? this.sendFeatureFlagEvent
-    // Callers such as the React Native hooks do not read the flag again after opt in, so report this read then.
+    // Callers such as the React Native hooks do not read the flag again after opt in, so optIn() reports this read.
     if (sendEventRequested && this.optedOut) {
       this.flagCallsPendingOptIn.add(key)
     }

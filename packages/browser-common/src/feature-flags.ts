@@ -316,7 +316,9 @@ export class PostHogFeatureFlags implements Extension {
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer: ReturnType<typeof setTimeout> | undefined
     private _firingFeatureFlagsCallbacks: boolean = false
-    private _flagCallsPendingCapture = new Set<string>()
+    // Flags read while capture was off, with the distinct ID that read them
+    private _flagCallsPendingCapture = new Map<string, string | undefined>()
+    private _sendingFlagCallsPendingCapture: boolean = false
     private _flagsLoadedFromRemote: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
     private _consecutiveStatusZeroFailures: number = 0
@@ -1014,17 +1016,35 @@ export class PostHogFeatureFlags implements Extension {
 
     resetFlagCallReported(): void {
         this._remove(FLAG_CALL_REPORTED)
-        this._flagCallsPendingCapture = new Set()
+        this._flagCallsPendingCapture = new Map()
     }
 
     /** Sends `$feature_flag_called` for the flags read while capture was off, once the client can capture. */
     sendFlagCallsPendingCapture(): void {
-        if (this._flagCallsPendingCapture.size === 0 || !this._client?.canCapture) {
+        // Each replay calls capture(), which calls this method again.
+        if (
+            this._flagCallsPendingCapture.size === 0 ||
+            this._sendingFlagCallsPendingCapture ||
+            !this._client?.canCapture
+        ) {
             return
         }
-        const pending = this._flagCallsPendingCapture
-        this._flagCallsPendingCapture = new Set()
-        pending.forEach((key) => this.getFeatureFlagResult(key))
+        const distinctId = this._client.distinctId
+        this._sendingFlagCallsPendingCapture = true
+        try {
+            this._flagCallsPendingCapture.forEach((readBy, key) => {
+                if (readBy === distinctId) {
+                    // The read leaves the pending map once it is evaluated. A read that returns early, for example on
+                    // an expired flag cache, stays pending for the next capture.
+                    this.getFeatureFlagResult(key)
+                } else {
+                    // An exposure must not be reported under an identity that did not read the flag.
+                    this._flagCallsPendingCapture.delete(key)
+                }
+            })
+        } finally {
+            this._sendingFlagCallsPendingCapture = false
+        }
     }
 
     _callFlagsEndpoint(options?: { disableFlags?: boolean }): void {
@@ -1361,15 +1381,18 @@ export class PostHogFeatureFlags implements Extension {
 
         if (options.send_event || !('send_event' in options)) {
             const canCapture = this._client?.canCapture
-            // Older SDK versions marked flags as reported while capture was off, but the client dropped the event.
-            // Clear those marks so the exposure is sent after consent is granted.
-            if (!canCapture && Object.keys(flagCallReported).length > 0) {
-                flagCallReported = {}
-                this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
-            }
-            // Callers such as the React hooks do not read the flag again after consent, so report this read then.
-            if (!canCapture) {
-                this._flagCallsPendingCapture.add(key)
+            if (canCapture) {
+                this._flagCallsPendingCapture.delete(key)
+            } else {
+                // Older SDK versions marked flags as reported while capture was off, but the client dropped the event.
+                // Clear those marks so the exposure is sent after consent is granted.
+                if (Object.keys(flagCallReported).length > 0) {
+                    flagCallReported = {}
+                    this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
+                }
+                // Callers such as the React hooks do not read the flag again after consent, so
+                // sendFlagCallsPendingCapture() reports this read.
+                this._flagCallsPendingCapture.set(key, this._client?.distinctId)
             }
             // The client drops the event while capture is off, so marking the flag as reported would suppress the
             // exposure after consent is granted.
@@ -2022,6 +2045,6 @@ export class PostHogFeatureFlags implements Extension {
         this._clearDebouncer()
         this._override_warning = false
         this._consecutiveStatusZeroFailures = 0
-        this._flagCallsPendingCapture = new Set()
+        this._flagCallsPendingCapture = new Map()
     }
 }

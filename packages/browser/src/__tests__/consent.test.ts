@@ -218,9 +218,22 @@ describe('consentManager', () => {
                 (ph: PostHog) => ph.capture('clicked'),
                 [true],
             ],
-            ['opt_in_capturing() after a read without send_event', readFlagWithoutEvent, optIn, noop, []],
+            [
+                'opt_in_capturing() after a read without send_event, which sends nothing',
+                readFlagWithoutEvent,
+                optIn,
+                noop,
+                [],
+            ],
+            [
+                'consent storage and identify() as another user, which sends nothing',
+                readFlag,
+                writeConsentStorage,
+                (ph: PostHog) => ph.identify('other-user'),
+                [],
+            ],
         ])(
-            'reports a flag read before consent is granted via %s',
+            'sends $feature_flag_called for a flag read before consent as expected: %s',
             async (_, readBeforeConsent, grantConsent, afterConsent, expectedResponses) => {
                 const beforeSendMock = vi.fn().mockImplementation((e) => e)
                 posthog = await createPostHog({

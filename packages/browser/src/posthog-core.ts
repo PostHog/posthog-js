@@ -1810,9 +1810,6 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        // Consent can be granted without opt_in_capturing(), for example in another tab or by a consent manager cookie.
-        this.featureFlags?.sendFlagCallsPendingCapture()
-
         const isBot = !this.config.opt_out_useragent_filter && this._is_bot()
         const shouldDropBotEvent = isBot && !this.config.__preview_capture_bot_pageviews
 
@@ -2095,6 +2092,10 @@ export class PostHog implements PostHogInterface {
             }
             this._send_retriable_request(requestOptions, transportOverride)
         }
+
+        // Consent can be granted without opt_in_capturing(), for example in another tab or by a consent manager cookie.
+        // Sending after this event keeps its rate limit token, and applies any identity change it picked up first.
+        this.featureFlags?.sendFlagCallsPendingCapture()
 
         return data
     }
@@ -4942,8 +4943,6 @@ export class PostHog implements PostHogInterface {
         // Start queue after opting in
         this._start_queue_if_opted_in()
 
-        this.featureFlags?.sendFlagCallsPendingCapture()
-
         // Restart session recording if it should now be enabled
         // (this handles the case where opt_out_capturing_by_default or cookieless_mode prevented it from starting)
         this.sessionRecording?.startIfEnabledOrStop()
@@ -4960,6 +4959,9 @@ export class PostHog implements PostHogInterface {
         if (isUndefined(options?.captureEventName) || options?.captureEventName) {
             this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
         }
+
+        // Covers an opt in that captures no event
+        this.featureFlags?.sendFlagCallsPendingCapture()
 
         if (this.config.capture_pageview) {
             this._captureInitialPageview()
