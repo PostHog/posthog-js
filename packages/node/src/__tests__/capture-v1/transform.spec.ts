@@ -315,9 +315,13 @@ describe('capture v1 transform', () => {
       expect(event.timestamp).toMatch(ISO_RE)
     })
 
-    it('falls back to a valid ISO string when a string timestamp is unparseable', () => {
+    it('falls back to a valid ISO string when a string timestamp is unparseable, and warns without the value', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const event = buildV1Event(baseMessage({ timestamp: 'not-a-date' }))
       expect(event.timestamp).toMatch(ISO_RE)
+      expect(warn).toHaveBeenCalledWith('[PostHog] replacing an unparseable event timestamp with the current time')
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('not-a-date')
+      warn.mockRestore()
     })
 
     it('falls back to a valid ISO string when the timestamp is an invalid Date instance', () => {

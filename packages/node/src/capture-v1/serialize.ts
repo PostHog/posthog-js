@@ -18,10 +18,37 @@ export interface SerializedV1Event {
   propertiesBytes: number
 }
 
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+// JSON.stringify writes a lone surrogate as a `\udXXX` escape (a valid pair stays raw), which capture rejects for the whole
+// request. The lookbehind skips an escaped backslash followed by literal "udXXX" text.
+const LONE_SURROGATE_ESCAPE = /(?<!\\)((?:\\\\)*)\\u[dD][89a-fA-F][0-9a-fA-F]{2}/g
+
+/**
+ * Why capture would reject this event, or undefined when it can be sent. A name must be a non-empty string, and the
+ * name and ids must be well-formed Unicode: a broken id is never repaired, because two broken ids could collapse into one.
+ */
+export function wireProblem(message: PostHogEventProperties): string | undefined {
+  const { event, distinct_id: distinctId, properties } = message
+  if (typeof event !== 'string' || event === '') {
+    return 'event name is missing, empty or not a string'
+  }
+  const props = (properties ?? {}) as Record<string, unknown>
+  const ids = [event, distinctId, props.$session_id, props.$window_id]
+  if (ids.some((value) => typeof value === 'string' && LONE_SURROGATE.test(value))) {
+    return 'event name or id is not well-formed Unicode'
+  }
+  return undefined
+}
+
 export function serializeV1Event(message: PostHogEventProperties): SerializedV1Event {
   const { properties, ...rest } = buildV1Event(message)
   const restJson = safeJsonStringify(rest)
-  const propertiesJson = safeJsonStringify(properties)
+  const rawPropertiesJson = safeJsonStringify(properties)
+  // Property strings are repaired to U+FFFD rather than dropping the event.
+  const propertiesJson =
+    rawPropertiesJson.includes('\\ud') || rawPropertiesJson.includes('\\uD')
+      ? rawPropertiesJson.replace(LONE_SURROGATE_ESCAPE, '$1\\ufffd')
+      : rawPropertiesJson
   const propertiesBytes = encoder.encode(propertiesJson).length
   return {
     uuid: rest.uuid,
