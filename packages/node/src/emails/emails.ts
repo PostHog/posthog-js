@@ -52,7 +52,6 @@ const SHARED_FIELDS: EveryField<SendEmailBase> = {
   to: true,
   distinctId: true,
   idempotencyKey: true,
-  captureEngagement: true,
   maxRetries: true,
 }
 const TEMPLATE_FIELDS: EveryField<TemplateEmailForm> = { templateId: true, templateData: true }
@@ -61,13 +60,14 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   subject: true,
   from: true,
   replyTo: true,
+  captureEngagement: true,
   html: true,
   text: true,
 }
 const TEMPLATE_FORM: SendForm = {
   name: 'templateId',
   fields: fieldSet(SHARED_FIELDS, TEMPLATE_FIELDS),
-  why: 'A template made in PostHog sets its own sender, subject and content.',
+  why: "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
   howToSend: 'send a template made in PostHog with templateId',
 }
 const CODE_FORM: SendForm = {
@@ -334,7 +334,7 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
   const send: UncheckedSend = options ?? {}
-  const { to, distinctId, idempotencyKey, captureEngagement, maxRetries } = send
+  const { to, distinctId, idempotencyKey, maxRetries } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
   }
@@ -356,7 +356,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
     throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
   }
 
-  const payload: Record<string, unknown> = { ...content, to, capture_engagement: captureEngagement ?? true }
+  const payload: Record<string, unknown> = { ...content, to }
   if (distinctId !== undefined) {
     payload.identifiers = { distinct_id: distinctId }
   }
@@ -398,7 +398,7 @@ function templateContent(send: UncheckedSend): Record<string, unknown> {
 }
 
 function codeContent(send: UncheckedSend): Record<string, unknown> {
-  const { templateKey, subject, html, text, from, replyTo } = send
+  const { templateKey, subject, html, text, from, replyTo, captureEngagement } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -426,6 +426,7 @@ function codeContent(send: UncheckedSend): Record<string, unknown> {
     ...(text !== undefined && { text }),
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
+    capture_engagement: captureEngagement ?? true,
   }
 }
 

@@ -12,6 +12,8 @@ export const forms: SendEmailOptions[] = [
 export const wrongCombinations: SendEmailOptions[] = [
   // @ts-expect-error a send takes exactly one form
   { to, templateId, templateKey: 'reset', subject: 'Reset', html: '<p>R</p>' },
+  // @ts-expect-error a template made in PostHog follows the project's engagement capture setting
+  { to, templateId, captureEngagement: false },
   // @ts-expect-error a template made in PostHog keeps its own sender
   { to, templateId, from: 'security@example.com' },
   // @ts-expect-error the code form needs html, text or both

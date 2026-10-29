@@ -106,7 +106,6 @@ describe('emails', () => {
       template: { id: TEMPLATE_ID },
       to: 'user@example.com',
       message_data: { name: 'Ada', expiresAt: '2026-11-20T00:00:00.000Z' },
-      capture_engagement: true,
       ...extraBody,
     })
   })
@@ -120,7 +119,6 @@ describe('emails', () => {
       template: { id: TEMPLATE_ID },
       to: 'user@example.com',
       message_data: {},
-      capture_engagement: true,
     })
   })
 
@@ -504,6 +502,11 @@ describe('emails', () => {
       ['subject on the template form', { templateId: TEMPLATE_ID, subject: 'Hi' }, 'subject'],
       ['html on the template form', { templateId: TEMPLATE_ID, html: '<p>Hi</p>' }, 'html'],
       ['text on the template form', { templateId: TEMPLATE_ID, text: 'Hi' }, 'text'],
+      [
+        'captureEngagement on the template form',
+        { templateId: TEMPLATE_ID, captureEngagement: false },
+        'captureEngagement',
+      ],
       ['a code send without a subject', { templateKey: 'welcome', html: '<p>Hi</p>' }, 'subject'],
       ['a code send without html or text', { templateKey: 'welcome', subject: 'Hi' }, 'html'],
       ['a code send with html that is not a string', { ...CODE_SEND, html: 1 }, 'html'],
@@ -526,8 +529,14 @@ describe('emails', () => {
       [
         'a sender on the template form',
         { templateId: TEMPLATE_ID, from: 'Acme <hi@example.com>' },
-        'A template made in PostHog sets its own sender, subject and content.',
+        "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
         'Remove from, or send content from your code with templateKey.',
+      ],
+      [
+        'engagement capture on the template form',
+        { templateId: TEMPLATE_ID, captureEngagement: true },
+        "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
+        'Remove captureEngagement, or send content from your code with templateKey.',
       ],
       [
         'template data on a code send',

@@ -17,12 +17,6 @@ export interface SendEmailBase {
    * `welcome:user_123`, to cover retries outside this call too.
    */
   idempotencyKey?: string
-  /**
-   * Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,
-   * bounced) as events of the recipient. Defaults to `true`. A project whose admin turned
-   * engagement capture off captures nothing, whatever the send asks.
-   */
-  captureEngagement?: boolean
   /** Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. */
   maxRetries?: number
 }
@@ -45,6 +39,13 @@ interface CodeEmailFields {
   /** A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender. */
   from?: string
   replyTo?: string | string[]
+  /**
+   * Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,
+   * bounced) as events of the recipient. Defaults to `true`. A project whose admin turned
+   * engagement capture off captures nothing, whatever the send asks. A template made in PostHog
+   * follows the project's setting.
+   */
+  captureEngagement?: boolean
 }
 
 /**

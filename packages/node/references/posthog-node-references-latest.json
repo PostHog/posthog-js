@@ -2040,6 +2040,11 @@
       "name": "CodeEmailFields",
       "properties": [
         {
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.",
+          "type": "boolean",
+          "name": "captureEngagement"
+        },
+        {
           "description": "A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender.",
           "type": "string",
           "name": "from"
@@ -4374,11 +4379,6 @@
       "name": "SendEmailBase",
       "properties": [
         {
-          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks.",
-          "type": "boolean",
-          "name": "captureEngagement"
-        },
-        {
           "description": "The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address.",
           "type": "string",
           "name": "distinctId"
@@ -4493,11 +4493,6 @@
           "name": "idempotencyKey"
         },
         {
-          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks.",
-          "type": "boolean",
-          "name": "captureEngagement"
-        },
-        {
           "description": "Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off.",
           "type": "number",
           "name": "maxRetries"
@@ -4529,6 +4524,11 @@
         {
           "type": "never",
           "name": "replyTo"
+        },
+        {
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.",
+          "type": "never",
+          "name": "captureEngagement"
         },
         {
           "type": "never",
