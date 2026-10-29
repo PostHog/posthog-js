@@ -1,6 +1,7 @@
 import type { JsonType } from '@posthog/core'
 
-import { EventMessage, PostHog, PostHogOptions } from '@/entrypoints/index.node'
+import { _resetDeprecationWarningsForTests } from '@/client'
+import { CaptureExceptionOptions, EventMessage, PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { FeatureFlagEvaluations } from '@/feature-flag-evaluations'
 import { AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, apiImplementationV4, captureEvents } from '../utils'
 import { V1WiringHarness } from '../utils/v1-wiring'
@@ -82,9 +83,9 @@ describe('layered event values', () => {
 
   /** Captures one event with options from the event, a context and `registerOptions()`. */
   const captureWithOptionLayers = (layers: Layers, message: Partial<EventMessage> = {}) =>
-    sendOne((client) => {
+    sendOne(async (client) => {
       if (layers.global) {
-        client.registerOptions(layers.global)
+        await client.registerOptions(layers.global)
       }
       const capture = (): void =>
         client.capture({ distinctId: 'u', event: 'e', ...message, options: layers.event ?? message.options })
@@ -303,7 +304,7 @@ describe('layered event values', () => {
 
         it('loses to captureException properties', async () => {
           const event = await sendOne((client) =>
-            client.captureException(new Error('boom'), 'u', { $release_id: 'mine' })
+            client.captureException(new Error('boom'), { distinctId: 'u', properties: { $release_id: 'mine' } })
           )
 
           expect(event.properties.$release_id).toBe('mine')
@@ -377,7 +378,7 @@ describe('layered event values', () => {
           $window_id: 'window',
           dropped: 'yes',
         })
-        client.registerOptions({ future_option: 1 })
+        await client.registerOptions({ future_option: 1 })
         await client.withContext({ sessionId: 'session' }, () => client.getFeatureFlag('test-flag', 'u'))
       })
 
@@ -436,8 +437,8 @@ describe('layered event values', () => {
     it('before_send sees the filled options and can remove one', async () => {
       const seen: EventMessage[] = []
       const event = await sendOne(
-        (client) => {
-          client.registerOptions({ cookieless_mode: true, product_tour_id: 'tour' })
+        async (client) => {
+          await client.registerOptions({ cookieless_mode: true, product_tour_id: 'tour' })
           client.capture({ distinctId: 'u', event: 'e' })
         },
         {
@@ -455,10 +456,10 @@ describe('layered event values', () => {
 
     describe('registerOptions', () => {
       it('merges calls, and unregisterOptions removes one key', async () => {
-        const event = await sendOne((client) => {
-          client.registerOptions({ a: 1, b: 2 })
-          client.registerOptions({ b: 3, c: 4 })
-          client.unregisterOptions('a')
+        const event = await sendOne(async (client) => {
+          await expect(client.registerOptions({ a: 1, b: 2 })).resolves.toBeUndefined()
+          await client.registerOptions({ b: 3, c: 4 })
+          await expect(client.unregisterOptions('a')).resolves.toBeUndefined()
           client.capture({ distinctId: 'u', event: 'e' })
         })
 
@@ -466,11 +467,11 @@ describe('layered event values', () => {
       })
 
       it('an event keeps the options it read when it was captured', async () => {
-        const event = await sendOne((client) => {
-          client.registerOptions({ a: 1 })
+        const event = await sendOne(async (client) => {
+          await client.registerOptions({ a: 1 })
           client.capture({ distinctId: 'u', event: 'e' })
-          client.registerOptions({ a: 2 })
-          client.unregisterOptions('a')
+          await client.registerOptions({ a: 2 })
+          await client.unregisterOptions('a')
         })
 
         expect(event.options).toStrictEqual({ a: 1 })
@@ -482,9 +483,9 @@ describe('layered event values', () => {
         ['a number', 1],
         ['null', null],
       ])('logs one error for %s and ignores it', async (_label, value) => {
-        const event = await sendOne((client) => {
-          client.registerOptions({ kept: true })
-          client.registerOptions(value as Record<string, JsonType>)
+        const event = await sendOne(async (client) => {
+          await client.registerOptions({ kept: true })
+          await client.registerOptions(value as Record<string, JsonType>)
           client.capture({ distinctId: 'u', event: 'e' })
         })
 
@@ -641,7 +642,7 @@ describe('layered event values', () => {
     it.each<[string, (client: PostHog) => unknown, string]>([
       ['capture', (c) => c.capture({ distinctId: 'u', event: 'e' }), ANALYTICS_CAPTURE_PATH],
       ['captureAi', (c) => c.captureAi({ distinctId: 'u', event: '$ai_span' }), AI_CAPTURE_PATH],
-      ['captureException', (c) => c.captureException(new Error('boom'), 'u'), ANALYTICS_CAPTURE_PATH],
+      ['captureException', (c) => c.captureException(new Error('boom'), { distinctId: 'u' }), ANALYTICS_CAPTURE_PATH],
       ['identify', (c) => c.identify({ distinctId: 'u', properties: { a: 1 } }), ANALYTICS_CAPTURE_PATH],
       ['identifyImmediate', (c) => c.identifyImmediate({ distinctId: 'u' }), ANALYTICS_CAPTURE_PATH],
       ['alias', (c) => c.alias({ distinctId: 'u', alias: 'anon' }), ANALYTICS_CAPTURE_PATH],
@@ -661,7 +662,7 @@ describe('layered event values', () => {
       const event = await sendOne(
         async (client) => {
           await client.register({ global_prop: 'g' })
-          client.registerOptions({ global_option: 'g' })
+          await client.registerOptions({ global_option: 'g' })
           return client.withContext({ properties: { context_prop: 'c' }, options: { context_option: 'c' } }, () =>
             send(client)
           )
@@ -675,38 +676,178 @@ describe('layered event values', () => {
     })
   })
 
-  describe('captureException properties', () => {
-    it.each([
-      '$exception_source',
-      '$debug_images',
-      '$exception_types',
-      '$exception_values',
-      '$exception_sources',
-      '$exception_functions',
-      '$exception_fingerprint_version',
-      '$exception_fingerprint_record',
-      '$exception_issue_id',
-      '$exception_release',
-      '$cymbal_errors',
-    ])('cannot set %s', async (key) => {
-      const event = await sendOne((client) => client.captureException(new Error('boom'), 'u', { [key]: 'caller' }))
+  describe('captureException', () => {
+    const EXCEPTION_UUID = '0191c0a2-6f3c-7a8e-9b1d-2c3e4f5a6b7c'
+    const DEPRECATION_ERROR = (method: string): string =>
+      `[PostHog] ${method}(error, distinctId, properties) is deprecated: pass an object instead, e.g. ` +
+      `${method}(error, { distinctId, properties }). The old form will be removed in the next major version.`
 
-      expect(event.properties).not.toHaveProperty(key)
+    /** The client typed with the 5.x positional signatures, which only work at runtime. */
+    const legacy = (
+      client: PostHog
+    ): {
+      captureException(error: unknown, ...args: unknown[]): void
+      captureExceptionImmediate(error: unknown, ...args: unknown[]): Promise<void>
+    } => client as any
+
+    beforeEach(() => {
+      _resetDeprecationWarningsForTests()
     })
 
-    it('cannot replace $exception_list or $exception_level, and keep other properties', async () => {
+    it.each<[string, (client: PostHog, options: CaptureExceptionOptions) => unknown]>([
+      ['captureException', (c, options) => c.captureException(new Error('boom'), options)],
+      ['captureExceptionImmediate', (c, options) => c.captureExceptionImmediate(new Error('boom'), options)],
+    ])('%s sends every field of the options object', async (_method, send) => {
       const event = await sendOne((client) =>
-        client.captureException(new Error('boom'), 'u', {
-          $exception_list: 'caller',
-          $exception_level: 'fatal',
-          $exception_fingerprint: 'custom',
-          custom: 1,
+        send(client, {
+          distinctId: 'u',
+          properties: { custom: 1 },
+          options: { product_tour_id: 'tour' },
+          uuid: EXCEPTION_UUID,
+          flags: flagSnapshot(),
+          level: 'warning',
         })
       )
 
+      expect(event).toMatchObject({ event: '$exception', distinct_id: 'u', uuid: EXCEPTION_UUID })
+      expect(event.options).toStrictEqual({ product_tour_id: 'tour' })
+      expect(event.properties).toMatchObject({
+        custom: 1,
+        '$feature/x': 'v',
+        $active_feature_flags: ['x'],
+        $exception_level: 'warning',
+      })
       expect(event.properties.$exception_list[0]).toMatchObject({ type: 'Error', value: 'boom' })
-      expect(event.properties.$exception_level).toBe('error')
-      expect(event.properties).toMatchObject({ $exception_fingerprint: 'custom', custom: 1 })
+      expect(console.error).not.toHaveBeenCalled()
+    })
+
+    it.each<[string, CaptureExceptionOptions | undefined, string]>([
+      ['no options', undefined, 'error'],
+      ['no level', { distinctId: 'u' }, 'error'],
+      ['level fatal', { level: 'fatal' }, 'fatal'],
+      ['level debug', { level: 'debug' }, 'debug'],
+      ['an alias of fatal', { level: 'critical' as CaptureExceptionOptions['level'] }, 'fatal'],
+      ['an upper-case level', { level: 'WARNING' as CaptureExceptionOptions['level'] }, 'warning'],
+      ['an alias of warning', { level: 'warn' as CaptureExceptionOptions['level'] }, 'warning'],
+      ['an unknown level', { level: 'bogus' as CaptureExceptionOptions['level'] }, 'error'],
+      ['level with a $exception_level property', { level: 'info', properties: { $exception_level: 'fatal' } }, 'info'],
+    ])('sends $exception_level for %s', async (_label, options, expected) => {
+      const event = await sendOne((client) => client.captureException(new Error('boom'), options))
+
+      expect(event.properties.$exception_level).toBe(expected)
+    })
+
+    it('an event with no distinct id is personless', async () => {
+      const event = await sendOne((client) => client.captureException(new Error('boom'), { properties: { a: 1 } }))
+
+      expect(event.distinct_id).toMatch(UUID_V7)
+      expect(event.options).toStrictEqual({ process_person_profile: false })
+      expect(event.properties.a).toBe(1)
+    })
+
+    describe('the 5.x positional form', () => {
+      it('captureException(error, distinctId, properties, uuid, flags) still sends every value', async () => {
+        const event = await sendOne((client) =>
+          legacy(client).captureException(new Error('boom'), 'u', { custom: 1 }, EXCEPTION_UUID, flagSnapshot())
+        )
+
+        expect(event).toMatchObject({ distinct_id: 'u', uuid: EXCEPTION_UUID })
+        expect(event.properties).toMatchObject({ custom: 1, '$feature/x': 'v', $exception_level: 'error' })
+        expect(console.error).toHaveBeenCalledTimes(1)
+        expect(console.error).toHaveBeenCalledWith(DEPRECATION_ERROR('captureException'))
+      })
+
+      it('captureExceptionImmediate(error, distinctId, properties, flags) still sends every value', async () => {
+        const event = await sendOne((client) =>
+          legacy(client).captureExceptionImmediate(new Error('boom'), 'u', { custom: 1 }, flagSnapshot())
+        )
+
+        expect(event.distinct_id).toBe('u')
+        expect(event.properties).toMatchObject({ custom: 1, '$feature/x': 'v' })
+        expect(console.error).toHaveBeenCalledWith(DEPRECATION_ERROR('captureExceptionImmediate'))
+      })
+
+      it('an undefined distinct id with properties still sends the properties', async () => {
+        const event = await sendOne((client) =>
+          legacy(client).captureException(new Error('boom'), undefined, { custom: 1 })
+        )
+
+        expect(event.distinct_id).toMatch(UUID_V7)
+        expect(event.properties.custom).toBe(1)
+        expect(console.error).toHaveBeenCalledTimes(1)
+      })
+
+      it('logs the deprecation error once per method per process', async () => {
+        const client = harness.makeClient()
+        legacy(client).captureException(new Error('one'), 'u')
+        legacy(client).captureException(new Error('two'), 'u', { a: 1 })
+        await legacy(client).captureExceptionImmediate(new Error('three'), 'u')
+        await legacy(client).captureExceptionImmediate(new Error('four'), 'u')
+        await client.flush()
+
+        expect(wireEvents()).toHaveLength(4)
+        expect((console.error as vi.Mock).mock.calls).toEqual([
+          [DEPRECATION_ERROR('captureException')],
+          [DEPRECATION_ERROR('captureExceptionImmediate')],
+        ])
+      })
+
+      it('warns once when arguments follow the options object, and ignores them', async () => {
+        const client = harness.makeClient()
+        legacy(client).captureException(new Error('one'), { distinctId: 'u' }, { ignored: 1 })
+        legacy(client).captureException(new Error('two'), { distinctId: 'u' }, { ignored: 2 })
+        await client.flush()
+
+        const events = wireEvents()
+        expect(events.map((event) => event.distinct_id)).toEqual(['u', 'u'])
+        expect(events.every((event) => !('ignored' in event.properties))).toBe(true)
+        expect(console.warn).toHaveBeenCalledWith(
+          '[PostHog] captureException(error, options) ignores the arguments after the options object.'
+        )
+        expect(
+          (console.warn as vi.Mock).mock.calls.filter((call) => String(call[0]).includes('ignores the arguments'))
+        ).toHaveLength(1)
+      })
+    })
+
+    describe('reserved properties', () => {
+      it.each([
+        '$exception_source',
+        '$debug_images',
+        '$exception_types',
+        '$exception_values',
+        '$exception_sources',
+        '$exception_functions',
+        '$exception_fingerprint_version',
+        '$exception_fingerprint_record',
+        '$exception_issue_id',
+        '$exception_release',
+        '$cymbal_errors',
+      ])('cannot set %s', async (key) => {
+        const event = await sendOne((client) =>
+          client.captureException(new Error('boom'), { distinctId: 'u', properties: { [key]: 'caller' } })
+        )
+
+        expect(event.properties).not.toHaveProperty(key)
+      })
+
+      it('cannot replace $exception_list or $exception_level, and keep other properties', async () => {
+        const event = await sendOne((client) =>
+          client.captureException(new Error('boom'), {
+            distinctId: 'u',
+            properties: {
+              $exception_list: 'caller',
+              $exception_level: 'fatal',
+              $exception_fingerprint: 'custom',
+              custom: 1,
+            },
+          })
+        )
+
+        expect(event.properties.$exception_list[0]).toMatchObject({ type: 'Error', value: 'boom' })
+        expect(event.properties.$exception_level).toBe('error')
+        expect(event.properties).toMatchObject({ $exception_fingerprint: 'custom', custom: 1 })
+      })
     })
   })
 })

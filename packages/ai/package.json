@@ -84,7 +84,7 @@
     "@ai-sdk/provider": "^2.0.0 || ^3.0.0 || ^4.0.0",
     "@openai/agents": "^0.8.0",
     "langchain": ">=1.5.5 <2.0.0",
-    "posthog-node": "^5.0.0"
+    "posthog-node": "^5.0.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {

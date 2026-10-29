@@ -91,6 +91,29 @@ export interface CaptureAiGenerationOptions {
 }
 
 /**
+ * posthog-node 6 takes an options object; 5.x, which has no `registerOptions`, takes positional
+ * arguments. The 6.x positional fallback works too, but logs a deprecation error in the app.
+ */
+const captureAiException = (
+  client: PostHog,
+  error: unknown,
+  properties: Record<string, unknown>,
+  uuid: string
+): void => {
+  if (typeof client.registerOptions === 'function') {
+    client.captureException(error, { properties, uuid })
+    return
+  }
+  const captureLegacy = client.captureException as (
+    error: unknown,
+    distinctId?: string,
+    properties?: Record<string, unknown>,
+    uuid?: string
+  ) => void
+  captureLegacy.call(client, error, undefined, properties, uuid)
+}
+
+/**
  * Capture an `$ai_generation` (or `$ai_embedding`) event to PostHog.
  *
  * This is the canonical primitive that every `@posthog/ai` wrapper
@@ -151,7 +174,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
         // so the global and framework handlers skip the rethrown error too.
         if (!shouldRedact) {
           exceptionId = uuidv7()
-          client.captureException(options.error, undefined, { $ai_trace_id: traceId }, exceptionId)
+          captureAiException(client, options.error, { $ai_trace_id: traceId }, exceptionId)
         }
         if (typeof options.error === 'object') {
           ;(options.error as CoreErrorTracking.PreviouslyCapturedError).__posthog_previously_captured_error = true

@@ -223,7 +223,7 @@
         {
           "category": "Error tracking",
           "description": "Capture an error exception as an event.",
-          "details": null,
+          "details": "The 5.x positional form `captureException(error, distinctId, properties, uuid, flags)` still works in 6.x but logs a deprecation error once per process, and will be removed in the next major version.",
           "id": "captureException",
           "showDocs": true,
           "title": "captureException",
@@ -231,12 +231,12 @@
             {
               "id": "capture_an_error_with_user_id",
               "name": "Capture an error with user ID",
-              "code": "\n\n// Capture an error with user ID\ntry {\n  // Some risky operation\n  riskyOperation()\n} catch (error) {\n  client.captureException(error, 'user_123')\n}\n\n\n"
+              "code": "\n\n// Capture an error with user ID\ntry {\n  // Some risky operation\n  riskyOperation()\n} catch (error) {\n  client.captureException(error, { distinctId: 'user_123' })\n}\n\n\n"
             },
             {
-              "id": "capture_with_additional_properties",
-              "name": "Capture with additional properties",
-              "code": "\n\n// Capture with additional properties\ntry {\n  apiCall()\n} catch (error) {\n  client.captureException(error, 'user_123', {\n    endpoint: '/api/users',\n    method: 'POST',\n    status_code: 500\n  })\n}\n\n\n\n"
+              "id": "capture_with_additional_properties_and_a_level",
+              "name": "Capture with additional properties and a level",
+              "code": "\n\n// Capture with additional properties and a level\ntry {\n  apiCall()\n} catch (error) {\n  client.captureException(error, {\n    distinctId: 'user_123',\n    properties: { endpoint: '/api/users', method: 'POST', status_code: 500 },\n    level: 'warning',\n  })\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -248,28 +248,10 @@
               "name": "error"
             },
             {
-              "description": "Optional user distinct ID",
+              "description": "Optional distinct id, properties, options, uuid, flags snapshot and level",
               "isOptional": true,
-              "type": "string",
-              "name": "distinctId"
-            },
-            {
-              "description": "Optional additional properties to include. Exception properties the SDK or PostHog owns, such as `$exception_list` and `$exception_level`, are ignored.",
-              "isOptional": true,
-              "type": "Record<string | number, any>",
-              "name": "additionalProperties"
-            },
-            {
-              "description": "Optional event UUID",
-              "isOptional": true,
-              "type": "EventMessage['uuid']",
-              "name": "uuid"
-            },
-            {
-              "description": "Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events",
-              "isOptional": true,
-              "type": "FeatureFlagEvaluations",
-              "name": "flags"
+              "type": "CaptureExceptionOptions",
+              "name": "options"
             }
           ],
           "returnType": {
@@ -281,7 +263,7 @@
         {
           "category": "Error tracking",
           "description": "Capture an error exception as an event immediately (synchronously).",
-          "details": null,
+          "details": "The 5.x positional form `captureExceptionImmediate(error, distinctId, properties, flags)` still works in 6.x but logs a deprecation error once per process, and will be removed in the next major version.",
           "id": "captureExceptionImmediate",
           "showDocs": true,
           "title": "captureExceptionImmediate",
@@ -289,12 +271,12 @@
             {
               "id": "capture_an_error_immediately_with_user_id",
               "name": "Capture an error immediately with user ID",
-              "code": "\n\n// Capture an error immediately with user ID\ntry {\n  // Some risky operation\n  riskyOperation()\n} catch (error) {\n  await client.captureExceptionImmediate(error, 'user_123')\n}\n\n\n"
+              "code": "\n\n// Capture an error immediately with user ID\ntry {\n  // Some risky operation\n  riskyOperation()\n} catch (error) {\n  await client.captureExceptionImmediate(error, { distinctId: 'user_123' })\n}\n\n\n"
             },
             {
               "id": "capture_with_additional_properties",
               "name": "Capture with additional properties",
-              "code": "\n\n// Capture with additional properties\ntry {\n  apiCall()\n} catch (error) {\n  await client.captureExceptionImmediate(error, 'user_123', {\n    endpoint: '/api/users',\n    method: 'POST',\n    status_code: 500\n  })\n}\n\n\n\n"
+              "code": "\n\n// Capture with additional properties\ntry {\n  apiCall()\n} catch (error) {\n  await client.captureExceptionImmediate(error, {\n    distinctId: 'user_123',\n    properties: { endpoint: '/api/users', method: 'POST', status_code: 500 },\n  })\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -306,22 +288,10 @@
               "name": "error"
             },
             {
-              "description": "Optional user distinct ID",
+              "description": "Optional distinct id, properties, options, uuid, flags snapshot and level",
               "isOptional": true,
-              "type": "string",
-              "name": "distinctId"
-            },
-            {
-              "description": "Optional additional properties to include. Exception properties the SDK or PostHog owns, such as `$exception_list` and `$exception_level`, are ignored.",
-              "isOptional": true,
-              "type": "Record<string | number, any>",
-              "name": "additionalProperties"
-            },
-            {
-              "description": "Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events",
-              "isOptional": true,
-              "type": "FeatureFlagEvaluations",
-              "name": "flags"
+              "type": "CaptureExceptionOptions",
+              "name": "options"
             }
           ],
           "returnType": {
@@ -1231,30 +1201,31 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
-          "category": "",
-          "details": null,
+          "category": "Capture",
+          "description": "Build an event as `capture()` would send it, without sending it.",
+          "details": "The result has the same shape as the message passed in: `options` holds the event's options after every layer filled them, and `uuid`, `timestamp` and `disableGeoip` are top-level fields. Rejects with `null` when `before_send` drops the event.",
           "id": "prepareEventMessage",
           "showDocs": true,
           "title": "prepareEventMessage",
           "examples": [
             {
-              "id": "prepareeventmessage",
-              "name": "Generated example for prepareEventMessage",
-              "code": "// Generated example for prepareEventMessage\nposthog.prepareEventMessage();"
+              "id": "",
+              "name": "",
+              "code": "\n\nconst message = await client.prepareEventMessage({ distinctId: 'user_123', event: 'button_clicked' })\nconsole.log(message.properties.$is_server, message.options)\n\n\n\n"
             }
           ],
           "releaseTag": "public",
           "params": [
             {
-              "description": "",
+              "description": "The event to build",
               "isOptional": false,
               "type": "EventMessage",
               "name": "props"
             }
           ],
           "returnType": {
-            "id": "Promise<{\n        distinctId: string;\n        event: string;\n        properties: PostHogEventProperties;\n        options: PostHogCaptureOptions;\n    }>",
-            "name": "Promise<{\n        distinctId: string;\n        event: string;\n        properties: PostHogEventProperties;\n        options: PostHogCaptureOptions;\n    }>"
+            "id": "Promise<PreparedEventMessage>",
+            "name": "Promise<PreparedEventMessage>"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -1298,7 +1269,7 @@
             {
               "id": "",
               "name": "",
-              "code": "\n\nclient.registerOptions({ cookieless_mode: true })\n\n\n\n"
+              "code": "\n\nawait client.registerOptions({ cookieless_mode: true })\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -1311,8 +1282,8 @@
             }
           ],
           "returnType": {
-            "id": "void",
-            "name": "void"
+            "id": "Promise<void>",
+            "name": "Promise<void>"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -1506,8 +1477,8 @@
             }
           ],
           "returnType": {
-            "id": "void",
-            "name": "void"
+            "id": "Promise<void>",
+            "name": "Promise<void>"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -2161,6 +2132,43 @@
         }
       ],
       "path": "../core/src/types.ts"
+    },
+    {
+      "id": "CaptureExceptionOptions",
+      "name": "CaptureExceptionOptions",
+      "properties": [
+        {
+          "description": "The event's distinct id. Without one, the context distinct id is used, else a personless id.",
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "description": "Properties to add to the event. Exception properties the SDK or PostHog owns, such as\n`$exception_list` and `$exception_level`, are ignored: use `level` to set the level.",
+          "type": "Record<string | number, any>",
+          "name": "properties"
+        },
+        {
+          "description": "Per-event options, as in `capture()`.",
+          "type": "Record<string, JsonType>",
+          "name": "options"
+        },
+        {
+          "description": "Overrides the generated event UUID. Must be a valid UUID.",
+          "type": "string",
+          "name": "uuid"
+        },
+        {
+          "description": "A `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events.",
+          "type": "FeatureFlagEvaluations",
+          "name": "flags"
+        },
+        {
+          "description": "The exception's severity, sent as `$exception_level`. An unknown value is ignored.",
+          "type": "\"fatal\" | \"error\" | \"warning\" | \"log\" | \"info\" | \"debug\"",
+          "name": "level"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "ChunkIdMapType",
@@ -3599,7 +3607,7 @@
           "name": "signal"
         },
         {
-          "type": "\"follow\" | \"manual\" | \"error\"",
+          "type": "\"error\" | \"follow\" | \"manual\"",
           "name": "redirect"
         }
       ],
@@ -4186,6 +4194,42 @@
       "path": "../core/src/types.ts"
     },
     {
+      "id": "PreparedEventMessage",
+      "name": "PreparedEventMessage",
+      "properties": [
+        {
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "type": "string",
+          "name": "event"
+        },
+        {
+          "type": "PostHogEventProperties",
+          "name": "properties"
+        },
+        {
+          "description": "The event's options, sent to capture unchanged.",
+          "type": "Record<string, JsonType>",
+          "name": "options"
+        },
+        {
+          "type": "string",
+          "name": "uuid"
+        },
+        {
+          "type": "Date",
+          "name": "timestamp"
+        },
+        {
+          "type": "boolean",
+          "name": "disableGeoip"
+        }
+      ],
+      "path": "src/types.ts"
+    },
+    {
       "id": "PreviouslyCapturedError",
       "name": "PreviouslyCapturedError",
       "properties": [],
@@ -4432,7 +4476,7 @@
           "name": "prefix"
         },
         {
-          "type": "(\"error\" | \"fatal\" | \"warning\" | \"log\" | \"info\" | \"debug\")[] | \"*\"",
+          "type": "(\"fatal\" | \"error\" | \"warning\" | \"log\" | \"info\" | \"debug\")[] | \"*\"",
           "name": "severityAllowList"
         },
         {

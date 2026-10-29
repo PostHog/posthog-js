@@ -13,6 +13,32 @@ describe('PostHog.prepareEventMessage', () => {
     await posthog.shutdown()
   })
 
+  it('returns the message shape, with the filled options and top-level uuid, timestamp and disableGeoip', async () => {
+    const timestamp = new Date('2026-01-02T03:04:05Z')
+    const uuid = '0191c0a2-6f3c-7a8e-9b1d-2c3e4f5a6b7c'
+    await posthog.registerOptions({ cookieless_mode: true })
+
+    const message = await posthog.prepareEventMessage({
+      distinctId: 'user_1',
+      event: 'test_event',
+      properties: { plan: 'pro' },
+      options: { product_tour_id: 'tour' },
+      uuid,
+      timestamp,
+      disableGeoip: false,
+    })
+
+    expect(message).toStrictEqual({
+      distinctId: 'user_1',
+      event: 'test_event',
+      properties: { plan: 'pro', $geoip_disable: false, $is_server: true },
+      options: { product_tour_id: 'tour', cookieless_mode: true },
+      uuid,
+      timestamp,
+      disableGeoip: false,
+    })
+  })
+
   it('should NOT include $groups if groups is undefined', async () => {
     const message = await posthog.prepareEventMessage({
       distinctId: 'user_1',

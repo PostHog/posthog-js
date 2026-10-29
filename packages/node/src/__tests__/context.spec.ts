@@ -475,7 +475,7 @@ describe('PostHog Context', () => {
   ])(
     'captureException $label',
     async ({ contextDistinctId, explicitDistinctId, expectedDistinctId, expectedProcessPersonProfile }) => {
-      const run = () => posthog.captureException(new Error('test error'), explicitDistinctId)
+      const run = () => posthog.captureException(new Error('test error'), { distinctId: explicitDistinctId })
       contextDistinctId ? posthog.withContext({ distinctId: contextDistinctId }, run) : run()
 
       // captureException uses addPendingPromise around an async buildEventMessage that

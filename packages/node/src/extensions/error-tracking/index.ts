@@ -28,6 +28,25 @@ const RESERVED_EXCEPTION_PROPERTIES: ReadonlySet<string> = new Set([
   '$cymbal_errors',
 ])
 
+/**
+ * The `$exception_level` values a caller may set (sdk-specs `exception-event-metadata`), read
+ * case-insensitively with the same aliases as posthog-python. Any other value keeps the default.
+ */
+const EXCEPTION_LEVELS: ReadonlyMap<string, CoreErrorTracking.SeverityLevel> = new Map([
+  ['fatal', 'fatal'],
+  ['critical', 'fatal'],
+  ['alert', 'fatal'],
+  ['emergency', 'fatal'],
+  ['error', 'error'],
+  ['warning', 'warning'],
+  ['warn', 'warning'],
+  ['log', 'log'],
+  ['notice', 'info'],
+  ['info', 'info'],
+  ['trace', 'debug'],
+  ['debug', 'debug'],
+])
+
 export default class ErrorTracking {
   private client: PostHogBackendClient
   private _exceptionAutocaptureEnabled: boolean
@@ -67,7 +86,8 @@ export default class ErrorTracking {
     error: unknown,
     hint: CoreErrorTracking.EventHint,
     distinctId?: string,
-    additionalProperties?: Record<string | number, any>
+    additionalProperties?: Record<string | number, any>,
+    level?: CoreErrorTracking.SeverityLevel
   ): Promise<EventMessage> {
     const properties: EventMessage['properties'] = {}
     for (const [key, value] of Object.entries(additionalProperties ?? {})) {
@@ -78,6 +98,10 @@ export default class ErrorTracking {
 
     const exceptionProperties = builder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
+    const exceptionLevel = typeof level === 'string' ? EXCEPTION_LEVELS.get(level.toLowerCase()) : undefined
+    if (exceptionLevel !== undefined) {
+      exceptionProperties.$exception_level = exceptionLevel
+    }
 
     return {
       event: '$exception',

@@ -127,7 +127,7 @@ describe('PostHog Node.js', () => {
       })
 
       try {
-        posthog.captureException(new Error('boom'), 'user-1')
+        posthog.captureException(new Error('boom'), { distinctId: 'user-1' })
         const flushPromise = posthog.flush()
         expect(mockedFetch).not.toHaveBeenCalled()
 
