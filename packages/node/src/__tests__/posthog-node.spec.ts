@@ -727,7 +727,6 @@ describe('PostHog Node.js', () => {
         timestamp: undefined,
         disableGeoip: undefined,
         uuid: undefined,
-        options: undefined,
       })
 
       const batchEvents = getLastBatchEvents()
