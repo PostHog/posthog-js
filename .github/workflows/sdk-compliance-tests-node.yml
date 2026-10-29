@@ -1,0 +1,106 @@
+name: Node SDK compliance
+
+on:
+    workflow_dispatch:
+    push:
+        branches: [main]
+        paths:
+            - 'packages/node/**'
+            - 'packages/core/**'
+            - 'packages/types/**'
+            - 'tooling/**'
+            - 'compliance/node/adapter.mjs'
+            - 'compliance/node/Dockerfile'
+            - '.github/workflows/sdk-compliance-tests-node.yml'
+            - 'pnpm-lock.yaml'
+            - 'pnpm-workspace.yaml'
+            - 'patches/**'
+    pull_request:
+        paths:
+            - 'packages/node/**'
+            - 'packages/core/**'
+            - 'packages/types/**'
+            - 'tooling/**'
+            - 'compliance/node/adapter.mjs'
+            - 'compliance/node/Dockerfile'
+            - '.github/workflows/sdk-compliance-tests-node.yml'
+            - 'pnpm-lock.yaml'
+            - 'pnpm-workspace.yaml'
+            - 'patches/**'
+
+permissions: {}
+
+jobs:
+    compliance:
+        # The harness has one enable_compression flag but a test per codec, so each
+        # job runs the adapter with one codec. The SDK has no brotli support.
+        name: Node SDK compliance (${{ matrix.compression }})
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                compression: [gzip, deflate, zstd]
+        concurrency:
+            group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.compression }}
+            cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+        env:
+            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness:1.26.0@sha256:9db022b5729dcf1557b9e622a36b6d6afa42e1b42653f031b0da6d73ca5d77fe
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Pull test harness
+              run: docker pull "$HARNESS_IMAGE"
+
+            - name: Build SDK adapter
+              run: docker build -f compliance/node/Dockerfile -t sdk-adapter:test .
+
+            - name: Start SDK adapter
+              env:
+                  COMPRESSION: ${{ matrix.compression }}
+              run: |
+                  docker network create test-network
+                  docker run -d --name sdk-adapter --network test-network -e COMPRESSION="$COMPRESSION" sdk-adapter:test
+
+            - name: Run compliance suites
+              run: |
+                  mkdir -p report
+                  docker run --rm \
+                    --name test-harness \
+                    --network test-network \
+                    -v "${GITHUB_WORKSPACE}/report:/report" \
+                    "$HARNESS_IMAGE" \
+                    run \
+                    --adapter-url http://sdk-adapter:8080 \
+                    --mock-url http://test-harness:8081 \
+                    --output text \
+                    --report /report/sdk-compliance-report.md \
+                    --sdk-type server
+
+            - name: Publish report to the job summary
+              if: always()
+              run: |
+                  if [ -f report/sdk-compliance-report.md ]; then
+                    cat report/sdk-compliance-report.md >> "$GITHUB_STEP_SUMMARY"
+                  fi
+
+            - name: Upload compliance report
+              if: always()
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: node-sdk-compliance-report-${{ matrix.compression }}
+                  path: report/sdk-compliance-report.md
+
+            - name: Show adapter logs on failure
+              if: failure()
+              run: docker logs sdk-adapter || true
+
+            - name: Stop containers
+              if: always()
+              run: |
+                  docker rm -f sdk-adapter || true
+                  docker network rm test-network || true
