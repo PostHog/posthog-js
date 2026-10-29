@@ -508,9 +508,9 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             assert(
                 coreRequests.length === 1 &&
                     coreRequests[0].status === 200 &&
-                    coreRequests[0].path === `/static/${core.version}/array.js` &&
+                    coreRequests[0].path === '/static/array.js' &&
                     Object.keys(coreRequests[0].query).length === 0,
-                'Loader did not fetch exactly its matching immutable core without query parameters'
+                'Loader did not fetch exactly one core from its unversioned namespace without query parameters'
             )
         }
         if (scenario === 'replay') assertReplayNetworkCapture(network, server.inspect(), server.origin)

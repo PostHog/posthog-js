@@ -5,7 +5,7 @@ import { getQueryParam } from '@posthog/browser-common/utils/request-utils'
 import type { PostHogConfig } from '@posthog/types'
 import { assignableWindow } from '../utils/globals'
 import { createPostHogStub, QueuedInit } from '../utils/loader-stub'
-import { getVersionedScriptURL } from '../utils/loader-script'
+import { getSDKScriptURL } from '../utils/loader-script'
 
 const logger = createLogger('[Loader]')
 
@@ -68,7 +68,7 @@ function load(): void {
     assignableWindow.posthog = createPostHogStub(initialization)
 
     const core = document.createElement('script')
-    core.src = getVersionedScriptURL(url)
+    core.src = getSDKScriptURL(url)
     core.async = true
     core.crossOrigin = 'anonymous'
     core.nonce = script.nonce

@@ -2,4 +2,4 @@
 'posthog-js': minor
 ---
 
-Add a local bootstrap that queues early SDK calls and loads auto-updating SDK releases asynchronously without blocking application startup.
+Add a nonblocking local bootstrap with early-call queuing, and make hosted and local loaders honor the selected latest, major, or exact-version SDK namespace.

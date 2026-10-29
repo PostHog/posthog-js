@@ -4,11 +4,14 @@ import { readFileSync } from 'node:fs'
 import { version } from '../../package.json'
 
 type CapturedEvent = { event: string; properties: Record<string, unknown> }
-const majorVersion = version.split('.')[0]
 
-for (const assetHost of ['https://us-assets.i.posthog.com', 'https://eu-assets.i.posthog.com', '/ingest']) {
+for (const [assetHost, sdkVersion, corePath, mutable] of [
+    ['https://us-assets.i.posthog.com', '', '/static/array.js', true],
+    ['https://eu-assets.i.posthog.com', '1', '/static/1/array.js', true],
+    ['/ingest', version, `/static/${version}/array.js`, false],
+] as const) {
     for (const fail of [false, true]) {
-        test(`application stays interactive during a ${fail ? 'failed' : 'delayed'} SDK download from ${assetHost}`, async ({
+        test(`application stays interactive during a ${fail ? 'failed' : 'delayed'} ${sdkVersion || 'unversioned'} SDK download from ${assetHost}`, async ({
             page,
         }) => {
             const events: CapturedEvent[] = []
@@ -37,7 +40,7 @@ for (const assetHost of ['https://us-assets.i.posthog.com', 'https://eu-assets.i
             }
             const html = `<!doctype html><html><head></head><body>
                 <button id="probe">Test interaction</button><output id="result"></output>
-                <script src="/bootstrap.js" data-asset-host="${assetHost}"></script>
+                <script src="/bootstrap.js" data-asset-host="${assetHost}"${sdkVersion ? ` data-sdk-version="${sdkVersion}"` : ''}></script>
                 <script src="/init.js"></script>
                 <script async src="/app.js"></script>
             </body></html>`
@@ -129,9 +132,9 @@ for (const assetHost of ['https://us-assets.i.posthog.com', 'https://eu-assets.i
                     expect(events.find(({ event }) => event === 'named event')?.properties.token).toBe('phc_secondary')
                 }
                 const resolvedHost = assetHost === '/ingest' ? 'https://customer.example/ingest' : assetHost
-                const aliasURL = `${resolvedHost}/static/${majorVersion}/array.js`
+                const aliasURL = `${resolvedHost}${corePath}`
                 expect(downloads).toEqual([aliasURL])
-                if (!fail) {
+                if (!fail && mutable) {
                     expect(await page.evaluate(() => (window as any).__bootstrapCoreRevision)).toBe(1)
                     revision = 2
                     events.length = 0

@@ -1,7 +1,6 @@
 import { isFunction } from '@posthog/core'
 import { document } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { version } from '../../package.json'
 import { assignableWindow } from '../utils/globals'
 import { createPostHogStub } from '../utils/loader-stub'
 
@@ -37,8 +36,15 @@ function bootstrap(): void {
         return
     }
 
+    const sdkVersion = script.getAttribute('data-sdk-version')?.trim()
+    if (sdkVersion && !/^\d+(?:\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)?$/.test(sdkVersion)) {
+        logger.critical('data-sdk-version must be a major or full SDK version; omit it to load the latest SDK.')
+        return
+    }
+
     assignableWindow.posthog = createPostHogStub()
-    url.pathname = url.pathname.replace(/\/+$/, '') + `/static/${version.split('.')[0]}/array.js`
+    const namespace = sdkVersion ? `${sdkVersion}/` : ''
+    url.pathname = url.pathname.replace(/\/+$/, '') + `/static/${namespace}array.js`
     const core = document.createElement('script')
     core.src = url.href
     core.async = true

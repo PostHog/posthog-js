@@ -1,8 +1,6 @@
 import { isNull } from '@posthog/core'
-import { version } from '../../package.json'
 import { AssignableWindow } from '../utils/globals'
 
-const majorVersion = version.split('.')[0]
 const loaderWindow = window as AssignableWindow
 const bootstrap = () => import('../entrypoints/loader-bootstrap')
 
@@ -29,15 +27,42 @@ describe('local loader bootstrap', () => {
 
     const injectedCore = () => document.querySelector<HTMLScriptElement>('script[src$="array.js"]')!
 
-    it('downloads the auto-updating major-version SDK without a hosted-loader request', async () => {
+    it('downloads the latest SDK by default without a hosted-loader request', async () => {
         await bootstrap()
         const downloads = Array.from(document.querySelectorAll<HTMLScriptElement>('script'))
             .filter((element) => element !== script)
             .map((element) => element.src)
-        expect(downloads).toEqual([`https://us-assets.i.posthog.com/static/${majorVersion}/array.js`])
+        expect(downloads).toEqual(['https://us-assets.i.posthog.com/static/array.js'])
         expect(injectedCore().async).toBe(true)
         expect(injectedCore().crossOrigin).toBe('anonymous')
     })
+
+    it.each([
+        ['', 'static/array.js'],
+        ['   ', 'static/array.js'],
+        ['1', 'static/1/array.js'],
+        [' 1.441.2 ', 'static/1.441.2/array.js'],
+        ['1.441.3-beta.1', 'static/1.441.3-beta.1/array.js'],
+    ])('selects the namespace for data-sdk-version %j', async (sdkVersion, corePath) => {
+        script.setAttribute('data-sdk-version', sdkVersion)
+        await bootstrap()
+        expect(injectedCore().src).toBe(`https://us-assets.i.posthog.com/${corePath}`)
+        expect(console.error).not.toHaveBeenCalled()
+    })
+
+    it.each(['latest', '1.2', '../1', '1/array.js', 'https://example.com', '1?project_token=phc_wrong'])(
+        'rejects invalid SDK namespace %s without creating a queue or downloading the SDK',
+        async (sdkVersion) => {
+            script.setAttribute('data-sdk-version', sdkVersion)
+            await bootstrap()
+            expect(console.error).toHaveBeenCalledWith(
+                expect.any(String),
+                'data-sdk-version must be a major or full SDK version; omit it to load the latest SDK.'
+            )
+            expect(loaderWindow.posthog).toBeUndefined()
+            expect(document.querySelectorAll('script')).toHaveLength(1)
+        }
+    )
 
     it('reports copied token-bearing script URLs instead of silently ignoring their token', async () => {
         script.setAttribute(
@@ -69,15 +94,15 @@ describe('local loader bootstrap', () => {
     })
 
     it.each([
-        ['https://eu-assets.i.posthog.com', `https://eu-assets.i.posthog.com/static/${majorVersion}/array.js`],
-        [' https://us-assets.i.posthog.com/ ', `https://us-assets.i.posthog.com/static/${majorVersion}/array.js`],
-        ['https://proxy.example/ingest', `https://proxy.example/ingest/static/${majorVersion}/array.js`],
-        ['https://proxy.example/ingest/', `https://proxy.example/ingest/static/${majorVersion}/array.js`],
-        ['/ingest', `http://localhost/ingest/static/${majorVersion}/array.js`],
-        ['http://proxy.example:8080/ingest', `http://proxy.example:8080/ingest/static/${majorVersion}/array.js`],
-        ['/static-proxy', `http://localhost/static-proxy/static/${majorVersion}/array.js`],
-        ['/', `http://localhost/static/${majorVersion}/array.js`],
-    ])('loads the major-version alias from asset host %s', async (source, expected) => {
+        ['https://eu-assets.i.posthog.com', 'https://eu-assets.i.posthog.com/static/array.js'],
+        [' https://us-assets.i.posthog.com/ ', 'https://us-assets.i.posthog.com/static/array.js'],
+        ['https://proxy.example/ingest', 'https://proxy.example/ingest/static/array.js'],
+        ['https://proxy.example/ingest/', 'https://proxy.example/ingest/static/array.js'],
+        ['/ingest', 'http://localhost/ingest/static/array.js'],
+        ['http://proxy.example:8080/ingest', 'http://proxy.example:8080/ingest/static/array.js'],
+        ['/static-proxy', 'http://localhost/static-proxy/static/array.js'],
+        ['/', 'http://localhost/static/array.js'],
+    ])('loads the unversioned alias from asset host %s', async (source, expected) => {
         script.setAttribute('data-asset-host', source)
         await bootstrap()
         expect(injectedCore().src).toBe(expected)
