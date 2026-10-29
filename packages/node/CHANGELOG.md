@@ -1,5 +1,15 @@
 # posthog-node
 
+## 5.60.1
+
+### Patch Changes
+
+- [#5471](https://github.com/PostHog/posthog-js/pull/5471) [`0058ef9`](https://github.com/PostHog/posthog-js/commit/0058ef9664f27224de6377ec18d786bdc0e67e4d) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix: let later conditions resolve a flag locally when an unexpected error follows a filter that local evaluation cannot check, instead of failing the whole flag
+  (2026-10-29)
+
+- [#5471](https://github.com/PostHog/posthog-js/pull/5471) [`0058ef9`](https://github.com/PostHog/posthog-js/commit/0058ef9664f27224de6377ec18d786bdc0e67e4d) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix: fall back to the server when a flag depends on a flag that only the server can evaluate (for example, one with a static cohort), instead of letting a later condition choose a different value locally. `unresolvedFlags` reports such a flag as `unresolved_dependency`
+  (2026-10-29)
+
 ## 5.60.0
 
 ### Minor Changes
