@@ -322,6 +322,7 @@ describe('PostHogSurveyProvider — popup delay', () => {
     ...popoverSurvey,
     id,
     appearance: { surveyPopupDelaySeconds: delay },
+    questions: [{ id: 'q1', type: SurveyQuestionType.Open, question: 'Feedback?' }],
   })
   const loadSurveys = async () => {
     // Flush the provider's readiness promises without advancing the appearance delay.
@@ -403,6 +404,181 @@ describe('PostHogSurveyProvider — popup delay', () => {
     // Both effective delays are zero, so preserve their original order.
     expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('first')
     expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('orders candidates using the local fallback delay', async () => {
+    mockClient = makeClient([delayedSurvey('fallback'), delayedSurvey('explicit', 1)])
+    const view = render(
+      <PostHogSurveyProvider client={mockClient} defaultSurveyAppearance={{ surveyPopupDelaySeconds: 10 }}>
+        <div />
+      </PostHogSurveyProvider>
+    )
+    await loadSurveys()
+    await advance(999)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    await advance(1)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('explicit')
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves the first deadline when the qualifying event repeats', async () => {
+    mockClient = makeClient([
+      { ...delayedSurvey('triggered', 10), conditions: { events: { values: [{ name: 'add_to_cart' }] } } },
+    ])
+    const view = renderProvider()
+    await loadSurveys()
+    const capture = mockClient.on.mock.calls.find(([name]: [string]) => name === 'capture')[1]
+    act(() => capture({ event: 'add_to_cart' }))
+    await advance(4000)
+    act(() => capture({ event: 'add_to_cart' }))
+    await advance(4000)
+    act(() => capture({ event: 'add_to_cart' }))
+    await advance(1999)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+    expect(mockClient.setPersistedProperty).not.toHaveBeenCalledWith(
+      PostHogPersistedProperty.SurveyLastSeenDate,
+      expect.anything()
+    )
+    await advance(1)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('triggered')
+    await advance(10000)
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves the pending deadline across unrelated flag updates', async () => {
+    mockClient = makeClient([delayedSurvey('pending', 10)])
+    const view = renderProvider()
+    await loadSurveys()
+    await advance(4000)
+    setFlags({ unrelated: true })
+    await advance(4000)
+    setFlags({ unrelated: false })
+    await advance(1999)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+    await advance(1)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('pending')
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves the pending deadline across equivalent inline appearances', async () => {
+    mockClient = makeClient([delayedSurvey('pending')])
+    const provider = () => (
+      <PostHogSurveyProvider client={mockClient} defaultSurveyAppearance={{ surveyPopupDelaySeconds: 10 }}>
+        <div />
+      </PostHogSurveyProvider>
+    )
+    const view = render(provider())
+    await loadSurveys()
+    await advance(4000)
+    view.rerender(provider())
+    await advance(4000)
+    view.rerender(provider())
+    await advance(1999)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+    await advance(1)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('pending')
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([0, 12])('applies a changed local delay of %s seconds from the original selection', async (delay) => {
+    mockClient = makeClient([delayedSurvey('pending')])
+    const provider = (seconds: number) => (
+      <PostHogSurveyProvider client={mockClient} defaultSurveyAppearance={{ surveyPopupDelaySeconds: seconds }}>
+        <div />
+      </PostHogSurveyProvider>
+    )
+    const view = render(provider(10))
+    await loadSurveys()
+    await advance(4000)
+    view.rerender(provider(delay))
+    if (delay > 0) {
+      await advance(delay * 1000 - 4001)
+      expect(view.queryByTestId('survey-modal')).toBeNull()
+      await advance(1)
+    }
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('pending')
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a pending reservation when a shorter-delay candidate becomes eligible', async () => {
+    mockClient = makeClient([
+      delayedSurvey('pending', 10),
+      { ...delayedSurvey('new', 0), targeting_flag_key: 'new-eligible' },
+    ])
+    const view = renderProvider()
+    await loadSurveys()
+    await advance(4000)
+    setFlags({ 'new-eligible': true })
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    await advance(6000)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('pending')
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts a new delay after the pending survey loses and regains eligibility', async () => {
+    mockClient = makeClient([{ ...delayedSurvey('pending', 10), targeting_flag_key: 'eligible' }])
+    mockClient.getFeatureFlags.mockReturnValue({ eligible: true })
+    const view = renderProvider()
+    await loadSurveys()
+    await advance(4000)
+    setFlags({ eligible: false })
+    await advance(4000)
+    setFlags({ eligible: true })
+    await advance(9999)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+    await advance(1)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('pending')
+  })
+
+  it('releases a pending reservation on reset and waits for a new trigger', async () => {
+    mockClient = makeClient([
+      { ...delayedSurvey('triggered', 10), conditions: { events: { values: [{ name: 'trigger' }] } } },
+    ])
+    const view = renderProvider()
+    await loadSurveys()
+    const capture = mockClient.on.mock.calls.find(([name]: [string]) => name === 'capture')[1]
+    act(() => capture({ event: 'trigger' }))
+    await advance(4000)
+    act(() => {
+      for (const [event, callback] of mockClient.on.mock.calls) {
+        if (event === 'surveysReset') callback()
+      }
+    })
+    await loadSurveys()
+    await advance(10000)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+    expect(dismissedSurveyEvent).not.toHaveBeenCalled()
+    act(() => capture({ event: 'trigger' }))
+    await advance(9999)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    await advance(1)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('triggered')
+  })
+
+  it('starts a fresh countdown when the client changes', async () => {
+    const survey = delayedSurvey('pending', 10)
+    mockClient = makeClient([survey])
+    const view = renderProvider()
+    await loadSurveys()
+    await advance(4000)
+    mockClient = makeClient([survey])
+    view.rerender(
+      <PostHogSurveyProvider client={mockClient}>
+        <div />
+      </PostHogSurveyProvider>
+    )
+    await loadSurveys()
+    await advance(9999)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+    await advance(1)
+    expect(view.getByTestId('survey-modal').getAttribute('data-survey-id')).toBe('pending')
+    expect(sendSurveyShownEvent).toHaveBeenCalledWith(survey, mockClient, null)
   })
 
   it('waits the full delay and chooses the shortest delay without mutating the definitions', async () => {
@@ -521,6 +697,22 @@ describe('PostHogSurveyProvider — popup delay', () => {
     await advance(5000)
     expect(view.queryByTestId('survey-modal')).toBeNull()
     expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+  })
+
+  it('does not show a pending survey if the client opts out during the delay', async () => {
+    mockClient = makeClient([delayedSurvey('pending', 5)])
+    const view = renderProvider()
+    await loadSurveys()
+    await advance(2000)
+    mockClient.optedOut = true
+    await advance(3000)
+    expect(view.queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+    expect(dismissedSurveyEvent).not.toHaveBeenCalled()
+    expect(mockClient.setPersistedProperty).not.toHaveBeenCalledWith(
+      PostHogPersistedProperty.SurveyLastSeenDate,
+      expect.anything()
+    )
   })
 
   it('cancels the appearance timer on unmount', async () => {
