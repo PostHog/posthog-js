@@ -122,6 +122,37 @@ describe('PostHogInterceptor', () => {
     })
 
     it.each([
+      { name: 'reads the posthog-js cookie when readPostHogCookie is on', readPostHogCookie: true, linked: true },
+      { name: 'ignores the posthog-js cookie by default', readPostHogCookie: undefined, linked: false },
+    ])('should $name', async ({ readPostHogCookie, linked }) => {
+      await posthog.shutdown()
+      posthog = createPostHog({ readPostHogCookie })
+      const interceptor = new PostHogInterceptor(posthog)
+      const now = Date.now()
+      const cookieValue = encodeURIComponent(
+        JSON.stringify({
+          distinct_id: 'user-from-cookie',
+          $user_state: 'identified',
+          $sesid: [now, 'cookie-session', now],
+        })
+      )
+      const context = createMockContext({ headers: { cookie: `ph_TEST_API_KEY_posthog=${cookieValue}` } })
+
+      let capturedContext: any
+      const handler = {
+        handle: () => {
+          capturedContext = posthog.getContext()
+          return of({ success: true })
+        },
+      }
+
+      await lastValueFrom(interceptor.intercept(context, handler))
+
+      expect(capturedContext.sessionId).toBe(linked ? 'cookie-session' : undefined)
+      expect(capturedContext.distinctId).toBe(linked ? 'user-from-cookie' : undefined)
+    })
+
+    it.each([
       {
         name: 'strips request path search and preserves URL hash by default',
         options: {},
