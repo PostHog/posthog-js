@@ -817,6 +817,18 @@ describe('ConversationsManager', () => {
             expect(themeCss()).toContain('@media (prefers-color-scheme: dark)')
         })
 
+        it('falls back to the init theme when setTheme() clears a value', async () => {
+            mockPosthog.config.conversations = { theme: { primary: '#fde047' } }
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            manager.setTheme({ primary: '#222222' })
+            expect(themeCss()).toContain('--ph-conv-primary:#222222;')
+
+            manager.setTheme({ primary: undefined })
+            expect(themeCss()).toContain('--ph-conv-primary:#fde047;')
+        })
+
         it('keeps setTheme() changes made while hidden and applies them when shown again', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()

@@ -6,7 +6,7 @@ import {
 } from '../../../extensions/conversations/external/theme'
 import { getStyles } from '../../../extensions/conversations/external/components/styles'
 
-const SELECTOR = ':where(#ph-conversations-widget-container)'
+const SELECTOR = '[id="ph-conversations-widget-container"]'
 
 const lightBlock = (css: string): string => {
     const start = css.indexOf(`${SELECTOR}{`) + SELECTOR.length + 1
@@ -139,8 +139,17 @@ describe('conversations theme', () => {
             ).toEqual({ primary: '#111', colorScheme: 'auto', dark: { primary: '#222', background: '#444' } })
         })
 
-        it('resets a value that the patch sets to undefined', () => {
-            expect(mergeThemes({ primary: '#111' }, { primary: undefined }).primary).toBeUndefined()
+        it('removes keys the patch sets to undefined so a later merge falls back to the base', () => {
+            const overrides = mergeThemes(
+                { primary: '#222', dark: { primary: '#333' } },
+                { primary: undefined, dark: { primary: undefined } }
+            )
+
+            expect(overrides).toEqual({ dark: {} })
+            expect(mergeThemes({ primary: '#111', dark: { primary: '#444' } }, overrides)).toEqual({
+                primary: '#111',
+                dark: { primary: '#444' },
+            })
         })
     })
 

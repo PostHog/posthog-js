@@ -1,5 +1,6 @@
 import type { ConversationsTheme, ConversationsThemeColors } from '../../../posthog-conversations-types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
+import { isUndefined } from '@posthog/core'
 
 const logger = createLogger('[Conversations]')
 
@@ -58,9 +59,21 @@ export function getContrastTextColor(hexColor: string): string {
     return hsp > 127.5 ? '#020617' : 'white'
 }
 
-/** Merge a theme patch over a base theme. `dark` is merged one level deeper. */
+function removeUndefined<T extends object>(values: T): T {
+    for (const key in values) {
+        if (isUndefined(values[key])) {
+            delete values[key]
+        }
+    }
+    return values
+}
+
+/**
+ * Merge a theme patch over a base theme. `dark` is merged one level deeper.
+ * A key the patch sets to undefined is removed, so a later merge falls back to the value beneath it.
+ */
 export function mergeThemes(base: ConversationsTheme | undefined, patch: ConversationsTheme | undefined) {
-    return { ...base, ...patch, dark: { ...base?.dark, ...patch?.dark } }
+    return removeUndefined({ ...base, ...patch, dark: removeUndefined({ ...base?.dark, ...patch?.dark }) })
 }
 
 function colorValues(colors: ConversationsThemeColors, primary: string, primaryText: string | undefined): ThemeValues {
@@ -96,11 +109,12 @@ function declarations(values: ThemeValues): string {
 /**
  * Build the widget's theme stylesheet.
  *
- * Rules use `:where()` so they have zero specificity: any rule a customer writes for the
- * container overrides the SDK's values.
+ * Rules select the container by attribute rather than by id so they stay below the specificity of
+ * `#ph-conversations-widget-container`: any rule a customer writes for the container overrides
+ * the SDK's values. `:where()` would do the same but is missing from browsers we still support.
  */
 export function buildThemeCss(remoteColor: string | undefined, theme: ConversationsTheme): string {
-    const selector = `:where(#${WIDGET_CONTAINER_ID})`
+    const selector = `[id="${WIDGET_CONTAINER_ID}"]`
     const primary = theme.primary || remoteColor || DEFAULT_PRIMARY_COLOR
     const light = declarations({
         ...colorValues(theme, primary, theme.primaryText),
