@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5477](https://github.com/PostHog/posthog-js/issues/5477) | Confirmed privacy bug: retries queued before opt-out can be dispatched after consent is withdrawn. | web, javascript, team/client-libraries, bug |  | no | 2026-10-29T06:09:51.358Z |
 | PostHog/posthog-js | [issue 5462](https://github.com/PostHog/posthog-js/issues/5462) | Confirmed React Native Fabric compatibility bug in the touch-autocapture fallback. | react-native, feature/autocapture, feature/mobile, team/client-libraries, bug |  | no | 2026-10-28T08:40:32.243Z |
 | PostHog/posthog-js | [issue 5442](https://github.com/PostHog/posthog-js/issues/5442) | Confirmed configuration bug: the Expo 57 example enables pnpm's no-downgrade trust policy but omits the existing scoped exception required by its locked dependency graph. | react-native, team/client-libraries, bug | https://github.com/PostHog/posthog-js/pull/5443 | no | 2026-10-26T22:30:56.796Z |
 | PostHog/posthog-js | [issue 5435](https://github.com/PostHog/posthog-js/issues/5435) | Confirmed compatibility bug: the published OTel entrypoint has a hard runtime dependency on the retired `@opentelemetry/sdk-trace-base` package. | node, team/ai-observability, bug |  | no | 2026-10-26T15:56:07.651Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 2150](https://github.com/PostHog/posthog-js/issues/2150) | Valid React Native autocapture feature request; not a small/safe sweep fix without gesture-classification design. | enhancement, feature/autocapture, feature/mobile, feature/replay, react-native, Android, iOS |  | no | 2026-07-03T09:32:09.302Z |
 | PostHog/posthog-js | [issue 3755](https://github.com/PostHog/posthog-js/issues/3755) | Valid error-tracking feature request; not a small SDK-only change. | enhancement, feature, feature/error-tracking, team/error-tracking |  | no | 2026-07-03T09:30:14.105Z |
 | PostHog/posthog-js | [issue 2527](https://github.com/PostHog/posthog-js/issues/2527) | Likely valid Next.js sourcemap retention/upload issue, but needs reproduction details before changing behavior. | feature/error-tracking, frameworks/next-js, team/error-tracking |  | no | 2026-07-02T09:35:19.514Z |
-| PostHog/posthog-js | [issue 3618](https://github.com/PostHog/posthog-js/issues/3618) | Valid feature request; the browser SDK currently adds the `_` cache-buster unconditionally and there is no opt-out. | enhancement, web, feature |  | no | 2026-07-02T09:34:10.541Z |
