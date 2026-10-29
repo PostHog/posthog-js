@@ -3624,6 +3624,10 @@
         {
           "type": "AbortSignal",
           "name": "signal"
+        },
+        {
+          "type": "\"error\" | \"follow\" | \"manual\"",
+          "name": "redirect"
         }
       ],
       "path": "../core/src/types.ts"

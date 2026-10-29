@@ -278,6 +278,104 @@ describe('V1CaptureSender', () => {
     })
   })
 
+  describe('redirects', () => {
+    const redirect = (status: number, location?: string): PostHogFetchResponse =>
+      makeResponse(status, 'moved', location === undefined ? {} : { Location: location })
+
+    it.each<[number, string, string]>([
+      [307, '/i/v1/analytics/events?moved=1', 'https://t.posthog.com/i/v1/analytics/events?moved=1'],
+      [308, 'https://t.posthog.com:443/elsewhere', 'https://t.posthog.com/elsewhere'],
+    ])('follows a same-origin %s with the same method, headers and body', async (status, location, resolved) => {
+      const compressed = new Uint8Array([7, 8, 9])
+      const { sender, fetch, errors } = makeSender(
+        { compression: 'gzip' },
+        { compress: () => Promise.resolve(compressed) }
+      )
+      fetch.mockResolvedValueOnce(redirect(status, location)).mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      await sender.send(v1Events([msg('u1')]))
+
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual(['https://t.posthog.com/i/v1/analytics/events', resolved])
+      const [first, second] = fetch.mock.calls.map(([, options]) => options)
+      expect(second.method).toBe('POST')
+      expect(second.headers).toEqual(first.headers)
+      expect(second.headers['PostHog-Attempt']).toBe('1')
+      expect(second.body).toEqual(compressed)
+      expect(second.body).not.toBe(first.body)
+      expect([first.redirect, second.redirect]).toEqual(['manual', 'manual'])
+      expect(errors).toEqual([])
+    })
+
+    it('follows up to 5 redirects and reports the 6th as a final failure', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValue(redirect(307, '/i/v1/analytics/events'))
+
+      await sender.send(v1Events([msg('u1')]))
+
+      expect(fetch).toHaveBeenCalledTimes(6)
+      expect(errors).toHaveLength(1)
+      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
+      expect(((errors[0] as CaptureError).cause as Error).message).toBe(
+        'Capture V1 request was redirected more than 5 times'
+      )
+    })
+
+    it('reaches a final response on the 5th redirect', async () => {
+      const { sender, fetch, errors } = makeSender()
+      for (let i = 0; i < 5; i++) {
+        fetch.mockResolvedValueOnce(redirect(308, `/hop-${i}`))
+      }
+      fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      await sender.send(v1Events([msg('u1')]))
+
+      expect(fetch).toHaveBeenCalledTimes(6)
+      expect(errors).toEqual([])
+    })
+
+    it.each<[string, PostHogFetchResponse, string]>([
+      [
+        'another host',
+        redirect(307, 'https://evil.example.com/i/v1/analytics/events'),
+        'away from the configured host',
+      ],
+      ['another scheme', redirect(307, 'http://t.posthog.com/i/v1/analytics/events'), 'away from the configured host'],
+      [
+        'another port',
+        redirect(308, 'https://t.posthog.com:8443/i/v1/analytics/events'),
+        'away from the configured host',
+      ],
+      ['no Location', redirect(307), 'away from the configured host'],
+      ['a 301', redirect(301, '/i/v1/analytics/events'), 'HTTP 301 redirect, which it does not follow'],
+      ['a 302', redirect(302, '/i/v1/analytics/events'), 'HTTP 302 redirect, which it does not follow'],
+      ['a 303', redirect(303, '/i/v1/analytics/events'), 'HTTP 303 redirect, which it does not follow'],
+    ])('reports a redirect to %s as a final failure without retrying', async (_label, response, reason) => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValue(response)
+
+      const unsent = await sender.send(v1Events([msg('u1')]), { keepUnsent: true })
+
+      expect(unsent).toEqual([])
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(errors).toHaveLength(1)
+      const error = errors[0] as CaptureError
+      expect(error).toBeInstanceOf(CaptureError)
+      expect(error.retryExhausted).toEqual(['u1'])
+      expect((error.cause as Error).message).toContain(reason)
+      expect((error.cause as Error).message).not.toContain('moved')
+    })
+
+    it('treats the final response of a fetch that follows redirects itself normally', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'drop', details: 'billing' } } }))
+
+      await sender.send(v1Events([msg('u1')]))
+
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect((errors[0] as CaptureError).drops).toEqual([{ uuid: 'u1', details: 'billing' }])
+    })
+  })
+
   describe('2xx per-event classification', () => {
     it.each([
       ['ok', { result: 'ok' }],
@@ -291,6 +389,23 @@ describe('V1CaptureSender', () => {
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toEqual([])
+    })
+
+    it.each<[string, (uuid: string) => string]>([
+      ['uppercase', (uuid) => uuid.toUpperCase()],
+      ['braced', (uuid) => `{${uuid}}`],
+      ['urn', (uuid) => `urn:uuid:${uuid}`],
+      ['32-hex', (uuid) => uuid.replace(/-/g, '')],
+    ])('matches a result keyed by the %s form of the event uuid', async (_label, form) => {
+      const uuid = '0198c0de-1234-7abc-8def-0123456789ab'
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(
+        makeResponse(200, { results: { [form(uuid)]: { result: 'drop', details: 'billing' } } })
+      )
+
+      await sender.send(v1Events([msg(uuid)]))
+
+      expect((errors[0] as CaptureError).drops).toEqual([{ uuid, details: 'billing' }])
     })
 
     it('treats an absent uuid as accepted', async () => {
@@ -381,6 +496,106 @@ describe('V1CaptureSender', () => {
       const error = errors[0] as CaptureError
       expect(error.retryExhausted).toEqual(['u1'])
       expect(error.drops).toEqual([])
+    })
+  })
+
+  describe('duplicates_dropped', () => {
+    const DUP = { uuid: 'a', details: 'duplicate_event_uuid' }
+    const uuidsIn = (fetch: Harness['fetch'], call: number): string[] =>
+      bodyOf(fetch, call).batch.map((e: any) => e.uuid)
+
+    it('reports the next n copies as duplicate drops when the kept copy is ok', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(makeResponse(200, { results: { a: { result: 'ok', duplicates_dropped: 2 } } }))
+
+      await sender.send(v1Events([msg('a'), msg('a'), msg('a')]))
+
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toMatchObject({ drops: [DUP, DUP], retryExhausted: [] })
+    })
+
+    it('keeps the drop details on the kept copy', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(
+        makeResponse(200, { results: { a: { result: 'drop', details: 'billing', duplicates_dropped: 1 } } })
+      )
+
+      await sender.send(v1Events([msg('a'), msg('a')]))
+
+      expect((errors[0] as CaptureError).drops).toEqual([{ uuid: 'a', details: 'billing' }, DUP])
+    })
+
+    it('resends only the kept copy when its result is retry', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch
+        .mockResolvedValueOnce(makeResponse(200, { results: { a: { result: 'retry', duplicates_dropped: 1 } } }))
+        .mockResolvedValueOnce(makeResponse(200, { results: { a: { result: 'ok' } } }))
+
+      await sender.send(v1Events([msg('a'), msg('a')]))
+
+      expect(uuidsIn(fetch, 1)).toEqual(['a'])
+      expect(errors[0]).toMatchObject({ drops: [DUP], retryExhausted: [] })
+    })
+
+    it('counts copies per uuid when uuids interleave', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(
+        makeResponse(200, {
+          results: { a: { result: 'ok', duplicates_dropped: 2 }, b: { result: 'retry', duplicates_dropped: 1 } },
+        })
+      )
+      fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      await sender.send(v1Events([msg('a'), msg('b'), msg('a'), msg('b'), msg('a')]))
+
+      expect(uuidsIn(fetch, 1)).toEqual(['b'])
+      expect((errors[0] as CaptureError).drops).toEqual([DUP, { ...DUP, uuid: 'b' }, DUP])
+    })
+
+    it('gives copies past n the kept verdict', async () => {
+      const { sender, fetch, errors } = makeSender()
+      fetch
+        .mockResolvedValueOnce(
+          makeResponse(200, {
+            results: {
+              a: { result: 'retry', duplicates_dropped: 1 },
+              b: { result: 'drop', details: 'billing', duplicates_dropped: 1 },
+            },
+          })
+        )
+        .mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      await sender.send(v1Events([msg('a'), msg('a'), msg('a'), msg('b'), msg('b'), msg('b')]))
+
+      expect(uuidsIn(fetch, 1)).toEqual(['a', 'a'])
+      expect((errors[0] as CaptureError).drops).toEqual([
+        DUP,
+        { uuid: 'b', details: 'billing' },
+        { ...DUP, uuid: 'b' },
+        { uuid: 'b', details: 'billing' },
+      ])
+    })
+
+    it.each<[string, unknown]>([
+      ['zero', 0],
+      ['negative', -1],
+      ['fractional', 1.5],
+      ['a string', '1'],
+      ['null', null],
+      ['absent', undefined],
+    ])('ignores a %s duplicates_dropped and gives every copy the result', async (_label, duplicates) => {
+      const { sender, fetch, errors } = makeSender()
+      fetch.mockResolvedValueOnce(
+        makeResponse(200, { results: { a: { result: 'drop', details: 'billing', duplicates_dropped: duplicates } } })
+      )
+
+      await sender.send(v1Events([msg('a'), msg('a')]))
+
+      expect((errors[0] as CaptureError).drops).toEqual([
+        { uuid: 'a', details: 'billing' },
+        { uuid: 'a', details: 'billing' },
+      ])
     })
   })
 
