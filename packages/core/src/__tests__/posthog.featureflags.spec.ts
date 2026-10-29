@@ -822,18 +822,28 @@ describe('PostHog Feature Flags v4', () => {
         }
       )
 
-      it('should capture feature_flag_called after opt in for a flag read while opted out', async () => {
-        posthog.optOut()
-        posthog.getFeatureFlag('feature-1')
-        posthog.optIn()
-        posthog.getFeatureFlag('feature-1')
-        await waitForPromises()
+      it.each([
+        ['read again after opt in', undefined, true, 1],
+        // The React Native hooks read a flag on mount and only again when flags change
+        ['not read again after opt in', undefined, false, 1],
+        ['read with sendEvent false', { sendEvent: false }, false, 0],
+      ])(
+        'should report a flag read while opted out after opt in when %s',
+        async (_, readOptions, readAgain, expectedCount) => {
+          posthog.optOut()
+          posthog.getFeatureFlag('feature-1', readOptions)
+          posthog.optIn()
+          if (readAgain) {
+            posthog.getFeatureFlag('feature-1')
+          }
+          await waitForPromises()
 
-        const flagCalledEvents = mocks.fetch.mock.calls
-          .flatMap((call) => parseBody(call)?.batch ?? [])
-          .filter((e: any) => e.event === '$feature_flag_called')
-        expect(flagCalledEvents).toHaveLength(1)
-      })
+          const flagCalledEvents = mocks.fetch.mock.calls
+            .flatMap((call) => parseBody(call)?.batch ?? [])
+            .filter((e: any) => e.event === '$feature_flag_called')
+          expect(flagCalledEvents).toHaveLength(expectedCount)
+        }
+      )
 
       describe('$feature_flag_has_experiment', () => {
         const mockFlagsWithMetadata = (metadata: Record<string, any>): void => {

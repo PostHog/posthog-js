@@ -1810,6 +1810,9 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        // Consent can be granted without opt_in_capturing(), for example in another tab or by a consent manager cookie.
+        this.featureFlags?.sendFlagCallsPendingCapture()
+
         const isBot = !this.config.opt_out_useragent_filter && this._is_bot()
         const shouldDropBotEvent = isBot && !this.config.__preview_capture_bot_pageviews
 
@@ -4938,6 +4941,8 @@ export class PostHog implements PostHogInterface {
 
         // Start queue after opting in
         this._start_queue_if_opted_in()
+
+        this.featureFlags?.sendFlagCallsPendingCapture()
 
         // Restart session recording if it should now be enabled
         // (this handles the case where opt_out_capturing_by_default or cookieless_mode prevented it from starting)

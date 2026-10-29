@@ -316,6 +316,7 @@ export class PostHogFeatureFlags implements Extension {
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer: ReturnType<typeof setTimeout> | undefined
     private _firingFeatureFlagsCallbacks: boolean = false
+    private _flagCallsPendingCapture = new Set<string>()
     private _flagsLoadedFromRemote: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
     private _consecutiveStatusZeroFailures: number = 0
@@ -1013,6 +1014,17 @@ export class PostHogFeatureFlags implements Extension {
 
     resetFlagCallReported(): void {
         this._remove(FLAG_CALL_REPORTED)
+        this._flagCallsPendingCapture = new Set()
+    }
+
+    /** Sends `$feature_flag_called` for the flags read while capture was off, once the client can capture. */
+    sendFlagCallsPendingCapture(): void {
+        if (this._flagCallsPendingCapture.size === 0 || !this._client?.canCapture) {
+            return
+        }
+        const pending = this._flagCallsPendingCapture
+        this._flagCallsPendingCapture = new Set()
+        pending.forEach((key) => this.getFeatureFlagResult(key))
     }
 
     _callFlagsEndpoint(options?: { disableFlags?: boolean }): void {
@@ -1354,6 +1366,10 @@ export class PostHogFeatureFlags implements Extension {
             if (!canCapture && Object.keys(flagCallReported).length > 0) {
                 flagCallReported = {}
                 this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
+            }
+            // Callers such as the React hooks do not read the flag again after consent, so report this read then.
+            if (!canCapture) {
+                this._flagCallsPendingCapture.add(key)
             }
             // The client drops the event while capture is off, so marking the flag as reported would suppress the
             // exposure after consent is granted.
@@ -2006,5 +2022,6 @@ export class PostHogFeatureFlags implements Extension {
         this._clearDebouncer()
         this._override_warning = false
         this._consecutiveStatusZeroFailures = 0
+        this._flagCallsPendingCapture = new Set()
     }
 }
