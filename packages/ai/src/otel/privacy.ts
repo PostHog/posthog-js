@@ -1,5 +1,5 @@
 import type { Attributes } from '@opentelemetry/api'
-import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base'
+import type { ReadableSpan, TimedEvent } from './types'
 
 import { withAttributes } from './spans'
 import { isToolDefinitionAttribute, withoutUnparseableToolDefinitions } from './toolDefinitions'

@@ -1,5 +1,5 @@
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
+import type { ReadableSpan } from './types'
 
 import { redactSpan } from './redact'
 import { stripContent } from './privacy'
