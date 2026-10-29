@@ -139,9 +139,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _isWidgetEnabled: boolean
     private _isDomainAllowed: boolean
     private _widgetState: ConversationsWidgetState = 'closed'
+    // open()/close() before the widget paints. Read once when choosing the initial panel state.
+    private _forcedInitialState: ConversationsWidgetState | null = null
     private _isWidgetRendered: boolean = false
     private _hasProcessedRestoreToken: boolean = false
     private _initializeWidgetPromise: Promise<void> | null = null
+    // Bumped by hide() so an initialization already waiting on the network does not
+    // render after the widget was removed.
+    private _widgetInitGeneration: number = 0
     // Bumped by destroy() (and so by reset()). Async initialization captures it before
     // awaiting a request and stops if it changed, so a manager torn down mid-request
     // doesn't persist state, render, or start polling afterwards.
@@ -637,29 +642,56 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (this._initializeWidgetPromise) {
             return this._initializeWidgetPromise
         }
-        this._initializeWidgetPromise = this._doInitializeWidget()
+        const initGeneration = this._widgetInitGeneration
+        this._initializeWidgetPromise = this._doInitializeWidget(initGeneration)
         return this._initializeWidgetPromise
     }
 
-    private async _doInitializeWidget(): Promise<void> {
-        const savedState = this._persistence.loadWidgetState()
-        const initialState: ConversationsWidgetState = savedState === 'open' ? 'open' : 'closed'
-        this._widgetState = initialState
-
+    private async _doInitializeWidget(initGeneration: number): Promise<void> {
         // Get initial user traits (from PostHog person properties or saved)
         const initialUserTraits = this._getInitialUserTraits()
 
-        const generation = this._lifecycleGeneration
+        const lifecycleGeneration = this._lifecycleGeneration
+        // Snapshot before the await so open()/close() during the tickets request
+        // still count as a change once initialization finishes.
+        const persistedBefore: ConversationsWidgetState =
+            this._persistence.loadWidgetState() === 'open' ? 'open' : 'closed'
 
         // Determine initial view based on ticket count
         const { view: initialView, tickets } = await this._determineInitialView()
 
         // destroy()/reset() ran while the tickets request was in flight
-        if (generation !== this._lifecycleGeneration) {
+        if (lifecycleGeneration !== this._lifecycleGeneration) {
             logger.info('Conversations destroyed during widget initialization, not rendering')
             return
         }
+        // hide() ran while the tickets request was in flight
+        if (initGeneration !== this._widgetInitGeneration) {
+            logger.info('Widget initialization cancelled before render')
+            return
+        }
         this._currentView = initialView
+
+        // Read after the await so open()/close() during startup override the saved state.
+        const forcedState = this._forcedInitialState
+        this._forcedInitialState = null
+        const persistedState: ConversationsWidgetState =
+            this._persistence.loadWidgetState() === 'open' ? 'open' : 'closed'
+        const initialState: ConversationsWidgetState = forcedState ?? persistedState
+        this._widgetState = initialState
+
+        // close() writes storage immediately, so compare against the current value when saving
+        // and against the pre-startup value when deciding whether the visible state changed.
+        if (initialState !== persistedState) {
+            this._persistence.saveWidgetState(initialState)
+        }
+        if (initialState !== persistedBefore) {
+            this._posthog.capture('$conversations_widget_state_changed', {
+                state: initialState,
+                view: this._currentView,
+                ticketId: this._currentTicketId,
+            })
+        }
 
         // Render the widget with initial view
         this._renderWidget(initialState, initialUserTraits, initialView, tickets)
@@ -1104,17 +1136,19 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private async _determineInitialView(): Promise<{ view: WidgetView; tickets: Ticket[] }> {
         try {
             const identityBefore = this._posthog.config.identity_distinct_id
-            const generation = this._lifecycleGeneration
+            const lifecycleGeneration = this._lifecycleGeneration
+            const initGeneration = this._widgetInitGeneration
             const response = await this.getTickets()
 
             // If identity changed while the request was in-flight, discard this
             // stale response -- setIdentity/clearIdentity already triggered a
             // fresh _loadTicketsAndReconcileView() with the correct credentials.
-            // Also discard it if the manager was destroyed/reset meanwhile, so the
-            // ticket id isn't written back to the storage reset() just cleared.
+            // Also discard it if the manager was destroyed/reset, or this initialization
+            // was cancelled by hide(), so a stale response doesn't overwrite newer state.
             if (
                 this._posthog.config.identity_distinct_id !== identityBefore ||
-                generation !== this._lifecycleGeneration
+                lifecycleGeneration !== this._lifecycleGeneration ||
+                initGeneration !== this._widgetInitGeneration
             ) {
                 return { view: 'messages', tickets: [] }
             }
@@ -1357,10 +1391,55 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
         this._widgetRef = null
         this._isWidgetRendered = false
+        this._widgetInitGeneration++
         this._initializeWidgetPromise = null
+        this._forcedInitialState = null
 
         // Reset timestamp so show() will re-fetch all messages
         this._lastMessageTimestamp = null
+    }
+
+    /**
+     * Open the chat panel.
+     * Renders the widget first when it is not on the page.
+     * Domain restrictions still apply.
+     */
+    open(): void {
+        if (!this._isDomainAllowed) {
+            logger.warn('Cannot open widget: current domain is not allowed')
+            return
+        }
+
+        if (this._isWidgetRendered) {
+            // The widget reports the change after its next render, which a hide() in the same tick skips.
+            this._persistence.saveWidgetState('open')
+            this._widgetRef?.open()
+            return
+        }
+
+        this._forcedInitialState = 'open'
+        void this._initializeWidget()
+    }
+
+    /**
+     * Close the chat panel. The launcher button stays on the page.
+     * When the widget is not rendered, a closed panel is what show() restores.
+     */
+    close(): void {
+        if (this._isWidgetRendered) {
+            // The widget reports the change after its next render, which a hide() in the same tick skips.
+            this._persistence.saveWidgetState('closed')
+            this._widgetRef?.close()
+            return
+        }
+
+        this._forcedInitialState = 'closed'
+        this._widgetState = 'closed'
+        // Persist immediately. hide() cancels an in-flight initialization, and that
+        // initialization is what would otherwise write the closed state.
+        if (this._persistence.loadWidgetState() === 'open') {
+            this._persistence.saveWidgetState('closed')
+        }
     }
 
     /**

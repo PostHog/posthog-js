@@ -44,6 +44,8 @@ export class PostHogConversations implements Extension {
     // Bumped by reset() so a bundle load that started before the reset doesn't finish
     // initialization against the post-reset state.
     private _resetGeneration: number = 0
+    // open()/close() called before the lazy bundle has loaded. Applied once the manager exists.
+    private _pendingPanelAction: 'open' | 'close' | null = null
 
     constructor(private _instance: PostHog) {}
 
@@ -54,6 +56,7 @@ export class PostHogConversations implements Extension {
     onRemoteConfig(result: RemoteConfigResult) {
         // Don't load conversations if disabled via config
         if (this._instance.config.disable_conversations) {
+            this._pendingPanelAction = null
             return
         }
 
@@ -64,6 +67,7 @@ export class PostHogConversations implements Extension {
 
         const conversations = result.config['conversations']
         if (isNullish(conversations)) {
+            this._pendingPanelAction = null
             return
         }
 
@@ -74,6 +78,10 @@ export class PostHogConversations implements Extension {
             // It's a ConversationsRemoteConfig object
             this._isConversationsEnabled = conversations.enabled
             this._remoteConfig = conversations
+        }
+
+        if (!this._isConversationsEnabled) {
+            this._pendingPanelAction = null
         }
 
         this.loadIfEnabled()
@@ -91,6 +99,7 @@ export class PostHogConversations implements Extension {
         this._remoteConfig = null
         this._remoteConfigSuccessful = undefined
         this._loadFailed = false
+        this._pendingPanelAction = null
     }
 
     loadIfEnabled() {
@@ -194,6 +203,23 @@ export class PostHogConversations implements Extension {
             logger.info('Conversations loaded successfully')
         } catch (e) {
             this._handleLoadError('Error completing conversations initialization', e)
+            return
+        }
+
+        this._applyPendingPanelAction()
+    }
+
+    /** Run an open()/close() that arrived before the lazy bundle finished loading. */
+    private _applyPendingPanelAction(): void {
+        const action = this._pendingPanelAction
+        this._pendingPanelAction = null
+        if (!this._conversationsManager || !action) {
+            return
+        }
+        if (action === 'open') {
+            this._conversationsManager.open()
+        } else {
+            this._conversationsManager.close()
         }
     }
 
@@ -220,10 +246,45 @@ export class PostHogConversations implements Extension {
      * Hide the conversations widget completely (button and chat panel)
      */
     hide(): void {
+        if (this._pendingPanelAction === 'open') {
+            this._pendingPanelAction = null
+        }
         if (!this._conversationsManager) {
             return
         }
         this._conversationsManager.hide()
+    }
+
+    /**
+     * Open the chat panel.
+     * Renders the widget first when it is not on the page.
+     *
+     * @example
+     * posthog.conversations.open()
+     */
+    open(): void {
+        if (!this._conversationsManager) {
+            // The bundle loads after remote config. Keep the request instead of dropping it.
+            this._pendingPanelAction = 'open'
+            return
+        }
+        this._pendingPanelAction = null
+        this._conversationsManager.open()
+    }
+
+    /**
+     * Close the chat panel. The launcher button stays on the page.
+     *
+     * @example
+     * posthog.conversations.close()
+     */
+    close(): void {
+        if (!this._conversationsManager) {
+            this._pendingPanelAction = 'close'
+            return
+        }
+        this._pendingPanelAction = null
+        this._conversationsManager.close()
     }
 
     /**

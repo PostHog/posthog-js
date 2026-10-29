@@ -39,6 +39,8 @@ describe('Conversations API Methods', () => {
         mockManager = {
             show: vi.fn(),
             hide: vi.fn(),
+            open: vi.fn(),
+            close: vi.fn(),
             reset: vi.fn(),
             isVisible: vi.fn().mockReturnValue(true),
             sendMessage: vi.fn(),
