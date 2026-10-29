@@ -32,7 +32,6 @@ const PROVIDER_NAMES = new Map([
   ['vertexai', 'vertex'],
 ])
 
-const BASE64_DATA_URL = /^data:([^;,]*)[^,]*;base64,(.*)$/s
 const STACK_ERROR_NAME = /^([A-Za-z_$][\w$]*)(?=:|\n|$)/
 
 /**
@@ -92,8 +91,8 @@ export interface PostHogGenkitSpanProcessorOptions {
   /** The PostHog client used to capture events. */
   client: PostHog
   /**
-   * Distinct ID for the captured events. When omitted, the distinct ID from `client.withContext()` is used
-   * if there is one. Otherwise events are captured anonymously (personless) keyed by the trace ID.
+   * Distinct ID for the captured events. When omitted, the distinct ID from `client.withContext()` at
+   * span start is used if there is one. Otherwise events are captured anonymously (personless) keyed by the trace ID.
    */
   distinctId?: string
   /** Leaves out inputs and outputs when true. Defaults to false. */
@@ -139,6 +138,7 @@ export class PostHogGenkitSpanProcessor {
   private readonly _groups?: Record<string, string | number>
   private readonly _properties: Record<string, unknown>
   private readonly _onError?: (error: unknown) => void
+  private readonly _spanDistinctIds = new WeakMap<object, string>()
 
   constructor(options: PostHogGenkitSpanProcessorOptions) {
     this._client = options.client
@@ -149,20 +149,31 @@ export class PostHogGenkitSpanProcessor {
     this._onError = options.onError
   }
 
-  onStart(): void {}
+  onStart(span: Pick<GenkitSpan, 'spanContext'>): void {
+    try {
+      const distinctId = this._distinctId ?? this._client.getContext?.()?.distinctId
+      if (distinctId !== undefined) {
+        this._spanDistinctIds.set(span, distinctId)
+      }
+    } catch (error) {
+      this._handleError(error)
+    }
+  }
 
   onEnd(span: GenkitSpan): void {
+    const distinctId = this._distinctId ?? this._spanDistinctIds.get(span)
+    this._spanDistinctIds.delete(span)
     try {
       if (typeof span.attributes['genkit:type'] !== 'string') {
         return
       }
       const subtype = span.attributes['genkit:metadata:subtype']
       if (subtype === 'model') {
-        this._captureGeneration(span)
+        this._captureGeneration(span, distinctId)
       } else if (subtype === 'embedder') {
-        this._captureEmbedding(span)
+        this._captureEmbedding(span, distinctId)
       } else {
-        this._captureSpan(span)
+        this._captureSpan(span, distinctId)
       }
     } catch (error) {
       this._handleError(error)
@@ -181,7 +192,7 @@ export class PostHogGenkitSpanProcessor {
     await this.forceFlush()
   }
 
-  private _captureGeneration(span: GenkitSpan): void {
+  private _captureGeneration(span: GenkitSpan, distinctId?: string): void {
     const request = parseAttribute(span, 'genkit:input') as GenkitModelRequest | undefined
     const response = parseAttribute(span, 'genkit:output') as GenkitModelResponse | undefined
     const usage = response?.usage
@@ -191,7 +202,7 @@ export class PostHogGenkitSpanProcessor {
     const { traceId, spanId, parentId } = spanIds(span)
 
     void captureAiGeneration(this._client, {
-      distinctId: this._resolveDistinctId(),
+      distinctId,
       traceId,
       ...modelAndProvider(span.name),
       baseURL: null,
@@ -222,7 +233,7 @@ export class PostHogGenkitSpanProcessor {
     })
   }
 
-  private _captureEmbedding(span: GenkitSpan): void {
+  private _captureEmbedding(span: GenkitSpan, distinctId?: string): void {
     const request = parseAttribute(span, 'genkit:input') as GenkitEmbedRequest | undefined
     const shouldRedact = isPrivacyModeEnabled(this._client, this._privacyMode)
     const { traceId, spanId, parentId } = spanIds(span)
@@ -231,7 +242,7 @@ export class PostHogGenkitSpanProcessor {
     // Genkit embed responses carry only the vectors, so there is no output or token usage to capture.
     void captureAiGeneration(this._client, {
       eventType: AIEvent.Embedding,
-      distinctId: this._resolveDistinctId(),
+      distinctId,
       traceId,
       ...modelAndProvider(span.name),
       baseURL: null,
@@ -252,10 +263,9 @@ export class PostHogGenkitSpanProcessor {
     })
   }
 
-  private _captureSpan(span: GenkitSpan): void {
+  private _captureSpan(span: GenkitSpan, distinctId?: string): void {
     const isRoot = span.attributes['genkit:isRoot'] === true
     const { traceId, spanId, parentId } = spanIds(span)
-    const distinctId = this._resolveDistinctId()
     const error = spanError(span)
 
     captureAiEvent(this._client, {
@@ -284,11 +294,6 @@ export class PostHogGenkitSpanProcessor {
       },
       groups: this._groups,
     })
-  }
-
-  private _resolveDistinctId(): string | undefined {
-    // span.end() runs inside the Genkit action, so a posthog-node context entered around the call is still active.
-    return this._distinctId ?? this._client.getContext?.()?.distinctId
   }
 
   private _handleError(error: unknown): void {
@@ -346,9 +351,15 @@ function formatPart(part: GenkitPart, client: PostHog): unknown {
 }
 
 function formatMedia(media: { url: string; contentType?: string }, client: PostHog): unknown {
-  const dataUrl = BASE64_DATA_URL.exec(media.url)
-  if (dataUrl) {
-    return formatInlineDataBlock({ mimeType: media.contentType || dataUrl[1], data: dataUrl[2] }, client)
+  if (media.url.startsWith('data:')) {
+    const comma = media.url.indexOf(',')
+    const metadata = media.url.slice(5, comma)
+    if (comma !== -1 && metadata.endsWith(';base64')) {
+      return formatInlineDataBlock(
+        { mimeType: media.contentType || metadata.split(';', 1)[0], data: media.url.slice(comma + 1) },
+        client
+      )
+    }
   }
   if (!media.contentType || media.contentType.startsWith('image/')) {
     return { type: 'image', image: media.url }

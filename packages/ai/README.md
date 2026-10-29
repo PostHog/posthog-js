@@ -111,7 +111,7 @@ The `googleai` and `vertexai` plugin names are sent as the `gemini` and `vertex`
 A streamed model call gives one `$ai_generation` with the complete response.
 Model parameters include only the common sampling settings.
 In span input and output, credential fields such as `apiKey`, `authorization` and `headers` are replaced with `[REDACTED]`.
-When `distinctId` is not set, events use the distinct ID from `client.withContext()` if there is one.
+When `distinctId` is not set, events use the distinct ID from `client.withContext()` when each span starts, even if it ends outside that context.
 In serverless functions, `await flushTracing()` from `genkit/tracing` before the function returns, so the PostHog client sends its queued events.
 Capture and flush failures never reach the Genkit flow. Pass `onError` to see them.
 

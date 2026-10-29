@@ -11,7 +11,7 @@ beforeAll(async () => {
   await enableTelemetry({
     spanProcessors: [
       {
-        onStart: () => {},
+        onStart: (span) => processor?.onStart(span),
         onEnd: (span) => processor?.onEnd(span),
         forceFlush: async () => processor?.forceFlush(),
         shutdown: async () => {},
