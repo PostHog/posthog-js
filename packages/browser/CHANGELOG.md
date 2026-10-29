@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.442.0
+
+### Minor Changes
+
+- [#5467](https://github.com/PostHog/posthog-js/pull/5467) [`afde45e`](https://github.com/PostHog/posthog-js/commit/afde45e3d38272d1512c2f5de66e9a249895ade2) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add `posthog.conversations.open()` and `posthog.conversations.close()` to open and close the support chat panel
+  (2026-10-29)
+
 ## 1.441.2
 
 ### Patch Changes
