@@ -77,6 +77,7 @@ import { AI_MAX_PROPERTIES_BYTES, ANALYTICS_MAX_EVENT_BYTES, CAPTURE_BATCH_TARGE
 import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
 import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
 import { canonicalizeUuid } from './capture-v1/uuid'
+import { readEventOptions } from './capture-v1/transform'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -131,6 +132,52 @@ function isInvalidUuid(uuid: unknown): boolean {
 function normalizeHost(value?: unknown): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || DEFAULT_NODE_HOST
+}
+
+/**
+ * A copy of the event for `before_send`, so a hook that mutates it cannot change the caller's
+ * objects or the `register()` and context defaults. Plain objects and arrays are copied all the
+ * way down; class instances (`Date`, `Buffer`, custom classes) stay shared. The hook always gets
+ * an `options` object it can write to.
+ */
+function isolateForBeforeSend(eventMessage: EventMessage): EventMessage {
+  const isolated = copyPlainValues(eventMessage, new WeakMap()) as EventMessage
+  isolated.options ??= {}
+  return isolated
+}
+
+/** Only objects with no prototype or `Object.prototype`: a copy keeps no class or `toJSON` method. */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+// `seen` keeps a circular value circular, so it still fails at serialization as it would without a hook.
+function copyPlainValues(value: unknown, seen: WeakMap<object, unknown>): unknown {
+  if (!Array.isArray(value) && !isPlainRecord(value)) {
+    return value
+  }
+  const known = seen.get(value)
+  if (known !== undefined) {
+    return known
+  }
+  if (Array.isArray(value)) {
+    const copy: unknown[] = new Array(value.length)
+    seen.set(value, copy)
+    value.forEach((item, index) => {
+      copy[index] = copyPlainValues(item, seen)
+    })
+    return copy
+  }
+  const copy: Record<string, unknown> = Object.getPrototypeOf(value) === null ? Object.create(null) : {}
+  seen.set(value, copy)
+  for (const key of Object.keys(value)) {
+    copy[key] = copyPlainValues(value[key], seen)
+  }
+  return copy
 }
 
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
@@ -1036,7 +1083,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
     return this.addPendingPromise(
       this._prepareEventMessage(props, prepareOptions)
-        .then(({ distinctId, event, properties, options }) => {
+        .then(({ distinctId, event, properties, options, eventOptions }) => {
           const captureOptions: LaneCaptureOptions = {
             timestamp: options.timestamp,
             disableGeoip: options.disableGeoip,
@@ -1050,6 +1097,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
               ...properties,
               ...this.getCommonEventProperties(),
             },
+            ...(eventOptions !== undefined ? { options: eventOptions } : {}),
           }
           return immediate
             ? this.sendImmediate(type, message, captureOptions, explicitRoute)
@@ -1226,7 +1274,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The identify data containing distinctId and properties
    */
-  identify({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): void {
+  identify({ distinctId, properties = {}, disableGeoip, options }: IdentifyMessage): void {
     // Catch properties passed as $set and move them to the top level
     const { $set, $set_once, $anon_distinct_id, ...rest } = properties
     // if no $set is provided we assume all rest properties are $set
@@ -1239,7 +1287,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
     this._sendPreparedEvent(
       'identify',
-      { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
+      { distinctId, event: '$identify', properties: eventProperties, disableGeoip, options },
       false,
       { includeContextProperties: false }
     )
@@ -1265,7 +1313,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The identify data containing distinctId and properties
    * @returns Promise that resolves when the identify is processed
    */
-  async identifyImmediate({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): Promise<void> {
+  async identifyImmediate({ distinctId, properties = {}, disableGeoip, options }: IdentifyMessage): Promise<void> {
     // Catch properties passed as $set and move them to the top level
     const { $set, $set_once, $anon_distinct_id, ...rest } = properties
     // if no $set is provided we assume all rest properties are $set
@@ -1278,7 +1326,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
     await this._sendPreparedEvent(
       'identify',
-      { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
+      { distinctId, event: '$identify', properties: eventProperties, disableGeoip, options },
       true,
       { includeContextProperties: false }
     )
@@ -1300,7 +1348,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The data containing distinctId and properties to set
    */
-  setPersonProperties({ distinctId, properties = {}, propertiesOnce = {} }: SetPersonPropertiesMessage): void {
+  setPersonProperties({ distinctId, properties = {}, propertiesOnce = {}, options }: SetPersonPropertiesMessage): void {
     if (Object.keys(properties).length === 0 && Object.keys(propertiesOnce).length === 0) {
       return
     }
@@ -1317,6 +1365,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       distinctId,
       event: '$set',
       properties: eventProperties,
+      options,
     })
   }
 
@@ -1335,13 +1384,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The data containing distinctId and property names to unset
    */
-  unsetPersonProperties({ distinctId, properties }: UnsetPersonPropertiesMessage): void {
+  unsetPersonProperties({ distinctId, properties, options }: UnsetPersonPropertiesMessage): void {
     const propertyNames = normalizeUnsetPersonProperties(properties)
     if (propertyNames.length === 0) {
       return
     }
 
-    this.capture({ distinctId, event: '$set', properties: { $unset: propertyNames } })
+    this.capture({ distinctId, event: '$set', properties: { $unset: propertyNames }, options })
   }
 
   /**
@@ -1360,7 +1409,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The alias data containing distinctId and alias
    */
-  alias(data: { distinctId: string; alias: string; disableGeoip?: boolean }): void {
+  alias(data: { distinctId: string; alias: string; disableGeoip?: boolean; options?: Record<string, JsonType> }): void {
     this._sendPreparedEvent(
       'alias',
       {
@@ -1368,6 +1417,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         event: '$create_alias',
         properties: { distinct_id: data.distinctId, alias: data.alias },
         disableGeoip: data.disableGeoip,
+        options: data.options,
       },
       false,
       { includeContextProperties: false }
@@ -1391,7 +1441,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The alias data containing distinctId and alias
    * @returns Promise that resolves when the alias is processed
    */
-  async aliasImmediate(data: { distinctId: string; alias: string; disableGeoip?: boolean }): Promise<void> {
+  async aliasImmediate(data: {
+    distinctId: string
+    alias: string
+    disableGeoip?: boolean
+    options?: Record<string, JsonType>
+  }): Promise<void> {
     await this._sendPreparedEvent(
       'alias',
       {
@@ -1399,6 +1454,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         event: '$create_alias',
         properties: { distinct_id: data.distinctId, alias: data.alias },
         disableGeoip: data.disableGeoip,
+        options: data.options,
       },
       true,
       { includeContextProperties: false }
@@ -2687,7 +2743,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The group identify data
    */
-  groupIdentify({ groupType, groupKey, properties, distinctId, disableGeoip }: GroupIdentifyMessage): void {
+  groupIdentify({ groupType, groupKey, properties, distinctId, disableGeoip, options }: GroupIdentifyMessage): void {
     this._sendPreparedEvent(
       'capture',
       {
@@ -2699,6 +2755,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           $group_set: properties || {},
         },
         disableGeoip,
+        options,
       },
       false,
       { includeContextProperties: false }
@@ -2733,6 +2790,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     properties,
     distinctId,
     disableGeoip,
+    options,
   }: GroupIdentifyMessage): Promise<void> {
     await this._sendPreparedEvent(
       'capture',
@@ -2745,6 +2803,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           $group_set: properties || {},
         },
         disableGeoip,
+        options,
       },
       true,
       { includeContextProperties: false }
@@ -3339,6 +3398,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     event: string
     properties: PostHogEventProperties
     options: PostHogCaptureOptions
+    /** The event's `options` map, sent to capture unchanged. */
+    eventOptions?: Record<string, JsonType>
   }> {
     const {
       distinctId,
@@ -3351,6 +3412,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip,
       uuid,
     }: EventMessage = props
+    let eventOptions = readEventOptions(props.options)
 
     const contextData = this.context?.get()
     const includeContextProperties = options.includeContextProperties ?? true
@@ -3371,7 +3433,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     if (!mergedDistinctId) {
       mergedDistinctId = uuidv7()
-      mergedProperties.$process_person_profile = false
+      if (eventOptions?.process_person_profile === undefined || eventOptions.process_person_profile === null) {
+        eventOptions = { ...eventOptions, process_person_profile: false }
+      }
     }
 
     if (includeContextProperties && contextData?.sessionId && !mergedProperties.$session_id) {
@@ -3397,6 +3461,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       timestamp,
       disableGeoip,
       uuid,
+      options: eventOptions,
     })
 
     if (!eventMessage) {
@@ -3482,6 +3547,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         disableGeoip: eventMessage.disableGeoip,
         uuid: eventMessage.uuid,
       },
+      eventOptions: eventMessage.options,
     }
   }
 
@@ -3492,7 +3558,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     const fns = Array.isArray(beforeSend) ? beforeSend : [beforeSend]
-    let result: EventMessage | null = eventMessage
+    let result: EventMessage | null = isolateForBeforeSend(eventMessage)
 
     for (const fn of fns) {
       try {

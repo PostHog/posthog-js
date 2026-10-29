@@ -718,6 +718,7 @@ describe('PostHog Node.js', () => {
         distinctId: '123',
         event: 'test-event',
         properties: { foo: 'bar' },
+        options: {},
         groups: undefined,
         sendFeatureFlags: undefined,
         timestamp: undefined,

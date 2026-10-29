@@ -130,11 +130,12 @@ exports[`server wire snapshots > snapshots the canonical Capture V1 transform an
     "batch": [
       {
         "distinct_id": "person-1",
-        "event": "all-valid-sentinels",
+        "event": "options-and-legacy-properties",
         "options": {
-          "cookieless_mode": true,
-          "disable_skew_correction": false,
-          "process_person_profile": false,
+          "cookieless_mode": "1",
+          "disable_skew_correction": "false",
+          "future_option": "kept",
+          "process_person_profile": true,
           "product_tour_id": "tour-7",
         },
         "properties": {
@@ -159,8 +160,13 @@ exports[`server wire snapshots > snapshots the canonical Capture V1 transform an
       },
       {
         "distinct_id": "person-2",
-        "event": "invalid-sentinels-are-omitted",
-        "options": {},
+        "event": "legacy-option-values-sent-unchanged",
+        "options": {
+          "cookieless_mode": "maybe",
+          "disable_skew_correction": null,
+          "process_person_profile": [],
+          "product_tour_id": 7,
+        },
         "properties": {
           "ordinary": true,
         },
