@@ -62,14 +62,35 @@ describe('resolveCaptureSettings AI lane limits', () => {
   })
 
   it.each<[keyof PostHogOptions, unknown, string]>([
-    ['captureAiMaxQueueSize', 0, 'captureAiMaxQueueSize must be a positive integer; using the default.'],
-    ['captureAiMaxQueueSize', 2.5, 'captureAiMaxQueueSize must be a positive integer; using the default.'],
-    ['captureAiMaxQueueSize', '10', 'captureAiMaxQueueSize must be a positive integer; using the default.'],
-    ['captureAiRequestTimeoutMs', -1, 'captureAiRequestTimeoutMs must be a positive number; using the default.'],
+    [
+      'captureAiMaxQueueSize',
+      0,
+      'captureAiMaxQueueSize must be a positive integer up to 2147483647; using the default.',
+    ],
+    [
+      'captureAiMaxQueueSize',
+      2.5,
+      'captureAiMaxQueueSize must be a positive integer up to 2147483647; using the default.',
+    ],
+    [
+      'captureAiMaxQueueSize',
+      '10',
+      'captureAiMaxQueueSize must be a positive integer up to 2147483647; using the default.',
+    ],
+    [
+      'captureAiRequestTimeoutMs',
+      -1,
+      'captureAiRequestTimeoutMs must be a positive number up to 2147483647; using the default.',
+    ],
+    [
+      'captureAiRequestTimeoutMs',
+      3e9,
+      'captureAiRequestTimeoutMs must be a positive number up to 2147483647; using the default.',
+    ],
     [
       'captureAiRequestTimeoutMs',
       Number.POSITIVE_INFINITY,
-      'captureAiRequestTimeoutMs must be a positive number; using the default.',
+      'captureAiRequestTimeoutMs must be a positive number up to 2147483647; using the default.',
     ],
   ])('logs one error for %s %s and uses the default', (name, value, message) => {
     const { settings, logged } = resolve({ [name]: value } as PostHogOptions)

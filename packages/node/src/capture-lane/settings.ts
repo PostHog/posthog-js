@@ -76,6 +76,9 @@ function resolveCompression(name: string, value: unknown, logInvalid: LogInvalid
   return undefined
 }
 
+// Node clamps a timer delay above this to 1 ms, which would time out every request.
+const MAX_SETTING_VALUE = 2_147_483_647
+
 function resolvePositive(
   name: string,
   value: unknown,
@@ -86,10 +89,17 @@ function resolvePositive(
   if (value == null) {
     return fallback
   }
-  if (typeof value === 'number' && value > 0 && (integer ? Number.isSafeInteger(value) : Number.isFinite(value))) {
+  if (
+    typeof value === 'number' &&
+    value > 0 &&
+    value <= MAX_SETTING_VALUE &&
+    (integer ? Number.isSafeInteger(value) : Number.isFinite(value))
+  ) {
     return value
   }
-  logInvalid(`${name} must be a positive ${integer ? 'integer' : 'number'}; using the default.`)
+  logInvalid(
+    `${name} must be a positive ${integer ? 'integer' : 'number'} up to ${MAX_SETTING_VALUE}; using the default.`
+  )
   return fallback
 }
 

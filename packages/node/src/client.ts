@@ -624,6 +624,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Compresses capture request bodies. The edge build uses CompressionStream; the Node
    * entrypoint overrides this with node:zlib.
+   *
+   * @internal
    */
   protected captureCompressor(): CaptureCompressor {
     return webCompressor
