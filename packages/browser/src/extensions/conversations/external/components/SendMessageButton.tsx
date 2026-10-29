@@ -1,19 +1,13 @@
 import { getStyles } from './styles'
 
 interface SendMessageButtonProps {
-    primaryColor: string
     inputValue: string
     isLoading: boolean
     handleSendMessage: () => void
 }
 
-export const SendMessageButton = ({
-    primaryColor,
-    inputValue,
-    isLoading,
-    handleSendMessage,
-}: SendMessageButtonProps) => {
-    const styles = getStyles(primaryColor)
+export const SendMessageButton = ({ inputValue, isLoading, handleSendMessage }: SendMessageButtonProps) => {
+    const styles = getStyles()
     return (
         <button
             style={{

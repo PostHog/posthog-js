@@ -7,7 +7,6 @@ describe('RichContent', () => {
     const defaultProps = {
         content: 'Fallback text',
         isCustomer: false,
-        primaryColor: '#1d4ed8',
     }
 
     describe('URL Sanitization Security', () => {
@@ -1034,55 +1033,6 @@ describe('RichContent', () => {
             const code = container.querySelector('code')
             // Non-customer styling uses darker background
             expect(code?.style.background).toContain('rgba(0, 0, 0')
-        })
-
-        it('should use primaryColor for links when not customer', () => {
-            const doc: TipTapDoc = {
-                type: 'doc',
-                content: [
-                    {
-                        type: 'paragraph',
-                        content: [
-                            {
-                                type: 'text',
-                                text: 'Link',
-                                marks: [{ type: 'link', attrs: { href: 'https://example.com' } }],
-                            },
-                        ],
-                    },
-                ],
-            }
-
-            const primaryColor = '#ff0000'
-            const { container } = render(
-                <RichContent {...defaultProps} isCustomer={false} primaryColor={primaryColor} richContent={doc} />
-            )
-
-            const link = container.querySelector('a')
-            expect(link?.style.color).toBe('rgb(255, 0, 0)')
-        })
-
-        it('should use white for links when customer', () => {
-            const doc: TipTapDoc = {
-                type: 'doc',
-                content: [
-                    {
-                        type: 'paragraph',
-                        content: [
-                            {
-                                type: 'text',
-                                text: 'Link',
-                                marks: [{ type: 'link', attrs: { href: 'https://example.com' } }],
-                            },
-                        ],
-                    },
-                ],
-            }
-
-            const { container } = render(<RichContent {...defaultProps} isCustomer={true} richContent={doc} />)
-
-            const link = container.querySelector('a')
-            expect(link?.style.color).toBe('white')
         })
     })
 

@@ -769,6 +769,113 @@ describe('ConversationsManager', () => {
         })
     })
 
+    describe('theme', () => {
+        const themeStyles = () => document.querySelectorAll('style[data-ph-conversations-theme]')
+        // prepareStylesheet() writes innerText, which jsdom keeps apart from textContent
+        const themeCss = () => {
+            const style = themeStyles()[0] as HTMLStyleElement | undefined
+            return style?.textContent || style?.innerText || ''
+        }
+
+        it('injects one theme stylesheet with the remote config color when the widget renders', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(themeStyles()).toHaveLength(1)
+            expect(themeStyles()[0].parentNode).toBe(document.head)
+            expect(themeCss()).toContain('--ph-conv-primary:#007bff;')
+        })
+
+        it('does not inject a stylesheet when the widget is not rendered', () => {
+            manager = new ConversationsManager({ ...mockConfig, widgetEnabled: false }, mockPosthog)
+
+            expect(themeStyles()).toHaveLength(0)
+        })
+
+        it('applies the init config theme over the remote config color', async () => {
+            mockPosthog.config.conversations = { theme: { primary: '#fde047', colorScheme: 'dark' } }
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(themeCss()).toContain('--ph-conv-primary:#fde047;')
+            expect(themeCss()).toContain('--ph-conv-bg:#18181b;')
+        })
+
+        it('updates the stylesheet in place when setTheme() is called', async () => {
+            mockPosthog.config.conversations = { theme: { primary: '#fde047' } }
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            const style = themeStyles()[0]
+
+            manager.setTheme({ background: '#000000' })
+            manager.setTheme({ colorScheme: 'auto' })
+
+            expect(themeStyles()).toHaveLength(1)
+            expect(themeStyles()[0]).toBe(style)
+            expect(themeCss()).toContain('--ph-conv-primary:#fde047;')
+            expect(themeCss()).toContain('--ph-conv-bg:#000000;')
+            expect(themeCss()).toContain('@media (prefers-color-scheme: dark)')
+        })
+
+        it('keeps setTheme() changes made while hidden and applies them when shown again', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            act(() => {
+                manager.hide()
+            })
+            expect(themeStyles()).toHaveLength(0)
+
+            manager.setTheme({ primary: '#ff0000' })
+            expect(themeStyles()).toHaveLength(0)
+
+            act(() => {
+                manager.show()
+            })
+            await flushPromises()
+
+            expect(themeStyles()).toHaveLength(1)
+            expect(themeCss()).toContain('--ph-conv-primary:#ff0000;')
+        })
+
+        it('removes the stylesheet on destroy()', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            manager.destroy()
+
+            expect(themeStyles()).toHaveLength(0)
+        })
+
+        it('passes the stylesheet with its CSS through prepare_external_dependency_stylesheet', async () => {
+            let cssSeenByHook = ''
+            const prepare = vi.fn((style: HTMLStyleElement) => {
+                cssSeenByHook = style.innerText
+                style.nonce = 'test-nonce'
+                return style
+            })
+            mockPosthog.config.prepare_external_dependency_stylesheet = prepare
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(prepare).toHaveBeenCalledTimes(1)
+            expect(cssSeenByHook).toContain('--ph-conv-primary:#007bff;')
+            expect((themeStyles()[0] as HTMLStyleElement).nonce).toBe('test-nonce')
+        })
+
+        it('re-attaches the stylesheet when the page removes it', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            themeStyles()[0].remove()
+            act(() => {
+                vi.advanceTimersByTime(1000)
+            })
+
+            expect(themeStyles()).toHaveLength(1)
+        })
+    })
+
     describe('re-attach on SPA navigation', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)

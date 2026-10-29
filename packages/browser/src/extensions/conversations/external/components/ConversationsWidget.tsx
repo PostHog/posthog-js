@@ -595,11 +595,10 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         )
     }
 
-    private _renderMessages(styles: ReturnType<typeof getStyles>, primaryColor: string, placeholderText: string) {
+    private _renderMessages(styles: ReturnType<typeof getStyles>, placeholderText: string) {
         return (
             <MessagesView
                 styles={styles}
-                primaryColor={primaryColor}
                 placeholderText={placeholderText}
                 messages={this.state.messages}
                 inputValue={this.state.inputValue}
@@ -650,11 +649,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     /**
      * Render the content for the current view
      */
-    private _renderViewContent(
-        styles: ReturnType<typeof getStyles>,
-        primaryColor: string,
-        placeholderText: string
-    ): h.JSX.Element {
+    private _renderViewContent(styles: ReturnType<typeof getStyles>, placeholderText: string): h.JSX.Element {
         switch (this.state.view) {
             case 'identification':
                 return this._renderIdentificationForm(styles)
@@ -663,23 +658,21 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             case 'tickets':
                 return this._renderTicketList(styles)
             case 'messages':
-                return this._renderMessages(styles, primaryColor, placeholderText)
+                return this._renderMessages(styles, placeholderText)
         }
     }
 
     render() {
         const { config } = this.props
         const { state, view } = this.state
-        const primaryColor = config.color || '#5375ff'
         const widgetPosition = config.widgetPosition || 'bottom_right'
         const placeholderText = config.placeholderText || 'Type your message...'
-        const styles = getStyles(primaryColor, widgetPosition)
+        const styles = getStyles(widgetPosition)
 
         // Button only (closed state)
         if (state === 'closed') {
             return (
                 <OpenChatButton
-                    primaryColor={primaryColor}
                     position={widgetPosition}
                     handleToggleOpen={this._handleToggleOpen}
                     unreadCount={this.state.unreadCount}
@@ -708,11 +701,11 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                             <span style={styles.headerTitle}>{this._getTitle(view)}</span>
                         </div>
                         <div style={styles.headerActions}>
-                            <CloseChatButton primaryColor={primaryColor} handleClose={this._handleClose} />
+                            <CloseChatButton handleClose={this._handleClose} />
                         </div>
                     </div>
 
-                    {this._renderViewContent(styles, primaryColor, placeholderText)}
+                    {this._renderViewContent(styles, placeholderText)}
 
                     {showRecoverFooter && (
                         <div style={styles.recoverFooter}>

@@ -26,6 +26,7 @@ describe('PostHogConversations', () => {
             hide: vi.fn(),
             open: vi.fn(),
             close: vi.fn(),
+            setTheme: vi.fn(),
             reset: vi.fn(),
             setIdentity: vi.fn(),
             clearIdentity: vi.fn(),
@@ -619,6 +620,48 @@ describe('PostHogConversations', () => {
                 late.onRemoteConfig(remoteConfig)
 
                 expect(mockManager.close).toHaveBeenCalledTimes(1)
+            })
+
+            it('applies setTheme() calls once the bundle loads, merged together', () => {
+                const late = new PostHogConversations(mockPostHog)
+                ;(mockManager.setTheme as VitestMock).mockClear()
+
+                late.setTheme({ primary: '#111111', dark: { background: '#000000' } })
+                late.setTheme({ colorScheme: 'auto', dark: { text: '#ffffff' } })
+                expect(mockManager.setTheme).not.toHaveBeenCalled()
+
+                late.onRemoteConfig(remoteConfig)
+
+                expect(mockManager.setTheme).toHaveBeenCalledTimes(1)
+                expect(mockManager.setTheme).toHaveBeenCalledWith({
+                    primary: '#111111',
+                    colorScheme: 'auto',
+                    dark: { background: '#000000', text: '#ffffff' },
+                })
+            })
+
+            it('keeps the theme across reset()', () => {
+                const late = new PostHogConversations(mockPostHog)
+                late.onRemoteConfig(remoteConfig)
+                late.setTheme({ primary: '#111111' })
+                ;(mockManager.setTheme as VitestMock).mockClear()
+
+                late.reset()
+                late.onRemoteConfig(remoteConfig)
+
+                expect(mockManager.setTheme).toHaveBeenCalledWith({ primary: '#111111', dark: {} })
+            })
+        })
+
+        describe('setTheme', () => {
+            it('forwards the patch to a loaded manager', () => {
+                conversations.setTheme({ colorScheme: 'dark' })
+
+                expect(mockManager.setTheme).toHaveBeenCalledWith({ colorScheme: 'dark' })
+            })
+
+            it('does not throw when called without a theme', () => {
+                expect(() => conversations.setTheme(undefined as any)).not.toThrow()
             })
         })
     })

@@ -2,6 +2,7 @@ import { h, Fragment } from 'preact'
 import { useMemo } from 'preact/hooks'
 import { isUndefined, isNumber, isArray } from '@posthog/core'
 import { TipTapDoc, TipTapNode, TipTapMark } from '../../../../posthog-conversations-types'
+import { cssVar, DEFAULT_ON_PRIMARY_COLOR, DEFAULT_PRIMARY_COLOR } from '../theme'
 
 interface RichContentProps {
     /** Rich content in TipTap JSON format (preferred) */
@@ -10,8 +11,6 @@ interface RichContentProps {
     content: string
     /** Whether message is from customer (affects styling) */
     isCustomer: boolean
-    /** Primary color for links */
-    primaryColor: string
     /** Recognize simple [label](url) links in the greeting's text fallback only. */
     isGreeting?: boolean
 }
@@ -87,7 +86,7 @@ function sanitizeUrl(url: string): string | undefined {
 /** Maximum recursion depth to prevent stack overflow */
 const MAX_DEPTH = 20
 
-function getStyles(isCustomer: boolean, primaryColor: string) {
+function getStyles(isCustomer: boolean) {
     return {
         code: {
             fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
@@ -101,7 +100,7 @@ function getStyles(isCustomer: boolean, primaryColor: string) {
             fontSize: '0.85em',
             padding: '8px 10px',
             borderRadius: '6px',
-            background: isCustomer ? 'rgba(255, 255, 255, 0.15)' : '#f4f4f5',
+            background: isCustomer ? 'rgba(255, 255, 255, 0.15)' : cssVar('surface', '#f4f4f5'),
             overflowX: 'auto' as const,
             whiteSpace: 'pre-wrap' as const,
             wordWrap: 'break-word' as const,
@@ -109,10 +108,12 @@ function getStyles(isCustomer: boolean, primaryColor: string) {
             margin: '8px 0',
             display: 'block',
             lineHeight: 1.5,
-            border: isCustomer ? 'none' : '1px solid #e4e4e7',
+            border: isCustomer ? 'none' : `1px solid ${cssVar('border', '#e4e4e7')}`,
         },
         link: {
-            color: isCustomer ? 'white' : primaryColor,
+            color: isCustomer
+                ? cssVar('on-primary', DEFAULT_ON_PRIMARY_COLOR)
+                : cssVar('primary', DEFAULT_PRIMARY_COLOR),
             textDecoration: 'underline',
         },
         image: {
@@ -294,8 +295,8 @@ function renderNode(
                     style={{
                         margin: '8px 0',
                         paddingLeft: '12px',
-                        borderLeft: '3px solid #e4e4e7',
-                        color: '#71717a',
+                        borderLeft: `3px solid ${cssVar('border', '#e4e4e7')}`,
+                        color: cssVar('muted', '#71717a'),
                     }}
                 >
                     {children}
@@ -314,7 +315,12 @@ function renderNode(
         }
 
         case 'horizontalRule':
-            return <hr key={key} style={{ margin: '12px 0', border: 'none', borderTop: '1px solid #e4e4e7' }} />
+            return (
+                <hr
+                    key={key}
+                    style={{ margin: '12px 0', border: 'none', borderTop: `1px solid ${cssVar('border', '#e4e4e7')}` }}
+                />
+            )
 
         default:
             // Unknown node types: render children if any, otherwise ignore
@@ -386,8 +392,8 @@ function renderPlainText(text: string, styles: ReturnType<typeof getStyles>, isG
  * 2. Otherwise render text, recognizing simple inline links only for greetings
  * 3. Wrap TipTap rendering in try/catch for safety
  */
-export function RichContent({ richContent, content, isCustomer, primaryColor, isGreeting }: RichContentProps) {
-    const styles = useMemo(() => getStyles(isCustomer, primaryColor), [isCustomer, primaryColor])
+export function RichContent({ richContent, content, isCustomer, isGreeting }: RichContentProps) {
+    const styles = useMemo(() => getStyles(isCustomer), [isCustomer])
 
     // Try to render rich content if available
     if (richContent) {

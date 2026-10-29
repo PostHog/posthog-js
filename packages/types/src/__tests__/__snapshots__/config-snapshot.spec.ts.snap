@@ -336,6 +336,107 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
+  \\"conversations\\": [
+    \\"undefined\\",
+    {
+      \\"theme\\": [
+        \\"undefined\\",
+        {
+          \\"colorScheme\\": [
+            \\"undefined\\",
+            \\"\\\\\\"light\\\\\\"\\",
+            \\"\\\\\\"dark\\\\\\"\\",
+            \\"\\\\\\"auto\\\\\\"\\"
+          ],
+          \\"dark\\": [
+            \\"undefined\\",
+            {
+              \\"primary\\": [
+                \\"undefined\\",
+                \\"string\\"
+              ],
+              \\"primaryText\\": [
+                \\"undefined\\",
+                \\"string\\"
+              ],
+              \\"background\\": [
+                \\"undefined\\",
+                \\"string\\"
+              ],
+              \\"surface\\": [
+                \\"undefined\\",
+                \\"string\\"
+              ],
+              \\"text\\": [
+                \\"undefined\\",
+                \\"string\\"
+              ],
+              \\"mutedText\\": [
+                \\"undefined\\",
+                \\"string\\"
+              ],
+              \\"border\\": [
+                \\"undefined\\",
+                \\"string\\"
+              ],
+              \\"agentBubble\\": [
+                \\"undefined\\",
+                \\"string\\"
+              ]
+            }
+          ],
+          \\"fontFamily\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"borderRadius\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"launcherShadow\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"windowShadow\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"primary\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"primaryText\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"background\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"surface\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"text\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"mutedText\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"border\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ],
+          \\"agentBubble\\": [
+            \\"undefined\\",
+            \\"string\\"
+          ]
+        }
+      ]
+    }
+  ],
   \\"identity_distinct_id\\": [
     \\"undefined\\",
     \\"string\\"

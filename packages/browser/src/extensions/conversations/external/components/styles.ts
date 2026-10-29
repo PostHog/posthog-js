@@ -1,26 +1,16 @@
-// Inline styles following PostHog design system
+// Inline styles following PostHog design system.
+// Themeable values read `--ph-conv-*` custom properties (see ../theme.ts); fallbacks are the light theme.
 
 import type { WidgetPosition } from '../../../../posthog-conversations-types'
 import { Z_INDEX_CONVERSATIONS } from '../../../../constants'
+import { cssVar, DEFAULT_ON_PRIMARY_COLOR, DEFAULT_PRIMARY_COLOR } from '../theme'
 
-/**
- * Calculate contrasting text color (black or white) based on background brightness
- * Uses HSP (Highly Sensitive Purity) brightness formula
- */
-function getContrastTextColor(hexColor: string): string {
-    const hex = hexColor.replace(/^#/, '')
-    const fullHex = hex.length === 3 ? hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2] : hex
+const primary = cssVar('primary', DEFAULT_PRIMARY_COLOR)
+const onPrimary = cssVar('on-primary', DEFAULT_ON_PRIMARY_COLOR)
+const background = cssVar('bg', 'white')
+const text = cssVar('text', '#020617')
 
-    const r = parseInt(fullHex.slice(0, 2), 16)
-    const g = parseInt(fullHex.slice(2, 4), 16)
-    const b = parseInt(fullHex.slice(4, 6), 16)
-
-    // HSP brightness formula
-    const hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b))
-    return hsp > 127.5 ? '#020617' : 'white'
-}
-
-export const getStyles = (primaryColor: string, position: WidgetPosition = 'bottom_right') => {
+export const getStyles = (position: WidgetPosition = 'bottom_right') => {
     const isLeft = position.includes('left')
     const isTop = position.includes('top')
 
@@ -30,8 +20,10 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             ...(isTop ? { top: '20px' } : { bottom: '20px' }),
             ...(isLeft ? { left: '20px' } : { right: '20px' }),
             zIndex: Z_INDEX_CONVERSATIONS,
-            fontFamily:
-                '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif',
+            fontFamily: cssVar(
+                'font',
+                '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif'
+            ),
         },
         buttonContainer: {
             position: 'relative' as const,
@@ -40,11 +32,14 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             width: '50px',
             height: '50px',
             borderRadius: '50%',
-            background: primaryColor,
-            color: getContrastTextColor(primaryColor),
+            background: primary,
+            color: onPrimary,
             border: 'none',
             cursor: 'pointer',
-            filter: 'drop-shadow(rgba(9, 14, 21, 0.54) 0px 1px 6px) drop-shadow(rgba(9, 14, 21, 0.9) 0px 2px 32px)',
+            filter: cssVar(
+                'launcher-shadow',
+                'drop-shadow(rgba(9, 14, 21, 0.54) 0px 1px 6px) drop-shadow(rgba(9, 14, 21, 0.9) 0px 2px 32px)'
+            ),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -73,9 +68,9 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             position: 'absolute' as const,
             ...(isTop ? { top: 0 } : { bottom: 0 }),
             ...(isLeft ? { left: 0 } : { right: 0 }),
-            background: 'white',
-            borderRadius: '10px',
-            boxShadow: '0 10px 25px -3px rgba(0,0,0,0.12), 0 4px 12px -2px rgba(0,0,0,0.10)',
+            background,
+            borderRadius: cssVar('radius', '10px'),
+            boxShadow: cssVar('window-shadow', '0 10px 25px -3px rgba(0,0,0,0.12), 0 4px 12px -2px rgba(0,0,0,0.10)'),
             display: 'flex',
             flexDirection: 'column' as const,
             overflow: 'hidden',
@@ -90,8 +85,8 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             maxHeight: 'calc(100vh - 100px)',
         },
         header: {
-            background: primaryColor,
-            color: getContrastTextColor(primaryColor),
+            background: primary,
+            color: onPrimary,
             padding: '8px 12px',
             display: 'flex',
             justifyContent: 'space-between',
@@ -110,7 +105,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         headerLinkButton: {
             background: 'transparent',
             border: 'none',
-            color: getContrastTextColor(primaryColor),
+            color: onPrimary,
             cursor: 'pointer',
             padding: '6px 8px',
             fontSize: '12px',
@@ -120,7 +115,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         headerButton: {
             background: 'transparent',
             border: 'none',
-            color: getContrastTextColor(primaryColor),
+            color: onPrimary,
             cursor: 'pointer',
             padding: '6px 8px',
             fontSize: '16px',
@@ -136,13 +131,13 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             display: 'flex',
             flexDirection: 'column' as const,
             gap: '8px',
-            background: 'white',
+            background,
         },
         message: {
             display: 'flex',
             flexDirection: 'column' as const,
             maxWidth: '85%',
-            animation: 'fadeIn 0.2s ease-out',
+            animation: 'ph-conv-fade-in 0.2s ease-out',
         },
         messageCustomer: {
             alignSelf: 'flex-end',
@@ -154,7 +149,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         },
         messageAuthor: {
             fontSize: '10px',
-            color: '#939393',
+            color: cssVar('muted', '#939393'),
             marginBottom: '4px',
             fontWeight: 500,
         },
@@ -167,19 +162,19 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             whiteSpace: 'pre-wrap' as const,
         },
         messageContentCustomer: {
-            background: primaryColor,
-            color: getContrastTextColor(primaryColor),
+            background: primary,
+            color: onPrimary,
             borderBottomRightRadius: '2px',
         },
         messageContentAgent: {
-            background: 'white',
-            color: '#020617',
-            border: '1.5px solid #dcdcdc',
+            background: cssVar('agent-bubble', 'white'),
+            color: text,
+            border: `1.5px solid ${cssVar('border', '#dcdcdc')}`,
             borderBottomLeftRadius: '2px',
         },
         messageTime: {
             fontSize: '10px',
-            color: '#939393',
+            color: cssVar('muted', '#939393'),
             marginTop: '4px',
             opacity: 0.8,
         },
@@ -195,8 +190,8 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         },
         inputContainer: {
             padding: '8px 12px',
-            background: 'white',
-            borderTop: '1px solid #dcdcdc',
+            background,
+            borderTop: `1px solid ${cssVar('border', '#dcdcdc')}`,
             display: 'flex',
             gap: '8px',
             alignItems: 'center', // Changed from flex-end to center to vertically align input and sendButton
@@ -204,8 +199,8 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         },
         resolvedBanner: {
             paddingTop: '12px',
-            background: 'white',
-            borderTop: '1px solid #dcdcdc',
+            background,
+            borderTop: `1px solid ${cssVar('border', '#dcdcdc')}`,
             display: 'flex',
             flexDirection: 'column' as const,
             flexShrink: 0,
@@ -213,7 +208,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         resolvedBannerText: {
             padding: '0 20px',
             fontSize: '13px',
-            color: '#64748b',
+            color: cssVar('muted', '#64748b'),
             textAlign: 'center' as const,
             lineHeight: 1.5,
         },
@@ -224,8 +219,8 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             resize: 'vertical',
             fontFamily: 'inherit',
             lineHeight: 1.5,
-            color: '#020617',
-            background: 'white',
+            color: text,
+            background,
             border: 'none',
             outline: 'none',
             transition: 'border-color 0.2s ease-out, box-shadow 0.2s ease-out',
@@ -237,8 +232,8 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             width: '33px',
             height: '33px', // Match input minHeight for vertical alignment
             borderRadius: '10px',
-            background: primaryColor,
-            color: getContrastTextColor(primaryColor),
+            background: primary,
+            color: onPrimary,
             border: 'none',
             cursor: 'pointer',
             display: 'flex',
@@ -255,26 +250,26 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             display: 'flex',
             flexDirection: 'column' as const,
             padding: '24px',
-            background: '#eeeded',
+            background: cssVar('surface', '#eeeded'),
             overflowY: 'auto' as const,
         },
         formTitle: {
             fontSize: '18px',
             fontWeight: 600,
-            color: '#020617',
+            color: text,
             marginBottom: '8px',
         },
         formDescription: {
             fontSize: '14px',
-            color: '#64748b',
+            color: cssVar('muted', '#64748b'),
             marginBottom: '24px',
             lineHeight: 1.5,
         },
         recoverFooter: {
             padding: '10px 14px',
-            borderTop: '1px solid #e5e7eb',
+            borderTop: `1px solid ${cssVar('border', '#e5e7eb')}`,
             fontSize: '12px',
-            color: '#64748b',
+            color: cssVar('muted', '#64748b'),
             lineHeight: 1.5,
             flexShrink: 0,
             textAlign: 'center',
@@ -283,7 +278,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             background: 'none',
             border: 'none',
             padding: 0,
-            color: '#64748b',
+            color: cssVar('muted', '#64748b'),
             cursor: 'pointer',
             fontSize: '12px',
             fontFamily: 'inherit',
@@ -296,18 +291,18 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             display: 'block',
             fontSize: '13px',
             fontWeight: 500,
-            color: '#020617',
+            color: text,
             marginBottom: '6px',
         },
         formInput: {
             width: '100%',
             padding: '10px 12px',
-            border: '1px solid #dcdcdc',
+            border: `1px solid ${cssVar('border', '#dcdcdc')}`,
             borderRadius: '6px',
             fontSize: '14px',
             fontFamily: 'inherit',
-            color: '#020617',
-            background: 'white',
+            color: text,
+            background,
             transition: 'border-color 0.2s ease-out, box-shadow 0.2s ease-out',
             boxSizing: 'border-box' as const,
         },
@@ -323,8 +318,8 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             width: '100%',
             padding: '12px 16px',
             borderRadius: '6px',
-            background: primaryColor,
-            color: getContrastTextColor(primaryColor),
+            background: primary,
+            color: onPrimary,
             border: 'none',
             cursor: 'pointer',
             fontSize: '14px',
@@ -334,7 +329,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         },
         formOptional: {
             fontSize: '12px',
-            color: '#939393',
+            color: cssVar('muted', '#939393'),
             fontWeight: 400,
         },
         restoreRequestSuccess: {
@@ -352,7 +347,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             flex: 1,
             display: 'flex',
             flexDirection: 'column' as const,
-            background: 'white',
+            background,
             overflowY: 'auto' as const,
         },
         ticketList: {
@@ -361,16 +356,16 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         },
         ticketItem: {
             padding: '14px 16px',
-            borderBottom: '1px solid #f1f1f1',
+            borderBottom: `1px solid ${cssVar('border', '#f1f1f1')}`,
             cursor: 'pointer',
             transition: 'background 0.15s ease-out',
-            background: 'white',
+            background,
             display: 'flex',
             alignItems: 'center',
             gap: '12px',
         },
         ticketItemUnread: {
-            background: '#fafafa',
+            background: cssVar('surface', '#fafafa'),
         },
         ticketItemContent: {
             display: 'flex',
@@ -380,7 +375,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             minWidth: 0, // Allow text truncation
         },
         ticketItemArrow: {
-            color: '#939393',
+            color: cssVar('muted', '#939393'),
             flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
@@ -393,7 +388,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         },
         ticketPreview: {
             fontSize: '13px',
-            color: '#020617',
+            color: text,
             lineHeight: 1.4,
             flex: 1,
             overflow: 'hidden',
@@ -402,7 +397,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         },
         ticketPreviewUnread: {
             fontSize: '13px',
-            color: '#020617',
+            color: text,
             lineHeight: 1.4,
             flex: 1,
             overflow: 'hidden',
@@ -431,12 +426,12 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         },
         ticketTime: {
             fontSize: '11px',
-            color: '#939393',
+            color: cssVar('muted', '#939393'),
         },
         ticketStatus: {
             fontSize: '10px',
-            color: '#64748b',
-            background: '#f1f5f9',
+            color: cssVar('muted', '#64748b'),
+            background: cssVar('surface', '#f1f5f9'),
             padding: '2px 6px',
             borderRadius: '4px',
             textTransform: 'uppercase' as const,
@@ -449,8 +444,8 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             margin: '12px 16px',
             padding: '10px 16px',
             borderRadius: '8px',
-            background: primaryColor,
-            color: getContrastTextColor(primaryColor),
+            background: primary,
+            color: onPrimary,
             border: 'none',
             cursor: 'pointer',
             fontSize: '13px',
@@ -465,16 +460,16 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             alignItems: 'center',
             justifyContent: 'center',
             gap: '12px',
-            color: '#64748b',
+            color: cssVar('muted', '#64748b'),
             fontSize: '13px',
         },
         loadingSpinner: {
             width: '24px',
             height: '24px',
-            border: '2px solid #e2e8f0',
-            borderTop: `2px solid ${primaryColor}`,
+            border: `2px solid ${cssVar('border', '#e2e8f0')}`,
+            borderTop: `2px solid ${primary}`,
             borderRadius: '50%',
-            animation: 'spin 0.8s linear infinite',
+            animation: 'ph-conv-spin 0.8s linear infinite',
         },
         // Ticket list empty state
         ticketListEmpty: {
@@ -487,26 +482,26 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             textAlign: 'center' as const,
         },
         emptyStateIcon: {
-            color: '#cbd5e1',
+            color: cssVar('muted', '#cbd5e1'),
             marginBottom: '16px',
         },
         emptyStateTitle: {
             fontSize: '16px',
             fontWeight: 600,
-            color: '#020617',
+            color: text,
             marginBottom: '8px',
         },
         emptyStateDescription: {
             fontSize: '13px',
-            color: '#64748b',
+            color: cssVar('muted', '#64748b'),
             lineHeight: 1.5,
             marginBottom: '20px',
         },
         newConversationButtonLarge: {
             padding: '12px 24px',
             borderRadius: '8px',
-            background: primaryColor,
-            color: getContrastTextColor(primaryColor),
+            background: primary,
+            color: onPrimary,
             border: 'none',
             cursor: 'pointer',
             fontSize: '14px',
@@ -517,7 +512,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             marginTop: '10px',
             background: 'transparent',
             border: 'none',
-            color: primaryColor,
+            color: primary,
             cursor: 'pointer',
             fontSize: '13px',
             textDecoration: 'underline',
@@ -527,7 +522,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         backButton: {
             background: 'transparent',
             border: 'none',
-            color: getContrastTextColor(primaryColor),
+            color: onPrimary,
             cursor: 'pointer',
             padding: '6px 0px',
             marginRight: '4px',
