@@ -201,7 +201,26 @@ export class WrappedCompletions extends Completions {
         return value
       })
 
-      return preserveProviderPromise(parentPromise, wrappedPromise)
+      const capturedPromise = wrappedPromise.catch(async (error: unknown) => {
+        await captureAiGeneration(
+          this.phClient,
+          buildChatErrorOptions(
+            {
+              client: this.phClient,
+              provider: 'openai',
+              baseURL: this.baseURL,
+              params: openAIParams,
+              monitoring: posthogParams,
+              modelParametersSource: body,
+            },
+            error,
+            { latency: (Date.now() - startTime) / 1000 }
+          )
+        )
+        throw error
+      })
+
+      return preserveProviderPromise(parentPromise, capturedPromise)
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
@@ -425,7 +444,26 @@ export class WrappedResponses extends Responses {
         return value
       })
 
-      return preserveProviderPromise(parentPromise, wrappedPromise)
+      const capturedPromise = wrappedPromise.catch(async (error: unknown) => {
+        await captureAiGeneration(
+          this.phClient,
+          buildResponsesErrorOptions(
+            {
+              client: this.phClient,
+              provider: 'openai',
+              baseURL: this.baseURL,
+              params: openAIParams,
+              monitoring: posthogParams,
+              modelParametersSource: body,
+            },
+            error,
+            { latency: (Date.now() - startTime) / 1000 }
+          )
+        )
+        throw error
+      })
+
+      return preserveProviderPromise(parentPromise, capturedPromise)
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {

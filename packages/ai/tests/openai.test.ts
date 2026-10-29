@@ -677,6 +677,50 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
   })
 
+  test('streaming chat completions capture an error event when the request fails before the stream opens', async () => {
+    const providerError = Object.assign(new Error('Incorrect API key'), { status: 401 })
+    const ChatMock: any = openaiModule.Chat
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockRejectedValue(providerError)
+
+    await expect(
+      client.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        posthogDistinctId: 'stream-user',
+      })
+    ).rejects.toBe(providerError)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    const { distinctId, properties } = captureArgs[0]
+    expect(distinctId).toBe('stream-user')
+    expect(properties['$ai_http_status']).toBe(401)
+    expect(properties['$ai_is_error']).toBe(true)
+    expect(properties['$ai_error']).toContain('401')
+  })
+
+  test('streaming responses capture an error event when the request fails before the stream opens', async () => {
+    const providerError = Object.assign(new Error('Rate limit reached'), { status: 429 })
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.create = vi.fn().mockRejectedValue(providerError)
+
+    await expect(
+      client.responses.create({
+        model: 'gpt-4o',
+        input: 'Hello',
+        stream: true,
+        posthogDistinctId: 'stream-user',
+      })
+    ).rejects.toBe(providerError)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    const { properties } = captureArgs[0]
+    expect(properties['$ai_http_status']).toBe(429)
+    expect(properties['$ai_is_error']).toBe(true)
+  })
+
   conditionalTest('groups', async () => {
     await client.chat.completions.create({
       model: 'gpt-4',
