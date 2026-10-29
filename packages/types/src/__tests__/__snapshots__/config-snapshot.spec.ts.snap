@@ -59,6 +59,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
         \\"undefined\\",
         \\"false\\",
         \\"true\\"
+      ],
+      \\"capture_value_css_selector_allowlist\\": [
+        \\"undefined\\",
+        \\"string[]\\",
+        \\"(element: Element) => boolean\\"
       ]
     }
   ],
@@ -439,6 +444,7 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
   ],
   \\"properties_string_max_length\\": \\"number\\",
   \\"defaults\\": [
+    \\"\\\\\\"latest\\\\\\"\\",
     \\"\\\\\\"2026-08-30\\\\\\"\\",
     \\"\\\\\\"2026-08-29\\\\\\"\\",
     \\"\\\\\\"2026-06-25\\\\\\"\\",

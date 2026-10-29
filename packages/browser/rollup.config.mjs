@@ -7,6 +7,7 @@ import fs from 'fs'
 import path from 'path'
 import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
 import { modernTransformOptions } from './oxc.config.mjs'
+import { loaderMethods } from './scripts/loader-methods.mjs'
 
 const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
@@ -200,6 +201,8 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
                               '_surveyEventReceiver',
                               // we don't mangle _surveyManager as it's used by external surveys to paint them on the dom directly
                               '_surveyManager',
+
+                              // lifecycle lookup from independently released bundle-local client adapters
 
                               // private ABI between independently emitted slim cores and extension bundles
                               ...(preserveCrossBundleProperties
@@ -451,7 +454,11 @@ const entrypointTargets = entrypoints.map((file) => {
                 : {}),
             ...(outputFormat === 'cjs' ? { exports: 'named' } : {}),
         })),
-        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
+        plugins: [
+            ...(fileName === 'loader' ? [loaderMethods()] : []),
+            ...pluginsForThisFile,
+            visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true }),
+        ],
     }
 })
 

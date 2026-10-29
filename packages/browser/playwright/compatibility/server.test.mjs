@@ -4,18 +4,20 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { compatibilityServer, observations, survey } from './server.mjs'
+import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
 
-async function fixture(t, scenario = 'core') {
+async function fixture(t, scenario = 'core', mode = 'snippet') {
     const folder = await mkdtemp(join(tmpdir(), 'compat-server-'))
     await writeFile(join(folder, 'surveys.js'), 'window.nativeSurvey = true;')
     await writeFile(join(folder, 'array.js'), 'window.nativeCore = true;')
+    await writeFile(join(folder, 'loader.js'), 'window.nativeLoader = true;')
     const settings = {
-        mode: 'snippet',
+        mode,
         scenario,
         coreVersion: '1.2.3',
         coreDist: folder,
         extensionDist: folder,
-        allowedAssets: ['array.js', 'surveys.js'],
+        allowedAssets: ['array.js', 'surveys.js', 'loader.js'],
         harness: join(folder, 'array.js'),
         snippet: join(folder, 'array.js'),
         player: join(folder, 'array.js'),
@@ -50,6 +52,24 @@ test('compatibility server holds actual native assets and supplies scenario conf
     assert.deepEqual(await (await fetch(origin + '/api/surveys')).json(), { surveys: [survey] })
 })
 
+test('loader deployment serves its bootstrap immediately while holding the matching core', async (t) => {
+    const { server, origin } = await fixture(t, 'core', 'loader')
+    const html = await (await fetch(origin)).text()
+    assert.match(html, /src="\/harness\.js"/)
+    assert.doesNotMatch(html, /src="\/(?:consumer|snippet)\.js"/)
+    const bootstrap = await fetch(origin + '/static/loader.js?project_token=phc_COMPAT', {
+        signal: AbortSignal.timeout(2000),
+    })
+    assert.equal(bootstrap.status, 200)
+    assert.equal(await bootstrap.text(), 'window.nativeLoader = true;')
+    const pending = fetch(origin + '/static/1.2.3/array.js')
+    while (!server.inspect().blockedRequests.length) await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(server.inspect().blockedRequests[0].barrier, 'core')
+    server.releaseBarrier('core')
+    assert.equal(await (await pending).text(), 'window.nativeCore = true;')
+    assert.deepEqual(server.inspect().errors, [])
+})
+
 test('compatibility server preserves native versioned fallback and extension faults', async (t) => {
     for (const scenario of ['version-fallback', 'extension-failure']) {
         const { server, origin } = await fixture(t, scenario)
@@ -65,6 +85,28 @@ test('compatibility server preserves native versioned fallback and extension fau
             [404, scenario === 'version-fallback' ? 404 : 503, scenario === 'version-fallback' ? 200 : 503]
         )
     }
+})
+
+test('Replay network fixture preserves application headers and bodies on the wire', async (t) => {
+    const { server, origin } = await fixture(t, 'replay')
+    for (const sample of replayNetworkCases) {
+        const response = await fetch(`${origin}${replayNetworkPath}/${sample.name}`, {
+            method: 'POST',
+            headers: replayNetworkHeaders.request,
+            body: sample.requestBody,
+        })
+        assert.equal(response.status, 200)
+        assert.equal(await response.text(), sample.responseBody)
+        for (const [name, value] of Object.entries(replayNetworkHeaders.response))
+            assert.equal(response.headers.get(name), value)
+    }
+    const requests = server.inspect().requests
+    assert.equal(requests.length, replayNetworkCases.length)
+    for (const [index, sample] of replayNetworkCases.entries()) {
+        assert.equal(requests[index].rawBody, sample.requestBody)
+        assert.equal(requests[index].headers.authorization, replayNetworkHeaders.request.authorization)
+    }
+    assert.deepEqual(server.inspect().errors, [])
 })
 
 test('compatibility behavioral projection retains original ordered ingestion batches separately from raw bytes', async (t) => {

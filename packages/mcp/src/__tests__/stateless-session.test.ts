@@ -1,5 +1,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import {
+  CallToolRequestSchema,
+  LATEST_PROTOCOL_VERSION,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
 import { decodeSessionId } from '../extensions/session-token'
@@ -290,8 +294,8 @@ describe('Stateless session minting', () => {
     const IDENTITY = { distinctId: 'user_mock', properties: { email: 'mock@example.com', plan: 'enterprise' } }
     const PLAN_CALL: MCPRequestLike = { method: 'tools/call', params: { name: 'get_plan', arguments: {} } }
 
-    it('publishes $identify once at initialize and never again for tool calls replaying the token', async () => {
-      // Pod A handles initialize: mints the token and announces the identity.
+    it('attributes tool calls on fresh pods replaying the token without publishing $identify', async () => {
+      // Pod A handles initialize and mints the token.
       const podA = createPod('pod-identify-a', { identify: async () => IDENTITY })
       const transportA: { sessionId?: string } = {}
       setFakeTransport(podA.server, transportA)
@@ -299,10 +303,8 @@ describe('Stateless session minting', () => {
 
       const token = transportA.sessionId
       expect(decodeSessionId(token)).not.toBeNull()
-      expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(1)
 
-      // Fresh pods share nothing with pod A — their identity caches are empty,
-      // but the replayed token says the session was announced at initialize.
+      // Fresh pods share nothing with pod A, so their identity caches are empty.
       for (const podName of ['pod-identify-b', 'pod-identify-c']) {
         const pod = createPod(podName, { identify: async () => IDENTITY })
         await invokeHandler(pod.lowLevel, 'tools/call', PLAN_CALL, {
@@ -310,10 +312,7 @@ describe('Stateless session minting', () => {
         })
       }
 
-      expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(1)
-
-      // Suppressing $identify must not lose attribution: every tool call still
-      // carries the identified user.
+      expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(0)
       const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
       expect(toolCalls).toHaveLength(2)
       for (const toolCall of toolCalls) {
@@ -322,12 +321,67 @@ describe('Stateless session minting', () => {
       }
     })
 
-    it('still publishes $identify for a first-seen identity when no token is in play', async () => {
+    it('publishes no $identify for a first-seen identity when no token is in play', async () => {
       const pod = createPod('pod-identify-generated', { identify: async () => IDENTITY })
 
       await invokeHandler(pod.lowLevel, 'tools/call', PLAN_CALL, { requestInfo: { headers: {} } })
 
-      expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(1)
+      expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(0)
+      expect(eventCapture.findCapturesByEvent('$mcp_tool_call')[0].distinct_id).toBe('user_mock')
+    })
+  })
+
+  describe('sendInitializeEvent: false', () => {
+    const OFF: MCPAnalyticsOptions = { sendInitializeEvent: false }
+    const callTool = { method: 'tools/call', params: { name: 'get_plan', arguments: {} } }
+
+    it('sends no $mcp_initialize but still mints the token another pod resolves', async () => {
+      const podA = createPod('pod-off-a', OFF)
+      const transportA: { sessionId?: string } = {}
+      setFakeTransport(podA.server, transportA)
+      await invokeHandler(podA.lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+
+      const decoded = decodeSessionId(transportA.sessionId)
+      expect(decoded).not.toBeNull()
+      expect(eventCapture.findCapturesByEvent('$mcp_initialize')).toHaveLength(0)
+
+      const podB = createPod('pod-off-b', OFF)
+      await invokeHandler(podB.lowLevel, 'tools/call', callTool, {
+        requestInfo: { headers: { 'mcp-session-id': transportA.sessionId } },
+      })
+
+      const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+      expect(toolCalls).toHaveLength(1)
+      expect(toolCalls[0].properties.$session_id).toBe(decoded?.sessionId)
+      expect(toolCalls[0].properties.$mcp_client_name).toBe('Claude')
+      expect(toolCalls[0].properties.$mcp_client_version).toBe('1.2.3')
+      expect(toolCalls[0].properties.$mcp_protocol_version).toBe('2025-06-18')
+    })
+
+    it('still re-mints the token with the negotiated version after a downgrade', async () => {
+      const podA = createPod('pod-off-downgrade', OFF)
+      const transportA: { sessionId?: string } = {}
+      setFakeTransport(podA.server, transportA)
+      await invokeHandler(
+        podA.lowLevel,
+        'initialize',
+        { method: 'initialize', params: { ...INITIALIZE_REQUEST.params, protocolVersion: '1999-01-01' } },
+        { requestInfo: { headers: {} } }
+      )
+
+      expect(decodeSessionId(transportA.sessionId)?.protocolVersion).toBe(LATEST_PROTOCOL_VERSION)
+      expect(eventCapture.findCapturesByEvent('$mcp_initialize')).toHaveLength(0)
+    })
+
+    it('still stamps the negotiated version on same-pod tool calls', async () => {
+      const { server, lowLevel } = createPod('pod-off-persist', OFF)
+      setFakeTransport(server, {})
+      await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+      await invokeHandler(lowLevel, 'tools/call', callTool)
+
+      const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+      expect(toolCalls).toHaveLength(1)
+      expect(toolCalls[0].properties.$mcp_protocol_version).toBe('2025-06-18')
     })
   })
 })

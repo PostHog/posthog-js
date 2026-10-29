@@ -1,4 +1,4 @@
-import { FeatureFlagValue, JsonType } from '@posthog/core'
+import { FeatureFlagValue, JsonType, UnresolvedFlagReason } from '@posthog/core'
 
 import { FeatureFlagError } from './types'
 
@@ -43,6 +43,11 @@ export type FlagCalledEventParams = {
  */
 export interface FeatureFlagEvaluationsHost {
   captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void
+  /**
+   * Whether a read sends `$feature_flag_called`: the per-read option, then the client's
+   * `sendFeatureFlagEvent` option, then `true`.
+   */
+  resolveSendFeatureFlagEvents(perRead: boolean | undefined): boolean
   logWarning(message: string): void
 }
 
@@ -73,6 +78,7 @@ export class FeatureFlagEvaluations {
   private readonly _groups: Record<string, string | number> | undefined
   private readonly _disableGeoip: boolean | undefined
   private readonly _flags: Record<string, EvaluatedFlagRecord>
+  private readonly _unresolvedFlags: Readonly<Record<string, UnresolvedFlagReason>>
   private readonly _requestId: string | undefined
   private readonly _evaluatedAt: number | undefined
   private readonly _flagDefinitionsLoadedAt: number | undefined
@@ -92,6 +98,7 @@ export class FeatureFlagEvaluations {
     groups?: Record<string, string | number>
     disableGeoip?: boolean
     flags: Record<string, EvaluatedFlagRecord>
+    unresolvedFlags?: Record<string, UnresolvedFlagReason>
     requestId?: string
     evaluatedAt?: number
     flagDefinitionsLoadedAt?: number
@@ -105,6 +112,7 @@ export class FeatureFlagEvaluations {
     this._groups = init.groups
     this._disableGeoip = init.disableGeoip
     this._flags = init.flags
+    this._unresolvedFlags = Object.freeze({ ...init.unresolvedFlags })
     this._requestId = init.requestId
     this._evaluatedAt = init.evaluatedAt
     this._flagDefinitionsLoadedAt = init.flagDefinitionsLoadedAt
@@ -117,32 +125,48 @@ export class FeatureFlagEvaluations {
   /**
    * Check whether a feature flag is enabled. Fires a `$feature_flag_called` event
    * on the first access per (distinctId, flag, value) tuple, deduped via the SDK's
-   * existing cache.
+   * existing cache, unless events are off for this read (see `options.sendFeatureFlagEvents`).
    *
    * Flags that were not returned from the underlying evaluation resolve to
    * `options.defaultValue` (`false` unless overridden). A flag that has a value —
    * including a conclusive `false` result and variant strings — always wins over
    * `options.defaultValue`. Use `getFlag()` to distinguish an absent result from `false`.
+   *
+   * @param key - The feature flag key
+   * @param options - `defaultValue`: the result when the flag is not in the snapshot.
+   *   `sendFeatureFlagEvents`: whether this read sends a `$feature_flag_called` event.
+   *   Defaults to the client's `sendFeatureFlagEvent` option, which defaults to `true`.
+   *   When `false`, the read sends nothing and does not mark the flag as reported, so a
+   *   later read that sends events still reports it. The flag still counts as accessed
+   *   for `onlyAccessed()`.
    */
-  isEnabled(key: string, options: { defaultValue?: boolean } = {}): boolean {
+  isEnabled(key: string, options: { defaultValue?: boolean; sendFeatureFlagEvents?: boolean } = {}): boolean {
     const flag = this._flags[key]
-    this._recordAccess(key)
+    this._recordAccess(key, options.sendFeatureFlagEvents)
     return flag?.enabled ?? options.defaultValue ?? false
   }
 
   /**
    * Get the evaluated value of a feature flag. Fires a `$feature_flag_called` event
-   * on the first access per (distinctId, flag, value) tuple.
+   * on the first access per (distinctId, flag, value) tuple, unless events are off for
+   * this read (see `options.sendFeatureFlagEvents`).
    *
    * Returns the variant string for multivariate flags, `true` for boolean flags that
    * evaluate on, `false` for boolean flags that conclusively evaluate off, and `undefined`
    * for flags that were not returned by the evaluation. Cached inactive definitions are
    * conclusive `false` results during local evaluation, while remote evaluation omits
    * globally inactive flags.
+   *
+   * @param key - The feature flag key
+   * @param options - `sendFeatureFlagEvents`: whether this read sends a `$feature_flag_called`
+   *   event. Defaults to the client's `sendFeatureFlagEvent` option, which defaults to `true`.
+   *   When `false`, the read sends nothing and does not mark the flag as reported, so a
+   *   later read that sends events still reports it. The flag still counts as accessed
+   *   for `onlyAccessed()`.
    */
-  getFlag(key: string): FeatureFlagValue | undefined {
+  getFlag(key: string, options: { sendFeatureFlagEvents?: boolean } = {}): FeatureFlagValue | undefined {
     const flag = this._flags[key]
-    this._recordAccess(key)
+    this._recordAccess(key, options.sendFeatureFlagEvents)
     if (!flag) {
       return undefined
     }
@@ -162,7 +186,8 @@ export class FeatureFlagEvaluations {
 
   /**
    * Return a filtered copy containing only flags that have been accessed via
-   * `isEnabled()` or `getFlag()` before this call.
+   * `isEnabled()` or `getFlag()` before this call, including reads that sent no
+   * `$feature_flag_called` event.
    *
    * Order-dependent: if nothing has been accessed yet, the returned snapshot is
    * empty. The method honors its name — pre-access if you want a populated result.
@@ -217,6 +242,18 @@ export class FeatureFlagEvaluations {
   }
 
   /**
+   * Flags that have a loaded local definition but that neither local evaluation nor a remote
+   * fallback resolved, mapped to the reason local evaluation was inconclusive. These flags are
+   * absent from `keys`, and their accessors return undefined (`isEnabled` returns false). Reading
+   * this does not count as an access and does not fire any event.
+   *
+   * Always empty on snapshots returned by `only()` / `onlyAccessed()`.
+   */
+  get unresolvedFlags(): Readonly<Record<string, UnresolvedFlagReason>> {
+    return this._unresolvedFlags
+  }
+
+  /**
    * Build the `$feature/*` and `$active_feature_flags` event properties derived
    * from the current flag set. Called by `capture()` when an event is captured
    * with `flags: ...`.
@@ -247,6 +284,7 @@ export class FeatureFlagEvaluations {
       groups: this._groups,
       disableGeoip: this._disableGeoip,
       flags,
+      // `unresolvedFlags` is left out on purpose: slices carry no unresolved entries.
       requestId: this._requestId,
       evaluatedAt: this._evaluatedAt,
       flagDefinitionsLoadedAt: this._flagDefinitionsLoadedAt,
@@ -260,8 +298,14 @@ export class FeatureFlagEvaluations {
     })
   }
 
-  private _recordAccess(key: string): void {
+  private _recordAccess(key: string, sendFeatureFlagEvents: boolean | undefined): void {
     this._accessed.add(key)
+
+    // Return before the dedupe cache is touched, so a later read that sends events still
+    // reports this flag.
+    if (!this._host.resolveSendFeatureFlagEvents(sendFeatureFlagEvents)) {
+      return
+    }
 
     // Empty snapshots (no resolvable distinctId) are returned by `evaluateFlags()` as a
     // safety fallback. Firing $feature_flag_called for them would emit events with an
@@ -304,7 +348,8 @@ export class FeatureFlagEvaluations {
 
     // Build the comma-joined `$feature_flag_error` matching the single-flag path's
     // granularity: response-level errors (errors-while-computing, quota-limited) are
-    // combined with per-flag errors (flag-missing) so consumers can filter by type.
+    // combined with per-flag errors (flag-missing or local-evaluation-inconclusive) so consumers
+    // can filter by type.
     const errors: string[] = []
     if (this._errorsWhileComputing) {
       errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
@@ -313,7 +358,11 @@ export class FeatureFlagEvaluations {
       errors.push(FeatureFlagError.QUOTA_LIMITED)
     }
     if (flag === undefined) {
-      errors.push(FeatureFlagError.FLAG_MISSING)
+      errors.push(
+        Object.prototype.hasOwnProperty.call(this._unresolvedFlags, key)
+          ? FeatureFlagError.LOCAL_EVALUATION_INCONCLUSIVE
+          : FeatureFlagError.FLAG_MISSING
+      )
     }
     if (errors.length > 0) {
       properties.$feature_flag_error = errors.join(',')

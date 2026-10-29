@@ -10,6 +10,7 @@ import {
   getPostHogTracingHeaderValues,
 } from './tracing-headers'
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
+import { notifyContextListeners } from './context/listeners'
 import { PostHogBackendClient } from '../client'
 
 // Local interfaces to avoid runtime dependency on @nestjs/common
@@ -104,6 +105,7 @@ export class PostHogInterceptor implements NestInterceptor {
       this.posthog.withContext(
         contextData,
         () => {
+          notifyContextListeners(this.posthog, true)
           let source = next.handle()
 
           if (this.captureExceptions) {

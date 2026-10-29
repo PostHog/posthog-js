@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { parseOptions, selection } from './options.mjs'
-import { MATRIX } from './golden.mjs'
+import { MATRIX, deploymentEntrypoints } from './golden.mjs'
 import { prepare, directory, repository, execute } from './prepare.mjs'
 
 const operation = process.argv[2]
@@ -12,15 +12,17 @@ const args = parseOptions(process.argv.slice(3), ['engines', 'modes', 'compariso
 const selected = {
     engines: selection(MATRIX.browsers, args.engines, 'engines'),
     modes: selection(MATRIX.entrypoints, args.modes, 'modes'),
-    comparisons: selection(['current', 'historical'], args.comparisons, 'comparisons'),
+    comparisons: selection(MATRIX.coreFamilies, args.comparisons, 'comparisons'),
     scenarios: selection(MATRIX.scenarios, args.scenarios, 'scenarios'),
 }
+if (!selected.comparisons.some((comparison) => deploymentEntrypoints(comparison, selected.modes).length))
+    throw new Error('No supported deployments selected')
 if (
     operation === 'update' &&
-    (selected.engines.length !== 3 ||
-        selected.modes.length !== 3 ||
-        selected.comparisons.length !== 2 ||
-        selected.scenarios.length !== 17)
+    (selected.engines.length !== MATRIX.browsers.length ||
+        selected.modes.length !== MATRIX.entrypoints.length ||
+        selected.comparisons.length !== MATRIX.coreFamilies.length ||
+        selected.scenarios.length !== MATRIX.scenarios.length)
 )
     throw new Error('Updates require the full matrix')
 if (args.repeats && (!Number.isInteger(Number(args.repeats)) || Number(args.repeats) < 2))

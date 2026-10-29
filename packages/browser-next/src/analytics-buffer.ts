@@ -48,6 +48,27 @@ export const createAnalyticsExtension = (
     let driver: AnalyticsDriver | undefined
     let loading: Promise<void> | undefined
     let disposed = false
+    const disposalWaiters = new Set<() => void>()
+    const teardownCallbacks = new Set<() => void>()
+    let isTearingDown = false
+    const beforeTeardown = () => {
+        isTearingDown = true
+        try {
+            for (const callback of teardownCallbacks) {
+                try {
+                    callback()
+                } catch (error) {
+                    try {
+                        host.reportFailure(error)
+                    } catch {
+                        /* A product must not block the handoff. */
+                    }
+                }
+            }
+        } finally {
+            isTearingDown = false
+        }
+    }
     let failures = 0
     const buffer = new EventBuffer<AnalyticsMessage>(
         1_000,
@@ -85,7 +106,7 @@ export const createAnalyticsExtension = (
                 if (disposed) {
                     return
                 }
-                driver = createDelivery(buffer, client, host, scheduling)
+                driver = createDelivery(buffer, client, host, scheduling, beforeTeardown)
             } catch (error: unknown) {
                 if (!driver) {
                     failures++
@@ -104,13 +125,16 @@ export const createAnalyticsExtension = (
 
     return {
         name: Analytics,
+        get isTearingDown() {
+            return isTearingDown
+        },
         setup(value) {
             client = value
         },
         initialize(value) {
             host = value
             if (deliveryFactory) {
-                driver = deliveryFactory(buffer, client, host, scheduling)
+                driver = deliveryFactory(buffer, client, host, scheduling, beforeTeardown)
             }
         },
         enqueue: (message, bytes) => buffer.enqueue(message, bytes),
@@ -121,6 +145,17 @@ export const createAnalyticsExtension = (
             void ensureDelivery('capture')
         },
         start: () => (eager ? ensureDelivery('eager') : Promise.resolve()),
+        onBeforeTeardown(callback) {
+            if (!disposed) teardownCallbacks.add(callback)
+            return {
+                get deliveryAvailable() {
+                    return !disposed && !!driver
+                },
+                dispose() {
+                    teardownCallbacks.delete(callback)
+                },
+            }
+        },
         async flush(reason = 'flush') {
             if (disposed) {
                 return
@@ -133,7 +168,17 @@ export const createAnalyticsExtension = (
             await driver?.flush()
         },
         async deliverImmediate(message, canContinue) {
-            await ensureDelivery('immediate')
+            // A pending loader must not hold an immediate capture open after disposal.
+            let release!: () => void
+            const disposal = new Promise<void>((resolve) => {
+                release = resolve
+                disposalWaiters.add(resolve)
+            })
+            try {
+                await Promise.race([ensureDelivery('immediate'), disposal])
+            } finally {
+                disposalWaiters.delete(release)
+            }
             let deliverImmediate: AnalyticsDriver['deliverImmediate'] | undefined
             try {
                 deliverImmediate = driver?.deliverImmediate
@@ -148,9 +193,29 @@ export const createAnalyticsExtension = (
             }
             return deliverImmediate.call(driver, [message], canContinue)
         },
+        deliverUnload(message, canContinue) {
+            const send = () => {
+                if (disposed || !canContinue()) {
+                    return
+                }
+                try {
+                    driver?.deliverUnload([message])
+                } catch (error) {
+                    host.reportFailure(error)
+                }
+            }
+            if (driver) {
+                send()
+            } else {
+                void ensureDelivery('immediate').then(send, (error) => host.reportFailure(error))
+            }
+        },
         purge: () => buffer.purge(),
         dispose() {
             disposed = true
+            for (const release of disposalWaiters) release()
+            disposalWaiters.clear()
+            teardownCallbacks.clear()
             if (driver) {
                 return driver.dispose()
             }

@@ -1,5 +1,5 @@
 import { loadRemoteConfig } from './remote-config'
-import type { BrowserClient, IdentifyInfo, GroupInfo } from './browser-client'
+import type { BrowserClient, ConsentChangeInfo, IdentifyInfo, GroupInfo } from './browser-client'
 import {
     type ApiResponse,
     type CaptureOptions,
@@ -135,6 +135,8 @@ class PostHogBrowserClient implements PostHog {
     readonly onIdentify: BrowserClient['onIdentify']
     readonly onGroup: BrowserClient['onGroup']
     readonly onReset: BrowserClient['onReset']
+    readonly onConsentChange: BrowserClient['onConsentChange']
+    readonly onSession: Client['onSession']
     readonly projectToken: string
 
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
@@ -158,6 +160,7 @@ class PostHogBrowserClient implements PostHog {
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
     private _cancelRemoteConfigWait: (() => void) | undefined
     private _immediateAuthority = {}
+    private readonly _consentChangePublisher: Publisher<ConsentChangeInfo>
     private _closing = false
     private _disposed = false
     private _shutdownPromise: Promise<void> | undefined
@@ -197,6 +200,9 @@ class PostHogBrowserClient implements PostHog {
         this._groupPublisher = new Publisher((error) => this.logger.error('A group listener failed', error))
         this._resetPublisher = new Publisher((error) => this.logger.error('A reset listener failed', error))
         this._newSessionPublisher = new Publisher((error) => this.logger.error('A session listener failed', error))
+        this._consentChangePublisher = new Publisher((error) =>
+            this.logger.error('A consent change listener failed', error)
+        )
 
         const browserNavigator: BrowserNavigator | undefined =
             options.navigator === false ? undefined : (options.navigator ?? getDefaultNavigator())
@@ -218,11 +224,12 @@ class PostHogBrowserClient implements PostHog {
             !this._blocked && options.storage === undefined && requestedStorage !== undefined
                 ? getDefaultSessionStorage
                 : undefined,
-            (consent) => {
+            (consent, previous) => {
                 if (consent === 'denied') {
                     this._immediateAuthority = {}
                     this._captureSink?.purge()
                 }
+                this._consentChangePublisher.publish({ current: consent, previous })
             }
         )
         this._consentObservation = this._observeConsent(
@@ -268,7 +275,9 @@ class PostHogBrowserClient implements PostHog {
         this.onIdentify = this._identifyPublisher.listener
         this.onGroup = this._groupPublisher.listener
         this.onReset = this._resetPublisher.listener
+        this.onConsentChange = this._consentChangePublisher.listener
         this.onNewSession = this._newSessionPublisher.listener
+        this.onSession = (listener) => this.onNewSession((session) => listener(session.sessionId))
         this._registry = new ExtensionRegistry(
             (extensionName) => this._createExtensionClient(extensionName),
             this.logger
@@ -296,9 +305,13 @@ class PostHogBrowserClient implements PostHog {
         return this._state.groups
     }
 
-    get session(): SessionContext {
+    get session(): SessionContext | undefined {
         this._state.prepare()
         return this._state.session
+    }
+
+    get isOptedOut(): boolean {
+        return this.hasOptedOut()
     }
 
     get canCapture(): boolean {
@@ -306,6 +319,19 @@ class PostHogBrowserClient implements PostHog {
     }
 
     capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): void {
+        try {
+            if (options.delivery === 'unload' && !this._captureSink?.isTearingDown) {
+                const authority = this._immediateAuthority
+                const message = this._admitCapture(event, properties, options, false, true)
+                if (message) {
+                    this._captureSink?.deliverUnload(message, () => this._immediateAuthority === authority)
+                }
+                return
+            }
+        } catch (error) {
+            this.logger.error('Unload capture failed', error)
+            return
+        }
         this._capture(event, properties, options)
     }
 
@@ -558,7 +584,7 @@ class PostHogBrowserClient implements PostHog {
     }
 
     async flush(): Promise<void> {
-        await this._captureSink?.flush()
+        await this._registry.flush()
     }
 
     optIn(): void {
@@ -604,12 +630,7 @@ class PostHogBrowserClient implements PostHog {
     }
 
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
-        return sendRequest(
-            this._requestRuntime,
-            path,
-            init,
-            () => !this._closing && !this._disposed && !this._blocked && !this.hasOptedOut()
-        )
+        return sendRequest(this._requestRuntime, path, init, () => !this._blocked && !this.hasOptedOut())
     }
 
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
@@ -715,8 +736,8 @@ class PostHogBrowserClient implements PostHog {
 
     shutdown(shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS): Promise<void> {
         if (!this._shutdownPromise) {
-            const captureFlush = this._captureSink?.flush('shutdown') ?? Promise.resolve()
             this._closing = true
+            const extensionFlush = this._registry.flush('shutdown')
             this._removePageviewListener()
             try {
                 this._consentObservation.dispose()
@@ -728,7 +749,7 @@ class PostHogBrowserClient implements PostHog {
             } catch {
                 // Shutdown remains bounded when timer cleanup is hostile.
             }
-            this._shutdownPromise = this._shutdown(shutdownTimeoutMs, captureFlush)
+            this._shutdownPromise = this._shutdown(shutdownTimeoutMs, extensionFlush)
         }
         return this._shutdownPromise
     }
@@ -737,7 +758,7 @@ class PostHogBrowserClient implements PostHog {
         return this.shutdown()
     }
 
-    private async _shutdown(shutdownTimeoutMs: number, captureFlush: Promise<void>): Promise<void> {
+    private async _shutdown(shutdownTimeoutMs: number, extensionFlush: Promise<void>): Promise<void> {
         const timeoutMs = Math.max(
             0,
             Math.floor(Number.isFinite(shutdownTimeoutMs) ? shutdownTimeoutMs : DEFAULT_SHUTDOWN_TIMEOUT_MS)
@@ -757,7 +778,7 @@ class PostHogBrowserClient implements PostHog {
         })
 
         try {
-            await Promise.race([captureFlush.catch((error) => this.logger.error('Event flush failed', error)), timeout])
+            await Promise.race([extensionFlush, timeout])
 
             this._disposed = true
             try {
@@ -775,6 +796,7 @@ class PostHogBrowserClient implements PostHog {
             this._identifyPublisher.dispose()
             this._groupPublisher.dispose()
             this._resetPublisher.dispose()
+            this._consentChangePublisher.dispose()
             this._newSessionPublisher.dispose()
             this._dynamicEventProperties.splice(0)
             await Promise.race([cleanup, timeout])
@@ -974,6 +996,9 @@ class PostHogBrowserClient implements PostHog {
             get session() {
                 return host.session
             },
+            get isOptedOut() {
+                return host.isOptedOut
+            },
             get canCapture() {
                 return host.canCapture
             },
@@ -984,11 +1009,13 @@ class PostHogBrowserClient implements PostHog {
                 return host.projectToken
             },
             sendRequest: (path, init) => host.sendRequest(path, init),
+            onConsentChange: host.onConsentChange,
             onRemoteConfig: host.onRemoteConfig,
             onEvent: host.onEvent,
             onIdentify: host.onIdentify,
             onGroup: host.onGroup,
             onReset: host.onReset,
+            onSession: host.onSession,
             kv,
             logger,
         }

@@ -1,9 +1,10 @@
-type Command = 'upload-s3'
+type Command = 'upload-s3' | 'upload-browser-s3'
 
 function getUsage(): string {
     return [
         'Usage:',
         '  node tooling/release/src/cli.ts upload-s3 <bucket> <version> [--immutable-only | --aliases-only] [--force-overwrite]',
+        '  node tooling/release/src/cli.ts upload-browser-s3 <bucket> <version> (--immutable-only | --aliases-only)',
     ].join('\n')
 }
 
@@ -11,6 +12,15 @@ async function main(): Promise<void> {
     const [command, ...args] = process.argv.slice(2) as [Command | undefined, ...string[]]
 
     switch (command) {
+        case 'upload-browser-s3': {
+            const [bucket, version, phase, ...extra] = args
+            if (!bucket || !version || extra.length || !['--immutable-only', '--aliases-only'].includes(phase)) {
+                throw new Error(`Invalid upload-browser-s3 arguments\n\n${getUsage()}`)
+            }
+            const { uploadBrowserS3 } = await import('./upload-browser-s3.ts')
+            await uploadBrowserS3(bucket, version, phase === '--immutable-only' ? 'immutable' : 'aliases')
+            return
+        }
         case 'upload-s3': {
             const [bucket, version, ...options] = args
             if (!bucket || !version) {

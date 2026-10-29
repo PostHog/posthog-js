@@ -30,7 +30,14 @@ import {
   SyncSpanContextManager,
   uuidv7,
 } from '@posthog/core'
-import type { Metrics, Span, SpanContextManager, StartSpanOptions, TraceSdkContext } from '@posthog/core'
+import type {
+  Metrics,
+  Span,
+  SpanContextManager,
+  StartSpanOptions,
+  TraceSdkContext,
+  UnresolvedFlagReason,
+} from '@posthog/core'
 import {
   AllFlagsOptions,
   EventMessage,
@@ -62,8 +69,11 @@ import {
   RequiresServerEvaluation,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
+import { getActiveTraceProperties } from './extensions/error-tracking/trace-context'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
+import { notifyContextListeners } from './extensions/context/listeners'
+import { getEventContext } from './extensions/context/event-context'
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
 import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routing'
 import { V1CaptureSender } from './capture-v1/sender'
@@ -158,6 +168,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _v1Sender?: V1CaptureSender
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
+  /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
+  public readonly privacyMode: boolean
   private _aiCaptureRouteActive = false
 
   // Feature flag overrides for local testing/development
@@ -243,6 +255,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.options = normalizedOptions
     this.captureMode = resolveCaptureMode()
     this.enableFullAiCapture = normalizedOptions.enableFullAiCapture === true
+    this.privacyMode = normalizedOptions.privacyMode === true
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
@@ -259,10 +272,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this.options.waitUntilMaxWaitMs = Math.max(normalizedOptions.waitUntilMaxWaitMs, 0)
     }
 
-    if (!this.disabled && normalizedOptions.personalApiKey) {
-      if (normalizedOptions.personalApiKey.includes('phc_')) {
+    if (!this.disabled && (normalizedOptions.personalApiKey || normalizedOptions.flagDefinitionCacheProvider)) {
+      if (normalizedOptions.personalApiKey?.includes('phc_')) {
         throw new Error(
-          'Your Personal API key is invalid. These keys are prefixed with "phx_" and can be created in PostHog project settings.'
+          'A project API key ("phc_...") was provided as secretKey or personalApiKey. Pass the project API key as the first constructor argument. For local evaluation, set secretKey (or the deprecated personalApiKey alias) to a server-only Project Secret API Key ("phs_...") or Personal API Key ("phx_...") with feature flag read access.'
         )
       }
 
@@ -1758,7 +1771,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     )
     const result = await this._getFeatureFlagResult(key, distinctId, {
       ...options,
-      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+      sendFeatureFlagEvents: this._resolveSendFeatureFlagEvents(options?.sendFeatureFlagEvents),
     })
     if (result === undefined) {
       return undefined
@@ -1910,7 +1923,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     return this._getFeatureFlagResult(key, resolvedDistinctId, {
       ...resolvedOptions,
-      sendFeatureFlagEvents: resolvedOptions?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+      sendFeatureFlagEvents: this._resolveSendFeatureFlagEvents(resolvedOptions?.sendFeatureFlagEvents),
     })
   }
 
@@ -2020,7 +2033,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Bypass the public `getFeatureFlag` so the user only sees one deprecation warning per call.
     const result = await this._getFeatureFlagResult(key, distinctId, {
       ...options,
-      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+      sendFeatureFlagEvents: this._resolveSendFeatureFlagEvents(options?.sendFeatureFlagEvents),
     })
     if (result === undefined) {
       return undefined
@@ -2231,6 +2244,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * a cached inactive definition is a conclusive `false` result locally, while remote evaluation
    * omits globally inactive flags and therefore leaves those keys absent.
    *
+   * **Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the
+   * first time each flag value is read for a user. Experiments use these events as exposures.
+   * The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass
+   * `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override
+   * it, so one snapshot can serve both experiment flags and flags that should send no events.
+   * `getFlagPayload()` never sends events.
+   *
    * **Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying
    * `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation
    * responses are not cached, so a key missing both locally and remotely costs one
@@ -2281,7 +2301,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Feature flags}
    *
    * @param distinctIdOrOptions - The user's distinct ID, or options when the distinctId comes from `withContext()`
-   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent.
+   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent; the snapshot's `unresolvedFlags` lists them with a reason.
    * @returns Promise that resolves to a `FeatureFlagEvaluations` snapshot
    */
   async evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
@@ -2467,12 +2487,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
+    // A flag a remote fallback or override resolved has a value, so it is not unresolved.
+    const unresolvedFlags: Record<string, UnresolvedFlagReason> = {}
+    for (const [key, reason] of Object.entries(localResult?.unresolved ?? {})) {
+      if (!Object.prototype.hasOwnProperty.call(records, key)) {
+        unresolvedFlags[key] = reason
+      }
+    }
+
     return new FeatureFlagEvaluations({
       host: this._getFeatureFlagEvaluationsHost(),
       distinctId: resolvedDistinctId,
       groups,
       disableGeoip,
       flags: records,
+      unresolvedFlags,
       requestId,
       evaluatedAt,
       flagDefinitionsLoadedAt: this.featureFlagsPoller?.getFlagDefinitionsLoadedAt(),
@@ -2543,12 +2572,22 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     })
   }
 
+  /**
+   * Whether a flag read sends `$feature_flag_called`: the per-call option wins, then the
+   * client's `sendFeatureFlagEvent` option, then `true`. Shared by the single-flag getters
+   * and `FeatureFlagEvaluations.isEnabled() / getFlag()`.
+   */
+  private _resolveSendFeatureFlagEvents(perCall?: boolean): boolean {
+    return perCall ?? this.options.sendFeatureFlagEvent ?? true
+  }
+
   private _featureFlagEvaluationsHost?: FeatureFlagEvaluationsHost
 
   private _getFeatureFlagEvaluationsHost(): FeatureFlagEvaluationsHost {
     if (!this._featureFlagEvaluationsHost) {
       this._featureFlagEvaluationsHost = {
         captureFlagCalledEventIfNeeded: (params) => this._captureFlagCalledEventIfNeeded(params),
+        resolveSendFeatureFlagEvents: (perRead) => this._resolveSendFeatureFlagEvents(perRead),
         logWarning: (message) => {
           if (this.options.featureFlagsLogWarnings !== false) {
             // These warnings guide API usage (misuse of `onlyAccessed()` / `only()`) and
@@ -2661,7 +2700,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Reload feature flag definitions from the server for local evaluation.
+   * Reload feature flag definitions from the configured cache provider or PostHog for local evaluation.
    *
    * @example
    * ```ts
@@ -2823,7 +2862,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return fn()
     }
 
-    return this.context.run(data, fn, options)
+    return this.context.run(
+      data,
+      () => {
+        notifyContextListeners(this)
+        return fn()
+      },
+      options
+    )
   }
 
   /**
@@ -2862,6 +2908,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   enterContext(data: Partial<ContextData>, options?: ContextOptions): void {
     this.context?.enter(data as ContextData, options)
+    notifyContextListeners(this)
   }
 
   /**
@@ -3156,7 +3203,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           error,
           { syntheticException },
           distinctId,
-          additionalProperties
+          additionalProperties,
+          this.getContext()
         ).then((msg) => this._capturePreparedEvent({ ...msg, uuid, flags }, false))
       )
     }
@@ -3212,7 +3260,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           error,
           { syntheticException },
           distinctId,
-          additionalProperties
+          additionalProperties,
+          this.getContext()
         ).then((msg) => this.captureImmediate({ ...msg, flags }))
       )
     }
@@ -3248,7 +3297,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       uuid,
     }: EventMessage = props
 
-    const contextData = this.context?.get()
+    const contextData = getEventContext(props, this.context?.get())
     const includeContextProperties = options.includeContextProperties ?? true
 
     let mergedDistinctId = distinctId || contextData?.distinctId
@@ -3260,6 +3309,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           ...(properties || {}),
         }
       : { ...(properties || {}) }
+
+    if (event === '$exception' && !('$trace_id' in mergedProperties || '$span_id' in mergedProperties)) {
+      Object.assign(mergedProperties, await getActiveTraceProperties())
+    }
 
     if (!mergedDistinctId) {
       mergedDistinctId = uuidv7()

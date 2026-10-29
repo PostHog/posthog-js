@@ -1,5 +1,156 @@
 # posthog-react-native
 
+## 4.84.3
+
+### Patch Changes
+
+- [#5466](https://github.com/PostHog/posthog-js/pull/5466) [`8c136a8`](https://github.com/PostHog/posthog-js/commit/8c136a8608187dc77b97cc4724639755b37d3c85) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix: capture touch autocapture events on React Native's new architecture (Fabric), where the touched element is only reachable through `target.__internalInstanceHandle`
+  (2026-10-28)
+
+## 4.84.2
+
+### Patch Changes
+
+- [#5431](https://github.com/PostHog/posthog-js/pull/5431) [`96d7ff2`](https://github.com/PostHog/posthog-js/commit/96d7ff2e394126e2bd03a2422f60b5892a85d87f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Deprecate `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` in favor of `getAllFeatureFlags()`, `onFeatureFlag()` in favor of `onFeatureFlags()`, the `cb` option of `reloadFeatureFlags()` in favor of `reloadFeatureFlagsAsync()`, and `overrideFeatureFlag()` in favor of `updateFlags()`. In React Native, also deprecate the `useFeatureFlagWithPayload()` hook in favor of `useFeatureFlagResult()`. They continue to work.
+  (2026-10-27)
+- Updated dependencies [[`96d7ff2`](https://github.com/PostHog/posthog-js/commit/96d7ff2e394126e2bd03a2422f60b5892a85d87f)]:
+  - @posthog/core@1.61.1
+
+## 4.84.1
+
+### Patch Changes
+
+- [#5445](https://github.com/PostHog/posthog-js/pull/5445) [`b9fe0ab`](https://github.com/PostHog/posthog-js/commit/b9fe0abf6f9c335b6ca49d9fb496662cca5806e5) Thanks [@ioannisj](https://github.com/ioannisj)! - Require `@posthog/react-native-plugin` 2.12.7 or newer, which pulls in OkHttp 4.12.1 on Android to block the compromised eMudhra intermediate certificates.
+  (2026-10-27)
+
+## 4.84.0
+
+### Minor Changes
+
+- [#5436](https://github.com/PostHog/posthog-js/pull/5436) [`43ad061`](https://github.com/PostHog/posthog-js/commit/43ad061185c7f8b0a36ed87bb6a28214d4224e9d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add the `projectToken` prop to `PostHogProvider` and the `projectToken` property to the client, and deprecate the `apiKey` prop and property in favor of them. `apiKey` keeps working, and `projectToken` wins when both are set.
+  (2026-10-26)
+
+### Patch Changes
+
+- Updated dependencies [[`43ad061`](https://github.com/PostHog/posthog-js/commit/43ad061185c7f8b0a36ed87bb6a28214d4224e9d)]:
+  - @posthog/core@1.61.0
+
+## 4.83.0
+
+### Minor Changes
+
+- [#5390](https://github.com/PostHog/posthog-js/pull/5390) [`662fd8b`](https://github.com/PostHog/posthog-js/commit/662fd8b237731d53db638dbf3b5b9871f25200fa) Thanks [@petrapresecki](https://github.com/petrapresecki)! - Error tracking drops exceptions that match the project's suppression rules, as posthog-js already does.
+  (2026-10-23)
+
+## 4.82.0
+
+### Minor Changes
+
+- [#5101](https://github.com/PostHog/posthog-js/pull/5101) [`997d4ff`](https://github.com/PostHog/posthog-js/commit/997d4ff074b9919121b274b614bd0e34628d8316) Thanks [@ioannisj](https://github.com/ioannisj)! - Attach `$recording_status` and the replay trigger and buffer `$sdk_debug_*` properties to every captured event, and the rest of the session replay debug properties to SDK events at most once every 30 seconds, reading the native replay state (`buffering`, hold reason, buffer length) from `@posthog/react-native-plugin` 2.12.0 or newer
+  (2026-10-23)
+
+### Patch Changes
+
+- Updated dependencies [[`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d)]:
+  - @posthog/core@1.60.1
+
+## 4.81.10
+
+### Patch Changes
+
+- [#5363](https://github.com/PostHog/posthog-js/pull/5363) [`c77206c`](https://github.com/PostHog/posthog-js/commit/c77206c35cdc41f8adef0acd79d2f612ec8e157c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Restart session replay in a new session when `optIn()` or `reset()` clears an opt-out and the app wanted replay on (`enableSessionReplay` or `startSessionRecording()`, with no `stopSessionRecording()` since), including a manual recording made with `enableSessionReplay` off and replay that was waiting for the linked flag, sampling or an event trigger; to keep replay stopped, call `stopSessionRecording()` before `optOut()` or after `optIn()`.
+  (2026-10-22)
+
+## 4.81.9
+
+### Patch Changes
+
+- [#5365](https://github.com/PostHog/posthog-js/pull/5365) [`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` the next time they are read after opt in.
+  (2026-10-22)
+
+- [#5294](https://github.com/PostHog/posthog-js/pull/5294) [`ff7aa53`](https://github.com/PostHog/posthog-js/commit/ff7aa5362be7f3399ed2b9a957cf0ef63b811967) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix events missing `$os_name` and `$os_version` in apps that use neither `expo-device` nor `react-native-device-info`.
+  (2026-10-22)
+
+- [#5293](https://github.com/PostHog/posthog-js/pull/5293) [`b4dfdff`](https://github.com/PostHog/posthog-js/commit/b4dfdffcae30e9aa29666e5807ec2c422c763229) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix React render errors that crash the app not being captured on React Native 0.78 and newer when `errorTracking.autocapture.uncaughtExceptions` is enabled.
+  (2026-10-22)
+- Updated dependencies [[`964e736`](https://github.com/PostHog/posthog-js/commit/964e736e0bf1649c7207b30e880828ecb8af897c)]:
+  - @posthog/core@1.59.4
+
+## 4.81.8
+
+### Patch Changes
+
+- [#5172](https://github.com/PostHog/posthog-js/pull/5172) [`8374fe7`](https://github.com/PostHog/posthog-js/commit/8374fe7e196aa2cd0afd7353486117b5d91623f2) Thanks [@phillram](https://github.com/phillram)! - Surveys follow the confirmation message setting from PostHog instead of always showing the screen. A confirmation message that carries only a description now shows that description.
+  (2026-10-22)
+
+- [#5347](https://github.com/PostHog/posthog-js/pull/5347) [`b2cd418`](https://github.com/PostHog/posthog-js/commit/b2cd4187ad979f57392ab073283b8bb18db742a6) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay attaching to another client's session when an app creates more than one `PostHog` client; a client for a different project no longer sends `identify()`, opt-out, push or replay calls to the native SDK, which stays with the first client's project.
+  (2026-10-22)
+
+## 4.81.7
+
+### Patch Changes
+
+- [#5336](https://github.com/PostHog/posthog-js/pull/5336) [`1a4ea26`](https://github.com/PostHog/posthog-js/commit/1a4ea26501f67dbecccc31e5eeed663483e11049) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Restart session replay on `optIn()` only if it was recording at `optOut()`, matching posthog-ios. A `stopSessionRecording()` call made while opted out no longer keeps replay stopped on `optIn()`; stop it before `optOut()` or after `optIn()` instead
+  (2026-10-21)
+
+## 4.81.6
+
+### Patch Changes
+
+- [#5283](https://github.com/PostHog/posthog-js/pull/5283) [`17b8cd9`](https://github.com/PostHog/posthog-js/commit/17b8cd9f371060b3a6915157269d51ba0f97fcf2) Thanks [@gauravch-code](https://github.com/gauravch-code)! - fix: Configure Android symbol and sourcemap uploads in Expo projects using Kotlin Gradle files.
+  (2026-10-21)
+- Updated dependencies [[`189da75`](https://github.com/PostHog/posthog-js/commit/189da75c7a52b319843a13405c1343565f0d4e25)]:
+  - @posthog/core@1.59.2
+
+## 4.81.5
+
+### Patch Changes
+
+- [#5253](https://github.com/PostHog/posthog-js/pull/5253) [`cc0d20e`](https://github.com/PostHog/posthog-js/commit/cc0d20e9f11749ba95dfa3e110480d5965bd16a4) Thanks [@Brian-1812](https://github.com/Brian-1812)! - Respect the survey wait period (`seenSurveyWaitPeriodInDays`), so a survey does not show if the user saw any survey within that many days
+  (2026-10-20)
+
+## 4.81.4
+
+### Patch Changes
+
+- [#5313](https://github.com/PostHog/posthog-js/pull/5313) [`1fc47eb`](https://github.com/PostHog/posthog-js/commit/1fc47eb16870d1e100beb873b70ff72afb91cecc) Thanks [@nandinitiw](https://github.com/nandinitiw)! - fix(react-native): resolve `posthog.gradle` from the Android project root, so Gradle builds started outside the project no longer fail
+  (2026-10-20)
+
+## 4.81.3
+
+### Patch Changes
+
+- [#5124](https://github.com/PostHog/posthog-js/pull/5124) [`10ec4ba`](https://github.com/PostHog/posthog-js/commit/10ec4ba84758531465707ae36caca80175e181f9) Thanks [@nandinitiw](https://github.com/nandinitiw)! - Stop session replay on `optOut()` and resume automatic replay under a new session ID on `optIn()`, unless the app stopped it with `stopSessionRecording()`
+  (2026-10-20)
+
+## 4.81.2
+
+### Patch Changes
+
+- [#5271](https://github.com/PostHog/posthog-js/pull/5271) [`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27) Thanks [@posthog](https://github.com/apps/posthog)! - Report fatal JS crashes the JS error handler did not capture, such as React render errors on iOS, through native crash capture instead of dropping them (requires updating both `posthog-react-native` and `@posthog/react-native-plugin`). Apps with `errorTracking.autocapture.nativeCrashes` on and `uncaughtExceptions` off now get every fatal JS crash reported this way.
+  (2026-10-14)
+- Updated dependencies [[`b21765a`](https://github.com/PostHog/posthog-js/commit/b21765ab182726e0f1597294ea1eb0575309bb27)]:
+  - @posthog/react-native-plugin@2.12.6
+
+## 4.81.1
+
+### Patch Changes
+
+- [#5290](https://github.com/PostHog/posthog-js/pull/5290) [`f3ca9c4`](https://github.com/PostHog/posthog-js/commit/f3ca9c48e7610cf1bdd4124fcf02e443a679be17) Thanks [@tsayin4](https://github.com/tsayin4)! - Fix fatal crashes being reported without a stack trace since 4.77.0 when a stack frame has no chunk ID.
+  (2026-10-13)
+
+## 4.81.0
+
+### Minor Changes
+
+- [#5257](https://github.com/PostHog/posthog-js/pull/5257) [`2788b40`](https://github.com/PostHog/posthog-js/commit/2788b409d1649e3e2a901e86b4f60cfb8839dc57) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Change properties passed to `capture()` and the other event methods to override SDK context properties such as `$app_version`, `$os_name` and `$lib`, matching posthog-js and posthog-android
+  (2026-10-10)
+
+### Patch Changes
+
+- Updated dependencies [[`2788b40`](https://github.com/PostHog/posthog-js/commit/2788b409d1649e3e2a901e86b4f60cfb8839dc57)]:
+  - @posthog/core@1.58.0
+
 ## 4.80.0
 
 ### Minor Changes

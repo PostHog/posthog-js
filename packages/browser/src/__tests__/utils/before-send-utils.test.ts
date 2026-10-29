@@ -128,7 +128,7 @@ describe('before send utils', () => {
                     properties: { $session_id: session_id },
                 } as unknown as CaptureResult
                 const firstBySession = sampleBySession(captureResult)
-                const thenByEvent = sampleByEventFn(firstBySession)
+                const thenByEvent = isNull(firstBySession) ? null : sampleByEventFn(firstBySession)
                 results.push(thenByEvent)
             })
         })

@@ -196,6 +196,32 @@ describe('Express extension', () => {
       expect(event.properties.$session_id).toBe(linked ? 'cookie-session' : undefined)
     })
 
+    it('should preserve existing context over cookie-derived identity', async () => {
+      await posthog.shutdown()
+      posthog = createPostHog({ readPostHogCookie: true })
+      const middleware = createRequestContextMiddleware(posthog)
+      const now = Date.now()
+      const cookieValue = encodeURIComponent(
+        JSON.stringify({
+          distinct_id: 'user-from-cookie',
+          $user_state: 'identified',
+          $sesid: [now, 'cookie-session', now],
+        })
+      )
+      const req = createMockRequest({ headers: { cookie: `ph_TEST_API_KEY_posthog=${cookieValue}` } })
+
+      posthog.withContext({ distinctId: 'context-user', sessionId: 'context-session' }, () => {
+        middleware(req, createMockResponse(), () => {
+          posthog.capture({ event: 'handler_event' })
+        })
+      })
+      await waitForFlushTimer(posthog)
+
+      const event = getLastBatchEvents()!.find((e: any) => e.event === 'handler_event')
+      expect(event.distinct_id).toBe('context-user')
+      expect(event.properties.$session_id).toBe('context-session')
+    })
+
     it('should keep anonymous cookie visitors personless and let an explicit distinctId win', async () => {
       await posthog.shutdown()
       posthog = createPostHog({ readPostHogCookie: true })

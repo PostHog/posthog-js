@@ -4,14 +4,22 @@ import { basename, dirname, join, resolve } from 'node:path'
 
 export const MATRIX = Object.freeze({
     coreFamilies: Object.freeze(['current', 'historical']),
-    entrypoints: Object.freeze(['snippet', 'npm', 'slim']),
+    entrypoints: Object.freeze(['snippet', 'npm', 'slim', 'loader']),
     browsers: Object.freeze(['chromium', 'firefox', 'webkit']),
     scenarios: Object.freeze([
         'core',
         'autocapture',
         'surveys',
+        'surveys-auto',
+        'web-vitals',
         'logs',
         'replay',
+        'replay-css',
+        'replay-persisted-config',
+        'replay-idle',
+        'replay-rotation',
+        'replay-bounce',
+        'replay-minimum-duration',
         'disabled',
         'extension-failure',
         'delayed-loading',
@@ -38,6 +46,10 @@ export const HISTORICAL_PACKAGES = Object.freeze({
     }),
 })
 
+export function deploymentEntrypoints(coreFamily, entrypoints = MATRIX.entrypoints) {
+    return entrypoints.filter((entrypoint) => entrypoint !== 'loader' || coreFamily === 'current')
+}
+
 export function historicalSource(entrypoint) {
     return entrypoint === 'slim' ? 'historical-slim' : 'historical'
 }
@@ -52,7 +64,7 @@ export function deploymentFilename(coreFamily, entrypoint) {
 const dimensions = Object.keys(MATRIX)
 const tupleFields = ['coreFamily', 'entrypoint', 'browser', 'scenario']
 const filenames = MATRIX.coreFamilies.flatMap((coreFamily) =>
-    MATRIX.entrypoints.map((entrypoint) => deploymentFilename(coreFamily, entrypoint))
+    deploymentEntrypoints(coreFamily).map((entrypoint) => deploymentFilename(coreFamily, entrypoint))
 )
 
 function requireCondition(condition, message) {
@@ -176,7 +188,7 @@ function selectionFor(selection = {}) {
 
 function tuplesFor(selection) {
     return selection.coreFamilies.flatMap((coreFamily) =>
-        selection.entrypoints.flatMap((entrypoint) =>
+        deploymentEntrypoints(coreFamily, selection.entrypoints).flatMap((entrypoint) =>
             selection.browsers.flatMap((browser) =>
                 selection.scenarios.map((scenario) => ({ coreFamily, entrypoint, browser, scenario }))
             )
@@ -273,6 +285,7 @@ export function buildGoldens(input) {
     validateIntegrity(input.inputIntegrity)
     const selection = selectionFor(input.selection)
     const tuples = tuplesFor(selection)
+    requireCondition(tuples.length > 0, 'No supported deployments selected')
     const expectedKeys = new Set(tuples.map(tupleKey))
     requireCondition(Array.isArray(input.runs), 'runs must be an array')
     const runs = new Map()
@@ -439,7 +452,7 @@ async function existingDirectory(directory, fileSystem) {
     const entries = await fileSystem.readdir(directory)
     requireCondition(
         entries.sort().join('\0') === [...filenames].sort().join('\0'),
-        'Existing golden directory must contain exactly the six deployment files'
+        'Existing golden directory must contain exactly the deployment files'
     )
     for (const filename of filenames) {
         const entry = await fileSystem.lstat(join(directory, filename))
@@ -448,7 +461,7 @@ async function existingDirectory(directory, fileSystem) {
     return true
 }
 
-/** Explicit full-matrix update. directory is dedicated to the six golden JSON files.
+/** Explicit full-matrix update. directory is dedicated to the deployment golden JSON files.
  * Stage and read back all files before a directory-level swap; rollback restores the
  * old set on publication failure. fileSystem is the fs/promises fault-injection seam.
  * Callers must serialize updates/readers. This is exception-safe, not a crash-atomic
@@ -458,7 +471,7 @@ async function existingDirectory(directory, fileSystem) {
  */
 export async function updateGoldens(directory, input, { fileSystem = fs } = {}) {
     const built = buildGoldens(input)
-    requireCondition(built.coverage === 'full', 'Partial runs cannot update the six-file golden set')
+    requireCondition(built.coverage === 'full', 'Partial runs cannot update the golden set')
     directory = resolve(directory)
     const existed = await existingDirectory(directory, fileSystem)
     await fileSystem.mkdir(dirname(directory), { recursive: true })

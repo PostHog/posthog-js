@@ -11,12 +11,17 @@ import {
     HISTORICAL_PACKAGES,
     historicalSource,
     deploymentFilename,
+    deploymentEntrypoints,
 } from './golden.mjs'
 
+const matrixCellCount =
+    MATRIX.coreFamilies.reduce((count, family) => count + deploymentEntrypoints(family).length, 0) *
+    MATRIX.browsers.length *
+    MATRIX.scenarios.length
 const errorMessage = 'this.instance._shouldDisableFlags is not a function'
 const digest = `sha256-${'a'.repeat(64)}`
 const filenames = MATRIX.coreFamilies.flatMap((family) =>
-    MATRIX.entrypoints.map((entrypoint) => deploymentFilename(family, entrypoint))
+    deploymentEntrypoints(family).map((entrypoint) => deploymentFilename(family, entrypoint))
 )
 const singleSelection = { coreFamilies: ['current'], entrypoints: ['npm'], browsers: ['chromium'], scenarios: ['core'] }
 
@@ -32,7 +37,7 @@ function fixture({ selection = {}, repeats = 2, value = 'blue' } = {}) {
     }
     const runs = []
     for (const coreFamily of selection.coreFamilies ?? MATRIX.coreFamilies) {
-        for (const entrypoint of selection.entrypoints ?? MATRIX.entrypoints) {
+        for (const entrypoint of deploymentEntrypoints(coreFamily, selection.entrypoints)) {
             for (const browser of selection.browsers ?? MATRIX.browsers) {
                 for (const scenario of selection.scenarios ?? MATRIX.scenarios) {
                     for (let repeat = 0; repeat < repeats; repeat++) {
@@ -129,17 +134,33 @@ async function assertPreserved(space) {
     assert.deepEqual(await fs.readdir(space.root), ['goldens'])
 }
 
-test('buildGoldens routes every required tuple to six stable deployment files', () => {
+test('full coverage includes loader goldens without inventing a historical loader deployment', () => {
+    const result = buildGoldens(fixture())
+    assert.equal(result.cellCount, 525)
+    assert.equal(Object.keys(result.files).length, 7)
+    assert.ok(result.files['current-loader.json'])
+    assert.ok(!result.files['historical-1.354.0-loader.json'])
+    const missing = fixture()
+    missing.runs = missing.runs.filter((run) => run.entrypoint !== 'loader')
+    assert.throws(() => buildGoldens(missing), /Missing run: current\/loader/)
+})
+
+test('unavailable historical loader selections cannot produce empty passing results', () => {
+    const input = fixture({ selection: { coreFamilies: ['historical'], entrypoints: ['loader'] } })
+    assert.throws(() => buildGoldens(input), /No supported deployments selected/)
+})
+
+test('buildGoldens routes every required tuple to seven stable deployment files', () => {
     const input = fixture()
     const result = buildGoldens(input)
     assert.equal(result.coverage, 'full')
-    assert.equal(result.cellCount, 306)
-    assert.deepEqual(result.functionalCoverage, { 'fully-ready': 306 })
+    assert.equal(result.cellCount, matrixCellCount)
+    assert.deepEqual(result.functionalCoverage, { 'fully-ready': matrixCellCount })
     assert.equal(result.repeats, 2)
     assert.deepEqual(Object.keys(result.files), filenames)
     let cells = 0
     for (const coreFamily of MATRIX.coreFamilies) {
-        for (const entrypoint of MATRIX.entrypoints) {
+        for (const entrypoint of deploymentEntrypoints(coreFamily)) {
             const filename = deploymentFilename(coreFamily, entrypoint)
             const text = result.files[filename]
             const deployment = JSON.parse(text)
@@ -174,7 +195,7 @@ test('buildGoldens routes every required tuple to six stable deployment files', 
             assert.equal(text, `${JSON.stringify(deployment, null, 4)}\n`)
         }
     }
-    assert.equal(cells, 306)
+    assert.equal(cells, matrixCellCount)
 })
 
 test('buildGoldens ignores arrival/key order but preserves normalized observations and ordered arrays', () => {
@@ -601,8 +622,8 @@ test('compareGoldens reports a small semantic API change at its deployment/brows
     const space = await seed(t)
     assert.deepEqual(await compareGoldens(space.directory, fixture()), {
         coverage: 'full',
-        cellCount: 306,
-        functionalCoverage: { 'fully-ready': 306 },
+        cellCount: matrixCellCount,
+        functionalCoverage: { 'fully-ready': matrixCellCount },
         repeats: 2,
         matched: true,
         differenceCount: 0,
@@ -788,14 +809,14 @@ test('compareGoldens reports missing selected cells or files and rejects misattr
     await assert.rejects(compareGoldens(directory, input), SyntaxError)
 })
 
-test('updateGoldens explicitly bootstraps and replaces the whole six-file set', async (t) => {
+test('updateGoldens explicitly bootstraps and replaces the whole deployment set', async (t) => {
     const space = await sandbox(t)
     const input = fixture()
     const first = await updateGoldens(space.directory, input)
     assert.deepEqual(first, {
         coverage: 'full',
-        cellCount: 306,
-        functionalCoverage: { 'fully-ready': 306 },
+        cellCount: matrixCellCount,
+        functionalCoverage: { 'fully-ready': matrixCellCount },
         repeats: 2,
         updated: true,
     })
@@ -907,7 +928,7 @@ test('updateGoldens preserves existing bytes when staging writes fail or readbac
                 /staged write|Staged write verification/
             )
             assert.equal(renames, 0)
-            assert.equal(writes, failure === 'write' ? 4 : 6)
+            assert.equal(writes, failure === 'write' ? 4 : filenames.length)
             await assertPreserved(space)
         })
     }
@@ -931,12 +952,12 @@ test('updateGoldens refuses an unexpected staged entry before publication', asyn
             return fs.rename(...args)
         },
     }
-    await assert.rejects(updateGoldens(space.directory, fixture(), { fileSystem }), /exactly the six/)
+    await assert.rejects(updateGoldens(space.directory, fixture(), { fileSystem }), /exactly the deployment/)
     assert.equal(renames, 0)
     await assertPreserved(space)
 })
 
-test('updateGoldens stages and validates all six files before touching the previous directory', async (t) => {
+test('updateGoldens stages and validates all deployment files before touching the previous directory', async (t) => {
     const space = await seed(t)
     const input = fixture({ value: 'reviewed-change' })
     const expected = buildGoldens(input).files
@@ -950,7 +971,7 @@ test('updateGoldens stages and validates all six files before touching the previ
         },
         async rename(from, to) {
             renames++
-            assert.equal(reads, 6)
+            assert.equal(reads, filenames.length)
             if (renames === 1) {
                 assert.equal(from, space.directory)
                 assert.deepEqual(await bytes(space.directory), space.original)
@@ -1042,7 +1063,7 @@ test('updateGoldens failure during first publication leaves no partial bootstrap
 test('updateGoldens refuses unrelated entries, incomplete sets and symlink targets without moving them', async (t) => {
     const space = await seed(t)
     await fs.writeFile(join(space.directory, 'unrelated.txt'), 'preserve')
-    await assert.rejects(updateGoldens(space.directory, fixture()), /exactly the six/)
+    await assert.rejects(updateGoldens(space.directory, fixture()), /exactly the deployment/)
     assert.equal(await fs.readFile(join(space.directory, 'unrelated.txt'), 'utf8'), 'preserve')
     assert.deepEqual(await bytes(space.directory), space.original)
     await fs.unlink(join(space.directory, 'unrelated.txt'))
@@ -1051,7 +1072,7 @@ test('updateGoldens refuses unrelated entries, incomplete sets and symlink targe
     await assert.rejects(updateGoldens(linked, fixture()), /dedicated directory/)
     await fs.unlink(linked)
     await fs.unlink(join(space.directory, filenames[0]))
-    await assert.rejects(updateGoldens(space.directory, fixture()), /exactly the six/)
+    await assert.rejects(updateGoldens(space.directory, fixture()), /exactly the deployment/)
     await fs.symlink(join(space.directory, filenames[1]), join(space.directory, filenames[0]))
     await assert.rejects(updateGoldens(space.directory, fixture()), /regular golden file/)
 })

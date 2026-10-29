@@ -117,6 +117,18 @@ const appearanceWithoutThankYou: SurveyAppearanceTheme = {
   thankYouMessageHeader: '',
 }
 
+// The header text stays behind when the confirmation message is turned off in PostHog.
+const appearanceWithConfirmationOff: SurveyAppearanceTheme = {
+  ...defaultSurveyAppearance,
+  displayThankYouMessage: false,
+  thankYouMessageHeader: 'Thanks!',
+}
+
+// A survey saved without the setting leaves no value, or a null, in its place. The theme type
+// says boolean, so these cases need a cast to build.
+const withConfirmationSetting = (value: boolean | null | undefined): SurveyAppearanceTheme =>
+  ({ ...appearanceWithThankYou, displayThankYouMessage: value }) as unknown as SurveyAppearanceTheme
+
 // Mount SurveyModal with the standard test fixture. Returns the rendered
 // result plus the onClose spy so tests can assert against either.
 const renderSurveyModal = (onClose: vi.Mock = vi.fn()) => {
@@ -130,6 +142,27 @@ const renderSurveyModal = (onClose: vi.Mock = vi.fn()) => {
     />
   )
   return { ...result, onClose }
+}
+
+// Mount SurveyModal with a given appearance and submit the stubbed questions, which is what
+// drives isSurveySent. Returns the query helper and the onClose spy.
+const renderAndSubmit = (appearance: SurveyAppearanceTheme) => {
+  const onClose = vi.fn()
+  const { queryByTestId, getByTestId } = render(
+    <SurveyModal
+      survey={baseSurvey}
+      surveyLanguage={null}
+      appearance={appearance}
+      onShow={() => {}}
+      onClose={onClose}
+    />
+  )
+
+  act(() => {
+    fireEvent.click(getByTestId('questions-stub'))
+  })
+
+  return { queryByTestId, onClose }
 }
 
 const clickCancel = (getByTestId: (id: string) => HTMLElement) => {
@@ -204,6 +237,40 @@ describe('SurveyModal close behavior', () => {
     // BUG: shouldShowConfirmation flips false, so Questions remounts with Q1.
     // After the fix the conditional branches on isSurveySent first → null.
     expect(queryByTestId('questions-stub')).toBeNull()
+  })
+
+  it.each([
+    ['the survey turns it off', appearanceWithConfirmationOff],
+    ['the survey has no copy for it', appearanceWithoutThankYou],
+  ])('closes without a confirmation message when %s', (_case, appearance) => {
+    const { queryByTestId, onClose } = renderAndSubmit(appearance)
+
+    expect(queryByTestId('confirmation-stub')).toBeNull()
+
+    act(() => {
+      vi.runAllTimers()
+    })
+    // Submitted, so the parent records a completed survey rather than a dismissal.
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalledWith(true, {})
+  })
+
+  it.each([
+    ['the setting is unset', withConfirmationSetting(undefined)],
+    ['the setting is null', withConfirmationSetting(null)],
+    [
+      'only the description carries copy',
+      { ...appearanceWithoutThankYou, thankYouMessageDescription: 'We read every answer.' },
+    ],
+  ])('keeps the confirmation message when %s', (_case, appearance) => {
+    const { queryByTestId, onClose } = renderAndSubmit(appearance)
+
+    expect(queryByTestId('confirmation-stub')).not.toBeNull()
+
+    act(() => {
+      vi.runAllTimers()
+    })
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('hides content immediately when the cancel button is pressed', () => {

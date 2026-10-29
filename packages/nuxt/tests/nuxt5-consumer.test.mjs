@@ -12,7 +12,6 @@ import { waitForPackages } from './wait-for-packages.mjs'
 const packageDir = dirname(fileURLToPath(import.meta.url))
 const fixtureDir = mkdtempSync(join(tmpdir(), 'posthog-nuxt5-consumer-'))
 const packageRoot = join(packageDir, '..')
-const packageStageDir = join(fixtureDir, 'package')
 let captureServer
 let nuxtServer
 
@@ -66,36 +65,37 @@ if (posthogJsVersion === unpublishedPosthogJs) {
 }
 
 try {
-  const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
   const packagesToWaitFor = new Map()
-  packageManifest.dependencies = Object.fromEntries(
-    Object.entries(packageManifest.dependencies).map(([name, version]) => {
-      if (version !== 'catalog:' && !version.startsWith('workspace:')) {
-        return [name, version]
-      }
-
-      const dependencyManifest = JSON.parse(
-        readFileSync(join(packageRoot, 'node_modules', ...name.split('/'), 'package.json'), 'utf8')
-      )
-      const range = version === 'workspace:^' ? '^' : version === 'workspace:~' ? '~' : ''
-      packagesToWaitFor.set(name, dependencyManifest.version)
-      return [name, `${range}${dependencyManifest.version}`]
-    })
-  )
-  delete packageManifest.scripts
-  delete packageManifest.devDependencies
-  cpSync(join(packageRoot, 'dist'), join(packageStageDir, 'dist'), { recursive: true })
-  writeFileSync(join(packageStageDir, 'package.json'), JSON.stringify(packageManifest, null, 2))
-
-  execFileSync('pnpm', ['pack', '--pack-destination', fixtureDir], {
-    cwd: packageStageDir,
-    stdio: 'inherit',
+  function packBuiltPackage(root, name, localDependencies = {}) {
+    const stage = join(fixtureDir, name)
+    const packageManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+    packageManifest.dependencies = Object.fromEntries(
+      Object.entries(packageManifest.dependencies).map(([dependency, version]) => {
+        if (localDependencies[dependency]) return [dependency, localDependencies[dependency]]
+        if (version !== 'catalog:' && !version.startsWith('workspace:')) return [dependency, version]
+        const manifest = JSON.parse(
+          readFileSync(join(root, 'node_modules', ...dependency.split('/'), 'package.json'), 'utf8')
+        )
+        const range = version === 'workspace:^' ? '^' : version === 'workspace:~' ? '~' : ''
+        packagesToWaitFor.set(dependency, manifest.version)
+        return [dependency, `${range}${manifest.version}`]
+      })
+    )
+    delete packageManifest.scripts
+    delete packageManifest.devDependencies
+    mkdirSync(stage, { recursive: true })
+    cpSync(join(root, 'dist'), join(stage, 'dist'), { recursive: true })
+    writeFileSync(join(stage, 'package.json'), JSON.stringify(packageManifest, null, 2))
+    execFileSync('pnpm', ['pack', '--pack-destination', stage], { cwd: stage, stdio: 'inherit' })
+    return join(
+      stage,
+      readdirSync(stage).find((filename) => filename.endsWith('.tgz'))
+    )
+  }
+  const nodeTarball = packBuiltPackage(join(packageRoot, '..', 'node'), 'node-package')
+  const packageTarball = packBuiltPackage(packageRoot, 'nuxt-package', {
+    'posthog-node': `file:${nodeTarball}`,
   })
-
-  const packageTarball = join(
-    fixtureDir,
-    readdirSync(fixtureDir).find((filename) => filename.endsWith('.tgz'))
-  )
   let resolveCapture
   const capture = new Promise((resolve) => {
     resolveCapture = resolve

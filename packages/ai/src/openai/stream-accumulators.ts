@@ -17,6 +17,7 @@ export interface OpenAIChatStreamResult {
 /** Pure state accumulator for OpenAI-compatible Chat Completions chunks. */
 export class OpenAIChatStreamAccumulator {
   private accumulatedContent = ''
+  private accumulatedRefusal = ''
   private model?: string
   private completionId?: string
   private systemFingerprint?: string
@@ -24,7 +25,8 @@ export class OpenAIChatStreamAccumulator {
   private firstTokenTime?: number
   private stopReason?: string
   private usage: TokenUsage = { webSearchCount: 0 }
-  private readonly toolCalls = new Map<number, { id: string; name: string; arguments: string }>()
+  private readonly toolCalls = new Map<number | string, { id: string; name: string; arguments: string }>()
+  private lastToolCallKey?: number | string
 
   consume(chunk: OpenAI.ChatCompletionChunk, receivedAt = Date.now()): void {
     this.model ||= chunk.model || undefined
@@ -49,13 +51,16 @@ export class OpenAIChatStreamAccumulator {
       this.accumulatedContent += choice.delta.content
     }
 
+    if (choice?.delta?.refusal) {
+      this.firstTokenTime ??= receivedAt
+      this.accumulatedRefusal += choice.delta.refusal
+    }
+
     if (Array.isArray(choice?.delta?.tool_calls)) {
       this.firstTokenTime ??= receivedAt
       for (const toolCall of choice.delta.tool_calls) {
-        if (toolCall.index === undefined) {
-          continue
-        }
-        const current = this.toolCalls.get(toolCall.index) ?? { id: '', name: '', arguments: '' }
+        const key = this.toolCallKey(toolCall)
+        const current = this.toolCalls.get(key) ?? { id: '', name: '', arguments: '' }
         if (toolCall.id) {
           current.id = toolCall.id
         }
@@ -65,7 +70,8 @@ export class OpenAIChatStreamAccumulator {
         if (toolCall.function?.arguments) {
           current.arguments += toolCall.function.arguments
         }
-        this.toolCalls.set(toolCall.index, current)
+        this.toolCalls.set(key, current)
+        this.lastToolCallKey = key
       }
     }
 
@@ -82,10 +88,34 @@ export class OpenAIChatStreamAccumulator {
     }
   }
 
+  /**
+   * Some OpenAI-compatible providers stream tool calls without an `index`. Match those deltas by a known
+   * `id`; a new `id` or a function name opens a new call, and anything else continues the latest call.
+   */
+  private toolCallKey(toolCall: { index?: number; id?: string; function?: { name?: string } }): number | string {
+    if (toolCall.index !== undefined) {
+      return toolCall.index
+    }
+    if (toolCall.id) {
+      for (const [key, existing] of this.toolCalls) {
+        if (existing.id === toolCall.id) {
+          return key
+        }
+      }
+    }
+    if (toolCall.id || toolCall.function?.name || this.lastToolCallKey === undefined) {
+      return `no-index-${this.toolCalls.size}`
+    }
+    return this.lastToolCallKey
+  }
+
   result(): OpenAIChatStreamResult {
     const content: FormattedContent = []
     if (this.accumulatedContent) {
       content.push({ type: 'text', text: this.accumulatedContent })
+    }
+    if (this.accumulatedRefusal) {
+      content.push({ type: 'refusal', refusal: this.accumulatedRefusal })
     }
     for (const toolCall of this.toolCalls.values()) {
       if (toolCall.name) {

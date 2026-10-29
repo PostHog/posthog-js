@@ -407,13 +407,17 @@ describe('URL credential redaction', () => {
     expect(Date.now() - start).toBeLessThan(1000)
   })
 
-  it('passes a large image inlined in HTML quickly', () => {
+  it('skips authority searches for a large image inlined in HTML', () => {
     // An HTML email embeds its images as `data:` URIs, one URL-shaped match as
     // long as the image, so it cannot be cut out of the scanned head.
     const html = `<p>Hi</p><img src="data:image/png;base64,${'iVBORw0KGgo'.repeat(1_000_000)}" alt="logo"/>`
-    const start = Date.now()
-    expect(sanitizeCapturedValue(html)).toBe(html)
-    expect(Date.now() - start).toBeLessThan(1000)
+    const authoritySearch = vi.spyOn(String.prototype, 'matchAll')
+    try {
+      expect(sanitizeCapturedValue(html)).toBe(html)
+      expect(authoritySearch).not.toHaveBeenCalled()
+    } finally {
+      authoritySearch.mockRestore()
+    }
   })
 })
 

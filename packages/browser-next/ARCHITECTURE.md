@@ -6,7 +6,7 @@ This document defines the bundle architecture for `@posthog/browser`.
 
 The goal is a behavior-complete core in the smallest practical bundle. Core behavior is a fixed constraint. Bundle size is the optimization objective.
 
-The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It installs one analytics extension that owns a bounded in-memory buffer from initialization. The first admitted event loads queue scheduling and Capture V1 delivery through a literal dynamic import by default; an explicitly supplied analytics extension includes delivery statically. The root also dynamically imports feature flags during async initialization, unless disabled or explicitly supplied. The `@posthog/browser/core` entrypoint omits both automatic dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
+The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It installs one analytics extension that owns a bounded in-memory buffer from initialization. The first admitted event loads queue scheduling and Capture V1 delivery through a literal dynamic import by default; an explicitly supplied analytics extension includes delivery statically. The root also dynamically imports feature flags, logs, surveys orchestration, and autocapture during async initialization, unless disabled or explicitly supplied. The `@posthog/browser/core` entrypoint omits automatic product dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
 
 Optional feature implementations must stay outside the initial root graph. Each public optional feature must remain in a removable chunk or explicit entrypoint, and the core entrypoint must not reference it. Application bundlers must be able to remove each unused module.
 
@@ -96,7 +96,7 @@ The core contains these responsibilities:
 
 Keep the capture pipeline fixed and direct. Use compact explicit state machines. Do not add a generic middleware framework or a general dependency-injection framework.
 
-The root `createPostHog` factory keeps explicitly supplied analytics or statically constructs a default instance using the caller's analytics configuration. The lightweight factory is included in the initial root graph; only delivery is dynamically loaded. Analytics interprets its own loading and scheduling options. `automatic-analytics.ts` supplies the literal deferred-delivery loader; the core entrypoint retains buffer-only defaults without that reference. The shared `createPostHogCore` helper receives the original client options and configured extensions. Analytics settings and extension order are snapshotted before client construction. The client's internal static `create` takes core options and the selected `CaptureSink` and returns the client. The factory installs analytics and initializes its host before installing other extensions, so they can capture during setup. It then awaits eager analytics loading when configured and starts core-generated pageview capture. Core uses its supplied capture sink for admission, flush, immediate delivery, and consent purging. If analytics setup fails, the factory disconnects that sink and rolls back its registration; other extensions retain their normal setup and failure isolation.
+The root `createPostHog` factory keeps explicitly supplied analytics or statically constructs a default instance using the caller's analytics configuration. The lightweight factory is included in the initial root graph; only delivery is dynamically loaded. Analytics interprets its own loading and scheduling options. `automatic-analytics.ts` supplies the literal deferred-delivery loader; the core entrypoint retains buffer-only defaults without that reference. The shared `createPostHogCore` helper receives the original client options and configured extensions. Analytics settings and extension order are snapshotted before client construction. The client's internal static `create` takes core options and the selected `CaptureSink` and returns the client. The factory installs analytics and initializes its host before installing other extensions, so they can capture during setup. It then awaits eager analytics loading when configured and starts core-generated pageview capture. Core uses its supplied capture sink for admission, immediate delivery, and consent purging. Flush coordination belongs to the extension registry, which invokes the installed analytics extension alongside other extension owners. If analytics setup fails, the factory disconnects that sink and rolls back its registration; other extensions retain their normal setup and failure isolation.
 
 First-party analytics receives package-private `CaptureHost` initialization with the bound request runtime, dispatch-time consent/lifecycle authority, diagnostic reporting, and a capacity-availability notification for pending initial pageviews. This preserves raw gzip bodies, abort signals, keepalive, and shutdown delivery without changing the shared `Client.sendRequest()` contract. Core neither constructs a delivery object nor supplies queue-control callbacks. All configured extensions receive the shared narrow `Client` view through normal `Extension.setup()`.
 
@@ -146,6 +146,8 @@ Put delivery or product behavior in an extension, capability, or adapter. Exampl
 
 An optional module can import the core. The core must not import the optional module.
 
+Application-facing log methods belong to the logs extension reference. Shared/core logs owns its queue, batching, retries, and flush implementation. An extension can observe reset and consent changes to clear its own queued data. The extension registry flushes each installed owner once, independently of its lookup bindings, and isolates failures. `client.flush()` awaits each optional `Extension.flush()`; shutdown passes the `shutdown` reason and awaits flushing within its timeout before releasing resources. Logs uses normal delivery for these flushes and Beacon for pagehide.
+
 Each optional module must have an explicit entry point. A consumer must import that entry point directly.
 
 ### 4.5 Standard preset
@@ -192,7 +194,7 @@ export * from './products'
 export { default } from './singleton'
 ```
 
-The root entry point must not re-export optional runtime features. Its automatic analytics loader imports delivery only after runtime admission or explicit eager selection; flags load during async initialization. You can re-export types when the compiler produces no JavaScript import.
+The root entry point must not re-export optional runtime features. Its automatic analytics loader imports delivery only after runtime admission or explicit eager selection; flags, logs, surveys orchestration, and autocapture load during async initialization. You can re-export types when the compiler produces no JavaScript import.
 
 Treat `createPostHog` and its static imports as one size unit.
 A bundler cannot remove an internal module when the factory always needs that module.
@@ -200,6 +202,12 @@ A bundler cannot remove an internal module when the factory always needs that mo
 Do not implement a large optional feature as a method on the core client class.
 Bundlers usually retain all methods on a used class.
 Use an extension or an adapter instead.
+
+### Autocapture
+
+The root awaits a literal dynamic autocapture import and setup, unless disabled or an explicit instance exists. `/autocapture` statically includes the same browser-common implementation; the manual core has no automatic import. Configuration uses camelCase, maps inside the optional module, and snapshots arrays/regular expressions without losing callbacks. The latest staged browser defaults apply: URL hashes are redacted, rageclick ignores stepper content and text-selection surfaces, clipboard capture is opt-in, and text/attribute masking remains false by default. Remote-config/cached opt-out policy, consent, DOM privacy filters, and event wire properties remain shared. No new core method or host contract is needed.
+
+Survey action selectors are owned by the optional surveys module. It returns copied snapshots to autocapture at setup and forwards replacements when definitions register later. Receiver creation hydrates running triggers from the existing cached definitions without adding requests or bypassing TTL/backoff. Successful full definition refreshes replace next's trigger maps, including empty snapshots; failed fetches retain them. The shared orchestration also replaces trigger maps for legacy clients. Survey disposal clears its selector set. For URL-constrained actions, the surveys observation adapter supplies a missing URL from its existing targeting URL capability only to local matching; explicit event URL values are preserved and observed/wire events are not modified. There is no generic extension-registration observer or core selector catalog. Matching keeps existing exact-target and SVG-control attribution rather than broadening ancestor matches.
 
 ### Feature flags
 
@@ -210,6 +218,30 @@ Applications access flag controls through `getExtension(FeatureFlagsExtension)`.
 Browser-next supplies a `BrowserClient` view extending the shared `Client` with `onIdentify`, `onGroup`, and `onReset` listeners. Core publishes synchronous notifications after local state updates, independently of capture admission. Publishers isolate listener failures and do not replay earlier operations. Extensions subscribe during setup and dispose their subscriptions during teardown. Flags uses these listeners to update evaluation context and reload; core does not look up product-specific identity hooks.
 
 Flags passes the shared `Client` directly to the shared feature-flags implementation and stores its values through `Client.kv`. The host owns storage selection, serialization, and durable writes. Core reset clears persisted extension data before notifying flags to clear its in-memory evaluation state and reload. Flag values follow the client's configured persistence, including memory-only operation with `storage: false`.
+
+### Logs
+
+Logs follows the flags composition pattern: the root awaits the literal module import and setup, not remote configuration. `logs: false` omits automatic inclusion; an explicit `logs(options)` extension owns its configuration and takes precedence. The manual core entrypoint contains no logs import. Applications call `captureLog()` on the logs extension; SDK diagnostics retain the existing `logger`.
+
+The optional module adapts the shared browser-common logs implementation. It owns programmatic and console queues, OTLP resources/scopes, the console runtime, persisted console enablement hints, and pagehide handoff. Console capture follows existing local/remote gates, not module loading. The generic console serialization and patching runtime is shared with legacy browser bundles; historical ABI routing and global registration stay exclusively in the legacy entrypoint.
+
+Shared logs uses the SDK-provided `Client.sendRequest()` for JSON requests to `/i/v1/logs?token=...` with a 60-second timeout. Logs owns status classification and retry policy; requests retain their own timeouts, while the SDK bounds how long shutdown waits for extension flushing. Pagehide uses the existing logs Beacon contract with keepalive Fetch fallback. This does not enable Beacon for analytics. Product queues, serializers, and console instrumentation stay in the optional module. Logs reads session context through the shared `Client.session` property without creating or advancing a session. The property can be undefined; an existing `SessionContext` includes `lastActivityTimestamp`. The logs adapter shapes the current URL through the shared `sanitizeUrl()` helper using its snapshotted `urlCapture` options. By default it retains the origin and path, omits query parameters and fragments, and omits invalid URLs. URL component selection is configured per extension.
+
+The logs extension subscribes to the browser client's reset and consent-change notifications to clear its queues on reset or observed consent denial. Capture stops when shutdown begins, but already admitted logs can flush while dispatch authority remains valid. `flush()` awaits analytics and both logs queues independently. Shutdown shares its existing timeout across delivery and disposal; an in-flight logs request can outlive that wait until its own timeout. Logs resolves `FeatureFlagsCommonExtension` through `Client.getExtension()` and reads `getFlags()` from the shared flags implementation to include flag keys without emitting exposure analytics. The host isolates extension setup, flush, and cleanup failures.
+
+### Surveys
+
+The root loads only optional surveys orchestration during initialization; it awaits setup, not remote configuration, renderer loading, or survey definitions. The orchestration module owns the literal dynamic import of the shared renderer. A successful remote configuration with a truthy surveys gate loads UI automatically. A false or unavailable gate leaves it deferred, while explicit survey APIs may initialize a non-automatic manager. If enabled remote configuration arrives later, that same manager starts its idempotent automatic-display loop unless automatic display is disabled; it is not replaced or duplicated. Static `@posthog/browser/surveys` includes that same renderer without a dynamic import. An explicit instance wins over `surveys`, and `surveys: false` omits automatic inclusion.
+
+Application-facing survey controls belong to the extension reference, obtained from the static factory or `getExtension()`. The extension receives host capabilities through ordinary setup and subscribes to `BrowserClient.onReset` for runtime cleanup. Renderer waiting and call coordination stay in the optional module; no post-init public registry installation is introduced. Manual `canRenderSurvey` resolves unavailable when disposed during loading or fetch. Callback delivery is suppressed after disposal.
+
+The shared renderer, Preact components, CSS string, event/action receiver, and matching helpers are reused by legacy adapters. Capture, flags, submission IDs, configuration, and stylesheet preparation are explicit runtime capabilities, not a concrete PostHog facade. Legacy global routing, preview wrappers, and UUID behavior remain legacy-owned. Native capability reads occur at invocation/setup, preserving strict static-entry import purity.
+
+The optional module stores definitions and event-activation state through its host-provided `Client.kv` namespace. Survey interaction history—seen markers, partial answers, and abandonment markers—uses dedicated browser localStorage with the existing survey keys, independently of SDK persistence, including `storage: false`. Failed partial-answer writes retain an in-memory fallback. Abandonment checks capture permission before writing its marker and skips capture if reading the marker fails. Client reset clears persisted extension data, and the extension's reset subscription delegates to the shared surveys reset implementation. This clears in-memory progress and activation state, plus localStorage seen markers, partial answers, and the last-seen date. Abandonment markers remain, matching legacy survey reset behavior. Existing capture consent gates still control eligibility and submission, while cleanup always runs. The renderer owns polling, language/visibility listeners, pending display timeouts, and Preact unmounting.
+
+Survey abandonment uses a package-private analytics pre-teardown subscription: the analytics buffer retains callbacks across lazy delivery loading, and initialized delivery invokes them synchronously before its single keepalive queue handoff. Browser-native `pagehide` listener ordering is not portable (Chromium can invoke an earlier non-capture listener before a later capture listener), so capture phase alone cannot provide this ordering. Subscription failures are contained and disposal removes callbacks. A surveys-owned `pagehide` fallback admits abandonment when analytics delivery is unavailable, but cannot ensure delivery from a module still loading during unload.
+
+Survey definitions are fetched separately at `/api/surveys/` with the existing token query, cache TTL, and failure backoff. The surveys extension resolves the browser-next flags facade through `Client.getExtension()` for configuration and person-property context; shared surveys resolves common flags through its common token. Event targets observe admitted captures. Action matching can register DOM selectors through an optional autocapture capability; that extension must be installed for selector-backed DOM events.
 
 ## 6. Import graph rules
 
@@ -291,7 +323,7 @@ If an import side effect is unavoidable, prefer a separate package. Otherwise, c
 
 ### 8.1 Use an import boundary
 
-Use a separate export subpath for each substantial optional feature. Automatic analytics delivery and feature flags use literal dynamic imports from the root entrypoint; the core entrypoint references neither implementation.
+Use a separate export subpath for each substantial optional feature. Automatic analytics delivery, feature flags, logs, surveys orchestration, and autocapture use literal dynamic imports from the root entrypoint; the core entrypoint references none of their automatic loaders.
 
 Example:
 
@@ -301,7 +333,7 @@ Example:
 @posthog/browser/delivery/analytics
 @posthog/browser/persistence/cookie
 @posthog/browser/delivery/durable
-@posthog/browser/extensions/feature-flags
+@posthog/browser/flags
 ```
 
 Add the source entry and the package export in the same change.
@@ -337,9 +369,9 @@ The change must include measurements that support this decision.
 
 ### 8.3 Register only selected extensions
 
-The extension registry stores configured instances and automatic instances selected by the root factory. Explicit analytics and feature-flags instances take precedence over their corresponding top-level options. Analytics delivery loading does not add a registry entry; flags register the same extension implementation used by static inclusion.
+The extension registry stores configured instances and automatic instances selected by the root factory. Explicit analytics, feature-flags, logs, surveys, and autocapture instances take precedence over their corresponding top-level options. Analytics delivery loading does not add a registry entry; flags register the same extension implementation used by static inclusion.
 
-Do not add a static catalog of product implementations to core. The root selects automatic analytics and flags through product-specific composition code, not a generic product-name loader registry. Other products require explicit composition until their automatic loading contract is implemented.
+Do not add a static catalog of product implementations to core. The root selects automatic analytics, flags, logs, surveys, and autocapture through product-specific composition code, not a generic product-name loader registry. Other products require explicit composition until their automatic loading contract is implemented.
 
 Do not put this code in the root graph:
 
@@ -359,10 +391,10 @@ A generic loader function does not create a chunk by itself. The owner or a prod
 Use this form when the application selects an extension before client creation:
 
 ```ts
-const { featureFlags } = await import('@posthog/browser/extensions/feature-flags')
+const { flags } = await import('@posthog/browser/flags')
 const posthog = await createPostHog({
     projectToken,
-    extensions: [featureFlags()],
+    extensions: [flags()],
 })
 ```
 
@@ -382,6 +414,8 @@ The host must give each extension a narrow `Client` view.
 The view must expose capabilities, not the concrete host implementation.
 
 The host must keep extension state separate. The host must dispose extensions in reverse installation order.
+
+An extension may declare additional lookup targets through `bindings`. Its name and binding names share one namespace and are reserved together before setup. Application and extension clients resolve each token to the same target. The registered extension is the sole lifecycle owner: binding targets are not independently set up or disposed. All bindings are removed when the owner fails setup, is rolled back, or is disposed. Browser-next flags binds `FeatureFlagsCommonExtension` from browser-common to its wrapped implementation while its SDK token resolves to the facade.
 
 An extension failure must not stop core capture. A failed setup must remove all reserved registry state.
 
@@ -425,6 +459,12 @@ Keep `sideEffects: false` while all entry points remain import-pure. If an expli
 
 Do not combine all entry points into one prebuilt runtime bundle.
 The package needs preserved ES module boundaries for consumer tree shaking.
+
+### CDN-only classic entry
+
+The standalone classic-script installer lives in `snippet/`, outside Rslib's `src` glob and the npm `files` allowlist. `build:cdn` emits `dist-cdn/script.js` with the complete initial core graph embedded, plus optional asynchronous chunks and source maps. Rspack's automatic public path captures the executing external script's directory synchronously and removes its query and fragment before loading chunks. There is no separate client download between the initial response and core construction.
+
+This deployment artifact intentionally initializes a client; it is not an npm export and does not change the import-purity contract or `sideEffects: false`. Keep the root factory's extension setup order, override precedence, snapshots, consent, and failure isolation unchanged. The installer delegates readiness to that factory. See the [script installation guide](./README.md#classic-script-installation-draft-cdn-distribution) for query configuration, global ownership, and ready-event semantics. `bundle-size:cdn` checks the generated initial graph and reports initial/deferred artifact sizes and module attribution; `test:snippet` runs the generated classic artifacts in plain HTML against the SDK mock server.
 
 ## 12. Bundle tests
 
@@ -471,7 +511,7 @@ Each optional-feature check must report these values:
 Extend the bundle-size script when you add a new public entry point.
 Fail the check when a forbidden product or dependency enters the root graph.
 
-Add a stored baseline before the first public release. Review each later increase against that baseline.
+Review initial and total bundle measurements for runtime changes.
 An increase needs a user benefit and a short size explanation.
 
 ## 13. Review procedure

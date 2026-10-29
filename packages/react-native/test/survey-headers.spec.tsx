@@ -74,4 +74,21 @@ describe('survey headers', () => {
     const introDescription = screen.getByText(description) as HTMLElement
     expect(introDescription.parentElement?.style.paddingRight).toBe(`${closeButtonSize}px`)
   })
+
+  it('shows a headerless confirmation description', () => {
+    const description = 'We read every answer.'
+
+    render(
+      <ConfirmationMessage
+        appearance={defaultSurveyAppearance}
+        header=""
+        description={description}
+        onClose={vi.fn()}
+        isModal={true}
+      />
+    )
+
+    const confirmationDescription = screen.getByText(description) as HTMLElement
+    expect(confirmationDescription.parentElement?.style.paddingRight).toBe(`${closeButtonSize}px`)
+  })
 })

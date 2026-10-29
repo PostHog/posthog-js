@@ -12,6 +12,14 @@ export interface FormattedTextContent {
 }
 
 /**
+ * Formatted reasoning content item (e.g. Gemini thought summaries)
+ */
+export interface FormattedReasoningContent {
+  type: 'reasoning'
+  text: string
+}
+
+/**
  * Formatted function/tool call content item
  */
 export interface FormattedFunctionCall {
@@ -33,6 +41,14 @@ export interface FormattedImageContent {
     mime_type: string
     data: string
   }
+}
+
+/**
+ * Formatted refusal content item
+ */
+export interface FormattedRefusalContent {
+  type: 'refusal'
+  refusal: string
 }
 
 /**
@@ -68,9 +84,11 @@ export interface FormattedDocumentContent {
  */
 export type FormattedContentItem =
   | FormattedTextContent
+  | FormattedReasoningContent
   | FormattedFunctionCall
   | FormattedImageContent
   | FormattedAudioContent
+  | FormattedRefusalContent
   | FormattedDocumentContent
 
 /**

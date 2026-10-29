@@ -1,5 +1,26 @@
 # @posthog/mcp
 
+## 0.25.0
+
+### Minor Changes
+
+- [#5404](https://github.com/PostHog/posthog-js/pull/5404) [`68336df`](https://github.com/PostHog/posthog-js/commit/68336dfb097a78e08041c77f72bbcc59b6958e04) Thanks [@gesh](https://github.com/gesh)! - Add a `sendToolsListEvent` option. It is on by default. Set it to `false` to stop sending `$mcp_tools_list`.
+  (2026-10-28)
+
+## 0.24.0
+
+### Minor Changes
+
+- [#5401](https://github.com/PostHog/posthog-js/pull/5401) [`8faad6a`](https://github.com/PostHog/posthog-js/commit/8faad6aa2508b38959cbd27196aa805bf6fa5ab7) Thanks [@gesh](https://github.com/gesh)! - Add a `sendInitializeEvent` option. It is on by default. Set it to `false` to stop sending `$mcp_initialize`.
+  (2026-10-28)
+
+## 0.23.0
+
+### Minor Changes
+
+- [#5306](https://github.com/PostHog/posthog-js/pull/5306) [`19b9b54`](https://github.com/PostHog/posthog-js/commit/19b9b54e10c9944f6288d2c29487e99b596e6c83) Thanks [@gesh](https://github.com/gesh)! - Stop sending standalone `$identify` events, so insights, funnels, or cohorts built on MCP `$identify` stop receiving new data. The `identify` callback still sets `distinct_id`, `$set` and `$groups` on every event.
+  (2026-10-19)
+
 ## 0.22.3
 
 ### Patch Changes

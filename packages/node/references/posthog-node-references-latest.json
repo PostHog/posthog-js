@@ -484,7 +484,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`. A requested key missing from local definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true. Locally resolved values remain authoritative when remote results are merged. In particular, a cached inactive definition is a conclusive `false` result locally, while remote evaluation omits globally inactive flags and therefore leaves those keys absent.\n**Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation responses are not cached, so a key missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
+          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`. A requested key missing from local definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true. Locally resolved values remain authoritative when remote results are merged. In particular, a cached inactive definition is a conclusive `false` result locally, while remote evaluation omits globally inactive flags and therefore leaves those keys absent.\n**Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the first time each flag value is read for a user. Experiments use these events as exposures. The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override it, so one snapshot can serve both experiment flags and flags that should send no events. `getFlagPayload()` never sends events.\n**Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation responses are not cached, so a key missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
           "details": null,
           "id": "evaluateFlags",
           "showDocs": true,
@@ -514,7 +514,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent.",
+              "description": "Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent; the snapshot's `unresolvedFlags` lists them with a reason.",
               "isOptional": true,
               "type": "AllFlagsOptions",
               "name": "options"
@@ -1259,7 +1259,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Reload feature flag definitions from the server for local evaluation.",
+          "description": "Reload feature flag definitions from the configured cache provider or PostHog for local evaluation.",
           "details": null,
           "id": "reloadFeatureFlags",
           "showDocs": true,
@@ -1982,14 +1982,14 @@
       "name": "BeforeSendFn_2",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "(event: CaptureEvent | null) => CaptureEvent | null"
+      "example": "(event: CaptureEvent) => CaptureEvent | null"
     },
     {
       "id": "BeforeSendFn",
       "name": "BeforeSendFn",
       "properties": [],
       "path": "src/types.ts",
-      "example": "(event: EventMessage | null) => EventMessage | null"
+      "example": "(event: EventMessage) => EventMessage | null"
     },
     {
       "id": "CaptureEvent",
@@ -2098,6 +2098,11 @@
           "description": "If true, replaces the current context entirely. If false, merges with the existing context (new values override existing ones).   false",
           "type": "boolean",
           "name": "fresh"
+        },
+        {
+          "description": "Ends this context and its inherited scopes when aborted, without cancelling the callback. An already aborted signal starts no active context. A fresh context has an independent lifetime.",
+          "type": "AbortSignal",
+          "name": "signal"
         }
       ],
       "path": "src/extensions/context/types.ts"
@@ -3072,7 +3077,7 @@
           "name": "disable_capture_url_hashes"
         },
         {
-          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)",
+          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)\n\nIn posthog-node this is also the default for reads from an `evaluateFlags()` snapshot\n(`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a\nsingle-flag getter, to override it for that call.",
           "type": "boolean",
           "name": "sendFeatureFlagEvent"
         },
@@ -3595,7 +3600,7 @@
           "name": "disable_capture_url_hashes"
         },
         {
-          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)",
+          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)\n\nIn posthog-node this is also the default for reads from an `evaluateFlags()` snapshot\n(`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a\nsingle-flag getter, to override it for that call.",
           "type": "boolean",
           "name": "sendFeatureFlagEvent"
         },
@@ -3721,7 +3726,7 @@
           "name": "traces"
         },
         {
-          "description": "Credential that enables local feature flag evaluation and remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nWhen provided, the client can evaluate feature flags locally and decrypt remote\nconfig payloads via `getRemoteConfigPayload`. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
+          "description": "Credential for fetching local feature flag definitions and decrypting remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
           "type": "string",
           "name": "secretKey"
         },
@@ -3732,6 +3737,7 @@
           "releaseTag": "deprecated"
         },
         {
+          "description": "Redact prompts, outputs and error details from every event that the PostHog AI\nintegrations (`@posthog/ai`) capture with this client. Per-call privacy settings\ncan only add redaction. Defaults to false.",
           "type": "boolean",
           "name": "privacyMode"
         },
@@ -3757,7 +3763,7 @@
           "name": "enableLocalEvaluation"
         },
         {
-          "description": "Optional cache provider for feature flag definitions.\n\nAllows custom caching strategies (Redis, database, etc.) for flag definitions\nin multi-worker environments. If not provided, defaults to in-memory cache.\n\nThis enables distributed coordination where only one worker fetches flags while\nothers use cached data, reducing API calls and improving performance.",
+          "description": "Optional cache provider for feature flag definitions.\n\nAllows custom caching strategies (Redis, database, etc.) for flag definitions\nin multi-worker environments. If not provided, defaults to in-memory cache.\n\nWithout a secretKey or personalApiKey, this instance only reads cached definitions on\neach refresh; it does not call shouldFetchFlagDefinitions or publish definitions.\nWith a credential, it uses the provider's fetch decision to coordinate fetching\nfresh definitions from PostHog and publishing them to the cache.\n\nThis enables distributed coordination where only one worker fetches flags while\nothers use cached data, reducing API calls and improving performance.",
           "type": "FlagDefinitionCacheProvider<FlagDefinitionCacheInput>",
           "name": "flagDefinitionCacheProvider"
         },
@@ -4870,6 +4876,13 @@
       "properties": [],
       "path": "../core/src/types.ts",
       "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
+    },
+    {
+      "id": "UnresolvedFlagReason",
+      "name": "UnresolvedFlagReason",
+      "properties": [],
+      "path": "../core/src/featureFlagLocalEvaluation.ts",
+      "example": "\"experience_continuity\" | \"unsupported_definition\" | \"missing_context\" | \"unresolved_dependency\""
     },
     {
       "id": "UnsetPersonPropertiesMessage",
