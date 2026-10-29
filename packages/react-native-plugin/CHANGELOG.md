@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.12.8
+
+### Patch Changes
+
+- [#5482](https://github.com/PostHog/posthog-js/pull/5482) [`dfd56e6`](https://github.com/PostHog/posthog-js/commit/dfd56e6e567b46b074a25f0e598877594dd8bab6) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Require posthog-ios 3.92.7 so session replay screenshots without masks upload at the same size as masked ones. Before, they were encoded at native scale, which could leave replay minutes behind.
+  (2026-10-29)
+
 ## 2.12.7
 
 ### Patch Changes
