@@ -63,9 +63,9 @@ export const runClientConformanceSuite = (hostName: string, createHost: ClientCo
             const subscription = host!.client.onEvent((event) => events.push(event))
             const registration = host!.client.registerDynamicEventProperties(() => ({ dynamic: 'yes' }))
 
-            const result: void = host!.client.capture('conformance_event', { explicit: true })
+            const result: boolean = host!.client.capture('conformance_event', { explicit: true })
 
-            expect(result).toBeUndefined()
+            expect(result).toBe(true)
             expect(events).toHaveLength(1)
             expect(events[0]).toMatchObject({
                 event: 'conformance_event',

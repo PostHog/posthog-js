@@ -189,12 +189,12 @@ describe('BrowserClientAdapter', () => {
         expect(client?.logger).toBeDefined()
 
         const timestamp = new Date('2026-01-01T00:00:00Z')
-        const captureResult: void = client?.capture(
+        const captureResult: boolean | undefined = client?.capture(
             'test-event',
             { explicit: true },
             { timestamp, uuid: 'test-uuid', set: { plan: 'paid' }, setOnce: { source: 'test' } }
         )
-        expect(captureResult).toBeUndefined()
+        expect(captureResult).toBe(true)
         expect(instance.capture).toHaveBeenCalledWith('test-event', { explicit: true }, {
             timestamp,
             uuid: 'test-uuid',
@@ -719,6 +719,22 @@ describe('BrowserClientAdapter', () => {
 
         posthog.reset()
         expect(await client?.kv.get(extensionKey)).toBeUndefined()
+        await posthog.shutdown()
+    })
+
+    it.each([
+        ['an event that before_send drops', { before_send: () => null }, [true, true]],
+        [
+            'events past the client rate limit',
+            { rate_limiting: { events_per_second: 1, events_burst_limit: 1 } },
+            [true, false],
+        ],
+    ])('returns whether capture can be retried for %s', async (_, config, expected) => {
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        const posthog = await createPosthogInstance(undefined, { capture_pageview: false, ...config })
+        const client = posthog._getBrowserClientAdapter()
+
+        expect([client.capture('first-event'), client.capture('second-event')]).toEqual(expected)
         await posthog.shutdown()
     })
 

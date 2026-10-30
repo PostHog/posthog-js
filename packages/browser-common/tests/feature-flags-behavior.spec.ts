@@ -455,14 +455,25 @@ describe('featureflags', () => {
             vi.mocked(client.capture).mock.calls.filter(([event]) => event === '$feature_flag_called')
 
         it.each([
-            ['the same identity', 'blah id', 1],
-            ['another identity, which sends nothing', 'other-user', 0],
-        ])('sends the pending exposure when capture turns on under %s', (_, distinctIdAtConsent, expectedCount) => {
+            ['the same identity and flag value', () => {}, 1],
+            [
+                'another identity, which sends nothing',
+                () => {
+                    client.distinctId = 'other-user'
+                },
+                0,
+            ],
+            [
+                'another flag value, which sends nothing',
+                () => featureFlags.updateFlags({ 'beta-feature': false }, undefined, { merge: true }),
+                0,
+            ],
+        ])('sends the pending exposure when capture turns on with %s', (_, beforeConsent, expectedCount) => {
             featureFlags._hasLoadedFlags = true
             client.canCapture = false
             featureFlags.getFeatureFlag('beta-feature')
 
-            client.distinctId = distinctIdAtConsent
+            beforeConsent()
             client.canCapture = true
             featureFlags.sendFlagCallsPendingCapture()
 
@@ -477,6 +488,7 @@ describe('featureflags', () => {
 
             vi.mocked(client.capture).mockImplementation(() => {
                 client.distinctId = 'other-user'
+                return true
             })
             client.canCapture = true
             featureFlags.sendFlagCallsPendingCapture()
@@ -499,6 +511,37 @@ describe('featureflags', () => {
             client.kv.set({ $feature_flag_evaluated_at: Date.now() })
             featureFlags.sendFlagCallsPendingCapture()
             expect(flagCalledEvents()).toHaveLength(1)
+        })
+    })
+
+    describe('flag reads that the client rate limit drops', () => {
+        const flagCalledEvents = () =>
+            vi.mocked(client.capture).mock.calls.filter(([event]) => event === '$feature_flag_called')
+
+        it.each([
+            ['sends the exposure once the rate limit clears', false, 2],
+            ['retries the exposure once per capture while the rate limit lasts', true, 3],
+        ])('%s', (_, staysRateLimited, expectedCount) => {
+            featureFlags._hasLoadedFlags = true
+            vi.mocked(client.capture).mockReturnValue(!staysRateLimited)
+            vi.mocked(client.capture).mockReturnValueOnce(false)
+            featureFlags.getFeatureFlag('beta-feature')
+
+            featureFlags.sendFlagCallsPendingCapture()
+            featureFlags.sendFlagCallsPendingCapture()
+
+            expect(flagCalledEvents()).toHaveLength(expectedCount)
+        })
+
+        it('retries one exposure per capture while the rate limit lasts', () => {
+            featureFlags._hasLoadedFlags = true
+            vi.mocked(client.capture).mockReturnValue(false)
+            featureFlags.getFeatureFlag('beta-feature')
+            featureFlags.getFeatureFlag('alpha-feature-2')
+
+            featureFlags.sendFlagCallsPendingCapture()
+
+            expect(flagCalledEvents()).toHaveLength(3)
         })
     })
 
