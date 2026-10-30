@@ -79,6 +79,8 @@ import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routi
 import { V1CaptureSender } from './capture-v1/sender'
 import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
+import { DEFAULT_EMAIL_REQUEST_MAX_RETRIES, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS, EmailSender } from './emails/emails'
+import type { Emails } from './emails/types'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -121,6 +123,14 @@ function normalizePersonalApiKey(value?: unknown): string | undefined {
 function normalizeHost(value?: unknown): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || DEFAULT_NODE_HOST
+}
+
+function positiveNumberOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+function nonNegativeIntegerOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback
 }
 
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
@@ -166,6 +176,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
+  private _emails?: EmailSender
+  private _isShutdown = false
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
   /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
@@ -671,6 +683,58 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
     }
     return this._metrics
+  }
+
+  /**
+   * The `posthog.emails` API: sends transactional email from PostHog email templates, and reads
+   * the status of each email it sent.
+   *
+   * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope. A key with only
+   * `hog_flow:read` can read statuses but not send. Requests go to `appHost`, or to the PostHog
+   * Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and do not reject.
+   * `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
+   * and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
+   * returns the error `client_closed`.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { secretKey: 'phs_...', host: 'https://eu.i.posthog.com' })
+   * const { data, error } = await client.emails.send({
+   *   to: 'user@example.com',
+   *   templateId: '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b',
+   *   templateData: { name: 'Ada' },
+   *   distinctId: 'user_123',
+   *   idempotencyKey: 'welcome:user_123',
+   * })
+   * if (error) {
+   *   console.error(error.code, error.message)
+   * }
+   *
+   * const status = await client.emails.get(data.id) // later, for example from a job
+   * ```
+   *
+   * {@label Emails}
+   */
+  public get emails(): Emails {
+    if (!this._emails) {
+      this._emails = new EmailSender(
+        {
+          secretKey: this.options.personalApiKey,
+          host: this.host,
+          appHost: this.options.appHost,
+          requestTimeoutMs: positiveNumberOr(this.options.emailRequestTimeoutMs, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS),
+          maxRetries: nonNegativeIntegerOr(this.options.emailRequestMaxRetries, DEFAULT_EMAIL_REQUEST_MAX_RETRIES),
+        },
+        {
+          fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
+          isDisabled: () => this.disabled,
+          isClosed: () => this._isShutdown,
+          logger: this._logger,
+          userAgent: this.getCustomUserAgent() || undefined,
+        }
+      )
+    }
+    return this._emails
   }
 
   /**
@@ -2936,6 +3000,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // super._shutdown spend from the same budget, so shutdown(500) can't take
     // ~1000ms by giving each phase a fresh full timeout.
     const shutdownDeadlineMs = Date.now() + (shutdownTimeoutMs ?? 30000)
+    this._isShutdown = true
+    // Sends that started before shutdown keep running alongside the flushes below, within the same budget.
+    const emailsDrained = this._emails?.drain()
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
@@ -2965,9 +3032,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       )
       this._traces.reset()
     }
+    const remainingMs = Math.max(0, shutdownDeadlineMs - Date.now())
+    // Wait for the email sends next to the core flush, not before it, so a slow send can't use up the budget for events.
+    const emailsSettled = emailsDrained ? raceWithTimeout(emailsDrained, remainingMs) : undefined
     try {
-      return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))
+      return await super._shutdown(remainingMs)
     } finally {
+      await emailsSettled
       this._distinctIdHasSentFlagCalls.clear()
       resolve?.()
     }
