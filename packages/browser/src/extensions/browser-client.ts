@@ -22,7 +22,14 @@ import { DEVICE_ID } from '../constants'
 import { AutocaptureExtension, FeatureFlagsExtension, LogsExtension, SurveysExtension } from '../extension-tokens'
 import { extendURLParams } from '../request'
 import type { PostHog } from '../posthog-core'
-import type { CaptureOptions, EventName, Properties, QueuedRequestWithOptions, RemoteConfigResult } from '../types'
+import type {
+    CaptureOptions,
+    CaptureResult,
+    EventName,
+    Properties,
+    QueuedRequestWithOptions,
+    RemoteConfigResult,
+} from '../types'
 
 class BrowserClientKeyValueStore implements KeyValueStore {
     constructor(private readonly _instance: PostHog) {}
@@ -192,10 +199,9 @@ export class BrowserClientAdapter implements Client {
         return extension as T | undefined
     }
 
-    capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): void {
+    capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): boolean {
         if (!options) {
-            this.instance.capture(event as EventName, properties)
-            return
+            return this._notRateLimited(this.instance.capture(event as EventName, properties))
         }
 
         const captureOptions: CaptureOptions = {
@@ -205,7 +211,13 @@ export class BrowserClientAdapter implements Client {
             $set_once: options.setOnce as Properties | undefined,
             ...(options.delivery === 'unload' ? { transport: 'sendBeacon' as const, send_instantly: true } : {}),
         }
-        this.instance.capture(event as EventName, properties, captureOptions)
+        return this._notRateLimited(this.instance.capture(event as EventName, properties, captureOptions))
+    }
+
+    private _notRateLimited(result: CaptureResult | undefined): boolean {
+        // capture() returns undefined for every dropped event. The rate limiter tells a rate limit drop apart from
+        // a drop the app chose, for example in before_send.
+        return !isUndefined(result) || !this.instance.rateLimiter?.lastEventRateLimited
     }
 
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {
