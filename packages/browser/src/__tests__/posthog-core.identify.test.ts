@@ -47,6 +47,7 @@ describe('identify()', () => {
                 reloadFeatureFlags: vi.fn(),
                 reset: vi.fn(),
                 resetFlagCallReported: vi.fn(),
+                sendFlagCallsPendingCapture: vi.fn(),
             },
             unregister: vi.fn(),
         })
