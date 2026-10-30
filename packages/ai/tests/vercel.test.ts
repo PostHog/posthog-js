@@ -353,6 +353,35 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(input).not.toContain('redacted')
     })
 
+    it.each([
+      { fullCapture: false, expected: '[base64 image/png redacted]' },
+      { fullCapture: true, expected: 'data:image/png;base64,UE5H' },
+    ])('records file bytes, full capture $fullCapture', async ({ fullCapture, expected }) => {
+      const client = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      client.enableFullAiCapture = fullCapture
+      const bytes = new Uint8Array([0x50, 0x4e, 0x47])
+      const baseModel = {
+        ...createMockV3Model('image-model'),
+        doGenerate: vi.fn().mockResolvedValue({
+          content: [{ type: 'file', data: bytes, mediaType: 'image/png' }],
+          usage: v3TokenUsage(1, 1),
+          response: { modelId: 'image-model' },
+          providerMetadata: {},
+          finishReason: { unified: 'stop', raw: undefined },
+          warnings: [],
+        }),
+      } as LanguageModelV3
+      const model = withTracing(baseModel, client, { posthogDistinctId: 'test-user' })
+
+      await model.doGenerate({
+        prompt: [{ role: 'user', content: [{ type: 'file', data: bytes, mediaType: 'image/png' }] }],
+      } as any)
+
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_input'][0].content[0].file).toBe(expected)
+      expect(properties['$ai_output_choices'][0].content[0].data).toBe(expected)
+    })
+
     it('redacts data URL objects from input while preserving HTTP URL objects', async () => {
       const binary = 'SU5QVVQgVVJMIERBVEE='
       const dataUrl = new URL(`data:audio/wav;base64,${binary}`)

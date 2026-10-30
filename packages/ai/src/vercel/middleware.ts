@@ -22,6 +22,7 @@ import {
   calculateWebSearchCount,
   getModelParams,
   isPrivacyModeEnabled,
+  uint8ArrayToBase64,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
 import { redactBase64DataUrl, sanitizeVercel } from '../sanitization'
@@ -82,6 +83,12 @@ type OutputContentItem =
   | { type: 'source'; sourceType: string; id: string; url: string; title: string }
 
 const redactFileData = (data: unknown, mediaType?: string, client?: FullAiCaptureGate): string | undefined => {
+  if (data instanceof Uint8Array) {
+    // The AI SDK hands over downloaded or decoded files as bytes, so record them as the data URL a string would be.
+    return isFullAiCaptureEnabled(client)
+      ? `data:${mediaType || 'application/octet-stream'};base64,${uint8ArrayToBase64(data)}`
+      : String(redactBase64DataUrl(data, mediaType))
+  }
   if (data instanceof URL) {
     return isFullAiCaptureEnabled(client)
       ? data.toString()
