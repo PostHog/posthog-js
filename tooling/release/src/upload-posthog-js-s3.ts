@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { parseSemver } from './release-utils.ts'
+import { writeIntegrityManifest } from './integrity-manifest.ts'
 import {
     IMMUTABLE_ASSET_CACHE_CONTROL,
     MUTABLE_ALIAS_CACHE_CONTROL,
@@ -45,11 +46,12 @@ async function listFilesRecursively(root: string): Promise<string[]> {
 export async function collectReleaseAssets(distDir = DIST_DIR): Promise<ReleaseAsset[]> {
     const distEntries = (await fs.readdir(distDir)).sort()
     const assets: ReleaseAsset[] = distEntries
-        .filter((name) => name.endsWith('.js') || name.endsWith('.js.map'))
+        .filter((name) => name.endsWith('.js') || name.endsWith('.js.map') || name === 'integrity.json')
         .map((entry) => ({
             relativeKey: entry,
             filePath: path.join(distDir, entry),
-            contentType: entry.endsWith('.js.map') ? 'application/json' : 'application/javascript',
+            contentType:
+                entry.endsWith('.json') || entry.endsWith('.js.map') ? 'application/json' : 'application/javascript',
         }))
 
     const toolbarCssPath = path.join(distDir, 'toolbar.css')
@@ -172,6 +174,18 @@ export async function uploadPostHogJsS3(
 
     const assets = await collectReleaseAssets()
     if (assets.length === 0) throw new Error('No release assets found')
+    await writeIntegrityManifest(
+        DIST_DIR,
+        version,
+        assets.map((asset) => asset.relativeKey)
+    )
+    if (!assets.some((asset) => asset.relativeKey === 'integrity.json')) {
+        assets.push({
+            relativeKey: 'integrity.json',
+            filePath: path.join(DIST_DIR, 'integrity.json'),
+            contentType: 'application/json',
+        })
+    }
     const publishMutableAliases = options.publishMutableAliases ?? true
     const forceOverwrite = options.forceOverwrite ?? false
     if (options.aliasesOnly && (!publishMutableAliases || forceOverwrite)) {

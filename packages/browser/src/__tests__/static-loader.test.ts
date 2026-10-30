@@ -245,6 +245,33 @@ describe('static script loader', () => {
         expect(injectedScripts()[0].nonce).toBe('test-nonce')
     })
 
+    it('applies a customer-pinned SHA-384 hash to the downloaded core', async () => {
+        const integrity = 'sha384-' + 'A'.repeat(64)
+        script.setAttribute('data-core-integrity', integrity)
+        await load()
+        expect(injectedScripts()[0].integrity).toBe(integrity)
+        expect(injectedScripts()[0].crossOrigin).toBe('anonymous')
+    })
+
+    it.each(['', ' ', 'not-a-hash', 'sha384-short', 'sha384-' + 'A'.repeat(63), 'sha384-' + '!'.repeat(64)])(
+        'rejects invalid core integrity %j without creating an unprotected script',
+        async (integrity) => {
+            script.setAttribute('data-core-integrity', integrity)
+            await load()
+            expect(injectedScripts()).toHaveLength(0)
+            expect(loaderWindow.posthog).toBeUndefined()
+            expect(console.error).toHaveBeenCalled()
+        }
+    )
+
+    it('also enforces core integrity in deferred initialization mode', async () => {
+        const integrity = 'sha384-' + 'B'.repeat(64)
+        script.setAttribute('data-defer-init', 'true')
+        script.setAttribute('data-core-integrity', integrity)
+        await load()
+        expect(injectedScripts()[0].integrity).toBe(integrity)
+    })
+
     it.each(['{', 'null', '[]', 'true', '"string"'])(
         'does not initialize with invalid JSON config %s',
         async (config) => {

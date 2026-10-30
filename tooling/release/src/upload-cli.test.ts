@@ -62,7 +62,10 @@ test('resumes a partial release without force and never rewrites identical immut
     s3.hooks.before = undefined
     const result = await s3.run()
     assert.equal(result.code, 0, result.output)
-    assert.equal(s3.objects.size, 6)
+    assert.equal(s3.objects.size, 9)
+    const manifest = JSON.parse(s3.objects.get(`/assets/static/${version}/integrity.json`)!.body.toString())
+    assert.equal(manifest.version, version)
+    assert.deepEqual(Object.keys(manifest.files), ['array.js', 'recorder.js'])
     assert.equal(
         s3.requests.filter((r) => r.method === 'PUT' && r.key === `/assets/static/${version}/array.js`).length,
         1
@@ -74,17 +77,17 @@ test('alias-only phase verifies all immutable bytes before any alias PUT', async
     assert.equal((await s3.run(['--aliases-only'])).code, 1)
     assert.equal(s3.requests.filter((r) => r.method === 'PUT').length, 0)
     assert.equal((await s3.run(['--immutable-only'])).code, 0)
-    assert.equal(s3.objects.size, 2)
+    assert.equal(s3.objects.size, 3)
     await fs.writeFile(path.join(s3.dist, 'recorder.js'), 'modified')
     const mismatch = await s3.run(['--aliases-only'])
     assert.equal(mismatch.code, 1)
     assert.match(mismatch.output, /differs/)
-    assert.equal(s3.requests.filter((r) => r.method === 'PUT').length, 2)
+    assert.equal(s3.requests.filter((r) => r.method === 'PUT').length, 3)
     await fs.writeFile(path.join(s3.dist, 'recorder.js'), 'recorder')
     const promoted = await s3.run(['--aliases-only'])
     assert.equal(promoted.code, 0, promoted.output)
-    assert.equal(s3.objects.size, 6)
-    assert.equal(s3.requests.filter((r) => r.method === 'PUT' && r.key.includes(`/${version}/`)).length, 2)
+    assert.equal(s3.objects.size, 9)
+    assert.equal(s3.requests.filter((r) => r.method === 'PUT' && r.key.includes(`/${version}/`)).length, 3)
 })
 
 test('a mismatching existing immutable asset prevents every write, unless force is explicit', async (t) => {
@@ -98,7 +101,7 @@ test('a mismatching existing immutable asset prevents every write, unless force 
     const overwrite = await s3.run(['--immutable-only', '--force-overwrite'])
     assert.equal(overwrite.code, 0, overwrite.output)
     assert.equal(s3.objects.get(`/assets/static/${version}/recorder.js`)?.body.toString(), 'new recorder')
-    assert.equal(s3.objects.size, 2)
+    assert.equal(s3.objects.size, 3)
 })
 
 test('prereleases never promote aliases even when running the alias phase', async (t) => {
@@ -106,7 +109,7 @@ test('prereleases never promote aliases even when running the alias phase', asyn
     const target = `${version}-beta.1`
     assert.equal((await s3.run(['--immutable-only'], target)).code, 0)
     assert.equal((await s3.run(['--aliases-only'], target)).code, 0)
-    assert.equal(s3.objects.size, 2)
+    assert.equal(s3.objects.size, 3)
     assert.ok([...s3.objects.keys()].every((key) => key.includes(target)))
 })
 
@@ -128,7 +131,7 @@ test('the real uploader bounds concurrent PUTs across a larger release', async (
     }
     const result = await s3.run(['--immutable-only'])
     assert.equal(result.code, 0, result.output)
-    assert.equal(s3.objects.size, 34)
+    assert.equal(s3.objects.size, 35)
     assert.ok(peak > 1 && peak <= 8, `Observed ${peak} concurrent PUTs`)
 })
 

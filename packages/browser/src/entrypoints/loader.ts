@@ -1,4 +1,4 @@
-import { isFunction, isObject, isString } from '@posthog/core'
+import { isFunction, isObject, isString, isUndefined } from '@posthog/core'
 import { document } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getQueryParam } from '@posthog/browser-common/utils/request-utils'
@@ -61,6 +61,12 @@ function load(): void {
         return
     }
 
+    const coreIntegrity = script.getAttribute('data-core-integrity')?.trim()
+    if (!isUndefined(coreIntegrity) && !/^sha384-[A-Za-z0-9+/]{64}$/.test(coreIntegrity)) {
+        logger.critical('data-core-integrity must be a SHA-384 integrity hash')
+        return
+    }
+
     const url = document.createElement('a')
     url.href = script.src
     const deferInit = script.getAttribute('data-defer-init') === 'true'
@@ -75,6 +81,9 @@ function load(): void {
     core.src = getSDKScriptURL(url)
     core.async = true
     core.crossOrigin = 'anonymous'
+    if (coreIntegrity) {
+        core.integrity = coreIntegrity
+    }
     core.nonce = script.nonce
     core.onerror = () => logger.critical('Failed to load the PostHog SDK')
     script.parentNode?.insertBefore(core, script.nextSibling)

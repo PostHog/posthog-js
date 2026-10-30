@@ -18,7 +18,7 @@
         "dev:compile": "tsc -b --watch",
         "dev:runtime": "pnpm build:runtime --watch",
         "dev:types": "pnpm build:types --watch",
-        "build": "tsc -b && pnpm build:runtime && pnpm build:types",
+        "build": "tsc -b && pnpm build:runtime && node scripts/generate-integrity-manifest.mjs && pnpm build:types",
         "build:runtime": "rolldown -c rollup.config.mjs",
         "build:types": "BUILD_TYPES_ONLY=1 rolldown -c rollup.config.mjs",
         "bundle-size:array": "node scripts/compare-array-bundle-size.mjs",
@@ -75,7 +75,8 @@
         "customizations/package.json",
         "rrweb/package.json",
         "rrweb-types/package.json",
-        "rrweb-plugin-console-record/package.json"
+        "rrweb-plugin-console-record/package.json",
+        "INTEGRITY.md"
     ],
     "dependencies": {
         "@posthog/browser-common": "workspace:^",
