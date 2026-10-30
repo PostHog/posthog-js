@@ -61,6 +61,11 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
+# @genkit-ai/core lists the Firebase telemetry plugin as optional. The @posthog/ai tests do not use it,
+# and it adds the Firebase and Google Cloud SDKs to the lockfile.
+ignoredOptionalDependencies:
+  - '@genkit-ai/firebase'
+
 onlyBuiltDependencies:
   - sharp
 
