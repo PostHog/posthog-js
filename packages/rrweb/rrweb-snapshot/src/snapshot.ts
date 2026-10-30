@@ -608,22 +608,37 @@ const CHANGED_LINK_SHEET_CHECK_DELAYS_MS = [
   100, 200, 400, 800, 1600, 3200, 6400, 12800, 25600,
 ] as const;
 
+// a later change moves the baseline, so a sheet that loaded for an href
+// replaced since does not count as up to date
+const sheetBeforeLatestSourceChange = new WeakMap<
+  HTMLLinkElement,
+  CSSStyleSheet | null
+>();
+
 /**
  * For a `<link rel=stylesheet>` whose `rel` or `href` just changed: until the
  * new sheet loads, `link.sheet` is still the sheet of the previous `href`.
+ * Call it in the task that changed the link, while that sheet is attached.
  */
 export function onceLinkStylesheetUpToDate(
   link: HTMLLinkElement,
   listener: () => unknown,
 ): void {
+  sheetBeforeLatestSourceChange.set(link, readLinkSheet(link));
   if (stylesheetLoadTracked.has(link)) return;
 
-  const sheetMatchesHref = () => {
+  const isSheetUpToDate = () => {
     const sheet = readLinkSheet(link);
-    return Boolean(sheet && sheet.href === link.href);
+    // `link.href` resolves against the current base URL, so after a
+    // pushState it differs from the URL a relative href loaded from
+    return Boolean(
+      sheet &&
+        (sheet !== sheetBeforeLatestSourceChange.get(link) ||
+          sheet.href === link.href),
+    );
   };
 
-  if (sheetMatchesHref()) {
+  if (isSheetUpToDate()) {
     listener();
     return;
   }
@@ -631,7 +646,7 @@ export function onceLinkStylesheetUpToDate(
   trackStylesheetUntilReady(
     link,
     listener,
-    sheetMatchesHref,
+    isSheetUpToDate,
     CHANGED_LINK_SHEET_CHECK_DELAYS_MS,
     // a full snapshot inlines the sheet still attached, which is the previous
     // href's, so only this tracking can record the new sheet

@@ -1888,6 +1888,61 @@ describe('record', function (this: ISuite) {
       expect(cssTextMutation.attributes._cssText).toContain('color: pink');
     });
 
+    it('sends null for attributes removed from a changed stylesheet link', async () => {
+      await ctx.page.evaluate(async (serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('media', 'screen');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+        await new Promise((resolve) => {
+          link.onload = resolve;
+          document.head.appendChild(link);
+        });
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        link.removeAttribute('media');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=2`);
+      }, serverURL);
+
+      const cssTextMutation = await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+
+      expect(cssTextMutation.attributes).toHaveProperty('media', null);
+    });
+
+    it('inlines the new sheet of a relative href that changed before a pushState', async () => {
+      await ctx.page.evaluate(async () => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('href', 'assets/style.css?v=1');
+        await new Promise((resolve) => {
+          link.onload = resolve;
+          document.head.appendChild(link);
+        });
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        link.setAttribute('href', 'assets/style.css?v=2');
+        history.pushState({}, '', '/elsewhere/page');
+      });
+
+      const cssTextMutation = await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+
+      expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+    });
+
     it('inlines the new sheet when a full snapshot runs while a changed link loads', async () => {
       await ctx.page.evaluate(async (serverURL) => {
         const { record } = (window as unknown as IWindow).rrweb;

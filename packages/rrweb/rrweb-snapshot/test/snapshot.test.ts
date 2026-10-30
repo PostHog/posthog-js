@@ -1393,8 +1393,8 @@ describe('onceLinkStylesheetUpToDate', () => {
     document.head.appendChild(link);
     return {
       link,
-      attachNewSheet: () => {
-        currentSheet = { href: link.href } as unknown as CSSStyleSheet;
+      attachNewSheet: (sheetHref = link.href) => {
+        currentSheet = { href: sheetHref } as unknown as CSSStyleSheet;
       },
     };
   }
@@ -1451,6 +1451,38 @@ describe('onceLinkStylesheetUpToDate', () => {
     attachNewSheet();
     vi.advanceTimersByTime(200);
     vi.advanceTimersByTime(60_000);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('notices a new sheet whose URL no longer matches link.href after a pushState', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    attachNewSheet('https://example.com/previous-path/theme-dark.css');
+    vi.advanceTimersByTime(100);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not count the sheet of an href that a later change replaced', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    attachNewSheet();
+    link.setAttribute('href', 'https://example.com/theme-contrast.css');
+    onceLinkStylesheetUpToDate(link, listener);
+    vi.advanceTimersByTime(100);
+    expect(listener).not.toHaveBeenCalled();
+
+    attachNewSheet();
+    vi.advanceTimersByTime(200);
 
     expect(listener).toHaveBeenCalledTimes(1);
   });

@@ -1236,7 +1236,10 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
     });
     return linkEl;
   };
-  const recorderView = { currentId: () => 7, serializeWithoutCss: () => null };
+  const recorderView = {
+    currentId: () => 7,
+    reserializeWithoutCss: () => ({ previous: null, current: null }),
+  };
 
   it('emits nothing from pending work once its recorder stops', () => {
     const mutationCb = vi.fn();

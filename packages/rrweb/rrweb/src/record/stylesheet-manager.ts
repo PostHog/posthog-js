@@ -55,15 +55,24 @@ type PendingDeferredSheet = {
   invalidate: () => void;
 };
 
-// Replay rebuilds the link from its snapshot-time attributes when `_cssText`
-// arrives, so attributes changed since the snapshot (such as `media`) must
-// travel with the CSS. `rel` and `href` go, as when a snapshot inlines a link.
-function attributesBesidesSource(
-  serialized: serializedNodeWithId | null,
-): attributeMutation['attributes'] {
-  const attributes = {
-    ...((serialized as elementNode | null)?.attributes ?? {}),
-  } as attributeMutation['attributes'];
+// Replay rebuilds the link from the attributes recorded for it before, when
+// `_cssText` arrives, so attributes changed since (such as `media`) must
+// travel with the CSS, and removed ones as null. `rel` and `href` go, as when
+// a snapshot inlines a link.
+function attributesReplacingPrevious(serialization: {
+  previous: serializedNodeWithId | null;
+  current: serializedNodeWithId | null;
+}): attributeMutation['attributes'] {
+  const attributes: attributeMutation['attributes'] = {};
+  for (const name of Object.keys(
+    (serialization.previous as elementNode | null)?.attributes ?? {},
+  )) {
+    attributes[name] = null;
+  }
+  Object.assign(
+    attributes,
+    (serialization.current as elementNode | null)?.attributes,
+  );
   delete attributes.rel;
   delete attributes.href;
   return attributes;
@@ -294,7 +303,10 @@ export class StylesheetManager {
     linkEl: HTMLLinkElement,
     recorderView: {
       currentId: () => number;
-      serializeWithoutCss: () => serializedNodeWithId | null;
+      reserializeWithoutCss: () => {
+        previous: serializedNodeWithId | null;
+        current: serializedNodeWithId | null;
+      };
     },
   ): void {
     // a stop from inside the consumer's emit has already reset the mirror
@@ -318,7 +330,7 @@ export class StylesheetManager {
           linkEl,
           id,
           cssText,
-          attributesBesidesSource(recorderView.serializeWithoutCss()),
+          attributesReplacingPrevious(recorderView.reserializeWithoutCss()),
         ),
       );
       if (!task) {

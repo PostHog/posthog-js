@@ -592,11 +592,13 @@ export default class MutationBuffer {
     for (const link of stylesheetLinksWithNewSource) {
       this.stylesheetManager.inlineLinkStylesheetAfterChange(link, {
         currentId: () => this.mirror.getId(link),
-        serializeWithoutCss: () =>
-          serializeNodeWithId(link, {
+        reserializeWithoutCss: () => ({
+          previous: this.mirror.getMeta(link),
+          current: serializeNodeWithId(link, {
             ...this.buildSerializationOptions(),
             inlineStylesheet: false,
           }),
+        }),
       });
     }
   };
