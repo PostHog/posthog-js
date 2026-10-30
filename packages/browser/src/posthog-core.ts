@@ -5458,6 +5458,23 @@ export function init_from_snippet(): void {
                 }
             }
         })
+
+        // Eager loaders can finish before init(). Retain the primary queue until initialization succeeds.
+        const peopleQueue = snippetPostHog.people
+        if (!posthogMain.__loaded && isArray(snippetPostHog)) {
+            const init = posthogMain.init
+            let pending = true
+            posthogMain.init = (token, config, name) => {
+                const instance = init.call(posthogMain, token, config, name)
+                if (pending && instance === posthogMain && instance.__loaded) {
+                    pending = false
+                    posthogMain.init = init
+                    instance._execute_array.call(instance.people, peopleQueue)
+                    instance._execute_array(snippetPostHog)
+                }
+                return instance
+            }
+        }
     }
 
     // Keep the snippet sentinel so another pasted snippet cannot replace live SDK methods with queue stubs.
