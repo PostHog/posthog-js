@@ -61,6 +61,8 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
                     shared.reloadFeatureFlags()
                 })
             )
+            // An accepted event shows that capture works again, and it has already used its own rate limit token.
+            subscriptions.push(value.onEvent(() => shared.sendFlagCallsPendingCapture()))
             subscriptions.push(
                 value.onReset(() => {
                     shared.reset()
