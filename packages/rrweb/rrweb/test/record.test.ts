@@ -1930,6 +1930,56 @@ describe('record', function (this: ISuite) {
       ).toBeUndefined();
     });
 
+    it('does not track a changed stylesheet link when emit stops the recording', async () => {
+      const loadListenersAddedAfterStop = await ctx.page.evaluate(
+        async (serverURL) => {
+          const { record } = (window as unknown as IWindow).rrweb;
+          const link = document.createElement('link');
+          link.setAttribute('rel', 'stylesheet');
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+          await new Promise((resolve) => {
+            link.onload = resolve;
+            document.head.appendChild(link);
+          });
+
+          let stopped = false;
+          let loadListenersAfterStop = 0;
+          const addEventListener = link.addEventListener.bind(link);
+          link.addEventListener = ((type: string, ...rest: unknown[]) => {
+            if (type === 'load' && stopped) loadListenersAfterStop += 1;
+            return (addEventListener as (...args: unknown[]) => void)(
+              type,
+              ...rest,
+            );
+          }) as typeof link.addEventListener;
+
+          const stopRecording = record({
+            inlineStylesheet: true,
+            emit: (event) => {
+              (window as unknown as IWindow).emit(event);
+              const changedAttributes = (
+                event.data as { attributes?: { attributes: object }[] }
+              ).attributes;
+              if (
+                !stopped &&
+                changedAttributes?.some((m) => 'href' in m.attributes)
+              ) {
+                stopped = true;
+                stopRecording?.();
+              }
+            },
+          });
+
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=2`);
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return stopped ? loadListenersAfterStop : -1;
+        },
+        serverURL,
+      );
+
+      expect(loadListenersAddedAfterStop).toBe(0);
+    });
+
     it('does not inline a changed stylesheet link after recording stops', async () => {
       await changeHrefThen(serverURL, 'stop');
 
