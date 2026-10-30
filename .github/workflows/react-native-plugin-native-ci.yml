@@ -158,15 +158,15 @@ jobs:
             -destination generic/platform=iOS | xcpretty
         working-directory: ${{ env.EXAMPLE_DIR }}/ios
 
-  build-ios-hybrid-spm:
+  build-ios-dynamic-frameworks:
     permissions:
       contents: read
-    name: Build example for iOS (CocoaPods plugin + SwiftPM posthog-ios)
-    # Exercises the hybrid opt-in path: `posthog.useSpm` in
-    # Podfile.properties.json routes posthog-ios through the React Native
-    # spm_dependency helper while the React Native plugin remains a CocoaPod.
-    # The hybrid path requires dynamic frameworks. macos-26 uses the latest
-    # Xcode shipped with the runner image.
+    name: Build example for iOS (CocoaPods, dynamic frameworks)
+    # The plugin is a CocoaPod that pulls posthog-ios in as a Swift package
+    # through React Native's spm_dependency helper. The static-library job
+    # above covers the default linkage; this one covers
+    # `use_frameworks! :linkage => :dynamic`. macos-26 uses the latest Xcode
+    # shipped with the runner image.
     runs-on: macos-26
     steps:
       - name: Checkout repository
@@ -196,16 +196,6 @@ jobs:
         # example lockfile must be kept in sync with its package.json.
         # The cooldown is explicit because --ignore-workspace skips the YAML policy.
         run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
-        working-directory: ${{ env.EXAMPLE_DIR }}
-
-      - name: Opt example into SPM resolution
-        if: steps.is-affected.outputs.is-affected == 'true'
-        run: |
-          cat > ios/Podfile.properties.json <<'JSON'
-          {
-            "posthog.useSpm": "true"
-          }
-          JSON
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Install CocoaPods
