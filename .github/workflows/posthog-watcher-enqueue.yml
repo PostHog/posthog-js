@@ -2,7 +2,7 @@ name: PostHog Watcher enqueue
 
 on:
     issues:
-        types: [opened, reopened, edited]
+        types: [opened, reopened, edited, closed]
     issue_comment:
         types: [created]
     pull_request:
