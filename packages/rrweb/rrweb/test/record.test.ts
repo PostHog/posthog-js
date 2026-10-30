@@ -1927,6 +1927,35 @@ describe('record', function (this: ISuite) {
       expect(cssTextEventIndex).toBeGreaterThan(lastFullSnapshotIndex);
     });
 
+    it('masks the attributes and CSS it sends after a stylesheet link changes', async () => {
+      await ctx.page.evaluate((serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'preload');
+        link.setAttribute('as', 'style');
+        link.setAttribute('data-owner', 'person@example.com');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?masked`);
+        link.onload = () => {
+          link.onload = null;
+          link.rel = 'stylesheet';
+        };
+        document.head.appendChild(link);
+
+        record({
+          inlineStylesheet: true,
+          maskAllElementAttributes: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+      }, serverURL);
+
+      await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+      const emittedBytes = JSON.stringify(ctx.events);
+      expect(emittedBytes).not.toContain('person@example.com');
+      expect(emittedBytes).not.toContain('color: pink');
+    });
+
     it('does not inline a late-loading stylesheet whose ancestor became blocked', async () => {
       await ctx.page.evaluate(async (serverURL) => {
         const { record } = (window as unknown as IWindow).rrweb;
