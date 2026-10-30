@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.85.1
+
+### Patch Changes
+
+- [#5489](https://github.com/PostHog/posthog-js/pull/5489) [`a055ee6`](https://github.com/PostHog/posthog-js/commit/a055ee65e61a876a7b399271b9df026d22dbb144) Thanks [@ioannisj](https://github.com/ioannisj)! - Document that `sessionReplayConfig.screenshotScale` now defaults to one pixel per dp on Android with posthog-android 3.74.0, instead of native resolution.
+  (2026-10-30)
+- Updated dependencies [[`a055ee6`](https://github.com/PostHog/posthog-js/commit/a055ee65e61a876a7b399271b9df026d22dbb144)]:
+  - @posthog/react-native-plugin@2.13.0
+
 ## 4.85.0
 
 ### Minor Changes
