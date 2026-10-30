@@ -49,8 +49,12 @@ function getAutoInit(script: HTMLScriptElement, origin: string): QueuedInit | un
 }
 
 function load(): void {
-    const script = document?.currentScript
-    if (!document || !script || !('src' in script) || !script.src) {
+    if (!document) {
+        return
+    }
+    const script = document.currentScript
+    if (!script || !('src' in script) || !script.src) {
+        logger.critical('Load the PostHog loader as a classic script with a src attribute.')
         return
     }
     if (assignableWindow.posthog?.__SV || isFunction(assignableWindow.posthog?.init)) {
@@ -72,7 +76,7 @@ function load(): void {
     core.async = true
     core.crossOrigin = 'anonymous'
     core.nonce = script.nonce
-    core.onerror = () => logger.error('Failed to load the PostHog SDK')
+    core.onerror = () => logger.critical('Failed to load the PostHog SDK')
     script.parentNode?.insertBefore(core, script.nextSibling)
 }
 

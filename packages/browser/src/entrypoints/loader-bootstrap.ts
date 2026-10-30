@@ -7,8 +7,12 @@ import { createPostHogStub } from '../utils/loader-stub'
 const logger = createLogger('[Loader bootstrap]')
 
 function bootstrap(): void {
-    const script = document?.currentScript
-    if (!document || !script) {
+    if (!document) {
+        return
+    }
+    const script = document.currentScript
+    if (!script) {
+        logger.critical('Load the PostHog bootstrap as a classic script, not a module or bundled import.')
         return
     }
     if (assignableWindow.posthog?.__SV || isFunction(assignableWindow.posthog?.init)) {
@@ -23,15 +27,19 @@ function bootstrap(): void {
     const url = document.createElement('a')
     url.href = source
     if (
-        !/^(https?:\/\/|\/)/i.test(source) ||
+        !/^(https?:\/\/|\/(?![/\\]))/i.test(source) ||
         !/^https?:$/.test(url.protocol) ||
+        (source.charAt(0) === '/' &&
+            (url.host !== document.location.host || url.protocol !== document.location.protocol)) ||
+        url.username ||
+        url.password ||
         /\/static(\/|$)/.test(url.pathname) ||
         url.search ||
         url.hash ||
         /\.js\/?$/i.test(url.pathname)
     ) {
         logger.critical(
-            'Use an http(s):// asset host or /proxy prefix without /static, a script filename, query, or fragment. Pass the project token to posthog.init().'
+            'Use a credential-free http(s):// asset host or same-origin /proxy prefix without /static, a script filename, query, or fragment. Pass the project token to posthog.init().'
         )
         return
     }
@@ -50,7 +58,7 @@ function bootstrap(): void {
     core.async = true
     core.crossOrigin = 'anonymous'
     core.nonce = script.nonce
-    core.onerror = () => logger.error('Failed to load the PostHog SDK')
+    core.onerror = () => logger.critical('Failed to load the PostHog SDK')
     script.parentNode?.insertBefore(core, script.nextSibling)
 }
 

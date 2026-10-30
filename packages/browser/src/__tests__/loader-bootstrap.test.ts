@@ -184,6 +184,13 @@ describe('local loader bootstrap', () => {
         'https://us-assets.i.posthog.com/static/1',
         '/static/1',
         'https://proxy.example/ingest/static/1.441.2',
+        '//evil.example',
+        '//localhost/ingest',
+        '/\\evil.example',
+        '/\n/evil.example',
+        'https://user@evil.example',
+        'https://user:secret@evil.example',
+        'https://:secret@evil.example',
     ])('reports invalid asset host %s without injecting a script', async (source) => {
         script.setAttribute('data-asset-host', source)
         await bootstrap()
@@ -192,10 +199,22 @@ describe('local loader bootstrap', () => {
         expect(document.querySelectorAll('script')).toHaveLength(1)
     })
 
-    it('does nothing without an executing script', async () => {
+    it('reports a missing executing script without debug mode', async () => {
         vi.spyOn(document, 'currentScript', 'get').mockReturnValue(null)
         await bootstrap()
+        expect(console.error).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('classic script'))
         expect(loaderWindow.posthog).toBeUndefined()
         expect(document.querySelectorAll('script')).toHaveLength(1)
+    })
+
+    it('reports failed SDK downloads without debug mode or exposing the asset URL', async () => {
+        script.setAttribute('data-asset-host', 'https://proxy.example/private-path')
+        await bootstrap()
+
+        injectedCore().dispatchEvent(new Event('error'))
+
+        expect(console.error).toHaveBeenCalledWith(expect.any(String), 'Failed to load the PostHog SDK')
+        expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('private-path')
+        expect(loaderWindow.posthog.__loaded).toBeUndefined()
     })
 })

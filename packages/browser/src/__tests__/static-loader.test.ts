@@ -272,11 +272,25 @@ describe('static script loader', () => {
         expect(console.error).toHaveBeenCalled()
     })
 
-    it('does nothing without an executing script element', async () => {
+    it('reports a missing executing script without debug mode', async () => {
+        Reflect.deleteProperty(loaderWindow, 'POSTHOG_DEBUG')
         vi.spyOn(document, 'currentScript', 'get').mockReturnValue(null)
         await load()
+        expect(console.error).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('classic script'))
         expect(loaderWindow.posthog).toBeUndefined()
         expect(injectedScripts()).toHaveLength(0)
+    })
+
+    it('reports failed SDK downloads without debug mode or exposing the loader URL', async () => {
+        Reflect.deleteProperty(loaderWindow, 'POSTHOG_DEBUG')
+        script.src += '?project_token=phc_private'
+        await load()
+
+        injectedScripts()[0].dispatchEvent(new Event('error'))
+
+        expect(console.error).toHaveBeenCalledWith(expect.any(String), 'Failed to load the PostHog SDK')
+        expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('phc_private')
+        expect(loaderWindow.posthog.__loaded).toBeUndefined()
     })
 
     it.each([
