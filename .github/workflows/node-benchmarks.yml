@@ -1,0 +1,105 @@
+name: Node SDK benchmarks
+
+on: [pull_request]
+
+permissions: {}
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+jobs:
+    affected:
+        permissions:
+            contents: read
+        uses: ./.github/workflows/check-affected.yml
+        with:
+            package-name: posthog-node
+            additional-paths: |
+                .github/workflows/node-benchmarks.yml
+                .github/workflows/check-affected.yml
+                .github/actions/is-affected/action.yaml
+
+    benchmark:
+        needs: affected
+        if: needs.affected.outputs.is-affected == 'true'
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        env:
+            CI: 'true'
+            TURBO_TELEMETRY_DISABLED: '1'
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: '24.13.0'
+                  package-manager-cache: false
+
+            - uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+              with:
+                  cache: false
+                  install: false
+
+            - name: Prepare pinned baseline
+              env:
+                  TARGET_SHA: ${{ github.event.pull_request.base.sha }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  set -euo pipefail
+                  BASE_WORKTREE="$RUNNER_TEMP/node-benchmark-base"
+                  export RESULTS="$RUNNER_TEMP/node-benchmark-results"
+                  printf 'BASE_WORKTREE=%s\nRESULTS=%s\n' "$BASE_WORKTREE" "$RESULTS" >> "$GITHUB_ENV"
+                  BASE_SHA=$(git merge-base "$TARGET_SHA" "$HEAD_SHA")
+                  git worktree add --detach "$BASE_WORKTREE" "$BASE_SHA"
+                  mkdir -p "$RESULTS"
+                  node -e 'require("fs").writeFileSync(process.env.RESULTS + "/revisions.json", JSON.stringify({target: process.env.TARGET_SHA, head: process.env.HEAD_SHA, base: process.argv[1]}, null, 2))' "$BASE_SHA"
+
+            - name: Build head
+              run: |
+                  pnpm install --frozen-lockfile --filter posthog-node...
+                  pnpm turbo run build --filter=posthog-node
+
+            - name: Build baseline
+              run: |
+                  cd "$BASE_WORKTREE"
+                  pnpm install --frozen-lockfile --filter posthog-node...
+                  pnpm turbo run build --filter=posthog-node
+
+            - name: Test measurement controls and fixtures
+              run: pnpm --filter posthog-node test:benchmarks
+
+            - name: Measure paired base and head
+              run: |
+                  node packages/node/benchmarks/run.mjs \
+                    --base "$BASE_WORKTREE/packages/node" \
+                    --head "$GITHUB_WORKSPACE/packages/node" \
+                    --output "$RESULTS" \
+                    --repetitions 6
+
+            - name: Upload raw benchmark results
+              if: always()
+              id: results
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: node-benchmark-results
+                  path: ${{ runner.temp }}/node-benchmark-results
+                  if-no-files-found: warn
+                  retention-days: 14
+
+            - name: Link results
+              if: always()
+              env:
+                  ARTIFACT_URL: ${{ steps.results.outputs.artifact-url }}
+              run: |
+                  printf '## Node SDK benchmark data\n\n' >> "$GITHUB_STEP_SUMMARY"
+                  if [[ -n "$ARTIFACT_URL" ]]; then
+                    printf '[Download paired measurements and execution metadata](%s)\n\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+                  fi
+                  printf 'Measurements are informational. Check workload statuses before comparing values.\n' >> "$GITHUB_STEP_SUMMARY"
