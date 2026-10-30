@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.444.0
+
+### Minor Changes
+
+- [#5480](https://github.com/PostHog/posthog-js/pull/5480) [`9bd0e80`](https://github.com/PostHog/posthog-js/commit/9bd0e807d019f06b08cd998b0bb72bac6dd2352e) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add support widget theming: `conversations.theme` init option, `posthog.conversations.setTheme()`, dark mode, and `--ph-conv-*` CSS custom properties
+  (2026-10-30)
+
+### Patch Changes
+
+- Updated dependencies [[`9bd0e80`](https://github.com/PostHog/posthog-js/commit/9bd0e807d019f06b08cd998b0bb72bac6dd2352e)]:
+  - @posthog/types@1.419.0
+
 ## 1.443.0
 
 ### Minor Changes
