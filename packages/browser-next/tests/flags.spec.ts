@@ -252,6 +252,22 @@ describe('flags', () => {
         expect(captured.mock.calls.filter(([event]) => event.event === '$feature_flag_called')).toHaveLength(2)
     })
 
+    it('sends a flag exposure that the client rate limit dropped at the next capture', async () => {
+        const now = vi.spyOn(Date, 'now').mockReturnValue(1_000)
+        vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const client = await create({ flags: { featureFlagEvaluation: false } })
+        const captured = vi.fn()
+        client.onEvent(captured)
+        for (let index = 0; index < 100; index++) client.capture('flood')
+        client.getExtension(FeatureFlagsExtension)!.updateFlags({ test: true })
+        client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('test')
+
+        now.mockReturnValue(3_000)
+        client.capture('next')
+
+        expect(captured.mock.calls.filter(([event]) => event.event === '$feature_flag_called')).toHaveLength(1)
+    })
+
     it('clears evaluation properties when the group key changes', async () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response('{}'))
