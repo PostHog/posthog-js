@@ -26,6 +26,7 @@ import type {
 } from '@posthog/rrweb-types';
 import {
   isBlocked,
+  isBlockedIncludingShadowHosts,
   isAncestorRemoved,
   isIgnored,
   isSerialized,
@@ -247,26 +248,11 @@ export default class MutationBuffer {
   // Queued nodes can become blocked before emission. Check the current tree,
   // including each shadow host: closest()/parentElement do not cross that boundary.
   private isBlockedAtEmission(node: Node | null): boolean {
-    const blockClass = this.blockClass;
-    // Match stateful patterns from zero without writing to the configured
-    // regexp, whose lastIndex may be non-writable. Keep all flags, including y.
-    const stateful =
-      blockClass &&
-      typeof blockClass !== 'string' &&
-      (blockClass.global || blockClass.sticky)
-        ? new RegExp(blockClass)
-        : null;
-    while (node) {
-      if (stateful) stateful.lastIndex = 0;
-      if (isBlocked(node, stateful || blockClass, this.blockSelector, true))
-        return true;
-      const root = 'getRootNode' in node ? dom.getRootNode(node) : null;
-      node =
-        root?.nodeType === Node.DOCUMENT_FRAGMENT_NODE
-          ? dom.host(root as ShadowRoot)
-          : null;
-    }
-    return false;
+    return isBlockedIncludingShadowHosts(
+      node,
+      this.blockClass,
+      this.blockSelector,
+    );
   }
 
   private processBufferedMutations = () => {
@@ -606,7 +592,6 @@ export default class MutationBuffer {
     for (const link of stylesheetLinksWithNewSource) {
       this.stylesheetManager.inlineLinkStylesheetAfterChange(link, {
         currentId: () => this.mirror.getId(link),
-        isBlocked: () => this.isBlockedAtEmission(link),
         serializeWithoutCss: () =>
           serializeNodeWithId(link, {
             ...this.buildSerializationOptions(),

@@ -1202,6 +1202,59 @@ describe('record() end-to-end delivery of deferred stylesheets', () => {
   });
 });
 
+describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
+  let scheduled: Array<(deadline: IdleDeadline) => void>;
+  const created: Element[] = [];
+
+  beforeEach(() => {
+    scheduled = [];
+    (
+      window as unknown as { requestIdleCallback: unknown }
+    ).requestIdleCallback = (cb: (deadline: IdleDeadline) => void) => {
+      scheduled.push(cb);
+      return scheduled.length;
+    };
+  });
+
+  afterEach(() => {
+    created.splice(0).forEach((node) => node.remove());
+    delete (window as unknown as { requestIdleCallback?: unknown })
+      .requestIdleCallback;
+  });
+
+  it('keeps one task per link when changes arrive while the sheet is current', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const styleEl = document.createElement('style');
+    styleEl.textContent = '.a { color: red; }';
+    document.head.appendChild(styleEl);
+    const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
+    linkEl.setAttribute('href', 'https://example.com/theme.css');
+    document.head.appendChild(linkEl);
+    created.push(styleEl, linkEl);
+    Object.defineProperty(linkEl, 'sheet', {
+      value: { href: linkEl.href, cssRules: styleEl.sheet!.cssRules },
+    });
+    const recorderView = { currentId: () => 7, serializeWithoutCss: () => null };
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    while (scheduled.length) {
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+    expect(
+      mutationCb.mock.calls[0][0].attributes[0].attributes._cssText,
+    ).toContain('color: red');
+  });
+});
+
 describe('record() suspension boundary wiring', () => {
   let stop: (() => void) | undefined;
   let cleanupNodes: Element[];

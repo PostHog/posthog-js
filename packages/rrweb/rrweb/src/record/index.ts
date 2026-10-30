@@ -589,6 +589,8 @@ function record<T = eventWithTime>(
     adoptedStyleSheetCb: wrappedAdoptedStyleSheetEmit,
     maskAllElementAttributes,
     maskAttributeFn,
+    blockClass,
+    blockSelector,
   });
 
   const iframeManager = new IframeManager({

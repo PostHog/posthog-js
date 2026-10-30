@@ -1927,6 +1927,31 @@ describe('record', function (this: ISuite) {
       expect(cssTextEventIndex).toBeGreaterThan(lastFullSnapshotIndex);
     });
 
+    it('does not inline a late-loading stylesheet whose ancestor became blocked', async () => {
+      await ctx.page.evaluate(async (serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        const wrapper = document.createElement('div');
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?late`);
+        wrapper.appendChild(link);
+        document.body.appendChild(wrapper);
+        // let the add go out while the sheet is still loading
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        wrapper.classList.add('rr-block');
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }, serverURL);
+
+      expect(
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      ).toBeUndefined();
+    });
+
     const changeHrefThen = (serverURL: string, afterChange: 'block' | 'stop') =>
       ctx.page.evaluate(
         async (serverURL, afterChange) => {

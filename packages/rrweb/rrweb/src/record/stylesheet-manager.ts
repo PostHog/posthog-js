@@ -17,6 +17,7 @@ import type {
   StylesheetTextCursor,
 } from '@posthog/rrweb-snapshot';
 import type {
+  blockClass,
   elementNode,
   serializedNodeWithId,
   adoptedStyleSheetCallback,
@@ -24,7 +25,7 @@ import type {
   attributeMutation,
   mutationCallBack,
 } from '@posthog/rrweb-types';
-import { StyleSheetMirror } from '../utils';
+import { StyleSheetMirror, isBlockedIncludingShadowHosts } from '../utils';
 import {
   type IdleDeadline,
   whenIdle,
@@ -72,10 +73,16 @@ export class StylesheetManager {
   private trackedLinkElements: WeakSet<HTMLLinkElement> = new WeakSet();
   private pendingDeferredSheets: Set<PendingDeferredSheet> = new Set();
   private fullSnapshotCount = 0;
+  private changedLinkTasks = new WeakMap<
+    HTMLLinkElement,
+    DeferredLinkInliningTask
+  >();
   private mutationCb: mutationCallBack;
   private adoptedStyleSheetCb: adoptedStyleSheetCallback;
   private maskAllElementAttributes: boolean;
   private maskAttributeFn: MaskAttributeFn | undefined;
+  private blockClass: blockClass;
+  private blockSelector: string | null;
   public styleMirror: StyleSheetMirror = new StyleSheetMirror();
 
   constructor(options: {
@@ -83,18 +90,35 @@ export class StylesheetManager {
     adoptedStyleSheetCb: adoptedStyleSheetCallback;
     maskAllElementAttributes?: boolean;
     maskAttributeFn?: MaskAttributeFn;
+    blockClass?: blockClass;
+    blockSelector?: string | null;
   }) {
     this.mutationCb = options.mutationCb;
     this.adoptedStyleSheetCb = options.adoptedStyleSheetCb;
     this.maskAllElementAttributes = options.maskAllElementAttributes ?? false;
     this.maskAttributeFn = options.maskAttributeFn;
+    this.blockClass = options.blockClass ?? 'rr-block';
+    this.blockSelector = options.blockSelector ?? null;
+  }
+
+  // Every path here emits a link's CSS after it was serialized, and the link
+  // or an ancestor can be blocked in between.
+  private isLinkBlocked(linkEl: HTMLLinkElement): boolean {
+    return isBlockedIncludingShadowHosts(
+      linkEl,
+      this.blockClass,
+      this.blockSelector,
+    );
   }
 
   public attachLinkElement(
     linkEl: HTMLLinkElement,
     childSn: serializedNodeWithId,
   ): void {
-    if ('_cssText' in (childSn as elementNode).attributes)
+    if (
+      '_cssText' in (childSn as elementNode).attributes &&
+      !this.isLinkBlocked(linkEl)
+    )
       this.mutationCb({
         adds: [],
         removes: [],
@@ -213,6 +237,9 @@ export class StylesheetManager {
             recordDeferredStylesheetFailure();
             return true;
           }
+          if (this.isLinkBlocked(linkEl)) {
+            return true;
+          }
           emitCssText(cssText);
           return true;
         } finally {
@@ -263,7 +290,6 @@ export class StylesheetManager {
     linkEl: HTMLLinkElement,
     recorderView: {
       currentId: () => number;
-      isBlocked: () => boolean;
       serializeWithoutCss: () => serializedNodeWithId | null;
     },
   ): void {
@@ -273,9 +299,11 @@ export class StylesheetManager {
     }
     onceLinkStylesheetUpToDate(linkEl, () => {
       const id = recorderView.currentId();
-      if (!linkEl.isConnected || id === -1 || recorderView.isBlocked()) {
+      if (!linkEl.isConnected || id === -1 || this.isLinkBlocked(linkEl)) {
         return;
       }
+      // a newer change supersedes the work still in flight for this link
+      this.changedLinkTasks.get(linkEl)?.discard();
       const task = this.beginDeferredLinkInlining(linkEl, id, (cssText) =>
         this.emitCssTextMutation(
           linkEl,
@@ -285,19 +313,28 @@ export class StylesheetManager {
         ),
       );
       if (!task) {
+        this.changedLinkTasks.delete(linkEl);
         return;
       }
+      this.changedLinkTasks.set(linkEl, task);
+      const release = () => {
+        task.discard();
+        if (this.changedLinkTasks.get(linkEl) === task) {
+          this.changedLinkTasks.delete(linkEl);
+        }
+      };
       const startedAtFullSnapshot = this.fullSnapshotCount;
       const step = (deadline?: IdleDeadline) => {
         try {
           // a full snapshot inlines the link's current sheet itself, and a
           // stop resets the mirror
           if (
+            this.changedLinkTasks.get(linkEl) !== task ||
             this.fullSnapshotCount !== startedAtFullSnapshot ||
             recorderView.currentId() === -1 ||
-            recorderView.isBlocked()
+            this.isLinkBlocked(linkEl)
           ) {
-            task.discard();
+            release();
             return;
           }
           let slices = 0;
@@ -311,13 +348,15 @@ export class StylesheetManager {
               ? !deadline.didTimeout && deadline.timeRemaining() > 5
               : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
           );
-          if (!finished) {
+          if (finished) {
+            release();
+          } else {
             whenIdle(step);
           }
         } catch (e) {
           // runs from an idle callback: a throwing consumer emit or mask
           // callback must not surface as an uncaught error on the customer's page
-          task.discard();
+          release();
         }
       };
       whenIdle(step);
