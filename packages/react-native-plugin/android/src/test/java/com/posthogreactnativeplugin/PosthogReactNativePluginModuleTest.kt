@@ -70,7 +70,7 @@ class PosthogReactNativePluginModuleTest {
 
       applyScreenshotConfig(map, config)
 
-      assertEquals(1f, config.screenshotScale)
+      assertNull(config.screenshotScale)
       assertEquals(30, config.screenshotCompressionQuality)
       assertEquals(PostHogScreenshotColorMode.ARGB_8888, config.screenshotColorMode)
     }
@@ -110,7 +110,7 @@ class PosthogReactNativePluginModuleTest {
       applyScreenshotConfig(JavaOnlyMap.of("screenshotCompressionQuality", value), config)
 
       assertEquals(expected, config.screenshotCompressionQuality)
-      assertEquals(1f, config.screenshotScale)
+      assertNull(config.screenshotScale)
       assertEquals(PostHogScreenshotColorMode.ARGB_8888, config.screenshotColorMode)
     }
   }
