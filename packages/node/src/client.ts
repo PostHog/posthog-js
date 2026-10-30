@@ -350,6 +350,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   override async flush(): Promise<void> {
+    // An app's crash handler often flushes and exits before the end of the turn, when autocapture would capture.
+    this.errorTracking.capturePendingExceptions()
     return this._flushKeepingRuntimeAlive(false)
   }
 

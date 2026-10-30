@@ -90,8 +90,30 @@ export type AutocaptureClient = {
   capture: (exception: unknown, hint: CoreErrorTracking.EventHint) => void
   // Each client keeps its own request context, set with withContext.
   getContext: () => ContextData | undefined
+  // Sends what the client holds, for a flush or shutdown of another client of the project.
+  flush: () => Promise<void>
   // Sends what the client still holds. Called before a fatal exit.
   shutdown: () => Promise<void>
+}
+
+type ContextRunner = <T>(run: () => T) => T
+
+type AsyncHooksModule = { AsyncLocalStorage?: { snapshot?: () => ContextRunner } }
+
+// The async context an exception was reported in: every AsyncLocalStorage, so each client's request context and the
+// active OpenTelemetry span. A capture that a flush or shutdown elsewhere forces early still reports that request.
+function snapshotAsyncContext(): ContextRunner {
+  try {
+    const process = globalThis.process as { getBuiltinModule?: (id: string) => unknown } | undefined
+    const asyncHooks = process?.getBuiltinModule?.('node:async_hooks') as AsyncHooksModule | undefined
+    const snapshot = asyncHooks?.AsyncLocalStorage?.snapshot?.()
+    if (snapshot) {
+      return snapshot
+    }
+  } catch {
+    // A runtime without AsyncLocalStorage.snapshot has nothing to restore.
+  }
+  return (run) => run()
 }
 
 const UNHANDLED_REJECTION_HINT: CoreErrorTracking.EventHint = {
@@ -127,6 +149,7 @@ type DeferredCapture = {
   hint: CoreErrorTracking.EventHint
   // The projects the app captured the exception for itself, which autocapture skips.
   skipKeys: Set<string>
+  runInContext: ContextRunner
 }
 
 type AutocaptureState = {
@@ -140,10 +163,17 @@ type AutocaptureState = {
   // it all hand over the same exception again before the turn ends. Primitives compare by value. The same error object
   // in a later turn is a new occurrence.
   capturedThisTurn: Map<unknown, Map<string, CaptureSource>>
-  deferred: Set<DeferredCapture>
+  // Captures waiting for the end of the turn, by exception.
+  deferred: Map<unknown, DeferredCapture>
   turnResetScheduled: boolean
   calledFatalError: boolean
-  removeListeners: () => void
+  listeners: InstalledListeners
+}
+
+type InstalledListeners = {
+  remove: () => void
+  // False once the app has removed them, for example with process.removeAllListeners().
+  areInstalled: () => boolean
 }
 
 type PostHogGlobal = typeof globalThis & {
@@ -219,21 +249,32 @@ function captureTargets(state: AutocaptureState): AutocaptureClient[] {
   return [...targets.values()]
 }
 
+// Runs after the microtasks the current callback queued. A runtime without setImmediate gets the next timer, which also
+// runs after them: a throw from our listener would turn every rejection into a crash. Not unref'd: an unref'd immediate
+// does not wake an idle event loop, which would stretch the turn until the next I/O or timer, and drop an occurrence
+// that comes in the meantime.
+function nextTurn(callback: () => void): void {
+  if (typeof globalThis.setImmediate === 'function') {
+    setImmediate(callback)
+  } else {
+    setTimeout(callback, 0)
+  }
+}
+
 function scheduleTurnReset(state: AutocaptureState): void {
   if (state.turnResetScheduled) {
     return
   }
   state.turnResetScheduled = true
-  // The turn ends one immediate late, because a rethrow can come from an immediate: Next.js 16's filter rethrows a
-  // listener's error with setImmediate.
-  const reset = setImmediate(() => {
-    const deferredReset = setImmediate(() => {
+  // Two immediates: a capture at the end of the turn runs in an immediate, and a host can rethrow the error from an
+  // immediate of its own (Next.js 16's filter does) or one more hop later. A real second occurrence of the same error
+  // object within that window counts once.
+  nextTurn(() => {
+    nextTurn(() => {
       state.capturedThisTurn.clear()
       state.turnResetScheduled = false
     })
-    deferredReset.unref?.()
   })
-  reset.unref?.()
 }
 
 function recordCapture(state: AutocaptureState, exception: unknown, key: string, source: CaptureSource): void {
@@ -256,49 +297,54 @@ function dispatch(
   exception: unknown,
   hint: CoreErrorTracking.EventHint,
   skipKeys?: Set<string>
-): void {
+): AutocaptureClient[] {
   const captured = state.capturedThisTurn.get(exception)
+  const owners: AutocaptureClient[] = []
   for (const client of captureTargets(state)) {
     if (captured?.has(client.key) || skipKeys?.has(client.key)) {
       continue
     }
     recordCapture(state, exception, client.key, 'autocapture')
     client.capture(exception, hint)
+    owners.push(client)
   }
+  return owners
 }
 
-function findDeferred(state: AutocaptureState, exception: unknown): DeferredCapture | undefined {
-  return [...state.deferred].find((deferred) => deferred.exception === exception)
-}
-
-function captureDeferred(state: AutocaptureState, deferred: DeferredCapture): void {
-  if (state.deferred.delete(deferred)) {
-    dispatch(state, deferred.exception, deferred.hint, deferred.skipKeys)
+// Returns the clients that captured it.
+function captureDeferred(state: AutocaptureState, deferred: DeferredCapture): AutocaptureClient[] {
+  if (state.deferred.get(deferred.exception) !== deferred) {
+    return []
   }
+  state.deferred.delete(deferred.exception)
+  return deferred.runInContext(() => dispatch(state, deferred.exception, deferred.hint, deferred.skipKeys))
 }
 
 // Used when the process survives the exception. The host's listeners run after ours, and a framework's error hook a
 // microtask later, so capturing at the end of the turn lets the app's own capture win, with the identity and
-// properties it passes. The immediate runs in this listener's async context, so it keeps the request context.
+// properties it passes.
 function deferCapture(state: AutocaptureState, exception: unknown, hint: CoreErrorTracking.EventHint): void {
-  if (wasCapturedThisTurn(state, exception) || findDeferred(state, exception)) {
+  if (wasCapturedThisTurn(state, exception) || state.deferred.has(exception)) {
     return
   }
   const deferred: DeferredCapture = {
     exception,
     hint,
     skipKeys: new Set(state.capturedThisTurn.get(exception)?.keys()),
+    runInContext: snapshotAsyncContext(),
   }
-  state.deferred.add(deferred)
-  setImmediate(() => captureDeferred(state, deferred))
+  state.deferred.set(exception, deferred)
+  nextTurn(() => captureDeferred(state, deferred))
 }
 
 async function exitAfterFatalError(state: AutocaptureState, error: unknown): Promise<void> {
-  console.error(error)
-  // Captures waiting for the end of the turn would go down with the process.
-  for (const deferred of [...state.deferred]) {
-    captureDeferred(state, deferred)
+  try {
+    console.error(error)
+  } catch {
+    // An error whose inspection throws must not stop the exit.
   }
+  // Captures waiting for the end of the turn would go down with the process.
+  capturePendingExceptions()
   const clients = new Set([...state.clients, ...state.retired.values()])
   await Promise.all([...clients].map((client) => client.shutdown().catch(() => undefined)))
   globalThis.process.exit(1)
@@ -310,17 +356,17 @@ function captureUncaughtException(
   origin: NodeJS.UncaughtExceptionOrigin,
   fatal: boolean
 ): void {
-  if (isIgnored(error, origin)) {
-    return
-  }
   const hint = origin === 'unhandledRejection' ? UNHANDLED_REJECTION_HINT : UNCAUGHT_EXCEPTION_HINT
   if (!fatal) {
     // The app handles uncaught exceptions itself, and its listener may capture this one.
-    deferCapture(state, error, hint)
+    if (!isIgnored(error, origin)) {
+      deferCapture(state, error, hint)
+    }
     return
   }
+  // A crash is captured whatever the error, an abort or a framework's control flow included.
   // A host listener that rethrew a rejection: one occurrence, reported as the rejection it was.
-  const deferred = findDeferred(state, error)
+  const deferred = state.deferred.get(error)
   if (deferred) {
     captureDeferred(state, deferred)
   } else {
@@ -347,13 +393,22 @@ function makeUncaughtExceptionHandler(state: AutocaptureState): ErrorHandler {
   })
 }
 
+// String() throws for a null-prototype object or a revoked proxy.
+function describeReason(reason: unknown): string {
+  try {
+    return String(reason)
+  } catch {
+    return typeof reason
+  }
+}
+
 // The error Node raises in throw mode for a rejection whose reason is not an Error.
 function toUnhandledRejectionError(reason: unknown): Error {
   if (reason instanceof Error) {
     return reason
   }
   const error = new Error(
-    `This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason "${String(reason)}".`
+    `This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason "${describeReason(reason)}".`
   )
   return Object.assign(error, { name: 'UnhandledPromiseRejection', code: 'ERR_UNHANDLED_REJECTION' })
 }
@@ -364,7 +419,7 @@ function toUnhandledRejectionError(reason: unknown): Error {
 function applyDefaultRejectionHandling(state: AutocaptureState, reason: unknown): void {
   const process = globalThis.process
   if (state.mode === 'warn-with-error-code') {
-    process.emitWarning(`Unhandled promise rejection: ${String(reason)}`, 'UnhandledPromiseRejectionWarning')
+    process.emitWarning(`Unhandled promise rejection: ${describeReason(reason)}`, 'UnhandledPromiseRejectionWarning')
     process.exitCode = 1
     if (!isIgnored(reason, 'unhandledRejection')) {
       dispatch(state, reason, UNHANDLED_REJECTION_HINT)
@@ -373,10 +428,11 @@ function applyDefaultRejectionHandling(state: AutocaptureState, reason: unknown)
   }
 
   if (process.versions?.bun) {
-    // Bun exits on an unhandled rejection without emitting uncaughtException.
-    if (!isIgnored(reason, 'unhandledRejection')) {
-      dispatch(state, reason, UNHANDLED_REJECTION_HINT)
-    }
+    // Bun exits on an unhandled rejection without emitting uncaughtException. When nothing else is pending, it also
+    // ends the process right after this listener, without running anything the listener started, so set the exit code
+    // now. A crash is captured whatever the error.
+    process.exitCode = 1
+    dispatch(state, reason, UNHANDLED_REJECTION_HINT)
     if (!state.calledFatalError) {
       state.calledFatalError = true
       void exitAfterFatalError(state, reason)
@@ -434,24 +490,26 @@ function joinHostRejectionQueue(listener: RejectionHandler): void {
   }
 }
 
-function installListeners(state: AutocaptureState): () => void {
+function installListeners(state: AutocaptureState): InstalledListeners {
   const process = globalThis.process
   const removals: (() => void)[] = []
   const listen = (event: string, listener: (...args: any[]) => void): void => {
     process.on(event, listener)
     removals.push(() => process.removeListener(event, listener))
   }
+  const remove = (): void => removals.forEach((removal) => removal())
 
   if (state.mode === 'strict') {
     // Strict mode raises the rejection as an uncaught exception before any unhandledRejection listener runs, and the
     // process exits right after.
-    listen('uncaughtExceptionMonitor', (error: Error, origin: NodeJS.UncaughtExceptionOrigin) =>
+    const monitor = (error: Error, origin: NodeJS.UncaughtExceptionOrigin): void =>
       captureUncaughtException(state, error, origin, true)
-    )
-    return () => removals.forEach((remove) => remove())
+    listen('uncaughtExceptionMonitor', monitor)
+    return { remove, areInstalled: () => process.listeners('uncaughtExceptionMonitor').includes(monitor) }
   }
 
-  listen('uncaughtException', makeUncaughtExceptionHandler(state))
+  const uncaughtExceptionHandler = makeUncaughtExceptionHandler(state)
+  listen('uncaughtException', uncaughtExceptionHandler)
 
   // In throw and warn-with-error-code modes, any unhandledRejection listener stops Node's default handling (the
   // escalation to uncaughtException, or the warning and exit code). We listen only while the host has a listener of
@@ -522,7 +580,13 @@ function installListeners(state: AutocaptureState): () => void {
       removeListener.call(process, 'unhandledRejection', listener)
     }
   })
-  return () => removals.forEach((remove) => remove())
+  return {
+    remove,
+    // In warn and none modes, and on Bun, the rejection listener is always installed.
+    areInstalled: () =>
+      process.listeners('uncaughtException').includes(uncaughtExceptionHandler) &&
+      (followsHostListeners || isInstalled()),
+  }
 }
 
 /**
@@ -546,14 +610,18 @@ export function startExceptionAutocapture(
       clients: new Set(),
       retired: new Map(),
       capturedThisTurn: new Map(),
-      deferred: new Set(),
+      deferred: new Map(),
       turnResetScheduled: false,
       calledFatalError: false,
-      removeListeners: () => undefined,
+      listeners: { remove: () => undefined, areInstalled: () => true },
     }
-    created.removeListeners = installListeners(created)
+    created.listeners = installListeners(created)
     posthogGlobal[STATE_KEY] = created
     state = created
+  } else if (!state.listeners.areInstalled()) {
+    // The app removed them, for example with process.removeAllListeners(). A new client always added its own.
+    state.listeners.remove()
+    state.listeners = installListeners(state)
   }
   state.clients.add(client)
   state.retired.delete(client.key)
@@ -586,8 +654,23 @@ export function claimExplicitCapture(error: unknown, key: string): boolean {
     return false
   }
   recordCapture(state, error, key, 'app')
-  findDeferred(state, error)?.skipKeys.add(key)
+  state.deferred.get(error)?.skipKeys.add(key)
   return true
+}
+
+/**
+ * Captures at once the exceptions waiting for the end of the turn. A flush or shutdown calls this first: an app's
+ * crash handler often flushes or shuts the client down and exits before the turn ends.
+ */
+export function capturePendingExceptions(): Set<AutocaptureClient> {
+  const owners = new Set<AutocaptureClient>()
+  const state = posthogGlobal[STATE_KEY]
+  if (state) {
+    for (const deferred of [...state.deferred.values()]) {
+      captureDeferred(state, deferred).forEach((owner) => owners.add(owner))
+    }
+  }
+  return owners
 }
 
 /** @internal Removes the shared listeners and forgets every client, for tests. */
@@ -595,7 +678,7 @@ export function resetExceptionAutocapture(): void {
   const state = posthogGlobal[STATE_KEY]
   if (state) {
     state.deferred.clear()
-    state.removeListeners()
+    state.listeners.remove()
     delete posthogGlobal[STATE_KEY]
   }
 }

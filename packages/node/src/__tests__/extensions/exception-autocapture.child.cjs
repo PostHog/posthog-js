@@ -43,7 +43,7 @@ if (
 
 const clients = withSdk
   ? Array.from(
-      { length: scenario === 'many-clients' ? 3 : 1 },
+      { length: scenario === 'many-clients' ? 3 : scenario === 'flush-second-client-in-uncaught-listener' ? 2 : 1 },
       () => new PostHog('api_key', { enableExceptionAutocapture: true })
     )
   : []
@@ -78,6 +78,35 @@ if (scenario === 'late-unhandled-rejection-listener') {
     process.stdout.write('exiting\n')
     process.exit(0)
   })
+} else if (scenario === 'shutdown-in-uncaught-listener') {
+  // The usual way to send what is queued before a crash: shut the client down, then exit.
+  process.on('uncaughtException', async () => {
+    await posthog?.shutdown()
+    process.stdout.write('exiting\n')
+    process.exit(1)
+  })
+} else if (scenario === 'flush-in-uncaught-listener') {
+  process.on('uncaughtException', async () => {
+    await posthog?.flush()
+    process.stdout.write('exiting\n')
+    process.exit(1)
+  })
+} else if (scenario === 'flush-second-client-in-uncaught-listener') {
+  // Two clients for one project, and the crash handler flushes the one that is not the project's first.
+  process.on('uncaughtException', async () => {
+    await clients[1]?.flush()
+    process.stdout.write('exiting\n')
+    process.exit(1)
+  })
+} else if (scenario === 'repeated-string-throws') {
+  // Keeps the process alive through uncaught exceptions, so an idle job can throw the same string again.
+  process.on('uncaughtException', () => undefined)
+} else if (scenario === 'shutdown-in-rejection-listener') {
+  process.on('unhandledRejection', async () => {
+    await posthog?.shutdown()
+    process.stdout.write('exiting\n')
+    process.exit(1)
+  })
 } else if (scenario === 'error-hook-listener') {
   // Like Nitro: the host's listener hands the rejection to an error hook, which an integration passes to
   // captureException a microtask later.
@@ -94,10 +123,22 @@ if (scenario !== 'exits-without-shutdown' && scenario !== 'flush-then-exit') {
   })
 }
 
-if (scenario === 'immediate-capture-in-uncaught-listener') {
+if (
+  scenario === 'immediate-capture-in-uncaught-listener' ||
+  scenario === 'shutdown-in-uncaught-listener' ||
+  scenario === 'flush-in-uncaught-listener' ||
+  scenario === 'flush-second-client-in-uncaught-listener'
+) {
   setTimeout(() => {
     throw new Error('Child process exception')
   }, 10)
+} else if (scenario === 'repeated-string-throws') {
+  // Nothing else wakes the event loop between the throws.
+  for (const delay of [100, 300, 500]) {
+    setTimeout(() => {
+      throw 'tick'
+    }, delay)
+  }
 } else if (scenario === 'flush-then-exit') {
   // The end of a serverless invocation: flush, then the runtime freezes or ends the instance.
   Promise.reject(new Error('Child process rejection'))
