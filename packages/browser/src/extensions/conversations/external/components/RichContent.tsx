@@ -11,6 +11,8 @@ interface RichContentProps {
     content: string
     /** Whether message is from customer (affects styling) */
     isCustomer: boolean
+    /** Link color, defaults to the theme's primary color (or the text color on it for customer messages) */
+    linkColor?: string
     /** Recognize simple [label](url) links in the greeting's text fallback only. */
     isGreeting?: boolean
 }
@@ -86,7 +88,7 @@ function sanitizeUrl(url: string): string | undefined {
 /** Maximum recursion depth to prevent stack overflow */
 const MAX_DEPTH = 20
 
-function getStyles(isCustomer: boolean) {
+function getStyles(isCustomer: boolean, linkColor: string | undefined) {
     return {
         code: {
             fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
@@ -111,9 +113,11 @@ function getStyles(isCustomer: boolean) {
             border: isCustomer ? 'none' : `1px solid ${cssVar('border', '#e4e4e7')}`,
         },
         link: {
-            color: isCustomer
-                ? cssVar('on-primary', DEFAULT_ON_PRIMARY_COLOR)
-                : cssVar('primary', DEFAULT_PRIMARY_COLOR),
+            color:
+                linkColor ||
+                (isCustomer
+                    ? cssVar('on-primary', DEFAULT_ON_PRIMARY_COLOR)
+                    : cssVar('primary', DEFAULT_PRIMARY_COLOR)),
             textDecoration: 'underline',
         },
         image: {
@@ -392,8 +396,8 @@ function renderPlainText(text: string, styles: ReturnType<typeof getStyles>, isG
  * 2. Otherwise render text, recognizing simple inline links only for greetings
  * 3. Wrap TipTap rendering in try/catch for safety
  */
-export function RichContent({ richContent, content, isCustomer, isGreeting }: RichContentProps) {
-    const styles = useMemo(() => getStyles(isCustomer), [isCustomer])
+export function RichContent({ richContent, content, isCustomer, linkColor, isGreeting }: RichContentProps) {
+    const styles = useMemo(() => getStyles(isCustomer, linkColor), [isCustomer, linkColor])
 
     // Try to render rich content if available
     if (richContent) {

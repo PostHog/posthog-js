@@ -41,6 +41,19 @@ test.describe('conversations theme', () => {
         })
     })
 
+    test('keeps the project color when the theme stylesheet is blocked', async ({ page, context }) => {
+        await startWithConversations(page, context, { conversations: { theme: { primary: '#fde047' } } })
+
+        // Stands in for a style-src CSP that blocks the stylesheet: inline styles still apply.
+        const background = await page.evaluate(() => {
+            document.querySelector('style[data-ph-conversations-theme]')?.remove()
+            const launcher = document.querySelector('#ph-conversations-widget-container button')!
+            return getComputedStyle(launcher).backgroundColor
+        })
+
+        expect(background).toBe('rgb(29, 78, 216)')
+    })
+
     test('applies the init theme and switches to dark colors', async ({ page, context }) => {
         await startWithConversations(page, context, {
             conversations: { theme: { primary: '#fde047', launcherShadow: 'none', colorScheme: 'dark' } },

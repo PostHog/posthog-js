@@ -1,18 +1,20 @@
 // Inline styles following PostHog design system.
 // Themeable values read `--ph-conv-*` custom properties (see ../theme.ts); fallbacks are the light theme.
+// The project color is a fallback too: a strict style-src CSP can block the theme stylesheet,
+// but not styles set through the DOM.
 
 import type { WidgetPosition } from '../../../../posthog-conversations-types'
 import { Z_INDEX_CONVERSATIONS } from '../../../../constants'
-import { cssVar, DEFAULT_ON_PRIMARY_COLOR, DEFAULT_PRIMARY_COLOR } from '../theme'
+import { cssVar, DEFAULT_PRIMARY_COLOR, getContrastTextColor } from '../theme'
 
-const primary = cssVar('primary', DEFAULT_PRIMARY_COLOR)
-const onPrimary = cssVar('on-primary', DEFAULT_ON_PRIMARY_COLOR)
 const background = cssVar('bg', 'white')
 const text = cssVar('text', '#020617')
 
-export const getStyles = (position: WidgetPosition = 'bottom_right') => {
+export const getStyles = (primaryColor: string = DEFAULT_PRIMARY_COLOR, position: WidgetPosition = 'bottom_right') => {
     const isLeft = position.includes('left')
     const isTop = position.includes('top')
+    const primary = cssVar('primary', primaryColor)
+    const onPrimary = cssVar('on-primary', getContrastTextColor(primaryColor))
 
     return {
         widget: {
@@ -165,6 +167,12 @@ export const getStyles = (position: WidgetPosition = 'bottom_right') => {
             background: primary,
             color: onPrimary,
             borderBottomRightRadius: '2px',
+        },
+        messageLinkCustomer: {
+            color: onPrimary,
+        },
+        messageLinkAgent: {
+            color: primary,
         },
         messageContentAgent: {
             background: cssVar('agent-bubble', 'white'),

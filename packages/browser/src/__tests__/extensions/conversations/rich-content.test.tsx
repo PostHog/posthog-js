@@ -987,6 +987,28 @@ describe('RichContent', () => {
     })
 
     describe('Styling', () => {
+        it('colors links with linkColor', () => {
+            const doc: TipTapDoc = {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'paragraph',
+                        content: [
+                            {
+                                type: 'text',
+                                text: 'Link',
+                                marks: [{ type: 'link', attrs: { href: 'https://example.com' } }],
+                            },
+                        ],
+                    },
+                ],
+            }
+
+            const { container } = render(<RichContent {...defaultProps} linkColor="#ff0000" richContent={doc} />)
+
+            expect(container.querySelector('a')?.style.color).toBe('rgb(255, 0, 0)')
+        })
+
         it('should apply customer styling when isCustomer is true', () => {
             const doc: TipTapDoc = {
                 type: 'doc',

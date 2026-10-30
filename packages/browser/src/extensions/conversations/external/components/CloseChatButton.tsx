@@ -1,11 +1,11 @@
 import { getStyles } from './styles'
 
 interface CloseChatButtonProps {
+    styles: ReturnType<typeof getStyles>
     handleClose: () => void
 }
 
-export const CloseChatButton = ({ handleClose }: CloseChatButtonProps) => {
-    const styles = getStyles()
+export const CloseChatButton = ({ styles, handleClose }: CloseChatButtonProps) => {
     return (
         <button
             style={styles.headerButton}

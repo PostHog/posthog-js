@@ -42,6 +42,7 @@ function MessageBubble({ message, styles }: { message: Message; styles: ReturnTy
                     content={message.content}
                     isGreeting={message.id === 'greeting'}
                     isCustomer={isCustomer}
+                    linkColor={(isCustomer ? styles.messageLinkCustomer : styles.messageLinkAgent).color}
                 />
             </div>
             <div style={styles.messageTime}>{formatRelativeTime(message.created_at)}</div>
@@ -92,6 +93,7 @@ export function MessagesView({
                         autoFocus
                     />
                     <SendMessageButton
+                        styles={styles}
                         inputValue={inputValue}
                         isLoading={isLoading}
                         handleSendMessage={onSendMessage}

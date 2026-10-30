@@ -1,18 +1,12 @@
-import type { WidgetPosition } from '../../../../posthog-conversations-types'
 import { getStyles } from './styles'
 
 interface OpenChatButtonProps {
-    position?: WidgetPosition
+    styles: ReturnType<typeof getStyles>
     handleToggleOpen: () => void
     unreadCount?: number
 }
 
-export const OpenChatButton = ({
-    position = 'bottom_right',
-    handleToggleOpen,
-    unreadCount = 0,
-}: OpenChatButtonProps) => {
-    const styles = getStyles(position)
+export const OpenChatButton = ({ styles, handleToggleOpen, unreadCount = 0 }: OpenChatButtonProps) => {
     const displayCount = unreadCount > 99 ? '99+' : unreadCount.toString()
 
     return (

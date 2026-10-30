@@ -178,6 +178,15 @@ describe('conversations theme', () => {
             expect(styles.widget.fontFamily).toMatch(/^var\(--ph-conv-font, -apple-system/)
         })
 
+        it('falls back to the project color, so it survives a CSP that blocks the theme stylesheet', () => {
+            const styles = getStyles('#1d4ed8')
+
+            expect(styles.button.background).toBe('var(--ph-conv-primary, #1d4ed8)')
+            expect(styles.button.color).toBe('var(--ph-conv-on-primary, white)')
+            expect(styles.header.background).toBe('var(--ph-conv-primary, #1d4ed8)')
+            expect(styles.messageLinkAgent.color).toBe('var(--ph-conv-primary, #1d4ed8)')
+        })
+
         it('animates with the keyframes defined by the theme stylesheet', () => {
             const styles = getStyles()
 

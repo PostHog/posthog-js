@@ -9,6 +9,7 @@ import {
 } from '../../../../posthog-conversations-types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getStyles } from './styles'
+import { DEFAULT_PRIMARY_COLOR } from '../theme'
 import { OpenChatButton } from './OpenChatButton'
 import { CloseChatButton } from './CloseChatButton'
 import { TicketListView } from './TicketListView'
@@ -667,13 +668,13 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         const { state, view } = this.state
         const widgetPosition = config.widgetPosition || 'bottom_right'
         const placeholderText = config.placeholderText || 'Type your message...'
-        const styles = getStyles(widgetPosition)
+        const styles = getStyles(config.color || DEFAULT_PRIMARY_COLOR, widgetPosition)
 
         // Button only (closed state)
         if (state === 'closed') {
             return (
                 <OpenChatButton
-                    position={widgetPosition}
+                    styles={styles}
                     handleToggleOpen={this._handleToggleOpen}
                     unreadCount={this.state.unreadCount}
                 />
@@ -701,7 +702,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                             <span style={styles.headerTitle}>{this._getTitle(view)}</span>
                         </div>
                         <div style={styles.headerActions}>
-                            <CloseChatButton handleClose={this._handleClose} />
+                            <CloseChatButton styles={styles} handleClose={this._handleClose} />
                         </div>
                     </div>
 
