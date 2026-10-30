@@ -1735,7 +1735,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -3744,7 +3744,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -6600,7 +6600,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -8737,7 +8737,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -11398,7 +11398,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -13012,7 +13012,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -14736,7 +14736,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -17129,7 +17129,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -19959,7 +19959,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -21736,7 +21736,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -24458,7 +24458,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -27169,7 +27169,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -29192,7 +29192,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 10,
@@ -29760,7 +29760,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -29864,7 +29864,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 10,
@@ -31880,7 +31880,7 @@
                                                                                     "attributes": {
                                                                                         "async": "",
                                                                                         "crossorigin": "anonymous",
-                                                                                        "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                        "src": "<fixture-origin>/static/array.js"
                                                                                     },
                                                                                     "childNodes": [],
                                                                                     "id": 10,
@@ -32733,7 +32733,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -32837,7 +32837,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 10,
@@ -35196,7 +35196,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 19,
@@ -35602,7 +35602,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -35766,7 +35766,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 19,
@@ -38552,7 +38552,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -39110,7 +39110,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -39369,7 +39369,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -39487,7 +39487,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -40029,7 +40029,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -41999,7 +41999,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -42494,7 +42494,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -42612,7 +42612,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -45264,7 +45264,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 10,
@@ -45658,7 +45658,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -45762,7 +45762,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 10,
@@ -48966,7 +48966,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 46,
@@ -49550,7 +49550,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -50060,7 +50060,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -50178,7 +50178,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -50757,7 +50757,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 46,
@@ -53323,7 +53323,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -55714,7 +55714,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -58099,7 +58099,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -59870,7 +59870,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -61919,15 +61919,15 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
-                                "method": "GET",
                                 "path": "/static/<core-version>/surveys.js",
                                 "query": {},
                                 "status": 404
+                            },
+                            {
+                                "method": "GET",
+                                "path": "/static/array.js",
+                                "query": {},
+                                "status": 200
                             },
                             {
                                 "method": "GET",
@@ -63741,7 +63741,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -65511,7 +65511,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -67520,7 +67520,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -70376,7 +70376,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -72513,7 +72513,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -75174,7 +75174,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -76788,7 +76788,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -78512,7 +78512,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -80905,7 +80905,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -83735,7 +83735,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -85512,7 +85512,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -88234,7 +88234,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -90945,7 +90945,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -92968,7 +92968,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 10,
@@ -93524,7 +93524,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -93628,7 +93628,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 10,
@@ -95632,7 +95632,7 @@
                                                                                     "attributes": {
                                                                                         "async": "",
                                                                                         "crossorigin": "anonymous",
-                                                                                        "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                        "src": "<fixture-origin>/static/array.js"
                                                                                     },
                                                                                     "childNodes": [],
                                                                                     "id": 10,
@@ -96485,7 +96485,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -96589,7 +96589,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 10,
@@ -98948,7 +98948,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 19,
@@ -99354,7 +99354,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -99518,7 +99518,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 19,
@@ -102304,7 +102304,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -102862,7 +102862,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -103121,7 +103121,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -103239,7 +103239,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -103781,7 +103781,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -105751,7 +105751,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -106246,7 +106246,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -106364,7 +106364,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -109016,7 +109016,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 10,
@@ -109410,7 +109410,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -109514,7 +109514,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 10,
@@ -112718,7 +112718,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 46,
@@ -113302,7 +113302,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -113812,7 +113812,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -113930,7 +113930,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -114509,7 +114509,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 46,
@@ -117075,7 +117075,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -119466,7 +119466,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -121851,7 +121851,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -123622,7 +123622,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -125671,15 +125671,15 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
-                                "method": "GET",
                                 "path": "/static/<core-version>/surveys.js",
                                 "query": {},
                                 "status": 404
+                            },
+                            {
+                                "method": "GET",
+                                "path": "/static/array.js",
+                                "query": {},
+                                "status": 200
                             },
                             {
                                 "method": "GET",
@@ -127493,7 +127493,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -129263,7 +129263,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -131272,7 +131272,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -134128,7 +134128,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -136265,7 +136265,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -138926,7 +138926,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -140540,7 +140540,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -142264,7 +142264,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -144657,7 +144657,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -147487,7 +147487,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -149264,7 +149264,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -151986,7 +151986,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -154697,7 +154697,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -156720,7 +156720,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 10,
@@ -157318,7 +157318,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -157422,7 +157422,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 10,
@@ -159468,7 +159468,7 @@
                                                                                     "attributes": {
                                                                                         "async": "",
                                                                                         "crossorigin": "anonymous",
-                                                                                        "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                        "src": "<fixture-origin>/static/array.js"
                                                                                     },
                                                                                     "childNodes": [],
                                                                                     "id": 10,
@@ -160321,7 +160321,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -160425,7 +160425,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 10,
@@ -162784,7 +162784,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 19,
@@ -163190,7 +163190,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -163354,7 +163354,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 19,
@@ -166140,7 +166140,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -166698,7 +166698,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -166957,7 +166957,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -167075,7 +167075,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -167617,7 +167617,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -169587,7 +169587,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -170082,7 +170082,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -170200,7 +170200,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -172852,7 +172852,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 10,
@@ -173246,7 +173246,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -173350,7 +173350,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 10,
@@ -176554,7 +176554,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 46,
@@ -177138,7 +177138,7 @@
                                                                                 "attributes": {
                                                                                     "async": "",
                                                                                     "crossorigin": "anonymous",
-                                                                                    "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                    "src": "<fixture-origin>/static/array.js"
                                                                                 },
                                                                                 "childNodes": [],
                                                                                 "id": 12,
@@ -177648,7 +177648,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -177766,7 +177766,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 12,
@@ -178345,7 +178345,7 @@
                                                                             "attributes": {
                                                                                 "async": "",
                                                                                 "crossorigin": "anonymous",
-                                                                                "src": "<fixture-origin>/static/<core-version>/array.js"
+                                                                                "src": "<fixture-origin>/static/array.js"
                                                                             },
                                                                             "childNodes": [],
                                                                             "id": 46,
@@ -180911,7 +180911,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -183302,7 +183302,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -185687,7 +185687,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -187458,7 +187458,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
@@ -189507,15 +189507,15 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
-                                "method": "GET",
                                 "path": "/static/<core-version>/surveys.js",
                                 "query": {},
                                 "status": 404
+                            },
+                            {
+                                "method": "GET",
+                                "path": "/static/array.js",
+                                "query": {},
+                                "status": 200
                             },
                             {
                                 "method": "GET",
@@ -191329,7 +191329,7 @@
                             },
                             {
                                 "method": "GET",
-                                "path": "/static/<core-version>/array.js",
+                                "path": "/static/array.js",
                                 "query": {},
                                 "status": 200
                             },
