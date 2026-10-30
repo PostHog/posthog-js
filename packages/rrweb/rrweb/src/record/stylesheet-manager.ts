@@ -78,6 +78,17 @@ function attributesReplacingPrevious(serialization: {
   return attributes;
 }
 
+type ChangedLinkRecorderView = {
+  currentId: () => number;
+  reserializeWithoutCss: () => {
+    previous: serializedNodeWithId | null;
+    current: serializedNodeWithId | null;
+  };
+};
+
+// bounds the rework when the page keeps changing a sheet through the CSSOM
+const CHANGED_LINK_RESTARTS_AFTER_SHEET_MUTATION = 3;
+
 export class StylesheetManager {
   private trackedLinkElements: WeakSet<HTMLLinkElement> = new WeakSet();
   private pendingDeferredSheets: Set<PendingDeferredSheet> = new Set();
@@ -163,6 +174,7 @@ export class StylesheetManager {
     id: number,
     emitCssText: (cssText: string) => void = (cssText) =>
       this.emitCssTextMutation(linkEl, id, cssText),
+    onInvalidatedBySheetMutation?: () => void,
   ): DeferredLinkInliningTask | null {
     if (id === -1 || !linkEl.isConnected) {
       // never made it into the mirror (slimDOM dropped it), or detached while we
@@ -214,10 +226,14 @@ export class StylesheetManager {
         try {
           if (invalidatedByMutation) {
             completed = true;
-            // emitting the defer-time text now would overwrite the mutation's
-            // already-recorded StyleSheetRule/StyleDeclaration event in replay;
-            // the link keeps its href, a counted fidelity loss
-            recordDeferredStylesheetFailure();
+            if (onInvalidatedBySheetMutation) {
+              onInvalidatedBySheetMutation();
+            } else {
+              // emitting the defer-time text now would overwrite the mutation's
+              // already-recorded StyleSheetRule/StyleDeclaration event in replay;
+              // the link keeps its href, a counted fidelity loss
+              recordDeferredStylesheetFailure();
+            }
             return true;
           }
           if (!readyCursor.advance(maxRules)) {
@@ -301,88 +317,115 @@ export class StylesheetManager {
    */
   public inlineLinkStylesheetAfterChange(
     linkEl: HTMLLinkElement,
-    recorderView: {
-      currentId: () => number;
-      reserializeWithoutCss: () => {
-        previous: serializedNodeWithId | null;
-        current: serializedNodeWithId | null;
-      };
-    },
+    recorderView: ChangedLinkRecorderView,
   ): void {
     // a stop from inside the consumer's emit has already reset the mirror
     if (this.stopped || recorderView.currentId() === -1) {
       return;
     }
-    onceLinkStylesheetUpToDate(linkEl, () => {
-      const id = recorderView.currentId();
-      if (
-        this.stopped ||
-        !linkEl.isConnected ||
-        id === -1 ||
-        this.isLinkBlocked(linkEl)
-      ) {
-        return;
-      }
-      // a newer change supersedes the work still in flight for this link
-      this.changedLinkTasks.get(linkEl)?.discard();
-      const task = this.beginDeferredLinkInlining(linkEl, id, (cssText) =>
+    onceLinkStylesheetUpToDate(linkEl, () =>
+      this.inlineChangedLinkStylesheet(
+        linkEl,
+        recorderView,
+        CHANGED_LINK_RESTARTS_AFTER_SHEET_MUTATION,
+      ),
+    );
+  }
+
+  private inlineChangedLinkStylesheet(
+    linkEl: HTMLLinkElement,
+    recorderView: ChangedLinkRecorderView,
+    restartsLeftAfterSheetMutation: number,
+  ): void {
+    const id = recorderView.currentId();
+    if (
+      this.stopped ||
+      !linkEl.isConnected ||
+      id === -1 ||
+      this.isLinkBlocked(linkEl)
+    ) {
+      return;
+    }
+    // a newer change supersedes the work still in flight for this link
+    this.changedLinkTasks.get(linkEl)?.discard();
+    let sheetMutatedWhileInlining = false;
+    const task = this.beginDeferredLinkInlining(
+      linkEl,
+      id,
+      (cssText) =>
         this.emitCssTextMutation(
           linkEl,
           id,
           cssText,
           attributesReplacingPrevious(recorderView.reserializeWithoutCss()),
         ),
-      );
-      if (!task) {
+      () => {
+        sheetMutatedWhileInlining = true;
+      },
+    );
+    if (!task) {
+      this.changedLinkTasks.delete(linkEl);
+      return;
+    }
+    this.changedLinkTasks.set(linkEl, task);
+    const release = () => {
+      task.discard();
+      if (this.changedLinkTasks.get(linkEl) === task) {
         this.changedLinkTasks.delete(linkEl);
-        return;
       }
-      this.changedLinkTasks.set(linkEl, task);
-      const release = () => {
-        task.discard();
-        if (this.changedLinkTasks.get(linkEl) === task) {
-          this.changedLinkTasks.delete(linkEl);
-        }
-      };
-      const startedAtFullSnapshot = this.fullSnapshotCount;
-      const step = (deadline?: IdleDeadline) => {
-        try {
-          // a full snapshot inlines the link's current sheet itself, and a
-          // stop resets the mirror
-          if (
-            this.stopped ||
-            this.changedLinkTasks.get(linkEl) !== task ||
-            this.fullSnapshotCount !== startedAtFullSnapshot ||
-            recorderView.currentId() === -1 ||
-            this.isLinkBlocked(linkEl)
-          ) {
-            release();
-            return;
-          }
-          let slices = 0;
-          let finished: boolean;
-          do {
-            finished = task.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE);
-            slices += 1;
-          } while (
-            !finished &&
-            (deadline
-              ? !deadline.didTimeout && deadline.timeRemaining() > 5
-              : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
-          );
-          if (finished) {
-            release();
-          } else {
-            whenIdle(step);
-          }
-        } catch (e) {
-          // runs from an idle callback: a throwing consumer emit or mask
-          // callback must not surface as an uncaught error on the customer's page
+    };
+    const startedAtFullSnapshot = this.fullSnapshotCount;
+    const step = (deadline?: IdleDeadline) => {
+      try {
+        // a full snapshot inlines the link's current sheet itself, and a
+        // stop resets the mirror
+        if (
+          this.stopped ||
+          this.changedLinkTasks.get(linkEl) !== task ||
+          this.fullSnapshotCount !== startedAtFullSnapshot ||
+          recorderView.currentId() === -1 ||
+          this.isLinkBlocked(linkEl)
+        ) {
           release();
+          return;
         }
-      };
-      whenIdle(step);
-    });
+        let slices = 0;
+        let finished: boolean;
+        do {
+          finished = task.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE);
+          slices += 1;
+        } while (
+          !finished &&
+          (deadline
+            ? !deadline.didTimeout && deadline.timeRemaining() > 5
+            : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
+        );
+        if (!finished) {
+          whenIdle(step);
+          return;
+        }
+        release();
+        if (!sheetMutatedWhileInlining) {
+          return;
+        }
+        if (restartsLeftAfterSheetMutation > 0) {
+          // replay keeps the previous sheet until this CSS arrives, and the
+          // mutated sheet's text already includes the recorded CSSOM change
+          this.inlineChangedLinkStylesheet(
+            linkEl,
+            recorderView,
+            restartsLeftAfterSheetMutation - 1,
+          );
+        } else {
+          recordDeferredStylesheetFailure();
+        }
+      } catch (e) {
+        // runs from an idle callback: a throwing consumer emit or mask
+        // callback must not surface as an uncaught error on the customer's page
+        release();
+      }
+    };
+    whenIdle(step);
   }
 
   /** One-call variant of {@link beginDeferredLinkInlining}: the whole sheet in a single slice. */

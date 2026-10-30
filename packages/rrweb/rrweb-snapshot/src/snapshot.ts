@@ -490,16 +490,20 @@ function onceIframeLoaded(
   };
 }
 
+type ChangedLinkBaseline = { sheetAtLatestChange: CSSStyleSheet | null };
+
 const stylesheetLoadTracked = new Map<
   HTMLLinkElement,
-  { controller: AbortController; keepAcrossFullSnapshots: boolean }
+  { controller: AbortController; changedLinkBaseline?: ChangedLinkBaseline }
 >();
 
 export function resetStylesheetLoadTracking(
   options: { keepChangedLinks?: boolean } = {},
 ): void {
   stylesheetLoadTracked.forEach((tracking, link) => {
-    if (options.keepChangedLinks && tracking.keepAcrossFullSnapshots) return;
+    // a full snapshot inlines the sheet still attached to a changed link,
+    // which is the previous href's, so only this tracking can record the new sheet
+    if (options.keepChangedLinks && tracking.changedLinkBaseline) return;
     tracking.controller.abort();
     stylesheetLoadTracked.delete(link);
   });
@@ -524,7 +528,7 @@ function trackStylesheetUntilReady(
   listener: () => unknown,
   isSheetReady: () => boolean,
   checkDelaysMs: readonly number[],
-  keepAcrossFullSnapshots: boolean,
+  changedLinkBaseline?: ChangedLinkBaseline,
 ) {
   const controller = new AbortController();
   const stopTracking = () => {
@@ -583,7 +587,7 @@ function trackStylesheetUntilReady(
   });
   scheduleCheck(0);
 
-  stylesheetLoadTracked.set(link, { controller, keepAcrossFullSnapshots });
+  stylesheetLoadTracked.set(link, { controller, changedLinkBaseline });
 }
 
 function onceStylesheetLoaded(
@@ -598,7 +602,6 @@ function onceStylesheetLoaded(
     listener,
     () => Boolean(readLinkSheet(link)),
     [styleSheetLoadTimeout],
-    false,
   );
 }
 
@@ -607,13 +610,6 @@ function onceStylesheetLoaded(
 const CHANGED_LINK_SHEET_CHECK_DELAYS_MS = [
   100, 200, 400, 800, 1600, 3200, 6400, 12800, 25600,
 ] as const;
-
-// a later change moves the baseline, so a sheet that loaded for an href
-// replaced since does not count as up to date
-const sheetBeforeLatestSourceChange = new WeakMap<
-  HTMLLinkElement,
-  CSSStyleSheet | null
->();
 
 /**
  * For a `<link rel=stylesheet>` whose `rel` or `href` just changed: until the
@@ -624,17 +620,25 @@ export function onceLinkStylesheetUpToDate(
   link: HTMLLinkElement,
   listener: () => unknown,
 ): void {
-  sheetBeforeLatestSourceChange.set(link, readLinkSheet(link));
-  if (stylesheetLoadTracked.has(link)) return;
+  const sheetAtChange = readLinkSheet(link);
+  const tracking = stylesheetLoadTracked.get(link);
+  if (tracking) {
+    // a later change moves the baseline, so a sheet that loaded for an href
+    // replaced since does not count as up to date
+    if (tracking.changedLinkBaseline) {
+      tracking.changedLinkBaseline.sheetAtLatestChange = sheetAtChange;
+    }
+    return;
+  }
 
+  const baseline: ChangedLinkBaseline = { sheetAtLatestChange: sheetAtChange };
   const isSheetUpToDate = () => {
     const sheet = readLinkSheet(link);
     // `link.href` resolves against the current base URL, so after a
     // pushState it differs from the URL a relative href loaded from
     return Boolean(
       sheet &&
-        (sheet !== sheetBeforeLatestSourceChange.get(link) ||
-          sheet.href === link.href),
+        (sheet !== baseline.sheetAtLatestChange || sheet.href === link.href),
     );
   };
 
@@ -648,9 +652,7 @@ export function onceLinkStylesheetUpToDate(
     listener,
     isSheetUpToDate,
     CHANGED_LINK_SHEET_CHECK_DELAYS_MS,
-    // a full snapshot inlines the sheet still attached, which is the previous
-    // href's, so only this tracking can record the new sheet
-    true,
+    baseline,
   );
 }
 

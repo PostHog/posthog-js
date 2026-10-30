@@ -1222,7 +1222,10 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
       .requestIdleCallback;
   });
 
-  const linkWithCurrentSheet = (): HTMLLinkElement => {
+  const linkWithCurrentSheet = (): {
+    linkEl: HTMLLinkElement;
+    backingSheet: CSSStyleSheet;
+  } => {
     const styleEl = document.createElement('style');
     styleEl.textContent = '.a { color: red; }';
     document.head.appendChild(styleEl);
@@ -1234,7 +1237,7 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
     Object.defineProperty(linkEl, 'sheet', {
       value: { href: linkEl.href, cssRules: styleEl.sheet!.cssRules },
     });
-    return linkEl;
+    return { linkEl, backingSheet: styleEl.sheet! };
   };
   const recorderView = {
     currentId: () => 7,
@@ -1247,7 +1250,7 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
       mutationCb: mutationCb as unknown as mutationCallBack,
       adoptedStyleSheetCb: vi.fn(),
     });
-    const linkEl = linkWithCurrentSheet();
+    const { linkEl } = linkWithCurrentSheet();
 
     manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
     manager.stop();
@@ -1264,7 +1267,7 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
       mutationCb: mutationCb as unknown as mutationCallBack,
       adoptedStyleSheetCb: vi.fn(),
     });
-    const linkEl = linkWithCurrentSheet();
+    const { linkEl } = linkWithCurrentSheet();
 
     manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
     manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
@@ -1277,6 +1280,46 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
     expect(
       mutationCb.mock.calls[0][0].attributes[0].attributes._cssText,
     ).toContain('color: red');
+  });
+
+  it('starts over from the changed sheet after a CSSOM change during inlining', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl, backingSheet } = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    backingSheet.insertRule('.b { color: blue; }', 1);
+    manager.onCssomSheetMutation(linkEl.sheet);
+    while (scheduled.length) {
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+    expect(
+      mutationCb.mock.calls[0][0].attributes[0].attributes._cssText,
+    ).toContain('color: blue');
+  });
+
+  it('gives up and counts a failure when CSSOM changes keep interrupting the inlining', () => {
+    resetSnapshotCostState();
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl } = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    while (scheduled.length) {
+      manager.onCssomSheetMutation(linkEl.sheet);
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+
+    expect(mutationCb).not.toHaveBeenCalled();
+    expect(getDeferredStylesheetStats().failedCount).toBe(1);
   });
 });
 
