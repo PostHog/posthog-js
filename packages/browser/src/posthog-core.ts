@@ -4960,7 +4960,10 @@ export class PostHog implements PostHogInterface {
             this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
         }
 
-        // Covers an opt in that captures no event
+        // Covers an opt in that captures no event. Adopt a sibling subdomain's identity first, so that a read made
+        // under the previous identity is dropped instead of reported under the new one.
+        this.persistence?.syncCookieProperties()
+        this._processCookieIdentityChange()
         this.featureFlags?.sendFlagCallsPendingCapture()
 
         if (this.config.capture_pageview) {

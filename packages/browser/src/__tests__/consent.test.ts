@@ -252,6 +252,43 @@ describe('consentManager', () => {
             }
         )
 
+        it.each([
+            ['the same identity', false, ['control']],
+            ['an identity a sibling subdomain wrote to the shared cookie, which sends nothing', true, []],
+        ])(
+            'sends $feature_flag_called on opt_in_capturing() without an event under %s',
+            async (_, siblingChangesIdentity, expectedResponses) => {
+                const beforeSendMock = vi.fn().mockImplementation((e) => e)
+                posthog = await createPostHog({
+                    persistence: 'localStorage+cookie',
+                    persistence_name: 'deferred-reader',
+                    cookieWinsOnConflict: true,
+                    secure_cookie: false,
+                    opt_out_capturing_by_default: true,
+                    disable_session_recording: true,
+                    capture_pageview: false,
+                    bootstrap: { distinctID: 'reader', isIdentifiedID: true, featureFlags: { 'beta-ui': 'control' } },
+                    before_send: beforeSendMock,
+                })
+
+                posthog.getFeatureFlag('beta-ui')
+                if (siblingChangesIdentity) {
+                    const cookieName = 'ph_deferred-reader'
+                    cookieStore._set(
+                        cookieName,
+                        { ...cookieStore._parse(cookieName), distinct_id: 'other', $user_state: 'identified' },
+                        365,
+                        true,
+                        false
+                    )
+                }
+                posthog.opt_in_capturing({ captureEventName: false })
+
+                const flagCalledEvents = beforeSendMock.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
+                expect(flagCalledEvents.map(([e]) => e.properties.$feature_flag_response)).toEqual(expectedResponses)
+            }
+        )
+
         it('sends $feature_flag_called for a flag an older SDK version marked as reported before consent', async () => {
             const beforeSendMock = vi.fn().mockImplementation((e) => e)
             posthog = await createPostHog({
