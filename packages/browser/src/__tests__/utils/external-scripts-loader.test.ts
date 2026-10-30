@@ -25,6 +25,9 @@ describe('external-scripts-loader', () => {
             mockPostHog.config.api_host = 'https://us.posthog.com'
             mockPostHog.config.strict_script_versioning = false
             mockPostHog.config.asset_host = null
+            mockPostHog.config.disable_external_dependency_loading = false
+            mockPostHog.config.external_scripts_inject_target = 'body'
+            delete mockPostHog.config.prepare_external_dependency_script
             delete mockPostHog.config.__preview_external_dependency_versioned_paths
         })
 
@@ -106,6 +109,243 @@ describe('external-scripts-loader', () => {
             scripts[0].dispatchEvent(new Event('load'))
             expect(firstCallback).toHaveBeenCalledTimes(1)
             expect(secondCallback).toHaveBeenCalledTimes(1)
+        })
+
+        it.each([false, true, 'fallback'] as const)(
+            'cancels a pending insertion once after set_config disables loading (%s)',
+            (strictScriptVersioning) => {
+                const posthog = new PostHog()
+                posthog.set_config({ strict_script_versioning: strictScriptVersioning })
+                const body = document!.body
+                body.remove()
+
+                assignableWindow.__PosthogExtensions__.loadExternalDependency(posthog, 'recorder', callback)
+                posthog.set_config({ disable_external_dependency_loading: true })
+                document!.documentElement.appendChild(body)
+                document!.dispatchEvent(new Event('DOMContentLoaded'))
+                document!.dispatchEvent(new Event('DOMContentLoaded'))
+
+                expect(document!.getElementsByTagName('script')).toHaveLength(0)
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback).toHaveBeenCalledWith('Loading of external scripts is disabled')
+            }
+        )
+
+        it('cancels a pending fallback insertion after set_config disables loading', () => {
+            const posthog = new PostHog()
+            posthog.set_config({ strict_script_versioning: 'fallback', external_scripts_inject_target: 'body' })
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(posthog, 'recorder', callback)
+            const script = document!.getElementsByTagName('script')[0]
+            const body = document!.body
+            body.remove()
+            script.remove()
+            script.dispatchEvent(new Event('error'))
+            posthog.set_config({ disable_external_dependency_loading: true })
+            document!.documentElement.appendChild(body)
+            document!.dispatchEvent(new Event('DOMContentLoaded'))
+            document!.dispatchEvent(new Event('DOMContentLoaded'))
+
+            expect(document!.getElementsByTagName('script')).toHaveLength(0)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith('Loading of external scripts is disabled')
+        })
+
+        it.each(['loading', 'loaded', 'failed'])(
+            'checks a requesting instance hook before reusing a %s script',
+            (state) => {
+                const firstCallback = vi.fn()
+                assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', firstCallback)
+                const existingScript = document!.getElementsByTagName('script')[0]
+                if (state !== 'loading') {
+                    existingScript.dispatchEvent(new Event(state === 'loaded' ? 'load' : 'error'))
+                }
+                const rejectScript = vi.fn((_script: HTMLScriptElement): HTMLScriptElement | null => null)
+                const requestingPostHog = new PostHog()
+                requestingPostHog.version = mockPostHog.version
+                requestingPostHog.set_config({
+                    ...mockPostHog.config,
+                    prepare_external_dependency_script: rejectScript,
+                })
+
+                assignableWindow.__PosthogExtensions__.loadExternalDependency(requestingPostHog, 'recorder', callback)
+                existingScript.dispatchEvent(new Event('load'))
+
+                expect(rejectScript).toHaveBeenCalledTimes(1)
+                expect(rejectScript.mock.calls[0][0]).not.toBe(existingScript)
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback).toHaveBeenCalledWith('prepare_external_dependency_script returned null')
+                expect(document!.getElementsByTagName('script')).toHaveLength(1)
+            }
+        )
+
+        it.each(
+            (['integrity', 'crossOrigin', 'nonce'] as const).flatMap((attribute) =>
+                [false, true].map((alreadyLoaded) => ({ attribute, alreadyLoaded }))
+            )
+        )(
+            'rejects incompatible $attribute without mutating the shared script or falling back (loaded: $alreadyLoaded)',
+            ({ attribute, alreadyLoaded }) => {
+                mockPostHog.config.strict_script_versioning = 'fallback'
+                assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', vi.fn())
+                const existingScript = document!.getElementsByTagName('script')[0]
+                const originalValue = existingScript[attribute]
+                if (alreadyLoaded) {
+                    existingScript.dispatchEvent(new Event('load'))
+                }
+                const requestingPostHog = {
+                    ...mockPostHog,
+                    config: {
+                        ...mockPostHog.config,
+                        prepare_external_dependency_script: (script: HTMLScriptElement) => {
+                            script[attribute] = attribute === 'crossOrigin' ? 'use-credentials' : 'pinned-value'
+                            return script
+                        },
+                    },
+                } as PostHog
+
+                assignableWindow.__PosthogExtensions__.loadExternalDependency(requestingPostHog, 'recorder', callback)
+                existingScript.dispatchEvent(new Event('load'))
+
+                expect(existingScript[attribute]).toBe(originalValue)
+                expect(document!.getElementsByTagName('script')).toHaveLength(1)
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback).toHaveBeenCalledWith('Existing script conflicts with prepared script policy')
+            }
+        )
+
+        it.each([false, true])('reuses same-policy rewritten relative URLs (already loaded: %s)', (alreadyLoaded) => {
+            const prepare = vi.fn((script: HTMLScriptElement) => {
+                script.src = '/approved/recorder.js'
+                script.integrity = 'sha384-approved'
+                script.crossOrigin = 'use-credentials'
+                script.nonce = 'approved-nonce'
+                return script
+            })
+            mockPostHog.config.api_host = '/ingest'
+            mockPostHog.config.prepare_external_dependency_script = prepare
+            const firstCallback = vi.fn()
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', firstCallback)
+            const existingScript = document!.getElementsByTagName('script')[0]
+            if (alreadyLoaded) {
+                existingScript.dispatchEvent(new Event('load'))
+            }
+            const requestingPostHog = { ...mockPostHog, config: { ...mockPostHog.config } } as PostHog
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(requestingPostHog, 'recorder', callback)
+            if (!alreadyLoaded) {
+                existingScript.dispatchEvent(new Event('load'))
+            }
+
+            expect(prepare).toHaveBeenCalledTimes(2)
+            expect(document!.getElementsByTagName('script')).toHaveLength(1)
+            expect(firstCallback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback.mock.calls[0][0]).toBeUndefined()
+        })
+
+        it.each(['load', 'error'] as const)('shares same-policy %s results across instances', (eventType) => {
+            mockPostHog.config.prepare_external_dependency_script = (script) => {
+                script.integrity = 'sha384-approved'
+                script.nonce = 'approved-nonce'
+                return script
+            }
+            const firstCallback = vi.fn()
+            const lateCallback = vi.fn()
+            const requestingPostHog = { ...mockPostHog, config: { ...mockPostHog.config } } as PostHog
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', firstCallback)
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(requestingPostHog, 'recorder', callback)
+            const event = new Event(eventType)
+            document!.getElementsByTagName('script')[0].dispatchEvent(event)
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(requestingPostHog, 'recorder', lateCallback)
+
+            expect(document!.getElementsByTagName('script')).toHaveLength(1)
+            for (const loadCallback of [firstCallback, callback, lateCallback]) {
+                expect(loadCallback).toHaveBeenCalledTimes(1)
+                expect(loadCallback.mock.calls[0][0]).toBe(eventType === 'error' ? event : undefined)
+            }
+        })
+
+        it('loads the approved rewritten URL instead of reusing the original URL', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', vi.fn())
+            const originalScript = document!.getElementsByTagName('script')[0]
+            const originalSrc = originalScript.src
+            mockPostHog.config.prepare_external_dependency_script = (script) => {
+                script.src = '/approved/recorder.js'
+                return script
+            }
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+            originalScript.dispatchEvent(new Event('load'))
+
+            expect(originalScript.src).toBe(originalSrc)
+            expect(callback).not.toHaveBeenCalled()
+            const approvedScript = document!.querySelector<HTMLScriptElement>('script[src="/approved/recorder.js"]')!
+            approvedScript.dispatchEvent(new Event('load'))
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith(undefined, expect.any(Event))
+        })
+
+        it('rechecks disabled loading after preparation', () => {
+            mockPostHog.config.prepare_external_dependency_script = (script) => {
+                mockPostHog.config.disable_external_dependency_loading = true
+                return script
+            }
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+
+            expect(document!.getElementsByTagName('script')).toHaveLength(0)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith('Loading of external scripts is disabled')
+        })
+
+        it.each(['load', 'error'] as const)(
+            'shares an existing head script %s before the body is available',
+            (eventType) => {
+                mockPostHog.config.external_scripts_inject_target = 'head'
+                const firstCallback = vi.fn()
+                const lateCallback = vi.fn()
+                assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', firstCallback)
+                const existingScript = document!.getElementsByTagName('script')[0]
+                const body = document!.body
+                body.remove()
+                const prepare = vi.fn((script: HTMLScriptElement) => script)
+                mockPostHog.config.prepare_external_dependency_script = prepare
+
+                assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+                const event = new Event(eventType)
+                existingScript.dispatchEvent(event)
+                assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', lateCallback)
+
+                expect(prepare).toHaveBeenCalledTimes(2)
+                for (const loadCallback of [firstCallback, callback, lateCallback]) {
+                    expect(loadCallback).toHaveBeenCalledTimes(1)
+                    expect(loadCallback.mock.calls[0][0]).toBe(eventType === 'error' ? event : undefined)
+                }
+                document!.documentElement.appendChild(body)
+                document!.dispatchEvent(new Event('DOMContentLoaded'))
+                expect(document!.getElementsByTagName('script')).toHaveLength(1)
+                expect(callback).toHaveBeenCalledTimes(1)
+            }
+        )
+
+        it('waits for the body if preparation rewrites away from an existing head script', () => {
+            mockPostHog.config.external_scripts_inject_target = 'head'
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', vi.fn())
+            const body = document!.body
+            body.remove()
+            mockPostHog.config.prepare_external_dependency_script = (script) => {
+                script.src = '/approved/recorder.js'
+                return script
+            }
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+            expect(document!.getElementsByTagName('script')).toHaveLength(1)
+            expect(callback).not.toHaveBeenCalled()
+            document!.documentElement.appendChild(body)
+            document!.dispatchEvent(new Event('DOMContentLoaded'))
+
+            expect(document!.getElementsByTagName('script')).toHaveLength(2)
+            document!
+                .querySelector<HTMLScriptElement>('script[src="/approved/recorder.js"]')!
+                .dispatchEvent(new Event('load'))
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith(undefined, expect.any(Event))
         })
 
         it('adds script when no preexisting scripts exist', () => {
