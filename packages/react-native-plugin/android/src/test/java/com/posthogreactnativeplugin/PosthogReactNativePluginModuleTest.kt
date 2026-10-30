@@ -78,7 +78,7 @@ class PosthogReactNativePluginModuleTest {
 
   @Test
   fun `screenshot scale is independent and uses native clamping without float overflow`() {
-    val cases = listOf(0.5 to 0.5f, 0.0 to 0.1f, -Double.MAX_VALUE to 0.1f, Double.MAX_VALUE to 1f)
+    val cases = listOf(1.0 to 1f, 0.5 to 0.5f, 0.0 to 0.1f, -Double.MAX_VALUE to 0.1f, Double.MAX_VALUE to 1f)
     for ((value, expected) in cases) {
       val config = PostHogSessionReplayConfig()
 
