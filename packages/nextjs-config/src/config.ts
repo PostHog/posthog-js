@@ -4,6 +4,7 @@ import path from 'node:path'
 import { PosthogWebpackPlugin, PluginConfig, resolveConfig, ResolvedPluginConfig } from '@posthog/webpack-plugin'
 import * as utils from './utils'
 import { deleteSourceMapFiles, stripDanglingSourceMapComments } from './strip-sourcemap-comments'
+import { injectServerRelease } from './inject-server-release'
 
 type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
 type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
@@ -89,7 +90,7 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
           : userWebPackConfig,
       compiler:
         sourceMapEnabled && turbopackEnabled && isCompilerHookSupported
-          ? withCompilerConfig(userCompilerConfig, resolvedConfig, nativeDebugIdsEnabled)
+          ? withCompilerConfig(userCompilerConfig, resolvedConfig, nativeDebugIdsEnabled, releaseId)
           : userCompilerConfig,
     }
     if (nativeDebugIdsEnabled) {
@@ -176,13 +177,15 @@ function withWebpackConfig(
 function withCompilerConfig(
   userCompilerConfig: NextConfig['compiler'],
   posthogConfig: ResolvedPluginConfig,
-  nativeDebugIdsEnabled: boolean
+  nativeDebugIdsEnabled: boolean,
+  releaseId: string | undefined
 ): NextConfig['compiler'] {
   const userCompilerHook = userCompilerConfig?.runAfterProductionCompile
   return {
     ...userCompilerConfig,
     runAfterProductionCompile: async (config: { distDir: string; projectDir: string }) => {
       await userCompilerHook?.(config)
+      if (nativeDebugIdsEnabled && releaseId) await injectServerRelease(config.distDir, releaseId)
       console.debug('Processing source maps from compilation hook...')
       await utils.processSourceMaps(posthogConfig, config.distDir, nativeDebugIdsEnabled ? 'upload' : 'process')
       if (posthogConfig.sourcemaps.deleteAfterUpload) {
