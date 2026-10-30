@@ -1,4 +1,5 @@
-import { addUncaughtExceptionListener, addUnhandledRejectionListener } from './autocapture'
+import { capturePendingExceptions, claimExplicitCapture, startExceptionAutocapture } from './autocapture'
+import type { AutocaptureClient } from './autocapture'
 import { PostHogBackendClient } from '@/client'
 import type { ContextData } from '../context/types'
 import { snapshotEventContext } from '../context/event-context'
@@ -15,6 +16,8 @@ export default class ErrorTracking {
   private _exceptionAutocaptureEnabled: boolean
   private _rateLimiter: BucketedRateLimiter<string>
   private _logger: Logger
+  private _autocaptureClient?: AutocaptureClient
+  private _stopAutocapture?: () => void
 
   constructor(client: PostHogBackendClient, options: PostHogOptions, _logger: Logger) {
     this.client = client
@@ -76,10 +79,44 @@ export default class ErrorTracking {
     })
   }
 
+  // Clients with the same project token and host send to the same project.
+  private get destinationKey(): string {
+    return `${this.client.apiKey}@${this.client.host}`
+  }
+
   private startAutocaptureIfEnabled(): void {
     if (this.isEnabled()) {
-      addUncaughtExceptionListener(this.onException.bind(this), this.onFatalError.bind(this))
-      addUnhandledRejectionListener(this.onException.bind(this))
+      this._autocaptureClient = {
+        key: this.destinationKey,
+        capture: (exception, hint) => this.onException(exception, hint),
+        getContext: () => this.client.getContext(),
+        flush: () => this.client.flush(),
+        shutdown: () => this.client.shutdown(SHUTDOWN_TIMEOUT),
+      }
+      this._stopAutocapture = startExceptionAutocapture(this._autocaptureClient)
+    }
+  }
+
+  /**
+   * Whether captureException should capture this error. False when exception autocapture already sent the same error
+   * object to this project in this turn of the event loop, for example when a framework passes an error from its own
+   * process listener to an error hook that calls captureException.
+   */
+  claimExplicitCapture(error: unknown): boolean {
+    return claimExplicitCapture(error, this.destinationKey)
+  }
+
+  /**
+   * Captures at once the exceptions autocapture holds until the end of the turn, so that this client's flush or
+   * shutdown sends them: an app's crash handler often flushes or shuts the client down and exits before the turn ends.
+   * The capture can land in another client of the project, the one whose request context is active, so this client
+   * waits for that client's flush too.
+   */
+  capturePendingExceptions(): void {
+    for (const owner of capturePendingExceptions()) {
+      if (owner !== this._autocaptureClient) {
+        void this.client.addPendingPromise(owner.flush().catch(() => undefined))
+      }
     }
   }
 
@@ -106,14 +143,12 @@ export default class ErrorTracking {
           }
           return this.client._capturePreparedEvent(eventMessage, false)
         }
-      })()
+      })().catch((error) => {
+        // shutdown() waits for every pending promise and stops before it flushes if one rejects, so an error that
+        // cannot be turned into an event would take the others down with it.
+        this._logger.error('Failed to capture an exception:', error)
+      })
     )
-  }
-
-  private async onFatalError(exception: Error): Promise<void> {
-    console.error(exception)
-    await this.client.shutdown(SHUTDOWN_TIMEOUT)
-    globalThis.process.exit(1)
   }
 
   isEnabled(): boolean {
@@ -122,5 +157,8 @@ export default class ErrorTracking {
 
   shutdown(): void {
     this._rateLimiter.stop()
+    this.capturePendingExceptions()
+    this._stopAutocapture?.()
+    this._stopAutocapture = undefined
   }
 }
