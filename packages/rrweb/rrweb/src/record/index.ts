@@ -1143,8 +1143,8 @@ function record<T = eventWithTime>(
         // abort the teardown below and leak observers and listeners
       }
       deferredStylesheetInlining = undefined;
-      // stylesheet load tracking is not tied to the observers, so it would outlive the stop
-      resetStylesheetLoadTracking();
+      // stylesheet load tracking and idle inlining are not tied to the observers, so they would outlive the stop
+      stylesheetManager.stop();
       callAllSafely(handlers);
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();

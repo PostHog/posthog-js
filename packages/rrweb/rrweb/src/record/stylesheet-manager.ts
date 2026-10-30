@@ -73,6 +73,9 @@ export class StylesheetManager {
   private trackedLinkElements: WeakSet<HTMLLinkElement> = new WeakSet();
   private pendingDeferredSheets: Set<PendingDeferredSheet> = new Set();
   private fullSnapshotCount = 0;
+  // a restarted recorder refills the shared mirror, so mirror membership
+  // cannot tell a stopped recorder's pending work from the new recorder's
+  private stopped = false;
   private changedLinkTasks = new WeakMap<
     HTMLLinkElement,
     DeferredLinkInliningTask
@@ -116,6 +119,7 @@ export class StylesheetManager {
     childSn: serializedNodeWithId,
   ): void {
     if (
+      !this.stopped &&
       '_cssText' in (childSn as elementNode).attributes &&
       !this.isLinkBlocked(linkEl)
     )
@@ -294,12 +298,17 @@ export class StylesheetManager {
     },
   ): void {
     // a stop from inside the consumer's emit has already reset the mirror
-    if (recorderView.currentId() === -1) {
+    if (this.stopped || recorderView.currentId() === -1) {
       return;
     }
     onceLinkStylesheetUpToDate(linkEl, () => {
       const id = recorderView.currentId();
-      if (!linkEl.isConnected || id === -1 || this.isLinkBlocked(linkEl)) {
+      if (
+        this.stopped ||
+        !linkEl.isConnected ||
+        id === -1 ||
+        this.isLinkBlocked(linkEl)
+      ) {
         return;
       }
       // a newer change supersedes the work still in flight for this link
@@ -329,6 +338,7 @@ export class StylesheetManager {
           // a full snapshot inlines the link's current sheet itself, and a
           // stop resets the mirror
           if (
+            this.stopped ||
             this.changedLinkTasks.get(linkEl) !== task ||
             this.fullSnapshotCount !== startedAtFullSnapshot ||
             recorderView.currentId() === -1 ||
@@ -374,6 +384,9 @@ export class StylesheetManager {
     cssText: string,
     otherAttributes: attributeMutation['attributes'] = {},
   ) {
+    if (this.stopped) {
+      return;
+    }
     // The snapshot path masks _cssText inside serializeElementNode; this path
     // builds the value itself, so it has to mask it too.
     this.mutationCb({
@@ -451,6 +464,12 @@ export class StylesheetManager {
     }
     if (styles.length > 0) adoptedStyleSheetData.styles = styles;
     this.adoptedStyleSheetCb(adoptedStyleSheetData);
+  }
+
+  /** Ends all delayed stylesheet work of this recorder; a stopped manager emits nothing. */
+  public stop(): void {
+    this.stopped = true;
+    resetStylesheetLoadTracking();
   }
 
   public reset(): void {

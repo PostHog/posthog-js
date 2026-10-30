@@ -1222,12 +1222,7 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
       .requestIdleCallback;
   });
 
-  it('keeps one task per link when changes arrive while the sheet is current', () => {
-    const mutationCb = vi.fn();
-    const manager = new StylesheetManager({
-      mutationCb: mutationCb as unknown as mutationCallBack,
-      adoptedStyleSheetCb: vi.fn(),
-    });
+  const linkWithCurrentSheet = (): HTMLLinkElement => {
     const styleEl = document.createElement('style');
     styleEl.textContent = '.a { color: red; }';
     document.head.appendChild(styleEl);
@@ -1239,7 +1234,34 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
     Object.defineProperty(linkEl, 'sheet', {
       value: { href: linkEl.href, cssRules: styleEl.sheet!.cssRules },
     });
-    const recorderView = { currentId: () => 7, serializeWithoutCss: () => null };
+    return linkEl;
+  };
+  const recorderView = { currentId: () => 7, serializeWithoutCss: () => null };
+
+  it('emits nothing from pending work once its recorder stops', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const linkEl = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    manager.stop();
+    while (scheduled.length) {
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+
+    expect(mutationCb).not.toHaveBeenCalled();
+  });
+
+  it('keeps one task per link when changes arrive while the sheet is current', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const linkEl = linkWithCurrentSheet();
 
     manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
     manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
