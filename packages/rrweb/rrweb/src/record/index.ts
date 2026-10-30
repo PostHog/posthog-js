@@ -9,12 +9,20 @@ import {
   beginSnapshotCostTracking,
   endSnapshotCostTracking,
   noteVisibilityChange,
+  resetStylesheetLoadTracking,
 } from '@posthog/rrweb-snapshot';
 import {
   initObservers,
   mutationBuffers,
   findAndRemoveIframeBuffer,
 } from './observer';
+import {
+  type IdleDeadline,
+  type IdleTask,
+  whenIdle,
+  DEFERRED_STYLESHEET_RULES_PER_SLICE,
+  DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK,
+} from './idle';
 import {
   on,
   callAllSafely,
@@ -90,40 +98,6 @@ const nonUserInitiatedSources = new Set<IncrementalSource>([
   IncrementalSource.StyleDeclaration,
   IncrementalSource.AdoptedStyleSheet,
 ]);
-type IdleTask = { cancel: () => void };
-type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number };
-
-function whenIdle(cb: (deadline?: IdleDeadline) => void): IdleTask {
-  const win = window as Window &
-    typeof globalThis & {
-      requestIdleCallback?: (
-        cb: (deadline: IdleDeadline) => void,
-        opts?: { timeout: number },
-      ) => number;
-      cancelIdleCallback?: (handle: number) => void;
-    };
-  if (typeof win.requestIdleCallback === 'function') {
-    // the timeout keeps a permanently busy main thread from starving the CSS
-    const handle = win.requestIdleCallback(cb, { timeout: 2000 });
-    return { cancel: () => win.cancelIdleCallback?.(handle) };
-  }
-  // no idle scheduling (e.g. Safari <= 17): space the chunks out instead, so
-  // they don't run back-to-back inside the page-load busy window
-  const handle = setTimeout(cb, 250);
-  return { cancel: () => clearTimeout(handle) };
-}
-
-// CSSRules stringified per slice before re-checking the idle deadline. A rule
-// stringifies in single-digit microseconds, so a slice stays around a
-// millisecond even on slow devices - small enough that overshooting a deadline
-// by one slice is negligible, big enough that a permanently busy page still
-// finishes real work with its one guaranteed slice per callback.
-const DEFERRED_STYLESHEET_RULES_PER_SLICE = 200;
-
-// Without idle deadlines (the setTimeout fallback in whenIdle) each tick gets a
-// fixed slice allowance instead: a tick stays a few ms, while a giant sheet
-// still completes in seconds rather than minutes.
-const DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK = 10;
 
 // Safety cap for the synchronous teardown flush (stop() / pagehide): at most
 // this many slices, i.e. 10,000 rules - the same synchronous CSS work the
@@ -143,8 +117,9 @@ type DeferredStylesheetInlining = {
    * `_cssText` mutations reach the recorder before teardown. Sheets estimated
    * not to fit in the remaining budget are abandoned (and counted) up front,
    * so one oversized sheet cannot starve the cheap sheets queued behind it.
+   * Returns the slices used.
    */
-  flush: () => void;
+  flush: () => number;
 };
 
 /**
@@ -261,7 +236,7 @@ export function inlineDeferredStylesheets(
     },
     flush: () => {
       if (cancelled) {
-        return;
+        return 0;
       }
       cancelled = true;
       pending?.cancel();
@@ -319,6 +294,7 @@ export function inlineDeferredStylesheets(
         task = null;
       }
       onDone();
+      return slices;
     },
   };
 }
@@ -428,6 +404,7 @@ function record<T = eventWithTime>(
 
   // reset mirror in case `record` this was called earlier
   mirror.reset();
+  resetStylesheetLoadTracking();
 
   const maskInputOptions: MaskInputOptions =
     maskAllInputs === true
@@ -614,7 +591,17 @@ function record<T = eventWithTime>(
     adoptedStyleSheetCb: wrappedAdoptedStyleSheetEmit,
     maskAllElementAttributes,
     maskAttributeFn,
+    blockClass,
+    blockSelector,
   });
+
+  // the deferred queue goes first, and changed links get what is left of the shared cap
+  const flushStylesheetInlining = () => {
+    const slicesUsed = deferredStylesheetInlining?.flush() ?? 0;
+    stylesheetManager.flushChangedLinkInlining(
+      DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES - slicesUsed,
+    );
+  };
 
   const iframeManager = new IframeManager({
     mirror,
@@ -845,7 +832,7 @@ function record<T = eventWithTime>(
         'pagehide',
         () => {
           try {
-            deferredStylesheetInlining?.flush();
+            flushStylesheetInlining();
           } catch (e) {
             // flush drives the user's emit/mask callbacks; their throw must
             // not surface on the host page's pagehide dispatch
@@ -1160,12 +1147,14 @@ function record<T = eventWithTime>(
       // finish the deferred CSS while the emit path is still wired up, so the
       // sheets this recording deferred don't silently vanish with it
       try {
-        deferredStylesheetInlining?.flush();
+        flushStylesheetInlining();
       } catch (e) {
         // flush drives the user's emit/mask callbacks; their throw must not
         // abort the teardown below and leak observers and listeners
       }
       deferredStylesheetInlining = undefined;
+      // stylesheet load tracking and idle inlining are not tied to the observers, so they would outlive the stop
+      stylesheetManager.stop();
       callAllSafely(handlers);
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();

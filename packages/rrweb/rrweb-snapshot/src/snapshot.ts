@@ -230,13 +230,6 @@ export function transformAttribute(
     name === 'src' ||
     (name === 'href' && !(tagName === 'use' && value[0] === '#'))
   ) {
-    // Prefer the loaded sheet's href — survives baseURI changes from SPA pushState.
-    if (tagName === 'link' && element) {
-      const sheetHref = (element as HTMLLinkElement).sheet?.href;
-      if (sheetHref) {
-        return sheetHref;
-      }
-    }
     // href starts with a # is an id pointer for svg
     const transformedValue = absoluteToDoc(doc, value);
 
@@ -302,7 +295,7 @@ export function ignoreAttribute(
  * matters because `<link rel=preload as=style>` carries the same URL as the
  * stylesheet it preloads while applying no CSS of its own.
  */
-function isStylesheetLink(rel: unknown): boolean {
+export function isStylesheetLink(rel: unknown): boolean {
   if (typeof rel !== 'string') {
     return false;
   }
@@ -497,30 +490,53 @@ function onceIframeLoaded(
   };
 }
 
-const stylesheetLoadTracked = new Map<HTMLLinkElement, AbortController>();
+type ChangedLinkBaseline = { sheetAtLatestChange: CSSStyleSheet | null };
 
-export function resetStylesheetLoadTracking(): void {
-  stylesheetLoadTracked.forEach((controller) => controller.abort());
-  stylesheetLoadTracked.clear();
+const stylesheetLoadTracked = new Map<
+  HTMLLinkElement,
+  { controller: AbortController; changedLinkBaseline?: ChangedLinkBaseline }
+>();
+
+export function resetStylesheetLoadTracking(
+  options: { keepChangedLinks?: boolean } = {},
+): void {
+  stylesheetLoadTracked.forEach((tracking, link) => {
+    // a full snapshot inlines the sheet still attached to a changed link,
+    // which is the previous href's, so only this tracking can record the new sheet
+    if (options.keepChangedLinks && tracking.changedLinkBaseline) return;
+    tracking.controller.abort();
+    stylesheetLoadTracked.delete(link);
+  });
 }
 
-function onceStylesheetLoaded(
+// a 0 ms stylesheetLoadTimeout must not turn the repeated checks into polling on every timer tick
+const MIN_REPEATED_SHEET_CHECK_MS = 1000;
+// a sheet still not loaded after this long counts as failed, so a hung request
+// does not keep the link and its listener alive until the next full snapshot
+const MAX_SHEET_WAIT_MS = 60_000;
+
+function readLinkSheet(link: HTMLLinkElement): CSSStyleSheet | null {
+  try {
+    return link.sheet;
+  } catch (error) {
+    return null;
+  }
+}
+
+function trackStylesheetUntilReady(
   link: HTMLLinkElement,
   listener: () => unknown,
-  styleSheetLoadTimeout: number,
+  isSheetReady: () => boolean,
+  checkDelaysMs: readonly number[],
+  changedLinkBaseline?: ChangedLinkBaseline,
 ) {
-  if (stylesheetLoadTracked.has(link)) return;
-
-  let styleSheetLoaded: StyleSheet | null;
-  try {
-    styleSheetLoaded = link.sheet;
-  } catch (error) {
-    return;
-  }
-
-  if (styleSheetLoaded) return;
-
   const controller = new AbortController();
+  const stopTracking = () => {
+    if (stylesheetLoadTracked.get(link)?.controller === controller) {
+      stylesheetLoadTracked.delete(link);
+    }
+    controller.abort();
+  };
   let fired = false;
   const fire = () => {
     if (fired) return;
@@ -528,21 +544,116 @@ function onceStylesheetLoaded(
     try {
       listener();
     } finally {
-      stylesheetLoadTracked.delete(link);
-      controller.abort();
+      stopTracking();
     }
   };
 
-  const timer = setTimeout(fire, styleSheetLoadTimeout);
-  controller.signal.addEventListener('abort', () => clearTimeout(timer), {
-    once: true,
-  });
   link.addEventListener('load', fire, {
     signal: controller.signal,
     once: true,
   });
+  link.addEventListener('error', stopTracking, {
+    signal: controller.signal,
+    once: true,
+  });
 
-  stylesheetLoadTracked.set(link, controller);
+  // A sheet on a slow network can load long after the scheduled checks, so
+  // the checks repeat at the last delay until the link loads, fails, leaves
+  // the DOM, waits longer than MAX_SHEET_WAIT_MS, or a reset ends it.
+  const giveUpAtMs = Date.now() + MAX_SHEET_WAIT_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleCheck = (checkIndex: number) => {
+    const delayMs =
+      checkIndex < checkDelaysMs.length
+        ? checkDelaysMs[checkIndex]
+        : Math.max(
+            checkDelaysMs[checkDelaysMs.length - 1],
+            MIN_REPEATED_SHEET_CHECK_MS,
+          );
+    timer = setTimeout(() => {
+      if (!link.isConnected) {
+        stopTracking();
+      } else if (isSheetReady()) {
+        fire();
+      } else if (Date.now() >= giveUpAtMs) {
+        stopTracking();
+      } else {
+        scheduleCheck(checkIndex + 1);
+      }
+    }, delayMs);
+  };
+  controller.signal.addEventListener('abort', () => clearTimeout(timer), {
+    once: true,
+  });
+  scheduleCheck(0);
+
+  stylesheetLoadTracked.set(link, { controller, changedLinkBaseline });
+}
+
+function onceStylesheetLoaded(
+  link: HTMLLinkElement,
+  listener: () => unknown,
+  styleSheetLoadTimeout: number,
+) {
+  if (stylesheetLoadTracked.has(link) || readLinkSheet(link)) return;
+
+  trackStylesheetUntilReady(
+    link,
+    listener,
+    () => Boolean(readLinkSheet(link)),
+    [styleSheetLoadTimeout],
+  );
+}
+
+// Chrome 131 fires no load event when an already-loaded stylesheet link gets a
+// new href (Chrome 156 does), so a changed link is also checked on a backoff.
+const CHANGED_LINK_SHEET_CHECK_DELAYS_MS = [
+  100, 200, 400, 800, 1600, 3200, 6400, 12800, 25600,
+] as const;
+
+/**
+ * For a `<link rel=stylesheet>` whose `rel` or `href` just changed: until the
+ * new sheet loads, `link.sheet` is still the sheet of the previous `href`.
+ * Call it in the task that changed the link, while that sheet is attached.
+ */
+export function onceLinkStylesheetUpToDate(
+  link: HTMLLinkElement,
+  listener: () => unknown,
+): void {
+  const sheetAtChange = readLinkSheet(link);
+  const tracking = stylesheetLoadTracked.get(link);
+  if (tracking) {
+    // a later change moves the baseline, so a sheet that loaded for an href
+    // replaced since does not count as up to date
+    if (tracking.changedLinkBaseline) {
+      tracking.changedLinkBaseline.sheetAtLatestChange = sheetAtChange;
+    }
+    return;
+  }
+
+  const baseline: ChangedLinkBaseline = { sheetAtLatestChange: sheetAtChange };
+  const isSheetUpToDate = () => {
+    const sheet = readLinkSheet(link);
+    // `link.href` resolves against the current base URL, so after a
+    // pushState it differs from the URL a relative href loaded from
+    return Boolean(
+      sheet &&
+        (sheet !== baseline.sheetAtLatestChange || sheet.href === link.href),
+    );
+  };
+
+  if (isSheetUpToDate()) {
+    listener();
+    return;
+  }
+
+  trackStylesheetUntilReady(
+    link,
+    listener,
+    isSheetUpToDate,
+    CHANGED_LINK_SHEET_CHECK_DELAYS_MS,
+    baseline,
+  );
 }
 
 function serializeNode(
@@ -800,6 +911,13 @@ function serializeElementNode(
         n,
         dataURLOptions,
       );
+    }
+  }
+  // Prefer the loaded sheet's href, which survives baseURI changes from SPA pushState.
+  if (tagName === 'link' && typeof attributes.href === 'string') {
+    const loadedSheetHref = readLinkSheet(n as HTMLLinkElement)?.href;
+    if (loadedSheetHref) {
+      attributes.href = loadedSheetHref;
     }
   }
   // remote css
