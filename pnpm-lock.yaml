@@ -502,6 +502,9 @@ importers:
       '@posthog/types':
         specifier: workspace:^
         version: link:../types
+      dompurify:
+        specifier: ^3.4.13
+        version: 3.4.13
       preact:
         specifier: ^10.29.3
         version: 10.29.3

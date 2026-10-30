@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify'
 import { FeatureFlagsCommonExtension } from '../extension-tokens'
 import { getTargetingUrl } from '../utils/url-targeting-utils'
 import { getSurveyReplayUrl } from '../survey-render-context'
@@ -726,7 +727,8 @@ interface RenderProps {
 export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, style }: RenderProps) => {
     return renderAsHtml
         ? cloneElement(component, {
-              dangerouslySetInnerHTML: { __html: children },
+              // Remote descriptions may contain rich text, but never executable markup or non-HTML namespaces.
+              dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(children, { USE_PROFILES: { html: true } }) },
               style,
           })
         : cloneElement(component, {
