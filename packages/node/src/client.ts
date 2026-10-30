@@ -362,6 +362,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   override async flush(): Promise<void> {
+    // An app's crash handler often flushes and exits before the end of the turn, when autocapture would capture.
+    this.errorTracking.capturePendingExceptions()
     return this._flushKeepingRuntimeAlive(false)
   }
 
@@ -3266,7 +3268,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     uuid?: EventMessage['uuid'],
     flags?: FeatureFlagEvaluations
   ): void {
-    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+    if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
         ErrorTracking.buildEventMessage(
@@ -3323,7 +3325,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     additionalProperties?: Record<string | number, any>,
     flags?: FeatureFlagEvaluations
   ): Promise<void> {
-    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+    if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       return this.addPendingPromise(
         ErrorTracking.buildEventMessage(
