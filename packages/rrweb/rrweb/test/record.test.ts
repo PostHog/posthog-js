@@ -1833,6 +1833,7 @@ describe('record', function (this: ISuite) {
         link.onload = () => {
           link.onload = null;
           link.rel = 'stylesheet';
+          link.media = 'screen';
         };
         document.head.appendChild(link);
 
@@ -1847,6 +1848,7 @@ describe('record', function (this: ISuite) {
       );
 
       expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+      expect(cssTextMutation.attributes.media).toBe('screen');
       expect(
         attributeMutations().find((m) => m.attributes.rel === 'stylesheet')
           ?.id,
@@ -1884,6 +1886,59 @@ describe('record', function (this: ISuite) {
       );
       expect(cssTextMutation.id).toBe(hrefMutation?.id);
       expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+    });
+
+    const changeHrefThen = (serverURL: string, afterChange: 'block' | 'stop') =>
+      ctx.page.evaluate(
+        async (serverURL, afterChange) => {
+          const { record } = (window as unknown as IWindow).rrweb;
+          const link = document.createElement('link');
+          link.setAttribute('rel', 'stylesheet');
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+          await new Promise((resolve) => {
+            link.onload = resolve;
+            document.head.appendChild(link);
+          });
+
+          const stopRecording = record({
+            inlineStylesheet: true,
+            emit: (window as unknown as IWindow).emit,
+          });
+
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=2`);
+          // let the href mutation go out before the new sheet arrives
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          if (afterChange === 'block') {
+            link.classList.add('rr-block');
+          } else {
+            stopRecording?.();
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        },
+        serverURL,
+        afterChange,
+      );
+
+    it('does not inline a changed stylesheet link that became blocked before its sheet loaded', async () => {
+      await changeHrefThen(serverURL, 'block');
+
+      expect(
+        attributeMutations().find((m) => 'href' in m.attributes),
+      ).toBeDefined();
+      expect(
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      ).toBeUndefined();
+    });
+
+    it('does not inline a changed stylesheet link after recording stops', async () => {
+      await changeHrefThen(serverURL, 'stop');
+
+      expect(
+        attributeMutations().find((m) => 'href' in m.attributes),
+      ).toBeDefined();
+      expect(
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      ).toBeUndefined();
     });
   });
 

@@ -617,10 +617,7 @@ export default class MutationBuffer {
       adds,
     };
 
-    const stylesheetLinksWithNewSource: Array<{
-      link: HTMLLinkElement;
-      id: number;
-    }> = [];
+    const stylesheetLinksWithNewSource: HTMLLinkElement[] = [];
     if (this.inlineStylesheet) {
       for (const { id, attributes } of payload.attributes) {
         if (!('rel' in attributes) && !('href' in attributes)) continue;
@@ -631,7 +628,7 @@ export default class MutationBuffer {
           node.getAttribute('href') &&
           !node.disabled
         ) {
-          stylesheetLinksWithNewSource.push({ link: node, id });
+          stylesheetLinksWithNewSource.push(node);
         }
       }
     }
@@ -662,8 +659,11 @@ export default class MutationBuffer {
     this.mutationCb(payload);
 
     // after the payload, so replay applies the new rel/href before the CSS that replaces the link
-    for (const { link, id } of stylesheetLinksWithNewSource) {
-      this.stylesheetManager.inlineLinkStylesheetAfterChange(link, id);
+    for (const link of stylesheetLinksWithNewSource) {
+      this.stylesheetManager.inlineLinkStylesheetAfterChange(link, {
+        currentId: () => this.mirror.getId(link),
+        isBlocked: () => this.isBlockedAtEmission(link),
+      });
     }
   };
 

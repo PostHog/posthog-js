@@ -12,6 +12,8 @@ import {
   runNonDeferrableStylesheetWork,
   stringifyRule,
   stringifyStylesheet,
+  toLowerCase,
+  transformAttribute,
 } from '@posthog/rrweb-snapshot';
 import type {
   MaskAttributeFn,
@@ -239,10 +241,11 @@ export class StylesheetManager {
    */
   public inlineLinkStylesheetAfterChange(
     linkEl: HTMLLinkElement,
-    id: number,
+    recorderView: { currentId: () => number; isBlocked: () => boolean },
   ): void {
     onceLinkStylesheetUpToDate(linkEl, () => {
-      if (!linkEl.isConnected) {
+      const id = recorderView.currentId();
+      if (!linkEl.isConnected || id === -1 || recorderView.isBlocked()) {
         return;
       }
       let sheet: CSSStyleSheet | null = null;
@@ -253,7 +256,7 @@ export class StylesheetManager {
       }
       const cssText = sheet && stringifyStylesheet(sheet);
       if (cssText) {
-        this.emitCssTextMutation(linkEl, id, cssText);
+        this.emitLinkReplacementMutation(linkEl, id, cssText);
       }
     });
   }
@@ -261,6 +264,43 @@ export class StylesheetManager {
   /** One-call variant of {@link beginDeferredLinkInlining}: the whole sheet in a single slice. */
   public inlineDeferredLinkElement(linkEl: HTMLLinkElement, id: number): void {
     this.beginDeferredLinkInlining(linkEl, id)?.advance(Infinity);
+  }
+
+  // Replay rebuilds the link from its snapshot-time attributes when `_cssText`
+  // arrives, so attributes changed since the snapshot (such as `media`) must
+  // travel with the CSS.
+  private emitLinkReplacementMutation(
+    linkEl: HTMLLinkElement,
+    id: number,
+    cssText: string,
+  ) {
+    const attributes: Record<string, string | null> = {};
+    for (const { name, value } of Array.from(linkEl.attributes)) {
+      if (name === 'rel' || name === 'href') continue;
+      attributes[name] = transformAttribute(
+        linkEl.ownerDocument,
+        'link',
+        toLowerCase(name),
+        value,
+        linkEl,
+      );
+    }
+    attributes._cssText = cssText;
+    for (const [name, value] of Object.entries(attributes)) {
+      attributes[name] = maskAttributeValue({
+        element: linkEl,
+        name,
+        value,
+        maskAllElementAttributes: this.maskAllElementAttributes,
+        maskAttributeFn: this.maskAttributeFn,
+      });
+    }
+    this.mutationCb({
+      adds: [],
+      removes: [],
+      texts: [],
+      attributes: [{ id, attributes }],
+    });
   }
 
   private emitCssTextMutation(

@@ -9,6 +9,7 @@ import {
   beginSnapshotCostTracking,
   endSnapshotCostTracking,
   noteVisibilityChange,
+  resetStylesheetLoadTracking,
 } from '@posthog/rrweb-snapshot';
 import {
   initObservers,
@@ -1166,6 +1167,8 @@ function record<T = eventWithTime>(
         // abort the teardown below and leak observers and listeners
       }
       deferredStylesheetInlining = undefined;
+      // stylesheet load tracking is not tied to the observers, so it would outlive the stop
+      resetStylesheetLoadTracking();
       callAllSafely(handlers);
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();

@@ -543,20 +543,23 @@ function trackStylesheetUntilReady(
     once: true,
   });
 
-  // A sheet on a slow network can load long after the last check, so the
-  // checks leave the load listener in place unless the link is gone.
+  // A sheet on a slow network can load at any time, so the checks go on at
+  // the last delay until the link loads, fails, leaves the DOM, or a full
+  // snapshot or stop resets the tracking.
   let timer: ReturnType<typeof setTimeout> | undefined;
   const scheduleCheck = (checkIndex: number) => {
-    if (checkIndex >= checkDelaysMs.length) return;
-    timer = setTimeout(() => {
-      if (!link.isConnected) {
-        stopTracking();
-      } else if (isSheetReady()) {
-        fire();
-      } else {
-        scheduleCheck(checkIndex + 1);
-      }
-    }, checkDelaysMs[checkIndex]);
+    timer = setTimeout(
+      () => {
+        if (!link.isConnected) {
+          stopTracking();
+        } else if (isSheetReady()) {
+          fire();
+        } else {
+          scheduleCheck(checkIndex + 1);
+        }
+      },
+      checkDelaysMs[Math.min(checkIndex, checkDelaysMs.length - 1)],
+    );
   };
   controller.signal.addEventListener('abort', () => clearTimeout(timer), {
     once: true,
