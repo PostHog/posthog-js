@@ -10,6 +10,7 @@ SDK usage examples and code snippets live in the official documentation so they 
 ## Documentation
 
 - [JavaScript library docs](https://posthog.com/docs/libraries/js)
+- [Higher-assurance browser installation](./SECURITY.md) — pinned, locally bundled SDK with runtime script loading disabled
 
 ## Single script tag
 

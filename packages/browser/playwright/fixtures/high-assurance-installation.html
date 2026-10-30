@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Higher-assurance installation fixture</title>
+    </head>
+    <body>
+        <h1>Customer application</h1>
+        <!-- Intentionally no CSP: a blocked script must not hide a recipe regression. -->
+        <script type="module">
+            const params = new URLSearchParams(location.search)
+            const withGlobalLoader = () => import('../../dist/module.mjs')
+            if (params.get('loader') === 'before') {
+                await withGlobalLoader()
+            }
+
+            // These built modules are the targets of the public no-external subpaths.
+            const { default: posthog } = await import(
+                params.get('bundle') === 'full'
+                    ? '../../dist/module.full.no-external.js'
+                    : '../../dist/module.no-external.js'
+            )
+            if (params.get('loader') === 'after') {
+                await withGlobalLoader()
+            }
+
+            posthog.init('phc_high_assurance', {
+                api_host: '/ingest',
+                disable_external_dependency_loading: true,
+                opt_in_site_apps: false,
+                disable_web_experiments: true,
+                disable_surveys: true,
+                disable_product_tours: true,
+                disable_conversations: true,
+                disable_session_recording: true,
+
+                // Test-only wire readability and automation support; not security controls.
+                request_batching: false,
+                disable_compression: true,
+                opt_out_useragent_filter: true,
+            })
+            window.highAssurancePosthog = posthog
+            window.highAssuranceFixtureReady = true
+        </script>
+    </body>
+</html>

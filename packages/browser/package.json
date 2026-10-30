@@ -62,6 +62,7 @@
     "module": "dist/module.mjs",
     "types": "dist/module.d.ts",
     "files": [
+        "SECURITY.md",
         "lib/*",
         "dist/*",
         "test-fixtures/*.json",
