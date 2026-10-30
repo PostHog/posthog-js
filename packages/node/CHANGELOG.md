@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.61.0
+
+### Minor Changes
+
+- [#5418](https://github.com/PostHog/posthog-js/pull/5418) [`c705824`](https://github.com/PostHog/posthog-js/commit/c705824357b00a1187302224a58f478d1f652a54) Thanks [@mayteio](https://github.com/mayteio)! - Send transactional email from a PostHog email template with `posthog.emails.send()`, using the new `appHost`, `emailRequestTimeoutMs` and `emailRequestMaxRetries` client options. Read what happened to a sent email with `posthog.emails.get(id)`, using the message ID that `send()` returned.
+  (2026-10-30)
+
+### Patch Changes
+
+- Updated dependencies [[`c705824`](https://github.com/PostHog/posthog-js/commit/c705824357b00a1187302224a58f478d1f652a54)]:
+  - @posthog/core@1.62.0
+
 ## 5.60.1
 
 ### Patch Changes

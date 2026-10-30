@@ -455,7 +455,7 @@ const entrypointTargets = entrypoints.map((file) => {
             ...(outputFormat === 'cjs' ? { exports: 'named' } : {}),
         })),
         plugins: [
-            ...(fileName === 'loader' ? [loaderMethods()] : []),
+            ...(fileName === 'loader' || fileName === 'loader-bootstrap' ? [loaderMethods()] : []),
             ...pluginsForThisFile,
             visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true }),
         ],
