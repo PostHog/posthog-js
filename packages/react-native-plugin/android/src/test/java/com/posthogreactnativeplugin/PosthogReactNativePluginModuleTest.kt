@@ -70,7 +70,7 @@ class PosthogReactNativePluginModuleTest {
 
       applyScreenshotConfig(map, config)
 
-      assertEquals(1f, config.screenshotScale)
+      assertNull(config.screenshotScale)
       assertEquals(30, config.screenshotCompressionQuality)
       assertEquals(PostHogScreenshotColorMode.ARGB_8888, config.screenshotColorMode)
     }
@@ -78,7 +78,7 @@ class PosthogReactNativePluginModuleTest {
 
   @Test
   fun `screenshot scale is independent and uses native clamping without float overflow`() {
-    val cases = listOf(0.5 to 0.5f, 0.0 to 0.1f, -Double.MAX_VALUE to 0.1f, Double.MAX_VALUE to 1f)
+    val cases = listOf(1.0 to 1f, 0.5 to 0.5f, 0.0 to 0.1f, -Double.MAX_VALUE to 0.1f, Double.MAX_VALUE to 1f)
     for ((value, expected) in cases) {
       val config = PostHogSessionReplayConfig()
 
@@ -91,13 +91,13 @@ class PosthogReactNativePluginModuleTest {
   }
 
   @Test
-  fun `non-finite screenshot scale uses full resolution`() {
+  fun `non-finite screenshot scale preserves the native default`() {
     for (value in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
       val config = PostHogSessionReplayConfig()
 
       applyScreenshotConfig(JavaOnlyMap.of("screenshotScale", value), config)
 
-      assertEquals(1f, config.screenshotScale)
+      assertNull(config.screenshotScale)
     }
   }
 
@@ -110,7 +110,7 @@ class PosthogReactNativePluginModuleTest {
       applyScreenshotConfig(JavaOnlyMap.of("screenshotCompressionQuality", value), config)
 
       assertEquals(expected, config.screenshotCompressionQuality)
-      assertEquals(1f, config.screenshotScale)
+      assertNull(config.screenshotScale)
       assertEquals(PostHogScreenshotColorMode.ARGB_8888, config.screenshotColorMode)
     }
   }

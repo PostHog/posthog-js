@@ -167,7 +167,6 @@ class PosthogReactNativePluginModule(
               val throttleDelayMs = getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
 
               sessionReplay = sessionReplayEnabled
-              sessionReplayConfig.screenshot = true
               sessionReplayConfig.captureTouches = getBoolean(sdkReplayConfig, "captureTouches", true)
               sessionReplayConfig.captureLogcat = captureLog
               sessionReplayConfig.throttleDelayMs = throttleDelayMs.toLong()
@@ -871,10 +870,10 @@ internal fun applyScreenshotConfig(
   map: ReadableMap?,
   config: PostHogSessionReplayConfig,
 ) {
-  getDoubleOrNull(map, "screenshotScale")?.let { scale ->
-    // Keep finite values within Float range; the native setter clamps to its supported range.
+  getDoubleOrNull(map, "screenshotScale")?.takeIf { it.isFinite() }?.let { scale ->
+    // Keep values within Float range; the native setter clamps to its supported range.
     val floatMax = Float.MAX_VALUE.toDouble()
-    config.screenshotScale = if (scale.isFinite()) scale.coerceIn(-floatMax, floatMax).toFloat() else 1f
+    config.screenshotScale = scale.coerceIn(-floatMax, floatMax).toFloat()
   }
   getDoubleOrNull(map, "screenshotCompressionQuality")?.takeIf { it.isFinite() }?.let { quality ->
     config.screenshotCompressionQuality = quality.toInt()
