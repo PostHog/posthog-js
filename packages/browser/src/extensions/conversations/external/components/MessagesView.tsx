@@ -9,7 +9,6 @@ import { formatRelativeTime } from './utils'
 
 interface MessagesViewProps {
     styles: ReturnType<typeof getStyles>
-    primaryColor: string
     placeholderText: string
     messages: Message[]
     inputValue: string
@@ -23,15 +22,7 @@ interface MessagesViewProps {
     messagesEndRef: (el: HTMLDivElement | null) => void
 }
 
-function MessageBubble({
-    message,
-    styles,
-    primaryColor,
-}: {
-    message: Message
-    styles: ReturnType<typeof getStyles>
-    primaryColor: string
-}) {
+function MessageBubble({ message, styles }: { message: Message; styles: ReturnType<typeof getStyles> }) {
     const isCustomer = message.author_type === 'customer'
     const messageStyle = {
         ...styles.message,
@@ -51,7 +42,7 @@ function MessageBubble({
                     content={message.content}
                     isGreeting={message.id === 'greeting'}
                     isCustomer={isCustomer}
-                    primaryColor={primaryColor}
+                    linkColor={(isCustomer ? styles.messageLinkCustomer : styles.messageLinkAgent).color}
                 />
             </div>
             <div style={styles.messageTime}>{formatRelativeTime(message.created_at)}</div>
@@ -61,7 +52,6 @@ function MessageBubble({
 
 export function MessagesView({
     styles,
-    primaryColor,
     placeholderText,
     messages,
     inputValue,
@@ -78,7 +68,7 @@ export function MessagesView({
         <>
             <div style={styles.messages}>
                 {messages.map((message) => (
-                    <MessageBubble key={message.id} message={message} styles={styles} primaryColor={primaryColor} />
+                    <MessageBubble key={message.id} message={message} styles={styles} />
                 ))}
                 <div ref={messagesEndRef} />
             </div>
@@ -103,7 +93,7 @@ export function MessagesView({
                         autoFocus
                     />
                     <SendMessageButton
-                        primaryColor={primaryColor}
+                        styles={styles}
                         inputValue={inputValue}
                         isLoading={isLoading}
                         handleSendMessage={onSendMessage}

@@ -2,6 +2,7 @@ import { LOAD_EXT_NOT_FOUND } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import {
     ConversationsRemoteConfig,
+    ConversationsTheme,
     GetMessagesResponse,
     GetTicketsOptions,
     GetTicketsResponse,
@@ -46,6 +47,10 @@ export class PostHogConversations implements Extension {
     private _resetGeneration: number = 0
     // open()/close() called before the lazy bundle has loaded. Applied once the manager exists.
     private _pendingPanelAction: 'open' | 'close' | null = null
+    // Every setTheme() patch merged together, so a manager created after the call (late bundle
+    // load, or a new manager after reset()) gets it too. reset() keeps it: the theme belongs to
+    // the app, not to the visitor whose data reset() clears.
+    private _theme: ConversationsTheme | null = null
 
     constructor(private _instance: PostHog) {}
 
@@ -206,6 +211,9 @@ export class PostHogConversations implements Extension {
             return
         }
 
+        if (this._theme) {
+            this._conversationsManager.setTheme(this._theme)
+        }
         this._applyPendingPanelAction()
     }
 
@@ -285,6 +293,21 @@ export class PostHogConversations implements Extension {
         }
         this._pendingPanelAction = null
         this._conversationsManager.close()
+    }
+
+    /**
+     * Change the widget theme. The patch is merged over the current theme, which starts from
+     * `conversations.theme` in the init config. Safe to call before conversations have loaded.
+     *
+     * @example
+     * posthog.conversations.setTheme({ colorScheme: 'dark' })
+     *
+     * @example
+     * posthog.conversations.setTheme({ primary: '#111827', launcherShadow: 'none' })
+     */
+    setTheme(theme: ConversationsTheme): void {
+        this._theme = { ...this._theme, ...theme, dark: { ...this._theme?.dark, ...theme?.dark } }
+        this._conversationsManager?.setTheme(theme)
     }
 
     /**

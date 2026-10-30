@@ -1,4 +1,5 @@
 export type { ConversationsRemoteConfig, WidgetPosition } from '@posthog/browser-common'
+export type { ConversationsConfig, ConversationsTheme, ConversationsThemeColors } from '@posthog/types'
 
 /**
  * Author types for messages in a conversation

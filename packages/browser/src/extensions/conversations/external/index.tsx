@@ -16,6 +16,7 @@ import {
     RequestRestoreLinkPayload,
     RequestRestoreLinkResponse,
     TicketStatus,
+    ConversationsTheme,
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
@@ -32,6 +33,8 @@ import {
 import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { createConversationsError, isConversationsError } from './errors'
+import { buildThemeCss, mergeThemes, WIDGET_CONTAINER_ID } from './theme'
+import { prepareStylesheet } from '@posthog/browser-common/utils/stylesheet-loader'
 import type { RequestResponse } from '@posthog/types'
 
 const logger = createLogger('[ConversationsManager]')
@@ -85,7 +88,6 @@ const createInvalidConversationsResponseError = (operation: string, logFailure: 
     return createConversationsError('invalid_response', message)
 }
 
-const WIDGET_CONTAINER_ID = 'ph-conversations-widget-container'
 // Polling cadence. The widget polls faster while open (so replies feel live) and
 // much slower while closed (the badge can lag a few seconds). Idle widgets with no
 // conversation don't poll at all — see _hasSomethingToPoll.
@@ -117,6 +119,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _persistence: ConversationsPersistence
     private _widgetRef: ConversationsWidget | null = null
     private _containerElement: HTMLDivElement | null = null
+    private _themeStyleElement: HTMLStyleElement | null = null
+    // Patches from setTheme(), applied over config.conversations.theme
+    private _themeOverrides: ConversationsTheme = {}
     private _currentTicketId: string | null = null
     private _pollTimeoutId: number | null = null
     // Guards against a second _startPolling() while the first poll is still in flight
@@ -1308,6 +1313,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (!this._isWidgetRendered || !this._containerElement) {
             return
         }
+        this._attachThemeStyle()
         // Still in the DOM — nothing to do
         if (this._containerElement.isConnected) {
             return
@@ -1389,6 +1395,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             this._containerElement.remove()
             this._containerElement = null
         }
+        this._removeThemeStyle()
         this._widgetRef = null
         this._isWidgetRendered = false
         this._widgetInitGeneration++
@@ -1447,6 +1454,49 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     isVisible(): boolean {
         return this._isWidgetRendered
+    }
+
+    /**
+     * Merge a theme patch over the current theme and restyle the widget.
+     * Unset values keep their current value; values set to undefined fall back to the init or default theme.
+     */
+    setTheme(theme: ConversationsTheme): void {
+        this._themeOverrides = mergeThemes(this._themeOverrides, theme)
+        if (this._themeStyleElement) {
+            this._applyTheme()
+        }
+    }
+
+    /** Write the theme stylesheet, creating it on first use. */
+    private _applyTheme(): void {
+        if (!document) {
+            return
+        }
+        const css = buildThemeCss(
+            this._config.color,
+            mergeThemes(this._posthog.config.conversations?.theme, this._themeOverrides)
+        )
+        if (this._themeStyleElement) {
+            this._themeStyleElement.textContent = css
+        } else {
+            this._themeStyleElement = prepareStylesheet(document, css, this._posthog)
+            if (!this._themeStyleElement) {
+                return
+            }
+            this._themeStyleElement.setAttribute('data-ph-conversations-theme', '')
+        }
+        this._attachThemeStyle()
+    }
+
+    private _attachThemeStyle(): void {
+        if (this._themeStyleElement && !this._themeStyleElement.isConnected) {
+            ;(document?.head || document?.body)?.appendChild(this._themeStyleElement)
+        }
+    }
+
+    private _removeThemeStyle(): void {
+        this._themeStyleElement?.remove()
+        this._themeStyleElement = null
     }
 
     /** Get tickets list for the current widget session or verified identity */
@@ -1701,6 +1751,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             this._containerElement.remove()
             this._containerElement = null
         }
+        this._removeThemeStyle()
 
         this._widgetRef = null
 
@@ -1756,6 +1807,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             document.body.appendChild(container)
         }
         this._containerElement = container
+        this._applyTheme()
 
         // Render widget with ref
         render(
