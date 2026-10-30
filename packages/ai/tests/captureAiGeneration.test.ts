@@ -79,6 +79,7 @@ describe('captureAiGeneration', () => {
     })
     expect(event.properties.$ai_tools).toEqual([{ type: 'function', function: { name: 'foo', parameters: {} } }])
     expect(event.properties.$process_person_profile).toBeUndefined()
+    expect(event.options).toBeUndefined()
   })
 
   it.each([
@@ -96,17 +97,33 @@ describe('captureAiGeneration', () => {
     }
   })
 
-  it('auto-generates a traceId and uses it as distinctId when missing', async () => {
+  it.each([undefined, '', '  '])(
+    'auto-generates a traceId and uses it as a personless distinctId when the distinctId is %j',
+    async (distinctId) => {
+      const client = buildClient()
+
+      await captureAiGeneration(client, { ...baseRequiredOptions, distinctId })
+
+      const event = (client.capture as vi.Mock).mock.calls[0][0]
+      expect(event.properties.$ai_trace_id).toEqual(expect.any(String))
+      expect(event.properties).not.toHaveProperty('$ai_latency')
+      expect(event.distinctId).toBe(event.properties.$ai_trace_id)
+      expect(event.properties.$process_person_profile).toBe(false)
+      expect(event.options).toEqual({ process_person_profile: false })
+    }
+  )
+
+  it('stays personless on posthog-node 6 when a process_person_profile option is registered', async () => {
+    const { PostHog: RealPostHog } = await vi.importActual<typeof import('posthog-node')>('posthog-node')
+    const posthog = new RealPostHog('TEST_API_KEY', { host: 'http://example.com' })
+    await posthog.registerOptions({ process_person_profile: true })
     const client = buildClient()
 
     await captureAiGeneration(client, baseRequiredOptions)
+    const message = await posthog.prepareEventMessage((client.capture as vi.Mock).mock.calls[0][0])
+    await posthog.shutdown()
 
-    const event = (client.capture as vi.Mock).mock.calls[0][0]
-    expect(event.properties.$ai_trace_id).toEqual(expect.any(String))
-    expect(event.properties).not.toHaveProperty('$ai_latency')
-    expect(event.distinctId).toBe(event.properties.$ai_trace_id)
-    // Anonymous events disable person processing
-    expect(event.properties.$process_person_profile).toBe(false)
+    expect(message.options).toEqual({ process_person_profile: false })
   })
 
   it('honours captureImmediate by awaiting captureImmediate instead of capture', async () => {

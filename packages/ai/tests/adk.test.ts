@@ -480,15 +480,28 @@ describe('PostHogADKPlugin', () => {
       expect(capturedEvent(client).distinctId).toBe('adk-user')
     })
 
-    it('captures anonymously (personless) when there is no distinctId or userId', async () => {
-      plugin = new PostHogADKPlugin({ client })
-      const ctx = createContext({ userId: '' })
+    it('falls back to the ADK userId when the distinctId option is only whitespace', async () => {
+      plugin = new PostHogADKPlugin({ client, distinctId: '  ' })
+      const ctx = createContext({ userId: 'adk-user' })
       await plugin.beforeModelCallback({ callbackContext: ctx, llmRequest: createRequest() })
       await plugin.afterModelCallback({ callbackContext: ctx, llmResponse: createResponse() })
-      const event = capturedEvent(client)
-      expect(event.distinctId).toBe('inv_123')
-      expect(event.properties.$process_person_profile).toBe(false)
+      expect(capturedEvent(client).distinctId).toBe('adk-user')
+      expect(capturedEvent(client).options).toBeUndefined()
     })
+
+    it.each(['', '  '])(
+      'captures anonymously (personless) when there is no distinctId and the userId is %j',
+      async (userId) => {
+        plugin = new PostHogADKPlugin({ client })
+        const ctx = createContext({ userId })
+        await plugin.beforeModelCallback({ callbackContext: ctx, llmRequest: createRequest() })
+        await plugin.afterModelCallback({ callbackContext: ctx, llmResponse: createResponse() })
+        const event = capturedEvent(client)
+        expect(event.distinctId).toBe('inv_123')
+        expect(event.properties.$process_person_profile).toBe(false)
+        expect(event.options).toEqual({ process_person_profile: false })
+      }
+    )
   })
 
   it('redacts input and output content in privacy mode', async () => {

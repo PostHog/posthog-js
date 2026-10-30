@@ -29,7 +29,7 @@ import {
 import { summarizeErrorForPrivacy } from '../serializeError'
 import { version } from '../../package.json'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
-import { captureAiEvent, isFullAiCaptureEnabled } from '../captureAiEvent'
+import { captureAiEvent, isFullAiCaptureEnabled, personlessOptions, userDistinctId } from '../captureAiEvent'
 import { extractCacheWriteTokens } from '../openai/utils'
 
 /**
@@ -172,17 +172,9 @@ export class PostHogTracingProcessor implements TracingProcessor {
 
   private _getDistinctId(trace: Trace | null): string | undefined {
     if (typeof this._distinctId === 'function') {
-      if (trace) {
-        const result = this._distinctId(trace)
-        if (result) {
-          return String(result)
-        }
-      }
-      return undefined
-    } else if (this._distinctId) {
-      return String(this._distinctId)
+      return trace ? userDistinctId(this._distinctId(trace)) : undefined
     }
-    return undefined
+    return userDistinctId(this._distinctId)
   }
 
   private _withPrivacyMode(value: unknown): unknown {
@@ -242,6 +234,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
         event,
         properties: finalProperties,
         groups: Object.keys(this._groups).length > 0 ? this._groups : undefined,
+        // `properties` holds only values this processor built, so the flag here is its own personless marker.
+        ...personlessOptions(properties.$process_person_profile === false),
       }
 
       captureAiEvent(this._client, eventMessage)

@@ -11,7 +11,7 @@ import type {
 import type { EventMessage, PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
 import { version } from '../../package.json'
-import { captureAiEvent, captureAiEventImmediate } from '../captureAiEvent'
+import { captureAiEvent, captureAiEventImmediate, personlessOptions, userDistinctId } from '../captureAiEvent'
 import { captureAiGeneration } from '../captureAiGeneration'
 import type { CaptureAiGenerationOptions } from '../captureAiGeneration'
 import { formatAiError } from '../serializeError'
@@ -834,6 +834,7 @@ export class PostHogClaudeAgentProcessor {
         ...(distinctId ? {} : { $process_person_profile: false }),
       },
       groups: trace.groups,
+      ...personlessOptions(!distinctId),
     }
 
     try {
@@ -887,8 +888,7 @@ function resolveDistinctId(resolver: DistinctIdResolver | undefined, result?: SD
     if (!result) {
       return undefined
     }
-    const resolved = resolver(result)
-    return resolved ? String(resolved) : undefined
+    return userDistinctId(resolver(result))
   }
-  return resolver ? String(resolver) : undefined
+  return userDistinctId(resolver)
 }

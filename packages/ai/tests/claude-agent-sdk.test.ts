@@ -762,7 +762,22 @@ describe('Claude Agent SDK integration', () => {
     const generation = capturedEvents(client, '$ai_generation')[0]
     expect(generation.distinctId).toBe('sess_123')
     expect(generation.properties.$process_person_profile).toBeUndefined()
+    expect(generation.options).toBeUndefined()
+    expect(trace.options).toBeUndefined()
     expect(generation.properties.environment).toBe('production')
+  })
+
+  it.each([undefined, '', '  '])('captures personless events when the distinct ID is %j', async (distinctId) => {
+    const client = createMockClient()
+    queryMock.mockReturnValue(scriptedQuery([messageStart(), messageStop(), resultMessage()]))
+
+    await drain(query({ prompt: 'Hello', posthog: { client, distinctId } }))
+
+    for (const event of [capturedEvents(client, '$ai_trace')[0], capturedEvents(client, '$ai_generation')[0]]) {
+      expect(event.distinctId).toBe(event.properties.$ai_trace_id)
+      expect(event.properties.$process_person_profile).toBe(false)
+      expect(event.options).toEqual({ process_person_profile: false })
+    }
   })
 
   it('rotates turn state when result processing fails before trace capture', async () => {
