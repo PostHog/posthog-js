@@ -4,12 +4,14 @@ import {
   getSuspensionGeneration,
   maskAttributeValue,
   nowMs,
+  onceLinkStylesheetUpToDate,
   recordDeferredStylesheetFailure,
   recordDeferredStylesheetSlice,
   recordStylesheetCost,
   resetStylesheetLoadTracking,
   runNonDeferrableStylesheetWork,
   stringifyRule,
+  stringifyStylesheet,
 } from '@posthog/rrweb-snapshot';
 import type {
   MaskAttributeFn,
@@ -229,6 +231,31 @@ export class StylesheetManager {
         pending.invalidate();
       }
     }
+  }
+
+  /**
+   * Inline the sheet that a `<link>` loads after a `rel` or `href` change, so
+   * replay does not keep the previous sheet or depend on fetching the new one.
+   */
+  public inlineLinkStylesheetAfterChange(
+    linkEl: HTMLLinkElement,
+    id: number,
+  ): void {
+    onceLinkStylesheetUpToDate(linkEl, () => {
+      if (!linkEl.isConnected) {
+        return;
+      }
+      let sheet: CSSStyleSheet | null = null;
+      try {
+        sheet = linkEl.sheet;
+      } catch (e) {
+        //
+      }
+      const cssText = sheet && stringifyStylesheet(sheet);
+      if (cssText) {
+        this.emitCssTextMutation(linkEl, id, cssText);
+      }
+    });
   }
 
   /** One-call variant of {@link beginDeferredLinkInlining}: the whole sheet in a single slice. */

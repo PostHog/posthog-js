@@ -1814,6 +1814,77 @@ describe('record', function (this: ISuite) {
 
       await assertSnapshot(ctx.events);
     });
+
+    const attributeMutations = () =>
+      ctx.events.flatMap((e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        e.data.source === IncrementalSource.Mutation
+          ? e.data.attributes
+          : [],
+      );
+
+    it('inlines a preload link once it becomes a stylesheet', async () => {
+      await ctx.page.evaluate((serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'preload');
+        link.setAttribute('as', 'style');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?async`);
+        link.onload = () => {
+          link.onload = null;
+          link.rel = 'stylesheet';
+        };
+        document.head.appendChild(link);
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+      }, serverURL);
+
+      const cssTextMutation = await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+
+      expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+      expect(
+        attributeMutations().find((m) => m.attributes.rel === 'stylesheet')
+          ?.id,
+      ).toBe(cssTextMutation.id);
+    });
+
+    it('records the new href and inlines the new sheet when a stylesheet link changes href', async () => {
+      await ctx.page.evaluate(async (serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+        await new Promise((resolve) => {
+          link.onload = resolve;
+          document.head.appendChild(link);
+        });
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=2`);
+      }, serverURL);
+
+      const cssTextMutation = await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+
+      const hrefMutation = attributeMutations().find(
+        (m) => 'href' in m.attributes,
+      );
+      expect(hrefMutation?.attributes.href).toBe(
+        `${serverURL}/html/assets/style.css?v=2`,
+      );
+      expect(cssTextMutation.id).toBe(hrefMutation?.id);
+      expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+    });
   });
 
   it('captures CORS stylesheets that are still loading', async () => {

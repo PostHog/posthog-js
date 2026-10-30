@@ -12,6 +12,8 @@ import snapshot, {
   wasMaxDepthReached,
   resetMaxDepthState,
   resetStylesheetLoadTracking,
+  onceLinkStylesheetUpToDate,
+  isStylesheetLink,
   genId,
 } from './snapshot';
 import rebuild, {
@@ -42,5 +44,7 @@ export {
   wasMaxDepthReached,
   resetMaxDepthState,
   resetStylesheetLoadTracking,
+  onceLinkStylesheetUpToDate,
+  isStylesheetLink,
   genId,
 };

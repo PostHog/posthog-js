@@ -14,6 +14,7 @@ import {
   nowMs,
   getSuspensionGeneration,
   recordMutationCost,
+  isStylesheetLink,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -616,6 +617,25 @@ export default class MutationBuffer {
       adds,
     };
 
+    const stylesheetLinksWithNewSource: Array<{
+      link: HTMLLinkElement;
+      id: number;
+    }> = [];
+    if (this.inlineStylesheet) {
+      for (const { id, attributes } of payload.attributes) {
+        if (!('rel' in attributes) && !('href' in attributes)) continue;
+        const node = this.mirror.getNode(id) as HTMLLinkElement | null;
+        if (
+          node?.nodeName === 'LINK' &&
+          isStylesheetLink(node.getAttribute('rel')) &&
+          node.getAttribute('href') &&
+          !node.disabled
+        ) {
+          stylesheetLinksWithNewSource.push({ link: node, id });
+        }
+      }
+    }
+
     // Reset before the empty-payload return: these collections strongly
     // reference DOM nodes, and payload holds its own references.
     this.texts = [];
@@ -640,6 +660,11 @@ export default class MutationBuffer {
     }
 
     this.mutationCb(payload);
+
+    // after the payload, so replay applies the new rel/href before the CSS that replaces the link
+    for (const { link, id } of stylesheetLinksWithNewSource) {
+      this.stylesheetManager.inlineLinkStylesheetAfterChange(link, id);
+    }
   };
 
   public bufferBelongsToIframe = (iframeEl: HTMLIFrameElement): boolean => {
@@ -767,6 +792,9 @@ export default class MutationBuffer {
             this.attributes.push(item);
             this.attributeMap.set(m.target, item);
           }
+          // until a changed href loads, link.sheet still belongs to the previous href
+          const linkSheetIsStale =
+            tagNameLower === 'link' && attributeName === 'href';
           // Transform with the source name before representing an inaccessible
           // iframe's source under the final rr_src key.
           const transformedValue = transformAttribute(
@@ -774,7 +802,7 @@ export default class MutationBuffer {
             tagNameLower,
             toLowerCase(attributeName),
             value,
-            target,
+            linkSheetIsStale ? undefined : target,
             this.dataURLOptions,
           );
           if (isIframeSrc && !this.keepIframeSrcFn(value as string)) {

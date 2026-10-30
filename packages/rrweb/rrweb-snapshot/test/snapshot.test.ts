@@ -12,6 +12,7 @@ import snapshot, {
   resetMaxDepthState,
   resetStylesheetLoadTracking,
   serializeNodeWithId,
+  onceLinkStylesheetUpToDate,
 } from '../src/snapshot';
 import { elementNode, serializedNodeWithId } from '../src/types';
 import { Mirror, absolutifyURLs } from '../src/utils';
@@ -1211,6 +1212,59 @@ describe('preload link load-listener accumulation', () => {
     document.head.removeChild(link);
   });
 
+  it('delivers _cssText when a stylesheet finishes loading after the load timeout', () => {
+    const { link, setSheet } = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-slow.css',
+      sheet: null,
+    });
+
+    let deliveredNode: serializedNodeWithId | null = null;
+    serializeWithCapture(link, (_, node) => {
+      deliveredNode = node;
+    });
+
+    vi.advanceTimersByTime(5000);
+    expect(deliveredNode).toBeNull();
+
+    const fakeRules = [
+      { cssText: '.slow { color: green; }', parentStyleSheet: null },
+    ];
+    setSheet({
+      cssRules: fakeRules as unknown as CSSRuleList,
+      rules: fakeRules as unknown as CSSRuleList,
+      href: null,
+    } as unknown as CSSStyleSheet);
+    link.dispatchEvent(new Event('load'));
+
+    const attrs = ((deliveredNode as unknown as elementNode) ?? {}).attributes;
+    expect(attrs?._cssText).toContain('.slow');
+
+    document.head.removeChild(link);
+  });
+
+  it('stops tracking a link whose stylesheet fails to load', () => {
+    const { link, setSheet } = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-missing.css',
+      sheet: null,
+    });
+
+    let stylesheetLoadCalls = 0;
+    serializeWithCapture(link, () => {
+      stylesheetLoadCalls += 1;
+    });
+
+    link.dispatchEvent(new Event('error'));
+    setSheet({ cssRules: [], rules: [] } as unknown as CSSStyleSheet);
+    link.dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(5000);
+
+    expect(stylesheetLoadCalls).toBe(0);
+
+    document.head.removeChild(link);
+  });
+
   it('resetStylesheetLoadTracking tears down the previous session listener and re-tracks the link for the new session', () => {
     const { link, setSheet } = setupLink({
       rel: 'stylesheet',
@@ -1249,6 +1303,97 @@ describe('preload link load-listener accumulation', () => {
     expect(attrs._cssText).toContain('color: blue');
 
     document.head.removeChild(link);
+  });
+});
+
+describe('onceLinkStylesheetUpToDate', () => {
+  const createdLinks: HTMLLinkElement[] = [];
+
+  function linkWithSheetHref(attachedSheetHref: string | null) {
+    const link = document.createElement('link');
+    createdLinks.push(link);
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', 'https://example.com/theme-dark.css');
+    let currentSheet: CSSStyleSheet | null =
+      attachedSheetHref === null
+        ? null
+        : ({ href: attachedSheetHref } as unknown as CSSStyleSheet);
+    Object.defineProperty(link, 'sheet', {
+      configurable: true,
+      get: () => currentSheet,
+    });
+    document.head.appendChild(link);
+    return {
+      link,
+      attachNewSheet: () => {
+        currentSheet = { href: link.href } as unknown as CSSStyleSheet;
+      },
+    };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    resetStylesheetLoadTracking();
+    createdLinks.splice(0).forEach((link) => link.remove());
+    vi.useRealTimers();
+  });
+
+  it('waits for the next load while the attached sheet is from the previous href', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    expect(listener).not.toHaveBeenCalled();
+
+    attachNewSheet();
+    link.dispatchEvent(new Event('load'));
+    link.dispatchEvent(new Event('load'));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for the load when a link has no sheet yet', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(null);
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    expect(listener).not.toHaveBeenCalled();
+
+    attachNewSheet();
+    link.dispatchEvent(new Event('load'));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('notices the new sheet without a load event', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    vi.advanceTimersByTime(100);
+    expect(listener).not.toHaveBeenCalled();
+
+    attachNewSheet();
+    vi.advanceTimersByTime(200);
+    vi.advanceTimersByTime(60_000);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs at once when the attached sheet already belongs to the current href', () => {
+    const { link } = linkWithSheetHref('https://example.com/theme-dark.css');
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });
 

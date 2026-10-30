@@ -302,7 +302,7 @@ export function ignoreAttribute(
  * matters because `<link rel=preload as=style>` carries the same URL as the
  * stylesheet it preloads while applying no CSS of its own.
  */
-function isStylesheetLink(rel: unknown): boolean {
+export function isStylesheetLink(rel: unknown): boolean {
   if (typeof rel !== 'string') {
     return false;
   }
@@ -504,6 +504,68 @@ export function resetStylesheetLoadTracking(): void {
   stylesheetLoadTracked.clear();
 }
 
+function readLinkSheet(link: HTMLLinkElement): CSSStyleSheet | null {
+  try {
+    return link.sheet;
+  } catch (error) {
+    return null;
+  }
+}
+
+function trackStylesheetUntilReady(
+  link: HTMLLinkElement,
+  listener: () => unknown,
+  isSheetReady: () => boolean,
+  checkDelaysMs: readonly number[],
+) {
+  const controller = new AbortController();
+  const stopTracking = () => {
+    stylesheetLoadTracked.delete(link);
+    controller.abort();
+  };
+  let fired = false;
+  const fire = () => {
+    if (fired) return;
+    fired = true;
+    try {
+      listener();
+    } finally {
+      stopTracking();
+    }
+  };
+
+  link.addEventListener('load', fire, {
+    signal: controller.signal,
+    once: true,
+  });
+  link.addEventListener('error', stopTracking, {
+    signal: controller.signal,
+    once: true,
+  });
+
+  // A sheet on a slow network can load long after the last check, so the
+  // checks leave the load listener in place unless the link is gone.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleCheck = (checkIndex: number) => {
+    if (checkIndex >= checkDelaysMs.length) return;
+    timer = setTimeout(() => {
+      if (!link.isConnected) {
+        stopTracking();
+      } else if (isSheetReady()) {
+        fire();
+      } else {
+        scheduleCheck(checkIndex + 1);
+      }
+    }, checkDelaysMs[checkIndex]);
+  };
+  controller.signal.addEventListener('abort', () => clearTimeout(timer), {
+    once: true,
+  });
+  scheduleCheck(0);
+
+  stylesheetLoadTracked.set(link, controller);
+}
+
 function onceStylesheetLoaded(
   link: HTMLLinkElement,
   listener: () => unknown,
@@ -520,29 +582,46 @@ function onceStylesheetLoaded(
 
   if (styleSheetLoaded) return;
 
-  const controller = new AbortController();
-  let fired = false;
-  const fire = () => {
-    if (fired) return;
-    fired = true;
-    try {
-      listener();
-    } finally {
-      stylesheetLoadTracked.delete(link);
-      controller.abort();
-    }
+  trackStylesheetUntilReady(
+    link,
+    listener,
+    () => Boolean(readLinkSheet(link)),
+    [styleSheetLoadTimeout],
+  );
+}
+
+// Chrome 131 fires no load event when an already-loaded stylesheet link gets a
+// new href (Chrome 156 does), so a changed link is also checked on a backoff.
+const CHANGED_LINK_SHEET_CHECK_DELAYS_MS = [
+  100, 200, 400, 800, 1600, 3200, 6400, 12800, 25600,
+] as const;
+
+/**
+ * For a `<link rel=stylesheet>` whose `rel` or `href` just changed: until the
+ * new sheet loads, `link.sheet` is still the sheet of the previous `href`.
+ */
+export function onceLinkStylesheetUpToDate(
+  link: HTMLLinkElement,
+  listener: () => unknown,
+): void {
+  if (stylesheetLoadTracked.has(link)) return;
+
+  const sheetMatchesHref = () => {
+    const sheet = readLinkSheet(link);
+    return Boolean(sheet && sheet.href === link.href);
   };
 
-  const timer = setTimeout(fire, styleSheetLoadTimeout);
-  controller.signal.addEventListener('abort', () => clearTimeout(timer), {
-    once: true,
-  });
-  link.addEventListener('load', fire, {
-    signal: controller.signal,
-    once: true,
-  });
+  if (sheetMatchesHref()) {
+    listener();
+    return;
+  }
 
-  stylesheetLoadTracked.set(link, controller);
+  trackStylesheetUntilReady(
+    link,
+    listener,
+    sheetMatchesHref,
+    CHANGED_LINK_SHEET_CHECK_DELAYS_MS,
+  );
 }
 
 function serializeNode(
