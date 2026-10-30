@@ -28,13 +28,14 @@ The small loader exposes queued public SDK methods, including `people.set` and `
 
 Include the tag before application scripts that call `posthog`. Do not add `async` or `defer` if those scripts need the queue immediately. Calls before the full SDK loads are queued; synchronous getters cannot return SDK values yet. The loader does not buffer browser interactions or errors that happen before the SDK installs its listeners.
 
-| Attribute            | Purpose                                                                                                                                         |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data-project-token` | Project token fallback when the URL has no `project_token` value.                                                                               |
-| `data-api-host`      | Ingestion host, including relative proxy paths such as `/ingest`. Inferred for the standard US/EU asset hosts; required for custom asset hosts. |
-| `data-defaults`      | Defaults snapshot override. If neither this attribute nor `data-config.defaults` is set, the SDK uses `unset`.                                  |
-| `data-config`        | JSON object with SDK options, applied before initialization. Explicit `data-api-host` and `data-defaults` attributes take precedence.           |
-| `data-defer-init`    | Set to `true` to wait for an explicit `init()` call. Defaults to `false`.                                                                       |
+| Attribute             | Purpose                                                                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data-project-token`  | Project token fallback when the URL has no `project_token` value.                                                                               |
+| `data-api-host`       | Ingestion host, including relative proxy paths such as `/ingest`. Inferred for the standard US/EU asset hosts; required for custom asset hosts. |
+| `data-defaults`       | Defaults snapshot override. If neither this attribute nor `data-config.defaults` is set, the SDK uses `unset`.                                  |
+| `data-config`         | JSON object with SDK options, applied before initialization. Explicit `data-api-host` and `data-defaults` attributes take precedence.           |
+| `data-defer-init`     | Set to `true` to wait for an explicit `init()` call. Defaults to `false`.                                                                       |
+| `data-core-integrity` | Optional customer-pinned SHA-384 hash for the downloaded `array.js`. See [content integrity](./INTEGRITY.md).                                   |
 
 For consent-gated automatic installation, set `data-config='{"opt_out_capturing_by_default":true}'` on the tag before it executes.
 
@@ -62,6 +63,8 @@ To pin the SDK, use `/static/<version>/loader.js` for a release that includes th
 Fatal automatic-initialization configuration errors are reported even when debug mode is off. Invalid JSON configuration still prevents automatic initialization.
 
 The loader forwards its CSP nonce to the SDK script. Your CSP must still allow the SDK, its extensions, and event ingestion. An existing legacy stub or live global instance takes precedence: the loader never replaces it or switches its project token.
+
+For customer-pinned hashes of the loader, downloaded core, and optional scripts, see [pinning browser SDK content](./INTEGRITY.md).
 
 ## Input value autocapture
 
