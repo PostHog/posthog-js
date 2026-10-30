@@ -628,6 +628,17 @@ export function buildNodeWithSN(
         afterAppend(childNode, childN.id);
       }
     }
+    // A <select> ignores the `value` attribute, so with no `selected` option
+    // (masked inputs) it shows the first enabled option. Setting the property
+    // after the options exist leaves a masked value with no option chosen.
+    if (
+      n.type === NodeType.Element &&
+      n.tagName === 'select' &&
+      typeof n.attributes.value === 'string' &&
+      'selectedIndex' in node
+    ) {
+      (node as HTMLSelectElement).value = n.attributes.value;
+    }
   }
 
   return node;
