@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.62.0
+
+### Minor Changes
+
+- [#5418](https://github.com/PostHog/posthog-js/pull/5418) [`c705824`](https://github.com/PostHog/posthog-js/commit/c705824357b00a1187302224a58f478d1f652a54) Thanks [@mayteio](https://github.com/mayteio)! - `parseRetryAfterMs` takes an optional cap, so a caller can read a `Retry-After` longer than five minutes.
+  (2026-10-30)
+
 ## 1.61.2
 
 ### Patch Changes
