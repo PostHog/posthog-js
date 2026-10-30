@@ -117,8 +117,9 @@ type DeferredStylesheetInlining = {
    * `_cssText` mutations reach the recorder before teardown. Sheets estimated
    * not to fit in the remaining budget are abandoned (and counted) up front,
    * so one oversized sheet cannot starve the cheap sheets queued behind it.
+   * Returns the slices used.
    */
-  flush: () => void;
+  flush: () => number;
 };
 
 /**
@@ -235,7 +236,7 @@ export function inlineDeferredStylesheets(
     },
     flush: () => {
       if (cancelled) {
-        return;
+        return 0;
       }
       cancelled = true;
       pending?.cancel();
@@ -293,6 +294,7 @@ export function inlineDeferredStylesheets(
         task = null;
       }
       onDone();
+      return slices;
     },
   };
 }
@@ -593,6 +595,14 @@ function record<T = eventWithTime>(
     blockSelector,
   });
 
+  // the deferred queue goes first, and changed links get what is left of the shared cap
+  const flushStylesheetInlining = () => {
+    const slicesUsed = deferredStylesheetInlining?.flush() ?? 0;
+    stylesheetManager.flushChangedLinkInlining(
+      DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES - slicesUsed,
+    );
+  };
+
   const iframeManager = new IframeManager({
     mirror,
     mutationCb: wrappedMutationEmit,
@@ -822,7 +832,7 @@ function record<T = eventWithTime>(
         'pagehide',
         () => {
           try {
-            deferredStylesheetInlining?.flush();
+            flushStylesheetInlining();
           } catch (e) {
             // flush drives the user's emit/mask callbacks; their throw must
             // not surface on the host page's pagehide dispatch
@@ -1137,7 +1147,7 @@ function record<T = eventWithTime>(
       // finish the deferred CSS while the emit path is still wired up, so the
       // sheets this recording deferred don't silently vanish with it
       try {
-        deferredStylesheetInlining?.flush();
+        flushStylesheetInlining();
       } catch (e) {
         // flush drives the user's emit/mask callbacks; their throw must not
         // abort the teardown below and leak observers and listeners

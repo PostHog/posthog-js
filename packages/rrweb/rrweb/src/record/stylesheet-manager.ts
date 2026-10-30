@@ -6,6 +6,7 @@ import {
   nowMs,
   onceLinkStylesheetUpToDate,
   recordDeferredStylesheetFailure,
+  recordDeferredStylesheetsAbandoned,
   recordDeferredStylesheetSlice,
   recordStylesheetCost,
   resetStylesheetLoadTracking,
@@ -47,6 +48,14 @@ export type DeferredLinkInliningTask = {
    * manager stops tracking its sheet for mutation invalidation.
    */
   discard: () => void;
+};
+
+/** Inlining of one changed link's sheet; see {@link StylesheetManager.inlineLinkStylesheetAfterChange}. */
+type ChangedLinkJob = {
+  remainingRules: () => number;
+  /** Returns true once the job is done or dropped. */
+  runSlice: () => boolean;
+  drop: () => void;
 };
 
 /** One pending deferral's captured root sheet plus its cancellation hook. */
@@ -100,6 +109,7 @@ export class StylesheetManager {
     HTMLLinkElement,
     DeferredLinkInliningTask
   >();
+  private changedLinkJobs = new Set<ChangedLinkJob>();
   private mutationCb: mutationCallBack;
   private adoptedStyleSheetCb: adoptedStyleSheetCallback;
   private maskAllElementAttributes: boolean;
@@ -370,62 +380,101 @@ export class StylesheetManager {
     this.changedLinkTasks.set(linkEl, task);
     const release = () => {
       task.discard();
+      this.changedLinkJobs.delete(job);
       if (this.changedLinkTasks.get(linkEl) === task) {
         this.changedLinkTasks.delete(linkEl);
       }
     };
     const startedAtFullSnapshot = this.fullSnapshotCount;
-    const step = (deadline?: IdleDeadline) => {
-      try {
-        // a full snapshot inlines the link's current sheet itself, and a
-        // stop resets the mirror
-        if (
-          this.stopped ||
-          this.changedLinkTasks.get(linkEl) !== task ||
-          this.fullSnapshotCount !== startedAtFullSnapshot ||
-          recorderView.currentId() === -1 ||
-          this.isLinkBlocked(linkEl)
-        ) {
+    const job: ChangedLinkJob = {
+      remainingRules: () => task.remainingRules(),
+      runSlice: () => {
+        try {
+          // a full snapshot inlines the link's current sheet itself, and a
+          // stop resets the mirror
+          if (
+            this.stopped ||
+            this.changedLinkTasks.get(linkEl) !== task ||
+            this.fullSnapshotCount !== startedAtFullSnapshot ||
+            recorderView.currentId() === -1 ||
+            this.isLinkBlocked(linkEl)
+          ) {
+            release();
+            return true;
+          }
+          if (!task.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE)) {
+            return false;
+          }
           release();
-          return;
+          if (!sheetMutatedWhileInlining) {
+            return true;
+          }
+          if (restartsLeftAfterSheetMutation > 0) {
+            // replay keeps the previous sheet until this CSS arrives, and the
+            // mutated sheet's text already includes the recorded CSSOM change
+            this.inlineChangedLinkStylesheet(
+              linkEl,
+              recorderView,
+              restartsLeftAfterSheetMutation - 1,
+            );
+          } else {
+            recordDeferredStylesheetFailure();
+          }
+          return true;
+        } catch (e) {
+          // runs from an idle callback or a pagehide flush: a throwing consumer
+          // emit or mask callback must not surface on the customer's page
+          release();
+          return true;
         }
-        let slices = 0;
-        let finished: boolean;
-        do {
-          finished = task.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE);
-          slices += 1;
-        } while (
-          !finished &&
-          (deadline
-            ? !deadline.didTimeout && deadline.timeRemaining() > 5
-            : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
-        );
-        if (!finished) {
-          whenIdle(step);
-          return;
-        }
-        release();
-        if (!sheetMutatedWhileInlining) {
-          return;
-        }
-        if (restartsLeftAfterSheetMutation > 0) {
-          // replay keeps the previous sheet until this CSS arrives, and the
-          // mutated sheet's text already includes the recorded CSSOM change
-          this.inlineChangedLinkStylesheet(
-            linkEl,
-            recorderView,
-            restartsLeftAfterSheetMutation - 1,
-          );
-        } else {
-          recordDeferredStylesheetFailure();
-        }
-      } catch (e) {
-        // runs from an idle callback: a throwing consumer emit or mask
-        // callback must not surface as an uncaught error on the customer's page
-        release();
+      },
+      drop: release,
+    };
+    this.changedLinkJobs.add(job);
+    const step = (deadline?: IdleDeadline) => {
+      let slices = 0;
+      let done: boolean;
+      do {
+        done = job.runSlice();
+        slices += 1;
+      } while (
+        !done &&
+        (deadline
+          ? !deadline.didTimeout && deadline.timeRemaining() > 5
+          : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
+      );
+      if (!done) {
+        whenIdle(step);
       }
     };
     whenIdle(step);
+  }
+
+  /**
+   * Synchronously finish the pending changed-link CSS, for a page that is
+   * going away before its idle callbacks run. A sheet that cannot finish in
+   * what is left of `maxSlices` is dropped and counted, so it cannot starve
+   * the ones behind it. Returns the slices used.
+   */
+  public flushChangedLinkInlining(maxSlices: number): number {
+    let slices = 0;
+    // a restart after a CSSOM change adds its job to the set, and this loop visits it too
+    for (const job of this.changedLinkJobs) {
+      let done = false;
+      while (!done) {
+        const slicesNeeded =
+          Math.floor(job.remainingRules() / DEFERRED_STYLESHEET_RULES_PER_SLICE) +
+          1;
+        if (slicesNeeded > maxSlices - slices) {
+          job.drop();
+          recordDeferredStylesheetsAbandoned(1);
+          break;
+        }
+        done = job.runSlice();
+        slices += 1;
+      }
+    }
+    return slices;
   }
 
   /** One-call variant of {@link beginDeferredLinkInlining}: the whole sheet in a single slice. */
