@@ -80,7 +80,7 @@ export async function coreBuildIdentity(directory) {
   return { entry, digest: await treeDigest(dirname(entry)) }
 }
 
-async function documentFor(directory, role, pairId, suite) {
+async function documentFor(directory, role, pairId, suite, shardId) {
   const root = git(directory, 'rev-parse', '--show-toplevel')
   const manifest = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'))
   assert.equal(manifest.name, 'posthog-node')
@@ -95,6 +95,7 @@ async function documentFor(directory, role, pairId, suite) {
     suite,
     execution: {
       pair_id: pairId,
+      ...(shardId === undefined ? {} : { shard_id: shardId }),
       runtime: 'node',
       runtime_version: process.version,
       v8_version: process.versions.v8,
@@ -172,6 +173,44 @@ export function appendSample(benchmark, raw, repetition) {
   }
 }
 
+export function validateShardManifest(manifest) {
+  assert.deepEqual(Object.keys(manifest).sort(), ['manifest_version', 'sdk', 'shards'])
+  assert.equal(manifest.manifest_version, 1)
+  assert.equal(manifest.sdk, 'posthog-node')
+  assert.ok(Array.isArray(manifest.shards) && manifest.shards.length > 0 && manifest.shards.length <= 16)
+  const shardIds = new Set()
+  const workloadIds = new Set()
+  for (const shard of manifest.shards) {
+    assert.deepEqual(Object.keys(shard).sort(), ['id', 'workloads'])
+    assert.ok(typeof shard.id === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(shard.id), 'Invalid shard ID')
+    assert.ok(!shardIds.has(shard.id), `Duplicate shard ID: ${shard.id}`)
+    shardIds.add(shard.id)
+    assert.ok(Array.isArray(shard.workloads) && shard.workloads.length > 0, 'Empty shard workloads')
+    for (const id of shard.workloads) {
+      assert.ok(typeof id === 'string' && id.length > 0, 'Invalid workload ID')
+      assert.ok(!workloadIds.has(id), `Duplicate shard workload: ${id}`)
+      workloadIds.add(id)
+    }
+  }
+  for (const smoke of [false, true]) {
+    const inventory = workloads(smoke).map((spec) => spec.id)
+    assert.equal(new Set(inventory).size, inventory.length, 'Duplicate native workload ID')
+    assert.deepEqual([...workloadIds].sort(), inventory.sort(), 'Shards must exactly partition the native inventory')
+  }
+}
+
+export function selectWorkloads(manifest, { smoke = false, shard, filter } = {}) {
+  validateShardManifest(manifest)
+  assert.ok(shard === undefined || filter === undefined, '--shard cannot be combined with --filter')
+  const selected = shard === undefined ? undefined : manifest.shards.find((item) => item.id === shard)
+  assert.ok(shard === undefined || selected, `Unknown shard: ${shard}`)
+  const specs = workloads(smoke).filter((spec) =>
+    selected ? selected.workloads.includes(spec.id) : !filter || spec.id.startsWith(filter)
+  )
+  assert.ok(specs.length, 'No matching workloads')
+  return specs
+}
+
 export async function main(args = process.argv.slice(2), executeWorker = runWorker) {
   const { values } = parseArgs({
     args,
@@ -182,24 +221,26 @@ export async function main(args = process.argv.slice(2), executeWorker = runWork
       repetitions: { type: 'string', default: '6' },
       smoke: { type: 'boolean', default: false },
       filter: { type: 'string' },
+      shard: { type: 'string' },
     },
   })
   assert.ok(
     values.base && values.head && values.output,
-    'Usage: node run.mjs --base <built packages/node> --head <built packages/node> --output <directory> [--smoke] [--repetitions 6] [--filter flags.]'
+    'Usage: node run.mjs --base <built packages/node> --head <built packages/node> --output <directory> [--smoke] [--repetitions 6] [--filter flags. | --shard <id>]'
   )
   const repetitions = Number(values.repetitions)
   assert.ok(
     Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 30,
     'repetitions must be an integer from 1 to 30'
   )
-  const specs = workloads(values.smoke).filter((spec) => !values.filter || spec.id.startsWith(values.filter))
-  assert.ok(specs.length, 'No matching workloads')
+  const manifest = JSON.parse(await readFile(join(here, 'shards.json'), 'utf8'))
+  const specs = selectWorkloads(manifest, values)
   const output = resolve(values.output)
   const pairId = randomUUID()
   const suite = {
     id: 'node-sdk-performance',
-    version: 1,
+    version: 2,
+    specification: 'sdk-benchmarks/v1',
     source_commit: git(here, 'rev-parse', 'HEAD'),
     source_digest: await treeDigest(here),
     profile: values.smoke ? 'smoke' : 'full',
@@ -207,11 +248,15 @@ export async function main(args = process.argv.slice(2), executeWorker = runWork
     allocation_sampling: samplingOptions,
     transport: 'public fetch adapter; in-process JSON; no network',
     settling: 'two explicit GC requests separated by event-loop turns',
-    memory_sampling: 'operation checkpoints; lifetime high-water mark includes setup and warmup',
+    memory_sampling:
+      'every 32 load evaluations, every refresh, every 100 captures, and final operation; no forced GC during work; lifetime high-water mark includes setup and warmup',
+    warmup:
+      'two refreshes; otherwise min(operations, 32 for 1000 flags or 160); verified then phase reset and generation 0 reload',
   }
   const directories = { base: resolve(values.base), head: resolve(values.head) }
   const documents = {}
-  for (const role of ['base', 'head']) documents[role] = await documentFor(directories[role], role, pairId, suite)
+  for (const role of ['base', 'head'])
+    documents[role] = await documentFor(directories[role], role, pairId, suite, values.shard)
   await mkdir(output, { recursive: true })
   const save = async () => {
     for (const role of ['base', 'head'])

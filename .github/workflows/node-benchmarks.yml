@@ -9,22 +9,13 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    affected:
-        permissions:
-            contents: read
-        uses: ./.github/workflows/check-affected.yml
-        with:
-            package-name: posthog-node
-            additional-paths: |
-                .github/workflows/node-benchmarks.yml
-                .github/workflows/check-affected.yml
-                .github/actions/is-affected/action.yaml
-
     benchmark:
-        needs: affected
-        if: needs.affected.outputs.is-affected == 'true'
         runs-on: ubuntu-24.04
-        timeout-minutes: 30
+        timeout-minutes: 15
+        strategy:
+            fail-fast: false
+            matrix:
+                shard: [flags-single, flags-scaling, flags-memory, capture]
         permissions:
             contents: read
         env:
@@ -76,12 +67,66 @@ jobs:
               run: pnpm --filter posthog-node test:benchmarks
 
             - name: Measure paired base and head
+              id: measure
+              timeout-minutes: 12
               run: |
                   node packages/node/benchmarks/run.mjs \
                     --base "$BASE_WORKTREE/packages/node" \
                     --head "$GITHUB_WORKSPACE/packages/node" \
                     --output "$RESULTS" \
-                    --repetitions 6
+                    --repetitions 6 \
+                    --shard "${{ matrix.shard }}"
+
+            - name: Upload raw shard results
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: benchmark-shard-${{ matrix.shard }}
+                  path: |
+                      ${{ runner.temp }}/node-benchmark-results/base.json
+                      ${{ runner.temp }}/node-benchmark-results/head.json
+                      ${{ runner.temp }}/node-benchmark-results/revisions.json
+                  if-no-files-found: warn
+                  retention-days: 14
+
+    aggregate:
+        needs: benchmark
+        if: ${{ !cancelled() }}
+        runs-on: ubuntu-24.04
+        timeout-minutes: 5
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+                  persist-credentials: false
+
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  pattern: benchmark-shard-*
+                  path: ${{ runner.temp }}/node-benchmark-shards
+                  merge-multiple: false
+
+            - name: Collect and render benchmark comparison
+              uses: PostHog/.github/.github/actions/benchmark-report@04f8421ec4daa7f4066eaeb4c53621ba79ddc3ca # SDK benchmark reporting (PostHog/.github PR #84)
+              with:
+                  mode: collect
+                  source-status: ${{ needs.benchmark.result }}
+                  shard-manifest: packages/node/benchmarks/shards.json
+                  shard-directory: ${{ runner.temp }}/node-benchmark-shards
+                  output-directory: ${{ runner.temp }}/node-benchmark-report
+
+            - name: Upload rendered comparison
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: node-benchmark-report
+                  path: |
+                      ${{ runner.temp }}/node-benchmark-report/report.md
+                      ${{ runner.temp }}/node-benchmark-report/comparison.json
+                  if-no-files-found: ignore
+                  retention-days: 14
 
             - name: Upload raw benchmark results
               if: always()
@@ -89,7 +134,9 @@ jobs:
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: node-benchmark-results
-                  path: ${{ runner.temp }}/node-benchmark-results
+                  path: |
+                      ${{ runner.temp }}/node-benchmark-report/bundle.json
+                      ${{ runner.temp }}/node-benchmark-report/revisions.json
                   if-no-files-found: warn
                   retention-days: 14
 

@@ -1,0 +1,39 @@
+{
+  "manifest_version": 1,
+  "sdk": "posthog-node",
+  "shards": [
+    {
+      "id": "flags-single",
+      "workloads": [
+        "flags.single.boolean",
+        "flags.single.rollout",
+        "flags.single.variant",
+        "flags.single.property",
+        "flags.single.regex",
+        "flags.single.cohort",
+        "flags.single.early",
+        "flags.single.late",
+        "flags.single.no-match"
+      ]
+    },
+    {
+      "id": "flags-scaling",
+      "workloads": ["flags.all.10", "flags.all.100", "flags.all.1000"]
+    },
+    {
+      "id": "flags-memory",
+      "workloads": ["flags.load.1000", "flags.refresh.1000"]
+    },
+    {
+      "id": "capture",
+      "workloads": [
+        "capture.enqueue.32",
+        "capture.enqueue.4096",
+        "capture.drain.steady.32",
+        "capture.drain.steady.4096",
+        "capture.drain.burst.32",
+        "capture.drain.burst.4096"
+      ]
+    }
+  ]
+}
