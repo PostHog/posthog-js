@@ -3,35 +3,11 @@ import { document } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getQueryParam } from '@posthog/browser-common/utils/request-utils'
 import type { PostHogConfig } from '@posthog/types'
-import { version } from '../../package.json'
 import { assignableWindow } from '../utils/globals'
-import methods from 'virtual:posthog-loader-methods'
+import { createPostHogStub, QueuedInit } from '../utils/loader-stub'
+import { getSDKScriptURL } from '../utils/loader-script'
 
 const logger = createLogger('[Loader]')
-
-type QueuedCall = [string, ...unknown[]]
-type QueuedInit = [string, Partial<PostHogConfig>, string]
-
-function createStub(instanceName = 'posthog') {
-    const stub = Object.assign([] as QueuedCall[], { people: [] as QueuedCall[] })
-    for (const method of methods.split(' ')) {
-        const [namespace, nestedMethod] = method.split('.')
-        const queue = nestedMethod ? stub.people : stub
-        const name = nestedMethod || namespace
-        Object.defineProperty(queue, name, {
-            configurable: true,
-            enumerable: true,
-            writable: true,
-            value: (...args: unknown[]) => {
-                queue.push([name, ...args])
-            },
-        })
-    }
-    const name = instanceName === 'posthog' ? 'posthog' : 'posthog.' + instanceName
-    Object.defineProperty(stub, 'toString', { value: () => name + ' (stub)', configurable: true })
-    Object.defineProperty(stub.people, 'toString', { value: () => name + '.people (stub)', configurable: true })
-    return stub
-}
 
 function getAutoInit(script: HTMLScriptElement, origin: string): QueuedInit | undefined {
     // Putting the token in the URL path would require additional routing; a query keeps this file shared.
@@ -73,8 +49,12 @@ function getAutoInit(script: HTMLScriptElement, origin: string): QueuedInit | un
 }
 
 function load(): void {
-    const script = document?.currentScript
-    if (!document || !script || !('src' in script) || !script.src) {
+    if (!document) {
+        return
+    }
+    const script = document.currentScript
+    if (!script || !('src' in script) || !script.src) {
+        logger.critical('Load the PostHog loader as a classic script with a src attribute.')
         return
     }
     if (assignableWindow.posthog?.__SV || isFunction(assignableWindow.posthog?.init)) {
@@ -95,47 +75,17 @@ function load(): void {
     if (!deferInit && !initialization) {
         return
     }
+    assignableWindow.posthog = createPostHogStub(initialization)
 
-    const posthog = Object.assign(createStub(), {
-        __SV: 1,
-        _i: initialization ? [initialization] : [],
-    })
-    Object.defineProperty(posthog, 'init', {
-        value: (token: string, config: Partial<PostHogConfig> = {}, name?: string) => {
-            const instanceName = name || 'posthog'
-            const existing = Object.getOwnPropertyDescriptor(posthog, instanceName)?.value
-            const instance = instanceName === 'posthog' ? posthog : existing || createStub(instanceName)
-            if (instanceName !== 'posthog' && !existing) {
-                Object.defineProperty(posthog, instanceName, {
-                    value: instance,
-                    configurable: true,
-                    enumerable: true,
-                    writable: true,
-                })
-            }
-            posthog._i.push([token, config, instanceName])
-            return instance
-        },
-    })
-    assignableWindow.posthog = posthog
-
-    const directory = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1)
-    // Cached mutable loaders must keep using their own release, not a separately cached SDK alias.
-    const versionedDirectory = /\/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\/$/.test(directory)
-        ? directory
-        : directory.replace(/\/static\/\d+\/$/, '/static/') + version + '/'
-    url.pathname = versionedDirectory + 'array.js'
-    url.search = ''
-    url.hash = ''
     const core = document.createElement('script')
-    core.src = url.href
+    core.src = getSDKScriptURL(url)
     core.async = true
     core.crossOrigin = 'anonymous'
     if (coreIntegrity) {
         core.integrity = coreIntegrity
     }
     core.nonce = script.nonce
-    core.onerror = () => logger.error('Failed to load the PostHog SDK')
+    core.onerror = () => logger.critical('Failed to load the PostHog SDK')
     script.parentNode?.insertBefore(core, script.nextSibling)
 }
 

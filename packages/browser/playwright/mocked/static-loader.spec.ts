@@ -26,6 +26,7 @@ async function install(
         dynamic = false,
         coreIntegrity,
         tamperCore = false,
+        namespace = '',
     }: {
         region?: string
         tokenSource?: 'query' | 'attribute'
@@ -36,6 +37,7 @@ async function install(
         dynamic?: boolean
         coreIntegrity?: string
         tamperCore?: boolean
+        namespace?: string
     } = {}
 ) {
     const events: CapturedEvent[] = []
@@ -53,7 +55,7 @@ async function install(
         opt_out_useragent_filter: true,
         ...config,
     }
-    const source = `${host}/static/loader.js${tokenSource === 'query' ? '?project_token=phc_loader_test' : ''}`
+    const source = `${host}/static/${namespace ? namespace + '/' : ''}loader.js${tokenSource === 'query' ? '?project_token=phc_loader_test' : ''}`
     const tokenAttribute = tokenSource === 'attribute' ? ' data-project-token="phc_loader_test"' : ''
     const integrityAttribute = coreIntegrity ? ` data-core-integrity="${coreIntegrity}"` : ''
     const tag = `<script src="${source}"${tokenAttribute}${integrityAttribute} data-config='${JSON.stringify(options)}' crossorigin="anonymous"></script>`
@@ -88,10 +90,10 @@ async function install(
         if (request.url() === 'https://customer.example/') {
             return route.fulfill({ contentType: 'text/html', body: html })
         }
-        if (url.pathname === '/static/loader.js') {
+        if (url.pathname.endsWith('/loader.js')) {
             return route.fulfill({ path: path.resolve(__dirname, '../../dist/loader.js'), headers })
         }
-        if (url.pathname === '/static/array.js' || url.pathname === `/static/${version}/array.js`) {
+        if (['/static/array.js', '/static/1/array.js', `/static/${version}/array.js`].includes(url.pathname)) {
             coreRequests.push(request.url())
             await coreReady
             return route.fulfill({
@@ -123,16 +125,18 @@ async function install(
 
 const waitForSDK = (page: Page) => page.waitForFunction(() => (window as any).posthog?.__loaded)
 
-for (const [region, tokenSource] of [
-    ['us', 'query'],
-    ['eu', 'query'],
-    ['us', 'attribute'],
-    ['eu', 'attribute'],
+for (const [region, tokenSource, namespace] of [
+    ['us', 'query', ''],
+    ['eu', 'query', ''],
+    ['us', 'attribute', ''],
+    ['eu', 'attribute', ''],
+    ['us', 'query', '1'],
+    ['eu', 'attribute', version],
 ] as const) {
-    test(`the ${region} cross-origin loader replays queued calls exactly once with a ${tokenSource} token`, async ({
+    test(`the ${region} ${namespace || 'unversioned'} loader replays queued calls once with a ${tokenSource} token`, async ({
         page,
     }, testInfo) => {
-        const state = await install(page, testInfo, { region, tokenSource, delayCore: true })
+        const state = await install(page, testInfo, { region, tokenSource, namespace, delayCore: true })
         expect(await page.evaluate(() => (window as any).posthog.__loaded)).toBeUndefined()
         state.releaseCore()
         await waitForSDK(page)
@@ -145,7 +149,9 @@ for (const [region, tokenSource] of [
         )
         expect(await page.evaluate(() => (window as any).posthog.config.token)).toBe('phc_loader_test')
         expect(await page.evaluate(() => (window as any).posthog.config.defaults)).toBe('unset')
-        expect(state.coreRequests).toEqual([`https://${region}-assets.i.posthog.com/static/${version}/array.js`])
+        expect(state.coreRequests).toEqual([
+            `https://${region}-assets.i.posthog.com/static/${namespace ? namespace + '/' : ''}array.js`,
+        ])
         expect(state.errors).toEqual([])
     })
 }
@@ -201,7 +207,7 @@ test('JavaScript injection exposes a callable queue when the loader onload callb
     await waitForSDK(page)
     await expect.poll(() => state.events.filter(({ event }) => event === 'dynamic event')).toHaveLength(1)
     expect(await page.evaluate(() => (window as any).posthog.config.token)).toBe('phc_loader_test')
-    expect(state.coreRequests).toEqual([`https://us-assets.i.posthog.com/static/${version}/array.js`])
+    expect(state.coreRequests).toEqual(['https://us-assets.i.posthog.com/static/array.js'])
     expect(state.errors).toEqual([])
 })
 
@@ -243,7 +249,7 @@ for (const timing of ['before-core', 'after-core'] as const) {
         expect(primary.properties.queued_property).toBe('before-core')
         expect(primary.properties).not.toHaveProperty('instance_property')
         expect(await page.evaluate(() => (window as any).posthog.config.token)).toBe('phc_loader_test')
-        expect(state.coreRequests).toEqual([`https://us-assets.i.posthog.com/static/${version}/array.js`])
+        expect(state.coreRequests).toEqual(['https://us-assets.i.posthog.com/static/array.js'])
         expect(state.errors).toEqual([])
     })
 }
@@ -290,7 +296,7 @@ for (const timing of ['before-core', 'after-core'] as const) {
         await expect.poll(() => state.events.filter(({ event }) => event === 'explicit init event')).toHaveLength(1)
         expect(state.events.find(({ event }) => event === 'explicit init event')?.properties.manual_callback).toBe(true)
         expect(await page.evaluate(() => (window as any).posthog.config.token)).toBe('phc_manual')
-        expect(state.coreRequests).toEqual([`https://us-assets.i.posthog.com/static/${version}/array.js`])
+        expect(state.coreRequests).toEqual(['https://us-assets.i.posthog.com/static/array.js'])
         expect(state.errors).toEqual([])
     })
 }
@@ -362,6 +368,6 @@ test('SDK download failure leaves a callable queue without throwing', async ({ p
         ['capture', 'after failure'],
     ])
     expect(state.events).toEqual([])
-    expect(state.coreRequests).toEqual([`https://us-assets.i.posthog.com/static/${version}/array.js`])
+    expect(state.coreRequests).toEqual(['https://us-assets.i.posthog.com/static/array.js'])
     expect(state.errors).toEqual([])
 })
