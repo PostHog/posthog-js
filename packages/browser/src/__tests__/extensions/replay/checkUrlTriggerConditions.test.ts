@@ -295,6 +295,33 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
             expect(onActivateCalls).toBe(1)
         })
 
+        it('re-activates on an unchanged URL when the persisted activation is cleared', () => {
+            const url = 'https://example.com/checkout'
+            configureTriggers([{ url: 'checkout', matching: 'regex' }])
+            setWindowLocation(url)
+
+            assertPendingToActivated('test-session')
+
+            // a session rotation clears the activation while the URL stays the same
+            persistedSession = null
+            onActivateCalls = 0
+            checkTriggers('test-session')
+
+            expect(onActivateCalls).toBe(1)
+            expect(urlTriggerMatching.triggerStatus('test-session')).toBe(TRIGGER_ACTIVATED)
+        })
+
+        it('does not activate on an unchanged URL that did not match', () => {
+            configureTriggers([{ url: 'checkout', matching: 'regex' }])
+            setWindowLocation('https://example.com/home')
+
+            checkTriggers('test-session')
+            checkTriggers('test-session')
+
+            expect(onActivateCalls).toBe(0)
+            expect(urlTriggerMatching.triggerStatus('test-session')).toBe(TRIGGER_PENDING)
+        })
+
         it('does not call onPause or onResume when URL remains blocked', () => {
             const blockedUrl = 'https://blocked.com/page'
 
