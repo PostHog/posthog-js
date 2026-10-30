@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify'
 import { PostHog } from './posthog-core'
 import { navigator, window } from '@posthog/browser-common/utils/globals'
 import {
@@ -269,9 +270,14 @@ export class WebExperiments implements Extension {
                 // oxlint-disable-next-line no-restricted-globals
                 const elements = document?.querySelectorAll(transform.selector)
                 elements?.forEach((element) => {
+                    // Sanitized plain text can still execute inside existing HTML or SVG script elements.
+                    if (element.localName.toLowerCase() === 'script') {
+                        return
+                    }
+
                     const htmlElement = element as HTMLElement
                     if (transform.html) {
-                        htmlElement.innerHTML = transform.html
+                        htmlElement.innerHTML = DOMPurify.sanitize(transform.html)
                     }
 
                     if (transform.css) {

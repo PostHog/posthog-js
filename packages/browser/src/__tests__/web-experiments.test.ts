@@ -311,6 +311,96 @@ describe('Web Experimentation', () => {
         })
     })
 
+    describe.each([false, true])('remote HTML with disable_external_dependency_loading=%s', (disabled) => {
+        beforeEach(() => {
+            posthog.config.disable_external_dependency_loading = disabled
+        })
+
+        function setRemoteTransform(html: string, css?: string) {
+            experimentsResponse = JSON.parse(
+                JSON.stringify({
+                    experiments: [
+                        {
+                            ...signupButtonWebExperimentWithFeatureFlag,
+                            variants: {
+                                test: {
+                                    variant_name: 'test',
+                                    transforms: [{ selector: '#set-user-properties', html, css }],
+                                },
+                            },
+                        },
+                    ],
+                })
+            )
+        }
+
+        it.each([
+            [
+                'event handlers',
+                '<img src="/missing" onerror="window.__experimentExecuted = true">',
+                '<img src="/missing">',
+            ],
+            ['script tags', '<script>window.__experimentExecuted = true</script><b>Safe</b>', '<b>Safe</b>'],
+            ['javascript links', '<a href="javascript:alert(1)">Link</a>', '<a>Link</a>'],
+            ['encoded active URLs', '<a href="java&#x09;script:alert(1)">Link</a>', '<a>Link</a>'],
+            ['data HTML links', '<a href="data:text/html,<script>alert(1)</script>">Link</a>', '<a>Link</a>'],
+            [
+                'form action URLs',
+                '<form action="javascript:alert(1)"><button formaction="javascript:alert(1)">Go</button></form>',
+                '<form><button>Go</button></form>',
+            ],
+            [
+                'SVG handlers and URLs',
+                '<svg onload="alert(1)"><a xlink:href="javascript:alert(1)"><text>Link</text></a></svg>',
+                '<svg><a><text>Link</text></a></svg>',
+            ],
+            ['embedded documents', '<iframe srcdoc="<img src=x onerror=alert(1)>"></iframe><b>Safe</b>', '<b>Safe</b>'],
+        ])('removes %s from JSON-supplied transforms', (_name, html, expected) => {
+            setRemoteTransform(html)
+            const element = createTestDocument()
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(posthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://test.com/api/web_experiments/?token=testtoken',
+                    method: 'GET',
+                })
+            )
+            expect(element.innerHTML).toEqual(expected)
+        })
+
+        it.each(['http://www.w3.org/1999/xhtml', 'http://www.w3.org/2000/svg'])(
+            'does not transform existing script elements in namespace %s',
+            (namespace) => {
+                const script = document.createElementNS(namespace, 'script')
+                script.id = 'set-user-properties'
+                document.body.appendChild(script)
+                setRemoteTransform('window.__experimentScriptExecuted = true', 'color:red')
+
+                simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+                expect(posthog._send_request).toHaveBeenCalled()
+                expect(script.innerHTML).toEqual('')
+                expect(script.hasAttribute('style')).toBe(false)
+            }
+        )
+
+        it('preserves safe markup, attributes, links and CSS transformations', () => {
+            const html =
+                '<h2 class="offer" style="color: blue">Hello <strong>world</strong></h2>' +
+                '<a href="https://example.com/signup" title="Sign up">Join</a>' +
+                '<img src="/offer.png" alt="Offer"><span data-offer="summer" aria-label="Details">Details</span>'
+            setRemoteTransform(html, 'font-size:40px;color:red')
+            const element = createTestDocument()
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(element.innerHTML).toEqual(html)
+            expect(element.getAttribute('style')).toEqual('font-size:40px;color:red')
+        })
+    })
+
     describe('with feature flags', () => {
         it('experiments are disabled by default', () => {
             experimentsResponse = {
