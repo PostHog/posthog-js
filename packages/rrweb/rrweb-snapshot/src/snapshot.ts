@@ -230,13 +230,6 @@ export function transformAttribute(
     name === 'src' ||
     (name === 'href' && !(tagName === 'use' && value[0] === '#'))
   ) {
-    // Prefer the loaded sheet's href — survives baseURI changes from SPA pushState.
-    if (tagName === 'link' && element) {
-      const sheetHref = (element as HTMLLinkElement).sheet?.href;
-      if (sheetHref) {
-        return sheetHref;
-      }
-    }
     // href starts with a # is an id pointer for svg
     const transformedValue = absoluteToDoc(doc, value);
 
@@ -512,6 +505,12 @@ export function resetStylesheetLoadTracking(
   });
 }
 
+// a 0 ms stylesheetLoadTimeout must not turn the repeated checks into polling on every timer tick
+const MIN_REPEATED_SHEET_CHECK_MS = 1000;
+// a sheet still not loaded after this long counts as failed, so a hung request
+// does not keep the link and its listener alive until the next full snapshot
+const MAX_SHEET_WAIT_MS = 60_000;
+
 function readLinkSheet(link: HTMLLinkElement): CSSStyleSheet | null {
   try {
     return link.sheet;
@@ -554,23 +553,30 @@ function trackStylesheetUntilReady(
     once: true,
   });
 
-  // A sheet on a slow network can load at any time, so the checks go on at
-  // the last delay until the link loads, fails, leaves the DOM, or a full
-  // snapshot or stop resets the tracking.
+  // A sheet on a slow network can load long after the scheduled checks, so
+  // the checks repeat at the last delay until the link loads, fails, leaves
+  // the DOM, waits longer than MAX_SHEET_WAIT_MS, or a reset ends it.
+  const giveUpAtMs = Date.now() + MAX_SHEET_WAIT_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const scheduleCheck = (checkIndex: number) => {
-    timer = setTimeout(
-      () => {
-        if (!link.isConnected) {
-          stopTracking();
-        } else if (isSheetReady()) {
-          fire();
-        } else {
-          scheduleCheck(checkIndex + 1);
-        }
-      },
-      checkDelaysMs[Math.min(checkIndex, checkDelaysMs.length - 1)],
-    );
+    const delayMs =
+      checkIndex < checkDelaysMs.length
+        ? checkDelaysMs[checkIndex]
+        : Math.max(
+            checkDelaysMs[checkDelaysMs.length - 1],
+            MIN_REPEATED_SHEET_CHECK_MS,
+          );
+    timer = setTimeout(() => {
+      if (!link.isConnected) {
+        stopTracking();
+      } else if (isSheetReady()) {
+        fire();
+      } else if (Date.now() >= giveUpAtMs) {
+        stopTracking();
+      } else {
+        scheduleCheck(checkIndex + 1);
+      }
+    }, delayMs);
   };
   controller.signal.addEventListener('abort', () => clearTimeout(timer), {
     once: true,
@@ -585,16 +591,7 @@ function onceStylesheetLoaded(
   listener: () => unknown,
   styleSheetLoadTimeout: number,
 ) {
-  if (stylesheetLoadTracked.has(link)) return;
-
-  let styleSheetLoaded: StyleSheet | null;
-  try {
-    styleSheetLoaded = link.sheet;
-  } catch (error) {
-    return;
-  }
-
-  if (styleSheetLoaded) return;
+  if (stylesheetLoadTracked.has(link) || readLinkSheet(link)) return;
 
   trackStylesheetUntilReady(
     link,
@@ -897,6 +894,13 @@ function serializeElementNode(
         n,
         dataURLOptions,
       );
+    }
+  }
+  // Prefer the loaded sheet's href, which survives baseURI changes from SPA pushState.
+  if (tagName === 'link' && typeof attributes.href === 'string') {
+    const loadedSheetHref = readLinkSheet(n as HTMLLinkElement)?.href;
+    if (loadedSheetHref) {
+      attributes.href = loadedSheetHref;
     }
   }
   // remote css

@@ -11,9 +11,6 @@ import {
   resetStylesheetLoadTracking,
   runNonDeferrableStylesheetWork,
   stringifyRule,
-  stringifyStylesheet,
-  toLowerCase,
-  transformAttribute,
 } from '@posthog/rrweb-snapshot';
 import type {
   MaskAttributeFn,
@@ -28,6 +25,12 @@ import type {
   mutationCallBack,
 } from '@posthog/rrweb-types';
 import { StyleSheetMirror } from '../utils';
+import {
+  type IdleDeadline,
+  whenIdle,
+  DEFERRED_STYLESHEET_RULES_PER_SLICE,
+  DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK,
+} from './idle';
 
 /** Resumable inlining of one deferred stylesheet; see {@link StylesheetManager.beginDeferredLinkInlining}. */
 export type DeferredLinkInliningTask = {
@@ -51,9 +54,24 @@ type PendingDeferredSheet = {
   invalidate: () => void;
 };
 
+// Replay rebuilds the link from its snapshot-time attributes when `_cssText`
+// arrives, so attributes changed since the snapshot (such as `media`) must
+// travel with the CSS. `rel` and `href` go, as when a snapshot inlines a link.
+function attributesBesidesSource(
+  serialized: serializedNodeWithId | null,
+): attributeMutation['attributes'] {
+  const attributes = {
+    ...((serialized as elementNode | null)?.attributes ?? {}),
+  } as attributeMutation['attributes'];
+  delete attributes.rel;
+  delete attributes.href;
+  return attributes;
+}
+
 export class StylesheetManager {
   private trackedLinkElements: WeakSet<HTMLLinkElement> = new WeakSet();
   private pendingDeferredSheets: Set<PendingDeferredSheet> = new Set();
+  private fullSnapshotCount = 0;
   private mutationCb: mutationCallBack;
   private adoptedStyleSheetCb: adoptedStyleSheetCallback;
   private maskAllElementAttributes: boolean;
@@ -106,6 +124,8 @@ export class StylesheetManager {
   public beginDeferredLinkInlining(
     linkEl: HTMLLinkElement,
     id: number,
+    emitCssText: (cssText: string) => void = (cssText) =>
+      this.emitCssTextMutation(linkEl, id, cssText),
   ): DeferredLinkInliningTask | null {
     if (id === -1 || !linkEl.isConnected) {
       // never made it into the mirror (slimDOM dropped it), or detached while we
@@ -193,7 +213,7 @@ export class StylesheetManager {
             recordDeferredStylesheetFailure();
             return true;
           }
-          this.emitCssTextMutation(linkEl, id, cssText);
+          emitCssText(cssText);
           return true;
         } finally {
           if (finished) {
@@ -241,32 +261,66 @@ export class StylesheetManager {
    */
   public inlineLinkStylesheetAfterChange(
     linkEl: HTMLLinkElement,
-    recorderView: { currentId: () => number; isBlocked: () => boolean },
+    recorderView: {
+      currentId: () => number;
+      isBlocked: () => boolean;
+      serializeWithoutCss: () => serializedNodeWithId | null;
+    },
   ): void {
     // a stop from inside the consumer's emit has already reset the mirror
     if (recorderView.currentId() === -1) {
       return;
     }
     onceLinkStylesheetUpToDate(linkEl, () => {
-      try {
-        const id = recorderView.currentId();
-        if (!linkEl.isConnected || id === -1 || recorderView.isBlocked()) {
-          return;
-        }
-        let sheet: CSSStyleSheet | null = null;
-        try {
-          sheet = linkEl.sheet;
-        } catch (e) {
-          //
-        }
-        const cssText = sheet && stringifyStylesheet(sheet);
-        if (cssText) {
-          this.emitLinkReplacementMutation(linkEl, id, cssText);
-        }
-      } catch (e) {
-        // runs from a load event or timer: a throwing consumer emit or mask
-        // callback must not surface as an uncaught error on the customer's page
+      const id = recorderView.currentId();
+      if (!linkEl.isConnected || id === -1 || recorderView.isBlocked()) {
+        return;
       }
+      const task = this.beginDeferredLinkInlining(linkEl, id, (cssText) =>
+        this.emitCssTextMutation(
+          linkEl,
+          id,
+          cssText,
+          attributesBesidesSource(recorderView.serializeWithoutCss()),
+        ),
+      );
+      if (!task) {
+        return;
+      }
+      const startedAtFullSnapshot = this.fullSnapshotCount;
+      const step = (deadline?: IdleDeadline) => {
+        try {
+          // a full snapshot inlines the link's current sheet itself, and a
+          // stop resets the mirror
+          if (
+            this.fullSnapshotCount !== startedAtFullSnapshot ||
+            recorderView.currentId() === -1 ||
+            recorderView.isBlocked()
+          ) {
+            task.discard();
+            return;
+          }
+          let slices = 0;
+          let finished: boolean;
+          do {
+            finished = task.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE);
+            slices += 1;
+          } while (
+            !finished &&
+            (deadline
+              ? !deadline.didTimeout && deadline.timeRemaining() > 5
+              : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
+          );
+          if (!finished) {
+            whenIdle(step);
+          }
+        } catch (e) {
+          // runs from an idle callback: a throwing consumer emit or mask
+          // callback must not surface as an uncaught error on the customer's page
+          task.discard();
+        }
+      };
+      whenIdle(step);
     });
   }
 
@@ -275,47 +329,11 @@ export class StylesheetManager {
     this.beginDeferredLinkInlining(linkEl, id)?.advance(Infinity);
   }
 
-  // Replay rebuilds the link from its snapshot-time attributes when `_cssText`
-  // arrives, so attributes changed since the snapshot (such as `media`) must
-  // travel with the CSS.
-  private emitLinkReplacementMutation(
-    linkEl: HTMLLinkElement,
-    id: number,
-    cssText: string,
-  ) {
-    const attributes: Record<string, string | null> = {};
-    for (const { name, value } of Array.from(linkEl.attributes)) {
-      if (name === 'rel' || name === 'href') continue;
-      attributes[name] = transformAttribute(
-        linkEl.ownerDocument,
-        'link',
-        toLowerCase(name),
-        value,
-        linkEl,
-      );
-    }
-    attributes._cssText = cssText;
-    for (const [name, value] of Object.entries(attributes)) {
-      attributes[name] = maskAttributeValue({
-        element: linkEl,
-        name,
-        value,
-        maskAllElementAttributes: this.maskAllElementAttributes,
-        maskAttributeFn: this.maskAttributeFn,
-      });
-    }
-    this.mutationCb({
-      adds: [],
-      removes: [],
-      texts: [],
-      attributes: [{ id, attributes }],
-    });
-  }
-
   private emitCssTextMutation(
     linkEl: HTMLLinkElement,
     id: number,
     cssText: string,
+    otherAttributes: attributeMutation['attributes'] = {},
   ) {
     // The snapshot path masks _cssText inside serializeElementNode; this path
     // builds the value itself, so it has to mask it too.
@@ -327,6 +345,7 @@ export class StylesheetManager {
         {
           id,
           attributes: {
+            ...otherAttributes,
             _cssText: maskAttributeValue({
               element: linkEl,
               name: '_cssText',
@@ -401,6 +420,7 @@ export class StylesheetManager {
     // any surviving deferral registrations belong to tasks the recorder
     // cancelled at the snapshot boundary; drop them so they don't pin sheets
     this.pendingDeferredSheets.clear();
+    this.fullSnapshotCount += 1;
     resetStylesheetLoadTracking({ keepChangedLinks: true });
   }
 

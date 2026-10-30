@@ -978,21 +978,32 @@ describe('link href capture across SPA navigations', () => {
     return link;
   }
 
-  it('prefers link.sheet.href over the detached-anchor resolution', () => {
+  it('snapshots link.sheet.href over the detached-anchor resolution', () => {
     const link = makeLinkWithSheet(
       '../../_app/auth.css',
       'http://localhost/_app/auth.css',
+    );
+
+    const serialized = serializeNode(link) as elementNode | null;
+
+    expect(serialized?.attributes.href).toBe('http://localhost/_app/auth.css');
+  });
+
+  it('transforms a changed href as written, not as the sheet still attached', () => {
+    const link = makeLinkWithSheet(
+      '/theme-dark.css',
+      'http://localhost/theme-light.css',
     );
 
     const result = transformAttribute(
       document,
       'link',
       'href',
-      '../../_app/auth.css',
+      '/theme-dark.css',
       link,
     );
 
-    expect(result).toBe('http://localhost/_app/auth.css');
+    expect(result).toMatch(/\/theme-dark\.css$/);
   });
 
   it('falls back to detached-anchor resolution when the sheet has not loaded', () => {
@@ -1267,6 +1278,34 @@ describe('preload link load-listener accumulation', () => {
     document.head.appendChild(link);
     serializeWithCapture(link);
 
+    expect(loadListenersAdded).toBe(2);
+
+    document.head.removeChild(link);
+  });
+
+  it('stops tracking a link whose stylesheet has not loaded after the maximum wait', () => {
+    const { link } = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-never.css',
+      sheet: null,
+    });
+    let loadListenersAdded = 0;
+    const addEventListener = link.addEventListener.bind(link);
+    link.addEventListener = ((type: string, ...rest: unknown[]) => {
+      if (type === 'load') loadListenersAdded += 1;
+      return (addEventListener as (...args: unknown[]) => void)(
+        type,
+        ...rest,
+      );
+    }) as typeof link.addEventListener;
+
+    serializeWithCapture(link);
+    vi.advanceTimersByTime(55_000);
+    serializeWithCapture(link);
+    expect(loadListenersAdded).toBe(1);
+
+    vi.advanceTimersByTime(5_000);
+    serializeWithCapture(link);
     expect(loadListenersAdded).toBe(2);
 
     document.head.removeChild(link);

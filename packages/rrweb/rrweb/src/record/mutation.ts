@@ -311,64 +311,7 @@ export default class MutationBuffer {
       if (parentId === -1 || nextId === -1) {
         return false;
       }
-      serializationOptions ??= {
-        doc: this.doc,
-        mirror: this.mirror,
-        blockClass: this.blockClass,
-        blockSelector: this.blockSelector,
-        maskTextClass: this.maskTextClass,
-        maskTextSelector: this.maskTextSelector,
-        skipChild: true,
-        newlyAddedElement: true,
-        inlineStylesheet: this.inlineStylesheet,
-        maskInputOptions: this.maskInputOptions,
-        maskTextFn: this.maskTextFn,
-        maskInputFn: this.maskInputFn,
-        maskAllElementAttributes: this.maskAllElementAttributes,
-        maskAttributeFn: this.maskAttributeFn,
-        slimDOMOptions: this.slimDOMOptions,
-        dataURLOptions: this.dataURLOptions,
-        recordCanvas: this.recordCanvas,
-        canvasMaskingConfigured: this.canvasMaskingConfigured,
-        inlineImages: this.inlineImages,
-        onSerialize: (currentN) => {
-          if (isSerializedIframe(currentN, this.mirror)) {
-            this.iframeManager.addIframe(currentN as HTMLIFrameElement);
-          }
-          if (isSerializedStylesheet(currentN, this.mirror)) {
-            this.stylesheetManager.trackLinkElement(
-              currentN as HTMLLinkElement,
-            );
-          }
-          if (
-            hasShadowRoot(currentN) &&
-            !isBlocked(
-              currentN,
-              this.blockClass,
-              this.blockSelector,
-              true,
-            )
-          ) {
-            this.shadowDomManager.addShadowRoot(
-              dom.shadowRoot(currentN)!,
-              this.doc,
-            );
-          }
-        },
-        onIframeLoad: (iframe, childSn) => {
-          this.iframeManager.attachIframe(iframe, childSn);
-          this.shadowDomManager.observeAttachShadow(iframe);
-        },
-        onIframeListenerRegistered: (
-          iframe: HTMLIFrameElement,
-          disposer: () => void,
-        ) => {
-          this.iframeManager.registerLoadListenerDisposer(iframe, disposer);
-        },
-        onStylesheetLoad: (link, childSn) => {
-          this.stylesheetManager.attachLinkElement(link, childSn);
-        },
-      };
+      serializationOptions ??= this.buildSerializationOptions();
       const sn = serializeNodeWithId(n, serializationOptions);
       if (sn) {
         adds.push({
@@ -664,9 +607,77 @@ export default class MutationBuffer {
       this.stylesheetManager.inlineLinkStylesheetAfterChange(link, {
         currentId: () => this.mirror.getId(link),
         isBlocked: () => this.isBlockedAtEmission(link),
+        serializeWithoutCss: () =>
+          serializeNodeWithId(link, {
+            ...this.buildSerializationOptions(),
+            inlineStylesheet: false,
+          }),
       });
     }
   };
+
+  private buildSerializationOptions(): Parameters<
+    typeof serializeNodeWithId
+  >[1] {
+    return {
+      doc: this.doc,
+      mirror: this.mirror,
+      blockClass: this.blockClass,
+      blockSelector: this.blockSelector,
+      maskTextClass: this.maskTextClass,
+      maskTextSelector: this.maskTextSelector,
+      skipChild: true,
+      newlyAddedElement: true,
+      inlineStylesheet: this.inlineStylesheet,
+      maskInputOptions: this.maskInputOptions,
+      maskTextFn: this.maskTextFn,
+      maskInputFn: this.maskInputFn,
+      maskAllElementAttributes: this.maskAllElementAttributes,
+      maskAttributeFn: this.maskAttributeFn,
+      slimDOMOptions: this.slimDOMOptions,
+      dataURLOptions: this.dataURLOptions,
+      recordCanvas: this.recordCanvas,
+      canvasMaskingConfigured: this.canvasMaskingConfigured,
+      inlineImages: this.inlineImages,
+      onSerialize: (currentN) => {
+        if (isSerializedIframe(currentN, this.mirror)) {
+          this.iframeManager.addIframe(currentN as HTMLIFrameElement);
+        }
+        if (isSerializedStylesheet(currentN, this.mirror)) {
+          this.stylesheetManager.trackLinkElement(
+            currentN as HTMLLinkElement,
+          );
+        }
+        if (
+          hasShadowRoot(currentN) &&
+          !isBlocked(
+            currentN,
+            this.blockClass,
+            this.blockSelector,
+            true,
+          )
+        ) {
+          this.shadowDomManager.addShadowRoot(
+            dom.shadowRoot(currentN)!,
+            this.doc,
+          );
+        }
+      },
+      onIframeLoad: (iframe, childSn) => {
+        this.iframeManager.attachIframe(iframe, childSn);
+        this.shadowDomManager.observeAttachShadow(iframe);
+      },
+      onIframeListenerRegistered: (
+        iframe: HTMLIFrameElement,
+        disposer: () => void,
+      ) => {
+        this.iframeManager.registerLoadListenerDisposer(iframe, disposer);
+      },
+      onStylesheetLoad: (link, childSn) => {
+        this.stylesheetManager.attachLinkElement(link, childSn);
+      },
+    };
+  }
 
   public bufferBelongsToIframe = (iframeEl: HTMLIFrameElement): boolean => {
     return this.doc === iframeEl.contentDocument;
@@ -793,9 +804,6 @@ export default class MutationBuffer {
             this.attributes.push(item);
             this.attributeMap.set(m.target, item);
           }
-          // until a changed href loads, link.sheet still belongs to the previous href
-          const linkSheetIsStale =
-            tagNameLower === 'link' && attributeName === 'href';
           // Transform with the source name before representing an inaccessible
           // iframe's source under the final rr_src key.
           const transformedValue = transformAttribute(
@@ -803,7 +811,7 @@ export default class MutationBuffer {
             tagNameLower,
             toLowerCase(attributeName),
             value,
-            linkSheetIsStale ? undefined : target,
+            target,
             this.dataURLOptions,
           );
           if (isIframeSrc && !this.keepIframeSrcFn(value as string)) {
