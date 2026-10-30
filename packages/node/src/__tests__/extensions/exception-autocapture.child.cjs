@@ -49,12 +49,15 @@ const clients = withSdk
   : []
 const posthog = clients[0]
 
+function printCapture(event) {
+  const exception = event.properties.$exception_list[0]
+  process.stdout.write(`posthog-capture:${exception.mechanism.type}:${exception.value}\n`)
+  return Promise.resolve()
+}
+
 for (const client of clients) {
-  client._capturePreparedEvent = (event) => {
-    const exception = event.properties.$exception_list[0]
-    process.stdout.write(`posthog-capture:${exception.mechanism.type}:${exception.value}\n`)
-    return Promise.resolve()
-  }
+  client._capturePreparedEvent = printCapture
+  client.captureImmediate = printCapture
 }
 
 if (scenario === 'late-unhandled-rejection-listener') {
@@ -69,7 +72,7 @@ if (scenario === 'late-unhandled-rejection-listener') {
     throw reason
   })
 } else if (scenario === 'immediate-capture-in-uncaught-listener') {
-  // Added after init, so autocapture captures the exception first and captureExceptionImmediate skips the duplicate.
+  // Added after init, so it runs after the SDK's listener. Its own capture still wins over autocapture.
   process.on('uncaughtException', async (error) => {
     await posthog?.captureExceptionImmediate(error)
     process.stdout.write('exiting\n')

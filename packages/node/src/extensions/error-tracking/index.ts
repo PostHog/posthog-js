@@ -1,10 +1,4 @@
-import {
-  claimExplicitCapture,
-  sendAutocapturedEvent,
-  startExceptionAutocapture,
-  waitForPendingRejections,
-} from './autocapture'
-import type { AutocaptureClient } from './autocapture'
+import { claimExplicitCapture, startExceptionAutocapture } from './autocapture'
 import { PostHogBackendClient } from '@/client'
 import type { ContextData } from '../context/types'
 import { snapshotEventContext } from '../context/event-context'
@@ -21,15 +15,12 @@ export default class ErrorTracking {
   private _exceptionAutocaptureEnabled: boolean
   private _rateLimiter: BucketedRateLimiter<string>
   private _logger: Logger
-  private _autocaptureClient?: AutocaptureClient
   private _stopAutocapture?: () => void
-  private _waitUntil?: (promise: Promise<unknown>) => void
 
   constructor(client: PostHogBackendClient, options: PostHogOptions, _logger: Logger) {
     this.client = client
     this._exceptionAutocaptureEnabled = options.enableExceptionAutocapture || false
     this._logger = _logger
-    this._waitUntil = options.waitUntil
 
     // Burst protection is scoped PER EXCEPTION TYPE: the rate limiter is keyed by exception type
     // (see `consumeRateLimit(exceptionType)` below), so each distinct type gets its own fresh
@@ -93,45 +84,22 @@ export default class ErrorTracking {
 
   private startAutocaptureIfEnabled(): void {
     if (this.isEnabled()) {
-      this._autocaptureClient = {
+      this._stopAutocapture = startExceptionAutocapture({
         key: this.destinationKey,
         capture: (exception, hint) => this.onException(exception, hint),
         getContext: () => this.client.getContext(),
-        drain: () => this.client._flushQueued(),
         shutdown: () => this.client.shutdown(SHUTDOWN_TIMEOUT),
-        keepAlive: this._waitUntil ? (promise) => this.keepAlive(promise) : undefined,
-      }
-      this._stopAutocapture = startExceptionAutocapture(this._autocaptureClient)
-    }
-  }
-
-  /** Waits until the unhandled rejections in their grace period are captured or handled, so that a flush sends them. */
-  async waitForPendingRejections(): Promise<void> {
-    if (this._autocaptureClient) {
-      await waitForPendingRejections(this._autocaptureClient)
-    }
-  }
-
-  private keepAlive(promise: Promise<unknown>): void {
-    try {
-      this._waitUntil?.(promise.catch(() => undefined))
-    } catch {
-      // waitUntil may throw outside a request context.
+      })
     }
   }
 
   /**
    * Whether captureException should capture this error. False when exception autocapture already sent the same error
-   * object to this project, for example when a framework passes an error from its own process listener to an error
-   * hook that calls captureException.
+   * object to this project in this turn of the event loop, for example when a framework passes an error from its own
+   * process listener to an error hook that calls captureException.
    */
   claimExplicitCapture(error: unknown): boolean {
     return claimExplicitCapture(error, this.destinationKey)
-  }
-
-  /** Sends the event autocapture made for an error that captureExceptionImmediate skipped as a duplicate. */
-  sendAutocapturedEvent(error: unknown): Promise<void> {
-    return sendAutocapturedEvent(error, this.destinationKey)
   }
 
   private onException(exception: unknown, hint: CoreErrorTracking.EventHint): void {

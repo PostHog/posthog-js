@@ -5,9 +5,6 @@ import {
   getUnhandledRejectionMode,
   resetExceptionAutocapture,
   startExceptionAutocapture,
-  sendAutocapturedEvent,
-  UNHANDLED_REJECTION_GRACE_MS,
-  waitForPendingRejections,
 } from '@/extensions/error-tracking/autocapture'
 import type { AutocaptureClient } from '@/extensions/error-tracking/autocapture'
 import { AsyncLocalStorage } from 'async_hooks'
@@ -158,14 +155,12 @@ function stubProcessListeners(hostRejectionListeners: Listener[] = []) {
 function makeClient(key = 'api_key@https://us.i.posthog.com'): AutocaptureClient & {
   capture: ReturnType<typeof vi.fn>
   getContext: ReturnType<typeof vi.fn>
-  drain: ReturnType<typeof vi.fn>
   shutdown: ReturnType<typeof vi.fn>
 } {
   return {
     key,
     capture: vi.fn(),
     getContext: vi.fn(),
-    drain: vi.fn().mockResolvedValue(undefined),
     shutdown: vi.fn().mockResolvedValue(undefined),
   }
 }
@@ -258,7 +253,7 @@ describe('exception autocapture', () => {
   )
 
   it.each(['throw', 'warn-with-error-code'] as const)(
-    'should capture an unhandled rejection in %s mode once its grace period passes, when a host listener exists',
+    'should capture an unhandled rejection in %s mode at the end of the turn, when a host listener exists',
     async (mode) => {
       const client = makeClient()
       const hostListener = vi.fn()
@@ -272,30 +267,12 @@ describe('exception autocapture', () => {
       expect(hostListener).toHaveBeenCalledWith(reason, expect.any(Promise))
       expect(client.capture).not.toHaveBeenCalled()
 
-      await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+      await vi.advanceTimersByTimeAsync(0)
 
       expect(client.capture).toHaveBeenCalledTimes(1)
       expect(client.capture).toHaveBeenCalledWith(reason, UNHANDLED_REJECTION_HINT)
     }
   )
-
-  it('should not capture a rejection that the app handles during the grace period', async () => {
-    const client = makeClient()
-    const processListeners = stubProcessListeners([vi.fn()])
-    startExceptionAutocapture(client, 'throw')
-    const promise = Promise.resolve()
-
-    processListeners.emit('unhandledRejection', new Error('handled late'), promise)
-    processListeners.emit('rejectionHandled', promise)
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
-
-    expect(client.capture).not.toHaveBeenCalled()
-    // Node prints this warning when no other listener takes rejectionHandled.
-    expect(processListeners.emitWarning).toHaveBeenCalledWith(
-      'Promise rejection was handled asynchronously',
-      'PromiseRejectionHandledWarning'
-    )
-  })
 
   it('should start capturing when a host listener is added after init and stop when the last one is removed', async () => {
     const client = makeClient()
@@ -311,7 +288,7 @@ describe('exception autocapture', () => {
 
     const reason = new Error('late host rejection')
     processListeners.emit('unhandledRejection', reason, Promise.resolve())
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    await vi.advanceTimersByTimeAsync(0)
     expect(client.capture).toHaveBeenCalledTimes(1)
     expect(client.capture).toHaveBeenCalledWith(reason, UNHANDLED_REJECTION_HINT)
 
@@ -363,7 +340,7 @@ describe('exception autocapture', () => {
 
     processListeners.emit('unhandledRejection', reason, Promise.resolve())
     processListeners.emit('uncaughtException', reason, 'uncaughtException')
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(client.capture).toHaveBeenCalledTimes(1)
     expect(client.capture).toHaveBeenCalledWith(reason, UNHANDLED_REJECTION_HINT)
@@ -378,7 +355,7 @@ describe('exception autocapture', () => {
 
     processListeners.emit('unhandledRejection', 'string reason', Promise.resolve())
     processListeners.emit('uncaughtException', 'string reason', 'uncaughtException')
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(client.capture).toHaveBeenCalledTimes(1)
     expect(client.capture).toHaveBeenCalledWith('string reason', UNHANDLED_REJECTION_HINT)
@@ -393,7 +370,7 @@ describe('exception autocapture', () => {
     // Bun's order: the host listener's throw reaches uncaughtException before the next rejection listener runs.
     processListeners.emit('uncaughtException', reason, 'uncaughtException')
     processListeners.emit('unhandledRejection', reason, Promise.resolve())
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(client.capture).toHaveBeenCalledTimes(1)
   })
@@ -408,7 +385,7 @@ describe('exception autocapture', () => {
     // Next.js 16's filter can hand a rejection to a listener that is both on the process and in its queue.
     processListeners.emit('unhandledRejection', reason, promise)
     processListeners.emit('unhandledRejection', reason, promise)
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(client.capture).toHaveBeenCalledTimes(1)
   })
@@ -421,7 +398,7 @@ describe('exception autocapture', () => {
 
     // An AbortSignal reason rejects a fetch nobody awaits, and is later thrown again by throwIfAborted().
     processListeners.emit('unhandledRejection', reason, Promise.resolve())
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    await vi.advanceTimersByTimeAsync(0)
     // Lets the end-of-turn reset run, as it would before any later turn.
     await vi.advanceTimersByTimeAsync(1)
     await vi.advanceTimersByTimeAsync(1)
@@ -429,21 +406,6 @@ describe('exception autocapture', () => {
 
     expect(client.capture).toHaveBeenCalledTimes(2)
     expect(client.capture).toHaveBeenLastCalledWith(reason, UNCAUGHT_EXCEPTION_HINT)
-  })
-
-  it('should capture both occurrences when the same error object is thrown during the grace period', async () => {
-    const client = makeClient()
-    const processListeners = stubProcessListeners([vi.fn()])
-    startExceptionAutocapture(client, 'throw')
-    const reason = new Error('aborted')
-
-    processListeners.emit('unhandledRejection', reason, Promise.resolve())
-    await vi.advanceTimersByTimeAsync(50)
-    processListeners.emit('uncaughtException', reason, 'uncaughtException')
-
-    expect(client.capture).toHaveBeenCalledTimes(2)
-    expect(client.capture).toHaveBeenNthCalledWith(1, reason, UNHANDLED_REJECTION_HINT)
-    expect(client.capture).toHaveBeenNthCalledWith(2, reason, UNCAUGHT_EXCEPTION_HINT)
   })
 
   it('should capture a rejection once when the host rethrows it from an immediate', async () => {
@@ -457,22 +419,23 @@ describe('exception autocapture', () => {
     startExceptionAutocapture(client, 'throw')
 
     processListeners.emit('unhandledRejection', reason, Promise.resolve())
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(client.capture).toHaveBeenCalledTimes(1)
     expect(client.capture).toHaveBeenCalledWith(reason, UNHANDLED_REJECTION_HINT)
   })
 
-  it('should capture two rejections with the same primitive reason as two', async () => {
+  it('should capture a reason once when two rejections report it in the same turn', async () => {
     const client = makeClient()
     const processListeners = stubProcessListeners([vi.fn()])
     startExceptionAutocapture(client, 'throw')
+    const reason = new Error('shared by two derived promises')
 
-    processListeners.emit('unhandledRejection', 'timeout', Promise.resolve())
-    processListeners.emit('unhandledRejection', 'timeout', Promise.resolve())
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    processListeners.emit('unhandledRejection', reason, Promise.resolve())
+    processListeners.emit('unhandledRejection', reason, Promise.resolve())
+    await vi.advanceTimersByTimeAsync(0)
 
-    expect(client.capture).toHaveBeenCalledTimes(2)
+    expect(client.capture).toHaveBeenCalledTimes(1)
   })
 
   it('should treat a later capture of the same error object as a new occurrence', async () => {
@@ -480,8 +443,8 @@ describe('exception autocapture', () => {
     const processListeners = stubProcessListeners()
     startExceptionAutocapture(client, 'throw')
     const error = new Error('cached failure')
-    process.on('uncaughtException', vi.fn())
 
+    // Without an app listener the exception is fatal, so autocapture captures it at once.
     processListeners.emit('uncaughtException', error, 'uncaughtException')
     // A framework's error hook handing the same occurrence to captureException.
     expect(claimExplicitCapture(error, client.key)).toBe(false)
@@ -491,19 +454,25 @@ describe('exception autocapture', () => {
     expect(claimExplicitCapture(error, client.key)).toBe(true)
     await vi.advanceTimersByTimeAsync(10)
     processListeners.emit('uncaughtException', error, 'uncaughtException')
+    await vi.advanceTimersByTimeAsync(0)
     expect(client.capture).toHaveBeenCalledTimes(2)
   })
 
-  it('should let captureException report a rejection in its grace period, once', async () => {
+  it.each([
+    ['unhandled rejection', 'unhandledRejection'],
+    ['uncaught exception', 'uncaughtException'],
+  ] as const)('should let the app capture an %s itself during the turn, once', async (_name, event) => {
     const client = makeClient()
     const processListeners = stubProcessListeners([vi.fn()])
+    process.on('uncaughtException', vi.fn())
     startExceptionAutocapture(client, 'throw')
-    const reason = new Error('handed to an error hook')
+    const error = new Error('handed to an error hook')
 
-    processListeners.emit('unhandledRejection', reason, Promise.resolve())
-    await vi.advanceTimersByTimeAsync(10)
-    expect(claimExplicitCapture(reason, client.key)).toBe(true)
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    processListeners.emit(event, error, event === 'unhandledRejection' ? Promise.resolve() : 'uncaughtException')
+    // The host's listener or a framework's error hook, a microtask later.
+    await Promise.resolve()
+    expect(claimExplicitCapture(error, client.key)).toBe(true)
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(client.capture).not.toHaveBeenCalled()
   })
@@ -532,7 +501,7 @@ describe('exception autocapture', () => {
     const reason = new Error('after the request finished')
 
     processListeners.emit('unhandledRejection', reason, Promise.resolve())
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    await vi.advanceTimersByTimeAsync(0)
     expect(requestClient.capture).toHaveBeenCalledWith(reason, UNHANDLED_REJECTION_HINT)
 
     // The next request's client takes over.
@@ -543,48 +512,31 @@ describe('exception autocapture', () => {
     expect(requestClient.capture).toHaveBeenCalledTimes(1)
   })
 
-  it('should leave a rejection in its grace period when another client of the project is still running', async () => {
-    const processListeners = stubProcessListeners([vi.fn()])
-    const first = makeClient()
-    const second = makeClient()
-    const stopFirst = startExceptionAutocapture(first, 'throw')
-    startExceptionAutocapture(second, 'throw')
-    const promise = Promise.resolve()
-
-    processListeners.emit('unhandledRejection', new Error('handled late'), promise)
-    stopFirst()
-    processListeners.emit('rejectionHandled', promise)
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
-
-    expect(first.capture).not.toHaveBeenCalled()
-    expect(second.capture).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    ['the request it happened in', { request: 'a' }],
-    ['no request, when it happened outside one', undefined],
-  ] as const)(
-    'should capture a rejection in its grace period with %s, wherever the capture is triggered',
-    (_name, requestOfRejection) => {
+  it('should capture each rejection in the async context it was reported in', async () => {
+    // A real immediate carries the listener's AsyncLocalStorage context. A fake one does not.
+    vi.useRealTimers()
+    try {
       const requests = new AsyncLocalStorage<{ request: string }>()
       const contexts: unknown[] = []
       const client = makeClient()
       client.capture.mockImplementation(() => contexts.push(requests.getStore()))
       const processListeners = stubProcessListeners([vi.fn()])
-      const stop = startExceptionAutocapture(client, 'throw')
-      const reject = (): void => processListeners.emit('unhandledRejection', new Error('pending'), Promise.resolve())
+      startExceptionAutocapture(client, 'throw')
 
-      if (requestOfRejection) {
-        requests.run(requestOfRejection, reject)
-      } else {
-        reject()
-      }
-      // The client shuts down inside another request, as at the end of a request handler.
-      requests.run({ request: 'b' }, stop)
+      requests.run({ request: 'a' }, () =>
+        processListeners.emit('unhandledRejection', new Error('in request a'), Promise.resolve())
+      )
+      requests.run({ request: 'b' }, () =>
+        processListeners.emit('unhandledRejection', new Error('in request b'), Promise.resolve())
+      )
+      processListeners.emit('unhandledRejection', new Error('outside a request'), Promise.resolve())
+      await new Promise((resolve) => setImmediate(resolve))
 
-      expect(contexts).toEqual([requestOfRejection])
+      expect(contexts).toEqual([{ request: 'a' }, { request: 'b' }, undefined])
+    } finally {
+      vi.useFakeTimers()
     }
-  )
+  })
 
   it('should capture through the client of a project whose request context is active', () => {
     const processListeners = stubProcessListeners([vi.fn()])
@@ -593,42 +545,11 @@ describe('exception autocapture', () => {
     inRequest.getContext.mockReturnValue({ distinctId: 'user-1' })
     startExceptionAutocapture(outside, 'throw')
     startExceptionAutocapture(inRequest, 'throw')
-    process.on('uncaughtException', vi.fn())
 
     processListeners.emit('uncaughtException', new Error('in a request'), 'uncaughtException')
 
     expect(outside.capture).not.toHaveBeenCalled()
     expect(inRequest.capture).toHaveBeenCalledTimes(1)
-  })
-
-  it('should send the autocaptured event when captureExceptionImmediate skips the duplicate', async () => {
-    const client = makeClient()
-    const processListeners = stubProcessListeners()
-    startExceptionAutocapture(client, 'throw')
-    process.on('uncaughtException', vi.fn())
-    const error = new Error('captured twice')
-
-    processListeners.emit('uncaughtException', error, 'uncaughtException')
-    expect(claimExplicitCapture(error, client.key)).toBe(false)
-    await sendAutocapturedEvent(error, client.key)
-
-    expect(client.drain).toHaveBeenCalledTimes(1)
-  })
-
-  it('should send what another client of the project captured when a client flushes', async () => {
-    const processListeners = stubProcessListeners([vi.fn()])
-    const owner = makeClient()
-    const flushing = makeClient()
-    startExceptionAutocapture(owner, 'throw')
-    startExceptionAutocapture(flushing, 'throw')
-
-    processListeners.emit('unhandledRejection', new Error('pending'), Promise.resolve())
-    const waited = waitForPendingRejections(flushing)
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
-    await waited
-
-    expect(owner.capture).toHaveBeenCalledTimes(1)
-    expect(owner.drain).toHaveBeenCalledTimes(1)
   })
 
   it('should not capture a rejection again when the app captured it just before it was thrown', async () => {
@@ -639,91 +560,9 @@ describe('exception autocapture', () => {
 
     expect(claimExplicitCapture(reason, client.key)).toBe(true)
     processListeners.emit('unhandledRejection', reason, Promise.resolve())
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
-
-    expect(client.capture).not.toHaveBeenCalled()
-  })
-
-  it('should capture rejections in their grace period before the process exits on its own', () => {
-    const client = makeClient()
-    const processListeners = stubProcessListeners([vi.fn()])
-    startExceptionAutocapture(client, 'throw')
-    const reason = new Error('just before exit')
-
-    processListeners.emit('unhandledRejection', reason, Promise.resolve())
-    processListeners.emit('beforeExit', 0)
-
-    expect(client.capture).toHaveBeenCalledWith(reason, UNHANDLED_REJECTION_HINT)
-    expect(client.drain).toHaveBeenCalled()
-  })
-
-  it.each([
-    ['captured', false],
-    ['handled', true],
-  ] as const)('should hold a flush until a rejection in its grace period is %s', async (_outcome, handled) => {
-    const client = makeClient()
-    const processListeners = stubProcessListeners([vi.fn()])
-    startExceptionAutocapture(client, 'throw')
-    const promise = Promise.resolve()
-    let waited = false
-
-    processListeners.emit('unhandledRejection', new Error('pending at flush'), promise)
-    void waitForPendingRejections(client).then(() => (waited = true))
-    await vi.advanceTimersByTimeAsync(10)
-    expect(waited).toBe(false)
-
-    if (handled) {
-      processListeners.emit('rejectionHandled', promise)
-    } else {
-      await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
-    }
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(waited).toBe(true)
-    expect(client.capture).toHaveBeenCalledTimes(handled ? 0 : 1)
-  })
-
-  it('should keep a serverless runtime alive until a rejection in its grace period is sent', async () => {
-    const keepAlive = vi.fn()
-    const client = { ...makeClient(), keepAlive }
-    const processListeners = stubProcessListeners([vi.fn()])
-    startExceptionAutocapture(client, 'throw')
-
-    // A burst: one keep-alive and one send cover all of them.
-    for (let index = 0; index < 1000; index++) {
-      processListeners.emit('unhandledRejection', new Error('before the freeze'), Promise.resolve())
-    }
-    expect(keepAlive).toHaveBeenCalledTimes(1)
-    expect(client.drain).not.toHaveBeenCalled()
-
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
-    await keepAlive.mock.calls[0][0]
-    expect(client.capture).toHaveBeenCalledTimes(1000)
-    expect(client.drain).toHaveBeenCalledTimes(1)
-  })
-
-  it('should listen for rejectionHandled only while a rejection is in its grace period', async () => {
-    const processListeners = stubProcessListeners([vi.fn()])
-    startExceptionAutocapture(makeClient(), 'throw')
-    expect(processListeners.listenerCount('rejectionHandled')).toBe(0)
-
-    processListeners.emit('unhandledRejection', new Error('pending'), Promise.resolve())
-    expect(processListeners.listenerCount('rejectionHandled')).toBe(1)
-
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
-    expect(processListeners.listenerCount('rejectionHandled')).toBe(0)
-  })
-
-  it('should send rejections in their grace period when a client stops', () => {
-    const client = makeClient()
-    const processListeners = stubProcessListeners([vi.fn()])
-    const stop = startExceptionAutocapture(client, 'throw')
-    const reason = new Error('pending at shutdown')
-
-    processListeners.emit('unhandledRejection', reason, Promise.resolve())
-    stop()
-
-    expect(client.capture).toHaveBeenCalledWith(reason, UNHANDLED_REJECTION_HINT)
+    expect(client.capture).not.toHaveBeenCalled()
   })
 
   it('should not capture an error through captureException after autocapture sent it to the same project', () => {
@@ -763,10 +602,13 @@ describe('exception autocapture', () => {
     })
     const abort = Object.assign(new Error('aborted'), { name: 'AbortError' })
 
+    const timers = vi.getTimerCount()
     for (const reason of [postpone, hangingPromise, wrapped, abort]) {
       processListeners.emit('unhandledRejection', reason, Promise.resolve())
     }
-    await vi.advanceTimersByTimeAsync(UNHANDLED_REJECTION_GRACE_MS)
+    // Nothing waits for the end of the turn either.
+    expect(vi.getTimerCount()).toBe(timers)
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(client.capture).not.toHaveBeenCalled()
   })
@@ -1065,7 +907,7 @@ describe('exception autocapture', () => {
     }
   )
 
-  it('should not capture a rejection the application handles shortly after Node reports it', async () => {
+  it('should capture a rejection the application handles only after Node reports it, as Node reports it', async () => {
     const [withoutSdk, withSdk] = await Promise.all([
       runUnhandledRejectionChild({ mode: 'throw', scenario: 'late-handled-rejection', withSdk: false }),
       runUnhandledRejectionChild({ mode: 'throw', scenario: 'late-handled-rejection' }),
@@ -1078,7 +920,7 @@ describe('exception autocapture', () => {
       expect(result.stdout).toContain('completed')
       expect(result.stderr).toContain('PromiseRejectionHandledWarning')
     }
-    expect(captureCount(withSdk)).toBe(0)
+    expect(captureCount(withSdk)).toBe(1)
   })
 
   it('should capture a rejection once however many clients the application creates', async () => {
@@ -1113,6 +955,8 @@ describe('exception autocapture', () => {
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('completed')
     expect(captureCount(result)).toBe(1)
+    // The hook's own capture wins, with whatever identity and properties it passes.
+    expect(result.stdout).toContain('posthog-capture:generic:Child process rejection')
   })
 
   it.each([
@@ -1143,18 +987,18 @@ describe('exception autocapture', () => {
     }
   )
 
-  it('should send the exception before captureExceptionImmediate resolves, though autocapture captured it first', async () => {
+  it('should let an uncaught-exception listener added after init capture the exception itself', async () => {
     const result = await runUnhandledRejectionChild({
       mode: 'throw',
       scenario: 'immediate-capture-in-uncaught-listener',
     })
 
     expect(result.code).toBe(0)
-    expect(result.stdout).toMatch(/posthog-capture:onuncaughtexception:Child process exception\nexiting/)
+    expect(result.stdout).toMatch(/posthog-capture:generic:Child process exception\nexiting/)
     expect(captureCount(result)).toBe(1)
   })
 
-  it('should send a rejection in its grace period with the next flush', async () => {
+  it('should send a rejection with a flush that follows it', async () => {
     const result = await runUnhandledRejectionChild({ mode: 'throw', scenario: 'flush-then-exit' })
 
     expect(result.code).toBe(0)

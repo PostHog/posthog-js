@@ -350,14 +350,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   override async flush(): Promise<void> {
-    // A rejection in its grace period would miss this flush, which can be the last before a serverless runtime freezes
-    // the instance. Waiting for it, at most the grace period, also keeps out the ones the app handles in that time.
-    await this.errorTracking.waitForPendingRejections()
-    return this._flushKeepingRuntimeAlive(false)
-  }
-
-  /** @internal Sends what is queued, without waiting for unhandled rejections in their grace period. */
-  _flushQueued(): Promise<void> {
     return this._flushKeepingRuntimeAlive(false)
   }
 
@@ -3260,25 +3252,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     additionalProperties?: Record<string | number, any>,
     flags?: FeatureFlagEvaluations
   ): Promise<void> {
-    if (ErrorTracking.isPreviouslyCapturedError(error)) {
-      return
+    if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
+      const syntheticException = new Error('PostHog syntheticException')
+      return this.addPendingPromise(
+        ErrorTracking.buildEventMessage(
+          this.getErrorPropertiesBuilder(),
+          error,
+          { syntheticException },
+          distinctId,
+          additionalProperties,
+          this.getContext()
+        ).then((msg) => this.captureImmediate({ ...msg, flags }))
+      )
     }
-    if (!this.errorTracking.claimExplicitCapture(error)) {
-      // Exception autocapture already captured this occurrence. It is still sent before this resolves, since an app's
-      // uncaught-exception listener often exits right after.
-      return this.errorTracking.sendAutocapturedEvent(error)
-    }
-    const syntheticException = new Error('PostHog syntheticException')
-    return this.addPendingPromise(
-      ErrorTracking.buildEventMessage(
-        this.getErrorPropertiesBuilder(),
-        error,
-        { syntheticException },
-        distinctId,
-        additionalProperties,
-        this.getContext()
-      ).then((msg) => this.captureImmediate({ ...msg, flags }))
-    )
   }
 
   public async prepareEventMessage(props: EventMessage): Promise<{
