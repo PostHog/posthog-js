@@ -91,13 +91,13 @@ class PosthogReactNativePluginModuleTest {
   }
 
   @Test
-  fun `non-finite screenshot scale uses full resolution`() {
+  fun `non-finite screenshot scale preserves the native default`() {
     for (value in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
       val config = PostHogSessionReplayConfig()
 
       applyScreenshotConfig(JavaOnlyMap.of("screenshotScale", value), config)
 
-      assertEquals(1f, config.screenshotScale)
+      assertNull(config.screenshotScale)
     }
   }
 
