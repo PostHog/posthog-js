@@ -291,7 +291,7 @@ const mapVercelOutput = (result: LanguageModelContent[], client?: FullAiCaptureG
   }
 }
 
-const extractProvider = (model: LanguageModel): string => {
+export const extractProvider = (model: { provider: string }): string => {
   const provider = model.provider.toLowerCase()
   const providerName = provider.split('.')[0]
   return providerName
@@ -304,7 +304,7 @@ const extractProvider = (model: LanguageModel): string => {
  * `openai-compatible` bury it in a `config.url({ path })` closure. Unknown shapes
  * degrade to `''` — those providers (or a custom `fetch`) stay invisible to dedup.
  */
-const extractBaseURL = (model: LanguageModel): string => {
+export const extractBaseURL = (model: { modelId: string }): string => {
   try {
     const config = (model as { config?: unknown }).config
     if (!isObject(config)) {
