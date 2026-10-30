@@ -158,7 +158,7 @@ for (const [region, tokenSource, namespace] of [
 
 test('a matching approved core integrity hash permits normal SDK loading', async ({ page }, testInfo) => {
     const manifest = JSON.parse(readFileSync(path.resolve(__dirname, '../../dist/integrity.json'), 'utf8'))
-    const state = await install(page, testInfo, { coreIntegrity: manifest.files['array.js'] })
+    const state = await install(page, testInfo, { coreIntegrity: manifest.files['array.js'], namespace: version })
     await waitForSDK(page)
     await expect.poll(() => state.events.filter(({ event }) => event === 'queued event')).toHaveLength(1)
     expect(state.errors).toEqual([])
@@ -172,6 +172,7 @@ for (const tamperCore of [false, true]) {
         const state = await install(page, testInfo, {
             coreIntegrity: tamperCore ? manifest.files['array.js'] : 'sha384-' + 'A'.repeat(64),
             tamperCore,
+            namespace: version,
         })
         await page.waitForLoadState('load')
         expect(await page.evaluate(() => window.loaderIntegrityTampered)).toBeUndefined()
