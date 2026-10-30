@@ -243,20 +243,29 @@ export class StylesheetManager {
     linkEl: HTMLLinkElement,
     recorderView: { currentId: () => number; isBlocked: () => boolean },
   ): void {
+    // a stop from inside the consumer's emit has already reset the mirror
+    if (recorderView.currentId() === -1) {
+      return;
+    }
     onceLinkStylesheetUpToDate(linkEl, () => {
-      const id = recorderView.currentId();
-      if (!linkEl.isConnected || id === -1 || recorderView.isBlocked()) {
-        return;
-      }
-      let sheet: CSSStyleSheet | null = null;
       try {
-        sheet = linkEl.sheet;
+        const id = recorderView.currentId();
+        if (!linkEl.isConnected || id === -1 || recorderView.isBlocked()) {
+          return;
+        }
+        let sheet: CSSStyleSheet | null = null;
+        try {
+          sheet = linkEl.sheet;
+        } catch (e) {
+          //
+        }
+        const cssText = sheet && stringifyStylesheet(sheet);
+        if (cssText) {
+          this.emitLinkReplacementMutation(linkEl, id, cssText);
+        }
       } catch (e) {
-        //
-      }
-      const cssText = sheet && stringifyStylesheet(sheet);
-      if (cssText) {
-        this.emitLinkReplacementMutation(linkEl, id, cssText);
+        // runs from a load event or timer: a throwing consumer emit or mask
+        // callback must not surface as an uncaught error on the customer's page
       }
     });
   }
@@ -392,7 +401,7 @@ export class StylesheetManager {
     // any surviving deferral registrations belong to tasks the recorder
     // cancelled at the snapshot boundary; drop them so they don't pin sheets
     this.pendingDeferredSheets.clear();
-    resetStylesheetLoadTracking();
+    resetStylesheetLoadTracking({ keepChangedLinks: true });
   }
 
   // TODO: take snapshot on stylesheet reload by applying event listener

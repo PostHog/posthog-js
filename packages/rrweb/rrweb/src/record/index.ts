@@ -429,6 +429,7 @@ function record<T = eventWithTime>(
 
   // reset mirror in case `record` this was called earlier
   mirror.reset();
+  resetStylesheetLoadTracking();
 
   const maskInputOptions: MaskInputOptions =
     maskAllInputs === true

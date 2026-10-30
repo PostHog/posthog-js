@@ -128,7 +128,6 @@ export default class MutationBuffer {
   private processedNodeManager: observerParam['processedNodeManager'];
   private unattachedDoc: HTMLDocument;
   private canvasManagerReleased = false;
-  private tornDown = false;
 
   public init(options: MutationBufferParam): void {
     (
@@ -193,7 +192,6 @@ export default class MutationBuffer {
   }
 
   public reset(): void {
-    this.tornDown = true;
     // Don't reset the shared shadowDomManager here — that would disconnect every shadow-root observer on the page when any single buffer is torn down.
     this.releaseCanvasManager();
   }
@@ -625,7 +623,8 @@ export default class MutationBuffer {
         if (!('rel' in attributes) && !('href' in attributes)) continue;
         const node = this.mirror.getNode(id) as HTMLLinkElement | null;
         if (
-          node?.nodeName === 'LINK' &&
+          node &&
+          toLowerCase(node.nodeName) === 'link' &&
           isStylesheetLink(node.getAttribute('rel')) &&
           node.getAttribute('href') &&
           !node.disabled
@@ -660,11 +659,6 @@ export default class MutationBuffer {
 
     this.mutationCb(payload);
 
-    // the consumer can stop recording from inside mutationCb, and tracking
-    // registered after that teardown would hold this buffer until the link loads
-    if (this.tornDown) {
-      return;
-    }
     // after the payload, so replay applies the new rel/href before the CSS that replaces the link
     for (const link of stylesheetLinksWithNewSource) {
       this.stylesheetManager.inlineLinkStylesheetAfterChange(link, {

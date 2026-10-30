@@ -497,11 +497,19 @@ function onceIframeLoaded(
   };
 }
 
-const stylesheetLoadTracked = new Map<HTMLLinkElement, AbortController>();
+const stylesheetLoadTracked = new Map<
+  HTMLLinkElement,
+  { controller: AbortController; keepAcrossFullSnapshots: boolean }
+>();
 
-export function resetStylesheetLoadTracking(): void {
-  stylesheetLoadTracked.forEach((controller) => controller.abort());
-  stylesheetLoadTracked.clear();
+export function resetStylesheetLoadTracking(
+  options: { keepChangedLinks?: boolean } = {},
+): void {
+  stylesheetLoadTracked.forEach((tracking, link) => {
+    if (options.keepChangedLinks && tracking.keepAcrossFullSnapshots) return;
+    tracking.controller.abort();
+    stylesheetLoadTracked.delete(link);
+  });
 }
 
 function readLinkSheet(link: HTMLLinkElement): CSSStyleSheet | null {
@@ -517,10 +525,13 @@ function trackStylesheetUntilReady(
   listener: () => unknown,
   isSheetReady: () => boolean,
   checkDelaysMs: readonly number[],
+  keepAcrossFullSnapshots: boolean,
 ) {
   const controller = new AbortController();
   const stopTracking = () => {
-    stylesheetLoadTracked.delete(link);
+    if (stylesheetLoadTracked.get(link)?.controller === controller) {
+      stylesheetLoadTracked.delete(link);
+    }
     controller.abort();
   };
   let fired = false;
@@ -566,7 +577,7 @@ function trackStylesheetUntilReady(
   });
   scheduleCheck(0);
 
-  stylesheetLoadTracked.set(link, controller);
+  stylesheetLoadTracked.set(link, { controller, keepAcrossFullSnapshots });
 }
 
 function onceStylesheetLoaded(
@@ -590,6 +601,7 @@ function onceStylesheetLoaded(
     listener,
     () => Boolean(readLinkSheet(link)),
     [styleSheetLoadTimeout],
+    false,
   );
 }
 
@@ -624,6 +636,9 @@ export function onceLinkStylesheetUpToDate(
     listener,
     sheetMatchesHref,
     CHANGED_LINK_SHEET_CHECK_DELAYS_MS,
+    // a full snapshot inlines the sheet still attached, which is the previous
+    // href's, so only this tracking can record the new sheet
+    true,
   );
 }
 

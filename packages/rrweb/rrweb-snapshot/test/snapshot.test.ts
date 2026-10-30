@@ -1243,6 +1243,35 @@ describe('preload link load-listener accumulation', () => {
     document.head.removeChild(link);
   });
 
+  it('releases a link that leaves the DOM after the first sheet check', () => {
+    const { link } = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-hung.css',
+      sheet: null,
+    });
+    let loadListenersAdded = 0;
+    const addEventListener = link.addEventListener.bind(link);
+    link.addEventListener = ((type: string, ...rest: unknown[]) => {
+      if (type === 'load') loadListenersAdded += 1;
+      return (addEventListener as (...args: unknown[]) => void)(
+        type,
+        ...rest,
+      );
+    }) as typeof link.addEventListener;
+
+    serializeWithCapture(link);
+    vi.advanceTimersByTime(5000);
+    document.head.removeChild(link);
+    vi.advanceTimersByTime(5000);
+
+    document.head.appendChild(link);
+    serializeWithCapture(link);
+
+    expect(loadListenersAdded).toBe(2);
+
+    document.head.removeChild(link);
+  });
+
   it('stops tracking a link whose stylesheet fails to load', () => {
     const { link, setSheet } = setupLink({
       rel: 'stylesheet',
@@ -1385,6 +1414,35 @@ describe('onceLinkStylesheetUpToDate', () => {
     vi.advanceTimersByTime(60_000);
 
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps waiting through the reset at a full snapshot', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    resetStylesheetLoadTracking({ keepChangedLinks: true });
+    attachNewSheet();
+    link.dispatchEvent(new Event('load'));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops waiting at a full reset', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    resetStylesheetLoadTracking();
+    attachNewSheet();
+    link.dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(60_000);
+
+    expect(listener).not.toHaveBeenCalled();
   });
 
   it('runs at once when the attached sheet already belongs to the current href', () => {

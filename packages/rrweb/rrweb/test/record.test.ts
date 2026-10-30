@@ -1888,6 +1888,45 @@ describe('record', function (this: ISuite) {
       expect(cssTextMutation.attributes._cssText).toContain('color: pink');
     });
 
+    it('inlines the new sheet when a full snapshot runs while a changed link loads', async () => {
+      await ctx.page.evaluate(async (serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+        await new Promise((resolve) => {
+          link.onload = resolve;
+          document.head.appendChild(link);
+        });
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=2`);
+        // the full snapshot lands while the v=2 sheet is still loading
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        record.takeFullSnapshot(true);
+      }, serverURL);
+
+      await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+      const lastFullSnapshotIndex = ctx.events
+        .map((e) => e.type)
+        .lastIndexOf(EventType.FullSnapshot);
+      const cssTextEventIndex = ctx.events.findIndex(
+        (e) =>
+          e.type === EventType.IncrementalSnapshot &&
+          e.data.source === IncrementalSource.Mutation &&
+          e.data.attributes.some((m) => '_cssText' in m.attributes),
+      );
+
+      expect(lastFullSnapshotIndex).toBeGreaterThan(0);
+      expect(cssTextEventIndex).toBeGreaterThan(lastFullSnapshotIndex);
+    });
+
     const changeHrefThen = (serverURL: string, afterChange: 'block' | 'stop') =>
       ctx.page.evaluate(
         async (serverURL, afterChange) => {
