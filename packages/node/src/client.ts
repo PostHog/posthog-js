@@ -614,6 +614,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * It does not reject when delivery fails: those failures arrive on the `'error'` event.
    */
   override async flush(): Promise<void> {
+    // An app's crash handler often flushes and exits before the end of the turn, when autocapture would capture.
+    this.errorTracking.capturePendingExceptions()
     return this._keepRuntimeAlive(this._flushEventsAndSpans())
   }
 
@@ -3637,7 +3639,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   captureException(error: unknown, options?: CaptureExceptionOptions): void
   captureException(error: unknown, options?: unknown, ...legacyArgs: unknown[]): void {
     const exceptionOptions = readCaptureExceptionArgs('captureException', options, legacyArgs, true)
-    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+    if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
         this._buildExceptionEvent(error, syntheticException, exceptionOptions).then((msg) =>
@@ -3688,7 +3690,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   captureExceptionImmediate(error: unknown, options?: CaptureExceptionOptions): Promise<void>
   async captureExceptionImmediate(error: unknown, options?: unknown, ...legacyArgs: unknown[]): Promise<void> {
     const exceptionOptions = readCaptureExceptionArgs('captureExceptionImmediate', options, legacyArgs, false)
-    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+    if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       return this.addPendingPromise(
         this._buildExceptionEvent(error, syntheticException, exceptionOptions).then((msg) => this.captureImmediate(msg))
