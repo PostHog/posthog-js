@@ -318,7 +318,7 @@ class PostHogBrowserClient implements PostHog {
         return !this._closing && !this._disposed && !this._blocked && !this.hasOptedOut() && this._state.prepare()
     }
 
-    capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): void {
+    capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): boolean {
         try {
             if (options.delivery === 'unload' && !this._captureSink?.isTearingDown) {
                 const authority = this._immediateAuthority
@@ -326,13 +326,13 @@ class PostHogBrowserClient implements PostHog {
                 if (message) {
                     this._captureSink?.deliverUnload(message, () => this._immediateAuthority === authority)
                 }
-                return
+                return !!message || !this._rateLimiter.limited
             }
         } catch (error) {
             this.logger.error('Unload capture failed', error)
-            return
+            return true
         }
-        this._capture(event, properties, options)
+        return this._capture(event, properties, options) || !this._rateLimiter.limited
     }
 
     async captureImmediate(

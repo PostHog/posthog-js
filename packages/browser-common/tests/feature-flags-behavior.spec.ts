@@ -477,6 +477,7 @@ describe('featureflags', () => {
 
             vi.mocked(client.capture).mockImplementation(() => {
                 client.distinctId = 'other-user'
+                return true
             })
             client.canCapture = true
             featureFlags.sendFlagCallsPendingCapture()
@@ -499,6 +500,26 @@ describe('featureflags', () => {
             client.kv.set({ $feature_flag_evaluated_at: Date.now() })
             featureFlags.sendFlagCallsPendingCapture()
             expect(flagCalledEvents()).toHaveLength(1)
+        })
+    })
+
+    describe('flag reads that the client rate limit drops', () => {
+        const flagCalledEvents = () =>
+            vi.mocked(client.capture).mock.calls.filter(([event]) => event === '$feature_flag_called')
+
+        it.each([
+            ['sends the exposure once the rate limit clears', false, 2],
+            ['retries the exposure once per capture while the rate limit lasts', true, 3],
+        ])('%s', (_, staysRateLimited, expectedCount) => {
+            featureFlags._hasLoadedFlags = true
+            vi.mocked(client.capture).mockReturnValue(!staysRateLimited)
+            vi.mocked(client.capture).mockReturnValueOnce(false)
+            featureFlags.getFeatureFlag('beta-feature')
+
+            featureFlags.sendFlagCallsPendingCapture()
+            featureFlags.sendFlagCallsPendingCapture()
+
+            expect(flagCalledEvents()).toHaveLength(expectedCount)
         })
     })
 

@@ -1031,9 +1031,14 @@ export class PostHogFeatureFlags implements Extension {
         }
         this._sendingFlagCallsPendingCapture = true
         try {
-            this._flagCallsPendingCapture.forEach((readBy, key) => {
+            // A read that the rate limit drops goes back into the map. Iterate over a copy, so that read waits for the
+            // next capture instead of looping here.
+            Array.from(this._flagCallsPendingCapture.keys()).forEach((key) => {
+                if (!this._flagCallsPendingCapture.has(key)) {
+                    return
+                }
                 // Check the identity for each read, because a capture listener can call identify() during this loop.
-                if (readBy === this._client?.distinctId) {
+                if (this._flagCallsPendingCapture.get(key) === this._client?.distinctId) {
                     // The read leaves the pending map once it is evaluated. A read that returns early, for example on
                     // an expired flag cache, stays pending for the next capture.
                     this.getFeatureFlagResult(key)
@@ -1459,7 +1464,11 @@ export class PostHogFeatureFlags implements Extension {
                     properties.$feature_flag_error = errors.join(',')
                 }
 
-                this._captureFeatureFlagCalled(properties)
+                if (!this._captureFeatureFlagCalled(properties)) {
+                    // The client rate limit dropped the event. Remove the mark so the next capture sends the exposure.
+                    this._unmarkFlagCallReported(key, flagReportValue)
+                    this._flagCallsPendingCapture.set(key, this._client?.distinctId)
+                }
             } else if (sessionIdToPersist) {
                 this._set({
                     [FLAG_CALL_REPORTED]: flagCallReported,
@@ -1485,12 +1494,24 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    private _captureFeatureFlagCalled(properties: Record<string, any | undefined>): void {
+    /** Returns `false` when the client rate limit dropped the event. */
+    private _captureFeatureFlagCalled(properties: Record<string, any | undefined>): boolean {
         try {
-            this._client?.capture('$feature_flag_called', properties)
+            return this._client?.capture('$feature_flag_called', properties) !== false
         } catch (error) {
             this._logger.error('Failed to capture feature flag call', error)
+            return true
         }
+    }
+
+    private _unmarkFlagCallReported(key: string, flagReportValue: string): void {
+        const flagCallReported: Record<string, string[]> = this._prop(FLAG_CALL_REPORTED) || {}
+        const reportedValues = flagCallReported[key]
+        if (!isArray(reportedValues) || !reportedValues.includes(flagReportValue)) {
+            return
+        }
+        flagCallReported[key] = reportedValues.filter((value) => value !== flagReportValue)
+        this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
     }
 
     /*

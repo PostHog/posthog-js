@@ -42,6 +42,11 @@ export class ClientRateLimiter {
         return { allowed: false, ...(reportDropped === undefined ? {} : { reportDropped }) }
     }
 
+    /** Whether the last consumed token was refused. */
+    get limited(): boolean {
+        return this._limited
+    }
+
     reported(): void {
         this._unreportedDropped = 0
     }
