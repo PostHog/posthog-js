@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.443.0
+
+### Minor Changes
+
+- [#5470](https://github.com/PostHog/posthog-js/pull/5470) [`41ae7fd`](https://github.com/PostHog/posthog-js/commit/41ae7fd024a582c811e85bae16e284467ae4ee3d) Thanks [@marandaneto](https://github.com/marandaneto)! - Add a nonblocking local bootstrap with early-call queuing, and make hosted and local loaders honor the selected latest, major, or exact-version SDK namespace.
+  (2026-10-30)
+
 ## 1.442.1
 
 ### Patch Changes
