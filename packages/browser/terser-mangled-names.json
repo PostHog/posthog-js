@@ -527,7 +527,7 @@
         "_markGroupDirty",
         "_markLoadedCrossTabFeatureFlagChangesPending",
         "_markMessagesAsRead",
-        "_markMetaIdentifierDelivered",
+        "_markMetaIdentifiersDelivered",
         "_markPendingCrossTabFeatureFlagChanges",
         "_maskRegionsFnFailed",
         "_maskReplayUrl",

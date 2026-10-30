@@ -343,6 +343,32 @@ describe('capture() hot path', () => {
         }
     )
 
+    it.each<PostHogConfig['persistence']>(['localStorage', 'localStorage+cookie'])(
+        'does not parse the persistence entry again for later responses confirming the same $fbc (persistence: %s)',
+        (persistence) => {
+            const { posthog, events, pendingResponses } = setupMetaCapture({ persistence })
+            posthog.persistence!.register({
+                $active_feature_flags: ACTIVE_FEATURE_FLAGS,
+                [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: 'fb.1.1700000000000.click', delivered: false },
+            })
+            for (let i = 0; i < 3; i++) {
+                posthog.capture('sends the pending $fbc')
+            }
+            expect(events.map((event) => event.$set?.$fbc)).toEqual(Array(3).fill('fb.1.1700000000000.click'))
+
+            const [firstResponse, ...laterResponses] = pendingResponses
+            firstResponse()
+            const parseSpy = vi.spyOn(JSON, 'parse')
+            laterResponses.forEach((respond) => respond())
+
+            expect(persistenceEntryParses(parseSpy)).toHaveLength(0)
+            expect(posthog.persistence!.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual({
+                value: 'fb.1.1700000000000.click',
+                delivered: true,
+            })
+        }
+    )
+
     it('sends the $fbc another frame wrote to the shared sessionStorage', () => {
         const token = uuidv7()
         const config: Partial<PostHogConfig> = {

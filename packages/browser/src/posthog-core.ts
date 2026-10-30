@@ -229,6 +229,8 @@ type MetaIdentifierChannel = {
     unregister: () => void
 }
 
+type SentMetaIdentifier = { channel: MetaIdentifierChannel; value: string }
+
 // The pixel's _fbc carries the true click time: it wins for a click the URL or the store holds, or for a newer one.
 const fbcCookieWins = (
     cookieFbc: string,
@@ -1726,16 +1728,22 @@ export class PostHog implements PostHogInterface {
         return stored ? { value: stored.value, pending: !stored.delivered } : undefined
     }
 
-    private _markMetaIdentifierDelivered(channel: MetaIdentifierChannel, value: string): void {
+    private _markMetaIdentifiersDelivered(sent: SentMetaIdentifier[]): void {
         if (!this.persistence) {
+            return
+        }
+        const awaitingDelivery = ({ channel, value }: SentMetaIdentifier) => {
+            const stored = this._getPersistedMetaIdentifier(channel)
+            return stored?.value === value && !stored.delivered
+        }
+        // Later callbacks in a batch find the value already delivered and skip the refresh.
+        const toConfirm = sent.filter(awaitingDelivery)
+        if (!toConfirm.length) {
             return
         }
         // A sibling may have stored a newer value since this request was sent.
         this.persistence.refreshMetaIdentifiers()
-        const stored = this._getPersistedMetaIdentifier(channel)
-        if (stored?.value === value && !stored.delivered) {
-            channel.register(value, true)
-        }
+        toConfirm.filter(awaitingDelivery).forEach(({ channel, value }) => channel.register(value, true))
     }
 
     /**
@@ -2018,11 +2026,14 @@ export class PostHog implements PostHogInterface {
             setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
         }
 
-        const metaIdentifiersToConfirm = metaIdentifiers.filter(({ channel, update }) => {
+        const metaIdentifiersToConfirm: SentMetaIdentifier[] = []
+        metaIdentifiers.forEach(({ channel, update }) => {
             const finalValue =
                 data.$set?.[channel.property] ??
                 (isObject(data.properties?.$set) ? data.properties.$set[channel.property] : undefined)
-            return update?.pending && finalValue === update.value
+            if (update?.pending && finalValue === update.value) {
+                metaIdentifiersToConfirm.push({ channel, value: update.value })
+            }
         })
 
         this._internalEventEmitter.emit('eventCaptured', data)
@@ -2050,9 +2061,7 @@ export class PostHog implements PostHogInterface {
                       fireCallbackOnDrop: true,
                       callback: (response) => {
                           if (response.statusCode >= 200 && response.statusCode < 300) {
-                              for (const { channel, update } of metaIdentifiersToConfirm) {
-                                  this._markMetaIdentifierDelivered(channel, update!.value)
-                              }
+                              this._markMetaIdentifiersDelivered(metaIdentifiersToConfirm)
                           }
                       },
                   }
