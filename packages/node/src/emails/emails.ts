@@ -307,12 +307,12 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 
   const payload: Record<string, unknown> = {
-    template: { id: templateId.toLowerCase() },
+    template_id: templateId.toLowerCase(),
     to,
     message_data: templateData ?? {},
   }
   if (distinctId !== undefined) {
-    payload.identifiers = { distinct_id: distinctId }
+    payload.distinct_id = distinctId
   }
   return {
     path: SEND_PATH,
