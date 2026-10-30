@@ -10,7 +10,9 @@ vi.mock('posthog-node', () => ({
     PostHog: mockPostHog,
 }))
 
-import { captureRequestError, createOnRequestError, onRequestError } from '../src/server.edge'
+import { NextRequest } from 'next/server'
+import type { NextFetchEvent } from 'next/server'
+import { captureRequestError, createOnRequestError, onRequestError, withPostHogProxy } from '../src/server.edge'
 
 describe('Next.js onRequestError edge runtime', () => {
     const originalEnv = process.env
@@ -40,7 +42,7 @@ describe('Next.js onRequestError edge runtime', () => {
         const cookie = postHogCookie('phc_edge_test', {
             distinct_id: 'edge_user',
             $device_id: 'edge_device',
-            $sesid: [1708700000000, 'edge_session', 1708700000000],
+            $sesid: [Date.now() - 60 * 1000, 'edge_session', Date.now() - 60 * 60 * 1000],
         })
 
         await onRequestError(
@@ -97,6 +99,78 @@ describe('Next.js onRequestError edge runtime', () => {
             expect.any(Error),
             undefined,
             expect.objectContaining({ custom_property: 'edge-custom-value' })
+        )
+    })
+
+    it('reads identity from tracing headers in the edge runtime', async () => {
+        await onRequestError(
+            new Error('edge route failed'),
+            { headers: { 'x-posthog-distinct-id': 'edge_header_user', 'x-posthog-session-id': 'edge_header_session' } },
+            {}
+        )
+
+        expect(mockCaptureExceptionImmediate).toHaveBeenCalledWith(
+            expect.any(Error),
+            'edge_header_user',
+            expect.objectContaining({ $session_id: 'edge_header_session' })
+        )
+    })
+
+    it('captures edge middleware errors once with withPostHogProxy and rethrows them', async () => {
+        const error = new Error('edge middleware failed')
+        const middleware = withPostHogProxy(() => {
+            throw error
+        })
+        const request = new NextRequest('https://edge.example.com/account?session=secret', {
+            headers: { host: 'edge.example.com' },
+        })
+        const event = { sourcePage: '/middleware', waitUntil: vi.fn() } as unknown as NextFetchEvent
+
+        await expect(middleware(request, event)).rejects.toBe(error)
+        // Next.js 15 and earlier report edge middleware errors to onRequestError after the middleware throws.
+        await onRequestError(
+            error,
+            { path: '/account?session=secret', method: 'GET', headers: {} },
+            { routerKind: 'Pages Router', routePath: '/middleware', routeType: 'middleware' }
+        )
+
+        expect(mockCaptureExceptionImmediate).toHaveBeenCalledTimes(1)
+        expect(mockCaptureExceptionImmediate).toHaveBeenCalledWith(
+            error,
+            undefined,
+            expect.objectContaining({
+                $current_url: 'https://edge.example.com/account',
+                $request_path: '/account',
+                nextjs_router_kind: 'Pages Router',
+                nextjs_route_path: '/middleware',
+                nextjs_route_type: 'middleware',
+            })
+        )
+        expect((error as Error & Record<string, unknown>).__posthog_previously_captured_error).toBe(true)
+    })
+
+    it('leaves an edge middleware error to onRequestError when the wrapper skips it', async () => {
+        const error = new Error('edge middleware failed')
+        const middleware = withPostHogProxy(
+            () => {
+                throw error
+            },
+            { disabled: true }
+        )
+        const event = { sourcePage: '/middleware', waitUntil: vi.fn() } as unknown as NextFetchEvent
+
+        await expect(middleware(new NextRequest('https://edge.example.com/account'), event)).rejects.toBe(error)
+        await onRequestError(
+            error,
+            { path: '/account', method: 'GET', headers: {} },
+            { routerKind: 'Pages Router', routePath: '/middleware', routeType: 'middleware' }
+        )
+
+        expect(mockCaptureExceptionImmediate).toHaveBeenCalledTimes(1)
+        expect(mockCaptureExceptionImmediate).toHaveBeenCalledWith(
+            error,
+            undefined,
+            expect.objectContaining({ nextjs_route_type: 'middleware' })
         )
     })
 })

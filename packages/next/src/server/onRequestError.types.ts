@@ -49,6 +49,12 @@ export interface OnRequestErrorOptions {
         opt_out_capturing_by_default?: boolean
     }
     /**
+     * Seconds without activity after which the browser SDK starts a new session. A PostHog cookie session that has
+     * been idle for longer is not attached to the exception. Set it to the `session_idle_timeout_seconds` you give
+     * posthog-js. Like posthog-js, it is clamped to 60 seconds to 10 hours. Default: 1800 (30 minutes).
+     */
+    sessionIdleTimeoutSeconds?: number
+    /**
      * Optionally add or override properties before capture. Return false to skip capture.
      */
     beforeCapture?: (

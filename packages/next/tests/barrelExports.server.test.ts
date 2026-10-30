@@ -81,6 +81,7 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
             ['captureRequestError', 'function'],
             ['onRequestError', 'function'],
             ['createOnRequestError', 'function'],
+            ['withPostHogProxy', 'function'],
             ['DEFAULT_INGEST_PATH', 'string'],
         ])('exposes %s as %s', (name, expectedType) => {
             expect(typeof asRecord(indexNode)[name]).toBe(expectedType)
@@ -97,6 +98,7 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
             ['captureRequestError', 'function'],
             ['onRequestError', 'function'],
             ['createOnRequestError', 'function'],
+            ['withPostHogProxy', 'function'],
             ['PostHogPageView', 'function'],
             ['DEFAULT_INGEST_PATH', 'string'],
         ])('exposes %s as %s', (name, expectedType) => {

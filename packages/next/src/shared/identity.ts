@@ -34,7 +34,7 @@ export type PostHogDistinctIdResolver = (
  * `unstable_rethrow` because that API doesn't exist across the supported
  * `next >= 13` peer range.
  */
-function isNextControlFlowError(error: unknown): boolean {
+export function isNextControlFlowError(error: unknown): boolean {
     const digest = (error as { digest?: unknown } | null | undefined)?.digest
     return (
         typeof digest === 'string' &&
