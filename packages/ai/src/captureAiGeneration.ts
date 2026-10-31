@@ -7,7 +7,13 @@ import { formatAiError } from './serializeError'
 import { AIEvent, CostOverride, getTokensSource, hasTokenOverrides, isPrivacyModeEnabled } from './utils'
 import { redactMcpToolCredentials } from './mcpCredentials'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
-import { captureAiEvent, captureAiEventImmediate, personlessOptions, userDistinctId } from './captureAiEvent'
+import {
+  captureAiEvent,
+  captureAiEventImmediate,
+  isPostHogNode6,
+  personlessOptions,
+  userDistinctId,
+} from './captureAiEvent'
 
 /**
  * Options for `captureAiGeneration`. Mirrors the `$ai_generation` event shape
@@ -100,7 +106,7 @@ const captureAiException = (
   properties: Record<string, unknown>,
   uuid: string
 ): void => {
-  if (typeof client.registerOptions === 'function') {
+  if (isPostHogNode6(client)) {
     client.captureException(error, { properties, uuid })
     return
   }
