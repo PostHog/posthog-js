@@ -46,7 +46,7 @@ A `404` that lasts through every retry can mean the deployment has no capture v1
 If you send events through your own reverse proxy, update it before you upgrade:
 
 - Forward `/i/v1/analytics/events` and `/i/v1/ai/events` to PostHog.
-- Pass `Authorization` through unchanged when it starts with `Bearer `. It carries the project API key, which is no longer in the request body. PostHog answers `401` without it.
+- Pass `Authorization` through unchanged when it starts with `Bearer phc_`, `Bearer phs_` or `Bearer phx_`. `phc_` is the project API key, which is no longer in the request body, and PostHog answers `401` without it. `phs_` and `phx_` are the secret key the SDK sends for local feature flag evaluation and remote config. Also allow the exact `Bearer <key>` value of an older key without one of these prefixes. Strip any other `Authorization` value, such as session tokens your app adds to its own requests. See the [proxy reference](https://posthog.com/docs/advanced/proxy/proxy-reference).
 - Pass every `PostHog-*` header, `Content-Type`, `Content-Encoding` and `User-Agent` through unchanged. PostHog answers `400` without them, and the batch fails.
 - Accept request bodies up to 20 MB. AI requests are often larger than 1 MB, the default limit in nginx and ingress-nginx.
 
