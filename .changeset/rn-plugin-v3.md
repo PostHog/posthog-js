@@ -13,5 +13,6 @@ Release `@posthog/react-native-plugin` 3.0, with the upgrade steps in the [migra
 - **Breaking:** ignore `iOSdebouncerDelayMs` and `androidDebouncerDelayMs` when calling `setup()` directly — pass `throttleDelayMs` instead
 - **Breaking:** ignore the experimental iOS session replay option `screenshotModeBackgroundCapture`
 - **Breaking:** require posthog-android 4.0
+- Always record Android session replay as masked screenshots, the mode the plugin already used
 - Accept `projectToken` as well as `apiKey` in `setup()` options on Android
 - Treat the plugin's `start()` method as optional in `posthog-react-native`

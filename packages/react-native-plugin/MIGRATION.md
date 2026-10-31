@@ -103,6 +103,10 @@ sdkReplayConfig: { throttleDelayMs: 500 }
 
 **If ignored:** replay silently uses the 1000 ms default.
 
+### Android session replay records only masked screenshots
+
+`posthog-android` 4.0 removes wireframe capture. The plugin already forced screenshot mode, so your recordings don't change. If native code in your app sets `sessionReplayConfig.screenshot`, remove it, because it no longer compiles.
+
 ### `screenshotModeBackgroundCapture` is ignored on iOS
 
 This experimental option no longer has any effect, and screenshots are captured on the main thread. `posthog-react-native` ## Native SDK 4.0: not merged yet
