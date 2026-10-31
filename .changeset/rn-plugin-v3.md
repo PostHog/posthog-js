@@ -15,6 +15,7 @@ Release `@posthog/react-native-plugin` 3.0, with the upgrade steps in the [migra
 - **Breaking:** ignore the experimental iOS session replay option `screenshotModeBackgroundCapture`
 - Accept `projectToken` as well as `apiKey` in `setup()` options on Android
 - Treat the plugin's `start()` method as optional in `posthog-react-native`
+- Deprecate `screenshotModeBackgroundCapture` in `posthog-react-native`
 - Always record iOS session replay as masked screenshots, the mode the plugin already used
 - Pause iOS native uploads (session replay, native crash reports) while cellular data is turned off for the app, instead of sending requests that fail
 - Stop bundling posthog-ios's native surveys in apps that use React Native's Swift Package Manager integration
