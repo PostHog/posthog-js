@@ -1,48 +1,76 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument, PostHog, PostHogMCP } from '../index'
-import { version } from '../version'
+import { version as mcpVersion } from '../version'
 import { setupTestServerAndClient } from './test-utils/client-server-factory'
 
+const CAPTURE_PATH = '/i/v1/analytics/events'
+
+/** A fetch that accepts every request and records the capture requests' headers. */
+function recordingFetch(): { fetch: any; captureHeaders: Record<string, string>[] } {
+  const captureHeaders: Record<string, string>[] = []
+  const fetch = vi.fn(async (url: string, init: { headers: Record<string, string> }) => {
+    if (url.includes(CAPTURE_PATH)) {
+      captureHeaders.push(init.headers)
+    }
+    return {
+      status: 200,
+      text: async () => '{"results":{}}',
+      json: async () => ({ results: {} }),
+      headers: { get: () => null },
+    }
+  })
+  return { fetch, captureHeaders }
+}
+
 /**
- * Every event @posthog/mcp sends should self-identify with the standard PostHog
- * `$lib` / `$lib_version` keys (value `posthog-node-mcp`), not the inherited
- * `posthog-node` transport id. posthog-node stamps those from the client's
- * `getLibraryId()` / `getLibraryVersion()`, so we assert on the getters.
+ * posthog-node identifies itself to PostHog (`$lib`, `$lib_version`, the `PostHog-Sdk-Info` and
+ * `User-Agent` headers) from `getLibraryId()` / `getLibraryVersion()`. @posthog/mcp must leave
+ * them as posthog-node's own, on its own client and on a client passed to `instrument()`;
+ * `@posthog/ai` reads the version to pick posthog-node 6's AI capture lane.
  */
 describe('lib identity', () => {
   const options = { host: 'http://localhost', flushAt: 1, fetchRetryCount: 0 } as const
+  const nodeVersion = new PostHog('phc_test', { ...options, disabled: true }).getLibraryVersion()
 
-  function instrumented(): PostHog {
-    const posthog = new PostHog('phc_test', options)
+  function instrumented(extra: Record<string, unknown> = {}): PostHog {
+    const posthog = new PostHog('phc_test', { ...options, ...extra })
     const server = new McpServer({ name: 'my-mcp', version: '1.0.0' }, { capabilities: { tools: {} } })
     instrument(server, posthog)
     return posthog
   }
 
-  // Both emit paths must report the identical `$lib` / `$lib_version` contract.
-  it.each([
-    { path: 'PostHogMCP', makeClient: () => new PostHogMCP('phc_test', options) },
+  const paths = [
+    { path: 'PostHogMCP', makeClient: (extra = {}) => new PostHogMCP('phc_test', { ...options, ...extra }) },
     { path: 'instrument()', makeClient: instrumented },
-  ])('$path reports $lib=posthog-node-mcp / $lib_version=<package version>', async ({ makeClient }) => {
+  ]
+
+  it('compares against a posthog-node version, not the @posthog/mcp one', () => {
+    expect(nodeVersion).not.toBe(mcpVersion)
+  })
+
+  it.each(paths)('$path keeps posthog-node as the library id and version', async ({ makeClient }) => {
     const client = makeClient()
     try {
-      expect(client.getLibraryId()).toBe('posthog-node-mcp')
-      expect(client.getLibraryVersion()).toBe(version)
+      expect(client.getLibraryId()).toBe('posthog-node')
+      expect(client.getLibraryVersion()).toBe(nodeVersion)
     } finally {
       await client.shutdown()
     }
   })
 
-  it('instrument() flips the host client from posthog-node to posthog-node-mcp', async () => {
-    const posthog = new PostHog('phc_test', options)
+  it.each(paths)('$path sends events as posthog-node', async ({ makeClient }) => {
+    const { fetch, captureHeaders } = recordingFetch()
+    const client = makeClient({ fetch })
     try {
-      expect(posthog.getLibraryId()).toBe('posthog-node')
-      const server = new McpServer({ name: 'my-mcp', version: '1.0.0' }, { capabilities: { tools: {} } })
-      instrument(server, posthog)
-      expect(posthog.getLibraryId()).toBe('posthog-node-mcp')
+      client.capture({ distinctId: 'user-1', event: 'example_event' })
+      await client.flush()
+
+      expect(captureHeaders).toHaveLength(1)
+      expect(captureHeaders[0]['PostHog-Sdk-Info']).toBe(`posthog-node/${nodeVersion}`)
+      expect(captureHeaders[0]['User-Agent']).toBe(`posthog-node/${nodeVersion}`)
     } finally {
-      await posthog.shutdown()
+      await client.shutdown()
     }
   })
 
