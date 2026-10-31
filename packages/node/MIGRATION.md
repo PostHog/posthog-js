@@ -280,6 +280,11 @@ PostHog sets `$lib` and `$lib_version` on every event from the `PostHog-Sdk-Info
 The SDK removes `$lib` and `$lib_version` from the properties it sends.
 A value you set on an event, in context, with `register()` or in `before_send` does not reach PostHog.
 
+`@posthog/mcp` no longer relabels the client.
+Before, `PostHogMCP` and a client passed to `instrument()` reported `posthog-node-mcp` and the `@posthog/mcp` version for every event and request, including the app's own events.
+Now they report `posthog-node`, like every other client.
+To find MCP traffic, filter on the `$mcp_*` events and properties instead of `$lib`.
+
 ## Session and window ids
 
 Capture v1 sends `$session_id` and `$window_id` as top-level event fields, not as properties.

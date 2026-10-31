@@ -43,7 +43,6 @@ import { PostHogMCPAnalyticsProperty } from './constants'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { normalizeHeaderString } from './headers'
-import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
 import {
   addModelParameterToTool,
@@ -178,7 +177,6 @@ export class PostHogMCP extends PostHog {
     this.#captureModel = options.captureModel
     this.#enableConversationId = options.enableConversationId ?? true
     this.#serverBuild = serverBuild
-    applyMcpLibIdentity(this)
   }
 
   get #feedbackToolName(): string {

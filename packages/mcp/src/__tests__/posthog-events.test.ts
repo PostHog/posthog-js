@@ -80,9 +80,8 @@ describe('buildPostHogCaptureEvents', () => {
   })
 
   it('does not stamp $lib/$lib_version in the built properties (the client owns those)', () => {
-    // `$lib` / `$lib_version` are set by the posthog-node client via
-    // `getLibraryId()` / `getLibraryVersion()` (see `applyMcpLibIdentity`), not
-    // by the event builder — and never as the legacy `$mcp_lib` keys.
+    // The posthog-node client sets `$lib` / `$lib_version`, not the event builder,
+    // and never as the legacy `$mcp_lib` keys.
     const [event] = buildPostHogCaptureEvents(makeEvent())
 
     expect(event.properties).not.toHaveProperty('$lib')
