@@ -59,7 +59,7 @@ The plugin is still a CocoaPod, but it no longer depends on the `PostHog` pod. R
 **Changes with no install error:**
 
 - **Builds fetch `posthog-ios` from GitHub.** Xcode resolves it from `https://github.com/PostHog/posthog-ios.git`, so build machines need access to it. `Podfile.lock` no longer records its version.
-- **Your own native code can stop compiling.** The package is added only to the plugin's pod target. If your app target has `import PostHog`, add `posthog-ios` to that target as a Swift package with a compatible version.
+- **Your own native code may stop compiling.** React Native's helper adds the package only to the plugin's pod target, not your app target. We haven't tested this case, but if your app target has `import PostHog` and it no longer resolves, add `posthog-ios` to that target as a Swift package with a compatible version.
 - **Custom dSYM upload scripts can stop working.** `${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh` no longer exists. Use `${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh`. The `uploadNativeSymbols` build phase from the Expo config plugin already checks both paths.
 - **Remove `posthog-react-native-session-replay` if you still have it.** Its pod brings in `posthog-ios` from CocoaPods alongside the plugin's Swift package, and that combination is untested.
 
@@ -125,7 +125,7 @@ This experimental option no longer has any effect, and screenshots are captured 
 - [ ] `posthog.useSpm` is gone from `ios/Podfile.properties.json`.
 - [ ] Your Podfile doesn't use `generate_multiple_pod_projects`, `deduplicate_targets => false`, or plugin targets with mixed platform or linkage settings.
 - [ ] Build machines can reach `github.com/PostHog/posthog-ios`.
-- [ ] Native `import PostHog` code and custom dSYM upload scripts are updated.
+- [ ] Native `import PostHog` code still compiles, and custom dSYM upload scripts are updated.
 - [ ] `posthog-react-native-session-replay` is removed.
 - [ ] Direct `start()` calls now use `setup()`, and direct `setup()` calls pass `throttleDelayMs`.
 - [ ] `screenshotModeBackgroundCapture` is removed.

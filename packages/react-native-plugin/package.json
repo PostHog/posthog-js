@@ -24,6 +24,7 @@
     "lib",
     "android",
     "ios",
+    "MIGRATION.md",
     "*.podspec",
     "!ios/build",
     "!android/build",
