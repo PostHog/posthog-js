@@ -11,7 +11,7 @@ If you only use the plugin through `posthog-react-native`, you don't need any Ja
 | macOS deployment target                             | 10.15                                                           | 11.0                  |
 | How `posthog-ios` is installed                      | CocoaPods trunk, or Swift Package Manager with `posthog.useSpm` | Swift Package Manager |
 
-Android `minSdk` stays at 23. `posthog-react-native` still accepts this plugin through its optional `>= 2.9.3` peer range, and 4.47.0 is the first version that loads the plugin.
+Android `minSdk` stays at 23. `posthog-react-native` still accepts this plugin through its optional `>= 2.12.7` peer range, and 4.47.0 is the first version that loads the plugin.
 
 Expo SDK 52 is the first Expo SDK that meets the React Native and iOS requirements. The Expo config plugin needs no changes.
 
@@ -111,7 +111,7 @@ This experimental option no longer has any effect, and screenshots are captured 
 
 <!-- Before release: finish #5237 and #5476, move what shipped into the sections above, and delete this heading. -->
 
-3.0.0 isn't meant to ship until it requires `posthog-ios` 4.0 ([#5237](https://github.com/PostHog/posthog-js/pull/5237)). Moving to `posthog-android` 4.0 is also proposed ([#5476](https://github.com/PostHog/posthog-js/pull/5476)). Both PRs are open and could change, and this branch still pins `posthog-ios` 3.88.2 and `posthog-android` 3.71.6. If they land as written:
+3.0.0 isn't meant to ship until it requires `posthog-ios` 4.0 ([#5237](https://github.com/PostHog/posthog-js/pull/5237)). Moving to `posthog-android` 4.0 is also proposed ([#5476](https://github.com/PostHog/posthog-js/pull/5476)). Both PRs are open and could change, and this branch still pins `posthog-ios` 3.92.7 and `posthog-android` 3.74.2. If they land as written:
 
 - iOS builds need Xcode 26 or later.
 - iOS native uploads, such as session replay and native crash reports, pause while cellular data is turned off for the app.
