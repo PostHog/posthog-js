@@ -134,7 +134,7 @@ posthog.on('error', (error) => {
 })
 ```
 
-- `details` names the reason, for example a capture result such as `invalid_options` or `duplicate_event_uuid`, or a local reason: `queue full`, `event too large` or `invalid event`.
+- `details` names the reason, for example a capture result such as `invalid_options` or `duplicate_event_uuid`, or a local reason: `queue full`, `event too large`, `invalid event` or `unserializable event`.
 - A local drop report lists at most 100 uuids. Its message carries the full count.
 - An event with no result in a `2xx` response counts as delivered. A proxy that answers the capture path with its own `200` therefore reports nothing. Make sure your proxy passes the capture response through.
 - With no `'error'` listener, the SDK logs one warning per failed batch, for example `[PostHog] 3 event(s) were not delivered to /i/v1/analytics/events: 3 failed with HTTP 400`. The line never contains event content, uuids or the server's response text.
@@ -163,6 +163,7 @@ Each lane has its own queue, batches and requests, so a slow or failing lane nev
 - `maxQueueSize` (default 10000) now applies to analytics events only. When a queue is full, the oldest event is dropped and reported through `'error'`.
 - `flush()` and `shutdown()` send both lanes at the same time. `shutdown(shutdownTimeoutMs)` uses one deadline for both. Events still queued at the deadline are reported through `'error'`.
 - The `'flush'` event fires once per lane.
+- The `'capture'` and `'flush'` events carry each message as it was queued, before the SDK builds the capture v1 event. Its properties can still hold `$lib`, `$lib_version`, legacy option properties such as `$process_person_profile`, and `$session_id` or `$window_id`, although the SDK removes or moves them before sending.
 - `captureCompression` (new) sets how analytics requests are compressed: `'none'`, `'gzip'`, `'deflate'` or `'zstd'`. The default is `'gzip'`. `disableCompression: true` still turns compression off when `captureCompression` is not set. `'zstd'` needs Node 22.15 or later and falls back to `'gzip'` elsewhere, including the edge build.
 - `requestTimeout` (default 10000 ms) still sets the timeout of analytics requests.
 
@@ -296,6 +297,8 @@ Capture rejects a whole request when one event has a broken field.
 
 - An event whose name is missing, empty or not a string is dropped and reported through `'error'` (`details: 'invalid event'`). 5.x sent it, and an object name was sent as `"[object Object]"`.
 - An event whose name, distinct id, session id or window id is not well-formed Unicode (it has a lone surrogate) is dropped the same way.
+- An event with a property value that throws when the SDK reads or serializes it, such as a getter or a `toJSON` method that throws, is dropped alone and reported through `'error'` (`details: 'unserializable event'`). The report has no event content, and the SDK does not keep or log the error. When the event has no uuid yet, the report counts it but does not list it.
+- In 5.x, a value that threw when the client read the call's properties dropped the event and printed the raw error with `console.error`, without `'error'`. A value that threw during serialization failed the whole batch, up to `maxBatchSize` events, and emitted the raw error on `'error'`.
 - A lone surrogate in a property string is replaced with U+FFFD, and the event is kept. Before, one bad character failed the whole request.
 - `NaN`, `Infinity` and `-Infinity` are sent as `null`, and the event is kept. A `NaN` under `$set` clears that person property.
 - PostHog drops an event whose name is over 200 UTF-8 bytes (`event_name_too_long`), and `'error'` reports it. Legacy capture had no event name limit. Check your event names before you upgrade.

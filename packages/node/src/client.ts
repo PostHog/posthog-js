@@ -211,6 +211,26 @@ function readCaptureExceptionArgs(
 }
 
 /**
+ * A caller value threw while the client read the event, so the event is dropped as
+ * `unserializable`. `original` only lets `prepareEventMessage()` reject as it did before; the drop
+ * report never uses it, because its message can hold event data.
+ */
+class UnreadableEventError extends Error {
+  constructor(readonly original: unknown) {
+    super('A value in the event threw while it was read')
+  }
+}
+
+/** Runs `read` over caller values; a throw becomes an `UnreadableEventError`. */
+function readCallerValues<T>(read: () => T): T {
+  try {
+    return read()
+  } catch (error) {
+    throw new UnreadableEventError(error)
+  }
+}
+
+/**
  * A copy of the event for `before_send`, so a hook that mutates it cannot change the caller's
  * objects or the `register()` and context defaults. Plain objects and arrays are copied all the
  * way down; class instances (`Date`, `Buffer`, custom classes) stay shared. The hook always gets
@@ -231,7 +251,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null
 }
 
-// `seen` keeps a circular value circular, so it still fails at serialization as it would without a hook.
+// `seen` keeps a circular value circular, so it serializes as it would without a hook.
 function copyPlainValues(value: unknown, seen: WeakMap<object, unknown>): unknown {
   if (!Array.isArray(value) && !isPlainRecord(value)) {
     return value
@@ -1278,11 +1298,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             : this.enqueue(type, message, captureOptions, explicitRoute)
         })
         .catch((err) => {
-          if (err) {
+          // Only a caller value that threw is a local drop; anything else is an SDK failure.
+          if (err instanceof UnreadableEventError) {
+            this._dropUnreadableEvent(uuid, immediate, explicitRoute)
+          } else if (err) {
             console.error(err)
           }
         })
     )
+  }
+
+  private _dropUnreadableEvent(uuid: string | undefined, immediate: boolean, explicitRoute?: string): void {
+    if (this.disabled || this.optedOut) {
+      return
+    }
+    this._captureLane(explicitRoute).dropUnserializable(uuid, immediate)
   }
 
   _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
@@ -3637,7 +3667,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns The event with its properties and options filled, after `before_send`
    */
   public async prepareEventMessage(props: EventMessage): Promise<PreparedEventMessage> {
-    return this._prepareEventMessage(props)
+    try {
+      return await this._prepareEventMessage(props)
+    } catch (error) {
+      throw error instanceof UnreadableEventError ? error.original : error
+    }
   }
 
   /**
@@ -3673,7 +3707,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       presentDistinctId(distinctId) ?? presentDistinctId(contextData?.distinctId) ?? prepareOptions.fallbackDistinctId
     const eventDistinctId = resolvedDistinctId ?? eventUuidv7()
 
-    const eventProperties: PostHogEventProperties = { ...(properties || {}) }
+    const eventProperties: PostHogEventProperties = readCallerValues(() => ({ ...(properties || {}) }))
     if (prepareOptions.distinctIdProperty) {
       eventProperties.distinct_id = eventDistinctId
     }
@@ -3762,7 +3796,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     const fns = Array.isArray(beforeSend) ? beforeSend : [beforeSend]
-    let result: EventMessage | null = isolateForBeforeSend(eventMessage)
+    let result: EventMessage | null = readCallerValues(() => isolateForBeforeSend(eventMessage))
 
     for (const fn of fns) {
       try {

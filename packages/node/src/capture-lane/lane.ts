@@ -51,22 +51,27 @@ interface QueuedEvent extends SerializedV1Event {
   message: PostHogEventProperties
 }
 
-type LocalDropReason = 'queueFull' | 'tooLarge' | 'invalid'
+type LocalDropReason = 'queueFull' | 'tooLarge' | 'invalid' | 'unserializable'
 
 interface LocalDropTally {
   queueFull: number
   tooLarge: number
   invalid: number
+  unserializable: number
   sample: CaptureDroppedEvent[]
 }
 
-const emptyTally = (): LocalDropTally => ({ queueFull: 0, tooLarge: 0, invalid: 0, sample: [] })
+const emptyTally = (): LocalDropTally => ({ queueFull: 0, tooLarge: 0, invalid: 0, unserializable: 0, sample: [] })
 
 const LOCAL_DROP_DETAILS: Record<LocalDropReason, string> = {
   queueFull: 'queue full',
   tooLarge: 'event too large',
   invalid: 'invalid event',
+  unserializable: 'unserializable event',
 }
+
+/** An event ready to send, or the uuid and reason of one dropped before sending. */
+type CheckedEvent = { event: SerializedV1Event } | { uuid: string; drop: LocalDropReason }
 
 /**
  * One capture endpoint's in-memory queue, flush timer, `flushAt` trigger, batching and
@@ -104,22 +109,17 @@ export class CaptureLane {
   }
 
   enqueue(message: PostHogEventProperties): void {
-    const event: QueuedEvent = { ...serializeV1Event(message), message }
-    if (wireProblem(message)) {
-      this.recordLocalDrop(event, 'invalid')
-      this.armFlushTimer()
-      return
-    }
-    if (this.isTooLarge(event)) {
-      this.recordLocalDrop(event, 'tooLarge')
+    const checked = this.check(message)
+    if ('drop' in checked) {
+      this.recordLocalDrop(checked.uuid, checked.drop)
       // Nothing may follow to flush, and the flush cycle is what reports the drop.
       this.armFlushTimer()
       return
     }
     if (this.queue.length >= this.config.maxQueueSize) {
-      this.recordLocalDrop(this.queue.shift()!, 'queueFull')
+      this.recordLocalDrop(this.queue.shift()!.uuid, 'queueFull')
     }
-    this.queue.push(event)
+    this.queue.push({ ...checked.event, message })
 
     if (this.queue.length >= this.config.flushAt) {
       this.flushInBackground()
@@ -130,15 +130,49 @@ export class CaptureLane {
 
   /** Sends one event now, without queueing. Delivery failures are reported, not thrown. */
   async sendImmediate(message: PostHogEventProperties): Promise<void> {
-    const event = serializeV1Event(message)
-    const reason = wireProblem(message) ? 'invalid' : this.isTooLarge(event) ? 'tooLarge' : undefined
-    if (reason) {
+    const checked = this.check(message)
+    if ('drop' in checked) {
       const tally = emptyTally()
-      this.addToTally(tally, event, reason)
+      this.addToTally(tally, checked.uuid, checked.drop)
       this.reportTally(tally)
       return
     }
-    await this.hooks.sender.send([event], { signal: this.abortController.signal })
+    await this.hooks.sender.send([checked.event], { signal: this.abortController.signal })
+  }
+
+  /**
+   * Drops an event the client could not read before it reached the lane, as `unserializable`. A
+   * queued event's drop is reported with the next flush cycle and an immediate one at once. An
+   * event with no uuid yet is counted but not listed.
+   */
+  dropUnserializable(uuid: string | undefined, immediate: boolean): void {
+    if (immediate) {
+      const tally = emptyTally()
+      this.addToTally(tally, uuid, 'unserializable')
+      this.reportTally(tally)
+      return
+    }
+    this.recordLocalDrop(uuid, 'unserializable')
+    // Nothing may follow to flush, and the flush cycle is what reports the drop.
+    this.armFlushTimer()
+  }
+
+  /**
+   * Serializes the event and checks its name, ids and size. A value that throws while it is read
+   * or written (a getter or `toJSON`) drops only this event. The error is not kept, because its
+   * message can carry event data.
+   */
+  private check(message: PostHogEventProperties): CheckedEvent {
+    let event: SerializedV1Event
+    try {
+      event = serializeV1Event(message)
+      if (wireProblem(message)) {
+        return { uuid: event.uuid, drop: 'invalid' }
+      }
+    } catch {
+      return { uuid: String(message.uuid), drop: 'unserializable' }
+    }
+    return this.isTooLarge(event) ? { uuid: event.uuid, drop: 'tooLarge' } : { event }
   }
 
   /** Sends everything queued when the returned flush starts. Never rejects. */
@@ -267,7 +301,7 @@ export class CaptureLane {
   private requeue(events: QueuedEvent[]): void {
     this.queue.unshift(...events)
     while (this.queue.length > this.config.maxQueueSize) {
-      this.recordLocalDrop(this.queue.shift()!, 'queueFull')
+      this.recordLocalDrop(this.queue.shift()!.uuid, 'queueFull')
     }
     this.hooks.logger.debug(
       `Kept ${events.length} event(s) for ${this.config.endpoint} after a network failure; the next flush sends them`
@@ -279,14 +313,14 @@ export class CaptureLane {
     return bytes > this.config.maxEventBytes
   }
 
-  private recordLocalDrop(event: SerializedV1Event, reason: LocalDropReason): void {
-    this.addToTally(this.localDrops, event, reason)
+  private recordLocalDrop(uuid: string | undefined, reason: LocalDropReason): void {
+    this.addToTally(this.localDrops, uuid, reason)
   }
 
-  private addToTally(tally: LocalDropTally, event: SerializedV1Event, reason: LocalDropReason): void {
+  private addToTally(tally: LocalDropTally, uuid: string | undefined, reason: LocalDropReason): void {
     tally[reason]++
-    if (tally.sample.length < MAX_REPORTED_LOCAL_DROPS) {
-      tally.sample.push({ uuid: event.uuid, details: LOCAL_DROP_DETAILS[reason] })
+    if (uuid !== undefined && tally.sample.length < MAX_REPORTED_LOCAL_DROPS) {
+      tally.sample.push({ uuid, details: LOCAL_DROP_DETAILS[reason] })
     }
   }
 
@@ -312,7 +346,7 @@ export class CaptureLane {
       errors.push(error)
       loss.add('still queued when shutdown ended', leftovers.length)
     }
-    const total = tally.queueFull + tally.tooLarge + tally.invalid
+    const total = tally.queueFull + tally.tooLarge + tally.invalid + tally.unserializable
     if (total > 0) {
       const { maxQueueSize, maxEventBytes, maxEventBytesOf } = this.config
       const reasons: string[] = []
@@ -326,6 +360,9 @@ export class CaptureLane {
       if (tally.invalid > 0) {
         reasons.push(`${tally.invalid} with a missing, empty or malformed event name or id`)
       }
+      if (tally.unserializable > 0) {
+        reasons.push(`${tally.unserializable} with a value that could not be serialized`)
+      }
       const error = new CaptureError({ endpoint, requestId: '', drops: tally.sample, retryExhausted: [] })
       error.message = `Dropped ${total} event(s) for ${endpoint} before sending: ${reasons.join(', ')}`
       errors.push(error)
@@ -333,6 +370,7 @@ export class CaptureLane {
       const measured = maxEventBytesOf === 'properties' ? 'their properties were' : 'they were'
       loss.add(`dropped because ${measured} larger than ${maxEventBytes} bytes`, tally.tooLarge)
       loss.add('dropped because the event name or an id was missing, empty or malformed', tally.invalid)
+      loss.add('dropped because a value could not be serialized', tally.unserializable)
     }
     if (errors.length > 0) {
       this.safely(() => this.hooks.onLocalDrops(errors, describeCaptureLoss(endpoint, loss)))
