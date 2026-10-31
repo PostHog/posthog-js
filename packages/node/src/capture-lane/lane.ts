@@ -141,6 +141,23 @@ export class CaptureLane {
   }
 
   /**
+   * Drops an event the client could not read before it reached the lane, as `unserializable`. A
+   * queued event's drop is reported with the next flush cycle and an immediate one at once. An
+   * event with no uuid yet is counted but not listed.
+   */
+  dropUnserializable(uuid: string | undefined, immediate: boolean): void {
+    if (immediate) {
+      const tally = emptyTally()
+      this.addToTally(tally, uuid, 'unserializable')
+      this.reportTally(tally)
+      return
+    }
+    this.recordLocalDrop(uuid, 'unserializable')
+    // Nothing may follow to flush, and the flush cycle is what reports the drop.
+    this.armFlushTimer()
+  }
+
+  /**
    * Serializes the event and checks its name, ids and size. A value that throws while it is read
    * or written (a getter or `toJSON`) drops only this event. The error is not kept, because its
    * message can carry event data.
@@ -296,13 +313,13 @@ export class CaptureLane {
     return bytes > this.config.maxEventBytes
   }
 
-  private recordLocalDrop(uuid: string, reason: LocalDropReason): void {
+  private recordLocalDrop(uuid: string | undefined, reason: LocalDropReason): void {
     this.addToTally(this.localDrops, uuid, reason)
   }
 
-  private addToTally(tally: LocalDropTally, uuid: string, reason: LocalDropReason): void {
+  private addToTally(tally: LocalDropTally, uuid: string | undefined, reason: LocalDropReason): void {
     tally[reason]++
-    if (tally.sample.length < MAX_REPORTED_LOCAL_DROPS) {
+    if (uuid !== undefined && tally.sample.length < MAX_REPORTED_LOCAL_DROPS) {
       tally.sample.push({ uuid, details: LOCAL_DROP_DETAILS[reason] })
     }
   }

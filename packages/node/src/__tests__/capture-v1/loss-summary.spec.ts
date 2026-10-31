@@ -1,6 +1,6 @@
 import { CaptureError, type PostHog, type PostHogOptions } from '@/entrypoints/index.node'
 
-import { ANALYTICS_CAPTURE_PATH, v1Response } from '../utils'
+import { AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, v1Response } from '../utils'
 import { V1WiringHarness } from '../utils/v1-wiring'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
@@ -198,38 +198,50 @@ describe('capture loss summary', () => {
 
   describe('an event with a value that cannot be serialized', () => {
     const BAD_UUID = '0198c0de-0000-7000-8000-0000000000bd'
-    const unserializable: [string, () => object][] = [
-      [
-        'a nested getter that throws',
-        () =>
-          Object.defineProperty({}, 'value', {
-            enumerable: true,
-            get: () => {
-              throw new Error(`getter failed: ${SECRET_PROPERTY}`)
-            },
-          }),
-      ],
-      [
-        'a toJSON that throws',
-        () => ({
-          toJSON: () => {
-            throw new Error(`toJSON failed: ${SECRET_PROPERTY}`)
-          },
-        }),
-      ],
-    ]
-    const cases = unserializable.flatMap(([label, value]) => [
-      [label, false, value] as const,
-      [label, true, value] as const,
-    ])
+    const GOOD_UUIDS = ['0198c0de-0000-7000-8000-000000000001', '0198c0de-0000-7000-8000-000000000002']
+    const DROP_MESSAGE = (endpoint: string): string =>
+      `Dropped 1 event(s) for ${endpoint} before sending: 1 with a value that could not be serialized`
+    const LOSS_LINE =
+      '[PostHog] 1 event(s) were not delivered to /i/v1/analytics/events: 1 dropped because a value could not be serialized'
 
-    /** Captures a good event, the unserializable one, then another good event; returns the good uuids. */
-    async function captureAround(posthog: PostHog, value: object, immediate: boolean): Promise<string[]> {
-      const good = ['0198c0de-0000-7000-8000-000000000001', '0198c0de-0000-7000-8000-000000000002']
+    const throwingGetter = (): object =>
+      Object.defineProperty({}, 'value', {
+        enumerable: true,
+        get: () => {
+          throw new Error(`getter failed: ${SECRET_PROPERTY}`)
+        },
+      })
+    const throwingToJson = (): object => ({
+      toJSON: () => {
+        throw new Error(`toJSON failed: ${SECRET_PROPERTY}`)
+      },
+    })
+
+    // Where the value throws: while the lane serializes the event, or while the client first reads
+    // the call's properties (their spread, or the copy made for before_send).
+    const unserializable: [string, () => Record<string, any>, PostHogOptions][] = [
+      ['a nested getter that throws', () => ({ nested: throwingGetter() }), {}],
+      ['a toJSON that throws', () => ({ value: throwingToJson() }), {}],
+      ['a getter directly on properties that throws', throwingGetter as () => Record<string, any>, {}],
+      ['a nested getter copied for before_send', () => ({ nested: throwingGetter() }), { before_send: (e) => e }],
+    ]
+    const cases = unserializable.flatMap(([label, properties, options]) =>
+      [false, true].flatMap((immediate) =>
+        [true, false].map((callerUuid) => [label, immediate, callerUuid, properties, options] as const)
+      )
+    )
+
+    /** Captures a good event, the unserializable one, then another good event. */
+    async function captureAround(
+      posthog: PostHog,
+      properties: Record<string, any>,
+      immediate: boolean,
+      callerUuid: boolean
+    ): Promise<void> {
       const events = [
-        { distinctId: 'u', event: 'before', uuid: good[0] },
-        { distinctId: 'u', event: 'signup', properties: { nested: { value } }, uuid: BAD_UUID },
-        { distinctId: 'u', event: 'after', uuid: good[1] },
+        { distinctId: 'u', event: 'before', uuid: GOOD_UUIDS[0] },
+        { distinctId: 'u', event: 'signup', properties, ...(callerUuid ? { uuid: BAD_UUID } : {}) },
+        { distinctId: 'u', event: 'after', uuid: GOOD_UUIDS[1] },
       ]
       for (const event of events) {
         if (immediate) {
@@ -241,51 +253,91 @@ describe('capture loss summary', () => {
       if (!immediate) {
         await posthog.flush()
       }
-      return good
     }
 
     it.each(cases)(
-      "drops only the event with %s (immediate: %s) and hands the local-drop CaptureError to 'error'",
-      async (_label, immediate, value) => {
+      "drops only the event with %s (immediate: %s, caller uuid: %s) and hands the local-drop CaptureError to 'error'",
+      async (label, immediate, callerUuid, properties, options) => {
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-        const posthog = harness.makeClient()
+        const posthog = harness.makeClient(options)
         const errors: unknown[] = []
         posthog.on('error', (error) => errors.push(error))
 
-        await captureAround(posthog, value(), immediate)
+        await captureAround(posthog, properties(), immediate, callerUuid)
 
         expect(harness.eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['before', 'after'])
         expect(errors).toHaveLength(1)
         const error = errors[0] as CaptureError
         expect(error).toBeInstanceOf(CaptureError)
-        expect(error.endpoint).toBe('/i/v1/analytics/events')
+        expect(error.endpoint).toBe(ANALYTICS_CAPTURE_PATH)
         expect(error.requestId).toBe('')
-        expect(error.drops).toEqual([{ uuid: BAD_UUID, details: 'unserializable event' }])
+        if (callerUuid) {
+          expect(error.drops).toEqual([{ uuid: BAD_UUID, details: 'unserializable event' }])
+        } else if (label.startsWith('a nested getter that') || label.startsWith('a toJSON')) {
+          // The lane serializes after the SDK generated the event's uuid.
+          expect(error.drops).toEqual([{ uuid: expect.stringMatching(UUID), details: 'unserializable event' }])
+        } else {
+          // Dropped before the SDK generates a uuid: counted, not listed.
+          expect(error.drops).toEqual([])
+        }
         expect(error.retryExhausted).toEqual([])
-        expect(error.message).toBe(
-          'Dropped 1 event(s) for /i/v1/analytics/events before sending: 1 with a value that could not be serialized'
-        )
+        expect(error.message).toBe(DROP_MESSAGE(ANALYTICS_CAPTURE_PATH))
         expect(consoleError).not.toHaveBeenCalled()
         expect(lines()).toEqual([])
       }
     )
 
     it.each(cases)(
-      'logs one content-free line for %s (immediate: %s) when nothing listens',
-      async (_label, immediate, value) => {
+      'logs one content-free line for %s (immediate: %s, caller uuid: %s) when nothing listens',
+      async (_label, immediate, callerUuid, properties, options) => {
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-        const posthog = harness.makeClient()
+        const posthog = harness.makeClient(options)
 
-        await captureAround(posthog, value(), immediate)
+        await captureAround(posthog, properties(), immediate, callerUuid)
 
         expect(harness.eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['before', 'after'])
-        expect(lines()).toEqual([
-          '[PostHog] 1 event(s) were not delivered to /i/v1/analytics/events: 1 dropped because a value could not be serialized',
-        ])
+        expect(lines()).toEqual([LOSS_LINE])
         expectContentFree(lines()[0])
         expect(consoleError).not.toHaveBeenCalled()
       }
     )
+
+    it.each([false, true])(
+      'reports a captureAi event whose properties throw on the AI lane, under its returned uuid (immediate: %s)',
+      async (immediate) => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+        const posthog = harness.makeClient()
+        const errors: unknown[] = []
+        posthog.on('error', (error) => errors.push(error))
+
+        const event = { distinctId: 'u', event: '$ai_generation', properties: throwingGetter() as any }
+        const uuid = immediate ? await posthog.captureAiImmediate(event) : posthog.captureAi(event)
+        posthog.captureAi({ distinctId: 'u', event: '$ai_span' })
+        await posthog.flush()
+
+        expect(harness.eventsIn(AI_CAPTURE_PATH)).toEqual(['$ai_span'])
+        expect(errors).toHaveLength(1)
+        const error = errors[0] as CaptureError
+        expect(error.endpoint).toBe(AI_CAPTURE_PATH)
+        expect(error.requestId).toBe('')
+        expect(error.drops).toEqual([{ uuid, details: 'unserializable event' }])
+        expect(error.message).toBe(DROP_MESSAGE(AI_CAPTURE_PATH))
+        expect(consoleError).not.toHaveBeenCalled()
+      }
+    )
+
+    it('still rejects prepareEventMessage() with the error the value threw', async () => {
+      const posthog = harness.makeClient()
+      const thrown = new Error('getter failed')
+      const properties = Object.defineProperty({}, 'value', {
+        enumerable: true,
+        get: () => {
+          throw thrown
+        },
+      })
+
+      await expect(posthog.prepareEventMessage({ distinctId: 'u', event: 'signup', properties })).rejects.toBe(thrown)
+    })
   })
 
   it("logs nothing and hands the CaptureError to an 'error' listener", async () => {

@@ -297,7 +297,8 @@ Capture rejects a whole request when one event has a broken field.
 
 - An event whose name is missing, empty or not a string is dropped and reported through `'error'` (`details: 'invalid event'`). 5.x sent it, and an object name was sent as `"[object Object]"`.
 - An event whose name, distinct id, session id or window id is not well-formed Unicode (it has a lone surrogate) is dropped the same way.
-- An event with a value inside a property that throws when it is serialized, such as a nested getter or a `toJSON` method that throws, is dropped alone and reported through `'error'` (`details: 'unserializable event'`). The SDK does not log the error, because its message can hold event data.
+- An event with a property value that throws when the SDK reads or serializes it, such as a getter or a `toJSON` method that throws, is dropped alone and reported through `'error'` (`details: 'unserializable event'`). The report has no event content, and the SDK does not keep or log the error. When the event has no uuid yet, the report counts it but does not list it.
+- In 5.x, a value that threw when the client read the call's properties dropped the event and printed the raw error with `console.error`, without `'error'`. A value that threw during serialization failed the whole batch, up to `maxBatchSize` events, and emitted the raw error on `'error'`.
 - A lone surrogate in a property string is replaced with U+FFFD, and the event is kept. Before, one bad character failed the whole request.
 - `NaN`, `Infinity` and `-Infinity` are sent as `null`, and the event is kept. A `NaN` under `$set` clears that person property.
 - PostHog drops an event whose name is over 200 UTF-8 bytes (`event_name_too_long`), and `'error'` reports it. Legacy capture had no event name limit. Check your event names before you upgrade.
