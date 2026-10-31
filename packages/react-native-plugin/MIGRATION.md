@@ -113,6 +113,10 @@ sdkReplayConfig: { throttleDelayMs: 500 }
 
 This experimental option no longer has any effect, and screenshots are captured on the main thread. `posthog-react-native` still accepts the option, so nothing warns you. Remove it from `sessionReplayConfig`.
 
+### iOS session replay records only masked screenshots
+
+`posthog-ios` 4.0 removes wireframe capture. The plugin already forced screenshot mode, so your recordings don't change. If native code in your app sets `sessionReplayConfig.screenshotMode`, remove it, because it no longer compiles.
+
 ### iOS uploads pause while cellular data is off
 
 Native uploads, such as session replay and native crash reports, pause while cellular data is turned off for your app, instead of sending requests that fail.
