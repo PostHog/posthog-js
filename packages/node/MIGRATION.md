@@ -239,7 +239,7 @@ These changes follow from this order:
 - `before_send` now sees `$is_server`, `$geoip_disable`, feature flag properties, trace ids and `options`. In 5.x it ran before the SDK added them. To change an option in `before_send`, edit `options`, which is always an object.
 - `before_send` gets its own copy of the event's plain objects and arrays. Changing a nested value no longer changes your objects or the `register()` and context values, as it could in 5.x. Class instances, such as `Date`, are not copied.
 - `$geoip_disable` and `$groups` are set before `before_send`, so to change them, edit the properties. Changing the message's `disableGeoip` or `groups` field has no effect.
-- A `before_send` hook that throws drops the event, as in 5.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing.
+- A `before_send` hook that throws drops the event, as in 5.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing. It is printed with `console.error` even when `debug` is off; in 5.x it showed only with `debug` on.
 - With `sendFeatureFlags`, the `/flags` request now runs before `before_send` and uses the event's own distinct id, even for an event the hook then drops. Changes the hook makes to the message's `groups` or `sendFeatureFlags` no longer reach that request, as editing those objects in place could in 5.x. To avoid that request, call `evaluateFlags()` yourself and pass the snapshot as `flags`.
 - Context and `register()` properties and options now reach `identify`, `alias` and `groupIdentify` events, not only `capture`.
 
