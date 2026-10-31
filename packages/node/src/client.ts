@@ -231,7 +231,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null
 }
 
-// `seen` keeps a circular value circular, so it still fails at serialization as it would without a hook.
+// `seen` keeps a circular value circular, so it serializes as it would without a hook.
 function copyPlainValues(value: unknown, seen: WeakMap<object, unknown>): unknown {
   if (!Array.isArray(value) && !isPlainRecord(value)) {
     return value
