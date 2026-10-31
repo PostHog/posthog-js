@@ -7,7 +7,7 @@ import { formatAiError } from './serializeError'
 import { AIEvent, CostOverride, getTokensSource, hasTokenOverrides, isPrivacyModeEnabled } from './utils'
 import { redactMcpToolCredentials } from './mcpCredentials'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
-import { captureAiEvent, captureAiEventImmediate } from './captureAiEvent'
+import { captureAiEvent, captureAiEventImmediate, personlessOptions, userDistinctId } from './captureAiEvent'
 
 /**
  * Options for `captureAiGeneration`. Mirrors the `$ai_generation` event shape
@@ -231,6 +231,8 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
     }
 
+    const distinctId = userDistinctId(options.distinctId)
+
     const properties: Record<string, unknown> = {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
@@ -250,7 +252,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       ...(options.baseURL === null ? {} : { $ai_base_url: options.baseURL ?? '' }),
       ...options.properties,
       $ai_tokens_source: getTokensSource(options.properties),
-      ...(options.distinctId ? {} : { $process_person_profile: false }),
+      ...(distinctId ? {} : { $process_person_profile: false }),
       ...(options.stopReason ? { $ai_stop_reason: options.stopReason } : {}),
       ...(options.tools ? { $ai_tools: redactMcpToolCredentials(options.tools) } : {}),
       ...(options.completionId ? { $ai_completion_id: options.completionId } : {}),
@@ -262,10 +264,11 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     }
 
     const event: EventMessage = {
-      distinctId: options.distinctId ?? traceId,
+      distinctId: distinctId ?? traceId,
       event: eventType,
       properties,
       groups: options.groups,
+      ...personlessOptions(!distinctId),
     }
 
     if (options.captureImmediate) {

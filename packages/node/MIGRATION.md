@@ -186,6 +186,7 @@ In 5.x they sent to the legacy AI endpoint.
 `@posthog/ai` sends every AI event with `captureAi()` when the client is posthog-node 6.
 `enableFullAiCapture` then controls only string truncation and media redaction.
 With posthog-node 5, nothing changes: AI events use `capture()` unless `enableFullAiCapture` is set.
+When an `@posthog/ai` integration has no user distinct id, it sends the event under the trace or run id with the option `process_person_profile: false`, so a `registerOptions()` or context `process_person_profile: true` doesn't create a person for each trace. An empty or whitespace-only distinct id counts as missing.
 
 ## Event options
 

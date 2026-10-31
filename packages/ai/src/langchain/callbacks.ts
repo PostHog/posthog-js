@@ -15,7 +15,7 @@ import { formatAiError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 import { isObject } from '../typeGuards'
 import { responsesStopReason } from '../openai/utils'
-import { captureAiEvent } from '../captureAiEvent'
+import { captureAiEvent, personlessOptions, userDistinctId } from '../captureAiEvent'
 
 // Mirror LangGraph's isGraphBubbleUp guard without adding LangGraph as a dependency. Every
 // LangGraph control-flow exception (GraphInterrupt, NodeInterrupt, ParentCommand, GraphDrained,
@@ -84,7 +84,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
     super()
     this.client = options.client
-    this.distinctId = options.distinctId
+    this.distinctId = userDistinctId(options.distinctId)
     this.traceId = options.traceId
     this.properties = options.properties || {}
     this.privacyMode = options.privacyMode || false
@@ -484,6 +484,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       event: eventName,
       properties: eventProperties,
       groups: this.groups,
+      ...personlessOptions(!this.distinctId),
     })
   }
 
@@ -617,6 +618,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       event: '$ai_generation',
       properties: eventProperties,
       groups: this.groups,
+      ...personlessOptions(!this.distinctId),
     })
   }
 

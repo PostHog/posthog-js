@@ -80,6 +80,32 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties.$ai_provider).toBe('openai')
   })
 
+  it.each([
+    { distinctId: undefined, personless: true },
+    { distinctId: '', personless: true },
+    { distinctId: '  ', personless: true },
+    { distinctId: 'user-1', personless: false },
+  ])('marks events personless only without a user distinct id: $distinctId', ({ distinctId, personless }) => {
+    const capture = mockPostHogClient.capture as vi.Mock
+    const personlessHandler = new LangChainCallbackHandler({ client: mockPostHogClient, distinctId })
+    const llm = { lc: 1, type: 'constructor', id: ['langchain', 'llms', 'openai', 'OpenAI'], kwargs: {} } as const
+    const chain = { lc: 1, type: 'constructor', id: ['langchain', 'chains', 'TestChain'], kwargs: {} } as const
+
+    personlessHandler.handleLLMStart(llm, ['Hello'], 'run_llm', undefined, { invocation_params: {} })
+    personlessHandler.handleLLMEnd({ generations: [[{ text: 'Hi' }]], llmOutput: {} }, 'run_llm')
+    personlessHandler.handleChainStart(chain, {}, 'run_chain')
+    personlessHandler.handleChainEnd({}, 'run_chain')
+
+    const events = capture.mock.calls.map(([event]) => event)
+    expect(events.map((event) => event.distinctId)).toEqual(
+      personless ? ['run_llm', 'run_chain'] : ['user-1', 'user-1']
+    )
+    for (const event of events) {
+      expect(event.properties.$process_person_profile).toBe(personless ? false : undefined)
+      expect(event.options).toEqual(personless ? { process_person_profile: false } : undefined)
+    }
+  })
+
   it('does not throw when generation capture fails', () => {
     const capture = mockPostHogClient.capture as vi.Mock
     capture.mockImplementationOnce(() => {

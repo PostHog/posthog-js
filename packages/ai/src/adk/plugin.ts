@@ -13,7 +13,7 @@ import {
 } from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import { captureAiGeneration } from '../captureAiGeneration'
-import { captureAiEvent, captureAiEventImmediate } from '../captureAiEvent'
+import { captureAiEvent, captureAiEventImmediate, personlessOptions, userDistinctId } from '../captureAiEvent'
 import { formatAiError } from '../serializeError'
 import type { FormattedContent, FormattedMessage } from '../types'
 import { mapGeminiUsage } from '../gemini/usage'
@@ -516,6 +516,7 @@ export class PostHogADKPlugin extends BasePlugin {
         ...(distinctId ? {} : { $process_person_profile: false }),
       },
       groups: this._groups,
+      ...personlessOptions(!distinctId),
     }
 
     if (this._captureImmediate) {
@@ -526,22 +527,13 @@ export class PostHogADKPlugin extends BasePlugin {
   }
 
   private _resolveDistinctId(context: Context): string | undefined {
-    if (typeof this._distinctId === 'function') {
-      const resolved = this._distinctId(context)
-      if (resolved) {
-        return String(resolved)
-      }
-    } else if (this._distinctId) {
-      return String(this._distinctId)
-    }
-    return context.userId ? String(context.userId) : undefined
+    const configured = typeof this._distinctId === 'function' ? this._distinctId(context) : this._distinctId
+    return userDistinctId(configured) ?? userDistinctId(context.userId)
   }
 
   private _resolveInvocationDistinctId(context: InvocationContext): string | undefined {
-    if (typeof this._distinctId === 'string' && this._distinctId) {
-      return String(this._distinctId)
-    }
-    return context.userId ? String(context.userId) : undefined
+    const configured = typeof this._distinctId === 'string' ? this._distinctId : undefined
+    return userDistinctId(configured) ?? userDistinctId(context.userId)
   }
 
   private _rememberContext(context: Context): void {

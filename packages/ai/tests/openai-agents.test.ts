@@ -178,8 +178,8 @@ describe('PostHogTracingProcessor', () => {
   })
 
   describe('personless mode', () => {
-    it('uses personless mode when no distinct_id is provided', async () => {
-      const proc = new PostHogTracingProcessor({ client: mockClient })
+    it.each([undefined, '', '  '])('uses personless mode when the distinct_id is %j', async (distinctId) => {
+      const proc = new PostHogTracingProcessor({ client: mockClient, distinctId })
       const trace = createMockTrace()
 
       await proc.onTraceStart(trace as any)
@@ -187,6 +187,7 @@ describe('PostHogTracingProcessor', () => {
 
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$process_person_profile).toBe(false)
+      expect(call.options).toEqual({ process_person_profile: false })
       expect(call.distinctId).toBe(trace.traceId)
     })
 
@@ -205,13 +206,14 @@ describe('PostHogTracingProcessor', () => {
 
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$process_person_profile).toBe(false)
+      expect(call.options).toEqual({ process_person_profile: false })
       expect(call.distinctId).toBe(trace.traceId)
     })
 
-    it('uses personless mode when callable distinct_id returns null', async () => {
+    it.each([null, '  '])('uses personless mode when callable distinct_id returns %j', async (resolved) => {
       const proc = new PostHogTracingProcessor({
         client: mockClient,
-        distinctId: () => null,
+        distinctId: () => resolved,
       })
       const trace = createMockTrace()
       const span = createMockSpan({
@@ -226,6 +228,7 @@ describe('PostHogTracingProcessor', () => {
 
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$process_person_profile).toBe(false)
+      expect(call.options).toEqual({ process_person_profile: false })
       expect(call.distinctId).toBe(trace.traceId)
     })
 
@@ -236,6 +239,7 @@ describe('PostHogTracingProcessor', () => {
 
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$process_person_profile).toBeUndefined()
+      expect(call.options).toBeUndefined()
     })
   })
 
