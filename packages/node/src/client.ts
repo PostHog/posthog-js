@@ -3778,7 +3778,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       } catch (error) {
         // The error's message can carry the data the hook was redacting, so only its type is logged.
         const errorType = error instanceof Error ? error.name : typeof error
-        this._logger.error(`Error in before_send function for event '${eventMessage.event}' (${errorType})`)
+        // console.error, not this._logger: the logger only prints in debug mode, and the event is lost.
+        console.error(`[PostHog] Error in before_send function for event '${eventMessage.event}' (${errorType})`)
         return null
       }
     }
