@@ -4865,7 +4865,9 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Enables event tracking and data persistence (cookies/localStorage) for this PostHog instance.
-     * By default, captures an `$opt_in` event unless disabled.
+     * By default, captures an `$opt_in` event unless disabled. The event is only captured when the user was not
+     * already opted in, so calling this on every page load (for example from a consent tool callback that re-applies
+     * stored consent) sends it once per user rather than once per page.
      *
      * @example
      * ```js
@@ -4933,6 +4935,8 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        const wasAlreadyGranted = this.consent.consent === ConsentStatus.GRANTED
+
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
@@ -4951,8 +4955,9 @@ export class PostHog implements PostHogInterface {
             this.conversations?.loadIfEnabled()
         }
 
-        // Don't capture if captureEventName is null or false
-        if (isUndefined(options?.captureEventName) || options?.captureEventName) {
+        // Don't capture if captureEventName is null or false, or if consent was already granted. Consent tools
+        // often re-apply stored consent on every page load, which would otherwise send one event per page.
+        if (!wasAlreadyGranted && (isUndefined(options?.captureEventName) || options?.captureEventName)) {
             this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
         }
 
