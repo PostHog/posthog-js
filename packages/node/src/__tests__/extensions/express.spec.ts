@@ -186,9 +186,15 @@ describe('Express extension', () => {
     it.each([
       { name: 'reads the posthog-js cookie when readPostHogCookie is on', readPostHogCookie: true, linked: true },
       { name: 'ignores the posthog-js cookie by default', readPostHogCookie: undefined, linked: false },
-    ])('should $name', async ({ readPostHogCookie, linked }) => {
+      {
+        name: 'ignores the posthog-js cookie when captureTracingHeaders is false',
+        readPostHogCookie: true,
+        captureTracingHeaders: false,
+        linked: false,
+      },
+    ])('should $name', async ({ readPostHogCookie, captureTracingHeaders, linked }) => {
       await posthog.shutdown()
-      posthog = createPostHog({ readPostHogCookie })
+      posthog = createPostHog({ readPostHogCookie, captureTracingHeaders })
       const middleware = createRequestContextMiddleware(posthog)
       const now = Date.now()
       const cookieValue = encodeURIComponent(

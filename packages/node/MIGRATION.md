@@ -274,6 +274,8 @@ To stop reading them, set the new client option `captureTracingHeaders: false`:
 const posthog = new PostHog('<project_api_key>', { captureTracingHeaders: false })
 ```
 
+`captureTracingHeaders: false` also turns off the `readPostHogCookie` fallback, which reads the session id, and an identified user's distinct id, from the posthog-js cookie when a request has neither header.
+
 ## SDK identity
 
 PostHog sets `$lib` and `$lib_version` on every event from the `PostHog-Sdk-Info` request header, which the client sets.
