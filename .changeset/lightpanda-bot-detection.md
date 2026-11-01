@@ -1,6 +1,8 @@
 ---
 '@posthog/core': patch
 'posthog-js': patch
+'posthog-node': patch
+'@posthog/browser-common': patch
 ---
 
-Detect self-declared Lightpanda headless browsers in the default bot user agent filter.
+Recognize self-declared Lightpanda headless browsers in bot detection.
