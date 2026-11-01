@@ -28,6 +28,7 @@ You need to change code or configuration if your app does any of these:
 - sends AI events with `captureAi()` and tunes the AI queue, timeout or compression
 - uses `sendFeatureFlags` together with a `before_send` hook that drops events or edits `groups` or `sendFeatureFlags`
 - uses `@posthog/convex`, `@posthog/next` or `@posthog/nuxt` (stay on posthog-node 5 for now)
+- uses `@posthog/ai` or `@posthog/mcp` and does not list `posthog-node` in its own dependencies (see [Wrapper packages](#wrapper-packages))
 
 ## Reverse proxies and self-hosted PostHog
 
@@ -62,6 +63,7 @@ A capture request follows only `307` and `308` redirects, and only to the same o
 It resends the same body and headers.
 Any other redirect fails the batch without a retry.
 If a proxy redirects capture requests to another host, set `host` to the final host.
+Capture requests call `fetch` with `redirect: 'manual'`, including a `fetch` you pass in the client options.
 Feature flag requests are unchanged.
 
 ## Removed and renamed
@@ -92,7 +94,7 @@ posthog.captureException(error, {
 - The positional form logs one deprecation error per method per process. It will be removed in the next major version.
 - Arguments after the options object are ignored, with one warning per process.
 - `level` sets `$exception_level`. It is read case-insensitively, and `critical`, `alert` and `emergency` mean `fatal`, `warn` means `warning`, `notice` means `info` and `trace` means `debug`, as in posthog-python. The default is `'error'`, and an unknown value is ignored.
-- Exception properties the SDK owns, such as `$exception_list` and `$exception_level`, are ignored in `properties`. Use `level` instead.
+- Exception properties the SDK owns, such as `$exception_list` and `$exception_level`, are ignored in `properties`. Use `level` instead. A reserved property the SDK does not set, such as `$exception_types`, still reaches the event when you set it in context or with `register()`, so do not set it there.
 
 ### `prepareEventMessage()`
 
@@ -173,13 +175,14 @@ Each lane has its own queue, batches and requests, so a slow or failing lane nev
 In 5.x they sent to the legacy AI endpoint.
 
 - An AI event whose `properties` are larger than 8 MiB is dropped before sending and reported through `'error'`.
+- PostHog drops an event sent with `captureAi()` whose name does not start with `$ai_` (`misrouted_event`), and `'error'` reports it. Send other events with `capture()`.
 - The AI lane has its own settings. It does not read `maxQueueSize`, `requestTimeout`, `captureCompression` or `disableCompression`.
 
-  | Option                      | Default  | What it does                                                             |
-  | --------------------------- | -------- | ------------------------------------------------------------------------ |
-  | `captureAiMaxQueueSize`     | 1000     | AI events held in memory. When full, the oldest is dropped and reported. |
-  | `captureAiRequestTimeoutMs` | 30000    | Timeout of each AI request, in milliseconds.                             |
-  | `captureAiCompression`      | `'gzip'` | Same values as `captureCompression`.                                     |
+  | Option                      | Default  | What it does                                                                       |
+  | --------------------------- | -------- | ---------------------------------------------------------------------------------- |
+  | `captureAiMaxQueueSize`     | 1000     | AI events held in memory. When full, the oldest is dropped and reported.           |
+  | `captureAiRequestTimeoutMs` | 30000    | Timeout of each AI request, in milliseconds.                                       |
+  | `captureAiCompression`      | `'gzip'` | Same values as `captureCompression`. We recommend `'zstd'` on Node 22.15 or later. |
 
 - `captureMaxRetries`, `flushAt`, `flushInterval` and `maxBatchSize` apply to both lanes.
 - An invalid value for one of these options is logged once, and the default is used.
@@ -262,6 +265,7 @@ These changes follow from this order:
 - The SDK's `process_person_profile: false` for a personless event fills only an unset option. An option set on the event, in context or with `registerOptions()` wins over it. A `$process_person_profile: true` property no longer turns person processing back on. Set the option instead.
 - `groupIdentify` uses the `distinctId` you pass, then the context distinct id, then `$<groupType>_<groupKey>`. In 5.x it skipped the context id. If `$<groupType>_<groupKey>` is over 200 bytes, pass `distinctId`.
 - `groupIdentify` never adds the context session id.
+- `identify` and `alias` now add the context session id as `$session_id`, like `capture`. 5.x did not add it to them.
 - `alias` never takes its alias target from context or `register()`.
 - PostHog drops an event whose distinct id is over 200 UTF-8 bytes (`distinct_id_too_large`), and `'error'` reports it. Legacy capture shortened the id and kept the event.
 - Generated personless distinct ids and event uuids are UUIDv7, with random bits from `crypto.getRandomValues` instead of `Math.random`.
@@ -326,7 +330,7 @@ The SDK's own logs no longer print whole events or `before_send` error messages.
 
 - Debug mode logs event names, uuids and counts instead of whole events.
 - A `before_send` error is logged with the error's type, not its message.
-- In debug mode, a capture error can still include the server or proxy response text.
+- When a request fails with an HTTP error status, the `CaptureError` message and its `cause` include up to 512 characters of the server or proxy response text. Debug mode logs that error.
 - The failed-batch line, the invalid uuid warning, the invalid timestamp warning and the session id warning never include event values.
 - Log-based alerts that match 5.x log text will stop matching. Listen for `'error'` instead.
 
@@ -339,6 +343,8 @@ The SDK's own logs no longer print whole events or `before_send` error messages.
 | `@posthog/convex`, `@posthog/next`, `@posthog/nuxt` | posthog-node 5. They move to posthog-node 6 in their own next major versions. |
 
 Upgrade `@posthog/ai` and `@posthog/mcp` to a version that accepts posthog-node 6 before or together with posthog-node.
+
+These versions accept both posthog-node 5 and 6. If your app does not list `posthog-node` in its own dependencies, upgrading `@posthog/ai` or `@posthog/mcp` can install posthog-node 6. List `posthog-node` in your dependencies so you choose when to move to 6.
 
 ## posthog-node 5.x support
 
