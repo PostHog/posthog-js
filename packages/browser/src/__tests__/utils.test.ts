@@ -155,6 +155,8 @@ describe('utils', () => {
             [
                 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)',
             ],
+            ['Lightpanda/1.0'],
+            ['Lightpanda/2.3.4'],
             ['Buck/2.4.2; (+https://app.hypefactors.com/media-monitoring/about.html)'],
 
             ['op3-fetcher/1.0 (bot; https://op3.dev)'],
