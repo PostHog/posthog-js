@@ -1916,6 +1916,32 @@ describe('record', function (this: ISuite) {
       expect(cssTextMutation.attributes).toHaveProperty('media', null);
     });
 
+    it('sends null for attributes removed from a stylesheet link before its sheet loads', async () => {
+      await ctx.page.evaluate(async (serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('media', 'screen');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?late`);
+        document.head.appendChild(link);
+        // the add is serialized with media first, and the sheet cannot load within a microtask
+        await Promise.resolve();
+        link.removeAttribute('media');
+      }, serverURL);
+
+      const cssTextMutation = await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+
+      expect(cssTextMutation.attributes).toHaveProperty('media', null);
+      expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+    });
+
     it('inlines the new sheet of a relative href that changed before a pushState', async () => {
       await ctx.page.evaluate(async () => {
         const { record } = (window as unknown as IWindow).rrweb;

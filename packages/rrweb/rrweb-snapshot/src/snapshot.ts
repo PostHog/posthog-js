@@ -1397,6 +1397,7 @@ export function serializeNodeWithId(
     onStylesheetLoad?: (
       linkNode: HTMLLinkElement,
       node: serializedElementNodeWithId,
+      previousNode: serializedNodeWithId | null,
     ) => unknown;
     stylesheetLoadTimeout?: number;
     depth?: number;
@@ -1667,6 +1668,7 @@ export function serializeNodeWithId(
       n as HTMLLinkElement,
       () => {
         if (onStylesheetLoad) {
+          const previousLinkNode = mirror.getMeta(n);
           const serializedLinkNode = serializeNodeWithId(n, {
             doc,
             mirror,
@@ -1702,6 +1704,7 @@ export function serializeNodeWithId(
             onStylesheetLoad(
               n as HTMLLinkElement,
               serializedLinkNode as serializedElementNodeWithId,
+              previousLinkNode,
             );
           }
         }
@@ -1770,6 +1773,7 @@ function snapshot(
     onStylesheetLoad?: (
       linkNode: HTMLLinkElement,
       node: serializedElementNodeWithId,
+      previousNode: serializedNodeWithId | null,
     ) => unknown;
     stylesheetLoadTimeout?: number;
     keepIframeSrcFn?: KeepIframeSrcFn;

@@ -147,6 +147,7 @@ export class StylesheetManager {
   public attachLinkElement(
     linkEl: HTMLLinkElement,
     childSn: serializedNodeWithId,
+    previousSn: serializedNodeWithId | null = null,
   ): void {
     if (
       !this.stopped &&
@@ -160,8 +161,10 @@ export class StylesheetManager {
         attributes: [
           {
             id: childSn.id,
-            attributes: (childSn as elementNode)
-              .attributes as attributeMutation['attributes'],
+            attributes: attributesReplacingPrevious({
+              previous: previousSn,
+              current: childSn,
+            }),
           },
         ],
       });

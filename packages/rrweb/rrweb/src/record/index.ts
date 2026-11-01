@@ -754,8 +754,8 @@ function record<T = eventWithTime>(
           ) => {
             iframeManager.registerLoadListenerDisposer(iframe, disposer);
           },
-          onStylesheetLoad: (linkEl, childSn) => {
-            stylesheetManager.attachLinkElement(linkEl, childSn);
+          onStylesheetLoad: (linkEl, childSn, previousSn) => {
+            stylesheetManager.attachLinkElement(linkEl, childSn, previousSn);
           },
           keepIframeSrcFn,
         });

@@ -660,8 +660,8 @@ export default class MutationBuffer {
       ) => {
         this.iframeManager.registerLoadListenerDisposer(iframe, disposer);
       },
-      onStylesheetLoad: (link, childSn) => {
-        this.stylesheetManager.attachLinkElement(link, childSn);
+      onStylesheetLoad: (link, childSn, previousSn) => {
+        this.stylesheetManager.attachLinkElement(link, childSn, previousSn);
       },
     };
   }
