@@ -29,6 +29,7 @@ import type {
 import { StyleSheetMirror, isBlockedIncludingShadowHosts } from '../utils';
 import {
   type IdleDeadline,
+  type IdleTask,
   whenIdle,
   DEFERRED_STYLESHEET_RULES_PER_SLICE,
   DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK,
@@ -101,15 +102,10 @@ const CHANGED_LINK_RESTARTS_AFTER_SHEET_MUTATION = 3;
 export class StylesheetManager {
   private trackedLinkElements: WeakSet<HTMLLinkElement> = new WeakSet();
   private pendingDeferredSheets: Set<PendingDeferredSheet> = new Set();
-  private fullSnapshotCount = 0;
   // a restarted recorder refills the shared mirror, so mirror membership
   // cannot tell a stopped recorder's pending work from the new recorder's
   private stopped = false;
-  private changedLinkTasks = new WeakMap<
-    HTMLLinkElement,
-    DeferredLinkInliningTask
-  >();
-  private changedLinkJobs = new Set<ChangedLinkJob>();
+  private changedLinkJobs = new Map<HTMLLinkElement, ChangedLinkJob>();
   private mutationCb: mutationCallBack;
   private adoptedStyleSheetCb: adoptedStyleSheetCallback;
   private maskAllElementAttributes: boolean;
@@ -360,7 +356,7 @@ export class StylesheetManager {
       return;
     }
     // a newer change supersedes the work still in flight for this link
-    this.changedLinkTasks.get(linkEl)?.discard();
+    this.changedLinkJobs.get(linkEl)?.drop();
     let sheetMutatedWhileInlining = false;
     const task = this.beginDeferredLinkInlining(
       linkEl,
@@ -377,28 +373,26 @@ export class StylesheetManager {
       },
     );
     if (!task) {
-      this.changedLinkTasks.delete(linkEl);
       return;
     }
-    this.changedLinkTasks.set(linkEl, task);
+    let pendingIdle: IdleTask | null = null;
+    // a page frozen before the idle callback runs must not keep the job and its CSS alive
     const release = () => {
       task.discard();
-      this.changedLinkJobs.delete(job);
-      if (this.changedLinkTasks.get(linkEl) === task) {
-        this.changedLinkTasks.delete(linkEl);
+      pendingIdle?.cancel();
+      pendingIdle = null;
+      if (this.changedLinkJobs.get(linkEl) === job) {
+        this.changedLinkJobs.delete(linkEl);
       }
     };
-    const startedAtFullSnapshot = this.fullSnapshotCount;
     const job: ChangedLinkJob = {
       remainingRules: () => task.remainingRules(),
       runSlice: () => {
         try {
-          // a full snapshot inlines the link's current sheet itself, and a
-          // stop resets the mirror
+          // a stop resets the mirror
           if (
             this.stopped ||
-            this.changedLinkTasks.get(linkEl) !== task ||
-            this.fullSnapshotCount !== startedAtFullSnapshot ||
+            this.changedLinkJobs.get(linkEl) !== job ||
             recorderView.currentId() === -1 ||
             this.isLinkBlocked(linkEl)
           ) {
@@ -433,8 +427,9 @@ export class StylesheetManager {
       },
       drop: release,
     };
-    this.changedLinkJobs.add(job);
+    this.changedLinkJobs.set(linkEl, job);
     const step = (deadline?: IdleDeadline) => {
+      pendingIdle = null;
       let slices = 0;
       let done: boolean;
       do {
@@ -447,10 +442,10 @@ export class StylesheetManager {
           : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
       );
       if (!done) {
-        whenIdle(step);
+        pendingIdle = whenIdle(step);
       }
     };
-    whenIdle(step);
+    pendingIdle = whenIdle(step);
   }
 
   /**
@@ -461,8 +456,8 @@ export class StylesheetManager {
    */
   public flushChangedLinkInlining(maxSlices: number): number {
     let slices = 0;
-    // a restart after a CSSOM change adds its job to the set, and this loop visits it too
-    for (const job of this.changedLinkJobs) {
+    // a restart after a CSSOM change adds its job to the map, and this loop visits it too
+    for (const job of this.changedLinkJobs.values()) {
       let done = false;
       while (!done) {
         const slicesNeeded =
@@ -576,7 +571,12 @@ export class StylesheetManager {
   /** Ends all delayed stylesheet work of this recorder; a stopped manager emits nothing. */
   public stop(): void {
     this.stopped = true;
+    this.dropChangedLinkJobs();
     resetStylesheetLoadTracking();
+  }
+
+  private dropChangedLinkJobs(): void {
+    Array.from(this.changedLinkJobs.values()).forEach((job) => job.drop());
   }
 
   public reset(): void {
@@ -585,7 +585,8 @@ export class StylesheetManager {
     // any surviving deferral registrations belong to tasks the recorder
     // cancelled at the snapshot boundary; drop them so they don't pin sheets
     this.pendingDeferredSheets.clear();
-    this.fullSnapshotCount += 1;
+    // the full snapshot inlines each changed link's current sheet itself
+    this.dropChangedLinkJobs();
     resetStylesheetLoadTracking({ keepChangedLinks: true });
   }
 

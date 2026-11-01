@@ -595,12 +595,23 @@ function record<T = eventWithTime>(
     blockSelector,
   });
 
+  // an emit inside the flush can stop the recorder, and that teardown must not
+  // start a second flush with a fresh budget
+  let flushingStylesheetInlining = false;
   // the deferred queue goes first, and changed links get what is left of the shared cap
   const flushStylesheetInlining = () => {
-    const slicesUsed = deferredStylesheetInlining?.flush() ?? 0;
-    stylesheetManager.flushChangedLinkInlining(
-      DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES - slicesUsed,
-    );
+    if (flushingStylesheetInlining) {
+      return;
+    }
+    flushingStylesheetInlining = true;
+    try {
+      const slicesUsed = deferredStylesheetInlining?.flush() ?? 0;
+      stylesheetManager.flushChangedLinkInlining(
+        DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES - slicesUsed,
+      );
+    } finally {
+      flushingStylesheetInlining = false;
+    }
   };
 
   const iframeManager = new IframeManager({

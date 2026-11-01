@@ -737,25 +737,41 @@ describe('record() teardown of deferred stylesheets', () => {
     expect(scheduled.size).toBe(0);
   });
 
-  it('pagehide flushes the CSS of a stylesheet link whose new href loaded', async () => {
+  const changedLinkWithNewSheet = (ruleCount: number, marker: string) => {
     const oldSheetEl = document.createElement('style');
-    oldSheetEl.textContent = '.theme-light { color: red; }';
+    oldSheetEl.textContent = `.${marker}-light { color: red; }`;
     const newSheetEl = document.createElement('style');
-    newSheetEl.textContent = '.theme-dark { color: blue; }';
+    newSheetEl.textContent = Array.from(
+      { length: ruleCount },
+      (_, i) => `.${marker}-dark-${i} { color: blue; }`,
+    ).join('\n');
     document.head.append(oldSheetEl, newSheetEl);
     const linkEl = document.createElement('link');
     linkEl.setAttribute('rel', 'stylesheet');
-    linkEl.setAttribute('href', 'https://example.com/theme-light.css');
+    linkEl.setAttribute('href', `https://example.com/${marker}-light.css`);
     let attachedSheet = oldSheetEl.sheet;
     Object.defineProperty(linkEl, 'sheet', { get: () => attachedSheet });
     document.head.appendChild(linkEl);
     cleanupNodes.push(oldSheetEl, newSheetEl, linkEl);
+    return {
+      changeHref: () =>
+        linkEl.setAttribute('href', `https://example.com/${marker}-dark.css`),
+      loadNewSheet: () => {
+        attachedSheet = newSheetEl.sheet;
+        linkEl.dispatchEvent(new Event('load'));
+      },
+    };
+  };
+  const nextMutationObserverDelivery = () =>
+    new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('pagehide flushes the CSS of a stylesheet link whose new href loaded', async () => {
+    const link = changedLinkWithNewSheet(1, 'theme');
     stop = startRecording(100_000);
 
-    linkEl.setAttribute('href', 'https://example.com/theme-dark.css');
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    attachedSheet = newSheetEl.sheet;
-    linkEl.dispatchEvent(new Event('load'));
+    link.changeHref();
+    await nextMutationObserverDelivery();
+    link.loadNewSheet();
     expect(cssTextMutations(events)).toHaveLength(0);
 
     window.dispatchEvent(new Event('pagehide'));
@@ -763,7 +779,32 @@ describe('record() teardown of deferred stylesheets', () => {
     const flushed = cssTextMutations(events);
     expect(flushed).toHaveLength(1);
     expect(flushed[0]).toContain('.theme-dark');
-    drainIdle();
+    expect(scheduled.size).toBe(0);
+  });
+
+  it('a stop from inside an emit during the pagehide flush does not start a second flush', async () => {
+    // 3 sheets of 21 slices each do not fit in the shared 50-slice cap
+    const links = ['first', 'second', 'third'].map((marker) =>
+      changedLinkWithNewSheet(4000, marker),
+    );
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+        if (stop && cssTextMutations([event as eventWithTime]).length) {
+          const stopNow = stop;
+          stop = undefined;
+          stopNow();
+        }
+      },
+      inlineStylesheetBudgetRules: 100_000,
+    });
+
+    links.forEach((link) => link.changeHref());
+    await nextMutationObserverDelivery();
+    links.forEach((link) => link.loadNewSheet());
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(stop).toBeUndefined();
     expect(cssTextMutations(events)).toHaveLength(1);
   });
 
@@ -1250,6 +1291,8 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
     created.splice(0).forEach((node) => node.remove());
     delete (window as unknown as { requestIdleCallback?: unknown })
       .requestIdleCallback;
+    delete (window as unknown as { cancelIdleCallback?: unknown })
+      .cancelIdleCallback;
   });
 
   const linkWithCurrentSheet = (): {
@@ -1289,6 +1332,22 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
     }
 
     expect(mutationCb).not.toHaveBeenCalled();
+  });
+
+  it('cancels the idle callback of pending work when its recorder stops', () => {
+    const cancelIdleCallback = vi.fn();
+    (window as unknown as { cancelIdleCallback: unknown }).cancelIdleCallback =
+      cancelIdleCallback;
+    const manager = new StylesheetManager({
+      mutationCb: vi.fn() as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl } = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    manager.stop();
+
+    expect(cancelIdleCallback).toHaveBeenCalledWith(scheduled.length);
   });
 
   it('keeps one task per link when changes arrive while the sheet is current', () => {
