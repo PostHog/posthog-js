@@ -286,6 +286,8 @@ export type PostHogOptions = Omit<
    * Whether the Express and NestJS integrations read the `X-POSTHOG-DISTINCT-ID` and
    * `X-POSTHOG-SESSION-ID` request headers into the request context. A distinct id or session id
    * you pass explicitly always wins over these headers, and they are never used for authentication.
+   * Turning it off does not turn off `readPostHogCookie`. To stop all request linking, set
+   * `captureTracingHeaders: false` and leave `readPostHogCookie` off (its default).
    *
    * @default true
    */
@@ -366,7 +368,8 @@ export type PostHogOptions = Omit<
    * `optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie
    * counts as opted out. A request sent right
    * after `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a
-   * short delay. It is ignored when `captureTracingHeaders` is `false`.
+   * short delay. When `captureTracingHeaders` is `false`, the tracing headers are ignored and every request falls
+   * back to the cookie. To stop all request linking, also leave this option off.
    *
    * @default false
    */

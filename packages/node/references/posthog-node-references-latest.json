@@ -3985,7 +3985,7 @@
           "name": "maxQueueSize"
         },
         {
-          "description": "Whether the Express and NestJS integrations read the `X-POSTHOG-DISTINCT-ID` and\n`X-POSTHOG-SESSION-ID` request headers into the request context. A distinct id or session id\nyou pass explicitly always wins over these headers, and they are never used for authentication.",
+          "description": "Whether the Express and NestJS integrations read the `X-POSTHOG-DISTINCT-ID` and\n`X-POSTHOG-SESSION-ID` request headers into the request context. A distinct id or session id\nyou pass explicitly always wins over these headers, and they are never used for authentication.\nTurning it off does not turn off `readPostHogCookie`. To stop all request linking, set\n`captureTracingHeaders: false` and leave `readPostHogCookie` off (its default).",
           "type": "boolean",
           "name": "captureTracingHeaders"
         },
@@ -4035,7 +4035,7 @@
           "name": "disableCompression"
         },
         {
-          "description": "Lets the Express and NestJS integrations read the session ID, and the distinct ID of an identified user, from the\nposthog-js cookie when a request has neither tracing header.\n\nTurn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server\ncannot read an opt-out that posthog-js keeps in localStorage (its default).\n\nIt needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie\nname (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set\n`sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set\n`optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie\ncounts as opted out. A request sent right\nafter `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a\nshort delay. It is ignored when `captureTracingHeaders` is `false`.",
+          "description": "Lets the Express and NestJS integrations read the session ID, and the distinct ID of an identified user, from the\nposthog-js cookie when a request has neither tracing header.\n\nTurn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server\ncannot read an opt-out that posthog-js keeps in localStorage (its default).\n\nIt needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie\nname (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set\n`sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set\n`optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie\ncounts as opted out. A request sent right\nafter `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a\nshort delay. When `captureTracingHeaders` is `false`, the tracing headers are ignored and every request falls\nback to the cookie. To stop all request linking, also leave this option off.",
           "type": "boolean | { sessionIdleTimeoutSeconds?: number; optOutCapturingByDefault?: boolean; }",
           "name": "readPostHogCookie"
         },

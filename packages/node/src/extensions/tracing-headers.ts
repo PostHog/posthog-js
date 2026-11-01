@@ -151,16 +151,29 @@ function getSessionIdleTimeoutMs(cookie: PostHogCookieReadOptions): number {
   return Math.min(Math.max(seconds, MIN_SESSION_IDLE_TIMEOUT_SECONDS), MAX_SESSION_IDLE_TIMEOUT_SECONDS) * 1000
 }
 
+function readCookieValues(headers: IncomingHttpHeaders, cookie: PostHogCookieReadOptions): PostHogTracingHeaderValues {
+  return getPostHogCookieValues(
+    headers.cookie,
+    cookie.apiKey,
+    Date.now(),
+    getSessionIdleTimeoutMs(cookie),
+    cookie.optOutCapturingByDefault === true
+  )
+}
+
 /**
- * The tracing header values (with the posthog-js cookie fallback when `cookie` is set), or none when the client's
- * `captureTracingHeaders` is `false`.
+ * The request's tracing ids, with the posthog-js cookie fallback when `cookie` is set. When the client's
+ * `captureTracingHeaders` is `false`, the tracing headers count as absent, so only the cookie can supply ids.
  */
 export function readPostHogTracingHeaders(
   options: { captureTracingHeaders?: boolean },
   headers?: IncomingHttpHeaders,
   cookie?: PostHogCookieReadOptions | null
 ): PostHogTracingHeaderValues {
-  return options.captureTracingHeaders === false ? {} : getPostHogTracingHeaderValues(headers, cookie)
+  if (options.captureTracingHeaders !== false) {
+    return getPostHogTracingHeaderValues(headers, cookie)
+  }
+  return headers && cookie ? readCookieValues(headers, cookie) : {}
 }
 
 /**
@@ -179,13 +192,7 @@ export function getPostHogTracingHeaderValues(
   const headerDistinctId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.distinctId])
   const { sessionId, distinctId } =
     headerSessionId === undefined && headerDistinctId === undefined && cookie
-      ? getPostHogCookieValues(
-          headers.cookie,
-          cookie.apiKey,
-          Date.now(),
-          getSessionIdleTimeoutMs(cookie),
-          cookie.optOutCapturingByDefault === true
-        )
+      ? readCookieValues(headers, cookie)
       : { sessionId: headerSessionId, distinctId: headerDistinctId }
 
   return {

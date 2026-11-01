@@ -60,6 +60,10 @@ const createErrorHandlerMiddleware = (posthog: PostHog): any => {
   return app.use.mock.calls[0][0]
 }
 
+const COOKIE_IDS = { sessionId: 'cookie-session', distinctId: 'user-from-cookie' }
+const NO_IDS = { sessionId: undefined, distinctId: undefined }
+const BOTH_TRACING_HEADERS = { 'x-posthog-session-id': 'header-session', 'x-posthog-distinct-id': 'header-user' }
+
 const createPostHog = (options: Record<string, any> = {}): PostHog =>
   new PostHog('TEST_API_KEY', {
     host: 'http://example.com',
@@ -184,15 +188,33 @@ describe('Express extension', () => {
     })
 
     it.each([
-      { name: 'reads the posthog-js cookie when readPostHogCookie is on', readPostHogCookie: true, linked: true },
-      { name: 'ignores the posthog-js cookie by default', readPostHogCookie: undefined, linked: false },
       {
-        name: 'ignores the posthog-js cookie when captureTracingHeaders is false',
+        name: 'reads the posthog-js cookie when readPostHogCookie is on',
+        readPostHogCookie: true,
+        expected: COOKIE_IDS,
+      },
+      { name: 'ignores the posthog-js cookie by default', readPostHogCookie: undefined, expected: NO_IDS },
+      {
+        name: 'reads the cookie, not the tracing headers, when captureTracingHeaders is false',
         readPostHogCookie: true,
         captureTracingHeaders: false,
-        linked: false,
+        tracingHeaders: BOTH_TRACING_HEADERS,
+        expected: COOKIE_IDS,
       },
-    ])('should $name', async ({ readPostHogCookie, captureTracingHeaders, linked }) => {
+      {
+        name: 'reads neither the tracing headers nor the cookie when both are off',
+        readPostHogCookie: undefined,
+        captureTracingHeaders: false,
+        tracingHeaders: BOTH_TRACING_HEADERS,
+        expected: NO_IDS,
+      },
+      {
+        name: 'uses only the tracing headers when a request has one, never the cookie',
+        readPostHogCookie: true,
+        tracingHeaders: { 'x-posthog-session-id': 'header-session' },
+        expected: { sessionId: 'header-session', distinctId: undefined },
+      },
+    ])('should $name', async ({ readPostHogCookie, captureTracingHeaders, tracingHeaders, expected }) => {
       await posthog.shutdown()
       posthog = createPostHog({ readPostHogCookie, captureTracingHeaders })
       const middleware = createRequestContextMiddleware(posthog)
@@ -204,7 +226,9 @@ describe('Express extension', () => {
           $sesid: [now, 'cookie-session', now],
         })
       )
-      const req = createMockRequest({ headers: { cookie: `ph_TEST_API_KEY_posthog=${cookieValue}` } })
+      const req = createMockRequest({
+        headers: { ...tracingHeaders, cookie: `ph_TEST_API_KEY_posthog=${cookieValue}` },
+      })
 
       middleware(req, createMockResponse(), () => {
         posthog.capture({ event: 'handler_event' })
@@ -212,8 +236,13 @@ describe('Express extension', () => {
       await waitForFlushTimer(posthog)
 
       const event = getLastBatchEvents()!.find((e: any) => e.event === 'handler_event')
-      expect(event.distinct_id === 'user-from-cookie').toBe(linked)
-      expect(event.properties.$session_id).toBe(linked ? 'cookie-session' : undefined)
+      expect(event.properties.$session_id).toBe(expected.sessionId)
+      if (expected.distinctId) {
+        expect(event.distinct_id).toBe(expected.distinctId)
+      } else {
+        // Without a context distinct id, capture generates a personless one.
+        expect(['user-from-cookie', 'header-user']).not.toContain(event.distinct_id)
+      }
     })
 
     it('should preserve existing context over cookie-derived identity', async () => {

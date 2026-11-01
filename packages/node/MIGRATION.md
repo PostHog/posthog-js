@@ -274,7 +274,9 @@ To stop reading them, set the new client option `captureTracingHeaders: false`:
 const posthog = new PostHog('<project_api_key>', { captureTracingHeaders: false })
 ```
 
-`captureTracingHeaders: false` also turns off the `readPostHogCookie` fallback, which reads the session id, and an identified user's distinct id, from the posthog-js cookie when a request has neither header.
+`captureTracingHeaders: false` does not turn off the `readPostHogCookie` fallback, which reads the session id, and an identified user's distinct id, from the posthog-js cookie.
+With the headers off, that fallback reads the cookie on every request.
+To stop all request linking, set `captureTracingHeaders: false` and leave `readPostHogCookie` off (its default).
 
 ## SDK identity
 
