@@ -63,7 +63,7 @@ A capture request follows only `307` and `308` redirects, and only to the same o
 It resends the same body and headers.
 Any other redirect fails the batch without a retry.
 If a proxy redirects capture requests to another host, set `host` to the final host.
-Capture requests call `fetch` with `redirect: 'manual'`, including a `fetch` you pass in the client options.
+Capture requests call `fetch` with `redirect: 'manual'`, including a `fetch` you pass in the client options, so a custom `fetch` must return `3xx` responses unchanged.
 Feature flag requests are unchanged.
 
 ## Removed and renamed
