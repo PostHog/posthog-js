@@ -724,8 +724,8 @@ importers:
         specifier: workspace:^
         version: link:../browser
       posthog-node:
-        specifier: ^5.56.0
-        version: 5.56.2(@opentelemetry/api@1.9.0)(rxjs@7.8.2)
+        specifier: ^5.58.0
+        version: 5.58.0(@opentelemetry/api@1.9.0)(rxjs@7.8.2)
       server-only:
         specifier: ^0.0.1
         version: 0.0.1
@@ -886,8 +886,8 @@ importers:
         specifier: workspace:^
         version: link:../browser
       posthog-node:
-        specifier: ^5.56.0
-        version: 5.56.2(@opentelemetry/api@1.9.0)(rxjs@7.8.2)
+        specifier: ^5.58.0
+        version: 5.58.0(@opentelemetry/api@1.9.0)(rxjs@7.8.2)
     devDependencies:
       '@nuxt/devtools':
         specifier: ^3.3.1
@@ -6650,11 +6650,17 @@ packages:
   '@posthog/core@1.59.1':
     resolution: {integrity: sha512-P39YgzQVDh6oz6wAzQXEnoHgTYpM7gifonmVKq1scAJco79h31XmmNVurRq9tTmmyIrr1uX8FHT0riCsyfV9AQ==}
 
+  '@posthog/core@1.61.1':
+    resolution: {integrity: sha512-qyMTxPfjeJkHIhpcukOgBN3BWXbCyFRPz8/Voy5qZtVh9NZqj3EhC6LLeYZuJhL3WpqhQTgn2FMIwAo/ag6fmw==}
+
   '@posthog/types@1.415.2':
     resolution: {integrity: sha512-BIIHPyXcPZuNTImrR1qLqLKFw7j9o8co6LG/9OpLtpWJ3RT0y89Lx6VCtd37N9/dkr/qW7y0uPjJxAxjsALHtw==}
 
   '@posthog/types@1.416.0':
     resolution: {integrity: sha512-0/9+02s/0uDyrH4G/qUg1yyl6gXUg8Uuxw/PlDad3KLzo9FFS9zS/kAQaEshx/saVGupj1aAy/4EUBxWisBogw==}
+
+  '@posthog/types@1.417.0':
+    resolution: {integrity: sha512-r/+gvmiE6egR6kkuMhEjOOE3Sm1pR00iFPQNoZZ0YvnZSsqGk7hK2IvQzcqjSRufG5Jf0EwhDMr5YOGtmf2/8g==}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -7884,6 +7890,7 @@ packages:
   '@smithy/core@3.35.2':
     resolution: {integrity: sha512-ejTukBuP/Pg3t9N8Ux+0zKsXeHWm7p6W3HbXFOyltKasSxZwCFmvTut7kBdZSCF3m9y1bXXyVu6p2xuMFcsTyQ==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.2.13':
     resolution: {integrity: sha512-wboCPijzf6RJKLOvnjDAiBxGSmSnGXj35o5ZAWKDaHa/cvQ5U3ZJ13D4tMCE8JG4dxVAZFy/P0x/V9CwwdfULQ==}
@@ -15731,6 +15738,18 @@ packages:
 
   posthog-node@5.56.2:
     resolution: {integrity: sha512-1/qYFNuHkDJJuDHjAvozN/fH/+XdqzlIZ0WCsCYrhUgGNxDBw5M3kZaJaRX0YSPi9tn7PnZFD5eTXg2Z7m5LeQ==}
+    engines: {node: ^20.20.0 || >=22.22.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.2.0
+      rxjs: ^7.0.0
+    peerDependenciesMeta:
+      '@opentelemetry/api':
+        optional: true
+      rxjs:
+        optional: true
+
+  posthog-node@5.58.0:
+    resolution: {integrity: sha512-UwvrvIQT5wMA8+E7yGXXr6+YCY7Uj9N68MS28wNQ/KYJUXK1d2Y561dRelBoEj2AfaqCNvOMWhWl6kHZSBDwuQ==}
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
       '@opentelemetry/api': ^1.2.0
@@ -25408,7 +25427,7 @@ snapshots:
 
   '@posthog/browser-common@0.9.4':
     dependencies:
-      '@posthog/core': 1.58.0
+      '@posthog/core': 1.59.1
       '@posthog/types': 1.415.2
 
   '@posthog/cli@0.18.11':
@@ -25429,9 +25448,15 @@ snapshots:
     dependencies:
       '@posthog/types': 1.416.0
 
+  '@posthog/core@1.61.1':
+    dependencies:
+      '@posthog/types': 1.417.0
+
   '@posthog/types@1.415.2': {}
 
   '@posthog/types@1.416.0': {}
+
+  '@posthog/types@1.417.0': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -36978,6 +37003,13 @@ snapshots:
   posthog-node@5.56.2(@opentelemetry/api@1.9.0)(rxjs@7.8.2):
     dependencies:
       '@posthog/core': 1.59.1
+    optionalDependencies:
+      '@opentelemetry/api': 1.9.0
+      rxjs: 7.8.2
+
+  posthog-node@5.58.0(@opentelemetry/api@1.9.0)(rxjs@7.8.2):
+    dependencies:
+      '@posthog/core': 1.61.1
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       rxjs: 7.8.2
