@@ -22,7 +22,6 @@ import type {
   attributeCursor,
   removedNodeMutation,
   addedNodeMutation,
-  Optional,
 } from '@posthog/rrweb-types';
 import {
   isBlocked,
@@ -37,104 +36,6 @@ import {
   closestElementOfNode,
 } from '../utils';
 import dom from '@posthog/rrweb-utils';
-
-type DoubleLinkedListNode = {
-  previous: DoubleLinkedListNode | null;
-  next: DoubleLinkedListNode | null;
-  value: NodeInLinkedList;
-};
-type NodeInLinkedList = Node & {
-  __ln: DoubleLinkedListNode;
-};
-
-function isNodeInLinkedList(n: Node | NodeInLinkedList): n is NodeInLinkedList {
-  return '__ln' in n;
-}
-
-class DoubleLinkedList {
-  public length = 0;
-  public head: DoubleLinkedListNode | null = null;
-  public tail: DoubleLinkedListNode | null = null;
-
-  public get(position: number) {
-    if (position >= this.length) {
-      throw new Error('Position outside of list range');
-    }
-
-    let current = this.head;
-    for (let index = 0; index < position; index++) {
-      current = current?.next || null;
-    }
-    return current;
-  }
-
-  public addNode(n: Node) {
-    const node: DoubleLinkedListNode = {
-      value: n as NodeInLinkedList,
-      previous: null,
-      next: null,
-    };
-    (n as NodeInLinkedList).__ln = node;
-    if (n.previousSibling && isNodeInLinkedList(n.previousSibling)) {
-      const current = n.previousSibling.__ln.next;
-      node.next = current;
-      node.previous = n.previousSibling.__ln;
-      n.previousSibling.__ln.next = node;
-      if (current) {
-        current.previous = node;
-      }
-    } else if (
-      n.nextSibling &&
-      isNodeInLinkedList(n.nextSibling) &&
-      n.nextSibling.__ln.previous
-    ) {
-      const current = n.nextSibling.__ln.previous;
-      node.previous = current;
-      node.next = n.nextSibling.__ln;
-      n.nextSibling.__ln.previous = node;
-      if (current) {
-        current.next = node;
-      }
-    } else {
-      if (this.head) {
-        this.head.previous = node;
-      }
-      node.next = this.head;
-      this.head = node;
-    }
-    if (node.next === null) {
-      this.tail = node;
-    }
-    this.length++;
-  }
-
-  public removeNode(n: NodeInLinkedList) {
-    const current = n.__ln;
-    if (!this.head) {
-      return;
-    }
-
-    if (!current.previous) {
-      this.head = current.next;
-      if (this.head) {
-        this.head.previous = null;
-      } else {
-        this.tail = null;
-      }
-    } else {
-      current.previous.next = current.next;
-      if (current.next) {
-        current.next.previous = current.previous;
-      } else {
-        this.tail = current.previous;
-      }
-    }
-    if (n.__ln) {
-      delete (n as Optional<NodeInLinkedList, '__ln'>).__ln;
-    }
-    this.length--;
-  }
-}
 
 const moveKey = (id: number, parentId: number) => `${id}@${parentId}`;
 
@@ -374,11 +275,6 @@ export default class MutationBuffer {
     const adds: addedNodeMutation[] = [];
     const addedIds = new Set<number>();
 
-    /**
-     * Sometimes child node may be pushed before its newly added
-     * parent, so we init a queue to store these nodes.
-     */
-    const addList = new DoubleLinkedList();
     const getNextId = (n: Node): number | null => {
       let ns: Node | null = n;
       let nextId: number | null = IGNORED_NODE; // slimDOM: ignored
@@ -394,20 +290,25 @@ export default class MutationBuffer {
     let serializationOptions:
       | Parameters<typeof serializeNodeWithId>[1]
       | undefined;
-    const pushAdd = (n: Node) => {
+    // Returns true when the node has been handled for this emission (either
+    // serialized successfully or deliberately skipped — e.g. blocked / not in
+    // DOM). Returns false when parentId or nextId are still unresolved, so
+    // the topological-order driver below can mark its subtree as dropped
+    // for this emission (the pending set is cleared at the end of emit()).
+    const pushAdd = (n: Node): boolean => {
       const parent = dom.parentNode(n);
       if (!parent || !inDom(n) || (parent as Element).tagName === 'TEXTAREA') {
-        return;
+        return true;
       }
       // A blocked node itself still needs a placeholder, but its descendants
       // must not be serialized from stale added/moved entries.
-      if (this.isBlockedAtEmission(parent)) return;
+      if (this.isBlockedAtEmission(parent)) return true;
       const parentId = isShadowRoot(parent)
         ? this.mirror.getId(getShadowHost(n))
         : this.mirror.getId(parent);
       const nextId = getNextId(n);
       if (parentId === -1 || nextId === -1) {
-        return addList.addNode(n);
+        return false;
       }
       serializationOptions ??= {
         doc: this.doc,
@@ -476,6 +377,7 @@ export default class MutationBuffer {
         });
         addedIds.add(sn.id);
       }
+      return true;
     };
 
     // Drain mapRemoves before pushAdd so the mirror only holds nodes that
@@ -489,6 +391,8 @@ export default class MutationBuffer {
       this.mirror.removeNodeFromMap(node);
     }
 
+    // Fold movedSet into addedSet so a single topological-order drain
+    // handles both.
     for (const n of this.movedSet) {
       if (
         isParentRemoved(this.removesSubTreeCache, n, this.mirror) &&
@@ -496,79 +400,146 @@ export default class MutationBuffer {
       ) {
         continue;
       }
-      pushAdd(n);
+      this.addedSet.add(n);
     }
 
-    for (const n of this.addedSet) {
-      if (
-        !isAncestorInSet(this.droppedSet, n) &&
-        !isParentRemoved(this.removesSubTreeCache, n, this.mirror)
-      ) {
-        pushAdd(n);
-      } else if (isAncestorInSet(this.movedSet, n)) {
-        pushAdd(n);
-      } else {
+    // Mark droppable addedSet entries so the drain below skips them without
+    // re-walking the DOM for parentRemoved/droppedSet membership per node.
+    for (const n of Array.from(this.addedSet)) {
+      const inDroppedTree = isAncestorInSet(this.droppedSet, n);
+      const parentWasRemoved = isParentRemoved(
+        this.removesSubTreeCache,
+        n,
+        this.mirror,
+      );
+      // A node that is itself in movedSet is never dropped, even when its
+      // parent chain was removed in the same batch.
+      const movedExempt =
+        this.movedSet.has(n) || isAncestorInSet(this.movedSet, n);
+      if ((inDroppedTree || parentWasRemoved) && !movedExempt) {
         this.droppedSet.add(n);
+        this.addedSet.delete(n);
       }
     }
 
-    let candidate: DoubleLinkedListNode | null = null;
-    while (addList.length) {
-      let node: DoubleLinkedListNode | null = null;
-      if (candidate) {
-        const parentId = this.mirror.getId(dom.parentNode(candidate.value));
-        const nextId = getNextId(candidate.value);
-        if (parentId !== -1 && nextId !== -1) {
-          node = candidate;
+    // Topological-order drain of this.addedSet. Previous siblings and
+    // nextSibling walks reach a node whose parentId is already in the
+    // mirror before touching its children, so pushAdd never has to drop
+    // a node that would otherwise need a rescan. Nodes whose parent
+    // cannot be resolved for this emission are recorded in missingParents
+    // so their descendants early-out via the same set.
+    const missingParents = new Set<Node>();
+    let n: Node | null = null;
+    const iter = this.addedSet.values();
+    let curr = iter.next();
+    while (this.addedSet.size) {
+      // Reuse the current row — n's previous sibling is next to serialize.
+      // Probe past IGNORED_NODE siblings (slimDOM-filtered tags like <script>
+      // or comments interleaved with new siblings) so a mixed row doesn't
+      // force the drain back to walk-up/descend per node.
+      let backProbe: Node | null = null;
+      if (n !== null) {
+        backProbe = dom.previousSibling(n);
+        while (backProbe && this.mirror.getId(backProbe) === IGNORED_NODE) {
+          backProbe = dom.previousSibling(backProbe);
         }
       }
-      if (!node) {
-        let tailNode = addList.tail;
-        while (tailNode) {
-          const _node = tailNode;
-          tailNode = tailNode.previous;
-          // ensure _node is defined before attempting to find value
-          if (_node) {
-            const parentId = this.mirror.getId(dom.parentNode(_node.value));
-            const nextId = getNextId(_node.value);
+      if (backProbe && this.addedSet.has(backProbe)) {
+        n = backProbe;
+      } else {
+        if (!this.addedSet.has(curr.value as Node)) {
+          // iter protects us from re-walking tombstones left in the Set after
+          // delete-during-iteration; take the next live entry
+          curr = iter.next();
+        }
+        n = curr.value as Node;
 
-            if (nextId === -1) continue;
-            // nextId !== -1 && parentId !== -1
-            else if (parentId !== -1) {
-              node = _node;
-              break;
+        // Walk up to the top of this contiguous added subtree so a parent is
+        // never serialized before its own ancestor in this.addedSet.
+        //
+        // Shadow DOM: when the DOM parent is a ShadowRoot we switch to the
+        // shadow host for the ancestor check. Serializer-side `pushAdd`
+        // translates ShadowRoot → host via `isShadowRoot(parent) ? getId(host)
+        // : getId(parent)`, so if the host is also in addedSet we must
+        // serialize the host first — otherwise its shadow children land here
+        // with an un-mirrored parent and get dropped.
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const parentNode = dom.parentNode(n);
+          const logicalParent =
+            parentNode && parentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+              ? (dom.host(parentNode as ShadowRoot) as Node | null)
+              : (parentNode as Node | null);
+          if (logicalParent && this.addedSet.has(logicalParent)) {
+            n = logicalParent;
+            continue;
+          }
+          break;
+        }
+
+        // Then descend to the row's last added sibling (jump via lastChild
+        // when possible so the inner loop isn't O(nextSibling walk) per row).
+        const parentNode = dom.parentNode(n);
+        if (parentNode && this.addedSet.has(dom.lastChild(parentNode) as Node)) {
+          n = dom.lastChild(parentNode) as Node;
+        } else if (parentNode) {
+          // Walk forward through siblings, probing past IGNORED_NODE siblings
+          // so a new node inserted before an ignored node (e.g. a <script>
+          // rrweb filtered out of the mirror) can still be reached from an
+          // earlier new sibling. Matches getNextId's loop, which skips past
+          // IGNORED_NODE siblings when computing nextId for the emitted add.
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            let probe: Node | null = dom.nextSibling(n);
+            while (probe && this.mirror.getId(probe) === IGNORED_NODE) {
+              probe = dom.nextSibling(probe);
             }
-            // nextId !== -1 && parentId === -1 This branch can happen if the node is the child of shadow root
-            else {
-              const unhandledNode = _node.value;
-              const parent = dom.parentNode(unhandledNode);
-              // If the node is the direct child of a shadow root, we treat the shadow host as its parent node.
-              if (parent && parent.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-                const shadowHost = dom.host(parent as ShadowRoot);
-                const parentId = this.mirror.getId(shadowHost);
-                if (parentId !== -1) {
-                  node = _node;
-                  break;
-                }
-              }
+            if (probe && this.addedSet.has(probe)) {
+              n = probe;
+              continue;
             }
+            break;
           }
         }
       }
-      if (!node) {
-        /**
-         * If all nodes in queue could not find a serialized parent,
-         * it may be a bug or corner case. We need to escape the
-         * dead while loop at once.
-         */
-        while (addList.head) {
-          addList.removeNode(addList.head.value);
-        }
-        break;
+
+      this.addedSet.delete(n);
+
+      // A missing parent propagates: once we fail to resolve a parent for
+      // emission, every descendant we encounter in this drain gets the same
+      // treatment without re-asking the mirror. For shadow children the
+      // "logical parent" for propagation is the shadow host, matching how
+      // pushAdd resolves parentId.
+      const parentNode = dom.parentNode(n);
+      const logicalParent =
+        parentNode && parentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+          ? (dom.host(parentNode as ShadowRoot) as Node | null)
+          : (parentNode as Node | null);
+      if (logicalParent && missingParents.has(logicalParent)) {
+        missingParents.add(n);
+        continue;
       }
-      candidate = node.previous;
-      addList.removeNode(node.value);
-      pushAdd(node.value);
+
+      // pushAdd handles isBlockedAtEmission, shadow-host reparenting,
+      // serializationOptions caching, canvasMaskingConfigured, and
+      // iframe/stylesheet attach callbacks, and reports back whether the
+      // node was serialized or dropped.
+      const handled = pushAdd(n);
+      if (!handled) {
+        missingParents.add(n);
+      }
+    }
+
+    // One summary line per emit() rather than one warn per dropped node.
+    // Per-node warnings cascade through subtrees (a dropped 13k-node table
+    // mount would produce 13k lines, which the rrweb console-record plugin
+    // then persists into the replay). The count is enough signal; the
+    // bodies are omitted so no masked content leaks into console-record
+    // events via the plugin's `instanceof Node` branch.
+    if (missingParents.size > 0) {
+      console.warn(
+        `[rrweb] dropped ${missingParents.size} node(s) with unresolved parent at emit`,
+      );
     }
 
     const payload = {
@@ -868,6 +839,15 @@ export default class MutationBuffer {
         break;
       }
       case 'childList': {
+        // Runs before the blocked-parent return so hosts removed from a
+        // blocked container are released too. Still attached by the time the
+        // batch is processed means moved, not removed.
+        m.removedNodes.forEach((n) => {
+          if (!inDom(n)) {
+            this.shadowDomManager.removeShadowRootsIn(n);
+          }
+        });
+
         /**
          * Parent is blocked, ignore all child mutations
          */
@@ -946,13 +926,10 @@ export default class MutationBuffer {
 
     // if n is added to set, there is no need to travel it and its' children again
     if (this.addedSet.has(n)) {
-      // re-insert n so the addedSet iteration order in the `emit` phase matches
-      // the latest DOM order; a stale position makes emit's out-of-order
-      // deferral list do far more work on large batches (upstream rrweb #1302).
-      // this only moves n itself - already-present children keep their earlier
-      // positions and aren't re-appended here, but emit's addList deferral
-      // re-derives parentId/nextId, so parent-before-child order still comes
-      // out correct.
+      // Re-insert n so the addedSet iteration order in emit() matches the
+      // latest DOM order. Only n itself moves; its already-present children
+      // keep their earlier positions. The drain re-derives parentId/nextId
+      // per node, so parent-before-child order still comes out correct.
       this.addedSet.delete(n);
       this.addedSet.add(n);
       return;

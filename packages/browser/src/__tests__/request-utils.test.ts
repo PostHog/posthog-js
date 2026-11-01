@@ -131,6 +131,42 @@ describe('request utils', () => {
                 ['gclid', 'fbclid'],
                 'pathname/?gclid=<masked>&fbclid=<masked>',
             ],
+            [
+                'keeps a question mark inside a query value',
+                'https://www.example.com/?next=/cart?step=2&query=1&utm_source=newsletter',
+                ['query'],
+                'https://www.example.com/?next=/cart?step=2&query=<masked>&utm_source=newsletter',
+            ],
+            [
+                'masks a query param that follows a nested question mark',
+                'https://www.example.com/?next=/cart?query=1&other=2',
+                ['query'],
+                'https://www.example.com/?next=/cart?query=<masked>&other=2',
+            ],
+            [
+                'masks the whole value of a listed param that contains a question mark',
+                'https://www.example.com/?query=https://y.com/cb?code=1&other=2',
+                ['query'],
+                'https://www.example.com/?query=<masked>&other=2',
+            ],
+            [
+                'masks a sensitive suffix without an equals sign',
+                'https://www.example.com/?gclid=public?SECRET&other=2',
+                ['gclid'],
+                'https://www.example.com/?gclid=<masked>&other=2',
+            ],
+            [
+                'masks the whole value after a nested listed param',
+                'https://www.example.com/?next=/cart?query=public?SECRET?code=1&other=2',
+                ['query'],
+                'https://www.example.com/?next=/cart?query=<masked>&other=2',
+            ],
+            [
+                'keeps a hash that contains another #',
+                'https://www.example.com/?query=1#/route#section',
+                ['query'],
+                'https://www.example.com/?query=<masked>#/route#section',
+            ],
         ])('%s', (_name, url, params, expected) => {
             expect(maskQueryParams(url, params, '<masked>')).toEqual(expected)
         })

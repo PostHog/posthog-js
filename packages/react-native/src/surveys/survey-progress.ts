@@ -139,7 +139,7 @@ export function getOtherProjectSurveyProgress(posthog: PostHog): unknown[] {
   if (!Array.isArray(raw)) return []
   const counts = new Map<string, number>()
   return raw.filter((entry) => {
-    if (!isRecord(entry) || !isNonEmptyString(entry.project) || entry.project === posthog.apiKey) return false
+    if (!isRecord(entry) || !isNonEmptyString(entry.project) || entry.project === posthog.projectToken) return false
     if (!isSavedProgress(entry, entry.project)) return false
     const count = counts.get(entry.project) ?? 0
     if (count >= MAX_PROGRESS) return false
@@ -155,7 +155,7 @@ export class SurveyProgressStore {
     const raw = this.posthog.getPersistedProperty<unknown>(PostHogPersistedProperty.SurveysInProgress)
     if (!Array.isArray(raw)) return []
     return raw
-      .filter((entry): entry is SavedProgress => isSavedProgress(entry, this.posthog.apiKey))
+      .filter((entry): entry is SavedProgress => isSavedProgress(entry, this.posthog.projectToken))
       .slice(0, MAX_PROGRESS)
   }
 
@@ -175,7 +175,7 @@ export class SurveyProgressStore {
     const surveyKey = getSurveyIterationKey(survey)
     this.write([
       {
-        project: this.posthog.apiKey,
+        project: this.posthog.projectToken,
         surveyKey,
         shape: surveyShape(survey),
         updatedAt: Date.now(),

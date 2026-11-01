@@ -15,6 +15,7 @@ import type {
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
+import type { Emails } from './emails/types'
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
 import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
@@ -181,6 +182,24 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   maxQueueSize?: number
   /**
+   * Lets the Express and NestJS integrations read the session ID, and the distinct ID of an identified user, from the
+   * posthog-js cookie when a request has neither tracing header.
+   *
+   * Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server
+   * cannot read an opt-out that posthog-js keeps in localStorage (its default).
+   *
+   * It needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie
+   * name (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set
+   * `sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set
+   * `optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie
+   * counts as opted out. A request sent right
+   * after `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a
+   * short delay.
+   *
+   * @default false
+   */
+  readPostHogCookie?: boolean | { sessionIdleTimeoutSeconds?: number; optOutCapturingByDefault?: boolean }
+  /**
    * Configuration for the `posthog.metrics` API (count, gauge, histogram).
    * Set `serviceName` so series can be filtered per service in the Metrics UI.
    *
@@ -211,12 +230,15 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   traces?: TracesConfig
   /**
-   * Credential for fetching local feature flag definitions and decrypting remote config.
+   * Credential for fetching local feature flag definitions, decrypting remote config and
+   * sending email.
    *
    * Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).
    * Local evaluation can also use definitions from `flagDefinitionCacheProvider` without
    * this credential. Remote config payload decryption via `getRemoteConfigPayload`
-   * still requires it. Prefer this over the deprecated
+   * still requires it. `emails.send` needs a Project Secret API Key with the
+   * `hog_flow:write` scope; set `enableLocalEvaluation: false` when the key is only for email.
+   * Prefer this over the deprecated
    * `personalApiKey` option; when both are set, `secretKey` takes precedence.
    *
    * @example
@@ -229,6 +251,28 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * @deprecated Use `secretKey` instead.
    */
   personalApiKey?: string
+  /**
+   * Your PostHog app host, such as `https://posthog.example.com`. `emails.send` sends there.
+   *
+   * Needed only when `host` is not PostHog Cloud, for example a reverse proxy, which must not
+   * receive the secret key. On PostHog Cloud, the client derives `https://us.posthog.com` or
+   * `https://eu.posthog.com` from `host`.
+   */
+  appHost?: string
+  /**
+   * Timeout in milliseconds for each `emails.send` request.
+   *
+   * @default 15000
+   */
+  emailRequestTimeoutMs?: number
+  /**
+   * Number of retries for an `emails.send` after a network error, a rate limit, or an
+   * unavailable service. Every retry sends the same idempotency key. Set to 0 when a job
+   * runner already retries the send.
+   *
+   * @default 2
+   */
+  emailRequestMaxRetries?: number
   /**
    * Redact prompts, outputs and error details from every event that the PostHog AI
    * integrations (`@posthog/ai`) capture with this client. Per-call privacy settings
@@ -903,6 +947,12 @@ export interface IPostHog {
    * periodically. Configure via the `metrics` client option.
    */
   readonly metrics: Metrics
+
+  /**
+   * @description The `posthog.emails` API: sends transactional email from PostHog email templates.
+   * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope.
+   */
+  readonly emails: Emails
 
   /**
    * @description Starts a span without making it active, for work that can't wrap a callback.

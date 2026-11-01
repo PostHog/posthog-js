@@ -6,6 +6,7 @@ import {
     COOKIELESS_SENTINEL_VALUE,
     COOKIELESS_ON_REJECT,
     DEVICE_ID,
+    DISTINCT_ID,
     DEVICE_MODEL,
     PERSON_PROFILES_IDENTIFIED_ONLY,
     USER_STATE_ANONYMOUS,
@@ -83,7 +84,7 @@ import {
     ToolbarParams,
     PostHogInterface,
 } from './types'
-import type { TreeShakeable } from '@posthog/types'
+import { CONFIG_DEFAULTS_DATES, type TreeShakeable } from '@posthog/types'
 import {
     _copyAndTruncateStrings,
     addEventListener,
@@ -253,6 +254,9 @@ const FLAG_CALLED_TRANSPORT_PROPERTY_KEYS = ['token', 'distinct_id', COOKIELESS_
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
+const LATEST_DEFAULTS_DATE = [...CONFIG_DEFAULTS_DATES].sort()[CONFIG_DEFAULTS_DATES.length - 1]
+
+// 'latest' sorts after ISO dates, so the comparisons below include all current and future default changes.
 const getSessionRecordingDefaults = (defaults?: ConfigDefaults): PostHogConfig['session_recording'] => {
     const sessionRecording: PostHogConfig['session_recording'] = {}
     if (!defaults || defaults === 'unset') {
@@ -1095,9 +1099,21 @@ export class PostHog implements PostHogInterface {
         // the same instance resumes on `pageshow`. Without this the page would stay marked as
         // unloading for the rest of its life, and every later unbatched capture would take the
         // beacon path on a fully active page.
-        addEventListener(window, 'pageshow', () => {
+        addEventListener(window, 'pageshow', (event) => {
             this._isPageUnloading = false
             if (!this._isShutdown) {
+                if ((event as PageTransitionEvent).persisted && this.persistence) {
+                    const previousDistinctId = this.persistence.get_property(DISTINCT_ID)
+                    const previousUserState = this.persistence.get_property(USER_STATE)
+                    this.persistence.load()
+                    if (
+                        !this._processCookieIdentityChange() &&
+                        (previousDistinctId !== this.persistence.get_property(DISTINCT_ID) ||
+                            previousUserState !== this.persistence.get_property(USER_STATE))
+                    ) {
+                        this._processIdentityChange()
+                    }
+                }
                 this._retryQueue?.resume()
             }
         })
@@ -2124,8 +2140,13 @@ export class PostHog implements PostHogInterface {
             return false
         }
 
+        this._processIdentityChange(reloadFeatureFlags)
+        return true
+    }
+
+    private _processIdentityChange(reloadFeatureFlags: boolean = true): void {
         this._cachedPersonProperties = null
-        if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
+        if (this.persistence?.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
             // Persistent event properties, including groups, are cleared while
             // reconciling the reset snapshot. Clear the separate session store
             // here before assembling an event under the anonymous identity.
@@ -2137,7 +2158,6 @@ export class PostHog implements PostHogInterface {
         if (reloadFeatureFlags) {
             this.reloadFeatureFlags()
         }
-        return true
     }
 
     /**
@@ -2177,7 +2197,7 @@ export class PostHog implements PostHogInterface {
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
         let properties = { ...eventProperties }
         properties['token'] = this.config.token
-        properties['$config_defaults'] = this.config.defaults
+        properties['$config_defaults'] = this.config.defaults === 'latest' ? LATEST_DEFAULTS_DATE : this.config.defaults
 
         if (this._inCookielessMode()) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
@@ -5438,6 +5458,23 @@ export function init_from_snippet(): void {
                 }
             }
         })
+
+        // Eager loaders can finish before init(). Retain the primary queue until initialization succeeds.
+        const peopleQueue = snippetPostHog.people
+        if (!posthogMain.__loaded && isArray(snippetPostHog)) {
+            const init = posthogMain.init
+            let pending = true
+            posthogMain.init = (token, config, name) => {
+                const instance = init.call(posthogMain, token, config, name)
+                if (pending && instance === posthogMain && instance.__loaded) {
+                    pending = false
+                    posthogMain.init = init
+                    instance._execute_array.call(instance.people, peopleQueue)
+                    instance._execute_array(snippetPostHog)
+                }
+                return instance
+            }
+        }
     }
 
     // Keep the snippet sentinel so another pasted snippet cannot replace live SDK methods with queue stubs.

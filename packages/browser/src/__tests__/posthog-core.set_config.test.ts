@@ -209,7 +209,9 @@ describe('posthog.set_config', () => {
         })
 
         describe('debounced session persistence', () => {
-            beforeEach(() => vi.useFakeTimers())
+            beforeEach(() => {
+                vi.useFakeTimers()
+            })
             afterEach(() => {
                 vi.clearAllTimers()
                 vi.useRealTimers()

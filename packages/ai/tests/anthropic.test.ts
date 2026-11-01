@@ -1072,6 +1072,30 @@ describe('PostHogAnthropic', () => {
   })
 
   describe('Error Handling', () => {
+    test('streaming requests capture an error event when the request fails before the stream opens', async () => {
+      const apiError = new Error('Invalid API key') as Error & { status: number }
+      apiError.status = 401
+
+      const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockRejectedValue(apiError)
+
+      await expect(
+        client.messages.create({
+          model: 'claude-3-opus-20240229',
+          messages: [{ role: 'user', content: 'Hello' }],
+          max_tokens: 100,
+          stream: true,
+          posthogDistinctId: 'test-user-123',
+        })
+      ).rejects.toBe(apiError)
+
+      const captureMock = mockPostHogClient.capture as vi.Mock
+      expect(captureMock).toHaveBeenCalledTimes(1)
+      const { properties } = captureMock.mock.calls[0][0]
+      expect(properties['$ai_http_status']).toBe(401)
+      expect(properties['$ai_is_error']).toBe(true)
+    })
+
     conditionalTest('should handle API errors', async () => {
       const apiError = new Error('API Error') as Error & { status: number }
       apiError.status = 429

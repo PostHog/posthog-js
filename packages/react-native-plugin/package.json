@@ -1,6 +1,6 @@
 {
   "name": "@posthog/react-native-plugin",
-  "version": "2.12.6",
+  "version": "2.13.0",
   "description": "PostHog React Native plugin for iOS and Android integrations",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
@@ -24,6 +24,7 @@
     "lib",
     "android",
     "ios",
+    "MIGRATION.md",
     "*.podspec",
     "!ios/build",
     "!android/build",
@@ -78,7 +79,7 @@
   },
   "peerDependencies": {
     "react": "*",
-    "react-native": ">=0.71"
+    "react-native": ">=0.75"
   },
   "react-native-builder-bob": {
     "source": "src",

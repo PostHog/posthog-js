@@ -1,5 +1,5 @@
 import type { AttributeValue, Attributes } from '@opentelemetry/api'
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
+import type { ReadableSpan } from './types'
 
 import { withAttributes } from './spans'
 

@@ -1,5 +1,26 @@
 # @posthog/types
 
+## 1.419.0
+
+### Minor Changes
+
+- [#5480](https://github.com/PostHog/posthog-js/pull/5480) [`9bd0e80`](https://github.com/PostHog/posthog-js/commit/9bd0e807d019f06b08cd998b0bb72bac6dd2352e) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add support widget theming: `conversations.theme` init option, `posthog.conversations.setTheme()`, dark mode, and `--ph-conv-*` CSS custom properties
+  (2026-10-30)
+
+## 1.418.0
+
+### Minor Changes
+
+- [#5269](https://github.com/PostHog/posthog-js/pull/5269) [`950d034`](https://github.com/PostHog/posthog-js/commit/950d03423605d1567c90a3f27f50d4603a89ae45) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `$input_value` to autocapture `change` events for fields marked `data-ph-capture-value`, or matched by the new `autocapture.capture_value_css_selector_allowlist` option (CSS selectors or an `(element) => boolean` predicate).
+  (2026-10-28)
+
+## 1.417.0
+
+### Minor Changes
+
+- [#5405](https://github.com/PostHog/posthog-js/pull/5405) [`3150079`](https://github.com/PostHog/posthog-js/commit/31500798797e35187ca0a61bcf2af24d6ba45a96) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `defaults: 'latest'` to follow the newest defaults and report the applied date in events.
+  (2026-10-27)
+
 ## 1.416.1
 
 ### Patch Changes

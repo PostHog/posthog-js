@@ -13,6 +13,8 @@ test('compatibility update rejects partial selectors and insufficient repeats be
     try {
         for (const args of [
             ['--modes', 'npm'],
+            ['--modes', 'snippet,npm,slim'],
+            ['--modes', 'loader', '--comparisons', 'historical'],
             ['--repeats', '1'],
         ]) {
             const output = join(folder, args[0].slice(2))
@@ -20,7 +22,10 @@ test('compatibility update rejects partial selectors and insufficient repeats be
                 encoding: 'utf8',
             })
             assert.equal(result.status, 1)
-            assert.match(result.stderr, /Updates require the full matrix|At least two repetitions/)
+            assert.match(
+                result.stderr,
+                /Updates require the full matrix|At least two repetitions|No supported deployments selected/
+            )
             assert.equal(existsSync(output), false)
         }
     } finally {

@@ -11,7 +11,14 @@ import { request } from '../../request'
 import { RequestRouter } from '../../utils/request-router'
 import { PostHog } from '../../posthog-core'
 import type { PostHogPersistence } from '../../posthog-persistence'
-import type { CaptureOptions, Properties, Property, QueuedRequestWithOptions, RemoteConfigResult } from '../../types'
+import type {
+    CaptureOptions,
+    Properties,
+    Property,
+    QueuedRequestWithOptions,
+    RemoteConfigResult,
+    SessionIdChangedCallback,
+} from '../../types'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 
 interface MockPostHog extends PostHog {
@@ -121,7 +128,7 @@ describe('BrowserClientAdapter', () => {
     it('delegates session notifications without reading or creating a session', () => {
         const instance = createMockPostHog()
         const unsubscribe = vi.fn()
-        let notify!: (sessionId: string) => void
+        let notify!: SessionIdChangedCallback
         instance.onSessionId = vi.fn((listener) => {
             notify = listener
             listener('existing-session', 'window')
@@ -131,7 +138,7 @@ describe('BrowserClientAdapter', () => {
         const listener = vi.fn()
         const subscription = client.onSession(listener)
         expect(listener).toHaveBeenCalledWith('existing-session')
-        notify('next-session')
+        notify('next-session', 'window')
         expect(listener).toHaveBeenLastCalledWith('next-session')
         expect(instance.sessionManager!.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         subscription.dispose()
@@ -490,7 +497,7 @@ describe('BrowserClientAdapter', () => {
         'exposes live consent separately from capture permission in cookieless mode %s',
         async (cookielessMode) => {
             const instance = await createPosthogInstance(undefined, {
-                cookieless_mode: cookielessMode,
+                cookieless_mode: cookielessMode || undefined,
                 capture_pageview: false,
                 advanced_disable_flags: true,
                 disable_session_recording: true,

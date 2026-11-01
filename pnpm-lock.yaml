@@ -144,8 +144,8 @@ importers:
         specifier: ^0.15.1
         version: 0.15.1
       '@posthog/coherence':
-        specifier: ^1.7.1
-        version: 1.7.1
+        specifier: ^1.10.1
+        version: 1.10.1
       '@types/node':
         specifier: ^22.19.1
         version: 22.19.1
@@ -203,6 +203,9 @@ importers:
 
   packages/ai:
     dependencies:
+      '@opentelemetry/sdk-trace':
+        specifier: ^2.9.0 || ^3.0.0
+        version: 2.10.0(@opentelemetry/api@1.9.0)
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -555,6 +558,9 @@ importers:
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.23.2(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(@typescript/native-preview@7.0.0-dev.20260216.1)(core-js@3.49.0)(typescript@7.0.2)
+      '@rspack/core':
+        specifier: 2.1.10
+        version: 2.1.10(@swc/helpers@0.5.23)
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
@@ -724,6 +730,15 @@ importers:
         specifier: ^0.0.1
         version: 0.0.1
     devDependencies:
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.0
+      '@opentelemetry/context-async-hooks':
+        specifier: ^2.10.0
+        version: 2.10.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.10.0
+        version: 2.10.0(@opentelemetry/api@1.9.0)
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
@@ -819,6 +834,9 @@ importers:
       '@opentelemetry/context-async-hooks':
         specifier: ^2.2.0
         version: 2.10.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.10.0
+        version: 2.10.0(@opentelemetry/api@1.9.0)
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
@@ -880,6 +898,15 @@ importers:
       '@nuxt/schema':
         specifier: ^4.1.2
         version: 4.1.3
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.0
+      '@opentelemetry/context-async-hooks':
+        specifier: ^2.2.0
+        version: 2.10.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.10.0
+        version: 2.10.0(@opentelemetry/api@1.9.0)
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.9
@@ -6605,8 +6632,8 @@ packages:
     engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
 
-  '@posthog/coherence@1.7.1':
-    resolution: {integrity: sha512-D5cwNyyI+H4S1ttVYFHJx32nDeu4PS/+l3MEGHhwkW9yvuWsYg41ELyfT55rHGOuRFBe4HYBdFxN9TuHgxYzbg==}
+  '@posthog/coherence@1.10.1':
+    resolution: {integrity: sha512-Ge373x9OJ360TivaVCvFDTfG4ObGhVGAvV6pXFY46Z8nB//ZJshLXtRqJB6CuJLu9rVUXOHYNOQazDKUus1ZEQ==}
     engines: {node: '>=22.18'}
     os: [darwin, linux]
     hasBin: true
@@ -25369,7 +25396,7 @@ snapshots:
     dependencies:
       detect-libc: 2.1.2
 
-  '@posthog/coherence@1.7.1':
+  '@posthog/coherence@1.10.1':
     optionalDependencies:
       pyright: 1.1.414
       typescript: 5.9.3

@@ -159,7 +159,24 @@
     })
     lab.initialize = (scenario) => {
         lab.scenario = scenario
-        if (lab.mode === 'snippet') {
+        if (lab.mode === 'loader') {
+            const { loaded, ...config } = lab.options()
+            const script = document.createElement('script')
+            script.src = '/static/loader.js?project_token=phc_COMPAT'
+            script.crossOrigin = 'anonymous'
+            script.setAttribute('data-config', JSON.stringify(config))
+            script.onload = () => {
+                lab.ph = window.posthog
+                lab.probe('before-init')
+                lab.probe('init-return')
+                // Auto-init accepts JSON only; observe readiness through the public SDK queue.
+                lab.ph.push(function () {
+                    loaded(this)
+                })
+                lab.initialized = true
+            }
+            document.head.appendChild(script)
+        } else if (lab.mode === 'snippet') {
             lab.ph = window.posthog
             lab.phase = 'snippet-init-call'
             lab.call('init', ['phc_COMPAT', lab.options()], 'snippet.init')

@@ -163,6 +163,62 @@ describe('Surveys: back button', () => {
         expect(screen.queryByText('Question 2')).not.toBeInTheDocument()
     })
 
+    test.each([false, true])(
+        'completes when the final optional rating is skipped with partial responses %s',
+        async (enablePartialResponses) => {
+            const survey: Survey = {
+                ...baseSurvey,
+                enable_partial_responses: enablePartialResponses,
+                questions: [
+                    { type: SurveyQuestionType.Open, question: 'Question 1', id: 'q1' },
+                    {
+                        type: SurveyQuestionType.Rating,
+                        question: 'Final rating',
+                        id: 'q2',
+                        display: 'number',
+                        scale: 5,
+                        lowerBoundLabel: 'Unhappy',
+                        upperBoundLabel: 'Happy',
+                        optional: true,
+                        branching: {
+                            type: SurveyQuestionBranchingType.ResponseBased,
+                            responseValues: {
+                                negative: SurveyQuestionBranchingType.End,
+                                neutral: SurveyQuestionBranchingType.End,
+                                positive: SurveyQuestionBranchingType.End,
+                            },
+                        },
+                    },
+                ],
+            }
+
+            render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
+
+            fireEvent.input(screen.getByRole('textbox'), { target: { value: 'first answer' } })
+            fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+            await waitFor(() => expect(screen.getByText('Final rating')).toBeVisible())
+            mockedSendSurveyEvent.mockClear()
+
+            fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+
+            await waitFor(() =>
+                expect(mockedSendSurveyEvent).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        isSurveyCompleted: true,
+                        responses: {
+                            $survey_response_q1: 'first answer',
+                            $survey_response_q2: null,
+                        },
+                    })
+                )
+            )
+            expect(mockedSetInProgressSurveyState).not.toHaveBeenCalledWith(
+                survey,
+                expect.objectContaining({ lastQuestionIndex: 2 })
+            )
+        }
+    )
+
     test('resuming an in-progress survey without visitedIndices does not crash and hides back', () => {
         mockedGetInProgressSurveyState.mockReturnValue({
             surveySubmissionId: 'legacy-id',

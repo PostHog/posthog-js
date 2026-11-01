@@ -6,17 +6,18 @@ import { join } from 'node:path'
 import { compatibilityServer, observations, survey } from './server.mjs'
 import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
 
-async function fixture(t, scenario = 'core') {
+async function fixture(t, scenario = 'core', mode = 'snippet') {
     const folder = await mkdtemp(join(tmpdir(), 'compat-server-'))
     await writeFile(join(folder, 'surveys.js'), 'window.nativeSurvey = true;')
     await writeFile(join(folder, 'array.js'), 'window.nativeCore = true;')
+    await writeFile(join(folder, 'loader.js'), 'window.nativeLoader = true;')
     const settings = {
-        mode: 'snippet',
+        mode,
         scenario,
         coreVersion: '1.2.3',
         coreDist: folder,
         extensionDist: folder,
-        allowedAssets: ['array.js', 'surveys.js'],
+        allowedAssets: ['array.js', 'surveys.js', 'loader.js'],
         harness: join(folder, 'array.js'),
         snippet: join(folder, 'array.js'),
         player: join(folder, 'array.js'),
@@ -49,6 +50,24 @@ test('compatibility server holds actual native assets and supplies scenario conf
     assert.equal(flags.requestId, '00000000-0000-4000-8000-000000000001')
     assert.deepEqual(flags.surveys, config.surveys)
     assert.deepEqual(await (await fetch(origin + '/api/surveys')).json(), { surveys: [survey] })
+})
+
+test('loader deployment serves its bootstrap immediately while holding the matching core', async (t) => {
+    const { server, origin } = await fixture(t, 'core', 'loader')
+    const html = await (await fetch(origin)).text()
+    assert.match(html, /src="\/harness\.js"/)
+    assert.doesNotMatch(html, /src="\/(?:consumer|snippet)\.js"/)
+    const bootstrap = await fetch(origin + '/static/loader.js?project_token=phc_COMPAT', {
+        signal: AbortSignal.timeout(2000),
+    })
+    assert.equal(bootstrap.status, 200)
+    assert.equal(await bootstrap.text(), 'window.nativeLoader = true;')
+    const pending = fetch(origin + '/static/1.2.3/array.js')
+    while (!server.inspect().blockedRequests.length) await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(server.inspect().blockedRequests[0].barrier, 'core')
+    server.releaseBarrier('core')
+    assert.equal(await (await pending).text(), 'window.nativeCore = true;')
+    assert.deepEqual(server.inspect().errors, [])
 })
 
 test('compatibility server preserves native versioned fallback and extension faults', async (t) => {

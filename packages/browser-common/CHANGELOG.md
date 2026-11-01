@@ -1,5 +1,38 @@
 # @posthog/browser-common
 
+## 0.10.2
+
+### Patch Changes
+
+- [#5341](https://github.com/PostHog/posthog-js/pull/5341) [`de6b06f`](https://github.com/PostHog/posthog-js/commit/de6b06f8a53faac5113ba979aa48472e6965a2b5) Thanks [@sebxt](https://github.com/sebxt)! - Keep the rest of the URL when masking personal data query params and a query value contains `?` or the hash contains `#`.
+  (2026-10-29)
+
+## 0.10.1
+
+### Patch Changes
+
+- [#5222](https://github.com/PostHog/posthog-js/pull/5222) [`6d12d24`](https://github.com/PostHog/posthog-js/commit/6d12d24ed24b2846415dbd95fc5d7ccf57779a99) Thanks [@posthog](https://github.com/apps/posthog)! - Fall back to `Math.random` when `crypto.getRandomValues` throws, so UUID generation no longer breaks capture.
+  (2026-10-28)
+
+## 0.10.0
+
+### Minor Changes
+
+- [#5269](https://github.com/PostHog/posthog-js/pull/5269) [`950d034`](https://github.com/PostHog/posthog-js/commit/950d03423605d1567c90a3f27f50d4603a89ae45) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `$input_value` to autocapture `change` events for fields marked `data-ph-capture-value`, or matched by the new `autocapture.capture_value_css_selector_allowlist` option (CSS selectors or an `(element) => boolean` predicate).
+  (2026-10-28)
+
+### Patch Changes
+
+- Updated dependencies [[`950d034`](https://github.com/PostHog/posthog-js/commit/950d03423605d1567c90a3f27f50d4603a89ae45)]:
+  - @posthog/types@1.418.0
+
+## 0.9.12
+
+### Patch Changes
+
+- [#5279](https://github.com/PostHog/posthog-js/pull/5279) [`d47c184`](https://github.com/PostHog/posthog-js/commit/d47c184b03040d6034bb15e7f7a0dcbd9b9a909f) Thanks [@github-actions](https://github.com/apps/github-actions)! - Fix optional rating surveys with response-based branching when skipped.
+  (2026-10-26)
+
 ## 0.9.11
 
 ### Patch Changes

@@ -99,6 +99,17 @@ export interface AutocaptureConfig {
      * When true, autocapture captures cut, copy, and paste interactions. Paste events do not contain pasted text.
      */
     capture_copied_text?: boolean
+
+    /**
+     * CSS selectors or a predicate opting individual native fields into value capture on change events.
+     * Selectors match the field itself, not its ancestors. An empty array disables value capture.
+     * String values are sent in $input_value and may be edited in before_send.
+     * Values are not automatically redacted; only opt in fields whose contents you intend to collect.
+     * Password fields, no-capture markers, sensitive-field exclusions, and mask_all_text still apply.
+     *
+     * @default ['[data-ph-capture-value]']
+     */
+    capture_value_css_selector_allowlist?: string[] | ((element: Element) => boolean)
 }
 
 export interface RageclickConfig {
@@ -475,19 +486,21 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
+export const CONFIG_DEFAULTS_DATES = Object.freeze([
+    '2026-08-30',
+    '2026-08-29',
+    '2026-06-25',
+    '2026-05-30',
+    '2026-01-30',
+    '2025-11-30',
+    '2025-05-24',
+] as const)
+
 /**
  * Configuration defaults snapshot used by `PostHogConfig.defaults`.
- * Later dates include all earlier default changes.
+ * Later dates include all earlier default changes. `latest` includes all changes in the loaded SDK version.
  */
-export type ConfigDefaults =
-    | '2026-08-30'
-    | '2026-08-29'
-    | '2026-06-25'
-    | '2026-05-30'
-    | '2026-01-30'
-    | '2025-11-30'
-    | '2025-05-24'
-    | 'unset'
+export type ConfigDefaults = 'latest' | (typeof CONFIG_DEFAULTS_DATES)[number] | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -1043,6 +1056,78 @@ export interface SurveyConfig {
     prefillFromUrl?: boolean
     autoSubmitIfComplete?: boolean
     autoSubmitDelay?: number
+}
+
+/**
+ * Colors of the conversations widget. Any CSS color value is accepted.
+ */
+export interface ConversationsThemeColors {
+    /** Launcher, header, customer messages and buttons. Overrides the color set in project settings. */
+    primary?: string
+    /** Text and icons drawn on `primary`. Computed from `primary` when it is a hex color and this is unset. */
+    primaryText?: string
+    /** Window, message list and input background. */
+    background?: string
+    /** Secondary background: identification form, unread tickets, code blocks. */
+    surface?: string
+    /** Main text color. */
+    text?: string
+    /** Secondary text: timestamps, author names, descriptions. */
+    mutedText?: string
+    /** Borders and dividers. */
+    border?: string
+    /** Background of messages from your team. */
+    agentBubble?: string
+}
+
+/**
+ * Theme of the conversations widget. The top-level colors are the light colors; `dark` holds the dark ones.
+ *
+ * Values are applied as `--ph-conv-*` CSS custom properties (`--ph-conv-primary`, `--ph-conv-on-primary`,
+ * `--ph-conv-bg`, `--ph-conv-surface`, `--ph-conv-text`, `--ph-conv-muted`, `--ph-conv-border`,
+ * `--ph-conv-agent-bubble`, `--ph-conv-font`, `--ph-conv-radius`, `--ph-conv-launcher-shadow`,
+ * `--ph-conv-window-shadow`). Rules in your own stylesheet that set them on
+ * `#ph-conversations-widget-container` take precedence over the theme.
+ */
+export interface ConversationsTheme extends ConversationsThemeColors {
+    /**
+     * Which colors to use. `'auto'` follows the visitor's `prefers-color-scheme`.
+     *
+     * @default 'light'
+     */
+    colorScheme?: 'light' | 'dark' | 'auto'
+    /**
+     * Colors used when the dark scheme is active. Unset values fall back to built-in dark colors,
+     * except `primary` and `primaryText`, which fall back to the light ones.
+     */
+    dark?: ConversationsThemeColors
+    /** Font family of the widget. */
+    fontFamily?: string
+    /** Corner radius of the chat window, e.g. `'16px'`. */
+    borderRadius?: string
+    /** CSS `filter` applied to the launcher button, e.g. `'none'` or `'drop-shadow(0 2px 8px rgba(0,0,0,0.2))'`. */
+    launcherShadow?: string
+    /** CSS `box-shadow` of the chat window. */
+    windowShadow?: string
+}
+
+/**
+ * Conversations configuration options
+ */
+export interface ConversationsConfig {
+    /**
+     * Theme of the support widget. Change it after init with `posthog.conversations.setTheme()`.
+     *
+     * @example
+     * ```js
+     * posthog.init('phc_...', {
+     *     conversations: {
+     *         theme: { colorScheme: 'auto', primary: '#111827', dark: { primary: '#f9fafb' } },
+     *     },
+     * })
+     * ```
+     */
+    theme?: ConversationsTheme
 }
 
 /**
@@ -1650,6 +1735,13 @@ export interface PostHogConfig {
     disable_conversations: boolean
 
     /**
+     * Conversations-specific configuration options, such as the support widget theme.
+     *
+     * @default undefined
+     */
+    conversations?: ConversationsConfig
+
+    /**
      * Verified distinct_id for HMAC-based identity verification.
      * When both `identity_distinct_id` and `identity_hash` are provided,
      * products like conversations use server-verified identity instead of
@@ -1877,7 +1969,12 @@ export interface PostHogConfig {
     /**
      * Configuration defaults for breaking changes. When set to a specific date,
      * enables new default behaviors that were introduced on that date.
+     * Set to `'latest'` to always use the newest defaults in the loaded SDK version.
+     * Unlike a pinned date, `'latest'` opts into future default changes when the SDK is upgraded,
+     * which may include breaking changes. Explicit configuration options still take precedence.
+     * Events report the resolved date in `$config_defaults` when using `'latest'`.
      *
+     * - `'latest'`: Use all default changes available in the loaded SDK version
      * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
