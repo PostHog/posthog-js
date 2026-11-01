@@ -20,6 +20,7 @@ You need to change code or configuration if your app does any of these:
 - reuses one event `uuid` for more than one event
 - passes strings such as `"true"` for `$process_person_profile`, `$cookieless_mode` or `$ignore_sent_at`
 - sets `$is_server`, `$geoip_disable` or feature flag properties on events, in context or with `register()`, and expects the SDK's value to win
+- turns person processing off with `register()`, `registerOptions()` or a context, and calls `identify`, `alias` or `groupIdentify` (see [Layer order](#layer-order))
 - sets `$lib` or `$lib_version`
 - sends a `$session_id` or `$window_id` that is not a string
 - passes a personal API key (`phx_...`) as the project API key
@@ -244,6 +245,7 @@ These changes follow from this order:
 - A `before_send` hook that throws drops the event, as in 5.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing.
 - With `sendFeatureFlags`, the `/flags` request now runs before `before_send` and uses the event's own distinct id, even for an event the hook then drops. Changes the hook makes to the message's `groups` or `sendFeatureFlags` no longer reach that request, as editing those objects in place could in 5.x. To avoid that request, call `evaluateFlags()` yourself and pass the snapshot as `flags`.
 - Context and `register()` properties and options now reach `identify`, `alias` and `groupIdentify` events, not only `capture`.
+- That includes a `process_person_profile: false` option or `$process_person_profile: false` property set with `register()`, `registerOptions()` or a context. PostHog drops `$identify`, `$create_alias` and `$groupidentify` events with person processing off and shows an ingestion warning. `'error'` does not report these drops, because capture accepts the events. Set person processing off on each event instead, or pass `options: { process_person_profile: true }` to `identify`, `alias` and `groupIdentify`.
 
 ## GeoIP
 
