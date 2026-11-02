@@ -1,5 +1,14 @@
 # posthog-ai
 
+## 8.18.2
+
+### Patch Changes
+
+- [#5520](https://github.com/PostHog/posthog-js/pull/5520) [`af74347`](https://github.com/PostHog/posthog-js/commit/af743477efddf80180d06c09c9b3bd9b12280f07) Thanks [@bernatixer](https://github.com/bernatixer)! - Vercel AI SDK file capture: keep provider file IDs like `file-abc123` as they are instead of turning them into data URLs, use the same placeholder for an over-budget file however it was passed, and skip encoding output files in privacy mode
+  (2026-11-02)
+- Updated dependencies [[`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85)]:
+  - @posthog/core@1.62.1
+
 ## 8.18.1
 
 ### Patch Changes

@@ -1,5 +1,21 @@
 # posthog-js
 
+## 1.444.4
+
+### Patch Changes
+
+- [#5492](https://github.com/PostHog/posthog-js/pull/5492) [`84a5277`](https://github.com/PostHog/posthog-js/commit/84a52778d41beb19700751f5cf8e7c49d7343fc9) Thanks [@marandaneto](https://github.com/marandaneto)! - Sanitize web experiment HTML transforms; unsupported tags and attributes are now removed.
+  (2026-11-02)
+
+- [#5505](https://github.com/PostHog/posthog-js/pull/5505) [`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85) Thanks [@majicmaj](https://github.com/majicmaj)! - Recognize self-declared Lightpanda headless browsers in bot detection.
+  (2026-11-02)
+
+- [#5503](https://github.com/PostHog/posthog-js/pull/5503) [`89c3a6b`](https://github.com/PostHog/posthog-js/commit/89c3a6b54aa35b971af850a55c37c04d3417b842) Thanks [@abdullah129026](https://github.com/abdullah129026)! - Fix tab widget surveys ignoring the selected position. The popup is only centred next to the tab for the default right position or next to trigger; any other position picked in the survey appearance settings is now honoured.
+  (2026-11-02)
+- Updated dependencies [[`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85), [`89c3a6b`](https://github.com/PostHog/posthog-js/commit/89c3a6b54aa35b971af850a55c37c04d3417b842)]:
+  - @posthog/core@1.62.1
+  - @posthog/browser-common@0.10.4
+
 ## 1.444.3
 
 ### Patch Changes
