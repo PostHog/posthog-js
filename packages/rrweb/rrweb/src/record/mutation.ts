@@ -599,6 +599,28 @@ export default class MutationBuffer {
             inlineStylesheet: false,
           }),
         }),
+        addPosition: () => {
+          const parent = dom.parentNode(link);
+          if (!parent) return null;
+          const inShadowRoot = isShadowRoot(parent);
+          const parentId = this.mirror.getId(
+            inShadowRoot ? getShadowHost(link) : parent,
+          );
+          if (parentId === -1) return null;
+          // a sibling not recorded yet arrives in its own add, placed against the siblings after it
+          let next = dom.nextSibling(link);
+          while (next && this.mirror.getId(next) < 0) {
+            next = dom.nextSibling(next);
+          }
+          return {
+            parentId,
+            nextId: next ? this.mirror.getId(next) : null,
+            isShadow:
+              inShadowRoot && isNativeShadowDom(parent as ShadowRoot)
+                ? true
+                : undefined,
+          };
+        },
       });
     }
   };

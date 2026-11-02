@@ -9,9 +9,11 @@ import {
   eventWithTime,
   EventType,
   IncrementalSource,
+  NodeType,
   styleSheetRuleData,
   selectionData,
 } from '@posthog/rrweb-types';
+import type { elementNode } from '@posthog/rrweb-types';
 import {
   assertSnapshot,
   getServerURL,
@@ -1967,6 +1969,113 @@ describe('record', function (this: ISuite) {
       );
 
       expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+    });
+
+    const addedLinks = () =>
+      ctx.events.flatMap((e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        e.data.source === IncrementalSource.Mutation
+          ? e.data.adds.filter(
+              (add) =>
+                add.node.type === NodeType.Element &&
+                add.node.tagName === 'link',
+            )
+          : [],
+      );
+
+    it('replays a plain link when the new sheet of a changed link cannot be read', async () => {
+      const crossOriginURL = serverURL.replace('localhost', '127.0.0.1');
+      const newHref = `${crossOriginURL}/html/assets/style.css?v=2`;
+      await ctx.page.evaluate(
+        async ({ serverURL, newHref }) => {
+          const { record } = (window as unknown as IWindow).rrweb;
+          const link = document.createElement('link');
+          link.setAttribute('rel', 'stylesheet');
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+          await new Promise((resolve) => {
+            link.onload = resolve;
+            document.head.appendChild(link);
+          });
+
+          record({
+            inlineStylesheet: true,
+            emit: (window as unknown as IWindow).emit,
+          });
+
+          link.setAttribute('href', newHref);
+        },
+        { serverURL, newHref },
+      );
+
+      const readd = await waitForCondition(() => addedLinks()[0]);
+      expect((readd.node as elementNode).attributes.href).toBe(newHref);
+      expect((readd.node as elementNode).attributes).not.toHaveProperty(
+        '_cssText',
+      );
+
+      const recordedEvents = [...ctx.events];
+      const firstTimestamp = recordedEvents[0].timestamp;
+      const lastTimestamp = recordedEvents[recordedEvents.length - 1].timestamp;
+      await ctx.page.evaluate(
+        ({ events, pauseAt }) => {
+          const { Replayer } = (
+            window as unknown as {
+              rrweb: {
+                Replayer: new (e: eventWithTime[]) => {
+                  pause: (t: number) => void;
+                };
+              };
+            }
+          ).rrweb;
+          new Replayer(events).pause(pauseAt);
+        },
+        {
+          events: recordedEvents,
+          pauseAt: lastTimestamp - firstTimestamp + 200,
+        },
+      );
+      const replayFrame = await (await ctx.page.$('iframe'))!.contentFrame();
+      expect(
+        await replayFrame!.$$eval('link', (links) =>
+          links.map((link) => link.getAttribute('href')),
+        ),
+      ).toContain(newHref);
+      expect(
+        await replayFrame!.$$eval('style', (styles) =>
+          styles.map((style) => style.textContent).join(''),
+        ),
+      ).not.toContain('pink');
+    });
+
+    it('does not re-add a changed link that replay still shows as a link', async () => {
+      const crossOriginURL = serverURL.replace('localhost', '127.0.0.1');
+      await ctx.page.evaluate((crossOriginURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'preload');
+        link.setAttribute('as', 'style');
+        link.setAttribute(
+          'href',
+          `${crossOriginURL}/html/assets/style.css?preload`,
+        );
+        link.onload = () => {
+          link.onload = null;
+          link.rel = 'stylesheet';
+        };
+        document.head.appendChild(link);
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+      }, crossOriginURL);
+
+      await waitForCondition(() =>
+        attributeMutations().find((m) => m.attributes.rel === 'stylesheet'),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(addedLinks()).toHaveLength(0);
     });
 
     it('inlines the new sheet when a full snapshot runs while a changed link loads', async () => {

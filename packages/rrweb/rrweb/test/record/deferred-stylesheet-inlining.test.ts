@@ -1295,12 +1295,14 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
       .cancelIdleCallback;
   });
 
-  const linkWithCurrentSheet = (): {
+  const linkWithCurrentSheet = (
+    cssText = '.a { color: red; }',
+  ): {
     linkEl: HTMLLinkElement;
     backingSheet: CSSStyleSheet;
   } => {
     const styleEl = document.createElement('style');
-    styleEl.textContent = '.a { color: red; }';
+    styleEl.textContent = cssText;
     document.head.appendChild(styleEl);
     const linkEl = document.createElement('link');
     linkEl.setAttribute('rel', 'stylesheet');
@@ -1315,7 +1317,53 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
   const recorderView = {
     currentId: () => 7,
     reserializeWithoutCss: () => ({ previous: null, current: null }),
+    addPosition: () => ({ parentId: 3, nextId: null }),
   };
+  const serializedLink = (attributes: Record<string, string>) =>
+    ({
+      type: NodeType.Element,
+      tagName: 'link',
+      attributes,
+      childNodes: [],
+      id: 7,
+    }) as serializedNodeWithId;
+  const recorderViewWithPrevious = (
+    previousAttributes: Record<string, string>,
+  ) => ({
+    ...recorderView,
+    reserializeWithoutCss: () => ({
+      previous: serializedLink(previousAttributes),
+      current: serializedLink({
+        rel: 'stylesheet',
+        href: 'https://example.com/theme.css',
+      }),
+    }),
+  });
+  const linkWithUnreadableSheet = (): HTMLLinkElement => {
+    const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
+    linkEl.setAttribute('href', 'https://cdn.example.com/theme.css');
+    document.head.appendChild(linkEl);
+    created.push(linkEl);
+    Object.defineProperty(linkEl, 'sheet', {
+      value: {
+        href: linkEl.href,
+        get cssRules(): CSSRuleList {
+          throw new DOMException('cross-origin sheet', 'SecurityError');
+        },
+      },
+    });
+    return linkEl;
+  };
+  const drainScheduled = () => {
+    while (scheduled.length) {
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+  };
+  const readdMutations = (mutationCb: ReturnType<typeof vi.fn>) =>
+    mutationCb.mock.calls
+      .map(([mutation]) => mutation)
+      .filter((mutation) => mutation.adds.length > 0);
 
   it('emits nothing from pending work once its recorder stops', () => {
     const mutationCb = vi.fn();
@@ -1332,6 +1380,97 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
     }
 
     expect(mutationCb).not.toHaveBeenCalled();
+  });
+
+  it('re-adds an unreadable changed link as a plain link when replay shows it as a style', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const linkEl = linkWithUnreadableSheet();
+
+    manager.inlineLinkStylesheetAfterChange(
+      linkEl,
+      recorderViewWithPrevious({ _cssText: '.old { color: red; }' }),
+    );
+    drainScheduled();
+
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+    const [mutation] = mutationCb.mock.calls[0];
+    expect(mutation.removes).toEqual([
+      { parentId: 3, id: 7, isShadow: undefined },
+    ]);
+    expect(mutation.adds).toEqual([
+      {
+        parentId: 3,
+        nextId: null,
+        node: serializedLink({
+          rel: 'stylesheet',
+          href: 'https://example.com/theme.css',
+        }),
+      },
+    ]);
+  });
+
+  it('re-adds a changed link whose new sheet is empty when replay shows it as a style', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl } = linkWithCurrentSheet('');
+
+    manager.inlineLinkStylesheetAfterChange(
+      linkEl,
+      recorderViewWithPrevious({ _cssText: '.old { color: red; }' }),
+    );
+    drainScheduled();
+
+    expect(readdMutations(mutationCb)).toHaveLength(1);
+  });
+
+  it('leaves an uninlinable changed link alone when replay still shows it as a link', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const linkEl = linkWithUnreadableSheet();
+
+    manager.inlineLinkStylesheetAfterChange(
+      linkEl,
+      recorderViewWithPrevious({
+        rel: 'stylesheet',
+        href: 'https://cdn.example.com/old.css',
+      }),
+    );
+    drainScheduled();
+
+    expect(mutationCb).not.toHaveBeenCalled();
+  });
+
+  it('re-adds a changed link whose earlier CSS this recorder sent', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl, backingSheet } = linkWithCurrentSheet();
+    const viewWithoutCssInPrevious = recorderViewWithPrevious({
+      rel: 'stylesheet',
+      href: 'https://example.com/theme.css',
+    });
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, viewWithoutCssInPrevious);
+    drainScheduled();
+    expect(readdMutations(mutationCb)).toHaveLength(0);
+
+    backingSheet.deleteRule(0);
+    manager.inlineLinkStylesheetAfterChange(linkEl, viewWithoutCssInPrevious);
+    drainScheduled();
+
+    expect(readdMutations(mutationCb)).toHaveLength(1);
   });
 
   it('cancels the idle callback of pending work when its recorder stops', () => {

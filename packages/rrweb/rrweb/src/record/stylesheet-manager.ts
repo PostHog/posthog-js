@@ -94,6 +94,12 @@ type ChangedLinkRecorderView = {
     previous: serializedNodeWithId | null;
     current: serializedNodeWithId | null;
   };
+  /** Where an add of the link goes; null when its parent is not recorded. */
+  addPosition: () => {
+    parentId: number;
+    nextId: number | null;
+    isShadow?: true;
+  } | null;
 };
 
 // bounds the rework when the page keeps changing a sheet through the CSSOM
@@ -106,6 +112,8 @@ export class StylesheetManager {
   // cannot tell a stopped recorder's pending work from the new recorder's
   private stopped = false;
   private changedLinkJobs = new Map<HTMLLinkElement, ChangedLinkJob>();
+  // replay shows these as a `<style>` since it got their `_cssText`
+  private linksInlinedSinceSnapshot = new WeakSet<HTMLLinkElement>();
   private mutationCb: mutationCallBack;
   private adoptedStyleSheetCb: adoptedStyleSheetCallback;
   private maskAllElementAttributes: boolean;
@@ -149,7 +157,7 @@ export class StylesheetManager {
       !this.stopped &&
       '_cssText' in (childSn as elementNode).attributes &&
       !this.isLinkBlocked(linkEl)
-    )
+    ) {
       this.mutationCb({
         adds: [],
         removes: [],
@@ -164,6 +172,8 @@ export class StylesheetManager {
           },
         ],
       });
+      this.linksInlinedSinceSnapshot.add(linkEl);
+    }
 
     this.trackLinkElement(linkEl);
   }
@@ -181,10 +191,16 @@ export class StylesheetManager {
   public beginDeferredLinkInlining(
     linkEl: HTMLLinkElement,
     id: number,
-    emitCssText: (cssText: string) => void = (cssText) =>
-      this.emitCssTextMutation(linkEl, id, cssText),
-    onInvalidatedBySheetMutation?: () => void,
+    options: {
+      emitCssText?: (cssText: string) => void;
+      onInvalidatedBySheetMutation?: () => void;
+      /** The sheet is unreadable or empty, so replay has to load it from its href. */
+      onUninlinable?: () => void;
+    } = {},
   ): DeferredLinkInliningTask | null {
+    const emitCssText =
+      options.emitCssText ??
+      ((cssText: string) => this.emitCssTextMutation(linkEl, id, cssText));
     if (id === -1 || !linkEl.isConnected) {
       // never made it into the mirror (slimDOM dropped it), or detached while we
       // were queued - either way a mutation for it would only make the replayer warn
@@ -204,6 +220,7 @@ export class StylesheetManager {
       // the sheet is unreadable, so the link keeps its href and replay must
       // load the CSS remotely - a fidelity risk worth counting, not hiding
       recordDeferredStylesheetFailure();
+      options.onUninlinable?.();
       return null;
     }
     const readyCursor = cursor;
@@ -235,8 +252,8 @@ export class StylesheetManager {
         try {
           if (invalidatedByMutation) {
             completed = true;
-            if (onInvalidatedBySheetMutation) {
-              onInvalidatedBySheetMutation();
+            if (options.onInvalidatedBySheetMutation) {
+              options.onInvalidatedBySheetMutation();
             } else {
               // emitting the defer-time text now would overwrite the mutation's
               // already-recorded StyleSheetRule/StyleDeclaration event in replay;
@@ -273,6 +290,7 @@ export class StylesheetManager {
             // stringification produced nothing: the link keeps its href and replay
             // must load the CSS remotely - a fidelity risk worth counting, not hiding
             recordDeferredStylesheetFailure();
+            options.onUninlinable?.();
             return true;
           }
           if (this.isLinkBlocked(linkEl)) {
@@ -358,20 +376,19 @@ export class StylesheetManager {
     // a newer change supersedes the work still in flight for this link
     this.changedLinkJobs.get(linkEl)?.drop();
     let sheetMutatedWhileInlining = false;
-    const task = this.beginDeferredLinkInlining(
-      linkEl,
-      id,
-      (cssText) =>
+    const task = this.beginDeferredLinkInlining(linkEl, id, {
+      emitCssText: (cssText) =>
         this.emitCssTextMutation(
           linkEl,
           id,
           cssText,
           attributesReplacingPrevious(recorderView.reserializeWithoutCss()),
         ),
-      () => {
+      onInvalidatedBySheetMutation: () => {
         sheetMutatedWhileInlining = true;
       },
-    );
+      onUninlinable: () => this.readdAsPlainLink(linkEl, recorderView),
+    });
     if (!task) {
       return;
     }
@@ -511,6 +528,46 @@ export class StylesheetManager {
         },
       ],
     });
+    this.linksInlinedSinceSnapshot.add(linkEl);
+  }
+
+  // Replay cannot turn the `<style>` it built from earlier CSS back into a
+  // `<link>`, so a remove and add of the same node, as for a moved node, makes
+  // it build a `<link>` that loads the new href.
+  private readdAsPlainLink(
+    linkEl: HTMLLinkElement,
+    recorderView: ChangedLinkRecorderView,
+  ): void {
+    if (this.stopped || !linkEl.isConnected || this.isLinkBlocked(linkEl)) {
+      return;
+    }
+    const { previous, current } = recorderView.reserializeWithoutCss();
+    const replayShowsStyle =
+      this.linksInlinedSinceSnapshot.has(linkEl) ||
+      '_cssText' in ((previous as elementNode | null)?.attributes ?? {});
+    const position = recorderView.addPosition();
+    if (!replayShowsStyle || !current || !position) {
+      return;
+    }
+    this.mutationCb({
+      texts: [],
+      attributes: [],
+      removes: [
+        {
+          parentId: position.parentId,
+          id: current.id,
+          isShadow: position.isShadow,
+        },
+      ],
+      adds: [
+        {
+          parentId: position.parentId,
+          nextId: position.nextId,
+          node: current,
+        },
+      ],
+    });
+    this.linksInlinedSinceSnapshot.delete(linkEl);
   }
 
   public trackLinkElement(linkEl: HTMLLinkElement): void {
@@ -587,6 +644,7 @@ export class StylesheetManager {
     this.pendingDeferredSheets.clear();
     // the full snapshot inlines each changed link's current sheet itself
     this.dropChangedLinkJobs();
+    this.linksInlinedSinceSnapshot = new WeakSet();
     resetStylesheetLoadTracking({ keepChangedLinks: true });
   }
 
