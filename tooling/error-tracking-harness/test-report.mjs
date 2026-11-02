@@ -7,7 +7,7 @@ import { test } from 'node:test'
 
 // Exercise the actual inline github-script without checking out PR code in the write-capable job.
 const workflow = readFileSync(
-    path.resolve(import.meta.dirname, '../../.github/workflows/error-tracking-harness.yml'),
+    path.resolve(import.meta.dirname, '../../.github/disabled-workflows/error-tracking-harness.yml'),
     'utf8'
 ).split('\n')
 const start = workflow.findIndex((line) => line.trim() === 'script: |')
