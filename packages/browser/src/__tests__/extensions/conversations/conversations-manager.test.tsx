@@ -520,6 +520,374 @@ describe('ConversationsManager', () => {
         })
     })
 
+    describe('open and close', () => {
+        beforeEach(async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+        })
+
+        it('opens the chat panel and leaves the widget rendered', () => {
+            expect(screen.getByRole('button', { name: 'Open chat', exact: true })).toBeInTheDocument()
+
+            act(() => {
+                manager.open()
+            })
+
+            expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument()
+            expect(screen.queryByRole('button', { name: 'Open chat', exact: true })).not.toBeInTheDocument()
+            expect(manager.isVisible()).toBe(true)
+            expect(manager['_persistence'].saveWidgetState).toHaveBeenCalledWith('open')
+            expect(mockPosthog.capture).toHaveBeenCalledWith(
+                '$conversations_widget_state_changed',
+                expect.objectContaining({ state: 'open' })
+            )
+        })
+
+        it('closes the chat panel and keeps the launcher button', () => {
+            act(() => {
+                manager.open()
+            })
+
+            act(() => {
+                manager.close()
+            })
+
+            expect(screen.getByRole('button', { name: 'Open chat', exact: true })).toBeInTheDocument()
+            expect(screen.queryByRole('button', { name: 'Close', exact: true })).not.toBeInTheDocument()
+            expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
+            expect(manager.isVisible()).toBe(true)
+            expect(manager['_persistence'].saveWidgetState).toHaveBeenCalledWith('closed')
+        })
+
+        it('renders the widget with the panel open when open() is called after hide()', async () => {
+            act(() => {
+                manager.hide()
+            })
+            expect(manager.isVisible()).toBe(false)
+
+            act(() => {
+                manager.open()
+            })
+            await flushPromises()
+
+            expect(manager.isVisible()).toBe(true)
+            expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument()
+            expect(manager['_persistence'].saveWidgetState).toHaveBeenCalledWith('open')
+        })
+
+        it('opens the panel when open() is called before the widget finishes loading', async () => {
+            manager.destroy()
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+
+            act(() => {
+                manager.open()
+            })
+            await flushPromises()
+
+            expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument()
+            expect(manager['_persistence'].saveWidgetState).toHaveBeenCalledWith('open')
+        })
+
+        it('closes the panel when close() is called before the widget finishes loading', async () => {
+            manager.destroy()
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            ;(manager['_persistence'].loadWidgetState as VitestMock).mockReturnValue('open')
+
+            act(() => {
+                manager.close()
+            })
+            await flushPromises()
+
+            expect(screen.getByRole('button', { name: 'Open chat', exact: true })).toBeInTheDocument()
+            expect(screen.queryByRole('button', { name: 'Close', exact: true })).not.toBeInTheDocument()
+            expect(manager['_persistence'].saveWidgetState).toHaveBeenCalledWith('closed')
+        })
+
+        it('saves a closed panel when close() is called while the widget is not rendered', () => {
+            manager.destroy()
+            manager = new ConversationsManager({ ...mockConfig, widgetEnabled: false }, mockPosthog)
+            ;(manager['_persistence'].loadWidgetState as VitestMock).mockReturnValue('open')
+
+            manager.close()
+
+            expect(manager.isVisible()).toBe(false)
+            expect(manager['_persistence'].saveWidgetState).toHaveBeenCalledWith('closed')
+        })
+
+        it('does not render on a disallowed domain', async () => {
+            manager.destroy()
+            manager = new ConversationsManager(
+                { ...mockConfig, widgetEnabled: false, domains: ['example.com'] },
+                mockPosthog
+            )
+
+            act(() => {
+                manager.open()
+            })
+            await flushPromises()
+
+            expect(manager.isVisible()).toBe(false)
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+        })
+
+        it('does not render when hide() runs before the first paint', async () => {
+            manager.destroy()
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            ;(mockPosthog.capture as VitestMock).mockClear()
+
+            act(() => {
+                manager.hide()
+            })
+            await flushPromises()
+
+            expect(manager.isVisible()).toBe(false)
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+            expect(mockPosthog.capture).not.toHaveBeenCalledWith('$conversations_widget_loaded', expect.anything())
+        })
+
+        it('does not render when open() is followed by hide() before the first paint', async () => {
+            manager.destroy()
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            ;(mockPosthog.capture as VitestMock).mockClear()
+
+            act(() => {
+                manager.open()
+                manager.hide()
+            })
+            await flushPromises()
+
+            expect(manager.isVisible()).toBe(false)
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+            expect(mockPosthog.capture).not.toHaveBeenCalledWith('$conversations_widget_loaded', expect.anything())
+        })
+
+        it('opens the panel when hide() is followed by open() before the first paint', async () => {
+            manager.destroy()
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+
+            act(() => {
+                manager.hide()
+                manager.open()
+            })
+            await flushPromises()
+
+            expect(manager.isVisible()).toBe(true)
+            expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument()
+        })
+
+        it('renders a closed panel when show() follows hide() before the first paint', async () => {
+            manager.destroy()
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+
+            act(() => {
+                manager.hide()
+                manager.show()
+            })
+            await flushPromises()
+
+            expect(manager.isVisible()).toBe(true)
+            expect(screen.getByRole('button', { name: 'Open chat', exact: true })).toBeInTheDocument()
+        })
+
+        it('saves a closed panel when close() is followed by hide() before the first paint', async () => {
+            manager.destroy()
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            ;(manager['_persistence'].loadWidgetState as VitestMock).mockReturnValue('open')
+
+            act(() => {
+                manager.close()
+                manager.hide()
+            })
+            await flushPromises()
+
+            expect(manager.isVisible()).toBe(false)
+            expect(manager['_persistence'].saveWidgetState).toHaveBeenCalledWith('closed')
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+        })
+
+        describe('with persisted widget state', () => {
+            let storedState: 'open' | 'closed' | null
+
+            beforeEach(() => {
+                storedState = null
+                ;(manager['_persistence'].loadWidgetState as VitestMock).mockImplementation(() => storedState)
+                ;(manager['_persistence'].saveWidgetState as VitestMock).mockImplementation(
+                    (state: 'open' | 'closed') => {
+                        storedState = state
+                    }
+                )
+            })
+
+            it('saves the final open state when close() then open() run during startup', async () => {
+                storedState = 'open'
+                act(() => {
+                    manager.hide()
+                    manager.show()
+                    manager.close()
+                    manager.open()
+                })
+                await flushPromises()
+
+                expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument()
+                expect(storedState).toBe('open')
+            })
+
+            it('saves the closed state when close() is followed by hide() on a rendered widget', async () => {
+                act(() => {
+                    manager.open()
+                })
+                expect(storedState).toBe('open')
+
+                act(() => {
+                    manager.close()
+                    manager.hide()
+                })
+                expect(storedState).toBe('closed')
+
+                act(() => {
+                    manager.show()
+                })
+                await flushPromises()
+
+                expect(screen.getByRole('button', { name: 'Open chat', exact: true })).toBeInTheDocument()
+            })
+
+            it('saves the open state when open() is followed by hide() on a rendered widget', async () => {
+                act(() => {
+                    manager.open()
+                    manager.hide()
+                })
+                expect(storedState).toBe('open')
+
+                act(() => {
+                    manager.show()
+                })
+                await flushPromises()
+
+                expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument()
+            })
+        })
+    })
+
+    describe('theme', () => {
+        const themeStyles = () => document.querySelectorAll('style[data-ph-conversations-theme]')
+        // prepareStylesheet() writes innerText, which jsdom keeps apart from textContent
+        const themeCss = () => {
+            const style = themeStyles()[0] as HTMLStyleElement | undefined
+            return style?.textContent || style?.innerText || ''
+        }
+
+        it('injects one theme stylesheet with the remote config color when the widget renders', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(themeStyles()).toHaveLength(1)
+            expect(themeStyles()[0].parentNode).toBe(document.head)
+            expect(themeCss()).toContain('--ph-conv-primary:#007bff;')
+        })
+
+        it('does not inject a stylesheet when the widget is not rendered', () => {
+            manager = new ConversationsManager({ ...mockConfig, widgetEnabled: false }, mockPosthog)
+
+            expect(themeStyles()).toHaveLength(0)
+        })
+
+        it('applies the init config theme over the remote config color', async () => {
+            mockPosthog.config.conversations = { theme: { primary: '#fde047', colorScheme: 'dark' } }
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(themeCss()).toContain('--ph-conv-primary:#fde047;')
+            expect(themeCss()).toContain('--ph-conv-bg:#18181b;')
+        })
+
+        it('updates the stylesheet in place when setTheme() is called', async () => {
+            mockPosthog.config.conversations = { theme: { primary: '#fde047' } }
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            const style = themeStyles()[0]
+
+            manager.setTheme({ background: '#000000' })
+            manager.setTheme({ colorScheme: 'auto' })
+
+            expect(themeStyles()).toHaveLength(1)
+            expect(themeStyles()[0]).toBe(style)
+            expect(themeCss()).toContain('--ph-conv-primary:#fde047;')
+            expect(themeCss()).toContain('--ph-conv-bg:#000000;')
+            expect(themeCss()).toContain('@media (prefers-color-scheme: dark)')
+        })
+
+        it('falls back to the init theme when setTheme() clears a value', async () => {
+            mockPosthog.config.conversations = { theme: { primary: '#fde047' } }
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            manager.setTheme({ primary: '#222222' })
+            expect(themeCss()).toContain('--ph-conv-primary:#222222;')
+
+            manager.setTheme({ primary: undefined })
+            expect(themeCss()).toContain('--ph-conv-primary:#fde047;')
+        })
+
+        it('keeps setTheme() changes made while hidden and applies them when shown again', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            act(() => {
+                manager.hide()
+            })
+            expect(themeStyles()).toHaveLength(0)
+
+            manager.setTheme({ primary: '#ff0000' })
+            expect(themeStyles()).toHaveLength(0)
+
+            act(() => {
+                manager.show()
+            })
+            await flushPromises()
+
+            expect(themeStyles()).toHaveLength(1)
+            expect(themeCss()).toContain('--ph-conv-primary:#ff0000;')
+        })
+
+        it('removes the stylesheet on destroy()', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            manager.destroy()
+
+            expect(themeStyles()).toHaveLength(0)
+        })
+
+        it('passes the stylesheet with its CSS through prepare_external_dependency_stylesheet', async () => {
+            let cssSeenByHook = ''
+            const prepare = vi.fn((style: HTMLStyleElement) => {
+                cssSeenByHook = style.innerText
+                style.nonce = 'test-nonce'
+                return style
+            })
+            mockPosthog.config.prepare_external_dependency_stylesheet = prepare
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(prepare).toHaveBeenCalledTimes(1)
+            expect(cssSeenByHook).toContain('--ph-conv-primary:#007bff;')
+            expect((themeStyles()[0] as HTMLStyleElement).nonce).toBe('test-nonce')
+        })
+
+        it('re-attaches the stylesheet when the page removes it', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            themeStyles()[0].remove()
+            act(() => {
+                vi.advanceTimersByTime(1000)
+            })
+
+            expect(themeStyles()).toHaveLength(1)
+        })
+    })
+
     describe('re-attach on SPA navigation', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)

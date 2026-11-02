@@ -380,6 +380,149 @@ describe('evaluateFlags', () => {
     })
   })
 
+  describe('$feature_flag_called settings for snapshot reads', () => {
+    const flagCalledKeys = (): string[] =>
+      captures.filter((m) => m.event === '$feature_flag_called').map((m) => m.properties.$feature_flag)
+
+    beforeEach(() => {
+      mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
+    })
+
+    it.each<[boolean | undefined, boolean | undefined, boolean]>([
+      [undefined, undefined, true],
+      [true, undefined, true],
+      [false, undefined, false],
+      [undefined, true, true],
+      [false, true, true],
+      [undefined, false, false],
+      [true, false, false],
+    ])(
+      'with client option %s and read option %s, isEnabled() and getFlag() send events: %s',
+      async (clientOption, readOption, sendsEvents) => {
+        setup(clientOption === undefined ? {} : { sendFeatureFlagEvent: clientOption })
+        const readOptions = readOption === undefined ? undefined : { sendFeatureFlagEvents: readOption }
+        const flags = await posthog.evaluateFlags('user-1')
+
+        // Read the payload before any value read so dedupe can't hide an event from it.
+        expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual([])
+
+        expect(flags.isEnabled('boolean-flag', readOptions)).toBe(true)
+        expect(flags.getFlag('variant-flag', readOptions)).toBe('variant-value')
+
+        await waitForPromises()
+        expect(flagCalledKeys().sort()).toEqual(sendsEvents ? ['boolean-flag', 'variant-flag'] : [])
+      }
+    )
+
+    it.each<[string, (flags: FeatureFlagEvaluations) => unknown]>([
+      ['the snapshot', (flags) => flags.getFlag('variant-flag', { sendFeatureFlagEvents: true })],
+      ['getFeatureFlag()', () => posthog.getFeatureFlag('variant-flag', 'user-1', { sendFeatureFlagEvents: true })],
+    ])(
+      'leaves the dedupe cache untouched on suppressed reads, so a later opted-in read through %s sends one event',
+      async (_, optedInRead) => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+        try {
+          setup({ sendFeatureFlagEvent: false })
+          const flags = await posthog.evaluateFlags('user-1')
+          flags.getFlag('variant-flag')
+          flags.isEnabled('variant-flag', { sendFeatureFlagEvents: false })
+          await waitForPromises()
+          expect(flagCalledKeys()).toEqual([])
+
+          await optedInRead(flags)
+          await optedInRead(flags)
+
+          await waitForPromises()
+          expect(flagCalledKeys()).toEqual(['variant-flag'])
+        } finally {
+          warnSpy.mockRestore()
+        }
+      }
+    )
+
+    it.each<[string, Partial<PostHogOptions>, { sendFeatureFlagEvents: boolean } | undefined]>([
+      ['the client option', { sendFeatureFlagEvent: false }, undefined],
+      ['the read option', {}, { sendFeatureFlagEvents: false }],
+    ])('still marks reads silenced by %s as accessed for onlyAccessed()', async (_, clientOptions, readOptions) => {
+      setup(clientOptions)
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('boolean-flag', readOptions)
+      flags.getFlag('variant-flag', readOptions)
+
+      const accessed = flags.onlyAccessed()
+      expect(accessed.keys.sort()).toEqual(['boolean-flag', 'variant-flag'])
+
+      posthog.capture({ distinctId: 'user-1', event: 'page_viewed', flags: accessed })
+      await waitForPromises()
+
+      const pageViewed = captures.find((m) => m.event === 'page_viewed')
+      expect(pageViewed.properties).toMatchObject({
+        '$feature/boolean-flag': true,
+        '$feature/variant-flag': 'variant-value',
+        $active_feature_flags: ['boolean-flag', 'variant-flag'],
+      })
+      expect(flagCalledKeys()).toEqual([])
+    })
+
+    it.each<[string, Partial<PostHogOptions>, { sendFeatureFlagEvents: boolean } | undefined]>([
+      ['the client option', { sendFeatureFlagEvent: false }, undefined],
+      ['the read option', {}, { sendFeatureFlagEvents: false }],
+    ])('sends no flag_missing event for a missing key silenced by %s', async (_, clientOptions, readOptions) => {
+      setup(clientOptions)
+      const flags = await posthog.evaluateFlags('user-1')
+
+      expect(flags.isEnabled('missing-flag', readOptions)).toBe(false)
+      expect(flags.getFlag('missing-flag', readOptions)).toBeUndefined()
+      await waitForPromises()
+      expect(flagCalledKeys()).toEqual([])
+
+      flags.getFlag('missing-flag', { sendFeatureFlagEvents: true })
+      await waitForPromises()
+      const flagCalled = captures.filter((m) => m.event === '$feature_flag_called')
+      expect(flagCalled).toHaveLength(1)
+      expect(flagCalled[0].properties).toMatchObject({
+        $feature_flag: 'missing-flag',
+        $feature_flag_error: 'flag_missing',
+      })
+    })
+
+    describe.each<[string, (flags: FeatureFlagEvaluations) => FeatureFlagEvaluations]>([
+      ['only()', (flags) => flags.only(['boolean-flag'])],
+      [
+        'onlyAccessed()',
+        (flags) => {
+          flags.isEnabled('boolean-flag', { sendFeatureFlagEvents: false })
+          return flags.onlyAccessed()
+        },
+      ],
+    ])('on a snapshot returned by %s', (_, slice) => {
+      it('a read option of true overrides a client option of false', async () => {
+        setup({ sendFeatureFlagEvent: false })
+        const sliced = slice(await posthog.evaluateFlags('user-1'))
+
+        expect(sliced.isEnabled('boolean-flag')).toBe(true)
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual([])
+
+        expect(sliced.getFlag('boolean-flag', { sendFeatureFlagEvents: true })).toBe(true)
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual(['boolean-flag'])
+      })
+
+      it('a read option of false silences a default-on client', async () => {
+        setup()
+        const sliced = slice(await posthog.evaluateFlags('user-1'))
+
+        expect(sliced.isEnabled('boolean-flag', { sendFeatureFlagEvents: false })).toBe(true)
+        expect(sliced.getFlag('boolean-flag', { sendFeatureFlagEvents: false })).toBe(true)
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual([])
+      })
+    })
+  })
+
   describe('capture integration', () => {
     beforeEach(() => {
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
@@ -1285,6 +1428,138 @@ describe('evaluateFlags', () => {
         expect(flags.unresolvedFlags).toEqual(unresolvedFlags)
       }
     )
+
+    it('lets a later condition resolve the flag when an unexpected error follows a filter that cannot be checked', async () => {
+      const dependsOnBeta = {
+        key: 'beta',
+        type: 'flag',
+        value: true,
+        operator: 'flag_evaluates_to',
+        dependency_chain: ['beta'],
+      }
+      await setupWithDefinitions([
+        alwaysOn('checkout', {
+          filters: {
+            groups: [
+              { properties: [missingPlan, dependsOnBeta], rollout_percentage: 100 },
+              { properties: [], rollout_percentage: 100 },
+            ],
+          },
+        }),
+        alwaysOn('beta', { id: 3 }),
+      ])
+      vi.spyOn((posthog as any).featureFlagsPoller, 'evaluateFlagDependency').mockRejectedValue(new Error('unexpected'))
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.getFlag('checkout')).toBe(true)
+      expect(flags.unresolvedFlags).toEqual({})
+    })
+
+    describe('a dependency that only the server can evaluate', () => {
+      const dependentFlag = (): Record<string, any> =>
+        alwaysOn('target', {
+          id: 4,
+          filters: {
+            groups: [
+              {
+                properties: [
+                  { key: 'dep', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: ['dep'] },
+                ],
+                rollout_percentage: 100,
+                variant: 'a',
+              },
+              { properties: [], rollout_percentage: 100, variant: 'b' },
+            ],
+            multivariate: {
+              variants: [
+                { key: 'a', rollout_percentage: 50 },
+                { key: 'b', rollout_percentage: 50 },
+              ],
+            },
+          },
+        })
+      const dependencyFlag = (property: Record<string, any>): Record<string, any> =>
+        alwaysOn('dep', { id: 5, filters: { groups: [{ properties: [property], rollout_percentage: 100 }] } })
+      const remoteTargetResponse = (): PostHogV2FlagsResponse => ({
+        flags: {
+          target: {
+            key: 'target',
+            enabled: true,
+            variant: 'a',
+            reason: { code: 'condition_match', condition_index: 0, description: 'Matched condition set 1' },
+            metadata: { id: 4, version: 1, payload: undefined, description: undefined },
+          },
+        },
+        errorsWhileComputingFlags: false,
+        requestId: 'request-id-1',
+      })
+
+      it.each([
+        ['requested alone', ['target']],
+        ['requested with all flags', undefined],
+      ])('falls back to the server instead of choosing a later variant, with the flag %s', async (_, flagKeys) => {
+        await setupWithDefinitions([dependencyFlag(staticCohort), dependentFlag()], remoteTargetResponse())
+
+        const flags = await posthog.evaluateFlags('user-123', { flagKeys })
+
+        expect(flags.getFlag('target')).toBe('a')
+        expect(remoteFlagCalls()).toHaveLength(1)
+      })
+
+      it('reports the flag as an unresolved dependency in local-only evaluation', async () => {
+        await setupWithDefinitions([dependencyFlag(staticCohort), dependentFlag()])
+
+        const flags = await posthog.evaluateFlags('user-123', { flagKeys: ['target'], onlyEvaluateLocally: true })
+
+        expect(flags.getFlag('target')).toBeUndefined()
+        expect(flags.unresolvedFlags).toEqual({ target: 'unresolved_dependency' })
+      })
+
+      const dependsOnDep = {
+        key: 'dep',
+        type: 'flag',
+        value: true,
+        operator: 'flag_evaluates_to',
+        dependency_chain: ['dep'],
+      }
+      it.each([
+        ['the dependency first', [dependsOnDep, unknownTierOperator]],
+        ['the unsupported filter first', [unknownTierOperator, dependsOnDep]],
+      ])('reports a cohort with an unsupported filter as unsupported_definition, with %s', async (_, values) => {
+        await setupWithDefinitions(
+          [
+            dependencyFlag(staticCohort),
+            alwaysOn('target', {
+              id: 4,
+              filters: { groups: [{ properties: [{ key: 'id', type: 'cohort', value: 3 }], rollout_percentage: 100 }] },
+            }),
+          ],
+          undefined,
+          { cohorts: { '3': { type: 'AND', values } } }
+        )
+
+        const flags = await posthog.evaluateFlags('user-123', {
+          flagKeys: ['target'],
+          onlyEvaluateLocally: true,
+          personProperties: { tier: 'gold' },
+        })
+
+        expect(flags.unresolvedFlags).toEqual({ target: 'unsupported_definition' })
+      })
+
+      it('resolves locally when the dependency resolves locally', async () => {
+        await setupWithDefinitions([dependencyFlag(missingPlan), dependentFlag()])
+
+        const flags = await posthog.evaluateFlags('user-123', {
+          flagKeys: ['target'],
+          personProperties: { plan: 'pro' },
+        })
+
+        expect(flags.getFlag('target')).toBe('a')
+        expect(remoteFlagCalls()).toHaveLength(0)
+      })
+    })
   })
 
   describe('overrides', () => {

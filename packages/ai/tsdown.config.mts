@@ -38,6 +38,7 @@ const providers = [
   'adk',
   'claude-agent-sdk',
   'evaluations',
+  'genkit',
 ]
 
 export default defineConfig([
@@ -47,6 +48,7 @@ export default defineConfig([
   },
   ...providers.map((provider) => ({
     ...commonConfig,
+    shims: provider === 'otel',
     entry: { [`${provider}/index`]: `src/${provider}/index.ts` },
   })),
 ])

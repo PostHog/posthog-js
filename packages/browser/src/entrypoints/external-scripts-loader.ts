@@ -27,37 +27,13 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
         return callback('Loading of external scripts is disabled')
     }
 
-    // Share the result when the same script is requested more than once so the browser
-    // only downloads and executes it once.
-    const existingScript = findScript(url)
-    if (existingScript) {
-        if ((existingScript as any).__posthog_loading_callback_fired) {
-            return callback()
-        }
-        const existingError = (existingScript as any).__posthog_loading_error
-        if (existingError) {
-            return callback(existingError)
-        }
-
-        // oxlint-disable-next-line posthog-js/no-add-event-listener
-        existingScript.addEventListener('load', (event) => {
-            ;(existingScript as any).__posthog_loading_callback_fired = true
-            callback(undefined, event)
-        })
-        // oxlint-disable-next-line posthog-js/no-add-event-listener
-        existingScript.addEventListener('error', (error) => {
-            ;(existingScript as any).__posthog_loading_error = error
-            callback(error)
-        })
-        return
-    }
-
     const addScript = () => {
+        document?.removeEventListener('DOMContentLoaded', addScript)
+        if (posthog.config.disable_external_dependency_loading) {
+            return callback('Loading of external scripts is disabled')
+        }
         if (!document) {
             return callback('document not found')
-        }
-        if (findScript(url)) {
-            return loadScript(posthog, url, callback)
         }
         let scriptTag: HTMLScriptElement | null = document.createElement('script')
         scriptTag.type = 'text/javascript'
@@ -80,6 +56,45 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
             return callback('prepare_external_dependency_script returned null')
         }
 
+        // Preparation runs on a detached candidate, never on a shared script that
+        // may already have executed. Match its final URL and security metadata:
+        // changing attributes on the existing element cannot retroactively verify it.
+        if (posthog.config.disable_external_dependency_loading) {
+            return callback('Loading of external scripts is disabled')
+        }
+        const existingScript = findScript(scriptTag.src)
+        if (existingScript) {
+            if (
+                existingScript.integrity !== scriptTag.integrity ||
+                existingScript.crossOrigin !== scriptTag.crossOrigin ||
+                existingScript.nonce !== scriptTag.nonce
+            ) {
+                return callback('Existing script conflicts with prepared script policy')
+            }
+            if ((existingScript as any).__posthog_loading_callback_fired) {
+                return callback()
+            }
+            const existingError = (existingScript as any).__posthog_loading_error
+            if (existingError) {
+                return callback(existingError)
+            }
+
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
+            existingScript.addEventListener('load', (event) => {
+                ;(existingScript as any).__posthog_loading_callback_fired = true
+                callback(undefined, event)
+            })
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
+            existingScript.addEventListener('error', (error) => {
+                ;(existingScript as any).__posthog_loading_error = error
+                callback(error)
+            })
+            return
+        }
+
+        if (!document.body) {
+            return waitForDocumentBody()
+        }
         if (posthog.config.external_scripts_inject_target === 'head') {
             document.head.appendChild(scriptTag)
         } else {
@@ -92,13 +107,17 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
         }
     }
 
-    if (document?.body) {
-        addScript()
-    } else {
+    const waitForDocumentBody = () => {
         // Inlining this because we don't care about `passive: true` here
         // and this saves us ~3% of the bundle size
         // oxlint-disable-next-line posthog-js/no-add-event-listener
         document?.addEventListener('DOMContentLoaded', addScript)
+    }
+
+    if (document?.body || findScript(url)) {
+        addScript()
+    } else {
+        waitForDocumentBody()
     }
 }
 

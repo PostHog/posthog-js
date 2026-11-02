@@ -45,7 +45,7 @@ The repository contains the following top-level packages in `./packages/`:
 | `core/`                      | `@posthog/core`                      | Shared core functionality used by multiple SDKs          |
 | `browser/`                   | `posthog-js`                         | Main browser SDK for capturing events and usage          |
 | `browser-common/`            | `@posthog/browser-common`            | Internal shared browser utilities and extensions         |
-| `browser-next/`              | `@posthog/browser`                   | Private experimental browser SDK                         |
+| `browser-next/`              | `@posthog/browser`                   | Experimental browser SDK                                 |
 | `web/`                       | `posthog-js-lite`                    | Lightweight browser SDK                                  |
 | `ai/`                        | `@posthog/ai`                        | AI integrations for Node.js                              |
 | `convex/`                    | `@posthog/convex`                    | Convex.dev component                                     |
@@ -158,7 +158,7 @@ pnpm clean:dep
 
 Every workspace package under `packages/` exposes `check-types`. Run `pnpm check-types` for all SDKs and rrweb, or `pnpm turbo run check-types --filter=posthog-node` for one SDK. Turbo builds workspace dependencies first, using the existing build graph once. Browser-next additionally builds itself because its check includes consumer fixtures. Direct package commands assume dependency outputs already exist.
 
-The contract checks production TypeScript using the existing compiler and compiler options. Rslib packages use their build TSConfig; browser, Convex and the native plugin reuse their existing `typecheck` command. Next retains its existing `tsgo` compiler. React, React Native and the lightweight web SDK use their package TSConfig. AI uses a source-only check config. Existing broader test/fixture coverage remains in the packages that already checked it. Version-generating packages run their existing `prebuild` preparation before checking. Nuxt runs `nuxt prepare` and checks module source against the generated framework configuration.
+The contract checks production TypeScript using the existing compiler and compiler options. Rslib packages use their build TSConfig; browser, Convex and the native plugin reuse their existing `typecheck` command. Browser also runs `test:typecheck`, because Vitest does not check the types of its unit tests. Next retains its existing `tsgo` compiler. React, React Native and the lightweight web SDK use their package TSConfig. AI uses a source-only check config. Existing broader test/fixture coverage remains in the packages that already checked it. Version-generating packages run their existing `prebuild` preparation before checking. Nuxt runs `nuxt prepare` and checks module source against the generated framework configuration.
 
 Builds already perform different kinds of checking: browser, React Native and Convex compile with TypeScript, Next compiles with tsgo, the native plugin uses Bob's TypeScript target, Rslib generates declarations, and AI/React/web use tsdown declaration generation. These build paths remain unchanged. The explicit command provides consistent whole-source coverage independent of which bundler emits declarations; do not add a second Turbo invocation inside package scripts or prepend redundant checks to SDK builds. rrweb retains its mandatory pre-build semantic gate described below.
 
@@ -384,30 +384,7 @@ Bundle-size, compatibility, incident-risk, description, and versioning checks sk
 
 The main unit, functional, local Playwright, MCP, SDK compliance, and native plugin checks do not require live API credentials. AI live-provider tests already skip without their respective `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`. Next.js CI smoke builds use dummy configuration and disable real sourcemap uploads.
 
-Publishing, S3 recovery, reference-generation, downstream-upgrade, and watcher worker/sweep workflows run in trusted push, manual, or scheduled contexts rather than untrusted PR test jobs. Their required GitHub App, AWS/OIDC, Slack, and OpenAI configuration must not be bypassed to make a release or automation run appear successful.
-
-### CI egress auditing
-
-Credential-bearing GitHub-hosted Ubuntu jobs run the SHA-pinned `step-security/harden-runner` action as their first step, before checkout, dependency installation, or token creation. Coverage includes jobs with write-capable `GITHUB_TOKEN` permissions, OIDC access, GitHub App credentials, or service secrets, including secrets used only in failure notifications. Read-only jobs without service secrets are intentionally outside this rollout.
-
-The initial policy is `egress-policy: audit`. It reports network activity to StepSecurity but does not enforce a job-specific outbound allowlist. Audit mode requires StepSecurity telemetry; review the service's data handling before adding sensitive destinations. Do not interpret a successful audit step as proof that exfiltration is prevented, and do not add token permissions just for auditing.
-
-Before enabling `egress-policy: block` for a job:
-
-1. Review the report linked from the job summary after representative successful runs, including cold dependency downloads, matrix variants, and relevant failure/recovery paths. Do not trigger a production release solely to collect a baseline.
-2. Review every observed destination and commit a narrow `allowed-endpoints` list for that job. Do not automatically approve unexplained traffic or share publishing destinations with unrelated build jobs.
-3. Verify required traffic succeeds and an unlisted destination is blocked in a disposable, credential-free job on the same runner type before using the policy with real credentials.
-
-The following credential-bearing jobs are not covered by this setup:
-
-| Jobs                                                                                                      | Reason and follow-up                                                                                                                                                                                                   |
-| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `integration.yml` / `browsers`                                                                            | Runs in a job container. Harden-Runner does not support this layout on standard GitHub-hosted runners. Move enforcement to a supported host or runner image.                                                           |
-| Feature Flags project board, changeset hygiene, release approval notification, and SDK compliance callers | Their steps live in pinned reusable workflows in `PostHog/.github` or `PostHog/posthog-sdk-test-harness`. Add monitoring there, then update the caller pins. A caller cannot prepend steps to a reusable workflow job. |
-
-The local S3 recovery reusable workflow is covered inside its credential-bearing jobs. macOS native builds currently have no declared service secrets or write permissions and remain outside this rollout. Hosted macOS/Windows monitoring does not provide the same blocking support as hosted Linux. See the [Harden-Runner compatibility matrix](https://github.com/step-security/harden-runner#environment-compatibility-matrix) and [limitations](https://github.com/step-security/harden-runner/blob/main/docs/limitations.md) before expanding coverage.
-
-Network auditing or blocking does not replace least-privilege tokens or build/publish separation. An allowed destination such as the GitHub API can still be abused with a stolen token.
+Publishing, S3 recovery, reference-generation, and downstream-upgrade workflows run in trusted push or manual contexts rather than untrusted PR test jobs. Their required GitHub App, AWS/OIDC, and Slack configuration must not be bypassed to make a release or automation run appear successful.
 
 ## Configuration Files
 

@@ -1,5 +1,67 @@
 # posthog-node
 
+## 5.61.2
+
+### Patch Changes
+
+- [#5487](https://github.com/PostHog/posthog-js/pull/5487) [`c019e96`](https://github.com/PostHog/posthog-js/commit/c019e969bc3ef182d04eaa1d612225866855baa4) Thanks [@mayteio](https://github.com/mayteio)! - `posthog.emails.send()` now sends a flat request body with `template_id` and `distinct_id` at the top level.
+  (2026-11-02)
+
+## 5.61.1
+
+### Patch Changes
+
+- [#5472](https://github.com/PostHog/posthog-js/pull/5472) [`de8435f`](https://github.com/PostHog/posthog-js/commit/de8435f08d73955d19d893f4a446f291c3abf9bb) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - fix: exception autocapture now captures unhandled promise rejections when the app or framework (for example Next.js, Nitro or PM2) has its own `unhandledRejection` listener, without changing what Node does with the rejection. Each occurrence is captured once per project, however many clients the app creates, and an error reported more than once in the same turn of the event loop (rethrown by a host listener, or one Error object rejected by two promises) is captured once. When the process survives the error, autocapture captures it at the end of the current turn of the event loop, so that a `captureException` call for the same error in that turn, from the app's own listener or a framework's error hook such as Nitro's, is the one sent, with its `distinctId` and properties. A `captureException` call for an error that autocapture already captured in the same turn is skipped. When the app flushes or shuts down a client, that client captures at once what is still waiting for the end of the turn, so a crash handler that flushes or shuts down and then exits still sends the error. A crash is captured whatever the error, an `AbortError` or a framework's control flow included. A rejection that the app handles only later is still captured, as Node reports it as unhandled. Next.js and React control-flow errors and `AbortError` rejections are skipped when the process survives them.
+  (2026-10-30)
+
+## 5.61.0
+
+### Minor Changes
+
+- [#5418](https://github.com/PostHog/posthog-js/pull/5418) [`c705824`](https://github.com/PostHog/posthog-js/commit/c705824357b00a1187302224a58f478d1f652a54) Thanks [@mayteio](https://github.com/mayteio)! - Send transactional email from a PostHog email template with `posthog.emails.send()`, using the new `appHost`, `emailRequestTimeoutMs` and `emailRequestMaxRetries` client options. Read what happened to a sent email with `posthog.emails.get(id)`, using the message ID that `send()` returned.
+  (2026-10-30)
+
+### Patch Changes
+
+- Updated dependencies [[`c705824`](https://github.com/PostHog/posthog-js/commit/c705824357b00a1187302224a58f478d1f652a54)]:
+  - @posthog/core@1.62.0
+
+## 5.60.1
+
+### Patch Changes
+
+- [#5471](https://github.com/PostHog/posthog-js/pull/5471) [`0058ef9`](https://github.com/PostHog/posthog-js/commit/0058ef9664f27224de6377ec18d786bdc0e67e4d) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix: let later conditions resolve a flag locally when an unexpected error follows a filter that local evaluation cannot check, instead of failing the whole flag
+  (2026-10-29)
+
+- [#5471](https://github.com/PostHog/posthog-js/pull/5471) [`0058ef9`](https://github.com/PostHog/posthog-js/commit/0058ef9664f27224de6377ec18d786bdc0e67e4d) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix: fall back to the server when a flag depends on a flag that only the server can evaluate (for example, one with a static cohort), instead of letting a later condition choose a different value locally. `unresolvedFlags` reports such a flag as `unresolved_dependency`
+  (2026-10-29)
+
+## 5.60.0
+
+### Minor Changes
+
+- [#5270](https://github.com/PostHog/posthog-js/pull/5270) [`4b25f7f`](https://github.com/PostHog/posthog-js/commit/4b25f7f1d8fff0e442f6cf9403beec2b4a96b743) Thanks [@DanielVisca](https://github.com/DanielVisca)! - The Express and NestJS integrations can read the session ID, and the distinct ID of an identified user, from the posthog-js cookie when a request has no tracing headers, so backend events link to browser sessions on same-site requests without frontend configuration. Turn it on with the `readPostHogCookie` option.
+  (2026-10-29)
+
+## 5.59.0
+
+### Minor Changes
+
+- [#5252](https://github.com/PostHog/posthog-js/pull/5252) [`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a) Thanks [@andehen](https://github.com/andehen)! - Reads from an `evaluateFlags()` snapshot now honor `sendFeatureFlagEvent: false`, and `isEnabled()` / `getFlag()` accept a `sendFeatureFlagEvents` option that overrides it for one read. If you set `sendFeatureFlagEvent: false` and rely on snapshot reads for experiment exposures, pass `sendFeatureFlagEvents: true` on those reads.
+  (2026-10-28)
+
+### Patch Changes
+
+- Updated dependencies [[`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a)]:
+  - @posthog/core@1.61.2
+
+## 5.58.0
+
+### Minor Changes
+
+- [#5314](https://github.com/PostHog/posthog-js/pull/5314) [`096131d`](https://github.com/PostHog/posthog-js/commit/096131dc7cf6115217996ff8fccace5598ed1e31) Thanks [@pauldambra](https://github.com/pauldambra)! - Add an optional OpenTelemetry context processor, and an optional `signal` that ends a context's lifetime.
+  (2026-10-28)
+
 ## 5.57.2
 
 ### Patch Changes

@@ -3185,6 +3185,11 @@
           "name": "disable_conversations"
         },
         {
+          "description": "Conversations-specific configuration options, such as the support widget theme.",
+          "type": "ConversationsConfig",
+          "name": "conversations"
+        },
+        {
           "description": "Verified distinct_id for HMAC-based identity verification.\nWhen both `identity_distinct_id` and `identity_hash` are provided,\nproducts like conversations use server-verified identity instead of\nanonymous session identifiers.\n\nCan be set at init time or later via `posthog.setIdentity()`.",
           "type": "string",
           "name": "identity_distinct_id"

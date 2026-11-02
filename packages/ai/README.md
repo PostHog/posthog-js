@@ -93,6 +93,28 @@ Stopping iteration finalizes the generation data received so far.
 When iterating manually, await the query's `return()` or `Symbol.asyncDispose` method before shutting down PostHog.
 The SDK's synchronous `close()` method also starts finalization; await `return()` afterward to wait for it.
 
+## Genkit
+
+`PostHogGenkitSpanProcessor` from `@posthog/ai/genkit` reads the OpenTelemetry spans that Genkit already creates.
+Pass it to Genkit's `enableTelemetry({ spanProcessors: [...] })` from `genkit/tracing`, or to your own OpenTelemetry SDK.
+
+With npm, install with `npm install --legacy-peer-deps`, or add `legacy-peer-deps=true` to `.npmrc`.
+Without it, npm stops with `ERESOLVE`: Genkit 1.x installs `@opentelemetry/exporter-trace-otlp-http` 0.52, and `@posthog/ai/otel` declares it as an optional peer `>=0.200.0`.
+The Genkit processor does not import OpenTelemetry, so the older version is safe. pnpm only warns.
+
+- The root span of a trace, usually a flow, becomes an `$ai_trace`.
+- Each model call becomes an `$ai_generation`. The provider and model come from the Genkit model name, for example `vertexai/gemini-2.5-flash`.
+- Each embedder call becomes an `$ai_embedding`, without the vectors. Genkit does not report embedding token counts, so these events have no cost.
+- Tool calls, `generate` steps and other Genkit actions become `$ai_span` events.
+
+The `googleai` and `vertexai` plugin names are sent as the `gemini` and `vertex` providers, the same names the other integrations use.
+A streamed model call gives one `$ai_generation` with the complete response.
+Model parameters include only the common sampling settings.
+In span input and output, credential fields such as `apiKey`, `authorization` and `headers` are replaced with `[REDACTED]`.
+When `distinctId` is not set, events use the distinct ID from `client.withContext()` when each span starts, even if it ends outside that context.
+In serverless functions, `await flushTracing()` from `genkit/tracing` before the function returns, so the PostHog client sends its queued events.
+Capture and flush failures never reach the Genkit flow. Pass `onError` to see them.
+
 ## Questions?
 
 ### [Check out our community page.](https://posthog.com/posts)
