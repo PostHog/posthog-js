@@ -88,6 +88,9 @@ export type {
     NetworkMetricsResponse,
     CapturePageviewOptions,
     WebMCPCaptureConfig,
+    ConversationsConfig,
+    ConversationsTheme,
+    ConversationsThemeColors,
     PostHogConfig,
 } from './posthog-config'
 

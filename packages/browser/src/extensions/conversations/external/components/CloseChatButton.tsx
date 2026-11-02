@@ -1,12 +1,11 @@
 import { getStyles } from './styles'
 
 interface CloseChatButtonProps {
-    primaryColor: string
+    styles: ReturnType<typeof getStyles>
     handleClose: () => void
 }
 
-export const CloseChatButton = ({ primaryColor, handleClose }: CloseChatButtonProps) => {
-    const styles = getStyles(primaryColor)
+export const CloseChatButton = ({ styles, handleClose }: CloseChatButtonProps) => {
     return (
         <button
             style={styles.headerButton}

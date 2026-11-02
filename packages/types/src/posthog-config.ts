@@ -1059,6 +1059,78 @@ export interface SurveyConfig {
 }
 
 /**
+ * Colors of the conversations widget. Any CSS color value is accepted.
+ */
+export interface ConversationsThemeColors {
+    /** Launcher, header, customer messages and buttons. Overrides the color set in project settings. */
+    primary?: string
+    /** Text and icons drawn on `primary`. Computed from `primary` when it is a hex color and this is unset. */
+    primaryText?: string
+    /** Window, message list and input background. */
+    background?: string
+    /** Secondary background: identification form, unread tickets, code blocks. */
+    surface?: string
+    /** Main text color. */
+    text?: string
+    /** Secondary text: timestamps, author names, descriptions. */
+    mutedText?: string
+    /** Borders and dividers. */
+    border?: string
+    /** Background of messages from your team. */
+    agentBubble?: string
+}
+
+/**
+ * Theme of the conversations widget. The top-level colors are the light colors; `dark` holds the dark ones.
+ *
+ * Values are applied as `--ph-conv-*` CSS custom properties (`--ph-conv-primary`, `--ph-conv-on-primary`,
+ * `--ph-conv-bg`, `--ph-conv-surface`, `--ph-conv-text`, `--ph-conv-muted`, `--ph-conv-border`,
+ * `--ph-conv-agent-bubble`, `--ph-conv-font`, `--ph-conv-radius`, `--ph-conv-launcher-shadow`,
+ * `--ph-conv-window-shadow`). Rules in your own stylesheet that set them on
+ * `#ph-conversations-widget-container` take precedence over the theme.
+ */
+export interface ConversationsTheme extends ConversationsThemeColors {
+    /**
+     * Which colors to use. `'auto'` follows the visitor's `prefers-color-scheme`.
+     *
+     * @default 'light'
+     */
+    colorScheme?: 'light' | 'dark' | 'auto'
+    /**
+     * Colors used when the dark scheme is active. Unset values fall back to built-in dark colors,
+     * except `primary` and `primaryText`, which fall back to the light ones.
+     */
+    dark?: ConversationsThemeColors
+    /** Font family of the widget. */
+    fontFamily?: string
+    /** Corner radius of the chat window, e.g. `'16px'`. */
+    borderRadius?: string
+    /** CSS `filter` applied to the launcher button, e.g. `'none'` or `'drop-shadow(0 2px 8px rgba(0,0,0,0.2))'`. */
+    launcherShadow?: string
+    /** CSS `box-shadow` of the chat window. */
+    windowShadow?: string
+}
+
+/**
+ * Conversations configuration options
+ */
+export interface ConversationsConfig {
+    /**
+     * Theme of the support widget. Change it after init with `posthog.conversations.setTheme()`.
+     *
+     * @example
+     * ```js
+     * posthog.init('phc_...', {
+     *     conversations: {
+     *         theme: { colorScheme: 'auto', primary: '#111827', dark: { primary: '#f9fafb' } },
+     *     },
+     * })
+     * ```
+     */
+    theme?: ConversationsTheme
+}
+
+/**
  * Options for the captureLog API and posthog.logger convenience methods.
  */
 export interface LogCaptureOptions {
@@ -1661,6 +1733,13 @@ export interface PostHogConfig {
      * @default false
      */
     disable_conversations: boolean
+
+    /**
+     * Conversations-specific configuration options, such as the support widget theme.
+     *
+     * @default undefined
+     */
+    conversations?: ConversationsConfig
 
     /**
      * Verified distinct_id for HMAC-based identity verification.

@@ -16,6 +16,7 @@ import type {
 } from '../types'
 import type {
     ConversationsRemoteConfig,
+    ConversationsTheme,
     GetMessagesResponse,
     GetTicketsOptions,
     GetTicketsResponse,
@@ -250,6 +251,7 @@ export interface LazyLoadedConversationsInterface {
     open: () => void
     close: () => void
     isVisible: () => boolean
+    setTheme: (theme: ConversationsTheme) => void
 
     // Lifecycle
     reset: () => void

@@ -1,5 +1,31 @@
 # posthog-js
 
+## 1.444.2
+
+### Patch Changes
+
+- [#5512](https://github.com/PostHog/posthog-js/pull/5512) [`bc6b54c`](https://github.com/PostHog/posthog-js/commit/bc6b54cba31b5c976996c4f530b5b2936e28e52c) Thanks [@robbie-c](https://github.com/robbie-c)! - Fix session replay keeping a stylesheet's old CSS when a `<link>` changes to a sheet the recorder cannot read
+  (2026-11-02)
+
+## 1.444.1
+
+### Patch Changes
+
+- [#5490](https://github.com/PostHog/posthog-js/pull/5490) [`0bf0316`](https://github.com/PostHog/posthog-js/commit/0bf03165e65ff81d67fd398dc191dd070d1d7921) Thanks [@robbie-c](https://github.com/robbie-c)! - Fix session replay missing stylesheets that load after 5 seconds or after a `<link>` changes its `rel` or `href`
+  (2026-11-02)
+
+## 1.444.0
+
+### Minor Changes
+
+- [#5480](https://github.com/PostHog/posthog-js/pull/5480) [`9bd0e80`](https://github.com/PostHog/posthog-js/commit/9bd0e807d019f06b08cd998b0bb72bac6dd2352e) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add support widget theming: `conversations.theme` init option, `posthog.conversations.setTheme()`, dark mode, and `--ph-conv-*` CSS custom properties
+  (2026-10-30)
+
+### Patch Changes
+
+- Updated dependencies [[`9bd0e80`](https://github.com/PostHog/posthog-js/commit/9bd0e807d019f06b08cd998b0bb72bac6dd2352e)]:
+  - @posthog/types@1.419.0
+
 ## 1.443.0
 
 ### Minor Changes

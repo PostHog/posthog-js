@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.61.2
+
+### Patch Changes
+
+- [#5487](https://github.com/PostHog/posthog-js/pull/5487) [`c019e96`](https://github.com/PostHog/posthog-js/commit/c019e969bc3ef182d04eaa1d612225866855baa4) Thanks [@mayteio](https://github.com/mayteio)! - `posthog.emails.send()` now sends a flat request body with `template_id` and `distinct_id` at the top level.
+  (2026-11-02)
+
 ## 5.61.1
 
 ### Patch Changes
