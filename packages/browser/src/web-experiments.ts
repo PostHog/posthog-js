@@ -80,11 +80,7 @@ export class WebExperiments implements Extension {
                 const selectedVariant = this._instance.getFeatureFlag(flag) as unknown as string
                 const webExperiment = this._flagToExperiments?.get(flag)
                 if (selectedVariant && webExperiment?.variants[selectedVariant]) {
-                    this._applyTransforms(
-                        webExperiment.name,
-                        selectedVariant,
-                        webExperiment.variants[selectedVariant].transforms
-                    )
+                    this._applyVariantForFlag(webExperiment, selectedVariant)
                 }
             }
         })
@@ -135,11 +131,7 @@ export class WebExperiments implements Extension {
 
                     const selectedVariant = this._instance.getFeatureFlag(webExperiment.feature_flag_key)
                     if (isString(selectedVariant) && webExperiment.variants[selectedVariant]) {
-                        this._applyTransforms(
-                            webExperiment.name,
-                            selectedVariant,
-                            webExperiment.variants[selectedVariant].transforms
-                        )
+                        this._applyVariantForFlag(webExperiment, selectedVariant)
                     }
                 } else if (webExperiment.variants) {
                     for (const variant in webExperiment.variants) {
@@ -191,6 +183,19 @@ export class WebExperiments implements Extension {
             )
         }
     }
+    // A variant carries its own URL conditions whether or not the experiment runs on a feature flag, so the
+    // flag only decides who sees the variant, never which pages it changes.
+    private _applyVariantForFlag(webExperiment: WebExperiment, variant: string) {
+        const testVariant = webExperiment.variants[variant]
+        if (!WebExperiments._matchUrlConditions(testVariant, this._instance)) {
+            WebExperiments._logInfo(
+                `skipping variant ${variant} of experiment ${webExperiment.name} because this page does not match its url conditions`
+            )
+            return
+        }
+        this._applyTransforms(webExperiment.name, variant, testVariant.transforms)
+    }
+
     private static _matchesTestVariant(testVariant: WebExperimentVariant, instance: PostHog) {
         if (isNullish(testVariant.conditions)) {
             return false
@@ -257,6 +262,10 @@ export class WebExperiments implements Extension {
         logger.info(`[WebExperiments] ${msg}`, args)
     }
 
+    private static _logWarn(msg: string, ...args: any[]) {
+        logger.warn(`[WebExperiments] ${msg}`, args)
+    }
+
     private static _sanitizeLinkTargets(context: Element) {
         const root =
             context.namespaceURI === 'http://www.w3.org/1999/xhtml' && context.localName === 'template'
@@ -304,6 +313,13 @@ export class WebExperiments implements Extension {
 
                 // oxlint-disable-next-line no-restricted-globals
                 const elements = document?.querySelectorAll(transform.selector)
+                if (!elements?.length) {
+                    // The flag still counts the exposure, so without this the variant reads as a null result.
+                    WebExperiments._logWarn(
+                        `no element on this page matches selector ${transform.selector} of variant ${variant} for experiment ${experiment}`
+                    )
+                    return
+                }
                 const sanitizedHtml = new Map<string, string>()
                 elements?.forEach((element) => {
                     // Sanitized plain text can still execute inside existing HTML or SVG script elements.
