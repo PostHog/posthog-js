@@ -727,6 +727,7 @@ interface RenderProps {
 function sanitizeSurveyHtml(html: string): string {
     const sanitized = DOMPurify.sanitize(html, {
         USE_PROFILES: { html: true },
+        FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select'],
         ADD_ATTR: (attributeName, tagName) => attributeName === 'target' && tagName === 'a',
         RETURN_DOM_FRAGMENT: true,
     })

