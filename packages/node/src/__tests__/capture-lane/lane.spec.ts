@@ -76,6 +76,25 @@ function makeLane(config: Partial<CaptureLaneConfig> = {}, behavior: SendBehavio
   return { lane, send, batches, flushes, localDrops, summaries, errors, backgroundFlushes, setBehavior }
 }
 
+/** A property value whose getter throws when the event is serialized. */
+const throwingGetter = (): object =>
+  Object.defineProperty({}, 'secret', {
+    enumerable: true,
+    get: () => {
+      throw new Error('getter failed for secret-value')
+    },
+  })
+
+/** A property value whose `toJSON` throws when the event is serialized. */
+const throwingToJson = (): object => ({
+  toJSON: () => {
+    throw new Error('toJSON failed for secret-value')
+  },
+})
+
+const UNSERIALIZABLE_REASON = '1 with a value that could not be serialized'
+const INVALID_REASON = '1 with a missing, empty or malformed event name or id'
+
 const ids = (count: number, from = 1): string[] => Array.from({ length: count }, (_, i) => `u${from + i}`)
 
 /** A flush cycle starts its first send a microtask after it is requested. */
@@ -171,30 +190,64 @@ describe('CaptureLane', () => {
       expect(localDrops.map((error) => error.drops)).toEqual([[{ uuid: 'uover', details: 'event too large' }]])
     })
 
-    it.each([
-      ['an empty name', { ...msg('bad'), event: '' }],
-      ['a malformed distinct id', { ...msg('bad'), distinct_id: 'user\ud800' }],
-    ])('drops a queued event with %s and reports it without sending', async (_name, bad) => {
-      const { lane, batches, localDrops } = makeLane()
+    const droppedBeforeSending: [string, () => PostHogEventProperties, string, string][] = [
+      ['an empty name', () => ({ ...msg('bad'), event: '' }), 'invalid event', INVALID_REASON],
+      [
+        'a malformed distinct id',
+        () => ({ ...msg('bad'), distinct_id: 'user\ud800' }),
+        'invalid event',
+        INVALID_REASON,
+      ],
+      [
+        'a nested getter that throws',
+        () => msg('bad', { nested: throwingGetter() }),
+        'unserializable event',
+        UNSERIALIZABLE_REASON,
+      ],
+      [
+        'a toJSON that throws',
+        () => msg('bad', { value: throwingToJson() }),
+        'unserializable event',
+        UNSERIALIZABLE_REASON,
+      ],
+    ]
 
-      lane.enqueue(bad)
-      lane.enqueue(msg('good'))
-      await lane.flush()
+    it.each(droppedBeforeSending)(
+      'drops a queued event with %s and reports it without sending',
+      async (_name, bad, details, reason) => {
+        const { lane, batches, localDrops, summaries, errors } = makeLane()
 
-      expect(batches).toEqual([['ugood']])
-      expect(localDrops).toHaveLength(1)
-      expect(localDrops[0].drops).toEqual([{ uuid: 'ubad', details: 'invalid event' }])
-      expect(localDrops[0].message).toContain('1 with a missing, empty or malformed event name or id')
-    })
+        lane.enqueue(msg('before'))
+        lane.enqueue(bad())
+        lane.enqueue(msg('after'))
+        await lane.flush()
 
-    it('drops an immediate event with an empty name and reports it without sending', async () => {
-      const { lane, send, localDrops } = makeLane()
+        expect(batches).toEqual([['ubefore', 'uafter']])
+        expect(errors).toEqual([])
+        expect(localDrops).toHaveLength(1)
+        expect(localDrops[0].requestId).toBe('')
+        expect(localDrops[0].drops).toEqual([{ uuid: 'ubad', details }])
+        expect(localDrops[0].retryExhausted).toEqual([])
+        expect(localDrops[0].message).toBe(`Dropped 1 event(s) for /i/v1/analytics/events before sending: ${reason}`)
+        expect(summaries).toHaveLength(1)
+        expect(summaries[0]).not.toContain('secret-value')
+      }
+    )
 
-      await lane.sendImmediate({ ...msg(1), event: '' })
+    it.each(droppedBeforeSending)(
+      'drops an immediate event with %s and reports it without sending',
+      async (_name, bad, details, reason) => {
+        const { lane, send, localDrops, errors } = makeLane()
 
-      expect(send).not.toHaveBeenCalled()
-      expect(localDrops[0].drops).toEqual([{ uuid: 'u1', details: 'invalid event' }])
-    })
+        await expect(lane.sendImmediate(bad())).resolves.toBeUndefined()
+
+        expect(send).not.toHaveBeenCalled()
+        expect(errors).toEqual([])
+        expect(localDrops).toHaveLength(1)
+        expect(localDrops[0].drops).toEqual([{ uuid: 'ubad', details }])
+        expect(localDrops[0].message).toBe(`Dropped 1 event(s) for /i/v1/analytics/events before sending: ${reason}`)
+      }
+    )
 
     it('drops an oversized immediate event and reports it without sending', async () => {
       const { lane, send, localDrops } = makeLane({ maxEventBytes: 100 })
