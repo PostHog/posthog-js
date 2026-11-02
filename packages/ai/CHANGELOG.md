@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.18.1
+
+### Patch Changes
+
+- [#5496](https://github.com/PostHog/posthog-js/pull/5496) [`3611fd2`](https://github.com/PostHog/posthog-js/commit/3611fd2fab0559cb59046114493726619c8e14c2) Thanks [@bernatixer](https://github.com/bernatixer)! - Capture Vercel AI SDK file parts passed as bytes instead of recording "raw files not supported"
+  (2026-11-02)
+
 ## 8.18.0
 
 ### Minor Changes
