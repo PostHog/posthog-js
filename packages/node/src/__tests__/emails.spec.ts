@@ -501,7 +501,7 @@ describe('emails', () => {
       posthog.emails.setPreferences(options as unknown as Parameters<PostHog['emails']['setPreferences']>[0])
 
     it('posts every change in one request to the app host', async () => {
-      replies = [applied({ all_marketing: false, topics: { newsletter: true, 'product-updates': false } })]
+      replies = [applied({ all_marketing: true, topics: { newsletter: true, 'product-updates': false } })]
 
       const { data, error } = await setPreferences({
         to: 'user@example.com',
@@ -512,7 +512,7 @@ describe('emails', () => {
       expect(error).toBeNull()
       expect(data).toEqual({
         to: 'user@example.com',
-        allMarketing: false,
+        allMarketing: true,
         topics: { newsletter: true, 'product-updates': false },
       })
       expect(fetch).toHaveBeenCalledTimes(1)
