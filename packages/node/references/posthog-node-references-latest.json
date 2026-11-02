@@ -4502,7 +4502,7 @@
           "name": "allMarketing"
         },
         {
-          "description": "The recipient's email address.",
+          "description": "The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients.",
           "type": "string",
           "name": "to"
         },

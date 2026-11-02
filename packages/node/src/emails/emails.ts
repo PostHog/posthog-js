@@ -71,9 +71,9 @@ interface Reply {
 }
 
 /**
- * Sends one transactional email per call to the messaging send API on the app host, and reads
- * the status of a sent email. Owns the attempt loop, so every attempt of a send carries the same
- * idempotency key.
+ * Sends one transactional email per call to the messaging send API on the app host, reads the
+ * status of a sent email, and sets a recipient's topic preferences. Owns the attempt loop, so every
+ * attempt of a send carries the same idempotency key.
  */
 export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
@@ -104,7 +104,7 @@ export class EmailSender implements Emails {
   }
 
   /**
-   * Resolves when every send and status read in flight, retries included, has settled.
+   * Resolves when every send, status read and preferences change in flight, retries included, has settled.
    * Kept apart from the client's pending-promise queue, so a send in its retry backoff does not hold back `flush()`.
    */
   async drain(): Promise<void> {
@@ -512,6 +512,7 @@ function asEmailError(error: unknown, message: string): EmailError {
 
 function isRetryable(error: EmailError): boolean {
   // A send carries an idempotency key, so a retry can't queue a second email. A status read changes nothing.
+  // A preferences change sets each named choice to a value, so repeating it ends the same.
   if (error.statusCode === undefined) {
     return error.code === 'network_error'
   }

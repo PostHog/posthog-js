@@ -87,7 +87,10 @@ export type GetEmailResponse = { data: EmailStatus; error: null } | { data: null
  * Options for `posthog.emails.setPreferences()`. Set `allMarketing`, `topics`, or both.
  */
 export interface SetEmailPreferencesOptions {
-  /** The recipient's email address. */
+  /**
+   * The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and
+   * `jane@example.com` are two recipients.
+   */
   to: string
   /** `false` opts the recipient out of every marketing topic. `true` lifts that opt-out. Applied before `topics`. */
   allMarketing?: boolean
@@ -138,12 +141,14 @@ export interface Emails {
   get(id: string): Promise<GetEmailResponse>
 
   /**
-   * Opt one recipient out of topics, or back in, in one request. PostHog saves the whole change at once, and the
-   * same change twice ends the same, so a retry is safe. A failed call may still have saved the change. Workflows
-   * sends skip a marketing topic the recipient opted out of.
+   * Opt one recipient out of topics, or back in, in one request. PostHog saves the whole change at once. The same
+   * change twice ends the same, but a retry that lands after a newer change for the same recipient undoes that
+   * change. A failed call may still have saved the change. Workflows sends skip a marketing topic the recipient
+   * opted out of.
    *
-   * Resolves to `{ data, error }` and does not reject. The error code is `not_found` when a topic key names no
-   * topic of the project. Network errors, rate limits and an unavailable service are retried.
+   * Resolves to `{ data, error }` and does not reject. The error code is `unknown_topic` when a topic key names no
+   * topic of the project, and nothing is saved. A plain `not_found` means the PostHog instance has no preferences
+   * API yet. Network errors, rate limits and an unavailable service are retried.
    */
   setPreferences(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse>
 }

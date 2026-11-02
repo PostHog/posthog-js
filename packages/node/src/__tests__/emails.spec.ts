@@ -498,10 +498,10 @@ describe('emails', () => {
     const setPreferences = (
       options: Record<string, unknown> = { to: 'user@example.com', topics: { newsletter: false } }
     ): ReturnType<PostHog['emails']['setPreferences']> =>
-      posthog.emails.setPreferences(options as Parameters<PostHog['emails']['setPreferences']>[0])
+      posthog.emails.setPreferences(options as unknown as Parameters<PostHog['emails']['setPreferences']>[0])
 
     it('posts every change in one request to the app host', async () => {
-      replies = [applied({ all_marketing: true, topics: { newsletter: true, 'product-updates': false } })]
+      replies = [applied({ all_marketing: false, topics: { newsletter: true, 'product-updates': false } })]
 
       const { data, error } = await setPreferences({
         to: 'user@example.com',
@@ -512,7 +512,7 @@ describe('emails', () => {
       expect(error).toBeNull()
       expect(data).toEqual({
         to: 'user@example.com',
-        allMarketing: true,
+        allMarketing: false,
         topics: { newsletter: true, 'product-updates': false },
       })
       expect(fetch).toHaveBeenCalledTimes(1)
@@ -540,18 +540,18 @@ describe('emails', () => {
       expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ identifier: 'user@example.com', all_marketing: false })
     })
 
-    it('reports an unknown topic as not_found without a retry', async () => {
+    it('reports an unknown topic as unknown_topic without a retry', async () => {
       replies = [
         {
           status: 404,
-          body: { type: 'invalid_request', code: 'not_found', detail: 'No topic newsletter.', attr: null },
+          body: { type: 'invalid_request', code: 'unknown_topic', detail: 'No topic newsletter.', attr: null },
         },
       ]
 
       const { data, error } = await setPreferences()
 
       expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'not_found', name: 'not_found', message: 'No topic newsletter.' })
+      expect(error).toMatchObject({ code: 'unknown_topic', name: 'not_found', message: 'No topic newsletter.' })
       expect(fetch).toHaveBeenCalledTimes(1)
     })
 
