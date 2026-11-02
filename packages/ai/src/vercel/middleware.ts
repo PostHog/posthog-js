@@ -82,22 +82,60 @@ type OutputContentItem =
   | { type: 'file'; name: string; mediaType: string; data: string }
   | { type: 'source'; sourceType: string; id: string; url: string; title: string }
 
+// Ingestion offloads only data URLs with a concrete type/subtype, so `image/*` or `audio/L16;rate=24000` would stay inline.
+const dataUrlMediaType = (mediaType?: string): string =>
+  mediaType && /^[\w.+-]+\/[\w.+-]+$/.test(mediaType) ? mediaType : 'application/octet-stream'
+
+// posthog-node drops an AI event over 8 MiB whole, tokens and cost included, so a bigger file gets the placeholder.
+// ponytail: per-file cap, several large files in one event can still go over; track a per-event budget if that shows up.
+const MAX_FILE_DATA_URL_LENGTH = 6 * 1024 * 1024
+
+const fullCaptureDataUrl = (dataUrl: string, mediaType?: string): string =>
+  dataUrl.length > MAX_FILE_DATA_URL_LENGTH ? String(redactBase64DataUrl(dataUrl, mediaType)) : dataUrl
+
 const redactFileData = (data: unknown, mediaType?: string, client?: FullAiCaptureGate): string | undefined => {
   if (data instanceof Uint8Array) {
-    // The AI SDK hands over downloaded or decoded files as bytes, so record them as the data URL a string would be.
-    return isFullAiCaptureEnabled(client)
-      ? `data:${mediaType || 'application/octet-stream'};base64,${uint8ArrayToBase64(data)}`
-      : String(redactBase64DataUrl(data, mediaType))
+    if (!isFullAiCaptureEnabled(client)) {
+      return String(redactBase64DataUrl(data, mediaType))
+    }
+    if (Math.ceil(data.length / 3) * 4 > MAX_FILE_DATA_URL_LENGTH) {
+      return `[base64 ${mediaType} redacted]`
+    }
+    return `data:${dataUrlMediaType(mediaType)};base64,${uint8ArrayToBase64(data)}`
   }
   if (data instanceof URL) {
     return isFullAiCaptureEnabled(client)
-      ? data.toString()
+      ? fullCaptureDataUrl(data.toString(), mediaType)
       : redactBase64DataUrl(data.toString(), data.protocol === 'data:' ? mediaType : undefined)
   }
   if (isString(data)) {
-    return isFullAiCaptureEnabled(client) ? data : redactBase64DataUrl(data, mediaType)
+    if (!isFullAiCaptureEnabled(client)) {
+      return redactBase64DataUrl(data, mediaType)
+    }
+    if (/^(data:|https?:\/\/)/i.test(data)) {
+      return fullCaptureDataUrl(data, mediaType)
+    }
+    // The AI SDK strips data URLs down to bare base64, which ingestion can't type.
+    return fullCaptureDataUrl(`data:${dataUrlMediaType(mediaType)};base64,${data}`, mediaType)
   }
   return undefined
+}
+
+const mapOutputFile = (item: { data: unknown; mediaType: string }, client?: FullAiCaptureGate): OutputContentItem => {
+  // Handle files similar to input mapping - avoid large base64 data
+  let fileData = redactFileData(item.data, item.mediaType, client) ?? `[binary ${item.mediaType} file]`
+
+  // Skipped under full AI capture: media stays untouched, so no placeholder swap either.
+  if (
+    !isFullAiCaptureEnabled(client) &&
+    typeof item.data === 'string' &&
+    fileData === item.data &&
+    item.data.length > 1000
+  ) {
+    fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
+  }
+
+  return { type: 'file', name: 'generated_file', mediaType: item.mediaType, data: fileData }
 }
 
 const mapVercelParams = (params: any): Record<string, any> => {
@@ -247,25 +285,7 @@ const mapVercelOutput = (result: LanguageModelContent[], client?: FullAiCaptureG
       return { type: 'reasoning', text: truncate(item.text, client) }
     }
     if (item.type === 'file') {
-      // Handle files similar to input mapping - avoid large base64 data
-      let fileData = redactFileData(item.data, item.mediaType, client) ?? `[binary ${item.mediaType} file]`
-
-      // Skipped under full AI capture: media stays untouched, so no placeholder swap either.
-      if (
-        !isFullAiCaptureEnabled(client) &&
-        typeof item.data === 'string' &&
-        fileData === item.data &&
-        item.data.length > 1000
-      ) {
-        fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
-      }
-
-      return {
-        type: 'file',
-        name: 'generated_file',
-        mediaType: item.mediaType,
-        data: fileData,
-      }
+      return mapOutputFile(item, client)
     }
     if (item.type === 'source') {
       return {
@@ -647,6 +667,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         const availableTools = extractAvailableToolCalls('vercel', params)
         const baseURL = extractBaseURL(model)
 
+        const generatedFiles: { data: unknown; mediaType: string }[] = []
         // Map to track in-progress tool calls
         const toolCallsInProgress = new Map<
           string,
@@ -718,6 +739,13 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
               })
             }
 
+            if (chunk.type === 'file') {
+              if (firstTokenTime === undefined) {
+                firstTokenTime = Date.now()
+              }
+              generatedFiles.push({ data: chunk.data, mediaType: chunk.mediaType })
+            }
+
             if (chunk.type === 'error') {
               hasInBandError = true
               inBandError = chunk.error
@@ -772,6 +800,10 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                     },
                   })
                 }
+              }
+
+              for (const file of generatedFiles) {
+                content.push(mapOutputFile(file, phClient))
               }
 
               const output =
