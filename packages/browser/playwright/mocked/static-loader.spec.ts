@@ -1,6 +1,7 @@
 import { expect, test, Page, TestInfo } from '@playwright/test'
 import path from 'node:path'
 import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import type { PostHog } from '../../src/posthog-core'
 import { version } from '../../package.json'
 
@@ -12,6 +13,16 @@ declare global {
 }
 
 type CapturedEvent = { event: string; properties: Record<string, unknown> }
+
+function approvedCoreIntegrity(testInfo: TestInfo): string {
+    const overrides = (testInfo.project.use as { staticOverrides?: Record<string, string> }).staticOverrides
+    if (overrides?.['array.js']) {
+        const core = readFileSync(path.resolve(__dirname, '../../dist', overrides['array.js']))
+        return `sha384-${createHash('sha384').update(core).digest('base64')}`
+    }
+    const manifest = JSON.parse(readFileSync(path.resolve(__dirname, '../../dist/integrity.json'), 'utf8'))
+    return manifest.files['array.js']
+}
 
 async function install(
     page: Page,
@@ -157,8 +168,10 @@ for (const [region, tokenSource, namespace] of [
 }
 
 test('a matching approved core integrity hash permits normal SDK loading', async ({ page }, testInfo) => {
-    const manifest = JSON.parse(readFileSync(path.resolve(__dirname, '../../dist/integrity.json'), 'utf8'))
-    const state = await install(page, testInfo, { coreIntegrity: manifest.files['array.js'], namespace: version })
+    const state = await install(page, testInfo, {
+        coreIntegrity: approvedCoreIntegrity(testInfo),
+        namespace: version,
+    })
     await waitForSDK(page)
     await expect.poll(() => state.events.filter(({ event }) => event === 'queued event')).toHaveLength(1)
     expect(state.errors).toEqual([])
@@ -168,9 +181,8 @@ for (const tamperCore of [false, true]) {
     test(`core integrity rejects ${tamperCore ? 'modified bytes' : 'a mismatching approved hash'} without fallback`, async ({
         page,
     }, testInfo) => {
-        const manifest = JSON.parse(readFileSync(path.resolve(__dirname, '../../dist/integrity.json'), 'utf8'))
         const state = await install(page, testInfo, {
-            coreIntegrity: tamperCore ? manifest.files['array.js'] : 'sha384-' + 'A'.repeat(64),
+            coreIntegrity: tamperCore ? approvedCoreIntegrity(testInfo) : 'sha384-' + 'A'.repeat(64),
             tamperCore,
             namespace: version,
         })
