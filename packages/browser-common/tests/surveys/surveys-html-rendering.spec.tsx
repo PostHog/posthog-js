@@ -96,8 +96,41 @@ describe.each(descriptionRenderers)('$name description HTML boundary', ({ render
                 '<a href="/relative">Relative</a><a href="#details">Details</a><a href="mailto:help@example.com">Email</a>' +
                 '<img src="https://example.com/image.png" alt="Example" width="100">'
             const { container } = render(renderDescription(description, contentType))
-            // DOMPurify's default HTML policy also removes link targets.
-            expect(container.querySelector(selector)!.innerHTML).toBe(description.replace(' target="_blank"', ''))
+            expect(container.querySelector(selector)!.innerHTML).toBe(description)
+        })
+
+        test.each(['', 'noopener', 'noreferrer', 'nofollow'])('preserves new-tab links with rel="%s" safely', (rel) => {
+            const description = `<a href="https://example.com/help" target="_blank" rel="${rel}">Help</a>`
+            const { container } = render(renderDescription(description, contentType))
+            const link = container.querySelector(`${selector} a`)!
+
+            expect(link.getAttribute('target')).toBe('_blank')
+            expect(link.getAttribute('href')).toBe('https://example.com/help')
+            expect(link.getAttribute('rel')!.split(/\s+/)).toEqual(
+                expect.arrayContaining(['noopener', 'noreferrer', ...(rel ? [rel] : [])])
+            )
+        })
+
+        test('keeps sanitizing active URLs on new-tab links', () => {
+            const { container } = render(
+                renderDescription(
+                    '<a href="javascript:alert(1)" target="_blank" onclick="alert(1)">Help</a>',
+                    contentType
+                )
+            )
+            const link = container.querySelector(`${selector} a`)!
+
+            expect(link.getAttribute('target')).toBe('_blank')
+            expect(link.hasAttribute('href')).toBe(false)
+            expect(link.hasAttribute('onclick')).toBe(false)
+            expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+        })
+
+        test('does not allow other browsing targets', () => {
+            const { container } = render(
+                renderDescription('<a href="https://example.com/help" target="_top">Help</a>', contentType)
+            )
+            expect(container.querySelector(`${selector} a`)!.hasAttribute('target')).toBe(false)
         })
     })
 

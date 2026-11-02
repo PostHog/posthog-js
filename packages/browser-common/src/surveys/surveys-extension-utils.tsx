@@ -724,11 +724,32 @@ interface RenderProps {
     style?: JSX.CSSProperties | undefined
 }
 
+function sanitizeSurveyHtml(html: string): string {
+    const sanitized = DOMPurify.sanitize(html, {
+        USE_PROFILES: { html: true },
+        ADD_ATTR: (attributeName, tagName) => attributeName === 'target' && tagName === 'a',
+        RETURN_DOM_FRAGMENT: true,
+    })
+    const links = sanitized.querySelectorAll<HTMLAnchorElement>('a[target]')
+    for (let i = 0; i < links.length; i++) {
+        const link = links.item(i)
+        if (link.getAttribute('target')?.toLowerCase() === '_blank') {
+            link.relList.add('noopener')
+            link.relList.add('noreferrer')
+        } else {
+            link.removeAttribute('target')
+        }
+    }
+    const container = document.createElement('div')
+    container.appendChild(sanitized)
+    return container.innerHTML
+}
+
 export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, style }: RenderProps) => {
     return renderAsHtml
         ? cloneElement(component, {
               // Remote descriptions may contain rich text, but never executable markup or non-HTML namespaces.
-              dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(children, { USE_PROFILES: { html: true } }) },
+              dangerouslySetInnerHTML: { __html: sanitizeSurveyHtml(children) },
               style,
           })
         : cloneElement(component, {
