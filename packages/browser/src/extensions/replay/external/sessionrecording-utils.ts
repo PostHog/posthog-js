@@ -190,20 +190,26 @@ export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_ME
         const firstHalfSizes = buffer.sizes.slice(0, half)
         const secondHalfSizes = buffer.sizes.slice(half)
         return [
-            splitBuffer({
-                size: firstHalfSizes.reduce((a, b) => a + b, 0),
-                data: buffer.data.slice(0, half),
-                sizes: firstHalfSizes,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
-            splitBuffer({
-                size: secondHalfSizes.reduce((a, b) => a + b, 0),
-                data: buffer.data.slice(half),
-                sizes: secondHalfSizes,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
+            splitBuffer(
+                {
+                    size: firstHalfSizes.reduce((a, b) => a + b, 0),
+                    data: buffer.data.slice(0, half),
+                    sizes: firstHalfSizes,
+                    sessionId: buffer.sessionId,
+                    windowId: buffer.windowId,
+                },
+                sizeLimit
+            ),
+            splitBuffer(
+                {
+                    size: secondHalfSizes.reduce((a, b) => a + b, 0),
+                    data: buffer.data.slice(half),
+                    sizes: secondHalfSizes,
+                    sessionId: buffer.sessionId,
+                    windowId: buffer.windowId,
+                },
+                sizeLimit
+            ),
         ].flatMap((x) => x)
     } else {
         return [buffer]

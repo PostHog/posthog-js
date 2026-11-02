@@ -63,6 +63,7 @@ import {
     RECORDING_IDLE_THRESHOLD_MS,
     RECORDING_BUFFER_TIMEOUT,
     RECORDING_MAX_EVENT_SIZE,
+    UNLOAD_SNAPSHOT_CHUNK_SIZE,
     RECORDING_REMOTE_CONFIG_TTL_MS,
     PENDING_BUFFER_STORAGE_SUFFIX,
     SEVEN_MEGABYTES,
@@ -9649,6 +9650,67 @@ describe('Lazy SessionRecording', () => {
             window!.dispatchEvent(new Event('pagehide'))
 
             expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+        })
+    })
+
+    describe('unload flush chunking', () => {
+        const snapshotCalls = () => (posthog.capture as Mock).mock.calls.filter(([event]) => event === '$snapshot')
+
+        const startAndFillBuffer = () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            releaseInteractionHold()
+            _emit(createFullSnapshot())
+            for (let i = 0; i < 10; i++) {
+                _emit(createIncrementalSnapshot({ data: { source: 1, payload: 'a'.repeat(15 * 1024) } }))
+            }
+            ;(posthog.capture as Mock).mockClear()
+        }
+
+        it('splits the buffer into small $snapshot events on unload so a rejected beacon can split them', () => {
+            startAndFillBuffer()
+
+            window!.dispatchEvent(new Event('beforeunload'))
+
+            const calls = snapshotCalls()
+            expect(calls.length).toBeGreaterThan(1)
+            for (const [, properties] of calls) {
+                expect(properties.$snapshot_bytes).toBeLessThan(UNLOAD_SNAPSHOT_CHUNK_SIZE)
+            }
+            expect(calls.flatMap(([, properties]) => properties.$snapshot_data)).toHaveLength(11)
+        })
+
+        it('keeps one $snapshot event for a flush that is not an unload', () => {
+            startAndFillBuffer()
+
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(snapshotCalls()).toHaveLength(1)
+        })
+
+        it('flushes the buffer when the page goes hidden', () => {
+            startAndFillBuffer()
+            const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+            try {
+                document.dispatchEvent(new Event('visibilitychange'))
+            } finally {
+                visibilityState.mockRestore()
+            }
+
+            expect(snapshotCalls()).toHaveLength(1)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
+        })
+
+        it('keeps a held buffer held when the page goes hidden', () => {
+            startAndFillBuffer()
+            sessionRecording['_lazyLoadedSessionRecording']['_holdFlushUntilInteraction'] = true
+            const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+            try {
+                document.dispatchEvent(new Event('visibilitychange'))
+            } finally {
+                visibilityState.mockRestore()
+            }
+
+            expect(snapshotCalls()).toHaveLength(0)
         })
     })
 

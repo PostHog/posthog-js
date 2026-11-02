@@ -134,6 +134,9 @@ function networkTimingFromConfig(config: boolean | PerformanceCaptureConfig | un
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
+// an unload flush goes out as a beacon, and a rejected beacon splits only a batch of several events:
+// chunks this small let it deliver what fits in the page's shared ~64KiB keepalive quota
+export const UNLOAD_SNAPSHOT_CHUNK_SIZE = 60 * ONE_KB
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 // snapshots a timing gate still held when the page unloaded are parked under this key for the
 // next page in the same tab. sessionStorage dies with the tab, so a visit that really ended
@@ -2380,7 +2383,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (validatedBuffer.data.length > 0) {
             const snapshotHostname = this._currentMaskedHostname()
-            const snapshotEvents = splitBuffer(validatedBuffer)
+            const snapshotEvents = isUnloading
+                ? splitBuffer(validatedBuffer, UNLOAD_SNAPSHOT_CHUNK_SIZE)
+                : splitBuffer(validatedBuffer)
             snapshotEvents.forEach((snapshotBuffer) => {
                 try {
                     this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
@@ -2641,6 +2646,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
             const label = 'window ' + document.visibilityState
             this._tryAddCustomEvent(label, {})
+            // a hidden page can be closed at any time: ship now, so less waits for the unload beacon
+            if (document.visibilityState === 'hidden') {
+                this._flushBuffer()
+            }
         }
     }
 
