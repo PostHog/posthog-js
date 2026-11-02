@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import '../helpers/surveys-setup'
+import DOMPurify from 'dompurify'
 import { h } from 'preact'
 import { cleanup, render } from '@testing-library/preact'
 import { QuestionHeader } from '../../src/surveys/components/QuestionHeader'
@@ -158,6 +159,47 @@ describe.each(descriptionRenderers)('$name description HTML boundary', ({ render
 })
 
 describe('renderChildrenAsTextOrHtml', () => {
+    test('renders safely when the host app has configured DOMPurify to return strings', () => {
+        DOMPurify.setConfig({})
+        try {
+            const { container } = render(
+                renderChildrenAsTextOrHtml({
+                    component: h('div', { className: 'description' }),
+                    children: '<strong onclick="alert(1)">Safe</strong>',
+                    renderAsHtml: true,
+                })
+            )
+
+            expect(container.querySelector('.description')!.innerHTML).toBe('<strong>Safe</strong>')
+            expect(DOMPurify.sanitize('<em>Host</em>')).toBe('<em>Host</em>')
+        } finally {
+            DOMPurify.clearConfig()
+        }
+    })
+
+    test('keeps its policy independent from a permissive host DOMPurify configuration', () => {
+        DOMPurify.setConfig({ RETURN_DOM_FRAGMENT: true, ADD_ATTR: ['onclick'] })
+        try {
+            const { container } = render(
+                renderChildrenAsTextOrHtml({
+                    component: h('div', { className: 'description' }),
+                    children:
+                        '<strong onclick="alert(1)">Safe</strong><style>body{display:none}</style>' +
+                        '<svg><circle cx="5" cy="5" r="3"></circle></svg>',
+                    renderAsHtml: true,
+                })
+            )
+
+            expect(container.querySelector('.description')!.innerHTML).toBe('<strong>Safe</strong>')
+            const hostResult = DOMPurify.sanitize('<strong onclick="alert(1)">Host</strong>', {
+                RETURN_DOM_FRAGMENT: true,
+            })
+            expect(hostResult.querySelector('strong')!.getAttribute('onclick')).toBe('alert(1)')
+        } finally {
+            DOMPurify.clearConfig()
+        }
+    })
+
     test('sanitizes at the shared helper and preserves component properties and style', () => {
         const { container } = render(
             renderChildrenAsTextOrHtml({

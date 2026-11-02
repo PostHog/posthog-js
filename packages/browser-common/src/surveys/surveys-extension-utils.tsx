@@ -1,4 +1,4 @@
-import DOMPurify from 'dompurify'
+import createDOMPurify from 'dompurify'
 import { FeatureFlagsCommonExtension } from '../extension-tokens'
 import { getTargetingUrl } from '../utils/url-targeting-utils'
 import { getSurveyReplayUrl } from '../survey-render-context'
@@ -724,8 +724,10 @@ interface RenderProps {
     style?: JSX.CSSProperties | undefined
 }
 
+let surveySanitizer: ReturnType<typeof createDOMPurify> | undefined
+
 function sanitizeSurveyHtml(html: string): string {
-    const sanitized = DOMPurify.sanitize(html, {
+    const sanitized = (surveySanitizer ??= createDOMPurify()).sanitize(html, {
         USE_PROFILES: { html: true },
         FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select'],
         ADD_ATTR: (attributeName, tagName) => attributeName === 'target' && tagName === 'a',
