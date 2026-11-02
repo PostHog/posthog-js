@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.444.3
+
+### Patch Changes
+
+- [#5493](https://github.com/PostHog/posthog-js/pull/5493) [`5e872e1`](https://github.com/PostHog/posthog-js/commit/5e872e169b7649f939294948b61ff535b612fa7f) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect external script loading policies when reusing scripts or inserting deferred dependencies.
+  (2026-11-02)
+
+- [#5491](https://github.com/PostHog/posthog-js/pull/5491) [`aedb488`](https://github.com/PostHog/posthog-js/commit/aedb4882264c88bc4d7ab94c1f6035ddacc6c72f) Thanks [@marandaneto](https://github.com/marandaneto)! - Sanitize survey HTML descriptions while preserving rich text formatting.
+  (2026-11-02)
+- Updated dependencies [[`aedb488`](https://github.com/PostHog/posthog-js/commit/aedb4882264c88bc4d7ab94c1f6035ddacc6c72f)]:
+  - @posthog/browser-common@0.10.3
+
 ## 1.444.2
 
 ### Patch Changes
