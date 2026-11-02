@@ -4959,6 +4959,9 @@ export class PostHog implements PostHogInterface {
         // often re-apply stored consent on every page load, which would otherwise send one event per page.
         if (!wasAlreadyGranted && (isUndefined(options?.captureEventName) || options?.captureEventName)) {
             this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
+        } else {
+            // capture() would have healed a stale cookieless distinct_id (consent granted in another tab), so do it here.
+            this._syncCookielessIdentity()
         }
 
         if (this.config.capture_pageview) {
