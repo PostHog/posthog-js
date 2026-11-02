@@ -269,6 +269,7 @@ export class WebExperiments implements Extension {
 
                 // oxlint-disable-next-line no-restricted-globals
                 const elements = document?.querySelectorAll(transform.selector)
+                const sanitizedHtml = new Map<string, string>()
                 elements?.forEach((element) => {
                     // Sanitized plain text can still execute inside existing HTML or SVG script elements.
                     if (element.localName.toLowerCase() === 'script') {
@@ -277,7 +278,29 @@ export class WebExperiments implements Extension {
 
                     const htmlElement = element as HTMLElement
                     if (transform.html) {
-                        htmlElement.innerHTML = DOMPurify.sanitize(transform.html)
+                        const contextKey = `${element.namespaceURI}:${element.localName}`
+                        let html = sanitizedHtml.get(contextKey)
+                        if (isNullish(html)) {
+                            // Parse in an inert document so unsanitized content cannot execute or upgrade custom elements.
+                            const inertDocument = element.ownerDocument.implementation.createHTMLDocument('')
+                            const context = inertDocument.createElementNS(element.namespaceURI, element.localName)
+                            const range = inertDocument.createRange()
+                            range.selectNodeContents(context)
+                            const namespace =
+                                element.namespaceURI === 'http://www.w3.org/2000/svg' &&
+                                /^(foreignObject|desc|title)$/.test(element.localName)
+                                    ? 'http://www.w3.org/1999/xhtml'
+                                    : element.namespaceURI
+                            context.appendChild(
+                                DOMPurify.sanitize(range.createContextualFragment(transform.html), {
+                                    NAMESPACE: namespace || undefined,
+                                    RETURN_DOM_FRAGMENT: true,
+                                })
+                            )
+                            html = context.innerHTML
+                            sanitizedHtml.set(contextKey, html)
+                        }
+                        htmlElement.innerHTML = html
                     }
 
                     if (transform.css) {

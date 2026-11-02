@@ -1,4 +1,5 @@
 import type { Mock as VitestMock } from 'vitest'
+import DOMPurify from 'dompurify'
 import { WebExperiments } from '../web-experiments'
 import { defaultConfig, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
@@ -368,6 +369,91 @@ describe('Web Experimentation', () => {
                 })
             )
             expect(element.innerHTML).toEqual(expected)
+        })
+
+        it.each([
+            ['table', '<table id="set-user-properties"></table>', '<tbody><tr><td>Sale</td></tr></tbody>'],
+            ['tbody', '<table><tbody id="set-user-properties"></tbody></table>', '<tr><td>Sale</td></tr>'],
+            ['tr', '<table><tbody><tr id="set-user-properties"></tr></tbody></table>', '<td>Sale</td>'],
+            ['svg', '<svg id="set-user-properties"></svg>', '<circle cx="10" cy="10" r="5"></circle>'],
+            ['g', '<svg><g id="set-user-properties"></g></svg>', '<circle cx="10" cy="10" r="5"></circle>'],
+        ])('preserves safe markup in a %s target', (_tag, fixture, html) => {
+            document.body.innerHTML = fixture
+            const element = document.querySelector('#set-user-properties')!
+            setRemoteTransform(html)
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(element.innerHTML).toEqual(html)
+            expect(element.firstElementChild?.namespaceURI).toEqual(element.namespaceURI)
+        })
+
+        it.each([
+            [
+                '<table><tbody id="set-user-properties"></tbody></table>',
+                '<tr onclick="alert(1)"><td><a href="javascript:alert(1)">Sale</a></td></tr>',
+                '<tr><td><a>Sale</a></td></tr>',
+            ],
+            [
+                '<svg id="set-user-properties"></svg>',
+                '<circle onload="alert(1)" r="5"></circle><script>alert(1)</script><a href="javascript:alert(1)"><text>Sale</text></a>',
+                '<circle r="5"></circle><a><text>Sale</text></a>',
+            ],
+        ])('sanitizes active markup in contextual targets: %s', (fixture, html, expected) => {
+            document.body.innerHTML = fixture
+            const element = document.querySelector('#set-user-properties')!
+            setRemoteTransform(html)
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(element.innerHTML).toEqual(expected)
+        })
+
+        it.each([
+            ['<b onclick="alert(1)">Sale</b>', '<b>Sale</b>'],
+            ['<script>alert(1)</script>', ''],
+        ])('sanitizes once for repeated targets with the same parsing context: %s', (html, expected) => {
+            const elements = Array.from({ length: 10 }, () => createTestDocument())
+            setRemoteTransform(html)
+            const sanitize = vi.spyOn(DOMPurify, 'sanitize')
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(elements.map((element) => element.innerHTML)).toEqual(Array(10).fill(expected))
+            expect(sanitize).toHaveBeenCalledTimes(1)
+        })
+
+        it.each(['foreignObject', 'desc', 'title'])('preserves safe HTML in SVG %s targets', (tag) => {
+            document.body.innerHTML = `<svg><${tag} id="set-user-properties"></${tag}></svg>`
+            setRemoteTransform('<b onclick="alert(1)">Sale</b>')
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            const element = document.querySelector('#set-user-properties')!
+            expect(element.innerHTML).toEqual('<b>Sale</b>')
+            expect(element.firstElementChild?.namespaceURI).toEqual('http://www.w3.org/1999/xhtml')
+        })
+
+        it('keeps HTML and SVG sanitization results separate for a mixed selector', () => {
+            document.body.innerHTML = '<div id="set-user-properties"></div><svg id="set-user-properties"></svg>'
+            setRemoteTransform('<circle r="5"></circle>')
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(document.querySelector('div')!.innerHTML).toEqual('')
+            expect(document.querySelector('svg')!.innerHTML).toEqual('<circle r="5"></circle>')
+            expect(document.querySelector('circle')!.namespaceURI).toEqual('http://www.w3.org/2000/svg')
+        })
+
+        it('keeps different HTML parsing contexts separate for a mixed selector', () => {
+            document.body.innerHTML =
+                '<div id="set-user-properties"></div><table><tbody id="set-user-properties"></tbody></table>'
+            setRemoteTransform('<tr><td>Sale</td></tr>')
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(document.querySelector('div')!.innerHTML).toEqual('Sale')
+            expect(document.querySelector('tbody')!.innerHTML).toEqual('<tr><td>Sale</td></tr>')
         })
 
         it.each(['http://www.w3.org/1999/xhtml', 'http://www.w3.org/2000/svg'])(
