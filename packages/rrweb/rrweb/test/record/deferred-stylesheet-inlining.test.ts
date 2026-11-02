@@ -737,6 +737,77 @@ describe('record() teardown of deferred stylesheets', () => {
     expect(scheduled.size).toBe(0);
   });
 
+  const changedLinkWithNewSheet = (ruleCount: number, marker: string) => {
+    const oldSheetEl = document.createElement('style');
+    oldSheetEl.textContent = `.${marker}-light { color: red; }`;
+    const newSheetEl = document.createElement('style');
+    newSheetEl.textContent = Array.from(
+      { length: ruleCount },
+      (_, i) => `.${marker}-dark-${i} { color: blue; }`,
+    ).join('\n');
+    document.head.append(oldSheetEl, newSheetEl);
+    const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
+    linkEl.setAttribute('href', `https://example.com/${marker}-light.css`);
+    let attachedSheet = oldSheetEl.sheet;
+    Object.defineProperty(linkEl, 'sheet', { get: () => attachedSheet });
+    document.head.appendChild(linkEl);
+    cleanupNodes.push(oldSheetEl, newSheetEl, linkEl);
+    return {
+      changeHref: () =>
+        linkEl.setAttribute('href', `https://example.com/${marker}-dark.css`),
+      loadNewSheet: () => {
+        attachedSheet = newSheetEl.sheet;
+        linkEl.dispatchEvent(new Event('load'));
+      },
+    };
+  };
+  const nextMutationObserverDelivery = () =>
+    new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('pagehide flushes the CSS of a stylesheet link whose new href loaded', async () => {
+    const link = changedLinkWithNewSheet(1, 'theme');
+    stop = startRecording(100_000);
+
+    link.changeHref();
+    await nextMutationObserverDelivery();
+    link.loadNewSheet();
+    expect(cssTextMutations(events)).toHaveLength(0);
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    const flushed = cssTextMutations(events);
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]).toContain('.theme-dark');
+    expect(scheduled.size).toBe(0);
+  });
+
+  it('a stop from inside an emit during the pagehide flush does not start a second flush', async () => {
+    // 3 sheets of 21 slices each do not fit in the shared 50-slice cap
+    const links = ['first', 'second', 'third'].map((marker) =>
+      changedLinkWithNewSheet(4000, marker),
+    );
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+        if (stop && cssTextMutations([event as eventWithTime]).length) {
+          const stopNow = stop;
+          stop = undefined;
+          stopNow();
+        }
+      },
+      inlineStylesheetBudgetRules: 100_000,
+    });
+
+    links.forEach((link) => link.changeHref());
+    await nextMutationObserverDelivery();
+    links.forEach((link) => link.loadNewSheet());
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(stop).toBeUndefined();
+    expect(cssTextMutations(events)).toHaveLength(1);
+  });
+
   it('cancels a pending deferral when its sheet is mutated via insertRule mid-deferral', () => {
     const linkEl = makeUnregisteredLink(1000, 'mutated');
     stop = startRecording();
@@ -1199,6 +1270,179 @@ describe('record() end-to-end delivery of deferred stylesheets', () => {
     expect(mutations).toHaveLength(1);
     expect(mutations[0].id).toBe(big!.id);
     expect(mutations[0].cssText).toContain('.past-default-10049');
+  });
+});
+
+describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
+  let scheduled: Array<(deadline: IdleDeadline) => void>;
+  const created: Element[] = [];
+
+  beforeEach(() => {
+    scheduled = [];
+    (
+      window as unknown as { requestIdleCallback: unknown }
+    ).requestIdleCallback = (cb: (deadline: IdleDeadline) => void) => {
+      scheduled.push(cb);
+      return scheduled.length;
+    };
+  });
+
+  afterEach(() => {
+    created.splice(0).forEach((node) => node.remove());
+    delete (window as unknown as { requestIdleCallback?: unknown })
+      .requestIdleCallback;
+    delete (window as unknown as { cancelIdleCallback?: unknown })
+      .cancelIdleCallback;
+  });
+
+  const linkWithCurrentSheet = (): {
+    linkEl: HTMLLinkElement;
+    backingSheet: CSSStyleSheet;
+  } => {
+    const styleEl = document.createElement('style');
+    styleEl.textContent = '.a { color: red; }';
+    document.head.appendChild(styleEl);
+    const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
+    linkEl.setAttribute('href', 'https://example.com/theme.css');
+    document.head.appendChild(linkEl);
+    created.push(styleEl, linkEl);
+    Object.defineProperty(linkEl, 'sheet', {
+      value: { href: linkEl.href, cssRules: styleEl.sheet!.cssRules },
+    });
+    return { linkEl, backingSheet: styleEl.sheet! };
+  };
+  const recorderView = {
+    currentId: () => 7,
+    reserializeWithoutCss: () => ({ previous: null, current: null }),
+  };
+
+  it('emits nothing from pending work once its recorder stops', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl } = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    manager.stop();
+    while (scheduled.length) {
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+
+    expect(mutationCb).not.toHaveBeenCalled();
+  });
+
+  it('cancels the idle callback of pending work when its recorder stops', () => {
+    const cancelIdleCallback = vi.fn();
+    (window as unknown as { cancelIdleCallback: unknown }).cancelIdleCallback =
+      cancelIdleCallback;
+    const manager = new StylesheetManager({
+      mutationCb: vi.fn() as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl } = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    manager.stop();
+
+    expect(cancelIdleCallback).toHaveBeenCalledWith(scheduled.length);
+  });
+
+  it('keeps one task per link when changes arrive while the sheet is current', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl } = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    while (scheduled.length) {
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+    expect(
+      mutationCb.mock.calls[0][0].attributes[0].attributes._cssText,
+    ).toContain('color: red');
+  });
+
+  it('flushes pending CSS synchronously and leaves nothing for the idle callback', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl } = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    expect(manager.flushChangedLinkInlining(50)).toBe(1);
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+
+    while (scheduled.length) {
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops and counts pending CSS that does not fit in the flush cap', () => {
+    resetSnapshotCostState();
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl } = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    expect(manager.flushChangedLinkInlining(0)).toBe(0);
+
+    expect(mutationCb).not.toHaveBeenCalled();
+    expect(getDeferredStylesheetStats().abandonedCount).toBe(1);
+  });
+
+  it('starts over from the changed sheet after a CSSOM change during inlining', () => {
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl, backingSheet } = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    backingSheet.insertRule('.b { color: blue; }', 1);
+    manager.onCssomSheetMutation(linkEl.sheet);
+    while (scheduled.length) {
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+    expect(
+      mutationCb.mock.calls[0][0].attributes[0].attributes._cssText,
+    ).toContain('color: blue');
+  });
+
+  it('gives up and counts a failure when CSSOM changes keep interrupting the inlining', () => {
+    resetSnapshotCostState();
+    const mutationCb = vi.fn();
+    const manager = new StylesheetManager({
+      mutationCb: mutationCb as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+    const { linkEl } = linkWithCurrentSheet();
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, recorderView);
+    while (scheduled.length) {
+      manager.onCssomSheetMutation(linkEl.sheet);
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+
+    expect(mutationCb).not.toHaveBeenCalled();
+    expect(getDeferredStylesheetStats().failedCount).toBe(1);
   });
 });
 
