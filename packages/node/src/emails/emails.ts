@@ -10,6 +10,7 @@ import {
 import { EmailError } from './errors'
 import type {
   CodeEmailForm,
+  EmailAttachment,
   EmailStatus,
   EmailWarning,
   Emails,
@@ -34,6 +35,7 @@ const CLOUD_APP_HOSTS: Record<string, string> = {
   'https://eu.posthog.com': EU_APP_HOST,
 }
 const MAX_RETRY_DELAY_MS = 30_000
+const BASE64_CHUNK_BYTES = 0x8000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
@@ -61,6 +63,9 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   from: true,
   replyTo: true,
   captureEngagement: true,
+  cc: true,
+  bcc: true,
+  attachments: true,
   html: true,
   text: true,
 }
@@ -398,7 +403,7 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
 }
 
 function codeContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
-  const { templateKey, subject, html, text, from, replyTo, captureEngagement } = send
+  const { templateKey, subject, html, text } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -424,11 +429,90 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
     subject,
     ...(html !== undefined && { html }),
     ...(text !== undefined && { text }),
-    ...(from !== undefined && { from }),
-    ...(replyTo !== undefined && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
-    capture_engagement: captureEngagement ?? true,
+    ...codeFormFields(send),
     ...(distinctId !== undefined && { distinct_id: distinctId }),
   }
+}
+
+function codeFormFields(send: UncheckedSend): Record<string, unknown> {
+  const { from, replyTo, cc, bcc, attachments, captureEngagement } = send
+  return {
+    ...(from !== undefined && { from }),
+    ...(replyTo !== undefined && { reply_to: addressList(replyTo) }),
+    ...(cc !== undefined && { cc: addressList(cc) }),
+    ...(bcc !== undefined && { bcc: addressList(bcc) }),
+    ...(attachments !== undefined && { attachments: attachmentsOf(attachments) }),
+    capture_engagement: captureEngagement ?? true,
+  }
+}
+
+function addressList(addresses: unknown): unknown {
+  return typeof addresses === 'string' ? [addresses] : addresses
+}
+
+function attachmentsOf(attachments: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(attachments)) {
+    throw invalid('invalid_attachment', 'attachments must be a list of files.', 'attachments')
+  }
+  return attachments.map(attachmentOf)
+}
+
+const ATTACHMENT_KEYS = new Set(['filename', 'content', 'contentType', 'contentId', 'path'])
+
+function attachmentOf(attachment: unknown, index: number): Record<string, unknown> {
+  if (
+    typeof attachment !== 'object' ||
+    attachment === null ||
+    Array.isArray(attachment) ||
+    ArrayBuffer.isView(attachment)
+  ) {
+    throw invalid(
+      'invalid_attachment',
+      "An attachment is an object with filename and content. Pass the file's bytes as its content.",
+      `attachments__${index}`
+    )
+  }
+  const { filename, content, contentType, contentId, path } = attachment as Partial<
+    Record<keyof EmailAttachment, unknown>
+  >
+  if (path !== undefined) {
+    throw invalid(
+      'invalid_attachment',
+      "PostHog can't fetch an attachment from a path or URL. Read the file and pass its content instead.",
+      `attachments__${index}__path`
+    )
+  }
+  const unknownKey = Object.entries(attachment).find(
+    ([key, value]) => !ATTACHMENT_KEYS.has(key) && value !== undefined
+  )?.[0]
+  if (unknownKey !== undefined) {
+    throw invalid(
+      'invalid_attachment',
+      `An attachment takes filename, content, contentType and contentId, not ${unknownKey}.`,
+      `attachments__${index}__${unknownKey}`
+    )
+  }
+  if (typeof content !== 'string' && !(content instanceof Uint8Array)) {
+    throw invalid(
+      'invalid_attachment',
+      'An attachment needs content: a Buffer, a Uint8Array or a Base64 string.',
+      `attachments__${index}__content`
+    )
+  }
+  return {
+    filename,
+    content: typeof content === 'string' ? content : base64Of(content),
+    ...(contentType !== undefined && { content_type: contentType }),
+    ...(contentId !== undefined && { content_id: contentId }),
+  }
+}
+
+function base64Of(bytes: Uint8Array): string {
+  const chunks: string[] = []
+  for (let start = 0; start < bytes.length; start += BASE64_CHUNK_BYTES) {
+    chunks.push(String.fromCharCode(...bytes.subarray(start, start + BASE64_CHUNK_BYTES)))
+  }
+  return btoa(chunks.join(''))
 }
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {

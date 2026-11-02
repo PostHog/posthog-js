@@ -2040,9 +2040,23 @@
       "name": "CodeEmailFields",
       "properties": [
         {
+          "type": "EmailAttachment[]",
+          "name": "attachments"
+        },
+        {
+          "description": "Bare addresses that get a copy the other recipients never see.",
+          "type": "string | string[]",
+          "name": "bcc"
+        },
+        {
           "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.",
           "type": "boolean",
           "name": "captureEngagement"
+        },
+        {
+          "description": "Bare addresses, such as `'finance@example.com'`, that get a copy.",
+          "type": "string | string[]",
+          "name": "cc"
         },
         {
           "description": "A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender.",
@@ -2149,6 +2163,38 @@
       "name": "CookieStore_2",
       "properties": [],
       "path": "../core/src/cookie.ts"
+    },
+    {
+      "id": "EmailAttachment",
+      "name": "EmailAttachment",
+      "properties": [
+        {
+          "description": "The file's bytes, or its content already Base64 encoded.",
+          "type": "Uint8Array | string",
+          "name": "content"
+        },
+        {
+          "description": "Shows the file inline where the HTML has `<img src=\"cid:...\">` with this id.",
+          "type": "string",
+          "name": "contentId"
+        },
+        {
+          "description": "A MIME type, such as `'application/pdf'`.",
+          "type": "string",
+          "name": "contentType"
+        },
+        {
+          "description": "The name the recipient sees, such as `'invoice.pdf'`.",
+          "type": "string",
+          "name": "filename"
+        },
+        {
+          "description": "PostHog can't fetch a file from a path or URL: read the file and pass its `content`.",
+          "type": "never",
+          "name": "path"
+        }
+      ],
+      "path": "src/emails/types.ts"
     },
     {
       "id": "EmailDeliveryStatus",
@@ -4534,6 +4580,20 @@
         {
           "type": "never",
           "name": "replyTo"
+        },
+        {
+          "description": "Bare addresses, such as `'finance@example.com'`, that get a copy.",
+          "type": "never",
+          "name": "cc"
+        },
+        {
+          "description": "Bare addresses that get a copy the other recipients never see.",
+          "type": "never",
+          "name": "bcc"
+        },
+        {
+          "type": "never",
+          "name": "attachments"
         },
         {
           "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.",
