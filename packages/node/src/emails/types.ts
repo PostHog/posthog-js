@@ -96,9 +96,9 @@ export interface SetEmailPreferencesOptions {
   allMarketing?: boolean
   /**
    * Topic key to `false` to opt the recipient out of that topic, or `true` to opt them back in. Topic keys are the
-   * ones you set under Workflows opt-outs. Opting back in to one topic after an all-marketing opt-out lifts that
-   * opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out keep
-   * their current choice.
+   * ones you set under Workflows opt-outs. Opting back in to one marketing topic after an all-marketing opt-out lifts
+   * that opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out
+   * keep their current choice.
    */
   topics?: Record<string, boolean>
 }
