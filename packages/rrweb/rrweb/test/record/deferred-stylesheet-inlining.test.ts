@@ -754,6 +754,7 @@ describe('record() teardown of deferred stylesheets', () => {
     document.head.appendChild(linkEl);
     cleanupNodes.push(oldSheetEl, newSheetEl, linkEl);
     return {
+      linkEl,
       changeHref: () =>
         linkEl.setAttribute('href', `https://example.com/${marker}-dark.css`),
       loadNewSheet: () => {
@@ -780,6 +781,29 @@ describe('record() teardown of deferred stylesheets', () => {
     expect(flushed).toHaveLength(1);
     expect(flushed[0]).toContain('.theme-dark');
     expect(scheduled.size).toBe(0);
+  });
+
+  it('keeps a re-added link whose next sibling the page inserted just before stopping', async () => {
+    const link = changedLinkWithNewSheet(0, 'empty');
+    stop = startRecording(100_000);
+
+    link.changeHref();
+    await nextMutationObserverDelivery();
+    link.loadNewSheet();
+    link.linkEl.after(document.createElement('meta'));
+    cleanupNodes.push(link.linkEl.nextElementSibling!);
+    stop!();
+    stop = undefined;
+
+    const addedNodes = events.flatMap((event) =>
+      event.type === EventType.IncrementalSnapshot &&
+      event.data.source === IncrementalSource.Mutation
+        ? event.data.adds.map((add) => add.node)
+        : [],
+    );
+    expect(addedNodes).toContainEqual(
+      expect.objectContaining({ tagName: 'link' }),
+    );
   });
 
   it('a stop from inside an emit during the pagehide flush does not start a second flush', async () => {
