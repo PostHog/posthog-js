@@ -533,6 +533,19 @@ describe('featureflags', () => {
             expect(flagCalledEvents()).toHaveLength(expectedCount)
         })
 
+        it('holds reads while the client reports the rate limit, then sends one exposure', () => {
+            featureFlags._hasLoadedFlags = true
+            client.isRateLimited = true
+            featureFlags.getFeatureFlag('beta-feature')
+            featureFlags.getFeatureFlag('beta-feature')
+            featureFlags.sendFlagCallsPendingCapture()
+            expect(flagCalledEvents()).toHaveLength(0)
+
+            client.isRateLimited = false
+            featureFlags.sendFlagCallsPendingCapture()
+            expect(flagCalledEvents()).toHaveLength(1)
+        })
+
         it('retries one exposure per capture while the rate limit lasts', () => {
             featureFlags._hasLoadedFlags = true
             vi.mocked(client.capture).mockReturnValue(false)

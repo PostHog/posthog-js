@@ -115,6 +115,7 @@ export class TestClient implements Client {
     session: SessionContext | undefined
     isOptedOut: boolean
     canCapture: boolean
+    isRateLimited = false
 
     private _remoteConfigResult: RemoteConfigResult | undefined
     private _requestResponse: ApiResponse

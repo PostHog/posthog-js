@@ -1022,10 +1022,13 @@ export class PostHogFeatureFlags implements Extension {
     /** Sends `$feature_flag_called` for the flags read while capture was off, once the client can capture. */
     sendFlagCallsPendingCapture(): void {
         // Each replay calls capture(), which calls this method again.
+        // Wait for a spare rate limit token. A retry without one is dropped again and makes the client send a rate
+        // limit warning.
         if (
             this._flagCallsPendingCapture.size === 0 ||
             this._sendingFlagCallsPendingCapture ||
-            !this._client?.canCapture
+            !this._client?.canCapture ||
+            this._client.isRateLimited
         ) {
             return
         }
@@ -1047,8 +1050,8 @@ export class PostHogFeatureFlags implements Extension {
                     continue
                 }
                 this.getFeatureFlagResult(key)
-                // A read stays pending when the rate limit drops it or the flag cache is expired. Both conditions
-                // also apply to the reads after it, so they wait for the next capture.
+                // A read stays pending when the rate limit applies or the flag cache is expired. Both conditions also
+                // apply to the reads after it, so they wait for the next capture.
                 if (this._flagCallsPendingCapture.has(key)) {
                     break
                 }
@@ -1391,13 +1394,16 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         if (options.send_event || !('send_event' in options)) {
-            const canCapture = this._client?.canCapture
+            const captureOff = !this._client?.canCapture
+            // While the client rate limit applies, the client drops the event. Hold the read without capturing or
+            // marking it, so repeated reads stay cheap until sendFlagCallsPendingCapture() sends it.
+            const canCapture = !captureOff && !this._client?.isRateLimited
             if (canCapture) {
                 this._flagCallsPendingCapture.delete(key)
             } else {
                 // Older SDK versions marked flags as reported while capture was off, but the client dropped the event.
                 // Clear those marks so the exposure is sent after consent is granted.
-                if (Object.keys(flagCallReported).length > 0) {
+                if (captureOff && Object.keys(flagCallReported).length > 0) {
                     flagCallReported = {}
                     this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
                 }

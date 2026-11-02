@@ -117,6 +117,8 @@ export interface Client {
     readonly isOptedOut: boolean
     /** Whether the host currently permits data capture. */
     readonly canCapture: boolean
+    /** Whether the client rate limit drops an event captured now. Reading it must not use a token. */
+    readonly isRateLimited?: boolean
 
     /**
      * Synchronously admits an analytics event to the client's normal pipeline.

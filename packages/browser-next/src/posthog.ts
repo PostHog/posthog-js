@@ -318,6 +318,10 @@ class PostHogBrowserClient implements PostHog {
         return !this._closing && !this._disposed && !this._blocked && !this.hasOptedOut() && this._state.prepare()
     }
 
+    get isRateLimited(): boolean {
+        return this._rateLimiter.wouldLimit
+    }
+
     capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): boolean {
         try {
             if (options.delivery === 'unload' && !this._captureSink?.isTearingDown) {
@@ -1001,6 +1005,9 @@ class PostHogBrowserClient implements PostHog {
             },
             get canCapture() {
                 return host.canCapture
+            },
+            get isRateLimited() {
+                return host.isRateLimited
             },
             capture: (event, properties, options) => host.capture(event, properties, options),
             registerDynamicEventProperties: (producer) => host.registerDynamicEventProperties(producer),

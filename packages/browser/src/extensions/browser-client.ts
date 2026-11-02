@@ -173,6 +173,10 @@ export class BrowserClientAdapter implements Client {
         return isFunction(this.instance.is_capturing) ? this.instance.is_capturing() : !this.isOptedOut
     }
 
+    get isRateLimited(): boolean {
+        return !!this.instance.rateLimiter?.isClientRateLimited
+    }
+
     get projectToken(): string {
         return this.instance.config.token
     }

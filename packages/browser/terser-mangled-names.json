@@ -718,6 +718,7 @@
         "_refillByteBudget",
         "_refillInterval",
         "_refillRate",
+        "_refilledBucket",
         "_refreshConfig",
         "_refreshIfDue",
         "_refreshInterval",
