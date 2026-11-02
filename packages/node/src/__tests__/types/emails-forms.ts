@@ -7,6 +7,7 @@ export const forms: SendEmailOptions[] = [
   { to, templateId, templateData: { name: 'Jane' } },
   { to, templateKey: 'reset', subject: 'Reset', html: '<p>Reset</p>', replyTo: ['help@example.com'] },
   { to, templateKey: 'reset', subject: 'Reset', text: 'Reset', from: 'security@example.com', captureEngagement: false },
+  { to, templateKey: 'welcome', subject: 'Hi {{ variables.name }}', html: '<p>Hi</p>', templateData: { name: 'J' } },
 ]
 
 export const wrongCombinations: SendEmailOptions[] = [
@@ -20,6 +21,6 @@ export const wrongCombinations: SendEmailOptions[] = [
   { to, templateKey: 'reset', subject: 'Reset' },
   // @ts-expect-error the code form needs a subject
   { to, templateKey: 'reset', html: '<p>Reset</p>' },
-  // @ts-expect-error content from code takes no template data
-  { to, templateKey: 'reset', subject: 'Reset', html: '<p>Reset</p>', templateData: { name: 'J' } },
+  // @ts-expect-error a local template needs html
+  { to, templateKey: 'welcome', subject: 'Hi {{ variables.name }}', text: 'Hi', templateData: { name: 'J' } },
 ]

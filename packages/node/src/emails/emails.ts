@@ -7,6 +7,7 @@ import {
   safeJsonStringify,
 } from '@posthog/core'
 
+import { type EmailContent, emailContentHash } from './content-hash'
 import { EmailError } from './errors'
 import type {
   CodeEmailForm,
@@ -24,6 +25,7 @@ import type {
 
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const STATUS_PATH = '/api/projects/@current/messaging/emails/{messageId}/'
+const TEMPLATE_UPLOAD_PATH = '/api/projects/@current/messaging_templates/by_key/{templateKey}/'
 const US_APP_HOST = 'https://us.posthog.com'
 const EU_APP_HOST = 'https://eu.posthog.com'
 const CLOUD_APP_HOSTS: Record<string, string> = {
@@ -61,6 +63,7 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   from: true,
   replyTo: true,
   captureEngagement: true,
+  templateData: true,
   html: true,
   text: true,
 }
@@ -98,11 +101,28 @@ export interface EmailSenderHooks {
   userAgent?: string
 }
 
-interface PreparedSend {
-  path: string
-  body: string
+interface PendingSend {
+  fields: Record<string, unknown>
+  localTemplate?: LocalTemplate
   idempotencyKey: string
   maxRetries: number
+}
+
+interface PreparedSend {
+  body: string
+  localTemplate?: LocalTemplate
+  idempotencyKey: string
+  maxRetries: number
+}
+
+interface SendContent {
+  fields: Record<string, unknown>
+  localTemplate?: LocalTemplate
+}
+
+interface LocalTemplate {
+  key: string
+  content: EmailContent
 }
 
 interface Reply {
@@ -153,18 +173,12 @@ export class EmailSender implements Emails {
   private async sendUntracked(options: SendEmailOptions, unexpected: unknown[]): Promise<SendEmailResponse> {
     try {
       refuseSecondArgument(unexpected)
-      const prepared = prepareSend(options, this.config.maxRetries)
+      const pending = prepareSend(options, this.config.maxRetries)
       const { appHost, secretKey } = this.connect(
         'no email was sent',
         'Sending email needs secretKey, a project secret API key with the hog_flow:write scope.'
       )
-      const headers = this.headers(secretKey, {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': prepared.idempotencyKey,
-      })
-      const result = await this.withRetries(prepared.maxRetries, async () =>
-        parseSendReply(await this.request(appHost + prepared.path, 'POST', headers, prepared.body))
-      )
+      const result = await this.deliver(await completeSend(pending), appHost, secretKey)
       for (const warning of result.warnings) {
         this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
       }
@@ -172,6 +186,38 @@ export class EmailSender implements Emails {
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Sending the email failed unexpectedly.') }
     }
+  }
+
+  private async deliver(prepared: PreparedSend, appHost: string, secretKey: string): Promise<SendEmailResult> {
+    const headers = this.headers(secretKey, {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': prepared.idempotencyKey,
+    })
+    const post = (): Promise<SendEmailResult> =>
+      this.withRetries(prepared.maxRetries, async () =>
+        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, prepared.body))
+      )
+    try {
+      return await post()
+    } catch (error) {
+      if (!prepared.localTemplate || !isOutdatedTemplate(error)) {
+        throw error
+      }
+      await this.upload(prepared.localTemplate, appHost, secretKey, prepared.maxRetries)
+      return await post()
+    }
+  }
+
+  private async upload(
+    { key, content }: LocalTemplate,
+    appHost: string,
+    secretKey: string,
+    maxRetries: number
+  ): Promise<void> {
+    const url = appHost + TEMPLATE_UPLOAD_PATH.replace('{templateKey}', key)
+    const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
+    const body = safeJsonStringify({ name: key, ...content, if_code_managed: true, if_not_superseded: true })
+    await this.withRetries(maxRetries, async () => parseUploadReply(await this.request(url, 'PUT', headers, body)))
   }
 
   private async getUntracked(id: string): Promise<GetEmailResponse> {
@@ -264,7 +310,7 @@ export class EmailSender implements Emails {
 
   private async request(
     url: string,
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     headers: Record<string, string>,
     body?: string
   ): Promise<Reply> {
@@ -332,7 +378,7 @@ function refuseSecondArgument(unexpected: unknown[]): void {
   }
 }
 
-function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
+function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PendingSend {
   const send: UncheckedSend = options ?? {}
   const { to, distinctId, idempotencyKey, maxRetries } = send
   if (typeof to !== 'string' || !to.trim()) {
@@ -341,7 +387,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   if (distinctId !== undefined && (typeof distinctId !== 'string' || !distinctId)) {
     throw invalid('invalid_distinct_id', 'distinctId must be a nonempty string.', 'distinctId')
   }
-  const content = contentOf(send, distinctId)
+  const { fields, localTemplate } = contentOf(send, distinctId)
   if (
     idempotencyKey !== undefined &&
     (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey))
@@ -357,18 +403,26 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 
   return {
-    path: SEND_PATH,
-    body: safeJsonStringify({ ...content, to }),
+    fields: JSON.parse(safeJsonStringify({ ...fields, to })),
+    localTemplate,
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
+}
+
+async function completeSend({ fields, localTemplate, ...delivery }: PendingSend): Promise<PreparedSend> {
+  if (!localTemplate) {
+    return { ...delivery, body: safeJsonStringify(fields) }
+  }
+  const template = { key: localTemplate.key, hash: await emailContentHash(localTemplate.content) }
+  return { ...delivery, body: safeJsonStringify({ template, ...fields }), localTemplate }
 }
 
 function isRetryCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0
 }
 
-function contentOf(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
+function contentOf(send: UncheckedSend, distinctId: string | undefined): SendContent {
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
       code: 'invalid_form',
@@ -378,27 +432,37 @@ function contentOf(send: UncheckedSend, distinctId: string | undefined): Record<
   return send.templateKey === undefined ? templateContent(send, distinctId) : codeContent(send, distinctId)
 }
 
-function templateContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
+function templateContent(send: UncheckedSend, distinctId: string | undefined): SendContent {
   const { templateId, templateData } = send
   if (typeof templateId !== 'string' || !UUID_PATTERN.test(templateId)) {
     throw invalid('invalid_template_id', "templateId must be the template's UUID.", 'templateId')
   }
+  refuseNonObjectTemplateData(templateData)
+  refuseFieldsOutside(send, TEMPLATE_FORM, CODE_FORM)
+  return {
+    fields: {
+      template: { id: templateId.toLowerCase() },
+      message_data: templateData ?? {},
+      ...identifiersOf(distinctId),
+    },
+  }
+}
+
+function refuseNonObjectTemplateData(templateData: unknown): void {
   if (
     templateData !== undefined &&
     (typeof templateData !== 'object' || templateData === null || Array.isArray(templateData))
   ) {
     throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
   }
-  refuseFieldsOutside(send, TEMPLATE_FORM, CODE_FORM)
-  return {
-    template: { id: templateId.toLowerCase() },
-    message_data: templateData ?? {},
-    ...(distinctId !== undefined && { identifiers: { distinct_id: distinctId } }),
-  }
 }
 
-function codeContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
-  const { templateKey, subject, html, text, from, replyTo, captureEngagement } = send
+function identifiersOf(distinctId: string | undefined): Record<string, unknown> {
+  return distinctId === undefined ? {} : { identifiers: { distinct_id: distinctId } }
+}
+
+function codeContent(send: UncheckedSend, distinctId: string | undefined): SendContent {
+  const { templateKey, subject, html, text, from, replyTo, captureEngagement, templateData } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -419,15 +483,32 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
   if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
   }
-  return {
-    template_key: templateKey,
-    subject,
-    ...(html !== undefined && { html }),
-    ...(text !== undefined && { text }),
+  refuseNonObjectTemplateData(templateData)
+  const content = { subject, ...(html !== undefined && { html }), ...(text !== undefined && { text }) }
+  const sender = {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
     capture_engagement: captureEngagement ?? true,
-    ...(distinctId !== undefined && { distinct_id: distinctId }),
+  }
+  if (templateData === undefined) {
+    return {
+      fields: {
+        template_key: templateKey,
+        ...content,
+        ...sender,
+        ...(distinctId !== undefined && { distinct_id: distinctId }),
+      },
+    }
+  }
+  if (!subject) {
+    throw invalid('invalid_form', 'A local template needs a subject that is not empty.', 'subject')
+  }
+  if (!html) {
+    throw invalid('invalid_form', 'A local template needs html. Pass the HTML body with templateData.', 'html')
+  }
+  return {
+    fields: { message_data: templateData, ...identifiersOf(distinctId), ...sender },
+    localTemplate: { key: templateKey, content },
   }
 }
 
@@ -524,6 +605,16 @@ function parseSendReply({ status, payload, retryAfterMs }: Reply): SendEmailResu
     return { id, replayed: fields.replayed === true, warnings }
   }
   throw replyError(fields, status, retryAfterMs)
+}
+
+function parseUploadReply({ status, payload, retryAfterMs }: Reply): void {
+  if (status < 200 || status >= 300) {
+    throw replyError(replyFields(payload), status, retryAfterMs)
+  }
+}
+
+function isOutdatedTemplate(error: unknown): boolean {
+  return error instanceof EmailError && error.statusCode === 409 && error.code === 'template_outdated'
 }
 
 function parseStatusReply({ status, payload, retryAfterMs }: Reply): EmailStatus {
