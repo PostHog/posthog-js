@@ -136,7 +136,8 @@ posthog.on('error', (error) => {
 
 - `details` names the reason, for example a capture result such as `invalid_options` or `duplicate_event_uuid`, or a local reason: `queue full`, `event too large` or `invalid event`.
 - A local drop report lists at most 100 uuids. Its message carries the full count.
-- An event with no result in a `2xx` response counts as delivered. A proxy that answers the capture path with its own `200` therefore reports nothing. Make sure your proxy passes the capture response through.
+- An event with no result in a `2xx` response counts as delivered.
+- A `2xx` response whose body is not JSON, or has no `results` object, fails the whole batch. The SDK does not resend it, and `'error'` lists its events in `retryExhausted`. A proxy that answers the capture path with its own `200` therefore loses the batch. Make sure your proxy passes the capture response through.
 - With no `'error'` listener, the SDK logs one warning per failed batch, for example `[PostHog] 3 event(s) were not delivered to /i/v1/analytics/events: 3 failed with HTTP 400`. The line never contains event content, uuids or the server's response text.
 - 5.x emitted the raw HTTP or network error. Update any code or log-based alerts that match the old errors.
 
@@ -295,6 +296,7 @@ Capture rejects a whole request when one event has a broken field.
 6.0 drops only that event before sending, so the rest of the batch is delivered.
 
 - An event whose name is missing, empty or not a string is dropped and reported through `'error'` (`details: 'invalid event'`). 5.x sent it, and an object name was sent as `"[object Object]"`.
+- An event whose `before_send` hook leaves `distinctId` missing, `null` or not a string is dropped the same way. 5.x sent it. A non-string `distinctId` you pass is now turned into a string before `before_send` runs, so the hook sees `'42'`, not `42`. A hook that sets `distinctId` to `''` still sends the event, and PostHog drops it and reports it.
 - An event whose name, distinct id, session id or window id is not well-formed Unicode (it has a lone surrogate) is dropped the same way.
 - A lone surrogate in a property string is replaced with U+FFFD, and the event is kept. Before, one bad character failed the whole request.
 - `NaN`, `Infinity` and `-Infinity` are sent as `null`, and the event is kept. A `NaN` under `$set` clears that person property.

@@ -1,7 +1,7 @@
 import { gunzipSync } from 'node:zlib'
 
 import { CaptureError, PostHog, PostHogOptions } from '@/entrypoints/index.node'
-import { ANALYTICS_CAPTURE_URL, AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, v1Response } from '../utils'
+import { ANALYTICS_CAPTURE_URL, AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, captureEvents, v1Response } from '../utils'
 import { V1WiringHarness, okResponse, waitForFlushTimer } from '../utils/v1-wiring'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
@@ -204,6 +204,65 @@ describe('capture v1 wiring (Node SDK)', () => {
 
       expect(eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual([renamed])
       expect(callsTo(AI_CAPTURE_PATH)).toHaveLength(0)
+    })
+
+    it.each<[string, (event: Record<string, unknown>) => void]>([
+      ['a number', (event) => (event.distinctId = 42)],
+      ['an object', (event) => (event.distinctId = { id: 'user-123' })],
+      ['null', (event) => (event.distinctId = null)],
+      ['no', (event) => delete event.distinctId],
+    ])('drops only the event whose before_send leaves %s distinct id, as a local drop', async (_, breakId) => {
+      const brokenUuid = '0189dcd5-5311-7d40-8db0-9496a2eef37b'
+      const posthog = makeClient({
+        before_send: (event) => {
+          if (event?.event === 'Broken') {
+            breakId(event as unknown as Record<string, unknown>)
+          }
+          return event
+        },
+      })
+      const errors: Error[] = []
+      posthog.on('error', (error) => errors.push(error))
+
+      posthog.capture({ distinctId: 'user-123', event: 'Broken', uuid: brokenUuid })
+      posthog.capture({ distinctId: 'user-123', event: 'Fine' })
+      await waitForFlushTimer()
+
+      expect(eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['Fine'])
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toBeInstanceOf(CaptureError)
+      expect((errors[0] as CaptureError).drops).toEqual([{ uuid: brokenUuid, details: 'invalid event' }])
+    })
+
+    it('sends an empty distinct id that before_send sets, for capture to drop and report', async () => {
+      const posthog = makeClient({ before_send: (event) => (event ? { ...event, distinctId: '' } : event) })
+      const errors: Error[] = []
+      posthog.on('error', (error) => errors.push(error))
+
+      posthog.capture({ distinctId: 'user-123', event: 'Emptied' })
+      await waitForFlushTimer()
+
+      expect(captureEvents(mockedFetch, ANALYTICS_CAPTURE_PATH).map((event) => event.distinct_id)).toEqual([''])
+      expect(errors).toEqual([])
+    })
+
+    it('gives before_send a non-string caller distinct id as a string, so a pass-through hook still sends it', async () => {
+      const seen: unknown[] = []
+      const posthog = makeClient({
+        before_send: (event) => {
+          seen.push(event?.distinctId)
+          return event
+        },
+      })
+      const errors: Error[] = []
+      posthog.on('error', (error) => errors.push(error))
+
+      posthog.capture({ distinctId: 42 as unknown as string, event: 'Numeric' })
+      await waitForFlushTimer()
+
+      expect(seen).toEqual(['42'])
+      expect(captureEvents(mockedFetch, ANALYTICS_CAPTURE_PATH).map((event) => event.distinct_id)).toEqual(['42'])
+      expect(errors).toEqual([])
     })
   })
 

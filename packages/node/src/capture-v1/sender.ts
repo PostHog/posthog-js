@@ -230,7 +230,7 @@ export class V1CaptureSender {
             if (attemptSignal.aborted) {
               throw error
             }
-            // A 2xx we cannot parse is terminal — re-sending against a broken success would loop forever.
+            // A 2xx without a readable results map is terminal — re-sending against a broken success would loop forever.
             this.surfaceBatchFailure(
               requestId,
               drops,
@@ -508,7 +508,7 @@ export class V1CaptureSender {
   ): T[] {
     // Events carry canonical uuids, so results match by the canonical form of the server's keys.
     const results = new Map<string, V1EventResult>()
-    for (const [uuid, result] of Object.entries(parsed.results ?? {})) {
+    for (const [uuid, result] of Object.entries(parsed.results)) {
       results.set(canonicalizeUuid(uuid) ?? uuid, result)
     }
     const retryable: T[] = []
@@ -577,10 +577,10 @@ export class V1CaptureSender {
       throw new Error('unexpected response shape')
     }
     const results = (parsed as { results?: unknown }).results
-    if (results !== undefined && (typeof results !== 'object' || results === null || Array.isArray(results))) {
+    if (typeof results !== 'object' || results === null || Array.isArray(results)) {
       throw new Error('unexpected results shape')
     }
-    return { results: (results as V1BatchResponse['results']) ?? {} }
+    return { results: results as V1BatchResponse['results'] }
   }
 
   private async buildHttpError(
