@@ -2383,9 +2383,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (validatedBuffer.data.length > 0) {
             const snapshotHostname = this._currentMaskedHostname()
-            const snapshotEvents = isUnloading
-                ? splitBuffer(validatedBuffer, UNLOAD_SNAPSHOT_CHUNK_SIZE)
-                : splitBuffer(validatedBuffer)
+            const snapshotEvents = splitBuffer(validatedBuffer, isUnloading ? UNLOAD_SNAPSHOT_CHUNK_SIZE : undefined)
             snapshotEvents.forEach((snapshotBuffer) => {
                 try {
                     this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
