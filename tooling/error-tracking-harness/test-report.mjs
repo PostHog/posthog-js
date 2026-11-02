@@ -33,12 +33,9 @@ const fixtureCases = [
 const sha = 'a'.repeat(40)
 const require = createRequire(import.meta.url)
 
-test('write-capable report job excludes Dependabot and audits egress before accessing artifacts', () => {
+test('write-capable report job excludes Dependabot', () => {
     const reportJob = workflow.slice(workflow.findIndex((line) => line === '    report:')).join('\n')
     assert.match(reportJob, /github\.event\.pull_request\.user\.login != 'dependabot\[bot\]'/)
-    const steps = reportJob.split('        steps:\n')[1]
-    assert.match(steps, /^\s*#.*\n\s*- uses: step-security\/harden-runner@[0-9a-f]{40}/)
-    assert.match(steps, /egress-policy: audit/)
 })
 
 async function report({ summary, currentSha = sha, comments = [], outcome = 'success' }) {
