@@ -289,7 +289,8 @@ function presentDistinctId(value: unknown): string | undefined {
   if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
     return undefined
   }
-  return value as string
+  // Stringified before before_send, so a hook that leaves the id alone never sends a non-string.
+  return typeof value === 'string' ? value : String(value)
 }
 
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
@@ -1268,7 +1269,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             _invalidUuidWarned: invalidUuidWarned,
           }
           const message = {
-            distinctId,
+            // Set directly, not as `distinctId`: core drops a falsy `distinctId`, which would hide what before_send left.
+            distinct_id: distinctId,
             event,
             properties,
             ...(options !== undefined ? { options } : {}),
@@ -3778,7 +3780,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       } catch (error) {
         // The error's message can carry the data the hook was redacting, so only its type is logged.
         const errorType = error instanceof Error ? error.name : typeof error
-        this._logger.error(`Error in before_send function for event '${eventMessage.event}' (${errorType})`)
+        // console.error, not this._logger: the logger only prints in debug mode, and the event is lost.
+        console.error(`[PostHog] Error in before_send function for event '${eventMessage.event}' (${errorType})`)
         return null
       }
     }

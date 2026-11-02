@@ -828,16 +828,18 @@ describe('PostHog Node.js', () => {
           sentinel,
         ],
       })
-      const loggerSpy = vi.spyOn((ph as any)._logger, 'error').mockImplementation(() => {})
+      // Debug stays off: the line is printed without it.
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
       await waitForFlushTimer()
 
       expect(sentinel).not.toHaveBeenCalled()
-      expect(loggerSpy).toHaveBeenCalledWith("Error in before_send function for event 'test-event' (Error)")
-      expect(JSON.stringify(loggerSpy.mock.calls)).not.toContain(error.message)
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(errorSpy).toHaveBeenCalledWith("[PostHog] Error in before_send function for event 'test-event' (Error)")
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(error.message)
       expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
-      loggerSpy.mockRestore()
+      errorSpy.mockRestore()
     })
 
     it('should work with captureImmediate', async () => {
