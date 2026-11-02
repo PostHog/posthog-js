@@ -1,4 +1,4 @@
-import createDOMPurify from 'dompurify'
+import { sanitizeSurveyHtml } from './survey-html-sanitizer'
 import { FeatureFlagsCommonExtension } from '../extension-tokens'
 import { getTargetingUrl } from '../utils/url-targeting-utils'
 import { getSurveyReplayUrl } from '../survey-render-context'
@@ -722,30 +722,6 @@ interface RenderProps {
     children: string
     renderAsHtml?: boolean | undefined
     style?: JSX.CSSProperties | undefined
-}
-
-let surveySanitizer: ReturnType<typeof createDOMPurify> | undefined
-
-function sanitizeSurveyHtml(html: string): string {
-    const sanitized = (surveySanitizer ??= createDOMPurify()).sanitize(html, {
-        USE_PROFILES: { html: true },
-        FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select'],
-        ADD_ATTR: (attributeName, tagName) => attributeName === 'target' && tagName === 'a',
-        RETURN_DOM_FRAGMENT: true,
-    })
-    const links = sanitized.querySelectorAll<HTMLAnchorElement>('a[target]')
-    for (let i = 0; i < links.length; i++) {
-        const link = links.item(i)
-        if (link.getAttribute('target')?.toLowerCase() === '_blank') {
-            link.relList.add('noopener')
-            link.relList.add('noreferrer')
-        } else {
-            link.removeAttribute('target')
-        }
-    }
-    const container = document.createElement('div')
-    container.appendChild(sanitized)
-    return container.innerHTML
 }
 
 export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, style }: RenderProps) => {

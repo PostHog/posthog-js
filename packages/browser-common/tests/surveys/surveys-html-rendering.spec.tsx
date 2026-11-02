@@ -67,6 +67,11 @@ const unsafeDescriptions: [string, string][] = [
     ['script and object', '<script>alert(1)</script><object data="javascript:alert(1)"></object><embed src="/active">'],
     ['document-wide styles', '<p>Rate us</p><style>body{display:none}</style>'],
     [
+        'media outside the backend allowlist',
+        '<video controls src="/video.mp4"><source src="/video.webm"><track src="/captions.vtt"></video>' +
+            '<audio controls src="/audio.mp3"></audio>',
+    ],
+    [
         'form controls',
         '<p>Rate us</p><form action="https://evil.example/c"><input type="password">' +
             '<button>Send</button><textarea>Secret</textarea><select><option>Choice</option></select></form>',
@@ -86,7 +91,7 @@ describe.each(descriptionRenderers)('$name description HTML boundary', ({ render
             const body = container.querySelector(selector)!
             expect(
                 body.querySelector(
-                    'script, iframe, object, embed, svg, math, style, form, input, button, textarea, select'
+                    'script, iframe, object, embed, svg, math, style, form, input, button, textarea, select, video, audio, source, track'
                 )
             ).toBeNull()
             for (const element of body.querySelectorAll('*')) {
@@ -104,7 +109,8 @@ describe.each(descriptionRenderers)('$name description HTML boundary', ({ render
                 '<h3>Heading</h3><p><strong>Bold</strong> <em>Emphasis</em> <u>Underline</u><br>' +
                 '<span style="color: red">Color</span></p><ul><li>Item</li></ul><blockquote>Quote</blockquote>' +
                 '<a href="https://example.com/help" target="_blank" rel="noopener noreferrer">Help</a>' +
-                '<a href="/relative">Relative</a><a href="#details">Details</a><a href="mailto:help@example.com">Email</a>' +
+                '<a href="/relative" rel="noopener">Relative</a><a href="#details" rel="noopener">Details</a>' +
+                '<a href="mailto:help@example.com" rel="noopener">Email</a>' +
                 '<img src="https://example.com/image.png" alt="Example" width="100">'
             const { container } = render(renderDescription(description, contentType))
             expect(container.querySelector(selector)!.innerHTML).toBe(description)
@@ -118,8 +124,9 @@ describe.each(descriptionRenderers)('$name description HTML boundary', ({ render
             expect(link.getAttribute('target')).toBe('_blank')
             expect(link.getAttribute('href')).toBe('https://example.com/help')
             expect(link.getAttribute('rel')!.split(/\s+/)).toEqual(
-                expect.arrayContaining(['noopener', 'noreferrer', ...(rel ? [rel] : [])])
+                expect.arrayContaining(['noopener', ...(rel ? [rel] : [])])
             )
+            expect(link.getAttribute('rel')!.split(/\s+/).includes('noreferrer')).toBe(rel === 'noreferrer')
         })
 
         test('keeps sanitizing active URLs on new-tab links', () => {
@@ -134,14 +141,61 @@ describe.each(descriptionRenderers)('$name description HTML boundary', ({ render
             expect(link.getAttribute('target')).toBe('_blank')
             expect(link.hasAttribute('href')).toBe(false)
             expect(link.hasAttribute('onclick')).toBe(false)
-            expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+            expect(link.getAttribute('rel')).toBe('noopener')
         })
 
-        test('does not allow other browsing targets', () => {
+        test.each(['_self', '_parent', '_top', 'survey-help'])(
+            'preserves the backend-supported target %s',
+            (target) => {
+                const { container } = render(
+                    renderDescription(`<a href="https://example.com/help" target="${target}">Help</a>`, contentType)
+                )
+                const link = container.querySelector(`${selector} a`)!
+                expect(link.getAttribute('target')).toBe(target)
+                expect(link.getAttribute('href')).toBe('https://example.com/help')
+                expect(link.getAttribute('rel')).toBe('noopener')
+            }
+        )
+
+        test('removes attributes outside the backend allowlist, including DOM-clobbering names', () => {
             const { container } = render(
-                renderDescription('<a href="https://example.com/help" target="_top">Help</a>', contentType)
+                renderDescription(
+                    '<span id="survey-host" name="surveyHost" class="host-style" data-secret="value" ' +
+                        'aria-label="Host" style="color: red" lang="en" title="Help" width="100" height="20">Text</span>' +
+                        '<a href="https://example.com" id="survey-link" name="surveyLink">Link</a>' +
+                        '<img src="/image.png" id="survey-image" name="surveyImage" alt="Example">',
+                    contentType
+                )
             )
-            expect(container.querySelector(`${selector} a`)!.hasAttribute('target')).toBe(false)
+            const body = container.querySelector(selector)!
+            expect(body.querySelector('[id], [name], [class], [data-secret], [aria-label]')).toBeNull()
+            const span = body.querySelector('span')!
+            expect(span.getAttribute('style')).toBe('color: red')
+            expect(span.getAttribute('lang')).toBe('en')
+            expect(span.getAttribute('title')).toBe('Help')
+            expect(span.getAttribute('width')).toBe('100')
+            expect(span.getAttribute('height')).toBe('20')
+        })
+
+        test('restricts attributes to the backend-approved element types', () => {
+            const { container } = render(
+                renderDescription(
+                    '<span href="https://example.com" src="/image.png" alt="Unexpected" dir="rtl">Text</span>' +
+                        '<bdo dir="rtl">Direction</bdo><a href="/help" hreflang="en">Help</a>' +
+                        '<img src="/image.png" alt="Example" align="left">' +
+                        '<table border="1" cellpadding="2" bgcolor="#ffffff"><tbody><tr align="left">' +
+                        '<td colspan="2" scope="row">Value</td></tr></tbody></table>',
+                    contentType
+                )
+            )
+            const body = container.querySelector(selector)!
+            expect(body.querySelector('span')!.attributes).toHaveLength(0)
+            expect(body.querySelector('bdo')!.getAttribute('dir')).toBe('rtl')
+            expect(body.querySelector('a')!.getAttribute('hreflang')).toBe('en')
+            expect(body.querySelector('img')!.getAttribute('alt')).toBe('Example')
+            expect(body.querySelector('img')!.getAttribute('align')).toBe('left')
+            expect(body.querySelector('table')!.getAttribute('cellpadding')).toBe('2')
+            expect(body.querySelector('td')!.getAttribute('colspan')).toBe('2')
         })
     })
 

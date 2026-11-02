@@ -309,7 +309,11 @@ test.describe('surveys - customization', () => {
     })
 
     test('opens sanitized description links in a new tab without an opener', async ({ page, context }) => {
-        await context.route('https://example.com/help', (route) => route.fulfill({ body: 'Help' }))
+        let referrer: string | undefined
+        await context.route('https://example.com/help', (route) => {
+            referrer = route.request().headers()['referer']
+            return route.fulfill({ body: 'Help' })
+        })
         await page.route('**/surveys/**', (route) =>
             route.fulfill({
                 json: {
@@ -331,14 +335,21 @@ test.describe('surveys - customization', () => {
                 },
             })
         )
-        await start(startOptions, page, context)
+        await start({ ...startOptions, url: '/playground/cypress/index.html' }, page, context)
+        await page.evaluate(() => {
+            const meta = document.createElement('meta')
+            meta.name = 'referrer'
+            meta.content = 'origin'
+            document.head.appendChild(meta)
+        })
         const originalUrl = page.url()
         const link = page.locator('.PostHogSurvey-123 .survey-question-description a')
         await expect(link).toHaveAttribute('target', '_blank')
-        await expect(link).toHaveAttribute('rel', 'noopener noreferrer')
 
         const [popup] = await Promise.all([context.waitForEvent('page'), link.click()])
         await popup.waitForLoadState()
+        expect(referrer).toBe(`${new URL(originalUrl).origin}/`)
+        await expect(link).toHaveAttribute('rel', 'noopener')
         expect(await popup.evaluate(() => window.opener)).toBeNull()
         await expect(page).toHaveURL(originalUrl)
         await expect(page.locator('.PostHogSurvey-123 .survey-form')).toBeVisible()
@@ -363,7 +374,9 @@ test.describe('surveys - customization', () => {
                                         '<form action="https://evil.example/c"><input type="password">' +
                                         '<button>Send</button><textarea>Secret</textarea>' +
                                         '<select><option>Choice</option></select></form>' +
-                                        '<span style="color: red">Styled text</span>',
+                                        '<video controls src="/video.mp4"></video>' +
+                                        '<span id="survey-host" name="surveyHost" class="host-style" data-secret="value" ' +
+                                        'aria-label="Host" style="color: red">Styled text</span>',
                                     descriptionContentType: 'html',
                                 },
                             ],
@@ -387,7 +400,11 @@ test.describe('surveys - customization', () => {
         await expect(page.locator('body')).not.toHaveCSS('display', 'none')
         const description = page.locator('#survey .survey-question-description')
         await expect(description).toBeVisible()
-        await expect(description.locator('style, form, input, button, textarea, select')).toHaveCount(0)
+        await expect(
+            description.locator(
+                'style, form, input, button, textarea, select, video, [id], [name], [class], [data-secret], [aria-label]'
+            )
+        ).toHaveCount(0)
         await expect(description.locator('p')).toHaveText('Rate us')
         await expect(description.locator('span')).toHaveCSS('color', 'rgb(255, 0, 0)')
         await expect(page.locator('#survey .survey-form textarea')).toBeVisible()
