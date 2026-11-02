@@ -518,6 +518,130 @@ describe('Web Experimentation', () => {
             }
         )
 
+        it.each([
+            ['_blank', '', 'noopener'],
+            ['_BLANK', 'noreferrer nofollow', 'noreferrer nofollow noopener'],
+            ['_blank', 'opener NOOPENER sponsored', 'sponsored noopener'],
+        ])('preserves new-tab links with target=%s and rel=%s', (target, rel, expectedRel) => {
+            const element = createTestDocument()
+            setRemoteTransform(`<a href="https://example.com/signup" target="${target}" rel="${rel}">Join</a>`)
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            const link = element.querySelector('a')!
+            expect(link.getAttribute('href')).toEqual('https://example.com/signup')
+            expect(link.getAttribute('target')).toEqual(target)
+            expect(link.getAttribute('rel')).toEqual(expectedRel)
+        })
+
+        it('preserves new-tab links inside templates and MathML text targets without allowing active URLs', () => {
+            document.body.innerHTML =
+                '<template id="set-user-properties"></template><math><mtext id="set-user-properties"></mtext></math>'
+            setRemoteTransform('<a href="java&#x09;script:alert(1)" target="_blank" rel="opener">Join</a>')
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            const templateLink = document.querySelector('template')!.content.querySelector('a')!
+            const mathLink = document.querySelector('mtext a')!
+            for (const link of [templateLink, mathLink]) {
+                expect(link.hasAttribute('href')).toBe(false)
+                expect(link.getAttribute('target')).toEqual('_blank')
+                expect(link.getAttribute('rel')).toEqual('noopener')
+            }
+        })
+
+        it.each(['_top', 'named-window', '_parent'])('does not widen link targets to %s', (target) => {
+            const element = createTestDocument()
+            setRemoteTransform(`<a href="https://example.com" target="${target}">Join</a>`)
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(element.querySelector('a')!.hasAttribute('target')).toBe(false)
+        })
+
+        it.each(['button', 'input', 'select', 'textarea', 'fieldset', 'output'])(
+            'preserves external form association for %s controls',
+            (tag) => {
+                const form = document.createElement('form')
+                form.id = 'checkout'
+                document.body.appendChild(form)
+                const element = createTestDocument()
+                setRemoteTransform(`<${tag} id="experiment-control" form="checkout"></${tag}>`)
+
+                simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+                const control = element.querySelector(tag)!
+                expect(control.getAttribute('form')).toEqual('checkout')
+                expect(form.elements.namedItem('experiment-control')).toBe(control)
+            }
+        )
+
+        it('preserves external form IDs containing a colon as literal IDs', () => {
+            const form = document.createElement('form')
+            form.id = 'checkout:cart'
+            document.body.appendChild(form)
+            const element = createTestDocument()
+            setRemoteTransform('<button id="experiment-control" form="checkout:cart">Buy</button>')
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(form.elements.namedItem('experiment-control')).toBe(element.querySelector('button'))
+        })
+
+        it('does not allow new target attributes on SVG links or buttons', () => {
+            const element = createTestDocument()
+            setRemoteTransform(
+                '<svg><a href="https://example.com" target="_blank"><text>Link</text></a></svg>' +
+                    '<button target="_blank">Buy</button>'
+            )
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(element.querySelector('svg a')).not.toBeNull()
+            expect(element.querySelector('button')).not.toBeNull()
+            expect(element.querySelectorAll('[target]')).toHaveLength(0)
+        })
+
+        it('preserves form association without enabling handlers, form overrides or DOM clobbering', () => {
+            const form = document.createElement('form')
+            form.id = 'checkout'
+            document.body.appendChild(form)
+            const element = createTestDocument()
+            setRemoteTransform(
+                '<button id="experiment-control" form="checkout" formaction="javascript:alert(1)" ' +
+                    'formtarget="_blank" onclick="alert(1)">Buy</button>' +
+                    '<input form="checkout" name="submit"><div form="checkout">Other</div>'
+            )
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            const button = element.querySelector('button')!
+            expect(form.elements.namedItem('experiment-control')).toBe(button)
+            for (const attribute of ['onclick', 'formaction', 'formtarget'])
+                expect(button.hasAttribute(attribute)).toBe(false)
+            expect(element.querySelector('input')!.hasAttribute('name')).toBe(false)
+            expect(element.querySelector('div')!.hasAttribute('form')).toBe(false)
+            expect(typeof form.submit).toEqual('function')
+        })
+
+        it.each([
+            ['SVG use', '<svg><use href="#icon"></use></svg>', '<svg></svg>'],
+            ['custom elements', '<experiment-button>Buy</experiment-button>', 'Buy'],
+            [
+                'framework attributes',
+                '<button hx-get="/buy" hx-target="#cart" x-show="open">Buy</button>',
+                '<button>Buy</button>',
+            ],
+            ['stylesheet links', '<link rel="stylesheet" href="/theme.css"><b>Sale</b>', '<b>Sale</b>'],
+        ])('continues to remove %s pending a separate compatibility policy', (_name, html, expected) => {
+            const element = createTestDocument()
+            setRemoteTransform(html)
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(element.innerHTML).toEqual(expected)
+        })
+
         it('preserves safe markup, attributes, links and CSS transformations', () => {
             const html =
                 '<h2 class="offer" style="color: blue">Hello <strong>world</strong></h2>' +

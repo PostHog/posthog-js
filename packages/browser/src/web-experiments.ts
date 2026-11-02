@@ -19,6 +19,13 @@ import { getCampaignParams } from '@posthog/browser-common/utils/event-utils'
 import { Extension } from './extensions/types'
 
 const BOT_REFUSE_MSG = 'Refusing to render web experiment since the viewer is a likely bot'
+const EXPERIMENT_HTML_CONFIG = {
+    ADD_ATTR: (attribute: string, tag: string) =>
+        (attribute === 'target' && tag === 'a') ||
+        (attribute === 'form' && /^(button|fieldset|input|output|select|textarea)$/.test(tag)),
+    // Form associations are literal element IDs, not URLs.
+    ADD_URI_SAFE_ATTR: ['form'],
+}
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -249,6 +256,33 @@ export class WebExperiments implements Extension {
         logger.info(`[WebExperiments] ${msg}`, args)
     }
 
+    private static _sanitizeLinkTargets(context: Element) {
+        const root =
+            context.namespaceURI === 'http://www.w3.org/1999/xhtml' && context.localName === 'template'
+                ? (context as HTMLTemplateElement).content
+                : context
+        root.querySelectorAll('a[target], template').forEach((element) => {
+            if (element.localName === 'template') {
+                if (element.namespaceURI === 'http://www.w3.org/1999/xhtml') {
+                    WebExperiments._sanitizeLinkTargets(element)
+                }
+                return
+            }
+            if (
+                element.namespaceURI !== 'http://www.w3.org/1999/xhtml' ||
+                element.getAttribute('target')?.toLowerCase() !== '_blank'
+            ) {
+                element.removeAttribute('target')
+                return
+            }
+            const rel = (element.getAttribute('rel') || '')
+                .split(/\s+/)
+                .filter((token) => token && !/^(opener|noopener)$/i.test(token))
+            rel.push('noopener')
+            element.setAttribute('rel', rel.join(' '))
+        })
+    }
+
     private _applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
         if (this._is_bot()) {
             WebExperiments._logInfo(BOT_REFUSE_MSG)
@@ -298,7 +332,11 @@ export class WebExperiments implements Extension {
                             ) {
                                 // Keep the integration-point parent so both HTML and MathML children retain their namespaces.
                                 context.appendChild(fragment)
-                                DOMPurify.sanitize(context, { NAMESPACE: namespace || undefined, IN_PLACE: true })
+                                DOMPurify.sanitize(context, {
+                                    ...EXPERIMENT_HTML_CONFIG,
+                                    NAMESPACE: namespace || undefined,
+                                    IN_PLACE: true,
+                                })
                             } else {
                                 const container =
                                     context.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
@@ -307,11 +345,13 @@ export class WebExperiments implements Extension {
                                         : context
                                 container.appendChild(
                                     DOMPurify.sanitize(fragment, {
+                                        ...EXPERIMENT_HTML_CONFIG,
                                         NAMESPACE: namespace || undefined,
                                         RETURN_DOM_FRAGMENT: true,
                                     })
                                 )
                             }
+                            WebExperiments._sanitizeLinkTargets(context)
                             html = context.innerHTML
                             sanitizedHtml.set(contextKey, html)
                         }

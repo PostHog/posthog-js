@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Sanitize web experiment HTML transforms to remove executable content while preserving safe markup.
+Sanitize web experiment HTML transforms; unsupported tags and attributes are now removed.
