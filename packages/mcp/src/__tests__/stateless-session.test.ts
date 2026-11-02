@@ -1,5 +1,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import {
+  CallToolRequestSchema,
+  LATEST_PROTOCOL_VERSION,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
 import { decodeSessionId } from '../extensions/session-token'
@@ -324,6 +328,60 @@ describe('Stateless session minting', () => {
 
       expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(0)
       expect(eventCapture.findCapturesByEvent('$mcp_tool_call')[0].distinct_id).toBe('user_mock')
+    })
+  })
+
+  describe('sendInitializeEvent: false', () => {
+    const OFF: MCPAnalyticsOptions = { sendInitializeEvent: false }
+    const callTool = { method: 'tools/call', params: { name: 'get_plan', arguments: {} } }
+
+    it('sends no $mcp_initialize but still mints the token another pod resolves', async () => {
+      const podA = createPod('pod-off-a', OFF)
+      const transportA: { sessionId?: string } = {}
+      setFakeTransport(podA.server, transportA)
+      await invokeHandler(podA.lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+
+      const decoded = decodeSessionId(transportA.sessionId)
+      expect(decoded).not.toBeNull()
+      expect(eventCapture.findCapturesByEvent('$mcp_initialize')).toHaveLength(0)
+
+      const podB = createPod('pod-off-b', OFF)
+      await invokeHandler(podB.lowLevel, 'tools/call', callTool, {
+        requestInfo: { headers: { 'mcp-session-id': transportA.sessionId } },
+      })
+
+      const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+      expect(toolCalls).toHaveLength(1)
+      expect(toolCalls[0].properties.$session_id).toBe(decoded?.sessionId)
+      expect(toolCalls[0].properties.$mcp_client_name).toBe('Claude')
+      expect(toolCalls[0].properties.$mcp_client_version).toBe('1.2.3')
+      expect(toolCalls[0].properties.$mcp_protocol_version).toBe('2025-06-18')
+    })
+
+    it('still re-mints the token with the negotiated version after a downgrade', async () => {
+      const podA = createPod('pod-off-downgrade', OFF)
+      const transportA: { sessionId?: string } = {}
+      setFakeTransport(podA.server, transportA)
+      await invokeHandler(
+        podA.lowLevel,
+        'initialize',
+        { method: 'initialize', params: { ...INITIALIZE_REQUEST.params, protocolVersion: '1999-01-01' } },
+        { requestInfo: { headers: {} } }
+      )
+
+      expect(decodeSessionId(transportA.sessionId)?.protocolVersion).toBe(LATEST_PROTOCOL_VERSION)
+      expect(eventCapture.findCapturesByEvent('$mcp_initialize')).toHaveLength(0)
+    })
+
+    it('still stamps the negotiated version on same-pod tool calls', async () => {
+      const { server, lowLevel } = createPod('pod-off-persist', OFF)
+      setFakeTransport(server, {})
+      await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+      await invokeHandler(lowLevel, 'tools/call', callTool)
+
+      const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+      expect(toolCalls).toHaveLength(1)
+      expect(toolCalls[0].properties.$mcp_protocol_version).toBe('2025-06-18')
     })
   })
 })

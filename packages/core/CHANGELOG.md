@@ -1,5 +1,33 @@
 # @posthog/core
 
+## 1.62.0
+
+### Minor Changes
+
+- [#5418](https://github.com/PostHog/posthog-js/pull/5418) [`c705824`](https://github.com/PostHog/posthog-js/commit/c705824357b00a1187302224a58f478d1f652a54) Thanks [@mayteio](https://github.com/mayteio)! - `parseRetryAfterMs` takes an optional cap, so a caller can read a `Retry-After` longer than five minutes.
+  (2026-10-30)
+
+## 1.61.2
+
+### Patch Changes
+
+- [#5252](https://github.com/PostHog/posthog-js/pull/5252) [`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a) Thanks [@andehen](https://github.com/andehen)! - Document that `sendFeatureFlagEvent` is also the default for posthog-node `evaluateFlags()` snapshot reads.
+  (2026-10-28)
+
+## 1.61.1
+
+### Patch Changes
+
+- [#5431](https://github.com/PostHog/posthog-js/pull/5431) [`96d7ff2`](https://github.com/PostHog/posthog-js/commit/96d7ff2e394126e2bd03a2422f60b5892a85d87f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Deprecate `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` in favor of `getAllFeatureFlags()`, `onFeatureFlag()` in favor of `onFeatureFlags()`, the `cb` option of `reloadFeatureFlags()` in favor of `reloadFeatureFlagsAsync()`, and `overrideFeatureFlag()` in favor of `updateFlags()`. In React Native, also deprecate the `useFeatureFlagWithPayload()` hook in favor of `useFeatureFlagResult()`. They continue to work.
+  (2026-10-27)
+
+## 1.61.0
+
+### Minor Changes
+
+- [#5436](https://github.com/PostHog/posthog-js/pull/5436) [`43ad061`](https://github.com/PostHog/posthog-js/commit/43ad061185c7f8b0a36ed87bb6a28214d4224e9d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add the `projectToken` prop to `PostHogProvider` and the `projectToken` property to the client, and deprecate the `apiKey` prop and property in favor of them. `apiKey` keeps working, and `projectToken` wins when both are set.
+  (2026-10-26)
+
 ## 1.60.1
 
 ### Patch Changes

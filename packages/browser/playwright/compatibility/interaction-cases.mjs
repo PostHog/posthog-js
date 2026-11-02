@@ -10,7 +10,7 @@ export const heatmapPoints = (network) =>
         .filter((event) => event.event === '$$heatmap')
         .flatMap((event) => Object.values(event.properties.$heatmap_data ?? {}).flat())
 
-export function assertInteractionProof(scenario, network, ui) {
+export function assertInteractionProof(scenario, network, ui, comparison) {
     const events = network.events
     const auto = events.filter((event) => event.event === '$autocapture')
     if (scenario === 'forms') {
@@ -25,6 +25,21 @@ export function assertInteractionProof(scenario, network, ui) {
                 auto.filter((event) => event.properties.$event_type === 'change' && target(event, id)).length,
                 1,
                 `Missing or duplicate ${id} change autocapture`
+            )
+        const changes = auto.filter((event) => event.properties.$event_type === 'change')
+        const category = changes.find((event) => target(event, 'category'))
+        const plan = changes.find((event) => target(event, 'plan'))
+        assert(['current', 'historical'].includes(comparison), 'Unknown form core family')
+        assert.equal(
+            category.properties.$input_value,
+            comparison === 'current' ? 'widgets' : undefined,
+            'Incorrect opted-in form value for the deployed core'
+        )
+        assert.equal(plan.properties.$input_value, undefined, 'Unannotated control captured a value')
+        for (const key of ['$elements', '$elements_chain'])
+            assert(
+                !JSON.stringify(category.properties[key] ?? null).includes('widgets'),
+                'Opted-in value appeared in the element hierarchy'
             )
         assert(!JSON.stringify(auto).includes('form-secret-password'), 'Password appeared in form autocapture')
         assert(!JSON.stringify(auto).includes('form-private-value'), 'Private input appeared in form autocapture')
@@ -118,7 +133,7 @@ export function assertInteractionProof(scenario, network, ui) {
     }
 }
 
-export async function exerciseInteractions({ scenario, page, received, expect, origin }) {
+export async function exerciseInteractions({ scenario, page, received, expect, origin, comparison }) {
     const ui = {}
     const advance = (milliseconds) => page.clock.runFor(milliseconds)
     const waitEvent = (predicate) => expect.poll(async () => (await received()).events.some(predicate)).toBe(true)
@@ -233,6 +248,6 @@ export async function exerciseInteractions({ scenario, page, received, expect, o
         ui.disabledDeliveryCount = heatmapPoints(await received()).length - before
     }
     await advance(20)
-    assertInteractionProof(scenario, await received(), ui)
+    assertInteractionProof(scenario, await received(), ui, comparison)
     return ui
 }

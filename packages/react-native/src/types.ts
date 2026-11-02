@@ -252,7 +252,7 @@ export type PostHogSessionReplayConfig = {
    * Does not enable session replay or change compression quality or color mode.
    *
    * @experimental
-   * @default 1.0
+   * @default undefined, which uses the native default: one pixel per dp with posthog-android 3.74.0 or later, native resolution with older versions.
    */
   screenshotScale?: number
   /**

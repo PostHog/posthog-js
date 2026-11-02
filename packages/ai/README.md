@@ -148,6 +148,14 @@ repeated iteration starts again at the same revision. Keep the client open until
 Use the snapshot's `revisionId` for the experiment, even when individual items were introduced
 in earlier revisions. Source output and trace provenance never become a new execution's output.
 
+Set `modelVersion` on `new EvaluationItem({ modelVersion, output })` or
+`EvaluationItem.fromDatasetItem(row, { modelVersion, output })` to identify the model used for
+that execution. Each item can override the experiment's `modelVersion`; omitted or null values
+inherit the experiment default on the server. Dataset metadata never supplies this model.
+Model identifiers must be nonempty strings of at most 255 characters and are preserved without
+trimming. Explicit models survive serialization, retries, and recovery. Changing a model requires
+a new item UUID because model attribution is part of the immutable execution declaration.
+
 `scorers` provides create/get/list/update/createVersion/getVersion/listVersions. Configurations
 are typed by `kind`: `boolean`, `numeric`, or `categorical`. Store `currentVersionId` to pin a
 configuration. Metadata updates do not create versions; explicit `createVersion` does, including

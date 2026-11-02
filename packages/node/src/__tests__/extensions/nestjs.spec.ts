@@ -52,6 +52,10 @@ const createMockCallHandler = (error?: Error) => ({
   handle: () => (error ? throwError(() => error) : of(undefined)),
 })
 
+const COOKIE_IDS = { sessionId: 'cookie-session', distinctId: 'user-from-cookie' }
+const NO_IDS = { sessionId: undefined, distinctId: undefined }
+const BOTH_TRACING_HEADERS = { 'x-posthog-session-id': 'header-session', 'x-posthog-distinct-id': 'header-user' }
+
 const createPostHog = (options: Record<string, any> = {}): PostHog =>
   new PostHog('TEST_API_KEY', {
     host: 'http://example.com',
@@ -108,6 +112,63 @@ describe('PostHogInterceptor', () => {
       expect(capturedContext.properties.$request_path).toBe('/api/test')
       expect(capturedContext.properties.$user_agent).toBe('TestAgent/1.0')
       expect(capturedContext.properties.$ip).toBe('192.168.1.1')
+    })
+
+    it.each([
+      {
+        name: 'reads the posthog-js cookie when readPostHogCookie is on',
+        readPostHogCookie: true,
+        expected: COOKIE_IDS,
+      },
+      { name: 'ignores the posthog-js cookie by default', readPostHogCookie: undefined, expected: NO_IDS },
+      {
+        name: 'reads the cookie, not the tracing headers, when captureTracingHeaders is false',
+        readPostHogCookie: true,
+        captureTracingHeaders: false,
+        tracingHeaders: BOTH_TRACING_HEADERS,
+        expected: COOKIE_IDS,
+      },
+      {
+        name: 'reads neither the tracing headers nor the cookie when both are off',
+        readPostHogCookie: undefined,
+        captureTracingHeaders: false,
+        tracingHeaders: BOTH_TRACING_HEADERS,
+        expected: NO_IDS,
+      },
+      {
+        name: 'uses only the tracing headers when a request has one, never the cookie',
+        readPostHogCookie: true,
+        tracingHeaders: { 'x-posthog-session-id': 'header-session' },
+        expected: { sessionId: 'header-session', distinctId: undefined },
+      },
+    ])('should $name', async ({ readPostHogCookie, captureTracingHeaders, tracingHeaders, expected }) => {
+      await posthog.shutdown()
+      posthog = createPostHog({ readPostHogCookie, captureTracingHeaders })
+      const interceptor = new PostHogInterceptor(posthog)
+      const now = Date.now()
+      const cookieValue = encodeURIComponent(
+        JSON.stringify({
+          distinct_id: 'user-from-cookie',
+          $user_state: 'identified',
+          $sesid: [now, 'cookie-session', now],
+        })
+      )
+      const context = createMockContext({
+        headers: { ...tracingHeaders, cookie: `ph_TEST_API_KEY_posthog=${cookieValue}` },
+      })
+
+      let capturedContext: any
+      const handler = {
+        handle: () => {
+          capturedContext = posthog.getContext()
+          return of({ success: true })
+        },
+      }
+
+      await lastValueFrom(interceptor.intercept(context, handler))
+
+      expect(capturedContext.sessionId).toBe(expected.sessionId)
+      expect(capturedContext.distinctId).toBe(expected.distinctId)
     })
 
     it.each([

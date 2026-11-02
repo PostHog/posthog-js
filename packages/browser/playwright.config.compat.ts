@@ -42,6 +42,7 @@ export default defineConfig({
                 '**/session-recording-fetch-sync-config.spec.ts',
                 '**/session-recording-fetch-rejection-stack.spec.ts',
                 '**/session-recording-fetch-compat.spec.ts',
+                '**/static-loader.spec.ts',
             ],
             use: {
                 ...devices['Desktop Chrome'],

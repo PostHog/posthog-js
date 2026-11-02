@@ -1,5 +1,26 @@
 # posthog-ai
 
+## 8.17.2
+
+### Patch Changes
+
+- [#5439](https://github.com/PostHog/posthog-js/pull/5439) [`a22cbec`](https://github.com/PostHog/posthog-js/commit/a22cbecd47f5a727747e1113c5c0be992cbeda1d) Thanks [@posthog](https://github.com/apps/posthog)! - Fix `@posthog/ai/otel` so that it loads with OpenTelemetry JS 3.x, which has no `@opentelemetry/sdk-trace-base`.
+  (2026-10-29)
+
+## 8.17.1
+
+### Patch Changes
+
+- [#5478](https://github.com/PostHog/posthog-js/pull/5478) [`aa4ed5d`](https://github.com/PostHog/posthog-js/commit/aa4ed5deb82510af1b684988e4fe83739f02b7c2) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture an `$ai_generation` error event when an OpenAI, Azure OpenAI or Anthropic call with `stream: true` fails before the stream opens (for example a 401, 429 or invalid model). Before, only the non-streaming call captured those errors.
+  (2026-10-29)
+
+## 8.17.0
+
+### Minor Changes
+
+- [#5438](https://github.com/PostHog/posthog-js/pull/5438) [`acdbdd2`](https://github.com/PostHog/posthog-js/commit/acdbdd2123cb379fae9f0615ee0e9ef627fbe8f9) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add per-item model attribution to offline evaluations and dataset execution conversion.
+  (2026-10-26)
+
 ## 8.16.3
 
 ### Patch Changes

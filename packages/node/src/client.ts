@@ -82,6 +82,10 @@ import { canonicalizeUuid, eventUuidv7 } from './capture-v1/uuid'
 import { readEventOptions } from './capture-v1/transform'
 import { fillOptions, fillProperties, isUnsetProperty, snapshotLayer } from './event-defaults'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
+import { notifyContextListeners } from './extensions/context/listeners'
+import { getEventContext } from './extensions/context/event-context'
+import { DEFAULT_EMAIL_REQUEST_MAX_RETRIES, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS, EmailSender } from './emails/emails'
+import type { Emails } from './emails/types'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -313,6 +317,14 @@ function presentDistinctId(value: unknown): string | undefined {
   return typeof value === 'string' ? value : String(value)
 }
 
+function positiveNumberOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+function nonNegativeIntegerOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback
+}
+
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
   const propertyNames = Array.isArray(value) ? value : [value]
   return propertyNames.filter(
@@ -357,6 +369,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   // Created on first use, so a client that never calls captureAi has no AI lane.
   private readonly _captureLanes = new Map<CaptureEndpoint, CaptureLane>()
   private readonly _captureSettings: CaptureSettings
+  private _emails?: EmailSender
+  private _isShutdown = false
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
   /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
@@ -621,6 +635,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * It does not reject when delivery fails: those failures arrive on the `'error'` event.
    */
   override async flush(): Promise<void> {
+    // An app's crash handler often flushes and exits before the end of the turn, when autocapture would capture.
+    this.errorTracking.capturePendingExceptions()
     return this._keepRuntimeAlive(this._flushEventsAndSpans())
   }
 
@@ -925,6 +941,58 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
     }
     return this._metrics
+  }
+
+  /**
+   * The `posthog.emails` API: sends transactional email from PostHog email templates, and reads
+   * the status of each email it sent.
+   *
+   * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope. A key with only
+   * `hog_flow:read` can read statuses but not send. Requests go to `appHost`, or to the PostHog
+   * Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and do not reject.
+   * `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
+   * and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
+   * returns the error `client_closed`.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { secretKey: 'phs_...', host: 'https://eu.i.posthog.com' })
+   * const { data, error } = await client.emails.send({
+   *   to: 'user@example.com',
+   *   templateId: '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b',
+   *   templateData: { name: 'Ada' },
+   *   distinctId: 'user_123',
+   *   idempotencyKey: 'welcome:user_123',
+   * })
+   * if (error) {
+   *   console.error(error.code, error.message)
+   * }
+   *
+   * const status = await client.emails.get(data.id) // later, for example from a job
+   * ```
+   *
+   * {@label Emails}
+   */
+  public get emails(): Emails {
+    if (!this._emails) {
+      this._emails = new EmailSender(
+        {
+          secretKey: this.options.personalApiKey,
+          host: this.host,
+          appHost: this.options.appHost,
+          requestTimeoutMs: positiveNumberOr(this.options.emailRequestTimeoutMs, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS),
+          maxRetries: nonNegativeIntegerOr(this.options.emailRequestMaxRetries, DEFAULT_EMAIL_REQUEST_MAX_RETRIES),
+        },
+        {
+          fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
+          isDisabled: () => this.disabled,
+          isClosed: () => this._isShutdown,
+          logger: this._logger,
+          userAgent: this.getCustomUserAgent() || undefined,
+        }
+      )
+    }
+    return this._emails
   }
 
   /**
@@ -2086,7 +2154,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     )
     const result = await this._getFeatureFlagResult(key, distinctId, {
       ...options,
-      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+      sendFeatureFlagEvents: this._resolveSendFeatureFlagEvents(options?.sendFeatureFlagEvents),
     })
     if (result === undefined) {
       return undefined
@@ -2238,7 +2306,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     return this._getFeatureFlagResult(key, resolvedDistinctId, {
       ...resolvedOptions,
-      sendFeatureFlagEvents: resolvedOptions?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+      sendFeatureFlagEvents: this._resolveSendFeatureFlagEvents(resolvedOptions?.sendFeatureFlagEvents),
     })
   }
 
@@ -2348,7 +2416,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Bypass the public `getFeatureFlag` so the user only sees one deprecation warning per call.
     const result = await this._getFeatureFlagResult(key, distinctId, {
       ...options,
-      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+      sendFeatureFlagEvents: this._resolveSendFeatureFlagEvents(options?.sendFeatureFlagEvents),
     })
     if (result === undefined) {
       return undefined
@@ -2558,6 +2626,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * Locally resolved values remain authoritative when remote results are merged. In particular,
    * a cached inactive definition is a conclusive `false` result locally, while remote evaluation
    * omits globally inactive flags and therefore leaves those keys absent.
+   *
+   * **Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the
+   * first time each flag value is read for a user. Experiments use these events as exposures.
+   * The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass
+   * `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override
+   * it, so one snapshot can serve both experiment flags and flags that should send no events.
+   * `getFlagPayload()` never sends events.
    *
    * **Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying
    * `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation
@@ -2880,12 +2955,22 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     })
   }
 
+  /**
+   * Whether a flag read sends `$feature_flag_called`: the per-call option wins, then the
+   * client's `sendFeatureFlagEvent` option, then `true`. Shared by the single-flag getters
+   * and `FeatureFlagEvaluations.isEnabled() / getFlag()`.
+   */
+  private _resolveSendFeatureFlagEvents(perCall?: boolean): boolean {
+    return perCall ?? this.options.sendFeatureFlagEvent ?? true
+  }
+
   private _featureFlagEvaluationsHost?: FeatureFlagEvaluationsHost
 
   private _getFeatureFlagEvaluationsHost(): FeatureFlagEvaluationsHost {
     if (!this._featureFlagEvaluationsHost) {
       this._featureFlagEvaluationsHost = {
         captureFlagCalledEventIfNeeded: (params) => this._captureFlagCalledEventIfNeeded(params),
+        resolveSendFeatureFlagEvents: (perRead) => this._resolveSendFeatureFlagEvents(perRead),
         logWarning: (message) => {
           if (this.options.featureFlagsLogWarnings !== false) {
             // These warnings guide API usage (misuse of `onlyAccessed()` / `only()`) and
@@ -3242,7 +3327,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return fn()
     }
 
-    return this.context.run(data, fn, options)
+    return this.context.run(
+      data,
+      () => {
+        notifyContextListeners(this)
+        return fn()
+      },
+      options
+    )
   }
 
   /**
@@ -3281,6 +3373,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   enterContext(data: Partial<ContextData>, options?: ContextOptions): void {
     this.context?.enter(data as ContextData, options)
+    notifyContextListeners(this)
   }
 
   /**
@@ -3308,6 +3401,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // super._shutdown spend from the same budget, so shutdown(500) can't take
     // ~1000ms by giving each phase a fresh full timeout.
     const shutdownDeadlineMs = Date.now() + (shutdownTimeoutMs ?? 30000)
+    this._isShutdown = true
+    // Sends that started before shutdown keep running alongside the flushes below, within the same budget.
+    const emailsDrained = this._emails?.drain()
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
@@ -3337,18 +3433,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       )
       this._traces.reset()
     }
+    const remainingMs = Math.max(0, shutdownDeadlineMs - Date.now())
+    // Wait for the email sends next to the core flush, not before it, so a slow send can't use up the budget for events.
+    const emailsSettled = emailsDrained ? raceWithTimeout(emailsDrained, remainingMs) : undefined
     try {
       // The core shutdown waits for pending captures to land on their lanes; the lanes drain meanwhile,
       // then once more for whatever those captures added.
-      await Promise.all([
-        super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now())),
-        this._drainCaptureLanes(shutdownDeadlineMs),
-      ])
+      await Promise.all([super._shutdown(remainingMs), this._drainCaptureLanes(shutdownDeadlineMs)])
       await this._drainCaptureLanes(shutdownDeadlineMs)
     } finally {
       for (const lane of this._captureLanes.values()) {
         lane.finishShutdown()
       }
+      await emailsSettled
       this._distinctIdHasSentFlagCalls.clear()
       resolve?.()
     }
@@ -3578,7 +3675,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   captureException(error: unknown, options?: CaptureExceptionOptions): void
   captureException(error: unknown, options?: unknown, ...legacyArgs: unknown[]): void {
     const exceptionOptions = readCaptureExceptionArgs('captureException', options, legacyArgs, true)
-    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+    if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
         this._buildExceptionEvent(error, syntheticException, exceptionOptions).then((msg) =>
@@ -3629,7 +3726,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   captureExceptionImmediate(error: unknown, options?: CaptureExceptionOptions): Promise<void>
   async captureExceptionImmediate(error: unknown, options?: unknown, ...legacyArgs: unknown[]): Promise<void> {
     const exceptionOptions = readCaptureExceptionArgs('captureExceptionImmediate', options, legacyArgs, false)
-    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+    if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       return this.addPendingPromise(
         this._buildExceptionEvent(error, syntheticException, exceptionOptions).then((msg) => this.captureImmediate(msg))
@@ -3648,7 +3745,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       { syntheticException },
       distinctId,
       properties,
-      level
+      level,
+      this.getContext()
     )
     return { ...msg, options, uuid, flags }
   }
@@ -3703,7 +3801,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const callOptions = readEventOptions(props.options)
 
     // Read every layer now, before the first await, so later changes never reach this event.
-    const contextData = this.context?.get()
+    const contextData = getEventContext(props, this.context?.get())
     const contextProperties = snapshotLayer(contextData?.properties)
     const contextOptions = snapshotLayer(contextData?.options)
     const globalProperties = snapshotLayer(this.props)

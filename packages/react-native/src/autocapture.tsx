@@ -81,11 +81,16 @@ const maxOwnerAncestors = 100
 let warnedCaptureFailure = false
 
 // react-dom (RN Web) events have no _targetInst; the fiber sits on e.target under a randomised
-// __reactFiber$ key. The clicked node may be a non-React node inside a React subtree, so walk up.
+// __reactFiber$ key. Fabric host instances (RN new architecture) have no such key either, but expose
+// the fiber as __internalInstanceHandle. The clicked node may be a non-React node inside a React
+// subtree, so walk up.
 const getFallbackTargetInstance = (e: any): Element | undefined => {
   let node = e.target
 
   for (let depth = 0; node && typeof node === 'object' && depth < maxFallbackAncestors; depth++) {
+    if (node.__internalInstanceHandle) {
+      return node.__internalInstanceHandle
+    }
     const key = Object.getOwnPropertyNames(node).find((name) => reactFiberKeyPattern.test(name))
     if (key) {
       return node[key]
