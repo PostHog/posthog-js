@@ -434,6 +434,52 @@ describe('Web Experimentation', () => {
             expect(element.firstElementChild?.namespaceURI).toEqual('http://www.w3.org/1999/xhtml')
         })
 
+        it.each([
+            ['<b>Sale</b>', '<b>Sale</b>'],
+            [
+                '<b onclick="alert(1)">Sale</b><script>alert(1)</script>' +
+                    '<template><img src="/missing" onerror="alert(1)"></template>',
+                '<b>Sale</b><template><img src="/missing"></template>',
+            ],
+        ])('preserves sanitized template content and reuses it: %s', (html, expected) => {
+            document.body.innerHTML = '<template id="set-user-properties">Original</template>'.repeat(2)
+            setRemoteTransform(html)
+            const sanitize = vi.spyOn(DOMPurify, 'sanitize')
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            const templates = document.querySelectorAll<HTMLTemplateElement>('#set-user-properties')
+            templates.forEach((template) => {
+                expect(template.innerHTML).toEqual(expected)
+                expect(template.content.firstElementChild?.localName).toEqual('b')
+                expect(template.childNodes).toHaveLength(0)
+            })
+            expect(sanitize).toHaveBeenCalledTimes(1)
+        })
+
+        it.each(['mtext', 'mi', 'mo', 'mn', 'ms'])(
+            'preserves sanitized HTML and MathML children in %s targets',
+            (tag) => {
+                document.body.innerHTML =
+                    `<math><${tag} id="set-user-properties">Original</${tag}>` +
+                    `<${tag} id="set-user-properties">Original</${tag}></math>`
+                setRemoteTransform(
+                    '<mglyph alt="Glyph"></mglyph><b onclick="alert(1)">Sale</b>' +
+                        '<a href="javascript:alert(1)">Buy</a><script>alert(1)</script>'
+                )
+                const sanitize = vi.spyOn(DOMPurify, 'sanitize')
+
+                simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+                document.querySelectorAll('#set-user-properties').forEach((element) => {
+                    expect(element.innerHTML).toEqual('<mglyph alt="Glyph"></mglyph><b>Sale</b><a>Buy</a>')
+                    expect(element.querySelector('mglyph')?.namespaceURI).toEqual('http://www.w3.org/1998/Math/MathML')
+                    expect(element.querySelector('b')?.namespaceURI).toEqual('http://www.w3.org/1999/xhtml')
+                })
+                expect(sanitize).toHaveBeenCalledTimes(1)
+            }
+        )
+
         it('keeps HTML and SVG sanitization results separate for a mixed selector', () => {
             document.body.innerHTML = '<div id="set-user-properties"></div><svg id="set-user-properties"></svg>'
             setRemoteTransform('<circle r="5"></circle>')

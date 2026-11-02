@@ -291,12 +291,27 @@ export class WebExperiments implements Extension {
                                 /^(foreignObject|desc|title)$/.test(element.localName)
                                     ? 'http://www.w3.org/1999/xhtml'
                                     : element.namespaceURI
-                            context.appendChild(
-                                DOMPurify.sanitize(range.createContextualFragment(transform.html), {
-                                    NAMESPACE: namespace || undefined,
-                                    RETURN_DOM_FRAGMENT: true,
-                                })
-                            )
+                            const fragment = range.createContextualFragment(transform.html)
+                            if (
+                                element.namespaceURI === 'http://www.w3.org/1998/Math/MathML' &&
+                                /^(mi|mo|mn|ms|mtext)$/.test(element.localName)
+                            ) {
+                                // Keep the integration-point parent so both HTML and MathML children retain their namespaces.
+                                context.appendChild(fragment)
+                                DOMPurify.sanitize(context, { NAMESPACE: namespace || undefined, IN_PLACE: true })
+                            } else {
+                                const container =
+                                    context.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
+                                    context.localName === 'template'
+                                        ? (context as HTMLTemplateElement).content
+                                        : context
+                                container.appendChild(
+                                    DOMPurify.sanitize(fragment, {
+                                        NAMESPACE: namespace || undefined,
+                                        RETURN_DOM_FRAGMENT: true,
+                                    })
+                                )
+                            }
                             html = context.innerHTML
                             sanitizedHtml.set(contextKey, html)
                         }
