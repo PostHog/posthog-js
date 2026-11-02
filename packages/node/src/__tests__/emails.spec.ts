@@ -460,6 +460,21 @@ describe('emails', () => {
     expect(batchCallsDuringBackoff).toBe(1)
   })
 
+  it.each([
+    ['a template send', {}],
+    [
+      'a local template send',
+      { templateId: undefined, templateKey: 'welcome', subject: 'Hi', html: '<p>Hi</p>', templateData: {} },
+    ],
+  ])('sends %s that started before shutdown', async (_name, overrides) => {
+    replies = [accepted()]
+
+    const pending = send(overrides)
+    await posthog.shutdown()
+
+    expect((await pending).data?.id).toBe('msg_1')
+  })
+
   it('sends nothing after shutdown and returns client_closed', async () => {
     await posthog.shutdown()
 
@@ -510,7 +525,6 @@ describe('emails', () => {
       ['a code send without a subject', { templateKey: 'welcome', html: '<p>Hi</p>' }, 'subject'],
       ['a code send without html or text', { templateKey: 'welcome', subject: 'Hi' }, 'html'],
       ['a code send with html that is not a string', { ...CODE_SEND, html: 1 }, 'html'],
-      ['template data on a code send', { ...CODE_SEND, templateData: { name: 'Jane' } }, 'templateData'],
       [
         "Resend's scheduledAt on the template form",
         { templateId: TEMPLATE_ID, scheduledAt: 'in 1 hour' },
@@ -539,12 +553,6 @@ describe('emails', () => {
         'Remove captureEngagement, or send content from your code with templateKey.',
       ],
       [
-        'template data on a code send',
-        { ...CODE_SEND, templateData: { name: 'Jane' } },
-        'A send with templateKey takes its content from your code.',
-        'Remove templateData, or send a template made in PostHog with templateId.',
-      ],
-      [
         'a field no form takes',
         { ...CODE_SEND, scheduledAt: 'in 1 hour' },
         undefined,
@@ -569,6 +577,146 @@ describe('emails', () => {
 
       expect(fetch).toHaveBeenCalledTimes(requests)
       expect(error?.code ?? null).toBe(requests ? null : 'invalid_form')
+    })
+  })
+
+  describe('a local template', () => {
+    const UPLOAD_URL = 'https://us.posthog.com/api/projects/@current/messaging_templates/by_key/welcome/'
+    const WELCOME_HASH = 'v1:e78af62206b6fdc0bd87d56d2a70555a9bb8d4a37617dcbb8a746f86f7db7a63'
+    const WELCOME = { templateKey: 'welcome', subject: 'Welcome, {{ variables.name }}', html: '<p>Hi</p>' }
+    const uploaded = (): Reply => ({ status: 201, body: { id: 'tpl_1', key: 'welcome', result: 'created' } })
+
+    const sendWelcome = async (overrides: Record<string, unknown> = {}): ReturnType<PostHog['emails']['send']> => {
+      const pending = posthog.emails.send({
+        to: 'user@example.com',
+        distinctId: 'user_123',
+        ...WELCOME,
+        templateData: { name: 'Jane' },
+        ...overrides,
+      } as SendEmailOptions)
+      await vi.runAllTimersAsync()
+      return pending
+    }
+
+    const requests = (): string[] => fetch.mock.calls.map(([url, options]) => `${options.method} ${url}`)
+    const bodies = (): unknown[] => fetch.mock.calls.map(([, options]) => JSON.parse(options.body))
+
+    it('sends a template PostHog holds by its key and content hash in one request', async () => {
+      replies = [accepted()]
+
+      const { data } = await sendWelcome({ from: 'Acme <hi@example.com>', replyTo: 'help@example.com' })
+
+      expect(data?.id).toBe('msg_1')
+      expect(requests()).toEqual([`POST ${SEND_URL}`])
+      expect(bodies()).toEqual([
+        {
+          template: { key: 'welcome', hash: WELCOME_HASH },
+          to: 'user@example.com',
+          message_data: { name: 'Jane' },
+          identifiers: { distinct_id: 'user_123' },
+          from: 'Acme <hi@example.com>',
+          reply_to: ['help@example.com'],
+          capture_engagement: true,
+        },
+      ])
+    })
+
+    it('uploads a template PostHog does not hold, then sends it again with the same idempotency key', async () => {
+      makeClient({ migratedFrom: 'resend' })
+      replies = [rejected(409, 'template_outdated'), uploaded(), accepted()]
+
+      const { data } = await sendWelcome()
+
+      expect(data?.id).toBe('msg_1')
+      expect(requests()).toEqual([`POST ${SEND_URL}`, `PUT ${UPLOAD_URL}`, `POST ${SEND_URL}`])
+      const [firstSend, upload, secondSend] = bodies()
+      expect(upload).toEqual({
+        name: 'welcome',
+        subject: WELCOME.subject,
+        html: WELCOME.html,
+        if_code_managed: true,
+        if_not_superseded: true,
+      })
+      expect(secondSend).toEqual(firstSend)
+      const [firstHeaders, uploadHeaders, secondHeaders] = fetch.mock.calls.map(([, options]) => options.headers)
+      expect(secondHeaders['Idempotency-Key']).toBe(firstHeaders['Idempotency-Key'])
+      expect(uploadHeaders).toMatchObject({
+        Authorization: `Bearer ${SECRET_KEY}`,
+        'Content-Type': 'application/json',
+        'X-PostHog-Migrated-From': 'resend',
+      })
+    })
+
+    it.each([
+      ['a refused upload', [rejected(409, 'template_outdated'), rejected(409, 'template_edited_in_posthog')], 2],
+      [
+        'a second template_outdated',
+        [rejected(409, 'template_outdated'), uploaded(), rejected(409, 'template_outdated')],
+        3,
+      ],
+    ])('returns %s and uploads at most once per send', async (_name, queued, requestsMade) => {
+      replies = queued
+
+      const { data, error } = await sendWelcome()
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ statusCode: 409, name: 'validation_error' })
+      expect(fetch).toHaveBeenCalledTimes(requestsMade)
+    })
+
+    it('never uploads content rendered for one recipient', async () => {
+      replies = [rejected(409, 'template_outdated')]
+
+      const { error } = await sendWelcome({ templateData: undefined })
+
+      expect(error?.code).toBe('template_outdated')
+      expect(requests()).toEqual([`POST ${SEND_URL}`])
+    })
+
+    it('sends the recipient and data it was called with, even when the caller changes them afterwards', async () => {
+      replies = [accepted(), accepted()]
+      const options = {
+        to: 'jane@example.com',
+        ...WELCOME,
+        templateData: { name: 'Jane' },
+        replyTo: ['jane-help@example.com'],
+      }
+
+      const toJane = posthog.emails.send(options)
+      options.to = 'bob@example.com'
+      options.templateData.name = 'Bob'
+      options.replyTo[0] = 'bob-help@example.com'
+      const toBob = posthog.emails.send(options)
+      await vi.runAllTimersAsync()
+      await Promise.all([toJane, toBob])
+
+      expect(bodies()).toHaveLength(2)
+      expect(bodies()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            to: 'jane@example.com',
+            message_data: { name: 'Jane' },
+            reply_to: ['jane-help@example.com'],
+          }),
+          expect.objectContaining({
+            to: 'bob@example.com',
+            message_data: { name: 'Bob' },
+            reply_to: ['bob-help@example.com'],
+          }),
+        ])
+      )
+    })
+
+    it.each([
+      ['template data that is not an object', { templateData: ['Jane'] }, 'invalid_template_data', 'templateData'],
+      ['a local template without html', { html: undefined, text: 'Hi {{ variables.name }}' }, 'invalid_form', 'html'],
+      ['a local template with empty html', { html: '' }, 'invalid_form', 'html'],
+      ['a local template with an empty subject', { subject: '' }, 'invalid_form', 'subject'],
+    ])('refuses %s before sending', async (_name, overrides, code, field) => {
+      const { error } = await sendWelcome(overrides)
+
+      expect(error).toMatchObject({ code, name: 'validation_error', field })
+      expect(fetch).not.toHaveBeenCalled()
     })
   })
 

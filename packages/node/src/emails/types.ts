@@ -46,22 +46,31 @@ interface CodeEmailFields {
    * follows the project's setting.
    */
   captureEngagement?: boolean
+  /**
+   * Leave it out to send rendered content: the email goes out as is, and PostHog never stores it.
+   * Pass it to send a local template: PostHog fills its `{{ variables.* }}`, and the SDK uploads
+   * the template whenever PostHog doesn't hold its content yet. A local template needs `html`.
+   * Content that PostHog already replaced with newer content isn't uploaded again: the email goes
+   * out with the newer content, and the send returns a `template_superseded` warning.
+   */
+  templateData?: Record<string, unknown>
 }
 
 /**
- * Email content your code rendered, such as React Email output, named by a key. PostHog sends it
- * as is and never stores it. Needs `html`, `text` or both. PostHog derives a missing `text` from
- * the `html`.
+ * Email content from your code, named by a key: content your code rendered, such as React Email
+ * output, or a local template that PostHog fills in with `templateData`. Needs `html`, `text` or
+ * both, and a local template needs `html`. PostHog derives a missing `text` from the `html`.
  */
-export type CodeEmailForm = CodeEmailFields & ({ html: string; text?: string } | { html?: string; text: string })
+export type CodeEmailForm = CodeEmailFields &
+  ({ html: string; text?: string } | { html?: string; text: string; templateData?: never })
 
 type Without<T> = { [K in keyof T]?: never }
 
 export type SendTemplateEmailOptions = SendEmailBase &
   TemplateEmailForm &
-  Without<CodeEmailFields & { html: string; text: string }>
+  Without<Omit<CodeEmailFields, 'templateData'> & { html: string; text: string }>
 
-export type SendCodeEmailOptions = SendEmailBase & CodeEmailForm & Without<TemplateEmailForm>
+export type SendCodeEmailOptions = SendEmailBase & CodeEmailForm & Without<Omit<TemplateEmailForm, 'templateData'>>
 
 /** Options for `posthog.emails.send()`: a template made in PostHog, or content from your code. */
 export type SendEmailOptions = SendTemplateEmailOptions | SendCodeEmailOptions
@@ -129,11 +138,13 @@ export type GetEmailResponse = { data: EmailStatus; error: null } | { data: null
  */
 export interface Emails {
   /**
-   * Queue one email, from a transactional email template or from content your code rendered.
+   * Queue one email, from a transactional email template, from content your code rendered, or
+   * from a local template.
    *
    * Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the email,
    * not that it was delivered. Network errors, rate limits, an in-flight idempotency key and
-   * an unavailable service are retried with the same idempotency key.
+   * an unavailable service are retried with the same idempotency key. A local template that
+   * PostHog doesn't hold yet is uploaded once, then sent again with the same idempotency key.
    */
   send(options: SendEmailOptions): Promise<SendEmailResponse>
 

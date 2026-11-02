@@ -2058,6 +2058,11 @@
           "name": "subject"
         },
         {
+          "description": "Leave it out to send rendered content: the email goes out as is, and PostHog never stores it. Pass it to send a local template: PostHog fills its `{{ variables.* }}`, and the SDK uploads the template whenever PostHog doesn't hold its content yet. A local template needs `html`. Content that PostHog already replaced with newer content isn't uploaded again: the email goes out with the newer content, and the send returns a `template_superseded` warning.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
           "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog. Letters, digits, hyphens and underscores, at most 400.",
           "type": "string",
           "name": "templateKey"
@@ -2070,7 +2075,7 @@
       "name": "CodeEmailForm",
       "properties": [],
       "path": "src/emails/types.ts",
-      "example": "CodeEmailFields & ({\n    html: string;\n    text?: string;\n} | {\n    html?: string;\n    text: string;\n})"
+      "example": "CodeEmailFields & ({\n    html: string;\n    text?: string;\n} | {\n    html?: string;\n    text: string;\n    templateData?: never;\n})"
     },
     {
       "id": "Coercer",
@@ -4382,7 +4387,7 @@
       "name": "SendCodeEmailOptions",
       "properties": [],
       "path": "src/emails/types.ts",
-      "example": "SendEmailBase & CodeEmailForm & Without<TemplateEmailForm>"
+      "example": "SendEmailBase & CodeEmailForm & Without<Omit<TemplateEmailForm, 'templateData'>>"
     },
     {
       "id": "SendEmailBase",

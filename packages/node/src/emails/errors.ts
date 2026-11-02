@@ -58,6 +58,8 @@ export class EmailError extends Error {
   }
 }
 
+const TEMPLATE_CONFLICTS = new Set(['template_outdated', 'template_edited_in_posthog'])
+
 function emailErrorName(status: number | undefined, code: string): EmailErrorName {
   if (code === 'missing_secret_key' || status === 401) {
     return 'missing_api_key'
@@ -76,7 +78,7 @@ function emailErrorName(status: number | undefined, code: string): EmailErrorNam
     case 404:
       return 'not_found'
     case 409:
-      return code === 'template_outdated' ? 'validation_error' : 'concurrent_idempotent_requests'
+      return TEMPLATE_CONFLICTS.has(code) ? 'validation_error' : 'concurrent_idempotent_requests'
     case 422:
       // The template send route also answers 422 for send checks such as recipient_suppressed.
       return code === 'idempotency_key_reused' ? 'invalid_idempotent_request' : 'validation_error'
