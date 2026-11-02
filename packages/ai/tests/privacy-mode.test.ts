@@ -15,23 +15,28 @@ import { PostHogSpanProcessor } from '../src/otel'
 const CANARY = 'CANARY_7f3a'
 const REQUEST_ID = 'req_0001'
 
-type Delivery = { client: PostHog; delivered: () => Promise<string> }
+type Delivery = { client: PostHog; delivered: () => Promise<string>; urls: string[] }
 
 function realClient(): Delivery {
   const bodies: string[] = []
+  const urls: string[] = []
   const client = new PostHog('phc_privacy_test', {
     host: 'http://localhost',
     privacyMode: true,
     enableExceptionAutocapture: true,
     fetchRetryCount: 0,
     disableCompression: true,
-    fetch: async (_url, options) => {
+    // The AI lane ignores disableCompression.
+    captureAiCompression: 'none',
+    fetch: async (url, options) => {
+      urls.push(url)
       bodies.push(String(options.body))
       return { status: 200, text: async () => '{}', json: async () => ({}) }
     },
   })
   return {
     client,
+    urls,
     delivered: async () => {
       await client.shutdown()
       return bodies.join('\n')
@@ -336,11 +341,12 @@ describe('privacy mode on a real posthog-node client', () => {
     ['LangChain callbacks', runLangChainCallbacks],
     ['LangChain middleware', runLangChainMiddleware],
   ])('sends no prompt, output, tool or error content from %s', async (_name, run) => {
-    const { client, delivered } = realClient()
+    const { client, delivered, urls } = realClient()
 
     await run(client)
     const payload = await delivered()
 
+    expect(urls).toContain('http://localhost/i/v1/ai/events')
     expect(payload).toContain('$ai_')
     expect(payload).not.toContain(CANARY)
   })
