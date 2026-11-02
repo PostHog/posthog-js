@@ -273,6 +273,8 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * @default 2
    */
   emailRequestMaxRetries?: number
+  /** The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request. */
+  migratedFrom?: string
   /**
    * Redact prompts, outputs and error details from every event that the PostHog AI
    * integrations (`@posthog/ai`) capture with this client. Per-call privacy settings

@@ -2036,6 +2036,43 @@
       "example": "Record<string, string>"
     },
     {
+      "id": "CodeEmailFields",
+      "name": "CodeEmailFields",
+      "properties": [
+        {
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.",
+          "type": "boolean",
+          "name": "captureEngagement"
+        },
+        {
+          "description": "A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender.",
+          "type": "string",
+          "name": "from"
+        },
+        {
+          "type": "string | string[]",
+          "name": "replyTo"
+        },
+        {
+          "type": "string",
+          "name": "subject"
+        },
+        {
+          "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog. Letters, digits, hyphens and underscores, at most 400.",
+          "type": "string",
+          "name": "templateKey"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
+      "id": "CodeEmailForm",
+      "name": "CodeEmailForm",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "CodeEmailFields & ({\n    html: string;\n    text?: string;\n} | {\n    html?: string;\n    text: string;\n})"
+    },
+    {
       "id": "Coercer",
       "name": "Coercer",
       "properties": [],
@@ -3877,6 +3914,11 @@
           "name": "emailRequestMaxRetries"
         },
         {
+          "description": "The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request.",
+          "type": "string",
+          "name": "migratedFrom"
+        },
+        {
           "description": "Redact prompts, outputs and error details from every event that the PostHog AI\nintegrations (`@posthog/ai`) capture with this client. Per-call privacy settings\ncan only add redaction. Defaults to false.",
           "type": "boolean",
           "name": "privacyMode"
@@ -4336,8 +4378,15 @@
       "path": "../core/src/utils/index.ts"
     },
     {
-      "id": "SendEmailOptions",
-      "name": "SendEmailOptions",
+      "id": "SendCodeEmailOptions",
+      "name": "SendCodeEmailOptions",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "SendEmailBase & CodeEmailForm & Without<TemplateEmailForm>"
+    },
+    {
+      "id": "SendEmailBase",
+      "name": "SendEmailBase",
       "properties": [
         {
           "description": "The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address.",
@@ -4345,7 +4394,7 @@
           "name": "distinctId"
         },
         {
-          "description": "1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too.",
+          "description": "1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns `invalid_idempotent_request`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too.",
           "type": "string",
           "name": "idempotencyKey"
         },
@@ -4355,22 +4404,19 @@
           "name": "maxRetries"
         },
         {
-          "description": "Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`.",
-          "type": "Record<string, unknown>",
-          "name": "templateData"
-        },
-        {
-          "description": "The UUID of an email template made transactional in PostHog.",
-          "type": "string",
-          "name": "templateId"
-        },
-        {
           "description": "One recipient email address.",
           "type": "string",
           "name": "to"
         }
       ],
       "path": "src/emails/types.ts"
+    },
+    {
+      "id": "SendEmailOptions",
+      "name": "SendEmailOptions",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "SendTemplateEmailOptions | SendCodeEmailOptions"
     },
     {
       "id": "SendEmailResponse",
@@ -4436,6 +4482,74 @@
       "properties": [],
       "path": "../core/src/metrics/types.ts",
       "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
+      "id": "SendTemplateEmailOptions",
+      "name": "SendTemplateEmailOptions",
+      "properties": [
+        {
+          "description": "One recipient email address.",
+          "type": "string",
+          "name": "to"
+        },
+        {
+          "description": "The recipient's distinct ID in your product. The email's events go to this person.\nWithout it, they go to a person whose distinct ID is the email address.",
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "description": "1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted\nqueues nothing and returns the first send's result. The same key with other options sends\nnothing and returns `invalid_idempotent_request`. Without it, the client makes a UUID that\ncovers its own retries. Pass a key derived from what the email is for, such as\n`welcome:user_123`, to cover retries outside this call too.",
+          "type": "string",
+          "name": "idempotencyKey"
+        },
+        {
+          "description": "Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off.",
+          "type": "number",
+          "name": "maxRetries"
+        },
+        {
+          "description": "The UUID of an email template made transactional in PostHog.",
+          "type": "string",
+          "name": "templateId"
+        },
+        {
+          "description": "Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it\nin PostHog. Letters, digits, hyphens and underscores, at most 400.",
+          "type": "never",
+          "name": "templateKey"
+        },
+        {
+          "type": "never",
+          "name": "subject"
+        },
+        {
+          "description": "A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender.",
+          "type": "never",
+          "name": "from"
+        },
+        {
+          "type": "never",
+          "name": "replyTo"
+        },
+        {
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.",
+          "type": "never",
+          "name": "captureEngagement"
+        },
+        {
+          "type": "never",
+          "name": "html"
+        },
+        {
+          "type": "never",
+          "name": "text"
+        }
+      ],
+      "path": "src/emails/types.ts"
     },
     {
       "id": "SendTracesBatchOutcome",
@@ -5083,6 +5197,23 @@
       "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {
+      "id": "TemplateEmailForm",
+      "name": "TemplateEmailForm",
+      "properties": [
+        {
+          "description": "Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "The UUID of an email template made transactional in PostHog.",
+          "type": "string",
+          "name": "templateId"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
       "id": "UnresolvedFlagReason",
       "name": "UnresolvedFlagReason",
       "properties": [],
@@ -5103,6 +5234,13 @@
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "Without",
+      "name": "Without",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "{\n    [K in keyof T]?: never;\n}"
     }
   ],
   "categories": [

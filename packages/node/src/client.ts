@@ -726,6 +726,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           appHost: this.options.appHost,
           requestTimeoutMs: positiveNumberOr(this.options.emailRequestTimeoutMs, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS),
           maxRetries: nonNegativeIntegerOr(this.options.emailRequestMaxRetries, DEFAULT_EMAIL_REQUEST_MAX_RETRIES),
+          migratedFrom: this.options.migratedFrom,
         },
         {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
