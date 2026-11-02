@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.10.3
+
+### Patch Changes
+
+- [#5491](https://github.com/PostHog/posthog-js/pull/5491) [`aedb488`](https://github.com/PostHog/posthog-js/commit/aedb4882264c88bc4d7ab94c1f6035ddacc6c72f) Thanks [@marandaneto](https://github.com/marandaneto)! - Sanitize survey HTML descriptions while preserving rich text formatting.
+  (2026-11-02)
+
 ## 0.10.2
 
 ### Patch Changes

@@ -1,3 +1,4 @@
+import createDOMPurify from 'dompurify'
 import { PostHog } from './posthog-core'
 import { navigator, window } from '@posthog/browser-common/utils/globals'
 import {
@@ -18,6 +19,14 @@ import { getCampaignParams } from '@posthog/browser-common/utils/event-utils'
 import { Extension } from './extensions/types'
 
 const BOT_REFUSE_MSG = 'Refusing to render web experiment since the viewer is a likely bot'
+const EXPERIMENT_HTML_CONFIG = {
+    ADD_ATTR: (attribute: string, tag: string) =>
+        (attribute === 'target' && tag === 'a') ||
+        (attribute === 'form' && /^(button|fieldset|input|output|select|textarea)$/.test(tag)),
+    // Form associations are literal element IDs, not URLs.
+    ADD_URI_SAFE_ATTR: ['form'],
+}
+let experimentSanitizer: ReturnType<typeof createDOMPurify> | undefined
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -248,6 +257,33 @@ export class WebExperiments implements Extension {
         logger.info(`[WebExperiments] ${msg}`, args)
     }
 
+    private static _sanitizeLinkTargets(context: Element) {
+        const root =
+            context.namespaceURI === 'http://www.w3.org/1999/xhtml' && context.localName === 'template'
+                ? (context as HTMLTemplateElement).content
+                : context
+        root.querySelectorAll('a[target], template').forEach((element) => {
+            if (element.localName === 'template') {
+                if (element.namespaceURI === 'http://www.w3.org/1999/xhtml') {
+                    WebExperiments._sanitizeLinkTargets(element)
+                }
+                return
+            }
+            if (
+                element.namespaceURI !== 'http://www.w3.org/1999/xhtml' ||
+                element.getAttribute('target')?.toLowerCase() !== '_blank'
+            ) {
+                element.removeAttribute('target')
+                return
+            }
+            const rel = (element.getAttribute('rel') || '')
+                .split(/\s+/)
+                .filter((token) => token && !/^(opener|noopener)$/i.test(token))
+            rel.push('noopener')
+            element.setAttribute('rel', rel.join(' '))
+        })
+    }
+
     private _applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
         if (this._is_bot()) {
             WebExperiments._logInfo(BOT_REFUSE_MSG)
@@ -268,10 +304,69 @@ export class WebExperiments implements Extension {
 
                 // oxlint-disable-next-line no-restricted-globals
                 const elements = document?.querySelectorAll(transform.selector)
+                const sanitizedHtml = new Map<string, string>()
                 elements?.forEach((element) => {
+                    // Sanitized plain text can still execute inside existing HTML or SVG script elements.
+                    if (element.localName.toLowerCase() === 'script') {
+                        return
+                    }
+
                     const htmlElement = element as HTMLElement
                     if (transform.html) {
-                        htmlElement.innerHTML = transform.html
+                        const encoding =
+                            element.namespaceURI === 'http://www.w3.org/1998/Math/MathML' &&
+                            element.localName === 'annotation-xml'
+                                ? element.getAttribute('encoding')?.toLowerCase() || ''
+                                : ''
+                        const contextKey = JSON.stringify([element.namespaceURI, element.localName, encoding])
+                        let html = sanitizedHtml.get(contextKey)
+                        if (isNullish(html)) {
+                            const sanitizer = (experimentSanitizer ??= createDOMPurify())
+                            // Parse in an inert document so unsanitized content cannot execute or upgrade custom elements.
+                            const inertDocument = element.ownerDocument.implementation.createHTMLDocument('')
+                            const context = inertDocument.createElementNS(element.namespaceURI, element.localName)
+                            if (encoding) {
+                                context.setAttribute('encoding', encoding)
+                            }
+                            const range = inertDocument.createRange()
+                            range.selectNodeContents(context)
+                            const namespace =
+                                (element.namespaceURI === 'http://www.w3.org/2000/svg' &&
+                                    /^(foreignObject|desc|title)$/.test(element.localName)) ||
+                                /^(text\/html|application\/xhtml\+xml)$/.test(encoding)
+                                    ? 'http://www.w3.org/1999/xhtml'
+                                    : element.namespaceURI
+                            const fragment = range.createContextualFragment(transform.html)
+                            if (
+                                element.namespaceURI === 'http://www.w3.org/1998/Math/MathML' &&
+                                /^(mi|mo|mn|ms|mtext)$/.test(element.localName)
+                            ) {
+                                // Keep the integration-point parent so both HTML and MathML children retain their namespaces.
+                                context.appendChild(fragment)
+                                sanitizer.sanitize(context, {
+                                    ...EXPERIMENT_HTML_CONFIG,
+                                    NAMESPACE: namespace || undefined,
+                                    IN_PLACE: true,
+                                })
+                            } else {
+                                const container =
+                                    context.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
+                                    context.localName === 'template'
+                                        ? (context as HTMLTemplateElement).content
+                                        : context
+                                container.appendChild(
+                                    sanitizer.sanitize(fragment, {
+                                        ...EXPERIMENT_HTML_CONFIG,
+                                        NAMESPACE: namespace || undefined,
+                                        RETURN_DOM_FRAGMENT: true,
+                                    })
+                                )
+                            }
+                            WebExperiments._sanitizeLinkTargets(context)
+                            html = context.innerHTML
+                            sanitizedHtml.set(contextKey, html)
+                        }
+                        htmlElement.innerHTML = html
                     }
 
                     if (transform.css) {
