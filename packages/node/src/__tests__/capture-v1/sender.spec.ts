@@ -418,15 +418,6 @@ describe('V1CaptureSender', () => {
       expect(errors).toEqual([])
     })
 
-    it('treats a valid 2xx body without a results field as all accepted', async () => {
-      const { sender, fetch, errors } = makeSender()
-      fetch.mockResolvedValueOnce(makeResponse(200, { status: 1 }))
-
-      await sender.send(v1Events([msg('u1')]))
-
-      expect(errors).toEqual([])
-    })
-
     it.each(['/i/v1/analytics/events', '/i/v1/ai/events'] as const)(
       'surfaces a drop on the %s lane as a terminal CaptureError naming that lane',
       async (path) => {
@@ -600,30 +591,38 @@ describe('V1CaptureSender', () => {
   })
 
   describe('2xx malformed body', () => {
-    it('treats an unparseable 2xx body as terminal failure without retrying', async () => {
+    it.each<[string, unknown]>([
+      ['a body that is not JSON', 'not-json{'],
+      ['a non-object JSON body', '[1,2,3]'],
+      ['an empty object', {}],
+      ['an object without results', { status: 1 }],
+      ['null results', { results: null }],
+      ['array results', { results: [] }],
+      ['string results', { results: 'ok' }],
+    ])('fails the whole batch without retrying on a 2xx with %s', async (_label, body) => {
       const { sender, fetch, errors } = makeSender()
-      fetch.mockResolvedValueOnce(makeResponse(200, 'not-json{'))
+      fetch.mockResolvedValueOnce(makeResponse(200, body))
 
-      await sender.send(v1Events([msg('u1')]))
+      await sender.send(v1Events([msg('u1'), msg('u2')]))
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
       const error = errors[0] as CaptureError
-      expect(error.retryExhausted).toEqual(['u1'])
-      expect((error.cause as Error).message).toContain('unparseable')
+      expect(error).toBeInstanceOf(CaptureError)
+      expect(error.drops).toEqual([])
+      expect(error.retryExhausted).toEqual(['u1', 'u2'])
+      expect((error.cause as Error).message).toBe('Capture V1 returned an unparseable 200 response body')
     })
 
-    it.each([
-      ['a non-object JSON body', '[1,2,3]'],
-      ['a non-object results field', { results: [1, 2] }],
-    ])('treats %s as terminal failure', async (_label, body) => {
+    it('treats an empty results object as every event delivered', async () => {
       const { sender, fetch, errors } = makeSender()
-      fetch.mockResolvedValueOnce(makeResponse(200, body))
+      fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
-      await sender.send(v1Events([msg('u1')]))
+      const unsent = await sender.send(v1Events([msg('u1'), msg('u2')]), { keepUnsent: true })
 
       expect(fetch).toHaveBeenCalledTimes(1)
-      expect((errors[0] as CaptureError).retryExhausted).toEqual(['u1'])
+      expect(unsent).toEqual([])
+      expect(errors).toEqual([])
     })
   })
 
