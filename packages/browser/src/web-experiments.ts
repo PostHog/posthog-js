@@ -313,18 +313,27 @@ export class WebExperiments implements Extension {
 
                     const htmlElement = element as HTMLElement
                     if (transform.html) {
-                        const contextKey = `${element.namespaceURI}:${element.localName}`
+                        const encoding =
+                            element.namespaceURI === 'http://www.w3.org/1998/Math/MathML' &&
+                            element.localName === 'annotation-xml'
+                                ? element.getAttribute('encoding')?.toLowerCase() || ''
+                                : ''
+                        const contextKey = JSON.stringify([element.namespaceURI, element.localName, encoding])
                         let html = sanitizedHtml.get(contextKey)
                         if (isNullish(html)) {
                             const sanitizer = (experimentSanitizer ??= createDOMPurify())
                             // Parse in an inert document so unsanitized content cannot execute or upgrade custom elements.
                             const inertDocument = element.ownerDocument.implementation.createHTMLDocument('')
                             const context = inertDocument.createElementNS(element.namespaceURI, element.localName)
+                            if (encoding) {
+                                context.setAttribute('encoding', encoding)
+                            }
                             const range = inertDocument.createRange()
                             range.selectNodeContents(context)
                             const namespace =
-                                element.namespaceURI === 'http://www.w3.org/2000/svg' &&
-                                /^(foreignObject|desc|title)$/.test(element.localName)
+                                (element.namespaceURI === 'http://www.w3.org/2000/svg' &&
+                                    /^(foreignObject|desc|title)$/.test(element.localName)) ||
+                                /^(text\/html|application\/xhtml\+xml)$/.test(encoding)
                                     ? 'http://www.w3.org/1999/xhtml'
                                     : element.namespaceURI
                             const fragment = range.createContextualFragment(transform.html)

@@ -582,6 +582,78 @@ describe('Web Experimentation', () => {
             }
         )
 
+        it.each(['text/html', 'application/xhtml+xml', 'TEXT/HTML', 'APPLICATION/XHTML+XML'])(
+            'preserves sanitized HTML in annotation-xml targets with encoding=%s',
+            (encoding) => {
+                document.body.innerHTML = `<math><annotation-xml id="set-user-properties" encoding="${encoding}">Original</annotation-xml></math>`
+                const element = document.querySelector('annotation-xml')!
+                setRemoteTransform(
+                    '<b onclick="alert(1)">Sale</b><a href="javascript:alert(1)">Buy</a>' +
+                        '<script>alert(1)</script><iframe srcdoc="unsafe"></iframe>'
+                )
+
+                simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+                expect(element.innerHTML).toEqual('<b>Sale</b><a>Buy</a>')
+                expect(element.firstElementChild?.namespaceURI).toEqual('http://www.w3.org/1999/xhtml')
+                expect(element.getAttribute('encoding')).toEqual(encoding)
+            }
+        )
+
+        it.each(['application/xml', ' text/html ', 'text/html;charset=utf-8'])(
+            'keeps annotation-xml targets in MathML for encoding=%s',
+            (encoding) => {
+                document.body.innerHTML = `<math><annotation-xml id="set-user-properties" encoding="${encoding}"></annotation-xml></math>`
+                setRemoteTransform('<mi onclick="alert(1)">x</mi>')
+
+                simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+                const element = document.querySelector('annotation-xml')!
+                expect(element.innerHTML).toEqual('<mi>x</mi>')
+                expect(element.firstElementChild?.namespaceURI).toEqual('http://www.w3.org/1998/Math/MathML')
+            }
+        )
+
+        it('does not allow annotation-xml elements inside replacement HTML', () => {
+            const element = createTestDocument()
+            setRemoteTransform(
+                '<math><annotation-xml encoding="text/html"><b onclick="alert(1)">Sale</b></annotation-xml></math>'
+            )
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            expect(element.innerHTML).toEqual('<math></math>')
+        })
+
+        it.each([false, true])('separates cached annotation-xml encodings with reversed order=%s', (reversed) => {
+            const encodings = ['text/html', 'application/xml', 'text/html', 'application/xml']
+            if (reversed) {
+                encodings.reverse()
+            }
+            document.body.innerHTML =
+                '<math>' +
+                encodings
+                    .map(
+                        (encoding) =>
+                            `<annotation-xml id="set-user-properties" encoding="${encoding}"></annotation-xml>`
+                    )
+                    .join('') +
+                '</math>'
+            setRemoteTransform('<b>Sale</b><mi>x</mi>')
+            const sanitize = vi.spyOn(sanitizerMock.instance!, 'sanitize')
+
+            simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+            document.querySelectorAll('annotation-xml').forEach((element) => {
+                const isHtml = element.getAttribute('encoding') === 'text/html'
+                expect(element.innerHTML).toEqual(isHtml ? '<b>Sale</b>' : '<mi>x</mi>')
+                expect(element.firstElementChild?.namespaceURI).toEqual(
+                    isHtml ? 'http://www.w3.org/1999/xhtml' : 'http://www.w3.org/1998/Math/MathML'
+                )
+            })
+            expect(sanitize).toHaveBeenCalledTimes(2)
+        })
+
         it('keeps HTML and SVG sanitization results separate for a mixed selector', () => {
             document.body.innerHTML = '<div id="set-user-properties"></div><svg id="set-user-properties"></svg>'
             setRemoteTransform('<circle r="5"></circle>')
