@@ -1,5 +1,19 @@
 # posthog-ai
 
+## 8.18.1
+
+### Patch Changes
+
+- [#5496](https://github.com/PostHog/posthog-js/pull/5496) [`3611fd2`](https://github.com/PostHog/posthog-js/commit/3611fd2fab0559cb59046114493726619c8e14c2) Thanks [@bernatixer](https://github.com/bernatixer)! - Capture Vercel AI SDK file parts passed as bytes instead of recording "raw files not supported"
+  (2026-11-02)
+
+## 8.18.0
+
+### Minor Changes
+
+- [#5381](https://github.com/PostHog/posthog-js/pull/5381) [`bac61c2`](https://github.com/PostHog/posthog-js/commit/bac61c26d5b5f16b60936dc6cbb823364e1f9c48) Thanks [@Brian-1812](https://github.com/Brian-1812)! - Add a Genkit integration that captures flows, model calls, embedder calls and tool calls as AI observability events
+  (2026-11-02)
+
 ## 8.17.2
 
 ### Patch Changes

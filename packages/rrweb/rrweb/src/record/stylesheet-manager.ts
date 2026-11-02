@@ -4,7 +4,9 @@ import {
   getSuspensionGeneration,
   maskAttributeValue,
   nowMs,
+  onceLinkStylesheetUpToDate,
   recordDeferredStylesheetFailure,
+  recordDeferredStylesheetsAbandoned,
   recordDeferredStylesheetSlice,
   recordStylesheetCost,
   resetStylesheetLoadTracking,
@@ -16,6 +18,7 @@ import type {
   StylesheetTextCursor,
 } from '@posthog/rrweb-snapshot';
 import type {
+  blockClass,
   elementNode,
   serializedNodeWithId,
   adoptedStyleSheetCallback,
@@ -23,7 +26,14 @@ import type {
   attributeMutation,
   mutationCallBack,
 } from '@posthog/rrweb-types';
-import { StyleSheetMirror } from '../utils';
+import { StyleSheetMirror, isBlockedIncludingShadowHosts } from '../utils';
+import {
+  type IdleDeadline,
+  type IdleTask,
+  whenIdle,
+  DEFERRED_STYLESHEET_RULES_PER_SLICE,
+  DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK,
+} from './idle';
 
 /** Resumable inlining of one deferred stylesheet; see {@link StylesheetManager.beginDeferredLinkInlining}. */
 export type DeferredLinkInliningTask = {
@@ -41,19 +51,72 @@ export type DeferredLinkInliningTask = {
   discard: () => void;
 };
 
+/** Inlining of one changed link's sheet; see {@link StylesheetManager.inlineLinkStylesheetAfterChange}. */
+type ChangedLinkJob = {
+  remainingRules: () => number;
+  /** Returns true once the job is done or dropped. */
+  runSlice: () => boolean;
+  drop: () => void;
+};
+
 /** One pending deferral's captured root sheet plus its cancellation hook. */
 type PendingDeferredSheet = {
   sheet: CSSStyleSheet;
   invalidate: () => void;
 };
 
+// Replay rebuilds the link from the attributes recorded for it before, when
+// `_cssText` arrives, so attributes changed since (such as `media`) must
+// travel with the CSS, and removed ones as null. `rel` and `href` go, as when
+// a snapshot inlines a link.
+function attributesReplacingPrevious(serialization: {
+  previous: serializedNodeWithId | null;
+  current: serializedNodeWithId | null;
+}): attributeMutation['attributes'] {
+  const attributes: attributeMutation['attributes'] = {};
+  for (const name of Object.keys(
+    (serialization.previous as elementNode | null)?.attributes ?? {},
+  )) {
+    attributes[name] = null;
+  }
+  Object.assign(
+    attributes,
+    (serialization.current as elementNode | null)?.attributes,
+  );
+  delete attributes.rel;
+  delete attributes.href;
+  return attributes;
+}
+
+type ChangedLinkRecorderView = {
+  currentId: () => number;
+  reserializeWithoutCss: () => {
+    previous: serializedNodeWithId | null;
+    current: serializedNodeWithId | null;
+  };
+  lastSerialization: () => serializedNodeWithId | null;
+  /** Records the link as removed and added again, in order with the mutations the recorder still holds. */
+  readdAsMove: () => void;
+};
+
+// bounds the rework when the page keeps changing a sheet through the CSSOM
+const CHANGED_LINK_RESTARTS_AFTER_SHEET_MUTATION = 3;
+
 export class StylesheetManager {
   private trackedLinkElements: WeakSet<HTMLLinkElement> = new WeakSet();
   private pendingDeferredSheets: Set<PendingDeferredSheet> = new Set();
+  // a restarted recorder refills the shared mirror, so mirror membership
+  // cannot tell a stopped recorder's pending work from the new recorder's
+  private stopped = false;
+  private changedLinkJobs = new Map<HTMLLinkElement, ChangedLinkJob>();
+  // replay shows these as a `<style>` since it got their `_cssText`
+  private linksInlinedSinceSnapshot = new WeakSet<HTMLLinkElement>();
   private mutationCb: mutationCallBack;
   private adoptedStyleSheetCb: adoptedStyleSheetCallback;
   private maskAllElementAttributes: boolean;
   private maskAttributeFn: MaskAttributeFn | undefined;
+  private blockClass: blockClass;
+  private blockSelector: string | null;
   public styleMirror: StyleSheetMirror = new StyleSheetMirror();
 
   constructor(options: {
@@ -61,18 +124,37 @@ export class StylesheetManager {
     adoptedStyleSheetCb: adoptedStyleSheetCallback;
     maskAllElementAttributes?: boolean;
     maskAttributeFn?: MaskAttributeFn;
+    blockClass?: blockClass;
+    blockSelector?: string | null;
   }) {
     this.mutationCb = options.mutationCb;
     this.adoptedStyleSheetCb = options.adoptedStyleSheetCb;
     this.maskAllElementAttributes = options.maskAllElementAttributes ?? false;
     this.maskAttributeFn = options.maskAttributeFn;
+    this.blockClass = options.blockClass ?? 'rr-block';
+    this.blockSelector = options.blockSelector ?? null;
+  }
+
+  // Every path here emits a link's CSS after it was serialized, and the link
+  // or an ancestor can be blocked in between.
+  private isLinkBlocked(linkEl: HTMLLinkElement): boolean {
+    return isBlockedIncludingShadowHosts(
+      linkEl,
+      this.blockClass,
+      this.blockSelector,
+    );
   }
 
   public attachLinkElement(
     linkEl: HTMLLinkElement,
     childSn: serializedNodeWithId,
+    previousSn: serializedNodeWithId | null = null,
   ): void {
-    if ('_cssText' in (childSn as elementNode).attributes)
+    if (
+      !this.stopped &&
+      '_cssText' in (childSn as elementNode).attributes &&
+      !this.isLinkBlocked(linkEl)
+    ) {
       this.mutationCb({
         adds: [],
         removes: [],
@@ -80,11 +162,15 @@ export class StylesheetManager {
         attributes: [
           {
             id: childSn.id,
-            attributes: (childSn as elementNode)
-              .attributes as attributeMutation['attributes'],
+            attributes: attributesReplacingPrevious({
+              previous: previousSn,
+              current: childSn,
+            }),
           },
         ],
       });
+      this.linksInlinedSinceSnapshot.add(linkEl);
+    }
 
     this.trackLinkElement(linkEl);
   }
@@ -102,7 +188,16 @@ export class StylesheetManager {
   public beginDeferredLinkInlining(
     linkEl: HTMLLinkElement,
     id: number,
+    options: {
+      emitCssText?: (cssText: string) => void;
+      onInvalidatedBySheetMutation?: () => void;
+      /** The sheet is unreadable or empty, so replay has to load it from its href. */
+      onUninlinable?: () => void;
+    } = {},
   ): DeferredLinkInliningTask | null {
+    const emitCssText =
+      options.emitCssText ??
+      ((cssText: string) => this.emitCssTextMutation(linkEl, id, cssText));
     if (id === -1 || !linkEl.isConnected) {
       // never made it into the mirror (slimDOM dropped it), or detached while we
       // were queued - either way a mutation for it would only make the replayer warn
@@ -122,6 +217,7 @@ export class StylesheetManager {
       // the sheet is unreadable, so the link keeps its href and replay must
       // load the CSS remotely - a fidelity risk worth counting, not hiding
       recordDeferredStylesheetFailure();
+      options.onUninlinable?.();
       return null;
     }
     const readyCursor = cursor;
@@ -153,10 +249,14 @@ export class StylesheetManager {
         try {
           if (invalidatedByMutation) {
             completed = true;
-            // emitting the defer-time text now would overwrite the mutation's
-            // already-recorded StyleSheetRule/StyleDeclaration event in replay;
-            // the link keeps its href, a counted fidelity loss
-            recordDeferredStylesheetFailure();
+            if (options.onInvalidatedBySheetMutation) {
+              options.onInvalidatedBySheetMutation();
+            } else {
+              // emitting the defer-time text now would overwrite the mutation's
+              // already-recorded StyleSheetRule/StyleDeclaration event in replay;
+              // the link keeps its href, a counted fidelity loss
+              recordDeferredStylesheetFailure();
+            }
             return true;
           }
           if (!readyCursor.advance(maxRules)) {
@@ -187,9 +287,13 @@ export class StylesheetManager {
             // stringification produced nothing: the link keeps its href and replay
             // must load the CSS remotely - a fidelity risk worth counting, not hiding
             recordDeferredStylesheetFailure();
+            options.onUninlinable?.();
             return true;
           }
-          this.emitCssTextMutation(linkEl, id, cssText);
+          if (this.isLinkBlocked(linkEl)) {
+            return true;
+          }
+          emitCssText(cssText);
           return true;
         } finally {
           if (finished) {
@@ -231,6 +335,160 @@ export class StylesheetManager {
     }
   }
 
+  /**
+   * Inline the sheet that a `<link>` loads after a `rel` or `href` change, so
+   * replay does not keep the previous sheet or depend on fetching the new one.
+   */
+  public inlineLinkStylesheetAfterChange(
+    linkEl: HTMLLinkElement,
+    recorderView: ChangedLinkRecorderView,
+  ): void {
+    // a stop from inside the consumer's emit has already reset the mirror
+    if (this.stopped || recorderView.currentId() === -1) {
+      return;
+    }
+    onceLinkStylesheetUpToDate(linkEl, () =>
+      this.inlineChangedLinkStylesheet(
+        linkEl,
+        recorderView,
+        CHANGED_LINK_RESTARTS_AFTER_SHEET_MUTATION,
+      ),
+    );
+  }
+
+  private inlineChangedLinkStylesheet(
+    linkEl: HTMLLinkElement,
+    recorderView: ChangedLinkRecorderView,
+    restartsLeftAfterSheetMutation: number,
+  ): void {
+    const id = recorderView.currentId();
+    if (
+      this.stopped ||
+      !linkEl.isConnected ||
+      id === -1 ||
+      this.isLinkBlocked(linkEl)
+    ) {
+      return;
+    }
+    // a newer change supersedes the work still in flight for this link
+    this.changedLinkJobs.get(linkEl)?.drop();
+    let sheetMutatedWhileInlining = false;
+    const task = this.beginDeferredLinkInlining(linkEl, id, {
+      emitCssText: (cssText) =>
+        this.emitCssTextMutation(
+          linkEl,
+          id,
+          cssText,
+          attributesReplacingPrevious(recorderView.reserializeWithoutCss()),
+        ),
+      onInvalidatedBySheetMutation: () => {
+        sheetMutatedWhileInlining = true;
+      },
+      onUninlinable: () => this.readdAsPlainLink(linkEl, recorderView),
+    });
+    if (!task) {
+      return;
+    }
+    let pendingIdle: IdleTask | null = null;
+    // a page frozen before the idle callback runs must not keep the job and its CSS alive
+    const release = () => {
+      task.discard();
+      pendingIdle?.cancel();
+      pendingIdle = null;
+      if (this.changedLinkJobs.get(linkEl) === job) {
+        this.changedLinkJobs.delete(linkEl);
+      }
+    };
+    const job: ChangedLinkJob = {
+      remainingRules: () => task.remainingRules(),
+      runSlice: () => {
+        try {
+          // a stop resets the mirror
+          if (
+            this.stopped ||
+            this.changedLinkJobs.get(linkEl) !== job ||
+            recorderView.currentId() === -1 ||
+            this.isLinkBlocked(linkEl)
+          ) {
+            release();
+            return true;
+          }
+          if (!task.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE)) {
+            return false;
+          }
+          release();
+          if (!sheetMutatedWhileInlining) {
+            return true;
+          }
+          if (restartsLeftAfterSheetMutation > 0) {
+            // replay keeps the previous sheet until this CSS arrives, and the
+            // mutated sheet's text already includes the recorded CSSOM change
+            this.inlineChangedLinkStylesheet(
+              linkEl,
+              recorderView,
+              restartsLeftAfterSheetMutation - 1,
+            );
+          } else {
+            recordDeferredStylesheetFailure();
+          }
+          return true;
+        } catch (e) {
+          // runs from an idle callback or a pagehide flush: a throwing consumer
+          // emit or mask callback must not surface on the customer's page
+          release();
+          return true;
+        }
+      },
+      drop: release,
+    };
+    this.changedLinkJobs.set(linkEl, job);
+    const step = (deadline?: IdleDeadline) => {
+      pendingIdle = null;
+      let slices = 0;
+      let done: boolean;
+      do {
+        done = job.runSlice();
+        slices += 1;
+      } while (
+        !done &&
+        (deadline
+          ? !deadline.didTimeout && deadline.timeRemaining() > 5
+          : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
+      );
+      if (!done) {
+        pendingIdle = whenIdle(step);
+      }
+    };
+    pendingIdle = whenIdle(step);
+  }
+
+  /**
+   * Synchronously finish the pending changed-link CSS, for a page that is
+   * going away before its idle callbacks run. A sheet that cannot finish in
+   * what is left of `maxSlices` is dropped and counted, so it cannot starve
+   * the ones behind it. Returns the slices used.
+   */
+  public flushChangedLinkInlining(maxSlices: number): number {
+    let slices = 0;
+    // a restart after a CSSOM change adds its job to the map, and this loop visits it too
+    for (const job of this.changedLinkJobs.values()) {
+      let done = false;
+      while (!done) {
+        const slicesNeeded =
+          Math.floor(job.remainingRules() / DEFERRED_STYLESHEET_RULES_PER_SLICE) +
+          1;
+        if (slicesNeeded > maxSlices - slices) {
+          job.drop();
+          recordDeferredStylesheetsAbandoned(1);
+          break;
+        }
+        done = job.runSlice();
+        slices += 1;
+      }
+    }
+    return slices;
+  }
+
   /** One-call variant of {@link beginDeferredLinkInlining}: the whole sheet in a single slice. */
   public inlineDeferredLinkElement(linkEl: HTMLLinkElement, id: number): void {
     this.beginDeferredLinkInlining(linkEl, id)?.advance(Infinity);
@@ -240,7 +498,11 @@ export class StylesheetManager {
     linkEl: HTMLLinkElement,
     id: number,
     cssText: string,
+    otherAttributes: attributeMutation['attributes'] = {},
   ) {
+    if (this.stopped) {
+      return;
+    }
     // The snapshot path masks _cssText inside serializeElementNode; this path
     // builds the value itself, so it has to mask it too.
     this.mutationCb({
@@ -251,6 +513,7 @@ export class StylesheetManager {
         {
           id,
           attributes: {
+            ...otherAttributes,
             _cssText: maskAttributeValue({
               element: linkEl,
               name: '_cssText',
@@ -262,6 +525,34 @@ export class StylesheetManager {
         },
       ],
     });
+    this.linksInlinedSinceSnapshot.add(linkEl);
+  }
+
+  // Replay cannot turn the `<style>` it built from earlier CSS back into a
+  // `<link>`, so the link goes out as a remove and an add, as a moved node
+  // does, and replay builds a `<link>` that loads the new href.
+  private readdAsPlainLink(
+    linkEl: HTMLLinkElement,
+    recorderView: ChangedLinkRecorderView,
+  ): void {
+    try {
+      if (this.stopped || !linkEl.isConnected || this.isLinkBlocked(linkEl)) {
+        return;
+      }
+      const replayShowsStyle =
+        this.linksInlinedSinceSnapshot.has(linkEl) ||
+        '_cssText' in
+          ((recorderView.lastSerialization() as elementNode | null)
+            ?.attributes ?? {});
+      if (!replayShowsStyle) {
+        return;
+      }
+      this.linksInlinedSinceSnapshot.delete(linkEl);
+      recorderView.readdAsMove();
+    } catch (e) {
+      // runs from a load event, timer or idle callback: a throwing consumer
+      // emit or mask callback must not surface on the customer's page
+    }
   }
 
   public trackLinkElement(linkEl: HTMLLinkElement): void {
@@ -319,13 +610,27 @@ export class StylesheetManager {
     this.adoptedStyleSheetCb(adoptedStyleSheetData);
   }
 
+  /** Ends all delayed stylesheet work of this recorder; a stopped manager emits nothing. */
+  public stop(): void {
+    this.stopped = true;
+    this.dropChangedLinkJobs();
+    resetStylesheetLoadTracking();
+  }
+
+  private dropChangedLinkJobs(): void {
+    Array.from(this.changedLinkJobs.values()).forEach((job) => job.drop());
+  }
+
   public reset(): void {
     this.styleMirror.reset();
     this.trackedLinkElements = new WeakSet();
     // any surviving deferral registrations belong to tasks the recorder
     // cancelled at the snapshot boundary; drop them so they don't pin sheets
     this.pendingDeferredSheets.clear();
-    resetStylesheetLoadTracking();
+    // the full snapshot inlines each changed link's current sheet itself
+    this.dropChangedLinkJobs();
+    this.linksInlinedSinceSnapshot = new WeakSet();
+    resetStylesheetLoadTracking({ keepChangedLinks: true });
   }
 
   // TODO: take snapshot on stylesheet reload by applying event listener

@@ -391,9 +391,9 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
   }
   refuseFieldsOutside(send, TEMPLATE_FORM, CODE_FORM)
   return {
-    template: { id: templateId.toLowerCase() },
+    template_id: templateId.toLowerCase(),
     message_data: templateData ?? {},
-    ...(distinctId !== undefined && { identifiers: { distinct_id: distinctId } }),
+    ...(distinctId !== undefined && { distinct_id: distinctId }),
   }
 }
 
