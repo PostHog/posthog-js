@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.62.1
+
+### Patch Changes
+
+- [#5505](https://github.com/PostHog/posthog-js/pull/5505) [`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85) Thanks [@majicmaj](https://github.com/majicmaj)! - Recognize self-declared Lightpanda headless browsers in bot detection.
+  (2026-11-02)
+
 ## 1.62.0
 
 ### Minor Changes
