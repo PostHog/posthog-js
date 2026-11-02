@@ -417,6 +417,29 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(properties['$ai_output_choices'][0].content[0].data).toBe(expected)
     })
 
+    it('shares one file budget across the event under full capture', async () => {
+      const client = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      client.enableFullAiCapture = true
+      const baseModel = createMockV3Model('image-model')
+      const model = withTracing(baseModel, client, { posthogDistinctId: 'test-user' })
+
+      await model.doGenerate({
+        prompt: [
+          {
+            role: 'user',
+            content: [
+              { type: 'file', data: new Uint8Array(5 * 1024 * 1024), mediaType: 'image/png' },
+              { type: 'file', data: new Uint8Array(1024 * 1024), mediaType: 'image/png' },
+            ],
+          },
+        ],
+      } as any)
+
+      const files = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_input'][0].content
+      expect(files[0].file.startsWith('data:image/png;base64,')).toBe(true)
+      expect(files[1].file).toBe('[base64 image/png redacted]')
+    })
+
     it('redacts data URL objects from input while preserving HTTP URL objects', async () => {
       const binary = 'SU5QVVQgVVJMIERBVEE='
       const dataUrl = new URL(`data:audio/wav;base64,${binary}`)
