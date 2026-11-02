@@ -1,3 +1,5 @@
+# Disabled: this workflow lives outside .github/workflows so GitHub Actions does not run it.
+# Restore it after resolving the Next 16 Turbopack smoke failure.
 name: Error tracking smoke
 
 on:
