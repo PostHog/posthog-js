@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.18.0
+
+### Minor Changes
+
+- [#5381](https://github.com/PostHog/posthog-js/pull/5381) [`bac61c2`](https://github.com/PostHog/posthog-js/commit/bac61c26d5b5f16b60936dc6cbb823364e1f9c48) Thanks [@Brian-1812](https://github.com/Brian-1812)! - Add a Genkit integration that captures flows, model calls, embedder calls and tool calls as AI observability events
+  (2026-11-02)
+
 ## 8.17.2
 
 ### Patch Changes
