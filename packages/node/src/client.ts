@@ -688,12 +688,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * The `posthog.emails` API: sends transactional email from PostHog email templates, and reads
-   * the status of each email it sent.
+   * The `posthog.emails` API: sends transactional email from PostHog email templates, reads
+   * the status of each email it sent, and sets a recipient's topic preferences.
    *
    * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope. A key with only
-   * `hog_flow:read` can read statuses but not send. Requests go to `appHost`, or to the PostHog
-   * Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and do not reject.
+   * `hog_flow:read` can read statuses but not send or set preferences. Requests go to `appHost`, or to the PostHog
+   * Cloud app host of `host`. `send`, `get` and `setPreferences` resolve to `{ data, error }` and do not reject.
    * `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
    * and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
    * returns the error `client_closed`.
@@ -713,6 +713,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * }
    *
    * const status = await client.emails.get(data.id) // later, for example from a job
+   *
+   * // From a preference center: opt out of one topic, keep the rest
+   * await client.emails.setPreferences({ to: 'user@example.com', topics: { newsletter: false } })
    * ```
    *
    * {@label Emails}

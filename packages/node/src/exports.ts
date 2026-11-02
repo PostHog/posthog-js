@@ -8,6 +8,7 @@ export { EmailError } from './emails/errors'
 export type { EmailErrorName } from './emails/errors'
 export type {
   EmailDeliveryStatus,
+  EmailPreferences,
   Emails,
   EmailStatus,
   EmailWarning,
@@ -15,6 +16,8 @@ export type {
   SendEmailOptions,
   SendEmailResponse,
   SendEmailResult,
+  SetEmailPreferencesOptions,
+  SetEmailPreferencesResponse,
 } from './emails/types'
 export type {
   FlagDefinitionCacheData,

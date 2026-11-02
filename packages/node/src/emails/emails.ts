@@ -9,6 +9,7 @@ import {
 
 import { EmailError } from './errors'
 import type {
+  EmailPreferences,
   EmailStatus,
   EmailWarning,
   Emails,
@@ -16,10 +17,13 @@ import type {
   SendEmailOptions,
   SendEmailResponse,
   SendEmailResult,
+  SetEmailPreferencesOptions,
+  SetEmailPreferencesResponse,
 } from './types'
 
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const STATUS_PATH = '/api/projects/@current/messaging/emails/{messageId}/'
+const PREFERENCES_PATH = '/api/projects/@current/messaging/preferences/'
 const US_APP_HOST = 'https://us.posthog.com'
 const EU_APP_HOST = 'https://eu.posthog.com'
 const CLOUD_APP_HOSTS: Record<string, string> = {
@@ -89,6 +93,10 @@ export class EmailSender implements Emails {
     return this.track(this.getUntracked(id))
   }
 
+  setPreferences(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse> {
+    return this.track(this.setPreferencesUntracked(options))
+  }
+
   private track<T>(pending: Promise<T>): Promise<T> {
     this.inFlight.add(pending)
     void pending.finally(() => this.inFlight.delete(pending))
@@ -145,6 +153,23 @@ export class EmailSender implements Emails {
       return { data: status, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Reading the email status failed unexpectedly.') }
+    }
+  }
+
+  private async setPreferencesUntracked(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse> {
+    try {
+      const body = preparePreferences(options)
+      const { appHost, secretKey } = this.connect(
+        'no preferences changed',
+        'Setting email preferences needs secretKey, a project secret API key with the hog_flow:write scope.'
+      )
+      const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
+      const preferences = await this.withRetries(this.config.maxRetries, async () =>
+        parsePreferencesReply(await this.request(appHost + PREFERENCES_PATH, 'POST', headers, body))
+      )
+      return { data: preferences, error: null }
+    } catch (error) {
+      return { data: null, error: asEmailError(error, 'Setting the email preferences failed unexpectedly.') }
     }
   }
 
@@ -322,6 +347,35 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 }
 
+function preparePreferences(options: SetEmailPreferencesOptions): string {
+  const fallback: Partial<SetEmailPreferencesOptions> = {}
+  const { to, allMarketing, topics } = options ?? fallback
+  if (typeof to !== 'string' || !to.trim()) {
+    throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
+  }
+  if (allMarketing !== undefined && typeof allMarketing !== 'boolean') {
+    throw invalid('invalid_preferences', 'allMarketing must be true or false.', 'allMarketing')
+  }
+  if (
+    topics !== undefined &&
+    (typeof topics !== 'object' ||
+      topics === null ||
+      Array.isArray(topics) ||
+      !Object.values(topics).every((value) => typeof value === 'boolean'))
+  ) {
+    throw invalid('invalid_preferences', 'topics must map each topic key to true or false.', 'topics')
+  }
+  const hasTopics = topics !== undefined && Object.keys(topics).length > 0
+  if (allMarketing === undefined && !hasTopics) {
+    throw invalid('invalid_preferences', 'Set allMarketing, topics, or both.', 'topics')
+  }
+  return safeJsonStringify({
+    identifier: to,
+    ...(allMarketing === undefined ? {} : { all_marketing: allMarketing }),
+    ...(hasTopics ? { topics } : {}),
+  })
+}
+
 function invalid(code: string, message: string, field: string): EmailError {
   return new EmailError({ code, message, field })
 }
@@ -412,6 +466,30 @@ function parseStatusReply({ status, payload, retryAfterMs }: Reply): EmailStatus
     })
   }
   return { id, status: deliveryStatus, createdAt, statusAt, reason: text(fields.reason) ?? null }
+}
+
+function parsePreferencesReply({ status, payload, retryAfterMs }: Reply): EmailPreferences {
+  const fields = replyFields(payload)
+  if (status < 200 || status >= 300) {
+    throw replyError(fields, status, retryAfterMs)
+  }
+  const to = text(fields.identifier)
+  const allMarketing = fields.all_marketing
+  const topics = fields.topics
+  if (
+    !to ||
+    !(allMarketing === null || typeof allMarketing === 'boolean') ||
+    topics === null ||
+    typeof topics !== 'object' ||
+    Array.isArray(topics)
+  ) {
+    throw new EmailError({
+      code: 'api_error',
+      message: 'PostHog answered without the preferences.',
+      statusCode: status,
+    })
+  }
+  return { to, allMarketing, topics: topics as Record<string, boolean> }
 }
 
 function replyError(fields: Record<string, unknown>, status: number, retryAfterMs: number | undefined): EmailError {
