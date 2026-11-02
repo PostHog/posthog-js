@@ -599,31 +599,30 @@ export default class MutationBuffer {
             inlineStylesheet: false,
           }),
         }),
-        addPosition: () => {
-          const parent = dom.parentNode(link);
-          if (!parent) return null;
-          const inShadowRoot = isShadowRoot(parent);
-          const parentId = this.mirror.getId(
-            inShadowRoot ? getShadowHost(link) : parent,
-          );
-          if (parentId === -1) return null;
-          // a sibling not recorded yet arrives in its own add, placed against the siblings after it
-          let next = dom.nextSibling(link);
-          while (next && this.mirror.getId(next) < 0) {
-            next = dom.nextSibling(next);
-          }
-          return {
-            parentId,
-            nextId: next ? this.mirror.getId(next) : null,
-            isShadow:
-              inShadowRoot && isNativeShadowDom(parent as ShadowRoot)
-                ? true
-                : undefined,
-          };
-        },
+        lastSerialization: () => this.mirror.getMeta(link),
+        readdAsMove: () => this.recordReinsertion(link),
       });
     }
   };
+
+  // Goes through the same path as a node taken out and put back in place, so a
+  // frozen or locked buffer holds it with the mutations recorded before it.
+  private recordReinsertion(node: Node): void {
+    const parent = dom.parentNode(node);
+    if (!parent) return;
+    const childListRecord = (removedNodes: Node[], addedNodes: Node[]) =>
+      ({
+        type: 'childList',
+        target: parent,
+        removedNodes,
+        addedNodes,
+        oldValue: null,
+        attributeName: null,
+      }) as unknown as mutationRecord;
+    this.processMutation(childListRecord([node], []));
+    this.processMutation(childListRecord([], [node]));
+    this.emit();
+  }
 
   private buildSerializationOptions(): Parameters<
     typeof serializeNodeWithId

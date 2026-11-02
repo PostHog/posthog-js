@@ -1317,7 +1317,8 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
   const recorderView = {
     currentId: () => 7,
     reserializeWithoutCss: () => ({ previous: null, current: null }),
-    addPosition: () => ({ parentId: 3, nextId: null }),
+    lastSerialization: () => null,
+    readdAsMove: () => {},
   };
   const serializedLink = (attributes: Record<string, string>) =>
     ({
@@ -1329,15 +1330,11 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
     }) as serializedNodeWithId;
   const recorderViewWithPrevious = (
     previousAttributes: Record<string, string>,
+    readdAsMove: () => void = vi.fn(),
   ) => ({
     ...recorderView,
-    reserializeWithoutCss: () => ({
-      previous: serializedLink(previousAttributes),
-      current: serializedLink({
-        rel: 'stylesheet',
-        href: 'https://example.com/theme.css',
-      }),
-    }),
+    lastSerialization: () => serializedLink(previousAttributes),
+    readdAsMove,
   });
   const linkWithUnreadableSheet = (): HTMLLinkElement => {
     const linkEl = document.createElement('link');
@@ -1360,10 +1357,7 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
       scheduled.shift()!(deadlineForSlices(100));
     }
   };
-  const readdMutations = (mutationCb: ReturnType<typeof vi.fn>) =>
-    mutationCb.mock.calls
-      .map(([mutation]) => mutation)
-      .filter((mutation) => mutation.adds.length > 0);
+
 
   it('emits nothing from pending work once its recorder stops', () => {
     const mutationCb = vi.fn();
@@ -1382,95 +1376,95 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
     expect(mutationCb).not.toHaveBeenCalled();
   });
 
-  it('re-adds an unreadable changed link as a plain link when replay shows it as a style', () => {
-    const mutationCb = vi.fn();
-    const manager = new StylesheetManager({
-      mutationCb: mutationCb as unknown as mutationCallBack,
+  const newManager = () =>
+    new StylesheetManager({
+      mutationCb: vi.fn() as unknown as mutationCallBack,
       adoptedStyleSheetCb: vi.fn(),
     });
+  const previousWithCss = { _cssText: '.old { color: red; }' };
+  const previousWithoutCss = {
+    rel: 'stylesheet',
+    href: 'https://example.com/theme.css',
+  };
+
+  it('re-adds an unreadable changed link when replay shows it as a style', () => {
+    const readdAsMove = vi.fn();
     const linkEl = linkWithUnreadableSheet();
 
-    manager.inlineLinkStylesheetAfterChange(
+    newManager().inlineLinkStylesheetAfterChange(
       linkEl,
-      recorderViewWithPrevious({ _cssText: '.old { color: red; }' }),
+      recorderViewWithPrevious(previousWithCss, readdAsMove),
     );
     drainScheduled();
 
-    expect(mutationCb).toHaveBeenCalledTimes(1);
-    const [mutation] = mutationCb.mock.calls[0];
-    expect(mutation.removes).toEqual([
-      { parentId: 3, id: 7, isShadow: undefined },
-    ]);
-    expect(mutation.adds).toEqual([
-      {
-        parentId: 3,
-        nextId: null,
-        node: serializedLink({
-          rel: 'stylesheet',
-          href: 'https://example.com/theme.css',
-        }),
-      },
-    ]);
+    expect(readdAsMove).toHaveBeenCalledTimes(1);
   });
 
   it('re-adds a changed link whose new sheet is empty when replay shows it as a style', () => {
-    const mutationCb = vi.fn();
-    const manager = new StylesheetManager({
-      mutationCb: mutationCb as unknown as mutationCallBack,
-      adoptedStyleSheetCb: vi.fn(),
-    });
+    const readdAsMove = vi.fn();
     const { linkEl } = linkWithCurrentSheet('');
 
-    manager.inlineLinkStylesheetAfterChange(
+    newManager().inlineLinkStylesheetAfterChange(
       linkEl,
-      recorderViewWithPrevious({ _cssText: '.old { color: red; }' }),
+      recorderViewWithPrevious(previousWithCss, readdAsMove),
     );
     drainScheduled();
 
-    expect(readdMutations(mutationCb)).toHaveLength(1);
+    expect(readdAsMove).toHaveBeenCalledTimes(1);
   });
 
   it('leaves an uninlinable changed link alone when replay still shows it as a link', () => {
-    const mutationCb = vi.fn();
-    const manager = new StylesheetManager({
-      mutationCb: mutationCb as unknown as mutationCallBack,
-      adoptedStyleSheetCb: vi.fn(),
-    });
+    const readdAsMove = vi.fn();
     const linkEl = linkWithUnreadableSheet();
 
-    manager.inlineLinkStylesheetAfterChange(
+    newManager().inlineLinkStylesheetAfterChange(
       linkEl,
-      recorderViewWithPrevious({
-        rel: 'stylesheet',
-        href: 'https://cdn.example.com/old.css',
-      }),
+      recorderViewWithPrevious(previousWithoutCss, readdAsMove),
     );
     drainScheduled();
 
-    expect(mutationCb).not.toHaveBeenCalled();
+    expect(readdAsMove).not.toHaveBeenCalled();
   });
 
   it('re-adds a changed link whose earlier CSS this recorder sent', () => {
-    const mutationCb = vi.fn();
-    const manager = new StylesheetManager({
-      mutationCb: mutationCb as unknown as mutationCallBack,
-      adoptedStyleSheetCb: vi.fn(),
-    });
+    const readdAsMove = vi.fn();
+    const manager = newManager();
     const { linkEl, backingSheet } = linkWithCurrentSheet();
-    const viewWithoutCssInPrevious = recorderViewWithPrevious({
-      rel: 'stylesheet',
-      href: 'https://example.com/theme.css',
-    });
+    const view = recorderViewWithPrevious(previousWithoutCss, readdAsMove);
 
-    manager.inlineLinkStylesheetAfterChange(linkEl, viewWithoutCssInPrevious);
+    manager.inlineLinkStylesheetAfterChange(linkEl, view);
     drainScheduled();
-    expect(readdMutations(mutationCb)).toHaveLength(0);
+    expect(readdAsMove).not.toHaveBeenCalled();
 
     backingSheet.deleteRule(0);
-    manager.inlineLinkStylesheetAfterChange(linkEl, viewWithoutCssInPrevious);
+    manager.inlineLinkStylesheetAfterChange(linkEl, view);
     drainScheduled();
 
-    expect(readdMutations(mutationCb)).toHaveLength(1);
+    expect(readdAsMove).toHaveBeenCalledTimes(1);
+  });
+
+  it('contains an error thrown while re-adding a link whose sheet went away', () => {
+    const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
+    linkEl.setAttribute('href', 'https://cdn.example.com/theme.css');
+    document.head.appendChild(linkEl);
+    created.push(linkEl);
+    // the up-to-date check reads the sheet twice; inlining then finds none and
+    // falls back at once, outside an idle slice
+    const sheet = { href: linkEl.href };
+    let sheetReads = 0;
+    Object.defineProperty(linkEl, 'sheet', {
+      get: () => (sheetReads++ < 2 ? sheet : null),
+    });
+
+    expect(() =>
+      newManager().inlineLinkStylesheetAfterChange(
+        linkEl,
+        recorderViewWithPrevious(previousWithCss, () => {
+          throw new Error('emit failed');
+        }),
+      ),
+    ).not.toThrow();
   });
 
   it('cancels the idle callback of pending work when its recorder stops', () => {

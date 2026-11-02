@@ -94,12 +94,9 @@ type ChangedLinkRecorderView = {
     previous: serializedNodeWithId | null;
     current: serializedNodeWithId | null;
   };
-  /** Where an add of the link goes; null when its parent is not recorded. */
-  addPosition: () => {
-    parentId: number;
-    nextId: number | null;
-    isShadow?: true;
-  } | null;
+  lastSerialization: () => serializedNodeWithId | null;
+  /** Records the link as removed and added again, in order with the mutations the recorder still holds. */
+  readdAsMove: () => void;
 };
 
 // bounds the rework when the page keeps changing a sheet through the CSSOM
@@ -532,42 +529,30 @@ export class StylesheetManager {
   }
 
   // Replay cannot turn the `<style>` it built from earlier CSS back into a
-  // `<link>`, so a remove and add of the same node, as for a moved node, makes
-  // it build a `<link>` that loads the new href.
+  // `<link>`, so the link goes out as a remove and an add, as a moved node
+  // does, and replay builds a `<link>` that loads the new href.
   private readdAsPlainLink(
     linkEl: HTMLLinkElement,
     recorderView: ChangedLinkRecorderView,
   ): void {
-    if (this.stopped || !linkEl.isConnected || this.isLinkBlocked(linkEl)) {
-      return;
+    try {
+      if (this.stopped || !linkEl.isConnected || this.isLinkBlocked(linkEl)) {
+        return;
+      }
+      const replayShowsStyle =
+        this.linksInlinedSinceSnapshot.has(linkEl) ||
+        '_cssText' in
+          ((recorderView.lastSerialization() as elementNode | null)
+            ?.attributes ?? {});
+      if (!replayShowsStyle) {
+        return;
+      }
+      this.linksInlinedSinceSnapshot.delete(linkEl);
+      recorderView.readdAsMove();
+    } catch (e) {
+      // runs from a load event, timer or idle callback: a throwing consumer
+      // emit or mask callback must not surface on the customer's page
     }
-    const { previous, current } = recorderView.reserializeWithoutCss();
-    const replayShowsStyle =
-      this.linksInlinedSinceSnapshot.has(linkEl) ||
-      '_cssText' in ((previous as elementNode | null)?.attributes ?? {});
-    const position = recorderView.addPosition();
-    if (!replayShowsStyle || !current || !position) {
-      return;
-    }
-    this.mutationCb({
-      texts: [],
-      attributes: [],
-      removes: [
-        {
-          parentId: position.parentId,
-          id: current.id,
-          isShadow: position.isShadow,
-        },
-      ],
-      adds: [
-        {
-          parentId: position.parentId,
-          nextId: position.nextId,
-          node: current,
-        },
-      ],
-    });
-    this.linksInlinedSinceSnapshot.delete(linkEl);
   }
 
   public trackLinkElement(linkEl: HTMLLinkElement): void {

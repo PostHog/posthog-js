@@ -1983,6 +1983,35 @@ describe('record', function (this: ISuite) {
           : [],
       );
 
+    const replayAtEnd = async () => {
+      const recordedEvents = [...ctx.events];
+      const firstTimestamp = recordedEvents[0].timestamp;
+      const lastTimestamp = recordedEvents[recordedEvents.length - 1].timestamp;
+      await ctx.page.evaluate(
+        ({ events, pauseAt }) => {
+          const { Replayer } = (
+            window as unknown as {
+              rrweb: {
+                Replayer: new (e: eventWithTime[]) => {
+                  pause: (t: number) => void;
+                };
+              };
+            }
+          ).rrweb;
+          new Replayer(events).pause(pauseAt);
+        },
+        {
+          events: recordedEvents,
+          pauseAt: lastTimestamp - firstTimestamp + 200,
+        },
+      );
+      return (await (await ctx.page.$('iframe'))!.contentFrame())!;
+    };
+    const replayedStyleText = (replayFrame: puppeteer.Frame) =>
+      replayFrame.$$eval('style', (styles) =>
+        styles.map((style) => style.textContent).join(''),
+      );
+
     it('replays a plain link when the new sheet of a changed link cannot be read', async () => {
       const crossOriginURL = serverURL.replace('localhost', '127.0.0.1');
       const newHref = `${crossOriginURL}/html/assets/style.css?v=2`;
@@ -2013,38 +2042,55 @@ describe('record', function (this: ISuite) {
         '_cssText',
       );
 
-      const recordedEvents = [...ctx.events];
-      const firstTimestamp = recordedEvents[0].timestamp;
-      const lastTimestamp = recordedEvents[recordedEvents.length - 1].timestamp;
-      await ctx.page.evaluate(
-        ({ events, pauseAt }) => {
-          const { Replayer } = (
-            window as unknown as {
-              rrweb: {
-                Replayer: new (e: eventWithTime[]) => {
-                  pause: (t: number) => void;
-                };
-              };
-            }
-          ).rrweb;
-          new Replayer(events).pause(pauseAt);
-        },
-        {
-          events: recordedEvents,
-          pauseAt: lastTimestamp - firstTimestamp + 200,
-        },
-      );
-      const replayFrame = await (await ctx.page.$('iframe'))!.contentFrame();
+      const replayFrame = await replayAtEnd();
       expect(
-        await replayFrame!.$$eval('link', (links) =>
+        await replayFrame.$$eval('link', (links) =>
           links.map((link) => link.getAttribute('href')),
         ),
       ).toContain(newHref);
+      expect(await replayedStyleText(replayFrame)).not.toContain('pink');
+    });
+
+    it('replays a plain link in its new place when the link moved while recording was frozen', async () => {
+      const crossOriginURL = serverURL.replace('localhost', '127.0.0.1');
+      const newHref = `${crossOriginURL}/html/assets/style.css?frozen`;
+      await ctx.page.evaluate(
+        async ({ serverURL, newHref }) => {
+          const { record, freezePage } = (window as unknown as IWindow).rrweb;
+          const link = document.createElement('link');
+          link.setAttribute('rel', 'stylesheet');
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+          await new Promise((resolve) => {
+            link.onload = resolve;
+            document.head.appendChild(link);
+          });
+
+          record({
+            inlineStylesheet: true,
+            emit: (window as unknown as IWindow).emit,
+          });
+
+          link.setAttribute('href', newHref);
+          // the href mutation is emitted first, and the sheet cannot load within a microtask
+          await Promise.resolve();
+          freezePage();
+          document.body.appendChild(link);
+          // the new sheet loads, and its fallback runs, while the move is still buffered
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          // 'unfreeze' happens upon a user event
+          document.body.click();
+        },
+        { serverURL, newHref },
+      );
+
+      await waitForCondition(() => addedLinks()[0]);
+      const replayFrame = await replayAtEnd();
       expect(
-        await replayFrame!.$$eval('style', (styles) =>
-          styles.map((style) => style.textContent).join(''),
+        await replayFrame.$$eval('body link', (links) =>
+          links.map((link) => link.getAttribute('href')),
         ),
-      ).not.toContain('pink');
+      ).toContain(newHref);
+      expect(await replayedStyleText(replayFrame)).not.toContain('pink');
     });
 
     it('does not re-add a changed link that replay still shows as a link', async () => {
