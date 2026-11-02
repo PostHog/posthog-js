@@ -94,6 +94,28 @@ describe('waitUntil debounced flush', () => {
       expect(mockWaitUntil).toHaveBeenCalledWith(expect.any(Promise))
     })
 
+    it('schedules a waitUntil flush for an event dropped while its properties are read', async () => {
+      const errors: unknown[] = []
+      posthog.on('error', (error) => errors.push(error))
+      const properties = Object.defineProperty({}, 'value', {
+        enumerable: true,
+        get: () => {
+          throw new Error('getter failed')
+        },
+      })
+
+      posthog.capture({ distinctId: 'user-1', event: 'unreadable', properties })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockWaitUntil).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      await expect(mockWaitUntil.mock.calls[0][0]).resolves.toBeUndefined()
+      expect(errors).toEqual([
+        expect.objectContaining({ name: 'CaptureError', message: expect.stringContaining('could not be serialized') }),
+      ])
+      expect(mockedFetch).not.toHaveBeenCalled()
+    })
+
     it('does not call waitUntil again on subsequent captures in same batch', async () => {
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
       posthog.capture({ distinctId: 'user-1', event: 'event_2' })
