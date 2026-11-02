@@ -24,13 +24,18 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 const LONE_SURROGATE_ESCAPE = /(?<!\\)((?:\\\\)*)\\u[dD][89a-fA-F][0-9a-fA-F]{2}/g
 
 /**
- * Why capture would reject this event, or undefined when it can be sent. A name must be a non-empty string, and the
- * name and ids must be well-formed Unicode: a broken id is never repaired, because two broken ids could collapse into one.
+ * Why capture would reject this event, or undefined when it can be sent. A name must be a non-empty string, the
+ * distinct id a string, and the name and ids well-formed Unicode: a broken id is never repaired, because two broken ids
+ * could collapse into one.
  */
 export function wireProblem(message: PostHogEventProperties): string | undefined {
   const { event, distinct_id: distinctId, properties } = message
   if (typeof event !== 'string' || event === '') {
     return 'event name is missing, empty or not a string'
+  }
+  // Caller ids are already strings, so only a before_send hook can leave a non-string here.
+  if (typeof distinctId !== 'string') {
+    return 'distinct id is missing or not a string'
   }
   const props = (properties ?? {}) as Record<string, unknown>
   const ids = [event, distinctId, props.$session_id, props.$window_id]

@@ -11,7 +11,7 @@ export interface AiLaneCapableClient extends FullAiCaptureGate {
   captureImmediate(props: EventMessage): Promise<void>
   captureAi?(props: EventMessage): string | undefined
   captureAiImmediate?(props: EventMessage): Promise<string | undefined>
-  getLibraryVersion?(): string
+  registerOptions?(options: Record<string, unknown>): Promise<void>
 }
 
 /** @internal */
@@ -44,6 +44,16 @@ export function personlessOptions(personless: boolean): Pick<EventMessage, 'opti
 }
 
 /**
+ * Whether the client is posthog-node 6 or later. `registerOptions` first shipped in 6.0. The
+ * version is not read, because `getLibraryVersion()` can be overridden by a subclass or wrapper.
+ *
+ * @internal
+ */
+export function isPostHogNode6(client: Pick<AiLaneCapableClient, 'registerOptions'>): boolean {
+  return typeof client.registerOptions === 'function'
+}
+
+/**
  * posthog-node 6 sends every AI event on its capture v1 AI lane; `enableFullAiCapture` then only
  * controls truncation and media redaction. posthog-node 5 keeps the opt-in, so an `@posthog/ai`
  * upgrade never changes how a 5.x client sends.
@@ -51,8 +61,7 @@ export function personlessOptions(personless: boolean): Pick<EventMessage, 'opti
  * @internal
  */
 export function usesAiLane(client: AiLaneCapableClient): boolean {
-  const major = Number.parseInt(client.getLibraryVersion?.() ?? '', 10)
-  return major >= 6 || isFullAiCaptureEnabled(client)
+  return isPostHogNode6(client) || isFullAiCaptureEnabled(client)
 }
 
 /** @internal */

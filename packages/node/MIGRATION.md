@@ -136,7 +136,8 @@ posthog.on('error', (error) => {
 
 - `details` names the reason, for example a capture result such as `invalid_options` or `duplicate_event_uuid`, or a local reason: `queue full`, `event too large`, `invalid event` or `unserializable event`.
 - A local drop report lists at most 100 uuids. Its message carries the full count.
-- An event with no result in a `2xx` response counts as delivered. A proxy that answers the capture path with its own `200` therefore reports nothing. Make sure your proxy passes the capture response through.
+- An event with no result in a `2xx` response counts as delivered.
+- A `2xx` response whose body is not JSON, or has no `results` object, fails the whole batch. The SDK does not resend it, and `'error'` lists its events in `retryExhausted`. A proxy that answers the capture path with its own `200` therefore loses the batch. Make sure your proxy passes the capture response through.
 - With no `'error'` listener, the SDK logs one warning per failed batch, for example `[PostHog] 3 event(s) were not delivered to /i/v1/analytics/events: 3 failed with HTTP 400`. The line never contains event content, uuids or the server's response text.
 - 5.x emitted the raw HTTP or network error. Update any code or log-based alerts that match the old errors.
 
@@ -242,7 +243,7 @@ These changes follow from this order:
 - Review your `before_send` hooks for the new event shape. A legacy property such as `$process_person_profile` that the hook sets does not replace an option that is already set. A hook that returns a new message must copy `options`, or the event is sent without them. That includes the `process_person_profile: false` the SDK sets for an event without a distinct id, so PostHog would create a person for its generated id.
 - `before_send` gets its own copy of the event's plain objects and arrays. Changing a nested value no longer changes your objects or the `register()` and context values, as it could in 5.x. Class instances, such as `Date`, are not copied.
 - `$geoip_disable` and `$groups` are set before `before_send`, so to change them, edit the properties. Changing the message's `disableGeoip` or `groups` field has no effect.
-- A `before_send` hook that throws drops the event, as in 5.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing.
+- A `before_send` hook that throws drops the event, as in 5.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing. It is printed with `console.error` even when `debug` is off; in 5.x it showed only with `debug` on.
 - With `sendFeatureFlags`, the `/flags` request now runs before `before_send` and uses the event's own distinct id, even for an event the hook then drops. Changes the hook makes to the message's `groups` or `sendFeatureFlags` no longer reach that request, as editing those objects in place could in 5.x. To avoid that request, call `evaluateFlags()` yourself and pass the snapshot as `flags`.
 - Context and `register()` properties and options now reach `identify`, `alias` and `groupIdentify` events, not only `capture`.
 
@@ -296,6 +297,7 @@ Capture rejects a whole request when one event has a broken field.
 6.0 drops only that event before sending, so the rest of the batch is delivered.
 
 - An event whose name is missing, empty or not a string is dropped and reported through `'error'` (`details: 'invalid event'`). 5.x sent it, and an object name was sent as `"[object Object]"`.
+- An event whose `before_send` hook leaves `distinctId` missing, `null` or not a string is dropped the same way. 5.x sent it. A non-string `distinctId` you pass is now turned into a string before `before_send` runs, so the hook sees `'42'`, not `42`. A hook that sets `distinctId` to `''` still sends the event, and PostHog drops it and reports it.
 - An event whose name, distinct id, session id or window id is not well-formed Unicode (it has a lone surrogate) is dropped the same way.
 - An event with a property value that throws when the SDK reads or serializes it, such as a getter or a `toJSON` method that throws, is dropped alone and reported through `'error'` (`details: 'unserializable event'`). The report has no event content, and the SDK does not keep or log the error. When the event has no uuid yet, the report counts it but does not list it.
 - In 5.x, a value that threw when the client read the call's properties dropped the event and printed the raw error with `console.error`, without `'error'`. A value that threw during serialization failed the whole batch, up to `maxBatchSize` events, and emitted the raw error on `'error'`.
