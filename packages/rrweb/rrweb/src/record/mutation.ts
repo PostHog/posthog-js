@@ -69,6 +69,7 @@ function getSerializedAttributeName(
 export default class MutationBuffer {
   private frozen = false;
   private locked = false;
+  private takePendingRecords: (() => mutationRecord[]) | undefined;
 
   private texts: textCursor[] = [];
   private attributes: attributeCursor[] = [];
@@ -190,6 +191,10 @@ export default class MutationBuffer {
     this.locked = false;
     this.canvasManager.unlock();
     this.emit();
+  }
+
+  public readPendingRecordsFrom(observer: MutationObserver): void {
+    this.takePendingRecords = () => observer.takeRecords();
   }
 
   public reset(): void {
@@ -599,9 +604,33 @@ export default class MutationBuffer {
             inlineStylesheet: false,
           }),
         }),
+        lastSerialization: () => this.mirror.getMeta(link),
+        readdAsMove: () => this.recordReinsertion(link),
       });
     }
   };
+
+  // Goes through the same path as a node taken out and put back in place, so a
+  // frozen or locked buffer holds it with the mutations recorded before it.
+  private recordReinsertion(node: Node): void {
+    const parent = dom.parentNode(node);
+    if (!parent) return;
+    // the add needs the node's next sibling recorded, and the page can insert
+    // it in the same task, before the observer delivers its record
+    this.takePendingRecords?.().forEach(this.processMutation);
+    const childListRecord = (removedNodes: Node[], addedNodes: Node[]) =>
+      ({
+        type: 'childList',
+        target: parent,
+        removedNodes,
+        addedNodes,
+        oldValue: null,
+        attributeName: null,
+      }) as unknown as mutationRecord;
+    this.processMutation(childListRecord([node], []));
+    this.processMutation(childListRecord([], [node]));
+    this.emit();
+  }
 
   private buildSerializationOptions(): Parameters<
     typeof serializeNodeWithId
