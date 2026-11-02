@@ -138,9 +138,9 @@ export interface Emails {
   get(id: string): Promise<GetEmailResponse>
 
   /**
-   * Opt one recipient out of topics, or back in, in one request. PostHog saves the whole change at once, so a
-   * failed call changed nothing and a retry is safe. Workflows sends skip a marketing topic the recipient opted
-   * out of.
+   * Opt one recipient out of topics, or back in, in one request. PostHog saves the whole change at once, and the
+   * same change twice ends the same, so a retry is safe. A failed call may still have saved the change. Workflows
+   * sends skip a marketing topic the recipient opted out of.
    *
    * Resolves to `{ data, error }` and does not reject. The error code is `not_found` when a topic key names no
    * topic of the project. Network errors, rate limits and an unavailable service are retried.

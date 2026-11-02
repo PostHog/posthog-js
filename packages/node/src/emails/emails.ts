@@ -481,7 +481,8 @@ function parsePreferencesReply({ status, payload, retryAfterMs }: Reply): EmailP
     !(allMarketing === null || typeof allMarketing === 'boolean') ||
     topics === null ||
     typeof topics !== 'object' ||
-    Array.isArray(topics)
+    Array.isArray(topics) ||
+    !Object.values(topics).every((value) => typeof value === 'boolean')
   ) {
     throw new EmailError({
       code: 'api_error',

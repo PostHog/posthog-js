@@ -555,6 +555,19 @@ describe('emails', () => {
       expect(fetch).toHaveBeenCalledTimes(1)
     })
 
+    it.each([
+      ['a topic value that is not a boolean', { topics: { newsletter: 'false' } }],
+      ['no topics', { topics: null }],
+      ['an all_marketing value that is not a boolean', { all_marketing: 'false' }],
+    ])('reports a reply with %s as api_error', async (_label, fields) => {
+      replies = [applied(fields)]
+
+      const { data, error } = await setPreferences()
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'api_error', statusCode: 200 })
+    })
+
     it('retries an unavailable service, because the same change twice ends the same', async () => {
       replies = [rejected(503), applied()]
 
