@@ -392,6 +392,27 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         mediaType: 'image/png',
         expected: '[base64 image/png redacted]',
       },
+      {
+        name: 'oversized bytes with a wildcard type',
+        fullCapture: true,
+        data: oversizedBytes,
+        mediaType: 'image/*',
+        expected: '[base64 image/* redacted]',
+      },
+      {
+        name: 'oversized base64 with a wildcard type',
+        fullCapture: true,
+        data: Buffer.from(oversizedBytes).toString('base64'),
+        mediaType: 'image/*',
+        expected: '[base64 image/* redacted]',
+      },
+      {
+        name: 'file ID',
+        fullCapture: true,
+        data: 'file-abc123',
+        mediaType: 'application/pdf',
+        expected: 'file-abc123',
+      },
     ])('records file $name, full capture $fullCapture', async ({ fullCapture, data, mediaType, expected }) => {
       const client = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
       client.enableFullAiCapture = fullCapture
@@ -417,27 +438,42 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(properties['$ai_output_choices'][0].content[0].data).toBe(expected)
     })
 
-    it('shares one file budget across the event under full capture', async () => {
+    it.each(['generate', 'stream'])('shares one file budget between input and output in %s', async (mode) => {
       const client = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
       client.enableFullAiCapture = true
-      const baseModel = createMockV3Model('image-model')
+      const outputFile = new Uint8Array(1024 * 1024)
+      const baseModel = {
+        ...createMockStreamingModel('v3', [
+          { type: 'file', mediaType: 'image/png', data: outputFile },
+          { type: 'finish', usage: v3TokenUsage(1, 1), finishReason: { unified: 'stop' as const, raw: undefined } },
+        ]),
+        doGenerate: vi.fn().mockResolvedValue({
+          content: [{ type: 'file', data: outputFile, mediaType: 'image/png' }],
+          usage: v3TokenUsage(1, 1),
+          finishReason: { unified: 'stop', raw: undefined },
+          warnings: [],
+        }),
+      } as LanguageModelV3
       const model = withTracing(baseModel, client, { posthogDistinctId: 'test-user' })
-
-      await model.doGenerate({
+      const params = {
         prompt: [
-          {
-            role: 'user',
-            content: [
-              { type: 'file', data: new Uint8Array(5 * 1024 * 1024), mediaType: 'image/png' },
-              { type: 'file', data: new Uint8Array(1024 * 1024), mediaType: 'image/png' },
-            ],
-          },
+          { role: 'user', content: [{ type: 'file', data: new Uint8Array(5 * 1024 * 1024), mediaType: 'image/png' }] },
         ],
-      } as any)
+      } as any
 
-      const files = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_input'][0].content
-      expect(files[0].file.startsWith('data:image/png;base64,')).toBe(true)
-      expect(files[1].file).toBe('[base64 image/png redacted]')
+      if (mode === 'generate') {
+        await model.doGenerate(params)
+      } else {
+        const reader = (await model.doStream(params)).stream.getReader()
+        while (!(await reader.read()).done) {
+          // Consume stream
+        }
+        await flushPromises()
+      }
+
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_output_choices'][0].content[0].data.startsWith('data:image/png;base64,')).toBe(true)
+      expect(properties['$ai_input'][0].content[0].file).toBe('[base64 image/png redacted]')
     })
 
     it('redacts data URL objects from input while preserving HTTP URL objects', async () => {

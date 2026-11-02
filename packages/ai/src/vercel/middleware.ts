@@ -102,8 +102,9 @@ const fitsBudget = (length: number, budget: FileBudget): boolean => {
   return true
 }
 
-const fullCaptureDataUrl = (dataUrl: string, budget: FileBudget, mediaType?: string): string =>
-  fitsBudget(dataUrl.length, budget) ? dataUrl : String(redactBase64DataUrl(dataUrl, mediaType))
+// The redactor reads the original value, so an over-budget file gets the same placeholder however it arrived.
+const fullCaptureDataUrl = (dataUrl: string, original: unknown, budget: FileBudget, mediaType?: string): string =>
+  fitsBudget(dataUrl.length, budget) ? dataUrl : String(redactBase64DataUrl(original, mediaType))
 
 const redactFileData = (
   data: unknown,
@@ -117,24 +118,25 @@ const redactFileData = (
     }
     const prefix = `data:${dataUrlMediaType(mediaType)};base64,`
     if (!fitsBudget(prefix.length + Math.ceil(data.length / 3) * 4, budget)) {
-      return `[base64 ${mediaType} redacted]`
+      return String(redactBase64DataUrl(data, mediaType))
     }
     return prefix + uint8ArrayToBase64(data)
   }
   if (data instanceof URL) {
     return isFullAiCaptureEnabled(client)
-      ? fullCaptureDataUrl(data.toString(), budget, mediaType)
+      ? fullCaptureDataUrl(data.toString(), data.toString(), budget, mediaType)
       : redactBase64DataUrl(data.toString(), data.protocol === 'data:' ? mediaType : undefined)
   }
   if (isString(data)) {
     if (!isFullAiCaptureEnabled(client)) {
       return redactBase64DataUrl(data, mediaType)
     }
-    if (/^(data:|https?:\/\/)/i.test(data)) {
-      return fullCaptureDataUrl(data, budget, mediaType)
+    // The AI SDK strips data URLs down to bare base64, which ingestion can't type. Anything else, such as an
+    // OpenAI file ID, passes through as it is.
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+      return fullCaptureDataUrl(data, data, budget, mediaType)
     }
-    // The AI SDK strips data URLs down to bare base64, which ingestion can't type.
-    return fullCaptureDataUrl(`data:${dataUrlMediaType(mediaType)};base64,${data}`, budget, mediaType)
+    return fullCaptureDataUrl(`data:${dataUrlMediaType(mediaType)};base64,${data}`, data, budget, mediaType)
   }
   return undefined
 }
@@ -584,9 +586,12 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           const modelId =
             mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
           const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
-          // result.content is undefined when the model returns only tool calls with no text output
           const fileBudget = newFileBudget()
-          const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[], phClient, fileBudget)
+          // Privacy mode drops the output, so skip encoding its files.
+          // result.content is undefined when the model returns only tool calls with no text output
+          const content = privacyMode
+            ? []
+            : mapVercelOutput((result.content ?? []) as LanguageModelContent[], phClient, fileBudget)
           const latency = (Date.now() - startTime) / 1000
           const providerMetadata = result.providerMetadata
           const additionalTokenValues = extractAdditionalTokenValues(providerMetadata, result.usage)
