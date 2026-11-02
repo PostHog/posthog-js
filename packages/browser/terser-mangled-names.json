@@ -808,6 +808,7 @@
         "_runWithPreparedSiteAppElements",
         "_safeTrackFullSnapshotCost",
         "_sampleRate",
+        "_sanitizeLinkTargets",
         "_saveDebounceMs",
         "_saveSessionState",
         "_scheduleCheck",
