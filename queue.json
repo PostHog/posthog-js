@@ -1,19 +1,4 @@
 {
   "version": 1,
-  "items": [
-    {
-      "id": "issue-closed-3842-auto-none-no-comment-no-close-1793614995157",
-      "kind": "issue-closed",
-      "number": 3842,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-11-02T10:23:15.157Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 41428346533,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/41428346533"
-      },
-      "attempts": 1
-    }
-  ]
+  "items": []
 }
