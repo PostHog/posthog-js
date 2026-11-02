@@ -754,6 +754,7 @@ describe('record() teardown of deferred stylesheets', () => {
     document.head.appendChild(linkEl);
     cleanupNodes.push(oldSheetEl, newSheetEl, linkEl);
     return {
+      linkEl,
       changeHref: () =>
         linkEl.setAttribute('href', `https://example.com/${marker}-dark.css`),
       loadNewSheet: () => {
@@ -780,6 +781,29 @@ describe('record() teardown of deferred stylesheets', () => {
     expect(flushed).toHaveLength(1);
     expect(flushed[0]).toContain('.theme-dark');
     expect(scheduled.size).toBe(0);
+  });
+
+  it('keeps a re-added link whose next sibling the page inserted just before stopping', async () => {
+    const link = changedLinkWithNewSheet(0, 'empty');
+    stop = startRecording(100_000);
+
+    link.changeHref();
+    await nextMutationObserverDelivery();
+    link.loadNewSheet();
+    link.linkEl.after(document.createElement('meta'));
+    cleanupNodes.push(link.linkEl.nextElementSibling!);
+    stop!();
+    stop = undefined;
+
+    const addedNodes = events.flatMap((event) =>
+      event.type === EventType.IncrementalSnapshot &&
+      event.data.source === IncrementalSource.Mutation
+        ? event.data.adds.map((add) => add.node)
+        : [],
+    );
+    expect(addedNodes).toContainEqual(
+      expect.objectContaining({ tagName: 'link' }),
+    );
   });
 
   it('a stop from inside an emit during the pagehide flush does not start a second flush', async () => {
@@ -1295,12 +1319,14 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
       .cancelIdleCallback;
   });
 
-  const linkWithCurrentSheet = (): {
+  const linkWithCurrentSheet = (
+    cssText = '.a { color: red; }',
+  ): {
     linkEl: HTMLLinkElement;
     backingSheet: CSSStyleSheet;
   } => {
     const styleEl = document.createElement('style');
-    styleEl.textContent = '.a { color: red; }';
+    styleEl.textContent = cssText;
     document.head.appendChild(styleEl);
     const linkEl = document.createElement('link');
     linkEl.setAttribute('rel', 'stylesheet');
@@ -1315,7 +1341,47 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
   const recorderView = {
     currentId: () => 7,
     reserializeWithoutCss: () => ({ previous: null, current: null }),
+    lastSerialization: () => null,
+    readdAsMove: () => {},
   };
+  const serializedLink = (attributes: Record<string, string>) =>
+    ({
+      type: NodeType.Element,
+      tagName: 'link',
+      attributes,
+      childNodes: [],
+      id: 7,
+    }) as serializedNodeWithId;
+  const recorderViewWithPrevious = (
+    previousAttributes: Record<string, string>,
+    readdAsMove: () => void = vi.fn(),
+  ) => ({
+    ...recorderView,
+    lastSerialization: () => serializedLink(previousAttributes),
+    readdAsMove,
+  });
+  const linkWithUnreadableSheet = (): HTMLLinkElement => {
+    const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
+    linkEl.setAttribute('href', 'https://cdn.example.com/theme.css');
+    document.head.appendChild(linkEl);
+    created.push(linkEl);
+    Object.defineProperty(linkEl, 'sheet', {
+      value: {
+        href: linkEl.href,
+        get cssRules(): CSSRuleList {
+          throw new DOMException('cross-origin sheet', 'SecurityError');
+        },
+      },
+    });
+    return linkEl;
+  };
+  const drainScheduled = () => {
+    while (scheduled.length) {
+      scheduled.shift()!(deadlineForSlices(100));
+    }
+  };
+
 
   it('emits nothing from pending work once its recorder stops', () => {
     const mutationCb = vi.fn();
@@ -1332,6 +1398,97 @@ describe('StylesheetManager.inlineLinkStylesheetAfterChange()', () => {
     }
 
     expect(mutationCb).not.toHaveBeenCalled();
+  });
+
+  const newManager = () =>
+    new StylesheetManager({
+      mutationCb: vi.fn() as unknown as mutationCallBack,
+      adoptedStyleSheetCb: vi.fn(),
+    });
+  const previousWithCss = { _cssText: '.old { color: red; }' };
+  const previousWithoutCss = {
+    rel: 'stylesheet',
+    href: 'https://example.com/theme.css',
+  };
+
+  it('re-adds an unreadable changed link when replay shows it as a style', () => {
+    const readdAsMove = vi.fn();
+    const linkEl = linkWithUnreadableSheet();
+
+    newManager().inlineLinkStylesheetAfterChange(
+      linkEl,
+      recorderViewWithPrevious(previousWithCss, readdAsMove),
+    );
+    drainScheduled();
+
+    expect(readdAsMove).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-adds a changed link whose new sheet is empty when replay shows it as a style', () => {
+    const readdAsMove = vi.fn();
+    const { linkEl } = linkWithCurrentSheet('');
+
+    newManager().inlineLinkStylesheetAfterChange(
+      linkEl,
+      recorderViewWithPrevious(previousWithCss, readdAsMove),
+    );
+    drainScheduled();
+
+    expect(readdAsMove).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves an uninlinable changed link alone when replay still shows it as a link', () => {
+    const readdAsMove = vi.fn();
+    const linkEl = linkWithUnreadableSheet();
+
+    newManager().inlineLinkStylesheetAfterChange(
+      linkEl,
+      recorderViewWithPrevious(previousWithoutCss, readdAsMove),
+    );
+    drainScheduled();
+
+    expect(readdAsMove).not.toHaveBeenCalled();
+  });
+
+  it('re-adds a changed link whose earlier CSS this recorder sent', () => {
+    const readdAsMove = vi.fn();
+    const manager = newManager();
+    const { linkEl, backingSheet } = linkWithCurrentSheet();
+    const view = recorderViewWithPrevious(previousWithoutCss, readdAsMove);
+
+    manager.inlineLinkStylesheetAfterChange(linkEl, view);
+    drainScheduled();
+    expect(readdAsMove).not.toHaveBeenCalled();
+
+    backingSheet.deleteRule(0);
+    manager.inlineLinkStylesheetAfterChange(linkEl, view);
+    drainScheduled();
+
+    expect(readdAsMove).toHaveBeenCalledTimes(1);
+  });
+
+  it('contains an error thrown while re-adding a link whose sheet went away', () => {
+    const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
+    linkEl.setAttribute('href', 'https://cdn.example.com/theme.css');
+    document.head.appendChild(linkEl);
+    created.push(linkEl);
+    // the up-to-date check reads the sheet twice; inlining then finds none and
+    // falls back at once, outside an idle slice
+    const sheet = { href: linkEl.href };
+    let sheetReads = 0;
+    Object.defineProperty(linkEl, 'sheet', {
+      get: () => (sheetReads++ < 2 ? sheet : null),
+    });
+
+    expect(() =>
+      newManager().inlineLinkStylesheetAfterChange(
+        linkEl,
+        recorderViewWithPrevious(previousWithCss, () => {
+          throw new Error('emit failed');
+        }),
+      ),
+    ).not.toThrow();
   });
 
   it('cancels the idle callback of pending work when its recorder stops', () => {
