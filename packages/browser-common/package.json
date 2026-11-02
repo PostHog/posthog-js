@@ -251,6 +251,7 @@
     "dependencies": {
         "@posthog/core": "workspace:^",
         "@posthog/types": "workspace:^",
+        "dompurify": "^3.4.13",
         "preact": "^10.29.3"
     },
     "devDependencies": {

@@ -246,7 +246,7 @@ const eligibility = await feedback?.canRenderSurvey('feedback')
 
 The options are `automaticDisplay` (default `true`), `requestTimeoutMs` (default `10_000`), `prefillFromUrl` (default `false`), `overrideDisplayLanguage`, `prepareStylesheet`, and `getCurrentUrl`. `getActiveMatchingSurveys(callback, forceReload?)` applies targeting; `onSurveysLoaded(callback)` returns a disposable subscription; `cancelPendingSurvey(id)` cancels pending display. Capture consent still gates rendering and responses.
 
-Use `surveys: false` to omit automatic inclusion. An explicitly supplied instance takes precedence, including over `false`. To include orchestration, rendering, and styles statically without runtime module loading:
+Use `surveys: false` to omit automatic inclusion. An explicitly supplied instance takes precedence, including over `false`. Importing the factory below includes orchestration only; rendering, styles, and HTML sanitization still load dynamically when needed. Importing the entrypoint or constructing the extension does not access browser globals.
 
 ```ts
 import { surveys } from '@posthog/browser/surveys'
