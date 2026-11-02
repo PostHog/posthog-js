@@ -1313,6 +1313,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return
     }
     this._captureLane(explicitRoute).dropUnserializable(uuid, immediate)
+    if (!immediate) {
+      // The next flush reports the drop, so a serverless host must stay alive for it.
+      this.scheduleDebouncedFlush()
+    }
   }
 
   _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
