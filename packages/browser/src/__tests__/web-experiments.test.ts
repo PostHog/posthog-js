@@ -8,6 +8,23 @@ import { RequestRouter } from '../utils/request-router'
 import { ConsentManager } from '../consent'
 import { createMockPostHog, createMockConfig, createMockPersistence } from './helpers/posthog-instance'
 
+const sanitizerMock = vi.hoisted((): { instance?: ReturnType<typeof DOMPurify>; factoryCalls: number } => ({
+    factoryCalls: 0,
+}))
+
+vi.mock('dompurify', async (importOriginal) => {
+    const actual = await importOriginal<{ default: typeof DOMPurify }>()
+    const instance = actual.default()
+    sanitizerMock.instance = instance
+    return {
+        ...actual,
+        default: Object.assign(() => {
+            sanitizerMock.factoryCalls++
+            return instance
+        }, actual.default),
+    }
+})
+
 describe('Web Experimentation', () => {
     let webExperiment: WebExperiments
     let posthog: PostHog
@@ -189,6 +206,32 @@ describe('Web Experimentation', () => {
         }
     }
 
+    it('creates its private sanitizer only for HTML transforms and reuses it', async () => {
+        const factoryCalls = sanitizerMock.factoryCalls
+        vi.resetModules()
+        const { WebExperiments: FreshWebExperiments } = await import('../web-experiments')
+        webExperiment = new FreshWebExperiments(posthog)
+        experimentsResponse = { experiments: [signupButtonWebExperimentWithFeatureFlag] }
+        const element = createTestDocument()
+        expect(sanitizerMock.factoryCalls).toBe(factoryCalls)
+
+        simulateFeatureFlags({ 'signup-button-test': 'variant-css-transform' })
+
+        expect(element.innerHTML).toEqual('original')
+        expect(element.getAttribute('style')).toEqual('font-size:40px')
+        expect(sanitizerMock.factoryCalls).toBe(factoryCalls)
+
+        simulateFeatureFlags({ 'signup-button-test': 'variant-inner-html-transform' })
+
+        expect(element.innerHTML).toEqual('<h1>hello world</h1>')
+        expect(sanitizerMock.factoryCalls).toBe(factoryCalls + 1)
+
+        simulateFeatureFlags({ 'signup-button-test': 'variant-sign-up' })
+
+        expect(element.innerHTML).toEqual('Sign me up')
+        expect(sanitizerMock.factoryCalls).toBe(factoryCalls + 1)
+    })
+
     describe('bot detection', () => {
         it('does not apply web experiment if viewer is a bot', () => {
             experimentsResponse = {
@@ -335,6 +378,65 @@ describe('Web Experimentation', () => {
             )
         }
 
+        describe.each([
+            ['HTML', '<div id="set-user-properties"></div>'],
+            ['MathML', '<math><mtext id="set-user-properties"></mtext></math>'],
+        ])('%s sanitizer isolation', (_name, fixture) => {
+            it('ignores persistent host configuration that returns strings', () => {
+                document.body.innerHTML = fixture
+                const element = document.querySelector('#set-user-properties')!
+                setRemoteTransform('<b onclick="alert(1)">Sale</b>')
+                DOMPurify.setConfig({})
+                try {
+                    simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+                    expect(element.innerHTML).toEqual('<b>Sale</b>')
+                    expect(DOMPurify.sanitize('<em>Host</em>')).toEqual('<em>Host</em>')
+                } finally {
+                    DOMPurify.clearConfig()
+                }
+            })
+
+            it('ignores permissive host configuration without changing the host policy', () => {
+                document.body.innerHTML = fixture
+                const element = document.querySelector('#set-user-properties')!
+                setRemoteTransform('<b onclick="alert(1)">Sale</b><img src="/missing" onerror="alert(1)">')
+                DOMPurify.setConfig({ RETURN_DOM_FRAGMENT: true, ADD_ATTR: ['onclick', 'onerror'] })
+                try {
+                    simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+                    expect(element.innerHTML).toEqual('<b>Sale</b><img src="/missing">')
+                    const hostResult = DOMPurify.sanitize('<b onclick="alert(1)">Host</b>', {
+                        RETURN_DOM_FRAGMENT: true,
+                    })
+                    expect(hostResult.querySelector('b')!.getAttribute('onclick')).toEqual('alert(1)')
+                } finally {
+                    DOMPurify.clearConfig()
+                }
+            })
+        })
+
+        it('ignores host sanitizer hooks without removing them', () => {
+            const element = createTestDocument()
+            setRemoteTransform('<b>Sale</b>')
+            const hook = vi.fn((node: Element) => {
+                if (node.localName === 'b') {
+                    node.setAttribute('onclick', 'alert(1)')
+                }
+            })
+            DOMPurify.addHook('afterSanitizeAttributes', hook)
+            try {
+                simulateFeatureFlags({ 'signup-button-test': 'test' })
+
+                expect(element.innerHTML).toEqual('<b>Sale</b>')
+                expect(hook).not.toHaveBeenCalled()
+                const hostResult = DOMPurify.sanitize('<b>Host</b>', { RETURN_DOM_FRAGMENT: true })
+                expect(hostResult.querySelector('b')!.getAttribute('onclick')).toEqual('alert(1)')
+            } finally {
+                DOMPurify.removeHook('afterSanitizeAttributes', hook)
+            }
+        })
+
         it.each([
             [
                 'event handlers',
@@ -415,7 +517,7 @@ describe('Web Experimentation', () => {
         ])('sanitizes once for repeated targets with the same parsing context: %s', (html, expected) => {
             const elements = Array.from({ length: 10 }, () => createTestDocument())
             setRemoteTransform(html)
-            const sanitize = vi.spyOn(DOMPurify, 'sanitize')
+            const sanitize = vi.spyOn(sanitizerMock.instance!, 'sanitize')
 
             simulateFeatureFlags({ 'signup-button-test': 'test' })
 
@@ -444,7 +546,7 @@ describe('Web Experimentation', () => {
         ])('preserves sanitized template content and reuses it: %s', (html, expected) => {
             document.body.innerHTML = '<template id="set-user-properties">Original</template>'.repeat(2)
             setRemoteTransform(html)
-            const sanitize = vi.spyOn(DOMPurify, 'sanitize')
+            const sanitize = vi.spyOn(sanitizerMock.instance!, 'sanitize')
 
             simulateFeatureFlags({ 'signup-button-test': 'test' })
 
@@ -467,7 +569,7 @@ describe('Web Experimentation', () => {
                     '<mglyph alt="Glyph"></mglyph><b onclick="alert(1)">Sale</b>' +
                         '<a href="javascript:alert(1)">Buy</a><script>alert(1)</script>'
                 )
-                const sanitize = vi.spyOn(DOMPurify, 'sanitize')
+                const sanitize = vi.spyOn(sanitizerMock.instance!, 'sanitize')
 
                 simulateFeatureFlags({ 'signup-button-test': 'test' })
 

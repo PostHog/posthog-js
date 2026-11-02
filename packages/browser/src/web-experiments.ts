@@ -1,4 +1,4 @@
-import DOMPurify from 'dompurify'
+import createDOMPurify from 'dompurify'
 import { PostHog } from './posthog-core'
 import { navigator, window } from '@posthog/browser-common/utils/globals'
 import {
@@ -26,6 +26,7 @@ const EXPERIMENT_HTML_CONFIG = {
     // Form associations are literal element IDs, not URLs.
     ADD_URI_SAFE_ATTR: ['form'],
 }
+let experimentSanitizer: ReturnType<typeof createDOMPurify> | undefined
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -315,6 +316,7 @@ export class WebExperiments implements Extension {
                         const contextKey = `${element.namespaceURI}:${element.localName}`
                         let html = sanitizedHtml.get(contextKey)
                         if (isNullish(html)) {
+                            const sanitizer = (experimentSanitizer ??= createDOMPurify())
                             // Parse in an inert document so unsanitized content cannot execute or upgrade custom elements.
                             const inertDocument = element.ownerDocument.implementation.createHTMLDocument('')
                             const context = inertDocument.createElementNS(element.namespaceURI, element.localName)
@@ -332,7 +334,7 @@ export class WebExperiments implements Extension {
                             ) {
                                 // Keep the integration-point parent so both HTML and MathML children retain their namespaces.
                                 context.appendChild(fragment)
-                                DOMPurify.sanitize(context, {
+                                sanitizer.sanitize(context, {
                                     ...EXPERIMENT_HTML_CONFIG,
                                     NAMESPACE: namespace || undefined,
                                     IN_PLACE: true,
@@ -344,7 +346,7 @@ export class WebExperiments implements Extension {
                                         ? (context as HTMLTemplateElement).content
                                         : context
                                 container.appendChild(
-                                    DOMPurify.sanitize(fragment, {
+                                    sanitizer.sanitize(fragment, {
                                         ...EXPERIMENT_HTML_CONFIG,
                                         NAMESPACE: namespace || undefined,
                                         RETURN_DOM_FRAGMENT: true,
