@@ -119,8 +119,8 @@ test('Replay network normalization bounds native clocks without hiding captured 
     )
 })
 
-test('Replay normalizes near-origin Firefox navigation fetchStart without masking negative request clocks', () => {
-    const source = (fetchStart, entryType = 'navigation', isInitial = true) => ({
+test('Replay normalizes near-origin Firefox navigation phases without masking invalid clocks', () => {
+    const source = (field, value, entryType = 'navigation', isInitial = true) => ({
         network: {
             snapshots: [
                 {
@@ -130,7 +130,7 @@ test('Replay normalizes near-origin Firefox navigation fetchStart without maskin
                                 type: 6,
                                 data: {
                                     plugin: 'rrweb/network@1',
-                                    payload: { requests: [{ fetchStart, entryType, isInitial }] },
+                                    payload: { requests: [{ [field]: value, entryType, isInitial }] },
                                 },
                             },
                         ],
@@ -139,12 +139,26 @@ test('Replay normalizes near-origin Firefox navigation fetchStart without maskin
             ],
         },
     })
-    const result = (value) =>
-        normalize(value, context).network.snapshots[0].properties.$snapshot_data[0].data.payload.requests[0].fetchStart
-    assert.equal(result(source(-1)), result(source(0)))
-    assert.equal(result(source(-2)), -2)
-    assert.equal(result(source(-1, 'resource', false)), -1)
-    assert.equal(result(source(-1, 'navigation', false)), -1)
+    const result = (field, value, entryType, isInitial) =>
+        normalize(source(field, value, entryType, isInitial), context).network.snapshots[0].properties.$snapshot_data[0]
+            .data.payload.requests[0][field]
+    for (const field of [
+        'fetchStart',
+        'domainLookupStart',
+        'domainLookupEnd',
+        'connectStart',
+        'connectEnd',
+        'requestStart',
+    ]) {
+        for (const value of [-2, -1, 0]) assert.equal(result(field, value), '<network-clock-ms>', field)
+        for (const value of [-3, '-1', null, false, NaN, Infinity])
+            assert.equal(result(field, value), value, `${field}: ${value}`)
+        assert.equal(result(field, -1, 'resource', true), -1, field)
+        assert.equal(result(field, -1, 'resource', false), -1, field)
+        assert.equal(result(field, -1, 'navigation', false), -1, field)
+    }
+    for (const field of ['startTime', 'endTime', 'duration', 'timestamp', 'timeOrigin', 'applicationClock'])
+        assert.equal(result(field, -1), -1, field)
 })
 
 test('normalize asserts core and CDN replay version roles before replacing only recognized metadata', () => {
