@@ -68,11 +68,11 @@ jobs:
         permissions:
             actions: read
             contents: read
-        uses: PostHog/error-tracking-harness/.github/workflows/subject-smoke.yml@37b54b2b55e0bc20c5c7740383dd771d8561f9f7
+        uses: PostHog/error-tracking-harness/.github/workflows/subject-smoke.yml@24788303746f15249016969b0ba8fa314d4d6fa1
         with:
             subject-artifact: error-tracking-subject
-            # Image published from harness #19 merge commit bf2b305ea09f71f4c9ae327e3937abeb054e4b65.
-            harness-image: ghcr.io/posthog/error-tracking-harness@sha256:435cff06dbb51c85af4c78d3c9729af41bc636ee0a7f485dd0080855a4b6c636
+            # Harness #20 checks map deletion without rewriting immutable Turbopack JavaScript.
+            harness-source-ref: 24788303746f15249016969b0ba8fa314d4d6fa1
 
     report:
         name: Post smoke results to PR
