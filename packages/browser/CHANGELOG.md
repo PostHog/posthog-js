@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.444.2
+
+### Patch Changes
+
+- [#5512](https://github.com/PostHog/posthog-js/pull/5512) [`bc6b54c`](https://github.com/PostHog/posthog-js/commit/bc6b54cba31b5c976996c4f530b5b2936e28e52c) Thanks [@robbie-c](https://github.com/robbie-c)! - Fix session replay keeping a stylesheet's old CSS when a `<link>` changes to a sheet the recorder cannot read
+  (2026-11-02)
+
 ## 1.444.1
 
 ### Patch Changes
