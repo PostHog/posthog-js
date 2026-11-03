@@ -2,6 +2,7 @@ import type { IPostHog } from 'posthog-node'
 import { PostHogContextSpanProcessor, enrichCurrentSpan } from 'posthog-node/otel'
 import type { CreatePostHogConfig } from './server/createPostHog.js'
 import { getConfiguredPostHogClient, resolvePostHogRequest } from './server/getPostHog.js'
+import { getProjectTokenOption } from './shared/config.js'
 
 export interface PostHogSpanContext {
     /** Add this processor to the application's existing Node.js tracer provider before it handles requests. */
@@ -20,14 +21,14 @@ export function createPostHogSpanContext(config: CreatePostHogConfig = {}): Post
 
     return {
         createContextSpanProcessor() {
-            pendingProcessor ??= getConfiguredPostHogClient(config.apiKey, config.options).then(
+            pendingProcessor ??= getConfiguredPostHogClient(getProjectTokenOption(config), config.options).then(
                 ({ client }) => new PostHogContextSpanProcessor(client)
             )
             return pendingProcessor
         },
         async withPostHogContext(work) {
             const { client, contextData } = await resolvePostHogRequest(
-                config.apiKey,
+                getProjectTokenOption(config),
                 config.options,
                 config.getDistinctId
             )

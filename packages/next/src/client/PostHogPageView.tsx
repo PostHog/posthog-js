@@ -38,7 +38,7 @@ export interface PostHogPageViewProps {
  *   return (
  *     <html>
  *       <body>
- *         <PostHogProvider apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!}>
+ *         <PostHogProvider projectToken={process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN!}>
  *           <PostHogPageView />
  *           {children}
  *         </PostHogProvider>

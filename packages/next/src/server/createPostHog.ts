@@ -1,10 +1,9 @@
 import type { PostHogOptions, IPostHog } from 'posthog-node'
 import { getRequestScopedPostHog } from './getPostHog.js'
 import type { PostHogDistinctIdResolver } from '../shared/identity.js'
+import { getProjectTokenOption, type ProjectTokenOptions } from '../shared/config.js'
 
-export interface CreatePostHogConfig {
-    /** PostHog project API key. If omitted, reads from `NEXT_PUBLIC_POSTHOG_KEY`. */
-    apiKey?: string
+export interface CreatePostHogConfig extends ProjectTokenOptions {
     /** Optional `posthog-node` configuration (e.g., `{ host: '...' }`). */
     options?: Partial<PostHogOptions>
     /**
@@ -74,6 +73,6 @@ export interface CreatePostHogResult {
  */
 export function createPostHog(config: CreatePostHogConfig = {}): CreatePostHogResult {
     return {
-        getPostHog: () => getRequestScopedPostHog(config.apiKey, config.options, config.getDistinctId),
+        getPostHog: () => getRequestScopedPostHog(getProjectTokenOption(config), config.options, config.getDistinctId),
     }
 }

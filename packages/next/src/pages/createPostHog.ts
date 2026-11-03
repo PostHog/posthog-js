@@ -1,6 +1,7 @@
 import type { GetServerSidePropsContext } from 'next'
 import type { IPostHog } from 'posthog-node'
 import { getServerSidePostHog } from './getServerSidePostHog.js'
+import { getProjectTokenOption } from '../shared/config.js'
 import type { CreatePostHogConfig as AppCreatePostHogConfig } from '../server/createPostHog.js'
 import type { PostHogDistinctIdResolver as SharedPostHogDistinctIdResolver } from '../shared/identity.js'
 
@@ -56,6 +57,6 @@ export function createPostHog(config: CreatePostHogConfig = {}): PagesCreatePost
 
     return {
         getPostHog: (ctx: GetServerSidePropsContext) =>
-            getServerSidePostHog(ctx, config.apiKey, config.options, getDistinctId),
+            getServerSidePostHog(ctx, getProjectTokenOption(config), config.options, getDistinctId),
     }
 }

@@ -45,39 +45,39 @@ describe('PostHogProvider', () => {
 
     it('renders children via ClientPostHogProvider', async () => {
         const element = await PostHogProvider({
-            apiKey: 'phc_test123',
+            projectToken: 'phc_test123',
             children: <div data-testid="child">Hello</div>,
         })
         render(element)
         expect(screen.getByTestId('child')).toBeInTheDocument()
     })
 
-    it('passes apiKey and clientOptions to ClientPostHogProvider', async () => {
+    it('passes projectToken and clientOptions to ClientPostHogProvider', async () => {
         const clientOptions = { api_host: 'https://custom.posthog.com' }
         const element = await PostHogProvider({
-            apiKey: 'phc_test123',
+            projectToken: 'phc_test123',
             clientOptions,
             children: <div>Child</div>,
         })
         render(element)
         expect(mockClientProvider).toHaveBeenCalledWith(
             expect.objectContaining({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 options: expect.objectContaining({ api_host: 'https://custom.posthog.com' }),
             })
         )
     })
 
-    it('trims apiKey and api_host before passing them to ClientPostHogProvider', async () => {
+    it('trims projectToken and api_host before passing them to ClientPostHogProvider', async () => {
         const element = await PostHogProvider({
-            apiKey: '  phc_test123\n',
+            projectToken: '  phc_test123\n',
             clientOptions: { api_host: '  https://custom.posthog.com/\t ' },
             children: <div>Child</div>,
         })
         render(element)
         expect(mockClientProvider).toHaveBeenCalledWith(
             expect.objectContaining({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 options: expect.objectContaining({ api_host: 'https://custom.posthog.com/' }),
             })
         )
@@ -85,7 +85,7 @@ describe('PostHogProvider', () => {
 
     it('does not add bootstrap to options when bootstrapFlags is not set', async () => {
         const element = await PostHogProvider({
-            apiKey: 'phc_test123',
+            projectToken: 'phc_test123',
             children: <div>Child</div>,
         })
         render(element)
@@ -96,7 +96,7 @@ describe('PostHogProvider', () => {
     describe('Next.js client defaults', () => {
         it('applies Next.js-specific defaults when no options provided', async () => {
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 children: <div>Child</div>,
             })
             render(element)
@@ -115,7 +115,7 @@ describe('PostHogProvider', () => {
 
         it('allows user clientOptions to override defaults', async () => {
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 clientOptions: {
                     capture_exceptions: false,
                     persistence: 'memory',
@@ -139,7 +139,7 @@ describe('PostHogProvider', () => {
 
     it('does not call cookies() when bootstrapFlags is off (static-safe)', async () => {
         const element = await PostHogProvider({
-            apiKey: 'phc_test123',
+            projectToken: 'phc_test123',
             children: <div>Child</div>,
         })
         render(element)
@@ -147,26 +147,28 @@ describe('PostHogProvider', () => {
         expect(cookies).not.toHaveBeenCalled()
     })
 
-    it('warns and renders children without ClientPostHogProvider when apiKey is empty and env var is not set', async () => {
-        delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+    it('warns and renders children without ClientPostHogProvider when projectToken is empty and env var is not set', async () => {
+        delete process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
         const element = await PostHogProvider({
-            apiKey: '',
+            projectToken: '',
             children: <div data-testid="child">Child</div>,
         })
         render(element)
 
         expect(screen.getByTestId('child')).toBeInTheDocument()
         expect(mockClientProvider).not.toHaveBeenCalled()
-        expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[PostHog Next.js] projectToken is required — set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN or pass projectToken. PostHog will not be initialized'
+        )
         warnSpy.mockRestore()
     })
 
-    it('warns when apiKey does not start with phc_', async () => {
+    it('warns when projectToken does not start with phc_', async () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         const element = await PostHogProvider({
-            apiKey: 'not_a_valid_key',
+            projectToken: 'not_a_valid_key',
             children: <div>Child</div>,
         })
         render(element)
@@ -174,10 +176,10 @@ describe('PostHogProvider', () => {
         warnSpy.mockRestore()
     })
 
-    it('does not warn when apiKey starts with phc_', async () => {
+    it('does not warn when projectToken starts with phc_', async () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         const element = await PostHogProvider({
-            apiKey: 'phc_test123',
+            projectToken: 'phc_test123',
             children: <div>Child</div>,
         })
         render(element)
@@ -186,29 +188,29 @@ describe('PostHogProvider', () => {
     })
 
     describe('environment variable defaults', () => {
-        it('reads apiKey from NEXT_PUBLIC_POSTHOG_KEY when prop is omitted', async () => {
-            process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_from_env'
+        it('reads projectToken from NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN when prop is omitted', async () => {
+            process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_from_env'
             const element = await PostHogProvider({
                 children: <div>Child</div>,
             })
             render(element)
-            expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'phc_from_env' }))
+            expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ projectToken: 'phc_from_env' }))
         })
 
-        it('prefers apiKey prop over env var', async () => {
-            process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_from_env'
+        it('prefers projectToken prop over env var', async () => {
+            process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_from_env'
             const element = await PostHogProvider({
-                apiKey: 'phc_from_prop',
+                projectToken: 'phc_from_prop',
                 children: <div>Child</div>,
             })
             render(element)
-            expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'phc_from_prop' }))
+            expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ projectToken: 'phc_from_prop' }))
         })
 
         it('reads api_host from NEXT_PUBLIC_POSTHOG_HOST when not in clientOptions', async () => {
             process.env.NEXT_PUBLIC_POSTHOG_HOST = 'https://eu.posthog.com'
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 children: <div>Child</div>,
             })
             render(element)
@@ -219,8 +221,8 @@ describe('PostHogProvider', () => {
             )
         })
 
-        it('trims apiKey and api_host from env vars', async () => {
-            process.env.NEXT_PUBLIC_POSTHOG_KEY = '  phc_from_env\n'
+        it('trims projectToken and api_host from env vars', async () => {
+            process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = '  phc_from_env\n'
             process.env.NEXT_PUBLIC_POSTHOG_HOST = '  https://eu.posthog.com/\t '
             const element = await PostHogProvider({
                 children: <div>Child</div>,
@@ -228,7 +230,7 @@ describe('PostHogProvider', () => {
             render(element)
             expect(mockClientProvider).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    apiKey: 'phc_from_env',
+                    projectToken: 'phc_from_env',
                     options: expect.objectContaining({ api_host: 'https://eu.posthog.com/' }),
                 })
             )
@@ -237,7 +239,7 @@ describe('PostHogProvider', () => {
         it('prefers clientOptions.api_host over env var', async () => {
             process.env.NEXT_PUBLIC_POSTHOG_HOST = 'https://eu.posthog.com'
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 clientOptions: { api_host: 'https://custom.posthog.com' },
                 children: <div>Child</div>,
             })
@@ -285,7 +287,7 @@ describe('PostHogProvider', () => {
 
         it('evaluates all flags when bootstrapFlags is true', async () => {
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 bootstrapFlags: true,
                 children: <div>Child</div>,
             })
@@ -313,7 +315,7 @@ describe('PostHogProvider', () => {
                 featureFlagPayloads: { 'flag-1': { color: 'red' }, 'client-only': { source: 'client' } },
             }
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 clientOptions: { bootstrap: clientBootstrap },
                 bootstrapFlags: true,
                 children: <div>Child</div>,
@@ -339,7 +341,7 @@ describe('PostHogProvider', () => {
             mockGetAllFlagsAndPayloads.mockResolvedValue({ featureFlags: {}, featureFlagPayloads: {} })
 
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 clientOptions: {
                     bootstrap: {
                         featureFlags: { 'configured-flag': true },
@@ -370,7 +372,7 @@ describe('PostHogProvider', () => {
             })
 
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 clientOptions: {
                     bootstrap: {
                         featureFlags: { 'flag-1': false, 'client-only': true },
@@ -404,7 +406,7 @@ describe('PostHogProvider', () => {
                 featureFlags: { 'client-only': true },
             }
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 clientOptions: { bootstrap: clientBootstrap },
                 bootstrapFlags: true,
                 children: <div>Child</div>,
@@ -425,7 +427,7 @@ describe('PostHogProvider', () => {
 
         it('evaluates specific flags when flagKeys provided', async () => {
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 bootstrapFlags: { flags: ['flag-1'] },
                 children: <div>Child</div>,
             })
@@ -436,7 +438,7 @@ describe('PostHogProvider', () => {
 
         it('always includes payloads in bootstrap', async () => {
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 bootstrapFlags: true,
                 children: <div>Child</div>,
             })
@@ -456,7 +458,7 @@ describe('PostHogProvider', () => {
 
         it('disables first flag load on client when bootstrap succeeds', async () => {
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 bootstrapFlags: true,
                 children: <div>Child</div>,
             })
@@ -480,7 +482,7 @@ describe('PostHogProvider', () => {
 
             await expect(
                 PostHogProvider({
-                    apiKey: 'phc_test123',
+                    projectToken: 'phc_test123',
                     bootstrapFlags: true,
                     children: <div>Child</div>,
                 })
@@ -496,7 +498,7 @@ describe('PostHogProvider', () => {
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 bootstrapFlags: true,
                 children: <div>Child</div>,
             })
@@ -516,7 +518,7 @@ describe('PostHogProvider', () => {
             vi.spyOn(console, 'warn').mockImplementation()
 
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 bootstrapFlags: true,
                 children: <div>Child</div>,
             })
@@ -563,7 +565,7 @@ describe('PostHogProvider', () => {
             })
 
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 bootstrapFlags: true,
                 children: <div>Child</div>,
             })
@@ -581,7 +583,7 @@ describe('PostHogProvider', () => {
             })
 
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 bootstrapFlags: true,
                 children: <div>Child</div>,
             })
@@ -596,7 +598,7 @@ describe('PostHogProvider', () => {
             })
 
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 clientOptions: { opt_out_capturing_by_default: true },
                 bootstrapFlags: true,
                 children: <div>Child</div>,
@@ -614,7 +616,7 @@ describe('PostHogProvider', () => {
             })
 
             const element = await PostHogProvider({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 bootstrapFlags: true,
                 children: <div>Child</div>,
             })

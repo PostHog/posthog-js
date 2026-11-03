@@ -31,8 +31,8 @@ function withDefaultTracingHeaders(options?: Partial<PostHogConfig>): Partial<Po
 }
 
 export interface ClientPostHogProviderProps {
-    /** PostHog project API key (starts with phc_) */
-    apiKey: string
+    /** PostHog project token (starts with phc_) */
+    projectToken: string
     /** Optional posthog-js configuration overrides */
     options?: Partial<PostHogConfig>
     children: React.ReactNode
@@ -52,10 +52,10 @@ export interface ClientPostHogProviderProps {
  * the `client` prop, we guarantee the instance is fully configured before any
  * child code runs.
  */
-export function ClientPostHogProvider({ apiKey, options, children }: ClientPostHogProviderProps) {
-    if (!apiKey) {
+export function ClientPostHogProvider({ projectToken, options, children }: ClientPostHogProviderProps) {
+    if (!projectToken) {
         // oxlint-disable-next-line no-console
-        console.warn('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        console.warn('[PostHog Next.js] projectToken is required — PostHog will not be initialized')
         return <>{children}</>
     }
 
@@ -63,7 +63,7 @@ export function ClientPostHogProvider({ apiKey, options, children }: ClientPostH
     // see a fully configured posthog instance. The `__loaded` guard prevents
     // double-init (e.g. React StrictMode).
     if (typeof window !== 'undefined' && !posthogJs.__loaded) {
-        posthogJs.init(apiKey, withDefaultTracingHeaders(options))
+        posthogJs.init(projectToken, withDefaultTracingHeaders(options))
     }
 
     return (

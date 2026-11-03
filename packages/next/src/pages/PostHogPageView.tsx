@@ -30,7 +30,7 @@ export interface PostHogPageViewProps {
  *
  * export default function App({ Component, pageProps }: AppProps) {
  *   return (
- *     <PostHogProvider apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!}>
+ *     <PostHogProvider projectToken={process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN!}>
  *       <PostHogPageView />
  *       <Component {...pageProps} />
  *     </PostHogProvider>

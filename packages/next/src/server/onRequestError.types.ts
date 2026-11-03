@@ -1,4 +1,5 @@
 import type { PostHogOptions } from 'posthog-node'
+import type { ProjectTokenOptions } from '../shared/config.js'
 
 export type NextRequestError = Error & { digest?: string }
 
@@ -30,9 +31,7 @@ export interface OnRequestErrorBeforeCaptureContext {
     properties: Record<string, unknown>
 }
 
-export interface OnRequestErrorOptions {
-    /** PostHog project API key. Defaults to NEXT_PUBLIC_POSTHOG_KEY. */
-    apiKey?: string
+export interface OnRequestErrorOptions extends ProjectTokenOptions {
     /** PostHog host. Defaults to NEXT_PUBLIC_POSTHOG_HOST, then https://us.i.posthog.com. */
     host?: string
     /** Additional posthog-node options for the server-side client. */

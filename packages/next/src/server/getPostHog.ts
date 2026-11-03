@@ -3,7 +3,7 @@ import type { PostHog, PostHogOptions, IPostHog } from 'posthog-node'
 import { cookies, headers } from 'next/headers.js'
 import { getOrCreateNodeClient } from './clientCache.node.js'
 import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
-import { resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import { resolveProjectToken, resolveHostOrDefault } from '../shared/config.js'
 import { readTracingHeaders, buildContextData } from '../shared/tracing-headers.js'
 import { resolveServerDistinctId, type PostHogDistinctIdResolver } from '../shared/identity.js'
 
@@ -61,35 +61,35 @@ function resolveServerDistinctIdOncePerRequest(
 }
 
 export async function getConfiguredPostHogClient(
-    apiKey?: string,
+    projectToken?: string,
     options?: Partial<PostHogOptions>
-): Promise<{ client: PostHog; resolvedApiKey?: string }> {
-    const resolvedApiKey = resolveApiKey(apiKey)
+): Promise<{ client: PostHog; resolvedProjectToken?: string }> {
+    const resolvedProjectToken = resolveProjectToken(projectToken)
     const host = resolveHostOrDefault(options?.host)
     const resolvedOptions = { ...options, host }
-    const client = await getOrCreateNodeClient(resolvedApiKey ?? '', resolvedOptions)
+    const client = await getOrCreateNodeClient(resolvedProjectToken ?? '', resolvedOptions)
 
-    return { client, resolvedApiKey }
+    return { client, resolvedProjectToken }
 }
 
 export async function resolvePostHogRequest(
-    apiKey?: string,
+    projectToken?: string,
     options?: Partial<PostHogOptions>,
     getDistinctId?: PostHogDistinctIdResolver
 ): Promise<{ client: PostHog; contextData?: Parameters<IPostHog['withContext']>[0] }> {
-    const { client, resolvedApiKey } = await getConfiguredPostHogClient(apiKey, options)
+    const { client, resolvedProjectToken } = await getConfiguredPostHogClient(projectToken, options)
 
-    if (!resolvedApiKey) {
+    if (!resolvedProjectToken) {
         return { client }
     }
 
     const cookieStore = await cookies()
 
-    if (isOptedOut(cookieStore, resolvedApiKey)) {
+    if (isOptedOut(cookieStore, resolvedProjectToken)) {
         return { client }
     }
 
-    const state = readPostHogCookie(cookieStore, resolvedApiKey)
+    const state = readPostHogCookie(cookieStore, resolvedProjectToken)
     const headerStore = await headers()
     const tracing = readTracingHeaders(headerStore)
     const contextData = buildContextData(tracing, state)
@@ -105,10 +105,10 @@ export async function resolvePostHogRequest(
 }
 
 export async function getRequestScopedPostHog(
-    apiKey?: string,
+    projectToken?: string,
     options?: Partial<PostHogOptions>,
     getDistinctId?: PostHogDistinctIdResolver
 ): Promise<IPostHog> {
-    const { client, contextData } = await resolvePostHogRequest(apiKey, options, getDistinctId)
+    const { client, contextData } = await resolvePostHogRequest(projectToken, options, getDistinctId)
     return contextData ? withRequestContext(client, contextData) : client
 }

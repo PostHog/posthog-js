@@ -102,7 +102,7 @@ describe('createPostHog().getPostHog', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         process.env = { ...originalEnv }
-        process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_env_key'
+        process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_env_key'
 
         // Reset to empty cookies and headers by default
         const emptyCookies = createMockCookies({})
@@ -116,7 +116,7 @@ describe('createPostHog().getPostHog', () => {
     })
 
     it('returns an IPostHog instance', async () => {
-        const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+        const client = await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
 
         expect(client).toBeDefined()
         expect(typeof client.capture).toBe('function')
@@ -133,7 +133,7 @@ describe('createPostHog().getPostHog', () => {
         })
         ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
 
-        const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+        const client = await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
         client.capture({ distinctId: 'user_abc', event: 'test_event' })
 
         expect(mockWithContext).toHaveBeenCalledWith(
@@ -151,7 +151,7 @@ describe('createPostHog().getPostHog', () => {
         const cookieStore = createMockCookies({})
         ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
 
-        const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+        const client = await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
         client.capture({ distinctId: 'anon', event: 'test_event' })
 
         expect(mockWithContext).toHaveBeenCalledWith(
@@ -164,18 +164,18 @@ describe('createPostHog().getPostHog', () => {
         )
     })
 
-    it('uses explicit apiKey over env var', async () => {
-        process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_env_key'
+    it('uses explicit projectToken over env var', async () => {
+        process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_env_key'
 
-        await createPostHog({ apiKey: 'phc_explicit_key' }).getPostHog()
+        await createPostHog({ projectToken: 'phc_explicit_key' }).getPostHog()
 
         expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_explicit_key', {
             host: 'https://us.i.posthog.com',
         })
     })
 
-    it('falls back to NEXT_PUBLIC_POSTHOG_KEY env var when no apiKey provided', async () => {
-        process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_env_key'
+    it('falls back to NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN env var when no projectToken provided', async () => {
+        process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_env_key'
 
         await createPostHog().getPostHog()
 
@@ -184,8 +184,8 @@ describe('createPostHog().getPostHog', () => {
         })
     })
 
-    it('warns and returns a disabled client when no apiKey provided and env var missing', async () => {
-        delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+    it('warns and returns a disabled client when no projectToken provided and env var missing', async () => {
+        delete process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
         const client = await createPostHog().getPostHog()
@@ -196,12 +196,17 @@ describe('createPostHog().getPostHog', () => {
         })
         expect(cookies).not.toHaveBeenCalled()
         expect(headers).not.toHaveBeenCalled()
-        expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[PostHog Next.js] projectToken is required — set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN or pass projectToken. PostHog will not be initialized'
+        )
         warnSpy.mockRestore()
     })
 
     it('passes host from options to getOrCreateNodeClient', async () => {
-        await createPostHog({ apiKey: 'phc_test123', options: { host: 'https://custom.posthog.com' } }).getPostHog()
+        await createPostHog({
+            projectToken: 'phc_test123',
+            options: { host: 'https://custom.posthog.com' },
+        }).getPostHog()
 
         expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_test123', {
             host: 'https://custom.posthog.com',
@@ -209,16 +214,16 @@ describe('createPostHog().getPostHog', () => {
     })
 
     it('defaults host when it is omitted', async () => {
-        await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+        await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
 
         expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_test123', {
             host: 'https://us.i.posthog.com',
         })
     })
 
-    it('trims apiKey and host before creating the node client', async () => {
+    it('trims projectToken and host before creating the node client', async () => {
         await createPostHog({
-            apiKey: '  phc_test123\n',
+            projectToken: '  phc_test123\n',
             options: { host: '  https://custom.posthog.com/\t ' },
         }).getPostHog()
 
@@ -230,7 +235,7 @@ describe('createPostHog().getPostHog', () => {
     it('reads host from NEXT_PUBLIC_POSTHOG_HOST env var when not in options', async () => {
         process.env.NEXT_PUBLIC_POSTHOG_HOST = 'https://env-host.posthog.com'
 
-        await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+        await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
 
         expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_test123', {
             host: 'https://env-host.posthog.com',
@@ -247,7 +252,7 @@ describe('createPostHog().getPostHog', () => {
         })
         ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
 
-        const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+        const client = await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
         client.capture({ distinctId: 'user_abc', event: 'test_event' })
 
         expect(mockWithContext).toHaveBeenCalledWith(
@@ -271,7 +276,7 @@ describe('createPostHog().getPostHog', () => {
             })
             ;(headers as vi.Mock).mockResolvedValue(headerStore)
 
-            const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+            const client = await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
             client.capture({ distinctId: 'header-user-789', event: 'test_event' })
 
             expect(mockWithContext).toHaveBeenCalledWith(
@@ -302,7 +307,7 @@ describe('createPostHog().getPostHog', () => {
             })
             ;(headers as vi.Mock).mockResolvedValue(headerStore)
 
-            const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+            const client = await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
             client.capture({ distinctId: 'header-user', event: 'test_event' })
 
             expect(mockWithContext).toHaveBeenCalledWith(
@@ -330,7 +335,7 @@ describe('createPostHog().getPostHog', () => {
             const headerStore = createMockHeaders({})
             ;(headers as vi.Mock).mockResolvedValue(headerStore)
 
-            const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+            const client = await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
             client.capture({ distinctId: 'cookie-user', event: 'test_event' })
 
             expect(mockWithContext).toHaveBeenCalledWith(
@@ -360,7 +365,7 @@ describe('createPostHog().getPostHog', () => {
             })
             ;(headers as vi.Mock).mockResolvedValue(headerStore)
 
-            const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+            const client = await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
             client.capture({ distinctId: 'cookie-user', event: 'test_event' })
 
             expect(mockWithContext).toHaveBeenCalledWith(
@@ -389,7 +394,7 @@ describe('createPostHog().getPostHog', () => {
             })
             ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
 
-            const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+            const client = await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
             expect(client).toBeDefined()
             // When opted out, methods should not go through withContext
             client.capture({ distinctId: 'user_abc', event: 'test_event' })
@@ -406,7 +411,7 @@ describe('createPostHog().getPostHog', () => {
             })
             ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
 
-            const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
+            const client = await createPostHog({ projectToken: 'phc_test123' }).getPostHog()
             client.capture({ distinctId: 'user_abc', event: 'test_event' })
 
             expect(mockWithContext).toHaveBeenCalledWith(

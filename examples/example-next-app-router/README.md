@@ -10,10 +10,10 @@ A Next.js 15 App Router example demonstrating all features of the `@posthog/next
     cp .env.local.example .env.local
     ```
 
-2. Add your PostHog API key to `.env.local`:
+2. Add your PostHog project token to `.env.local`:
 
     ```
-    NEXT_PUBLIC_POSTHOG_KEY=phc_your_key_here
+    NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=phc_your_project_token_here
     NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
     ```
 

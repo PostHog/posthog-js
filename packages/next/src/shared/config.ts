@@ -14,22 +14,53 @@ export type PostHogClientConfig = Partial<PostHogConfig>
  */
 export type PostHogServerConfig = PostHogOptions
 
-/**
- * Resolves the PostHog API key from an explicit value or the
- * `NEXT_PUBLIC_POSTHOG_KEY` environment variable.
- *
- * Warns and returns undefined if neither is available.
- */
 export function normalizeConfigValue(value?: unknown): string | undefined {
     const normalizedValue = typeof value === 'string' ? value.trim() : ''
     return normalizedValue || undefined
 }
 
-export function resolveApiKey(apiKey?: unknown): string | undefined {
-    const resolved = normalizeConfigValue(apiKey) ?? normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_KEY)
+/**
+ * Options that accept the project token. `apiKey` is the deprecated name.
+ */
+export interface ProjectTokenOptions {
+    /**
+     * Your PostHog project token, which starts with `phc_`.
+     * If omitted, reads from the `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` env var.
+     */
+    projectToken?: string
+    /**
+     * Your PostHog project token. Ignored when `projectToken` is set.
+     *
+     * @deprecated Use `projectToken` instead. This will be removed in the next major version.
+     */
+    apiKey?: string
+}
+
+/**
+ * Returns the explicitly configured project token, preferring `projectToken`
+ * over the deprecated `apiKey`.
+ */
+export function getProjectTokenOption({ projectToken, apiKey }: ProjectTokenOptions): string | undefined {
+    return normalizeConfigValue(projectToken) ?? normalizeConfigValue(apiKey)
+}
+
+/**
+ * Resolves the PostHog project token from an explicit value, the
+ * `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` env var, or the legacy
+ * `NEXT_PUBLIC_POSTHOG_KEY` env var, in that order.
+ *
+ * Warns and returns undefined if none is available.
+ */
+export function resolveProjectToken(projectToken?: unknown): string | undefined {
+    const resolved =
+        normalizeConfigValue(projectToken) ??
+        normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN) ??
+        normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_KEY)
     if (!resolved) {
         // oxlint-disable-next-line no-console
-        console.warn('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        console.warn(
+            '[PostHog Next.js] projectToken is required — set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN or pass projectToken. PostHog will not be initialized'
+        )
     }
     return resolved
 }

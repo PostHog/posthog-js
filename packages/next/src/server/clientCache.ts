@@ -6,7 +6,7 @@ type CacheablePostHogOptions = {
 }
 
 type PostHogConstructor<TClient, TOptions extends CacheablePostHogOptions> = new (
-    apiKey: string,
+    projectToken: string,
     options?: Partial<TOptions>
 ) => TClient
 
@@ -29,10 +29,10 @@ const autoDetectedWaitUntil: Promise<WaitUntil | undefined> = import(/* webpackI
 export async function getOrCreatePostHogClient<TClient, TOptions extends CacheablePostHogOptions>(
     cache: Map<string, TClient>,
     PostHogClient: PostHogConstructor<TClient, TOptions>,
-    apiKey: string,
+    projectToken: string,
     options?: Partial<TOptions>
 ): Promise<TClient> {
-    const key = `${apiKey}:${options?.host ?? ''}`
+    const key = `${projectToken}:${options?.host ?? ''}`
     let client = cache.get(key)
     if (!client) {
         const waitUntil = options?.waitUntil ?? (await autoDetectedWaitUntil)
@@ -43,7 +43,7 @@ export async function getOrCreatePostHogClient<TClient, TOptions extends Cacheab
             ...(waitUntil ? { waitUntil } : {}),
             ...options,
         } as Partial<TOptions>
-        client = new PostHogClient(apiKey, mergedOptions)
+        client = new PostHogClient(projectToken, mergedOptions)
         cache.set(key, client)
     }
     return client

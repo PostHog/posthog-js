@@ -4,6 +4,6 @@ import { getOrCreatePostHogClient } from './clientCache.js'
 
 const cache = new Map<string, PostHog>()
 
-export async function getOrCreateEdgeClient(apiKey: string, options?: Partial<PostHogOptions>): Promise<PostHog> {
-    return getOrCreatePostHogClient(cache, PostHog, apiKey, options)
+export async function getOrCreateEdgeClient(projectToken: string, options?: Partial<PostHogOptions>): Promise<PostHog> {
+    return getOrCreatePostHogClient(cache, PostHog, projectToken, options)
 }

@@ -14,7 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <html lang="en">
             <body className="bg-gray-50 text-gray-900 min-h-screen">
                 <PostHogProvider
-                    apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!}
+                    projectToken={process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN!}
                     clientOptions={{ api_host: '/ingest' }}
                     bootstrapFlags
                 >

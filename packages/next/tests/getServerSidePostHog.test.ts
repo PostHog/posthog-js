@@ -38,7 +38,7 @@ function createMockContext(cookies: Record<string, string> = {}, extraHeaders: R
 describe('getServerSidePostHog', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+        delete process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
     })
 
     it('returns a posthog client', async () => {
@@ -80,8 +80,8 @@ describe('getServerSidePostHog', () => {
         expect(mockGetAllFlags).toHaveBeenCalledWith()
     })
 
-    it('reads apiKey from NEXT_PUBLIC_POSTHOG_KEY env when not provided', async () => {
-        process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_env_key'
+    it('reads projectToken from NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN env when not provided', async () => {
+        process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_env_key'
         const ctx = createMockContext({
             ph_phc_env_key_posthog: JSON.stringify({
                 distinct_id: 'user_abc',
@@ -101,7 +101,7 @@ describe('getServerSidePostHog', () => {
         )
     })
 
-    it('warns and returns a disabled client when no apiKey provided and env not set', async () => {
+    it('warns and returns a disabled client when no projectToken provided and env not set', async () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         const ctx = createMockContext({})
 
@@ -114,11 +114,13 @@ describe('getServerSidePostHog', () => {
         })
         expect(mockEnterContext).not.toHaveBeenCalled()
         expect(mockWithContext).not.toHaveBeenCalled()
-        expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[PostHog Next.js] projectToken is required — set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN or pass projectToken. PostHog will not be initialized'
+        )
         warnSpy.mockRestore()
     })
 
-    it('trims apiKey and host before creating the node client', async () => {
+    it('trims projectToken and host before creating the node client', async () => {
         const ctx = createMockContext({})
 
         await getServerSidePostHog(ctx, '  phc_test123\n', { host: '  https://custom.posthog.com/\t ' })

@@ -30,12 +30,12 @@ describe('clientCache.node cache sharing', () => {
     it.each([
         ['the first copy created the client', 'first', 'second', 'phc_test_a'],
         ['the second copy created the client', 'second', 'first', 'phc_test_b'],
-    ] as const)('reuses the client across module copies when %s', async (_, creator, reader, apiKey) => {
+    ] as const)('reuses the client across module copies when %s', async (_, creator, reader, projectToken) => {
         const copies = await loadTwoModuleCopies()
         expect(copies.second).not.toBe(copies.first)
 
-        const created = await copies[creator].getOrCreateNodeClient(apiKey, { host: 'https://test.com' })
-        const read = await copies[reader].getOrCreateNodeClient(apiKey, { host: 'https://test.com' })
+        const created = await copies[creator].getOrCreateNodeClient(projectToken, { host: 'https://test.com' })
+        const read = await copies[reader].getOrCreateNodeClient(projectToken, { host: 'https://test.com' })
 
         expect(read).toBe(created)
         expect(mockPostHogConstructor).toHaveBeenCalledTimes(1)

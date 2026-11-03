@@ -23,7 +23,7 @@ describe('Next.js onRequestError', () => {
         vi.clearAllMocks()
         process.env = { ...originalEnv }
         process.env.NEXT_RUNTIME = 'nodejs'
-        process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_test123'
+        process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_test123'
         delete process.env.NEXT_PUBLIC_POSTHOG_HOST
     })
 
@@ -31,8 +31,8 @@ describe('Next.js onRequestError', () => {
         process.env = originalEnv
     })
 
-    function postHogCookie(apiKey: string, value: Record<string, unknown>): string {
-        return `ph_${apiKey}_posthog=${encodeURIComponent(JSON.stringify(value))}`
+    function postHogCookie(projectToken: string, value: Record<string, unknown>): string {
+        return `ph_${projectToken}_posthog=${encodeURIComponent(JSON.stringify(value))}`
     }
 
     it('captures server-side request errors with user and Next.js context', async () => {
@@ -84,9 +84,29 @@ describe('Next.js onRequestError', () => {
         )
     })
 
+    it.each([
+        ['deprecated apiKey', { apiKey: 'phc_legacy' }, 'phc_legacy'],
+        ['projectToken over apiKey', { projectToken: 'phc_custom', apiKey: 'phc_legacy' }, 'phc_custom'],
+    ])('createOnRequestError accepts %s', async (_case, options, expected) => {
+        const handler = createOnRequestError(options)
+
+        await handler(new Error('failed'), { method: 'GET', path: '/', headers: {} }, {})
+
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith(expected, expect.any(Object))
+    })
+
+    it('reads the legacy NEXT_PUBLIC_POSTHOG_KEY env var when NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN is unset', async () => {
+        delete process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
+        process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_legacy'
+
+        await onRequestError(new Error('failed'), { method: 'GET', path: '/', headers: {} }, {})
+
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_legacy', expect.any(Object))
+    })
+
     it('supports explicit options, Headers-like request headers, and beforeCapture properties', async () => {
         const handler = createOnRequestError({
-            apiKey: 'phc_custom',
+            projectToken: 'phc_custom',
             host: 'https://custom.posthog.com',
             serverOptions: { flushAt: 1 },
             beforeCapture: () => ({ custom_property: 'custom-value' }),
