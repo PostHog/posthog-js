@@ -3028,6 +3028,16 @@
         {
           "type": "string",
           "name": "sessionId"
+        },
+        {
+          "description": "When the session last had activity (`$sesid[0]`), in milliseconds since the Unix epoch.",
+          "type": "number",
+          "name": "sessionLastActivityTimestamp"
+        },
+        {
+          "description": "When the session started (`$sesid[2]`), in milliseconds since the Unix epoch.",
+          "type": "number",
+          "name": "sessionStartTimestamp"
         }
       ],
       "path": "../core/src/cookie.ts"
