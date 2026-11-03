@@ -468,6 +468,13 @@ describe('featureflags', () => {
                 () => featureFlags.updateFlags({ 'beta-feature': false }, undefined, { merge: true }),
                 0,
             ],
+            [
+                'another group, which sends nothing',
+                () => {
+                    client.groups = { organization: 'other-org' }
+                },
+                0,
+            ],
         ])('sends the pending exposure when capture turns on with %s', (_, beforeConsent, expectedCount) => {
             featureFlags._hasLoadedFlags = true
             client.canCapture = false
@@ -543,6 +550,20 @@ describe('featureflags', () => {
 
             client.isRateLimited = false
             featureFlags.sendFlagCallsPendingCapture()
+            expect(flagCalledEvents()).toHaveLength(1)
+        })
+
+        it('does not send an exposure that the session already reported in a later session', () => {
+            config.deduplicateCallsPerSession = true
+            featureFlags._hasLoadedFlags = true
+            featureFlags.getFeatureFlag('beta-feature')
+            client.isRateLimited = true
+            featureFlags.getFeatureFlag('beta-feature')
+
+            client.session = { ...client.session!, sessionId: 'later-session' }
+            client.isRateLimited = false
+            featureFlags.sendFlagCallsPendingCapture()
+
             expect(flagCalledEvents()).toHaveLength(1)
         })
 

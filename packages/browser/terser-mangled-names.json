@@ -384,6 +384,7 @@
         "_hashchangeListener",
         "_heldBufferOverflowed",
         "_heldEpochShipsOnUnload",
+        "_holdFlagCall",
         "_holdFlushUntilInteraction",
         "_host",
         "_hostnamesForPatch",
