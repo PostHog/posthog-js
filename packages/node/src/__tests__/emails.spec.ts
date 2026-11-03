@@ -170,6 +170,21 @@ describe('emails', () => {
         capture_engagement: true,
       },
     ],
+    [
+      'an empty reply-to list, which it leaves out',
+      {
+        templateKey: 'password-reset',
+        subject: 'Reset',
+        html: '<p>Reset</p>',
+        replyTo: [],
+      },
+      {
+        template_key: 'password-reset',
+        subject: 'Reset',
+        html: '<p>Reset</p>',
+        capture_engagement: true,
+      },
+    ],
   ])('posts content from code with %s to the same send URL', async (_name, content, body) => {
     replies = [accepted()]
 

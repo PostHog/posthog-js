@@ -419,13 +419,14 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
   if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
   }
+  const sendsReplyTo = replyTo !== undefined && !(Array.isArray(replyTo) && replyTo.length === 0)
   return {
     template_key: templateKey,
     subject,
     ...(html !== undefined && { html }),
     ...(text !== undefined && { text }),
     ...(from !== undefined && { from }),
-    ...(replyTo !== undefined && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
+    ...(sendsReplyTo && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
     capture_engagement: captureEngagement ?? true,
     ...(distinctId !== undefined && { distinct_id: distinctId }),
   }

@@ -12,7 +12,7 @@ export interface SendEmailBase {
   /**
    * 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted
    * queues nothing and returns the first send's result. The same key with other options sends
-   * nothing and returns `invalid_idempotent_request`. Without it, the client makes a UUID that
+   * nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that
    * covers its own retries. Pass a key derived from what the email is for, such as
    * `welcome:user_123`, to cover retries outside this call too.
    */
