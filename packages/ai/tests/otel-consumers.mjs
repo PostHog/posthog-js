@@ -4,8 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { build } from 'esbuild'
-import { Miniflare } from 'miniflare'
+import { testWorkerBundles } from './otel-bundlers.mjs'
 
 const tests = dirname(fileURLToPath(import.meta.url))
 const root = resolve(tests, '../../..')
@@ -109,6 +108,10 @@ const { NodeSDK } = require('@opentelemetry/sdk-node')
 const { trace } = require('@opentelemetry/api')
 const resolveFromAi = createRequire(require.resolve('@posthog/ai/otel'))
 ${sdk === '0.220.0' ? '' : `assert.throws(() => resolveFromAi.resolve('${absentPackage}'), { code: 'MODULE_NOT_FOUND' })`}
+const { readFileSync } = require('node:fs')
+const { dirname, resolve } = require('node:path')
+assert.match(readFileSync(resolve(dirname(require.resolve('@posthog/ai/otel')), '../../LICENSE.opentelemetry'), 'utf8'), /Apache License/)
+process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = '2'
 const exported = []
 OTLPTraceExporter.prototype.export = function (spans, callback) {
   exported.push(...spans)
@@ -124,9 +127,12 @@ await processor.forceFlush()
 assert.equal(exported.length, 1)
 assert.equal(exported[0].name, 'gen_ai.compat')
 assert.equal(exported[0].attributes['gen_ai.prompt'], '[base64 image/png redacted]')
+tracer.startSpan('gen_ai.full_batch.1').end()
+tracer.startSpan('gen_ai.full_batch.2').end()
+assert.equal(exported.length, 3, 'Node batch size environment setting must take effect before forceFlush')
 tracer.startSpan('gen_ai.shutdown').end()
 await sdk.shutdown()
-assert.deepEqual(exported.map(span => span.name), ['gen_ai.compat', 'gen_ai.shutdown'])
+assert.deepEqual(exported.map(span => span.name), ['gen_ai.compat', 'gen_ai.full_batch.1', 'gen_ai.full_batch.2', 'gen_ai.shutdown'])
 console.log('${sdk}: types, loading, upstream batching, filtering, redaction, flush and shutdown passed')
 `
   for (const format of ['cjs', 'esm']) {
@@ -139,62 +145,5 @@ console.log('${sdk}: types, loading, upstream batching, filtering, redaction, fl
     console.log(run(process.execPath, [filename], consumer, `runtime-${sdk}-${format}.log`).trim())
   }
 
-  const worker = join(consumer, 'worker.mjs')
-  const bundle = await build({
-    stdin: {
-      contents: `
-import { ${sdk === '0.200.0' ? 'BasicTracerProvider' : 'TracerProvider'} as TracerProvider } from '${tracePackage}'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-export default { async fetch() {
-  const { PostHogSpanProcessor, PostHogTraceExporter } = await import('@posthog/ai/otel')
-  const exported = []
-  OTLPTraceExporter.prototype.export = function(spans, callback) {
-    exported.push(...spans.map(span => ({ name: span.name, prompt: span.attributes['gen_ai.prompt'] })))
-    callback({ code: 0 })
-  }
-  const processor = new PostHogSpanProcessor({ projectToken: 'phc_test' })
-  const provider = new TracerProvider({ spanProcessors: [processor] })
-  const tracer = provider.getTracer('workers-compatibility-test')
-  tracer.startSpan('gen_ai.flush', { attributes: { 'gen_ai.prompt': 'data:image/png;base64,aGVsbG8=' } }).end()
-  tracer.startSpan('http.request').end()
-  await processor.forceFlush()
-  const flushed = exported.slice()
-  tracer.startSpan('gen_ai.shutdown').end()
-  await provider.shutdown()
-  const exporter = new PostHogTraceExporter({ projectToken: 'phc_test' })
-  await exporter.shutdown()
-  return Response.json({ flushed, exported })
-} }
-`,
-      resolveDir: consumer,
-      sourcefile: 'worker-entry.mjs',
-    },
-    bundle: true,
-    platform: 'browser',
-    format: 'esm',
-    external: ['node:*'],
-    outfile: worker,
-    metafile: true,
-    logLevel: 'silent',
-  })
-  assert.ok(Object.keys(bundle.metafile.inputs).some((input) => input.includes(`${tracePackage}/`)))
-  const workerRuntime = new Miniflare({
-    modules: true,
-    scriptPath: worker,
-    modulesRoot: consumer,
-    compatibilityDate: '2026-07-30',
-    compatibilityFlags: ['nodejs_compat'],
-    cf: false,
-  })
-  try {
-    const response = await workerRuntime.dispatchFetch('http://localhost/')
-    assert.equal(response.status, 200, await response.clone().text())
-    assert.deepEqual(await response.json(), {
-      flushed: [{ name: 'gen_ai.flush', prompt: '[base64 image/png redacted]' }],
-      exported: [{ name: 'gen_ai.flush', prompt: '[base64 image/png redacted]' }, { name: 'gen_ai.shutdown' }],
-    })
-    console.log(`${sdk}: bundled Workers import, construction, filtering, redaction, flush and shutdown passed`)
-  } finally {
-    await workerRuntime.dispose()
-  }
+  await testWorkerBundles(consumer, sdk, tracePackage)
 }

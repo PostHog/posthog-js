@@ -45,7 +45,12 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
     "@opentelemetry/otlp-exporter-base": "^0.200.0",
-    "@opentelemetry/sdk-trace-base": "^2.0.0",
+    "@opentelemetry/sdk-trace-base": "2.2.0",
+    "@rollup/plugin-commonjs": "28.0.6",
+    "@rollup/plugin-json": "6.1.0",
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "rollup": "catalog:",
+    "webpack": "5.108.1",
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/tsconfig-base": "workspace:*",
@@ -85,8 +90,6 @@
     "openai": "^6.48.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0 <1.0.0",
-    "@opentelemetry/sdk-trace-base": "^2.0.0",
-    "@opentelemetry/sdk-trace": "^2.9.0 || ^3.0.0",
     "@ai-sdk/provider": "^2.0.0 || ^3.0.0 || ^4.0.0",
     "@openai/agents": "^0.8.0",
     "langchain": ">=1.5.5 <2.0.0",
@@ -123,12 +126,6 @@
     "@opentelemetry/exporter-trace-otlp-http": {
       "optional": true
     },
-    "@opentelemetry/sdk-trace-base": {
-      "optional": true
-    },
-    "@opentelemetry/sdk-trace": {
-      "optional": true
-    },
     "@ai-sdk/provider": {
       "optional": true
     },
@@ -137,7 +134,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE.opentelemetry"
   ],
   "exports": {
     ".": {
@@ -166,6 +164,10 @@
       "types": "./dist/vercel/index.d.ts"
     },
     "./otel": {
+      "browser": {
+        "require": "./dist/otel/index.browser.cjs",
+        "import": "./dist/otel/index.browser.mjs"
+      },
       "require": "./dist/otel/index.cjs",
       "import": "./dist/otel/index.mjs",
       "types": "./dist/otel/index.d.ts"
