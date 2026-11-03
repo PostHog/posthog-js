@@ -17,7 +17,7 @@ describe('Pages PostHogProvider', () => {
 
     it('renders children inside ClientPostHogProvider', () => {
         render(
-            <PostHogProvider apiKey="phc_test123">
+            <PostHogProvider projectToken="phc_test123">
                 <div data-testid="child">Hello</div>
             </PostHogProvider>
         )
@@ -25,35 +25,37 @@ describe('Pages PostHogProvider', () => {
         expect(screen.getByTestId('child')).toBeInTheDocument()
     })
 
-    it('passes apiKey to ClientPostHogProvider', () => {
+    it('passes projectToken to ClientPostHogProvider', () => {
         render(
-            <PostHogProvider apiKey="phc_test123">
+            <PostHogProvider projectToken="phc_test123">
                 <div>Child</div>
             </PostHogProvider>
         )
-        expect(mockClientPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'phc_test123' }))
+        expect(mockClientPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ projectToken: 'phc_test123' }))
     })
 
-    it('warns and renders children without ClientPostHogProvider when apiKey is empty and env var is not set', () => {
-        delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+    it('warns and renders children without ClientPostHogProvider when projectToken is empty and env var is not set', () => {
+        delete process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
         render(
-            <PostHogProvider apiKey="">
+            <PostHogProvider projectToken="">
                 <div data-testid="child">Child</div>
             </PostHogProvider>
         )
 
         expect(screen.getByTestId('child')).toBeInTheDocument()
         expect(mockClientPostHogProvider).not.toHaveBeenCalled()
-        expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[PostHog Next.js] projectToken is required — set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN or pass projectToken. PostHog will not be initialized'
+        )
         warnSpy.mockRestore()
     })
 
-    it('trims apiKey and api_host before passing them to ClientPostHogProvider', () => {
+    it('trims projectToken and api_host before passing them to ClientPostHogProvider', () => {
         render(
             <PostHogProvider
-                apiKey={'  phc_test123\n'}
+                projectToken={'  phc_test123\n'}
                 clientOptions={{ api_host: '  https://custom.posthog.com/\t ' }}
             >
                 <div>Child</div>
@@ -61,7 +63,7 @@ describe('Pages PostHogProvider', () => {
         )
         expect(mockClientPostHogProvider).toHaveBeenCalledWith(
             expect.objectContaining({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 options: expect.objectContaining({ api_host: 'https://custom.posthog.com/' }),
             })
         )
@@ -69,7 +71,7 @@ describe('Pages PostHogProvider', () => {
 
     it('applies NEXTJS_CLIENT_DEFAULTS to options', () => {
         render(
-            <PostHogProvider apiKey="phc_test123">
+            <PostHogProvider projectToken="phc_test123">
                 <div>Child</div>
             </PostHogProvider>
         )
@@ -88,7 +90,10 @@ describe('Pages PostHogProvider', () => {
 
     it('allows user clientOptions to override defaults', () => {
         render(
-            <PostHogProvider apiKey="phc_test123" clientOptions={{ capture_exceptions: false, persistence: 'memory' }}>
+            <PostHogProvider
+                projectToken="phc_test123"
+                clientOptions={{ capture_exceptions: false, persistence: 'memory' }}
+            >
                 <div>Child</div>
             </PostHogProvider>
         )
@@ -106,7 +111,7 @@ describe('Pages PostHogProvider', () => {
     it('resolves api_host from env when not provided', () => {
         process.env.NEXT_PUBLIC_POSTHOG_HOST = 'https://env-host.posthog.com'
         render(
-            <PostHogProvider apiKey="phc_test123">
+            <PostHogProvider projectToken="phc_test123">
                 <div>Child</div>
             </PostHogProvider>
         )
@@ -120,8 +125,8 @@ describe('Pages PostHogProvider', () => {
         delete process.env.NEXT_PUBLIC_POSTHOG_HOST
     })
 
-    it('trims apiKey and api_host from env vars', () => {
-        process.env.NEXT_PUBLIC_POSTHOG_KEY = '  phc_from_env\n'
+    it('trims projectToken and api_host from env vars', () => {
+        process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = '  phc_from_env\n'
         process.env.NEXT_PUBLIC_POSTHOG_HOST = '  https://env-host.posthog.com/\t '
         render(
             <PostHogProvider>
@@ -130,20 +135,20 @@ describe('Pages PostHogProvider', () => {
         )
         expect(mockClientPostHogProvider).toHaveBeenCalledWith(
             expect.objectContaining({
-                apiKey: 'phc_from_env',
+                projectToken: 'phc_from_env',
                 options: expect.objectContaining({
                     api_host: 'https://env-host.posthog.com/',
                 }),
             })
         )
-        delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+        delete process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
         delete process.env.NEXT_PUBLIC_POSTHOG_HOST
     })
 
     it('passes clientOptions.bootstrap to ClientPostHogProvider', () => {
         const bootstrap = { featureFlags: { 'flag-a': true } }
         render(
-            <PostHogProvider apiKey="phc_test123" clientOptions={{ bootstrap }}>
+            <PostHogProvider projectToken="phc_test123" clientOptions={{ bootstrap }}>
                 <div>Child</div>
             </PostHogProvider>
         )

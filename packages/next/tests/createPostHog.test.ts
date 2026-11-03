@@ -56,7 +56,7 @@ describe('createPostHog', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         process.env = { ...originalEnv }
-        process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_env_key'
+        process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_env_key'
         ;(cookies as vi.Mock).mockResolvedValue(createMockCookies({}))
         ;(headers as vi.Mock).mockResolvedValue(createMockHeaders({}))
     })
@@ -65,9 +65,9 @@ describe('createPostHog', () => {
         process.env = originalEnv
     })
 
-    it('passes apiKey and options from config to the node client', async () => {
+    it('passes projectToken and options from config to the node client', async () => {
         const { getPostHog } = createPostHog({
-            apiKey: 'phc_test123',
+            projectToken: 'phc_test123',
             options: { host: 'https://custom.posthog.com' },
         })
 
@@ -85,7 +85,7 @@ describe('createPostHog', () => {
             })
         )
 
-        const { getPostHog } = createPostHog({ apiKey: 'phc_test123' })
+        const { getPostHog } = createPostHog({ projectToken: 'phc_test123' })
         const client = await getPostHog()
         client.capture({ event: 'test_event' })
 
@@ -108,7 +108,7 @@ describe('createPostHog', () => {
             )
 
             const { getPostHog } = createPostHog({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 getDistinctId: async () => 'server-user',
             })
             const client = await getPostHog()
@@ -133,7 +133,7 @@ describe('createPostHog', () => {
             )
 
             const { getPostHog } = createPostHog({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 getDistinctId: () => 'server-user',
             })
             const client = await getPostHog()
@@ -147,7 +147,7 @@ describe('createPostHog', () => {
 
         it('sets identity when no client identity exists at all', async () => {
             const { getPostHog } = createPostHog({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 getDistinctId: async () => 'server-user',
             })
             const client = await getPostHog()
@@ -169,7 +169,7 @@ describe('createPostHog', () => {
                 )
 
                 const { getPostHog } = createPostHog({
-                    apiKey: 'phc_test123',
+                    projectToken: 'phc_test123',
                     getDistinctId: async () => resolved,
                 })
                 const client = await getPostHog()
@@ -191,7 +191,7 @@ describe('createPostHog', () => {
             )
 
             const { getPostHog } = createPostHog({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 getDistinctId: async () => {
                     throw new Error('auth unavailable')
                 },
@@ -218,7 +218,7 @@ describe('createPostHog', () => {
             'BAILOUT_TO_CLIENT_SIDE_RENDERING',
         ])('rethrows Next.js control-flow errors with digest %s', async (digest) => {
             const { getPostHog } = createPostHog({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 getDistinctId: async () => {
                     throw Object.assign(new Error(digest), { digest })
                 },
@@ -231,7 +231,7 @@ describe('createPostHog', () => {
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
             const { getPostHog } = createPostHog({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 getDistinctId: () => 42 as unknown as string,
             })
             const client = await getPostHog()
@@ -256,7 +256,7 @@ describe('createPostHog', () => {
             )
 
             const { getPostHog } = createPostHog({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 getDistinctId: () => ({ id: 'user' }) as unknown as string,
             })
             const client = await getPostHog()
@@ -280,7 +280,7 @@ describe('createPostHog', () => {
             )
             const getDistinctId = vi.fn(() => 'server-user')
 
-            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
+            const { getPostHog } = createPostHog({ projectToken: 'phc_test123', getDistinctId })
             const client = await getPostHog()
             client.capture({ event: 'test_event' })
 
@@ -288,8 +288,8 @@ describe('createPostHog', () => {
             expect(mockWithContext).not.toHaveBeenCalled()
         })
 
-        it('does not call the resolver when no apiKey is available', async () => {
-            delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+        it('does not call the resolver when no projectToken is available', async () => {
+            delete process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
             const getDistinctId = vi.fn(() => 'server-user')
 
@@ -303,7 +303,7 @@ describe('createPostHog', () => {
         it('does not re-run the resolver per captured event', async () => {
             const getDistinctId = vi.fn(() => 'server-user')
 
-            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
+            const { getPostHog } = createPostHog({ projectToken: 'phc_test123', getDistinctId })
             const client = await getPostHog()
             client.capture({ event: 'one' })
             client.capture({ event: 'two' })
@@ -314,7 +314,7 @@ describe('createPostHog', () => {
         it('resolves identity once per request across multiple getPostHog() calls', async () => {
             const getDistinctId = vi.fn(() => 'server-user')
 
-            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
+            const { getPostHog } = createPostHog({ projectToken: 'phc_test123', getDistinctId })
             const client1 = await getPostHog()
             const client2 = await getPostHog()
             client1.capture({ event: 'one' })
@@ -343,7 +343,7 @@ describe('createPostHog', () => {
 
             // The headers() mock resolves the same store object for the whole
             // test, mirroring how Next returns one headers instance per request.
-            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
+            const { getPostHog } = createPostHog({ projectToken: 'phc_test123', getDistinctId })
             const clientsPromise = Promise.all([getPostHog(), getPostHog()])
 
             await resolverStarted
@@ -364,7 +364,7 @@ describe('createPostHog', () => {
         it('resolves identity again for a new request', async () => {
             const getDistinctId = vi.fn(() => 'server-user')
 
-            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
+            const { getPostHog } = createPostHog({ projectToken: 'phc_test123', getDistinctId })
             await getPostHog()
             ;(headers as vi.Mock).mockResolvedValue(createMockHeaders({}))
             await getPostHog()
@@ -376,8 +376,8 @@ describe('createPostHog', () => {
             const sharedClient = { capture: mockCapture, withContext: mockWithContext, enterContext: mockEnterContext }
             mockGetOrCreateNodeClient.mockReturnValue(sharedClient)
 
-            const factoryA = createPostHog({ apiKey: 'phc_test123', getDistinctId: async () => 'user-a' })
-            const factoryB = createPostHog({ apiKey: 'phc_test123', getDistinctId: async () => 'user-b' })
+            const factoryA = createPostHog({ projectToken: 'phc_test123', getDistinctId: async () => 'user-a' })
+            const factoryB = createPostHog({ projectToken: 'phc_test123', getDistinctId: async () => 'user-b' })
 
             const [clientA, clientB] = await Promise.all([factoryA.getPostHog(), factoryB.getPostHog()])
             clientA.capture({ event: 'from_a' })
@@ -417,7 +417,7 @@ describe('createPostHog', () => {
                 ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
             })
             const { getPostHog } = createPagesPostHog({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 getDistinctId: (resolverContext) => {
                     expect(resolverContext.req).toBe(ctx.req)
                     return 'server-user'
@@ -438,7 +438,7 @@ describe('createPostHog', () => {
                 ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
             })
 
-            const { getPostHog } = createPagesPostHog({ apiKey: 'phc_test123', getDistinctId: () => null })
+            const { getPostHog } = createPagesPostHog({ projectToken: 'phc_test123', getDistinctId: () => null })
             const client = await getPostHog(ctx)
             client.capture({ event: 'test_event' })
 
@@ -452,7 +452,7 @@ describe('createPostHog', () => {
             const getDistinctId = vi.fn(() => 'server-user')
             const ctx = createMockPagesContext({ __ph_opt_in_out_phc_test123: '0' })
 
-            const { getPostHog } = createPagesPostHog({ apiKey: 'phc_test123', getDistinctId })
+            const { getPostHog } = createPagesPostHog({ projectToken: 'phc_test123', getDistinctId })
             const client = await getPostHog(ctx)
             client.capture({ event: 'test_event' })
 
@@ -465,7 +465,7 @@ describe('createPostHog', () => {
                 ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
             })
 
-            const { getPostHog } = createPagesPostHog({ apiKey: 'phc_test123' })
+            const { getPostHog } = createPagesPostHog({ projectToken: 'phc_test123' })
             await getPostHog(ctx)
 
             expect(mockEnterContext).not.toHaveBeenCalled()

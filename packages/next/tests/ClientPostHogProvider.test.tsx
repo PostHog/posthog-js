@@ -41,17 +41,17 @@ describe('ClientPostHogProvider', () => {
 
     it('renders children', () => {
         render(
-            <ClientPostHogProvider apiKey="phc_test123">
+            <ClientPostHogProvider projectToken="phc_test123">
                 <div data-testid="child">Hello</div>
             </ClientPostHogProvider>
         )
         expect(screen.getByTestId('child')).toBeInTheDocument()
     })
 
-    it('calls init with apiKey and options', () => {
+    it('calls init with projectToken and options', () => {
         const options = { api_host: 'https://custom.posthog.com' }
         render(
-            <ClientPostHogProvider apiKey="phc_test123" options={options}>
+            <ClientPostHogProvider projectToken="phc_test123" options={options}>
                 <div>Child</div>
             </ClientPostHogProvider>
         )
@@ -87,7 +87,7 @@ describe('ClientPostHogProvider', () => {
         },
     ])('$name', ({ options, expectedOptions }) => {
         render(
-            <ClientPostHogProvider apiKey="phc_test123" options={options}>
+            <ClientPostHogProvider projectToken="phc_test123" options={options}>
                 <div>Child</div>
             </ClientPostHogProvider>
         )
@@ -97,7 +97,7 @@ describe('ClientPostHogProvider', () => {
     it('provides posthog client via context', () => {
         let contextValue: any
         render(
-            <ClientPostHogProvider apiKey="phc_test123">
+            <ClientPostHogProvider projectToken="phc_test123">
                 <ContextReader onContext={(ctx) => (contextValue = ctx)} />
             </ClientPostHogProvider>
         )
@@ -111,7 +111,7 @@ describe('ClientPostHogProvider', () => {
             featureFlags: { 'flag-a': true, 'flag-b': 'variant-1' },
         }
         render(
-            <ClientPostHogProvider apiKey="phc_test123" options={{ bootstrap }}>
+            <ClientPostHogProvider projectToken="phc_test123" options={{ bootstrap }}>
                 <div>Child</div>
             </ClientPostHogProvider>
         )
@@ -128,7 +128,7 @@ describe('ClientPostHogProvider', () => {
         }
         let contextValue: any
         render(
-            <ClientPostHogProvider apiKey="phc_test123" options={{ bootstrap }}>
+            <ClientPostHogProvider projectToken="phc_test123" options={{ bootstrap }}>
                 <ContextReader onContext={(ctx) => (contextValue = ctx)} />
             </ClientPostHogProvider>
         )
@@ -138,7 +138,7 @@ describe('ClientPostHogProvider', () => {
     it('context bootstrap is undefined when options.bootstrap is not provided', () => {
         let contextValue: any
         render(
-            <ClientPostHogProvider apiKey="phc_test123">
+            <ClientPostHogProvider projectToken="phc_test123">
                 <ContextReader onContext={(ctx) => (contextValue = ctx)} />
             </ClientPostHogProvider>
         )
@@ -148,7 +148,7 @@ describe('ClientPostHogProvider', () => {
     it('does not call init when already loaded', () => {
         mockPostHogJs.__loaded = true
         render(
-            <ClientPostHogProvider apiKey="phc_test123">
+            <ClientPostHogProvider projectToken="phc_test123">
                 <div>Child</div>
             </ClientPostHogProvider>
         )
@@ -167,7 +167,7 @@ describe('ClientPostHogProvider', () => {
             return <div data-testid="flag">{String(flagValue)}</div>
         }
         render(
-            <ClientPostHogProvider apiKey="phc_test123" options={{ bootstrap }}>
+            <ClientPostHogProvider projectToken="phc_test123" options={{ bootstrap }}>
                 <FlagReader />
             </ClientPostHogProvider>
         )
@@ -185,21 +185,21 @@ describe('ClientPostHogProvider', () => {
             return null
         }
         render(
-            <ClientPostHogProvider apiKey="phc_test123" options={{ bootstrap }}>
+            <ClientPostHogProvider projectToken="phc_test123" options={{ bootstrap }}>
                 <FlagReader />
             </ClientPostHogProvider>
         )
         expect(flagValue).toBeUndefined()
     })
 
-    it('renders children and warns when apiKey is empty', () => {
+    it('renders children and warns when projectToken is empty', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         render(
-            <ClientPostHogProvider apiKey="">
+            <ClientPostHogProvider projectToken="">
                 <div data-testid="child">Child</div>
             </ClientPostHogProvider>
         )
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('apiKey is required'))
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('projectToken is required'))
         expect(screen.getByTestId('child')).toBeInTheDocument()
         warnSpy.mockRestore()
     })

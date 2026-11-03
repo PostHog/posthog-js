@@ -1,14 +1,15 @@
 import React from 'react'
 import type { PostHogConfig } from 'posthog-js'
 import { ClientPostHogProvider } from '../client/ClientPostHogProvider.js'
-import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import {
+    NEXTJS_CLIENT_DEFAULTS,
+    getProjectTokenOption,
+    resolveHostOrDefault,
+    resolveProjectToken,
+    type ProjectTokenOptions,
+} from '../shared/config.js'
 
-export interface PagesPostHogProviderProps {
-    /**
-     * PostHog project API key (starts with phc_).
-     * If omitted, reads from `NEXT_PUBLIC_POSTHOG_KEY` env var.
-     */
-    apiKey?: string
+export interface PagesPostHogProviderProps extends ProjectTokenOptions {
     /** Optional posthog-js configuration overrides. */
     clientOptions?: Partial<PostHogConfig>
     children: React.ReactNode
@@ -25,26 +26,26 @@ export interface PagesPostHogProviderProps {
  *
  * export default function App({ Component, pageProps }: AppProps) {
  *   return (
- *     <PostHogProvider apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!}>
+ *     <PostHogProvider projectToken={process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN!}>
  *       <Component {...pageProps} />
  *     </PostHogProvider>
  *   )
  * }
  * ```
  */
-let apiKeyWarned = false
+let projectTokenWarned = false
 
-export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, children }: PagesPostHogProviderProps) {
-    const apiKey = resolveApiKey(apiKeyProp)
-    if (!apiKey) {
+export function PostHogProvider({ clientOptions, children, ...tokenOptions }: PagesPostHogProviderProps) {
+    const projectToken = resolveProjectToken(getProjectTokenOption(tokenOptions))
+    if (!projectToken) {
         return <>{children}</>
     }
 
-    if (!apiKeyWarned && !apiKey.startsWith('phc_')) {
-        apiKeyWarned = true
+    if (!projectTokenWarned && !projectToken.startsWith('phc_')) {
+        projectTokenWarned = true
         // oxlint-disable-next-line no-console
         console.warn(
-            `[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`
+            `[PostHog Next.js] projectToken "${projectToken}" does not start with "phc_". This may not be a valid PostHog project token.`
         )
     }
 
@@ -56,7 +57,7 @@ export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, children }:
     }
 
     return (
-        <ClientPostHogProvider apiKey={apiKey} options={resolvedOptions}>
+        <ClientPostHogProvider projectToken={projectToken} options={resolvedOptions}>
             {children}
         </ClientPostHogProvider>
     )

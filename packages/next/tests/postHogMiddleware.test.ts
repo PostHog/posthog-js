@@ -96,20 +96,57 @@ describe('postHogMiddleware', () => {
     })
 
     it('returns a middleware function', () => {
-        const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+        const middleware = postHogMiddleware({ projectToken: 'phc_test123' })
         expect(typeof middleware).toBe('function')
     })
 
     it('calls NextResponse.next()', async () => {
-        const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+        const middleware = postHogMiddleware({ projectToken: 'phc_test123' })
         const req = new MockNextRequest('https://example.com/page')
 
         await middleware(req as any)
         expect(mockNextResponseNext).toHaveBeenCalled()
     })
 
-    describe('apiKey resolution', () => {
-        it('reads apiKey from NEXT_PUBLIC_POSTHOG_KEY when not in config', async () => {
+    describe('projectToken resolution', () => {
+        it('reads projectToken from NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN when not in config', async () => {
+            process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_from_env'
+            const middleware = postHogMiddleware({})
+            const req = new MockNextRequest('https://example.com/')
+
+            await middleware(req as any)
+
+            expect(mockCookiesSet).toHaveBeenCalledWith(
+                'ph_phc_from_env_posthog',
+                expect.any(String),
+                expect.any(Object)
+            )
+        })
+
+        it('prefers config projectToken over env var', async () => {
+            process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_from_env'
+            const middleware = postHogMiddleware({ projectToken: 'phc_test123' })
+            const req = new MockNextRequest('https://example.com/')
+
+            await middleware(req as any)
+
+            expect(mockCookiesSet).toHaveBeenCalledWith(COOKIE_NAME, expect.any(String), expect.any(Object))
+        })
+
+        it.each([
+            ['deprecated apiKey', { apiKey: 'phc_test123' }],
+            ['projectToken over apiKey', { projectToken: 'phc_test123', apiKey: 'phc_legacy' }],
+        ])('accepts %s', async (_case, config) => {
+            const middleware = postHogMiddleware(config)
+            const req = new MockNextRequest('https://example.com/')
+
+            await middleware(req as any)
+
+            expect(mockCookiesSet).toHaveBeenCalledWith(COOKIE_NAME, expect.any(String), expect.any(Object))
+        })
+
+        it('reads projectToken from legacy NEXT_PUBLIC_POSTHOG_KEY when the new env var is unset', async () => {
+            delete process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
             process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_from_env'
             const middleware = postHogMiddleware({})
             const req = new MockNextRequest('https://example.com/')
@@ -123,9 +160,8 @@ describe('postHogMiddleware', () => {
             )
         })
 
-        it('prefers config apiKey over env var', async () => {
-            process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_from_env'
-            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+        it('trims projectToken before seeding cookies', async () => {
+            const middleware = postHogMiddleware({ projectToken: '  phc_test123\n' })
             const req = new MockNextRequest('https://example.com/')
 
             await middleware(req as any)
@@ -133,17 +169,8 @@ describe('postHogMiddleware', () => {
             expect(mockCookiesSet).toHaveBeenCalledWith(COOKIE_NAME, expect.any(String), expect.any(Object))
         })
 
-        it('trims apiKey before seeding cookies', async () => {
-            const middleware = postHogMiddleware({ apiKey: '  phc_test123\n' })
-            const req = new MockNextRequest('https://example.com/')
-
-            await middleware(req as any)
-
-            expect(mockCookiesSet).toHaveBeenCalledWith(COOKIE_NAME, expect.any(String), expect.any(Object))
-        })
-
-        it('warns and skips cookie seeding when neither config nor env var provides apiKey', async () => {
-            delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+        it('warns and skips cookie seeding when neither config nor env var provides projectToken', async () => {
+            delete process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
             const middleware = postHogMiddleware({})
             const req = new MockNextRequest('https://example.com/')
@@ -151,7 +178,7 @@ describe('postHogMiddleware', () => {
             await middleware(req as any)
 
             expect(warnSpy).toHaveBeenCalledWith(
-                '[PostHog Next.js] apiKey is required — PostHog will not be initialized'
+                '[PostHog Next.js] projectToken is required — set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN or pass projectToken. PostHog will not be initialized'
             )
             expect(mockCookiesSet).not.toHaveBeenCalled()
             expect(mockNextResponseNext).toHaveBeenCalled()
@@ -161,7 +188,7 @@ describe('postHogMiddleware', () => {
 
     describe('cookie seeding', () => {
         it('seeds cookie on first visit', async () => {
-            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const middleware = postHogMiddleware({ projectToken: 'phc_test123' })
             const req = new MockNextRequest('https://example.com/')
 
             await middleware(req as any)
@@ -187,7 +214,7 @@ describe('postHogMiddleware', () => {
         it('uses the generated anonymous ID in the cookie', async () => {
             mockGenerateAnonymousId.mockReturnValue('seeded-uuid-v7')
 
-            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const middleware = postHogMiddleware({ projectToken: 'phc_test123' })
             const req = new MockNextRequest('https://example.com/')
 
             await middleware(req as any)
@@ -198,7 +225,7 @@ describe('postHogMiddleware', () => {
         })
 
         it('uses custom cookieMaxAgeSeconds when provided', async () => {
-            const middleware = postHogMiddleware({ apiKey: 'phc_test123', cookieMaxAgeSeconds: 3600 })
+            const middleware = postHogMiddleware({ projectToken: 'phc_test123', cookieMaxAgeSeconds: 3600 })
             const req = new MockNextRequest('https://example.com/')
 
             await middleware(req as any)
@@ -211,7 +238,7 @@ describe('postHogMiddleware', () => {
         })
 
         it('does not overwrite existing cookie', async () => {
-            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const middleware = postHogMiddleware({ projectToken: 'phc_test123' })
             const req = new MockNextRequest('https://example.com/', {
                 [COOKIE_NAME]: JSON.stringify({
                     distinct_id: 'existing-user',
@@ -233,7 +260,7 @@ describe('postHogMiddleware', () => {
             }
 
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 response: providedResponse as any,
             })
             const req = new MockNextRequest('https://example.com/')
@@ -257,7 +284,7 @@ describe('postHogMiddleware', () => {
             }
 
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 response: providedResponse as any,
             })
             const req = new MockNextRequest('https://example.com/', {
@@ -277,7 +304,7 @@ describe('postHogMiddleware', () => {
     describe('proxy', () => {
         it('proxies ingest requests to PostHog host', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: true,
             })
             const req = new MockNextRequest('https://example.com/ingest/e/')
@@ -292,7 +319,7 @@ describe('postHogMiddleware', () => {
 
         it('preserves query string on proxy', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: true,
             })
             const req = new MockNextRequest('https://example.com/ingest/flags?v=2')
@@ -306,7 +333,7 @@ describe('postHogMiddleware', () => {
 
         it('does not proxy non-ingest paths', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: true,
             })
             const req = new MockNextRequest('https://example.com/about')
@@ -319,7 +346,7 @@ describe('postHogMiddleware', () => {
 
         it('does not proxy paths that only partially match the prefix', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: true,
             })
             const req = new MockNextRequest('https://example.com/ingestion')
@@ -332,7 +359,7 @@ describe('postHogMiddleware', () => {
 
         it('returns 400 for invalid proxy requests', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: true,
             })
             const ingestionUrl = 'https://example.com/ingest/'
@@ -348,7 +375,7 @@ describe('postHogMiddleware', () => {
 
         it('does not seed cookie on proxied requests', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: true,
             })
             const req = new MockNextRequest('https://example.com/ingest/e/')
@@ -360,7 +387,7 @@ describe('postHogMiddleware', () => {
 
         it('proxies exact prefix path to root', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: true,
             })
             const req = new MockNextRequest('https://example.com/ingest')
@@ -373,7 +400,7 @@ describe('postHogMiddleware', () => {
 
         it('supports custom pathPrefix', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: { pathPrefix: '/ph-proxy' },
             })
             const req = new MockNextRequest('https://example.com/ph-proxy/e/')
@@ -387,7 +414,7 @@ describe('postHogMiddleware', () => {
 
         it('normalizes pathPrefix without leading slash', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: { pathPrefix: 'ingest' },
             })
             const req = new MockNextRequest('https://example.com/ingest/e/')
@@ -401,7 +428,7 @@ describe('postHogMiddleware', () => {
 
         it('supports custom host', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: { host: 'https://eu.i.posthog.com' },
             })
             const req = new MockNextRequest('https://example.com/ingest/e/')
@@ -415,7 +442,7 @@ describe('postHogMiddleware', () => {
 
         it('trims custom proxy host before rewriting', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: { host: '  https://eu.i.posthog.com/\t ' },
             })
             const req = new MockNextRequest('https://example.com/ingest/e/')
@@ -429,7 +456,7 @@ describe('postHogMiddleware', () => {
 
         it('has no effect when proxy is false', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 proxy: false,
             })
             const req = new MockNextRequest('https://example.com/ingest/e/')
@@ -442,7 +469,7 @@ describe('postHogMiddleware', () => {
 
         it('has no effect when proxy is undefined', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
             })
             const req = new MockNextRequest('https://example.com/ingest/e/')
 
@@ -457,7 +484,7 @@ describe('postHogMiddleware', () => {
         const CONSENT_COOKIE = '__ph_opt_in_out_phc_test123'
 
         it('does not seed identity cookie when opted out (consent cookie = 0)', async () => {
-            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const middleware = postHogMiddleware({ projectToken: 'phc_test123' })
             const req = new MockNextRequest('https://example.com/', {
                 [CONSENT_COOKIE]: '0',
             })
@@ -467,7 +494,7 @@ describe('postHogMiddleware', () => {
         })
 
         it('seeds identity cookie when opted in (consent cookie = 1)', async () => {
-            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const middleware = postHogMiddleware({ projectToken: 'phc_test123' })
             const req = new MockNextRequest('https://example.com/', {
                 [CONSENT_COOKIE]: '1',
             })
@@ -478,7 +505,7 @@ describe('postHogMiddleware', () => {
 
         it('does not seed when no consent cookie and seedAnonymousCookie is false', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 seedAnonymousCookie: false,
             })
             const req = new MockNextRequest('https://example.com/')
@@ -488,7 +515,7 @@ describe('postHogMiddleware', () => {
         })
 
         it('seeds when no consent cookie and seedAnonymousCookie is true (default)', async () => {
-            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const middleware = postHogMiddleware({ projectToken: 'phc_test123' })
             const req = new MockNextRequest('https://example.com/')
 
             await middleware(req as any)
@@ -496,7 +523,7 @@ describe('postHogMiddleware', () => {
         })
 
         it('deletes existing identity cookie when opted out', async () => {
-            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const middleware = postHogMiddleware({ projectToken: 'phc_test123' })
             const req = new MockNextRequest('https://example.com/', {
                 [COOKIE_NAME]: JSON.stringify({ distinct_id: 'user_123', $device_id: 'device_abc' }),
                 [CONSENT_COOKIE]: '0',
@@ -508,7 +535,7 @@ describe('postHogMiddleware', () => {
 
         it('uses custom consentCookieName', async () => {
             const middleware = postHogMiddleware({
-                apiKey: 'phc_test123',
+                projectToken: 'phc_test123',
                 consentCookieName: 'my_consent',
             })
             const req = new MockNextRequest('https://example.com/', {

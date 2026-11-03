@@ -1,6 +1,6 @@
 import { isArray, isFunction } from '@posthog/core'
 import { cookieStateToProperties, cookieStoreFromHeader, isOptedOut, readPostHogCookie } from '../shared/cookie.js'
-import { resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import { getProjectTokenOption, resolveHostOrDefault, resolveProjectToken } from '../shared/config.js'
 import type { NextRequestErrorContext, NextRequestErrorRequest, OnRequestErrorOptions } from './onRequestError.types.js'
 
 interface PostHogExceptionCaptureClient {
@@ -13,7 +13,7 @@ interface PostHogExceptionCaptureClient {
 
 type ServerOptions = NonNullable<OnRequestErrorOptions['serverOptions']>
 
-type GetOrCreateClient = (apiKey: string, options?: ServerOptions) => Promise<PostHogExceptionCaptureClient>
+type GetOrCreateClient = (projectToken: string, options?: ServerOptions) => Promise<PostHogExceptionCaptureClient>
 
 type HeaderValue = string | string[] | null | undefined
 
@@ -30,18 +30,18 @@ export async function captureNextRequestError(
         return
     }
 
-    const apiKey = resolveApiKey(options.apiKey)
-    if (!apiKey) {
+    const projectToken = resolveProjectToken(getProjectTokenOption(options))
+    if (!projectToken) {
         return
     }
 
     const cookieHeader = getHeader(request.headers, 'cookie')
     const cookieStore = cookieStoreFromHeader(cookieHeader ?? '')
-    if (isOptedOut(cookieStore, apiKey, options.consent)) {
+    if (isOptedOut(cookieStore, projectToken, options.consent)) {
         return
     }
 
-    const cookieState = readPostHogCookie(cookieStore, apiKey)
+    const cookieState = readPostHogCookie(cookieStore, projectToken)
     const distinctId = cookieState?.distinctId
     const shouldStripUrlHash = options.serverOptions?.disable_capture_url_hashes === true
     let properties = buildExceptionProperties(
@@ -69,7 +69,7 @@ export async function captureNextRequestError(
 
     try {
         const host = resolveHostOrDefault(options.host ?? options.serverOptions?.host)
-        const client = await getOrCreateClient(apiKey, {
+        const client = await getOrCreateClient(projectToken, {
             ...options.serverOptions,
             host,
         })

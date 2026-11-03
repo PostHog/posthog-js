@@ -19,7 +19,7 @@ describe('Next.js onRequestError edge runtime', () => {
         vi.clearAllMocks()
         process.env = { ...originalEnv }
         process.env.NEXT_RUNTIME = 'edge'
-        process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_edge_test'
+        process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = 'phc_edge_test'
         delete process.env.NEXT_PUBLIC_POSTHOG_HOST
     })
 
@@ -27,8 +27,8 @@ describe('Next.js onRequestError edge runtime', () => {
         process.env = originalEnv
     })
 
-    function postHogCookie(apiKey: string, value: Record<string, unknown>): string {
-        return `ph_${apiKey}_posthog=${encodeURIComponent(JSON.stringify(value))}`
+    function postHogCookie(projectToken: string, value: Record<string, unknown>): string {
+        return `ph_${projectToken}_posthog=${encodeURIComponent(JSON.stringify(value))}`
     }
 
     it('captures request errors with the edge-safe posthog-node client', async () => {
@@ -81,7 +81,7 @@ describe('Next.js onRequestError edge runtime', () => {
 
     it('supports custom options via createOnRequestError', async () => {
         const handler = createOnRequestError({
-            apiKey: 'phc_edge_custom',
+            projectToken: 'phc_edge_custom',
             host: 'https://custom.posthog.com',
             serverOptions: { flushAt: 1 },
             beforeCapture: () => ({ custom_property: 'edge-custom-value' }),

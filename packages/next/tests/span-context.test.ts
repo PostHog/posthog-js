@@ -23,7 +23,7 @@ describe('Next.js optional span context', () => {
     let client: PostHog
     let provider: BasicTracerProvider
     let exporter: InMemorySpanExporter
-    const config = { apiKey: 'phc_test', options: { host: 'https://example.com' } }
+    const config = { projectToken: 'phc_test', options: { host: 'https://example.com' } }
 
     beforeAll(() => context.setGlobalContextManager(manager.enable()))
     afterAll(() => {
@@ -145,7 +145,7 @@ describe('Next.js optional span context', () => {
             expect(requestClient.getContext()?.distinctId).toBe('trusted-person')
         )
         expect(getDistinctId).toHaveBeenCalledTimes(1)
-        expect(cachedClient).toHaveBeenLastCalledWith(config.apiKey, config.options)
+        expect(cachedClient).toHaveBeenLastCalledWith(config.projectToken, config.options)
     })
 
     it.each(['success', 'failure'])('keeps context for async SDK work after %s', async (outcome) => {

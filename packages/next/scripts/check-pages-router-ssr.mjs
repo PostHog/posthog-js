@@ -16,7 +16,7 @@ renderToStaticMarkup(
     React.createElement(
         PostHogProvider,
         {
-            apiKey: 'phc_test',
+            projectToken: 'phc_test',
             clientOptions: {
                 bootstrap: {
                     distinctID: 'ssr-user',

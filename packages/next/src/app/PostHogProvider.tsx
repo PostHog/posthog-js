@@ -5,7 +5,13 @@ import { ClientPostHogProvider } from '../client/ClientPostHogProvider.js'
 import { cookies } from 'next/headers.js'
 import type { PostHogOptions } from 'posthog-node'
 import { getOrCreateNodeClient } from '../server/clientCache.node.js'
-import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import {
+    NEXTJS_CLIENT_DEFAULTS,
+    getProjectTokenOption,
+    resolveHostOrDefault,
+    resolveProjectToken,
+    type ProjectTokenOptions,
+} from '../shared/config.js'
 import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
 
 type AllFlagsOptions = {
@@ -28,12 +34,7 @@ export interface BootstrapFlagsConfig {
     groupProperties?: AllFlagsOptions['groupProperties']
 }
 
-export interface PostHogProviderProps {
-    /**
-     * PostHog project API key (starts with phc_).
-     * If omitted, reads from `NEXT_PUBLIC_POSTHOG_KEY` env var.
-     */
-    apiKey?: string
+export interface PostHogProviderProps extends ProjectTokenOptions {
     /** Optional posthog-js configuration overrides. */
     clientOptions?: Partial<PostHogConfig>
     /** Options passed to the posthog-node client used for server-side flag evaluation. */
@@ -68,21 +69,21 @@ export interface PostHogProviderProps {
  * require this provider as an ancestor.
  */
 export async function PostHogProvider({
-    apiKey: apiKeyProp,
     clientOptions,
     serverOptions,
     bootstrapFlags,
     children,
+    ...tokenOptions
 }: PostHogProviderProps) {
-    const apiKey = resolveApiKey(apiKeyProp)
-    if (!apiKey) {
+    const projectToken = resolveProjectToken(getProjectTokenOption(tokenOptions))
+    if (!projectToken) {
         return <>{children}</>
     }
 
-    if (!apiKey.startsWith('phc_')) {
+    if (!projectToken.startsWith('phc_')) {
         // oxlint-disable-next-line no-console
         console.warn(
-            `[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`
+            `[PostHog Next.js] projectToken "${projectToken}" does not start with "phc_". This may not be a valid PostHog project token.`
         )
     }
 
@@ -101,7 +102,7 @@ export async function PostHogProvider({
         const cookieStore = await cookies()
 
         try {
-            bootstrap = await evaluateFlags(cookieStore, apiKey, resolvedOptions, bootstrapFlags, serverOptions)
+            bootstrap = await evaluateFlags(cookieStore, projectToken, resolvedOptions, bootstrapFlags, serverOptions)
 
             // Only disable the first-load fetch when we actually have bootstrap data.
             // If evaluateFlags returned undefined (no cookie, opted-out), the client
@@ -117,7 +118,7 @@ export async function PostHogProvider({
     }
 
     return (
-        <ClientPostHogProvider apiKey={apiKey} options={resolvedOptions}>
+        <ClientPostHogProvider projectToken={projectToken} options={resolvedOptions}>
             {children}
         </ClientPostHogProvider>
     )
@@ -159,16 +160,16 @@ function mergeBootstrap(
 
 async function evaluateFlags(
     cookieStore: Awaited<ReturnType<typeof cookies>>,
-    apiKey: string,
+    projectToken: string,
     options: Partial<PostHogConfig> | undefined,
     bootstrapFlags: boolean | BootstrapFlagsConfig,
     serverOptions?: Partial<PostHogOptions>
 ): Promise<BootstrapConfig | undefined> {
-    if (isOptedOut(cookieStore, apiKey, options)) {
+    if (isOptedOut(cookieStore, projectToken, options)) {
         return undefined
     }
 
-    const cookieState = readPostHogCookie(cookieStore, apiKey)
+    const cookieState = readPostHogCookie(cookieStore, projectToken)
     if (!cookieState) {
         return undefined
     }
@@ -183,7 +184,7 @@ async function evaluateFlags(
 
     const host = resolveHostOrDefault(serverOptions?.host)
     const nodeOptions: Partial<PostHogOptions> = { ...serverOptions, ...(host ? { host } : {}) }
-    const client = await getOrCreateNodeClient(apiKey, nodeOptions)
+    const client = await getOrCreateNodeClient(projectToken, nodeOptions)
 
     const { flags: flagKeys, ...flagOptions } = typeof bootstrapFlags === 'object' ? bootstrapFlags : {}
     const allFlagsOptions: AllFlagsOptions = { ...flagOptions, ...(flagKeys ? { flagKeys } : {}) }

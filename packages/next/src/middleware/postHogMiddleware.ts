@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server.js'
 import type { NextRequest } from 'next/server.js'
 import { getPostHogCookieName, readPostHogCookie, serializePostHogCookie, isOptedOut } from '../shared/cookie.js'
 import { generateAnonymousId } from '../shared/identity.js'
-import { resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import {
+    getProjectTokenOption,
+    resolveHostOrDefault,
+    resolveProjectToken,
+    type ProjectTokenOptions,
+} from '../shared/config.js'
 import { COOKIE_MAX_AGE_SECONDS, DEFAULT_INGEST_PATH } from '../shared/constants.js'
 
 export interface PostHogProxyOptions {
@@ -15,12 +20,7 @@ export interface PostHogProxyOptions {
 /**
  * Configuration for the PostHog middleware.
  */
-export interface PostHogMiddlewareOptions {
-    /**
-     * PostHog project API key (starts with phc_).
-     * If omitted, reads from `NEXT_PUBLIC_POSTHOG_KEY` env var.
-     */
-    apiKey?: string
+export interface PostHogMiddlewareOptions extends ProjectTokenOptions {
     /** Cookie max age in seconds. Default: 365 days. */
     cookieMaxAgeSeconds?: number
     /**
@@ -58,7 +58,7 @@ export interface PostHogMiddlewareOptions {
      */
     consentCookieName?: string
     /**
-     * Custom prefix for the consent cookie (appended with apiKey).
+     * Custom prefix for the consent cookie (appended with the project token).
      * Mirrors the client-side `opt_out_capturing_cookie_prefix` option.
      */
     consentCookiePrefix?: string
@@ -120,7 +120,7 @@ function matchesPathPrefix(pathname: string, pathPrefix: string): boolean {
  * on first visit and optionally rewrites API requests to PostHog's
  * ingest host.
  *
- * @example Standalone (simplest — reads apiKey from NEXT_PUBLIC_POSTHOG_KEY)
+ * @example Standalone (simplest — reads the project token from NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN)
  * ```ts
  * // middleware.ts
  * import { postHogMiddleware } from '@posthog/next'
@@ -141,7 +141,7 @@ function matchesPathPrefix(pathname: string, pathPrefix: string): boolean {
  * ```
  */
 export function postHogMiddleware(config: PostHogMiddlewareOptions = {}) {
-    const apiKey = resolveApiKey(config.apiKey)
+    const projectToken = resolveProjectToken(getProjectTokenOption(config))
     const proxyConfig = resolveProxyConfig(config.proxy)
 
     return async function middleware(request: NextRequest) {
@@ -152,15 +152,15 @@ export function postHogMiddleware(config: PostHogMiddlewareOptions = {}) {
         }
 
         const response = config.response ?? NextResponse.next()
-        if (!apiKey) {
+        if (!projectToken) {
             return response
         }
 
-        const cookieName = getPostHogCookieName(apiKey)
-        const state = readPostHogCookie(request.cookies, apiKey)
+        const cookieName = getPostHogCookieName(projectToken)
+        const state = readPostHogCookie(request.cookies, projectToken)
 
         const shouldSeed = config.seedAnonymousCookie ?? true
-        const optedOut = isOptedOut(request.cookies, apiKey, {
+        const optedOut = isOptedOut(request.cookies, projectToken, {
             opt_out_capturing_by_default: !shouldSeed,
             consent_persistence_name: config.consentCookieName,
             opt_out_capturing_cookie_prefix: config.consentCookiePrefix,

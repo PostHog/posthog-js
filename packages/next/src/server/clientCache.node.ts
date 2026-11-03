@@ -11,6 +11,6 @@ const CACHE_KEY = Symbol.for('posthog-nextjs.node-client-cache')
 const cacheHolder = globalThis as typeof globalThis & { [CACHE_KEY]?: Map<string, PostHog> }
 const cache = (cacheHolder[CACHE_KEY] ??= new Map<string, PostHog>())
 
-export async function getOrCreateNodeClient(apiKey: string, options?: Partial<PostHogOptions>): Promise<PostHog> {
-    return getOrCreatePostHogClient(cache, PostHog, apiKey, options)
+export async function getOrCreateNodeClient(projectToken: string, options?: Partial<PostHogOptions>): Promise<PostHog> {
+    return getOrCreatePostHogClient(cache, PostHog, projectToken, options)
 }
