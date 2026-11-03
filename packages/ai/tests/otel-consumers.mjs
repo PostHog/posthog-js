@@ -80,23 +80,26 @@ new BatchSpanProcessor(${sdk === '0.200.0' ? 'exporter' : '{ exporter }'})
 `
   for (const extension of ['mts', 'cts']) {
     writeFileSync(join(consumer, `consumer.${extension}`), source)
-    run(
-      process.execPath,
-      [
-        join(consumer, 'node_modules/typescript/bin/tsc'),
-        '--noEmit',
-        '--strict',
-        '--skipLibCheck',
-        'false',
-        '--target',
-        'ES2022',
-        '--module',
-        'NodeNext',
-        `consumer.${extension}`,
-      ],
-      consumer,
-      `types-${sdk}-${extension}.log`
-    )
+    for (const condition of ['node', 'browser']) {
+      run(
+        process.execPath,
+        [
+          join(consumer, 'node_modules/typescript/bin/tsc'),
+          '--noEmit',
+          '--strict',
+          '--skipLibCheck',
+          'false',
+          '--target',
+          'ES2022',
+          '--module',
+          'NodeNext',
+          ...(condition === 'browser' ? ['--customConditions', 'browser'] : []),
+          `consumer.${extension}`,
+        ],
+        consumer,
+        `types-${sdk}-${extension}-${condition}.log`
+      )
+    }
   }
 
   // Observe the real upstream processor's export boundary without sending network traffic.
