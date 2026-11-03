@@ -109,18 +109,7 @@ jobs:
         run: pnpm turbo run build --filter=@posthog/ai
 
       - name: Test installed OTel consumers and Workers bundles
-        env:
-          TMPDIR: ${{ runner.temp }}
         run: pnpm --filter @posthog/ai test:otel-consumers
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: ${{ !cancelled() }}
-        with:
-          name: ai-otel-consumers-node-${{ matrix.node-version }}
-          path: |
-            ${{ runner.temp }}/posthog-otel-consumers-*/*.log
-            ${{ runner.temp }}/posthog-otel-consumers-*/*/*.log
-          retention-days: 14
 
   integration:
     permissions:
