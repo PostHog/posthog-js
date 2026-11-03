@@ -193,8 +193,44 @@ describe('consentManager', () => {
             // Wait for the $pageview timeout to be called
             await new Promise((r) => setTimeout(r, 10))
             posthog.opt_in_capturing()
-            expect(beforeSendMock).toHaveBeenCalledTimes(3)
-            expect(beforeSendMock).not.lastCalledWith(expect.objectContaining({ event: '$pageview' }))
+            // consent was already granted, so neither $opt_in nor $pageview is captured again
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+        })
+
+        const optInEvents = () => beforeSendMock.mock.calls.filter(([e]) => e.event === '$opt_in')
+
+        it('should send opt in event once when called again after consent was granted', () => {
+            posthog.opt_in_capturing()
+            posthog.opt_in_capturing()
+            posthog.opt_in_capturing({ captureEventName: 'override-opt-in' })
+            expect(optInEvents()).toHaveLength(1)
+            expect(beforeSendMock).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'override-opt-in' }))
+        })
+
+        it('should not send opt in event on a later page load that re-applies stored consent', async () => {
+            posthog.opt_in_capturing()
+            expect(optInEvents()).toHaveLength(1)
+
+            // a new instance with the same token reads the stored consent, like the next page load
+            beforeSendMock.mockClear()
+            posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
+            expect(posthog.get_explicit_consent_status()).toBe('granted')
+            posthog.opt_in_capturing()
+            expect(optInEvents()).toHaveLength(0)
+        })
+
+        it('should send opt in event again after opting out and back in', () => {
+            posthog.opt_in_capturing()
+            posthog.opt_out_capturing()
+            posthog.opt_in_capturing()
+            expect(optInEvents()).toHaveLength(2)
+        })
+
+        it('should send opt in event again after reset clears consent', () => {
+            posthog.opt_in_capturing()
+            posthog.reset()
+            posthog.opt_in_capturing()
+            expect(optInEvents()).toHaveLength(2)
         })
     })
 
@@ -432,6 +468,8 @@ describe('consentManager', () => {
                     posthog.opt_in_capturing()
                     expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
 
+                    // opt out first, otherwise the second opt in is a repeat and captures nothing
+                    posthog.opt_out_capturing()
                     beforeSendMock.mockClear()
                     const captureEventName = `єνєηт`
                     const captureProperties = { '𝖕𝖗𝖔𝖕𝖊𝖗𝖙𝖞': `𝓿𝓪𝓵𝓾𝓮` }
