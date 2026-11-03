@@ -439,11 +439,16 @@ function codeFormFields(send: UncheckedSend): Record<string, unknown> {
   return {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && { reply_to: addressList(replyTo) }),
-    ...(cc !== undefined && { cc: addressList(cc) }),
-    ...(bcc !== undefined && { bcc: addressList(bcc) }),
-    ...(attachments !== undefined && { attachments: attachmentsOf(attachments) }),
+    ...(cc !== undefined && unlessEmpty('cc', addressList(cc))),
+    ...(bcc !== undefined && unlessEmpty('bcc', addressList(bcc))),
+    ...(attachments !== undefined && unlessEmpty('attachments', attachmentsOf(attachments))),
     capture_engagement: captureEngagement ?? true,
   }
+}
+
+// A server that doesn't take a field yet refuses a send that names it, even with an empty list.
+function unlessEmpty(field: string, list: unknown): Record<string, unknown> {
+  return Array.isArray(list) && list.length === 0 ? {} : { [field]: list }
 }
 
 function addressList(addresses: unknown): unknown {
