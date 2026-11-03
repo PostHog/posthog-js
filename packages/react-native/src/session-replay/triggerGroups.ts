@@ -352,6 +352,14 @@ export class SessionReplayTriggerGroupsEvaluator {
     }
   }
 
+  // Clears in-memory activation (reset() calls this when the persisted one is wiped). With no
+  // activation session, no group reads as activated, and the next onEvent/restoreActivation
+  // clears the group sets as it would for any new session. Sampling decisions are per-session
+  // cache, not activation: untouched.
+  clearActivation(): void {
+    this.activationSessionId = null
+  }
+
   // Adds the persisted activation for sessionId. Activation from any other session is ignored.
   restoreActivation(sessionId: string, activation: SessionReplayTriggerGroupsActivation | null | undefined): void {
     // Storage is read back as-is, so a malformed value must not break replay evaluation.

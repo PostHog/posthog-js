@@ -318,6 +318,33 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
   })
 
+  it('reset() clears the in-memory trigger groups activation even when the session id is kept', async () => {
+    currentSessionRecording = v2Config([purchaseGroup])
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+    posthog.capture('purchase')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+
+    // Identity change keeping the session id: the persisted activation is wiped, so the
+    // in-memory evaluator must drop its copy too or the next user stays activated.
+    const stopsBeforeReset = replay.stopRecording.mock.calls.length
+    posthog.reset([
+      PostHogPersistedProperty.SessionId,
+      PostHogPersistedProperty.SessionLastTimestamp,
+      PostHogPersistedProperty.SessionStartTimestamp,
+    ])
+    const sessionId = posthog.getSessionId()
+
+    const evaluator = (posthog as any)._triggerGroupsEvaluator
+    expect(evaluator.getActivation()).toBeNull()
+    expect(evaluator.evaluate(sessionId, posthog.getKnownFeatureFlags(), undefined).shouldRecord).toBe(false)
+    // The flags reload reset() triggers re-evaluates the gate and stops the recorder.
+    await waitForExpect(2000, () => expect(replay.stopRecording.mock.calls.length).toBeGreaterThan(stopsBeforeReset))
+  })
+
   it('pins the persisted activation key (renaming it would orphan activation across app upgrades)', () => {
     expect(PostHogPersistedProperty.SessionReplayTriggerGroupsActivation).toBe(
       'session_replay_trigger_groups_activation'
@@ -344,5 +371,34 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     await wait(50)
     expect(replay.stopRecording).not.toHaveBeenCalled()
     expect((posthog as any).sessionProps.$sdk_debug_replay_remote_trigger_matching_config).toBeUndefined()
+  })
+
+  const rotateSession = (): void => {
+    posthog.setPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp, Date.now() - 31 * 60 * 1000)
+    posthog.getSessionId()
+  }
+
+  it('stops native when an earlier start it refused is followed by an off decision', async () => {
+    currentSessionRecording = v2Config([purchaseGroup])
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+    posthog.capture('purchase')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    replay.isEnabled.mockImplementation(async () => true)
+    rotateSession()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+
+    // Native refuses the next start (e.g. its own flags aren't loaded), but that start still lifts
+    // its stop hold, so native may resume by itself once its flags arrive.
+    replay.isEnabled.mockImplementation(async () => false)
+    posthog.capture('purchase')
+    await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
+    await wait(50)
+
+    rotateSession()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(2))
   })
 })
