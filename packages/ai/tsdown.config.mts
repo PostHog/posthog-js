@@ -26,6 +26,22 @@ const commonConfig: UserConfig = {
   },
 }
 
+const otelConfig: UserConfig = {
+  ...commonConfig,
+  inputOptions: { resolve: { mainFields: ['module', 'main'] } },
+  nodeProtocol: true,
+  deps: {
+    neverBundle: true,
+    // Keep the API external so the application's tracer and this processor share context.
+    alwaysBundle: [/^@opentelemetry\/(sdk-trace-base|core|resources|semantic-conventions)(\/|$)/],
+    onlyBundle: [/^@opentelemetry\/(sdk-trace-base|core|resources|semantic-conventions)(\/|$)/],
+  },
+  outputOptions: {
+    ...commonConfig.outputOptions,
+    banner: '/*! Includes OpenTelemetry code. Copyright The OpenTelemetry Authors. Licensed under Apache-2.0. */',
+  },
+}
+
 const providers = [
   'anthropic',
   'openai',
@@ -33,7 +49,6 @@ const providers = [
   'langchain',
   'langchain/middleware',
   'gemini',
-  'otel',
   'openai-agents',
   'adk',
   'claude-agent-sdk',
@@ -48,7 +63,18 @@ export default defineConfig([
   },
   ...providers.map((provider) => ({
     ...commonConfig,
-    shims: provider === 'otel',
     entry: { [`${provider}/index`]: `src/${provider}/index.ts` },
   })),
+  {
+    ...otelConfig,
+    entry: { 'otel/index': 'src/otel/index.ts' },
+  },
+  {
+    ...otelConfig,
+    entry: { 'otel/index.browser': 'src/otel/index.ts' },
+    platform: 'browser',
+    inputOptions: { platform: 'browser', resolve: { mainFields: ['module', 'main'] } },
+    format: ['esm', 'cjs'],
+    dts: false,
+  },
 ])

@@ -1,7 +1,7 @@
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { Context } from '@opentelemetry/api'
 import type { SpanProcessor, ReadableSpan, Span } from './types'
-import { createBatchSpanProcessor } from './batchProcessor'
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 
 import { redactSpan } from './redact'
 import { stripContent } from './privacy'
@@ -135,7 +135,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
           Authorization: `Bearer ${token}`,
         },
       })
-      this.inner = createBatchSpanProcessor(exporter)
+      this.inner = new BatchSpanProcessor(exporter)
     }
   }
 
