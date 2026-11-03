@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.445.0
+
+### Minor Changes
+
+- [#5494](https://github.com/PostHog/posthog-js/pull/5494) [`b033b8c`](https://github.com/PostHog/posthog-js/commit/b033b8cf7075d0f46f7b60a9d5c8c704e3672aec) Thanks [@marandaneto](https://github.com/marandaneto)! - Add release integrity manifests and customer-pinned core integrity support to the static loader.
+  (2026-11-03)
+
 ## 1.444.4
 
 ### Patch Changes
