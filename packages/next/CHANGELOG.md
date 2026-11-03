@@ -1,5 +1,17 @@
 # @posthog/next
 
+## 0.11.0
+
+### Minor Changes
+
+- [#5473](https://github.com/PostHog/posthog-js/pull/5473) [`5c8f314`](https://github.com/PostHog/posthog-js/commit/5c8f3140d68c0bd3b437958afd1e4ced33f4f83a) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: `onRequestError` takes identity from PostHog tracing headers before the cookie, drops a cookie session that posthog-js would have ended, and adds the request URL, method, path and user agent. New `withPostHogProxy` captures errors thrown in `proxy.ts` or middleware without delaying the response. Errors that escape middleware or a proxy are marked unhandled.
+  (2026-11-03)
+
+### Patch Changes
+
+- Updated dependencies [[`5c8f314`](https://github.com/PostHog/posthog-js/commit/5c8f3140d68c0bd3b437958afd1e4ced33f4f83a)]:
+  - @posthog/core@1.63.0
+
 ## 0.10.0
 
 ### Minor Changes
