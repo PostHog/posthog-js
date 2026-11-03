@@ -219,6 +219,28 @@ describe('emails', () => {
     })
   })
 
+  it('retries a send with attachments with the bytes and key of the first attempt', async () => {
+    replies = [rejected(503, 'delivery_unavailable'), accepted()]
+    const file = Buffer.from('invoice')
+
+    const pending = posthog.emails.send({
+      to: 'user@example.com',
+      templateKey: 'receipt',
+      subject: 'Your receipt',
+      html: '<p>Thanks</p>',
+      attachments: [{ filename: 'invoice.txt', content: file }],
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    file.fill(0)
+    await vi.runAllTimersAsync()
+
+    expect((await pending).data?.id).toBe('msg_1')
+    const [first, retry] = fetch.mock.calls.map(([, options]) => options.body)
+    expect(retry).toBe(first)
+    expect(JSON.parse(first).attachments[0].content).toBe(Buffer.from('invoice').toString('base64'))
+    expect(new Set(sentHeaders()).size).toBe(1)
+  })
+
   it('names the provider the client moved from on every request', async () => {
     makeClient({ migratedFrom: 'resend' })
     replies = [accepted(), { status: 200, body: { id: MESSAGE_ID, status: 'sent', created_at: 'a', status_at: 'b' } }]
@@ -567,6 +589,7 @@ describe('emails', () => {
 
     it.each([
       ['attachments that are not a list', { filename: 'a.txt', content: 'YQ==' }, 'attachments'],
+      ['a hole in a sparse list of attachments', new Array(1), 'attachments__0'],
       ['an attachment without content', [{ filename: 'a.txt' }], 'attachments__0__content'],
       ["a file's bytes in place of an attachment", [Buffer.from('%PDF')], 'attachments__0'],
       ['a Base64 string in place of an attachment', ['JVBERi0='], 'attachments__0'],

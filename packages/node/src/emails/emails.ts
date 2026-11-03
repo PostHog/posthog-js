@@ -454,7 +454,8 @@ function attachmentsOf(attachments: unknown): Record<string, unknown>[] {
   if (!Array.isArray(attachments)) {
     throw invalid('invalid_attachment', 'attachments must be a list of files.', 'attachments')
   }
-  return attachments.map(attachmentOf)
+  // Array.from visits holes in a sparse array, which map() skips.
+  return Array.from(attachments, attachmentOf)
 }
 
 const ATTACHMENT_KEYS = new Set(['filename', 'content', 'contentType', 'contentId', 'path'])
