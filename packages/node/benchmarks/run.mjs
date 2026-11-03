@@ -257,6 +257,20 @@ export async function main(args = process.argv.slice(2), executeWorker = runWork
   const documents = {}
   for (const role of ['base', 'head'])
     documents[role] = await documentFor(directories[role], role, pairId, suite, values.shard)
+  for (const document of Object.values(documents))
+    document.benchmarks = specs.map((spec) => ({
+      id: spec.id,
+      parameters: spec,
+      fixture_digest: digest({
+        spec,
+        definitions: spec.flag_count ? definitions(spec.flag_count) : null,
+        users,
+      }),
+      status: 'error',
+      reason: 'Workload was not run: suite stopped before reaching it',
+      metrics: [],
+      runs: [],
+    }))
   await mkdir(output, { recursive: true })
   const save = async () => {
     for (const role of ['base', 'head'])
@@ -264,22 +278,12 @@ export async function main(args = process.argv.slice(2), executeWorker = runWork
   }
   let failures = 0
   let timeouts = 0
-  for (const spec of specs) {
+  for (const [index, spec] of specs.entries()) {
     const records = {}
     for (const role of ['base', 'head']) {
-      records[role] = {
-        id: spec.id,
-        parameters: spec,
-        fixture_digest: digest({
-          spec,
-          definitions: spec.flag_count ? definitions(spec.flag_count) : null,
-          users,
-        }),
-        status: 'ok',
-        metrics: [],
-        runs: [],
-      }
-      documents[role].benchmarks.push(records[role])
+      records[role] = documents[role].benchmarks[index]
+      records[role].status = 'ok'
+      delete records[role].reason
     }
     for (let repetition = 0; repetition < repetitions; repetition++) {
       for (const pass of spec.passes) {

@@ -218,28 +218,50 @@ test('OOM requires runtime evidence, not just SIGKILL', () => {
   assert.equal(classifyExit({ timedOut: true, stderr: '' }), 'timeout')
 })
 
-test('repeated timeouts stop the suite and preserve both sides of the failed pair', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'posthog-bench-timeouts-'))
-  let calls = 0
-  try {
-    const code = await main(
-      ['--base', sdkDirectory, '--head', sdkDirectory, '--output', directory, '--smoke'],
-      async () => {
-        calls++
-        return { status: 'timeout', error: 'Worker did not complete' }
+test('repeated timeouts preserve the complete inventory and both sides of the failed pair', async () => {
+  const manifest = JSON.parse(await readFile(new URL('./shards.json', import.meta.url), 'utf8'))
+  for (const shard of [undefined, ...manifest.shards.map((item) => item.id)]) {
+    const directory = await mkdtemp(join(tmpdir(), 'posthog-bench-timeouts-'))
+    let calls = 0
+    try {
+      const code = await main(
+        [
+          '--base',
+          sdkDirectory,
+          '--head',
+          sdkDirectory,
+          '--output',
+          directory,
+          '--smoke',
+          ...(shard === undefined ? [] : ['--shard', shard]),
+        ],
+        async () => {
+          calls++
+          return { status: 'timeout', error: 'Worker did not complete' }
+        }
+      )
+      assert.equal(code, 1)
+      assert.equal(calls, 2)
+      const expected = selectWorkloads(manifest, { smoke: true, shard }).map((spec) => spec.id)
+      for (const role of ['base', 'head']) {
+        const document = JSON.parse(await readFile(join(directory, `${role}.json`), 'utf8'))
+        assert.deepEqual(
+          document.benchmarks.map((record) => record.id),
+          expected
+        )
+        assert.equal(document.benchmarks[0].status, 'timeout')
+        assert.deepEqual(document.benchmarks[0].metrics, [])
+        assert.equal(document.benchmarks[0].runs.length, 1)
+        for (const record of document.benchmarks.slice(1)) {
+          assert.equal(record.status, 'error')
+          assert.match(record.reason, /not run/)
+          assert.deepEqual(record.metrics, [])
+          assert.deepEqual(record.runs, [])
+        }
       }
-    )
-    assert.equal(code, 1)
-    assert.equal(calls, 2)
-    for (const role of ['base', 'head']) {
-      const document = JSON.parse(await readFile(join(directory, `${role}.json`), 'utf8'))
-      assert.equal(document.benchmarks.length, 1)
-      assert.equal(document.benchmarks[0].status, 'timeout')
-      assert.deepEqual(document.benchmarks[0].metrics, [])
-      assert.equal(document.benchmarks[0].runs.length, 1)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
     }
-  } finally {
-    await rm(directory, { recursive: true, force: true })
   }
 })
 
