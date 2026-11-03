@@ -239,6 +239,26 @@ describe('emails', () => {
     })
   })
 
+  it('encodes attachment bytes without Buffer, as on the edge runtime', async () => {
+    replies = [accepted()]
+    const bytes = Uint8Array.from({ length: 70_000 }, (_, index) => (index * 7) % 256)
+    const expected = Buffer.from(bytes).toString('base64')
+    vi.stubGlobal('Buffer', undefined)
+    try {
+      await posthog.emails.send({
+        to: 'user@example.com',
+        templateKey: 'receipt',
+        subject: 'Your receipt',
+        html: '<p>Thanks</p>',
+        attachments: [{ filename: 'scan.bin', content: bytes }],
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+
+    expect(JSON.parse(fetch.mock.calls[0][1].body).attachments[0].content).toBe(expected)
+  })
+
   it('retries a send with attachments with the bytes and key of the first attempt', async () => {
     replies = [rejected(503, 'delivery_unavailable'), accepted()]
     const file = Buffer.from('invoice')
