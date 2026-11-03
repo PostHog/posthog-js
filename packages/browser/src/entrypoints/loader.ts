@@ -1,11 +1,11 @@
-import { isFunction, isObject, isString, isUndefined } from '@posthog/core'
+import { isFunction, isObject, isString, isNull } from '@posthog/core'
 import { document } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getQueryParam } from '@posthog/browser-common/utils/request-utils'
 import type { PostHogConfig } from '@posthog/types'
 import { assignableWindow } from '../utils/globals'
 import { createPostHogStub, QueuedInit } from '../utils/loader-stub'
-import { getSDKScriptURL } from '../utils/loader-script'
+import { getCoreIntegrity, getSDKScriptURL } from '../utils/loader-script'
 
 const logger = createLogger('[Loader]')
 
@@ -61,8 +61,8 @@ function load(): void {
         return
     }
 
-    const coreIntegrity = script.getAttribute('data-core-integrity')?.trim()
-    if (!isUndefined(coreIntegrity) && !/^sha384-[A-Za-z0-9+/]{64}$/.test(coreIntegrity)) {
+    const coreIntegrity = getCoreIntegrity(script)
+    if (isNull(coreIntegrity)) {
         logger.critical('data-core-integrity must be a SHA-384 integrity hash')
         return
     }

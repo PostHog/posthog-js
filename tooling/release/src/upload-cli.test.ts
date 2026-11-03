@@ -62,7 +62,9 @@ test('resumes a partial release without force and never rewrites identical immut
     s3.hooks.before = undefined
     const result = await s3.run()
     assert.equal(result.code, 0, result.output)
-    assert.equal(s3.objects.size, 9)
+    assert.equal(s3.objects.size, 7)
+    assert.equal(s3.objects.has('/assets/static/integrity.json'), false)
+    assert.equal(s3.objects.has('/assets/static/1/integrity.json'), false)
     const manifest = JSON.parse(s3.objects.get(`/assets/static/${version}/integrity.json`)!.body.toString())
     assert.equal(manifest.version, version)
     assert.deepEqual(Object.keys(manifest.files), ['array.js', 'recorder.js'])
@@ -86,7 +88,9 @@ test('alias-only phase verifies all immutable bytes before any alias PUT', async
     await fs.writeFile(path.join(s3.dist, 'recorder.js'), 'recorder')
     const promoted = await s3.run(['--aliases-only'])
     assert.equal(promoted.code, 0, promoted.output)
-    assert.equal(s3.objects.size, 9)
+    assert.equal(s3.objects.size, 7)
+    assert.equal(s3.objects.has('/assets/static/integrity.json'), false)
+    assert.equal(s3.objects.has('/assets/static/1/integrity.json'), false)
     assert.equal(s3.requests.filter((r) => r.method === 'PUT' && r.key.includes(`/${version}/`)).length, 3)
 })
 

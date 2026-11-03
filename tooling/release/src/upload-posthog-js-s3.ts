@@ -135,6 +135,7 @@ export function buildAssetUploadPlans(
     const shouldPublishMutableAliases = publishMutableAliases && !parsedVersion.prerelease
 
     assertNoCompatibilityVersionNamespaceCollisions(assets)
+    const aliasAssets = assets.filter((asset) => asset.relativeKey !== 'integrity.json')
 
     return {
         immutable: assets.map((asset) => ({
@@ -144,7 +145,7 @@ export function buildAssetUploadPlans(
             cacheControl: IMMUTABLE_ASSET_CACHE_CONTROL,
         })),
         majorAlias: shouldPublishMutableAliases
-            ? assets.map((asset) => ({
+            ? aliasAssets.map((asset) => ({
                   key: getAssetKey(majorPrefix, asset),
                   filePath: asset.filePath,
                   contentType: asset.contentType,
@@ -152,7 +153,7 @@ export function buildAssetUploadPlans(
               }))
             : [],
         compatibility: shouldPublishMutableAliases
-            ? assets.map((asset) => ({
+            ? aliasAssets.map((asset) => ({
                   key: getAssetKey(compatibilityPrefix, asset),
                   filePath: asset.filePath,
                   contentType: asset.contentType,
