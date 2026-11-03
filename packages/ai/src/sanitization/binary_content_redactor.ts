@@ -32,22 +32,26 @@ export class BinaryContentRedactor {
 
     if (this.visited.has(value)) return null
     this.visited.add(value)
+    try {
+      if (Array.isArray(value)) {
+        return value.map((item) => this.walk(item, ctx))
+      }
 
-    if (Array.isArray(value)) {
-      return value.map((item) => this.walk(item, ctx))
+      const obj = value as Record<string, unknown>
+      const out: Record<string, unknown> = {}
+      for (const k of Object.keys(obj)) {
+        Object.defineProperty(out, k, {
+          value: this.walk(obj[k], new MediaTypeContext(obj, k)),
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        })
+      }
+      return out
+    } finally {
+      // Only ancestors count as a cycle. An object reachable by two paths is not one.
+      this.visited.delete(value)
     }
-
-    const obj = value as Record<string, unknown>
-    const out: Record<string, unknown> = {}
-    for (const k of Object.keys(obj)) {
-      Object.defineProperty(out, k, {
-        value: this.walk(obj[k], new MediaTypeContext(obj, k)),
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      })
-    }
-    return out
   }
 
   private redactString(value: string, ctx: MediaTypeContext): string {
