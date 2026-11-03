@@ -925,7 +925,7 @@ class FeatureFlagsPoller {
   }
 
   /**
-   * Warn about flags whose definition local evaluation cannot resolve.
+   * Warn about server-applicable flags whose definition local evaluation cannot resolve.
    * Called after loading flag definitions when local evaluation is enabled. Each flag is
    * warned about once until its definition changes.
    */
@@ -937,6 +937,10 @@ class FeatureFlagsPoller {
     const warnedFlags = new Map<string, string>()
     const definitions = this.currentDefinitions()
     for (const flag of flags) {
+      // Client-only definitions are retained for server-side bootstrapping.
+      if (flag.evaluation_runtime === 'client') {
+        continue
+      }
       const reason = getDefinitionUnresolvedReason(flag, definitions)
       if (!reason) {
         continue
