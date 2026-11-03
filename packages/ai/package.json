@@ -134,8 +134,7 @@
     }
   },
   "files": [
-    "dist",
-    "LICENSE.opentelemetry"
+    "dist"
   ],
   "exports": {
     ".": {

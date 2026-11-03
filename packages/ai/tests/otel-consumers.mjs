@@ -111,9 +111,6 @@ const { NodeSDK } = require('@opentelemetry/sdk-node')
 const { trace } = require('@opentelemetry/api')
 const resolveFromAi = createRequire(require.resolve('@posthog/ai/otel'))
 ${sdk === '0.220.0' ? '' : `assert.throws(() => resolveFromAi.resolve('${absentPackage}'), { code: 'MODULE_NOT_FOUND' })`}
-const { readFileSync } = require('node:fs')
-const { dirname, resolve } = require('node:path')
-assert.match(readFileSync(resolve(dirname(require.resolve('@posthog/ai/otel')), '../../LICENSE.opentelemetry'), 'utf8'), /Apache License/)
 process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = '2'
 const exported = []
 OTLPTraceExporter.prototype.export = function (spans, callback) {

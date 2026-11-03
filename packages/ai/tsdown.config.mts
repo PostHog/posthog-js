@@ -38,8 +38,7 @@ const otelConfig: UserConfig = {
   },
   outputOptions: {
     ...commonConfig.outputOptions,
-    banner:
-      '/*! Includes OpenTelemetry code. Copyright The OpenTelemetry Authors. Apache-2.0; see LICENSE.opentelemetry. */',
+    banner: '/*! Includes OpenTelemetry code. Copyright The OpenTelemetry Authors. Licensed under Apache-2.0. */',
   },
 }
 
