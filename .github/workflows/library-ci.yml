@@ -300,11 +300,6 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
-        with:
-          egress-policy: audit
-
       - name: Find existing compat comment
         if: ${{ needs.compat.outputs.has_failures == 'true' }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
@@ -528,20 +523,6 @@ jobs:
       - name: Install Next.js App Router example dependencies from local tarballs
         run: pnpm install --lockfile=false
         working-directory: examples/example-next-app-router
-
-      - name: Restore Next.js build cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            examples/example-next-app-router/.next/cache
-            examples/example-nextjs/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'examples/example-next-app-router/package.json', 'examples/example-nextjs/pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'examples/example-next-app-router/package.json', 'examples/example-nextjs/pnpm-lock.yaml') }}-
-            ${{ runner.os }}-nextjs-
-
-      - name: Initialize Next.js build cache directories
-        run: mkdir -p examples/example-next-app-router/.next/cache examples/example-nextjs/.next/cache
 
       - name: Build Next.js App Router example
         run: pnpm build

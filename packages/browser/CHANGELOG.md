@@ -1,5 +1,54 @@
 # posthog-js
 
+## 1.445.0
+
+### Minor Changes
+
+- [#5494](https://github.com/PostHog/posthog-js/pull/5494) [`b033b8c`](https://github.com/PostHog/posthog-js/commit/b033b8cf7075d0f46f7b60a9d5c8c704e3672aec) Thanks [@marandaneto](https://github.com/marandaneto)! - Add release integrity manifests and customer-pinned core integrity support to the static loader.
+  (2026-11-03)
+
+## 1.444.4
+
+### Patch Changes
+
+- [#5492](https://github.com/PostHog/posthog-js/pull/5492) [`84a5277`](https://github.com/PostHog/posthog-js/commit/84a52778d41beb19700751f5cf8e7c49d7343fc9) Thanks [@marandaneto](https://github.com/marandaneto)! - Sanitize web experiment HTML transforms; unsupported tags and attributes are now removed.
+  (2026-11-02)
+
+- [#5505](https://github.com/PostHog/posthog-js/pull/5505) [`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85) Thanks [@majicmaj](https://github.com/majicmaj)! - Recognize self-declared Lightpanda headless browsers in bot detection.
+  (2026-11-02)
+
+- [#5503](https://github.com/PostHog/posthog-js/pull/5503) [`89c3a6b`](https://github.com/PostHog/posthog-js/commit/89c3a6b54aa35b971af850a55c37c04d3417b842) Thanks [@abdullah129026](https://github.com/abdullah129026)! - Fix tab widget surveys ignoring the selected position. The popup is only centred next to the tab for the default right position or next to trigger; any other position picked in the survey appearance settings is now honoured.
+  (2026-11-02)
+- Updated dependencies [[`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85), [`89c3a6b`](https://github.com/PostHog/posthog-js/commit/89c3a6b54aa35b971af850a55c37c04d3417b842)]:
+  - @posthog/core@1.62.1
+  - @posthog/browser-common@0.10.4
+
+## 1.444.3
+
+### Patch Changes
+
+- [#5493](https://github.com/PostHog/posthog-js/pull/5493) [`5e872e1`](https://github.com/PostHog/posthog-js/commit/5e872e169b7649f939294948b61ff535b612fa7f) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect external script loading policies when reusing scripts or inserting deferred dependencies.
+  (2026-11-02)
+
+- [#5491](https://github.com/PostHog/posthog-js/pull/5491) [`aedb488`](https://github.com/PostHog/posthog-js/commit/aedb4882264c88bc4d7ab94c1f6035ddacc6c72f) Thanks [@marandaneto](https://github.com/marandaneto)! - Sanitize survey HTML descriptions while preserving rich text formatting.
+  (2026-11-02)
+- Updated dependencies [[`aedb488`](https://github.com/PostHog/posthog-js/commit/aedb4882264c88bc4d7ab94c1f6035ddacc6c72f)]:
+  - @posthog/browser-common@0.10.3
+
+## 1.444.2
+
+### Patch Changes
+
+- [#5512](https://github.com/PostHog/posthog-js/pull/5512) [`bc6b54c`](https://github.com/PostHog/posthog-js/commit/bc6b54cba31b5c976996c4f530b5b2936e28e52c) Thanks [@robbie-c](https://github.com/robbie-c)! - Fix session replay keeping a stylesheet's old CSS when a `<link>` changes to a sheet the recorder cannot read
+  (2026-11-02)
+
+## 1.444.1
+
+### Patch Changes
+
+- [#5490](https://github.com/PostHog/posthog-js/pull/5490) [`0bf0316`](https://github.com/PostHog/posthog-js/commit/0bf03165e65ff81d67fd398dc191dd070d1d7921) Thanks [@robbie-c](https://github.com/robbie-c)! - Fix session replay missing stylesheets that load after 5 seconds or after a `<link>` changes its `rel` or `href`
+  (2026-11-02)
+
 ## 1.444.0
 
 ### Minor Changes

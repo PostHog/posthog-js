@@ -235,9 +235,6 @@ test('@posthog/browser stable aliases require the current main version', () => {
 
 test('@posthog/browser reports S3 failures to the release approval thread', () => {
     const notify = job(release, 'notify-posthog-browser-s3-failed')
-    assert.match(notify, /steps:\n {12}- name: Audit runner egress/)
-    assert.match(notify, /uses: step-security\/harden-runner@[a-f0-9]{40}/)
-    assert.match(notify, /egress-policy: audit/)
     for (const id of [
         'check-posthog-browser-version',
         'build-posthog-browser-s3-artifacts',

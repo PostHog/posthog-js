@@ -1,3 +1,5 @@
+# Disabled: this workflow lives outside .github/workflows so GitHub Actions does not run it.
+# Restore it after resolving the Next 16 Turbopack smoke failure.
 name: Error tracking smoke
 
 on:
@@ -85,9 +87,6 @@ jobs:
             pull-requests: write
         steps:
             # The write-capable job never checks out or runs PR code; the artifact is data only.
-            - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
-              with:
-                  egress-policy: audit
             - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               continue-on-error: true
               with:

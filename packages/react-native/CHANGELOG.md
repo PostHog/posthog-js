@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.85.2
+
+### Patch Changes
+
+- [#5525](https://github.com/PostHog/posthog-js/pull/5525) [`f3fe629`](https://github.com/PostHog/posthog-js/commit/f3fe629b0788325a1ebd5610a6b1a410bff2b4ef) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Fix `posthog-xcode.sh` uploading from `DERIVED_FILE_DIR` when `SOURCEMAP_FILE` is preset elsewhere (e.g. EAS builds), so the composed source map is found.
+  (2026-11-03)
+
 ## 4.85.1
 
 ### Patch Changes
