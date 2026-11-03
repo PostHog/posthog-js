@@ -509,6 +509,10 @@ function attachmentOf(attachment: unknown, index: number): Record<string, unknow
 }
 
 function base64Of(bytes: Uint8Array): string {
+  // The edge runtime has no Buffer, so only there the bytes go through btoa, which is much slower.
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
+  }
   const chunks: string[] = []
   for (let start = 0; start < bytes.length; start += BASE64_CHUNK_BYTES) {
     chunks.push(String.fromCharCode(...bytes.subarray(start, start + BASE64_CHUNK_BYTES)))
