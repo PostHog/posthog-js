@@ -628,6 +628,24 @@ describe('SessionReplayTriggerGroupsEvaluator', () => {
     expect(malformed.evaluate('s1', null, undefined).hasPendingGroups).toBe(true)
   })
 
+  it('clearActivation drops the session activation so the same session stops recording', () => {
+    const evaluator = new SessionReplayTriggerGroupsEvaluator()
+    evaluator.onConfig([group({ conditions: conditions({ events: [{ name: 'purchase', properties: [] }] }) })])
+    expect(evaluator.onEvent('s1', 'purchase', undefined, undefined).newlyActivated).toBe(true)
+    expect(evaluator.evaluate('s1', null, undefined).shouldRecord).toBe(true)
+
+    evaluator.clearActivation()
+    expect(evaluator.getActivation()).toBeNull()
+    // Same session id, activation gone: pending again instead of recording.
+    const decision = evaluator.evaluate('s1', null, undefined)
+    expect(decision.shouldRecord).toBe(false)
+    expect(decision.hasPendingGroups).toBe(true)
+
+    // Sampling decisions are per-session cache, not activation: untouched.
+    const stored = (evaluator as unknown as { samplingDecisions: Map<string, unknown> }).samplingDecisions
+    expect(stored.size).toBe(1)
+  })
+
   it('evaluating a stale session does not wipe the current session activation', () => {
     const evaluator = new SessionReplayTriggerGroupsEvaluator()
     evaluator.onConfig([group({ conditions: conditions({ events: [{ name: 'purchase', properties: [] }] }) })])

@@ -907,6 +907,9 @@ export class PostHog extends PostHogCore {
 
     // Cancel before super.reset() emits flags for the next, anonymous user.
     this._cancelManualRecordingStart()
+    // The persisted activation is wiped below; the in-memory evaluator must drop its copy too,
+    // or a session id kept via propertiesToKeep would carry one user's activated groups forward.
+    this._triggerGroupsEvaluator.clearActivation()
 
     // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
     // always preserve them so replay can re-arm against the new user's flags. The
@@ -3226,12 +3229,19 @@ export class PostHog extends PostHogCore {
       this._sessionReplayStartFailed = this._sessionReplayRecordingActive !== true
     } else {
       this._logger.info('Session replay disabled.')
+      // A start native refused still lifts its stop hold, so native may have resumed on its own
+      // once its flags arrived: stop it as well.
+      const startFailed = this._sessionReplayStartFailed
+      const wasActive = this._sessionReplayRecordingActive === true
       this._sessionReplayStartFailed = false
 
-      if (this._sessionReplayRecordingActive === true) {
-        // Linked flag turned off — pause so a gated-off user isn't recorded. Keep the flag
-        // set if the native stop fails, so the next reload retries instead of giving up.
-        this._sessionReplayRecordingActive = !(await this._stopSessionRecording())
+      if (wasActive || (startFailed && this._sessionReplayNativeInitialized)) {
+        // Linked flag turned off — pause so a gated-off user isn't recorded. If the native stop
+        // fails, keep whichever flag was set so the next reload retries: marking a refused start
+        // active would turn the next flag-on into "Already recording" and never start it.
+        const stopped = await this._stopSessionRecording()
+        this._sessionReplayRecordingActive = wasActive && !stopped
+        this._sessionReplayStartFailed = !wasActive && !stopped
       } else {
         this._sessionReplayRecordingActive = false
       }

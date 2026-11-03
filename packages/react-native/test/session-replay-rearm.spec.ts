@@ -233,6 +233,132 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(2))
   })
 
+  it('retries the start after a refused start is followed by a failed stop', { timeout: 30000 }, async () => {
+    // isEnabled mirrors the native recorder state; start() brings it up, stopRecording() stops it.
+    let enabled = false
+    replay.isEnabled.mockImplementation(async () => enabled)
+    replay.start.mockImplementation(async () => {
+      enabled = true
+    })
+    replay.stopRecording.mockImplementation(async () => {
+      enabled = false
+    })
+
+    // Warm-up launch caches the linkedFlag config so the next launch evaluates it at bootstrap.
+    currentSessionRecording = { linkedFlag: 'f', endpoint: '/s/' }
+    currentFlags = { f: false }
+    const warmup = newPostHog()
+    await warmup.ready()
+    await warmup.reloadFeatureFlagsAsync()
+    await wait(50)
+    await warmup.shutdown()
+    // The warm-up's own bootstrap start + flag-off stop must not count in the phases below.
+    replay.start.mockClear()
+    replay.startRecording.mockClear()
+    replay.stopRecording.mockClear()
+
+    // Launch with the flag on: recording starts.
+    currentFlags = { f: true }
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await wait(50)
+
+    // Flag off with a clean stop: paused, recorder off.
+    currentFlags = { f: false }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+    expect(enabled).toBe(false)
+
+    // Flag on, but the recorder refuses the resume (isEnabled stays false).
+    currentFlags = { f: true }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
+    await wait(50)
+    expect(enabled).toBe(false)
+    expect((posthog as any)._sessionReplayStartFailed).toBe(true)
+
+    // Flag off, but this stop throws: recording was never active, so it must stay off with the
+    // start-failed hold intact (a stale "active" would dedup the next flag-on into no-op).
+    replay.stopRecording.mockRejectedValueOnce(new Error('native stop failed'))
+    currentFlags = { f: false }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(2))
+    await wait(50)
+    expect((posthog as any)._sessionReplayRecordingActive).toBe(false)
+    expect((posthog as any)._sessionReplayStartFailed).toBe(true)
+
+    // Flag on: the start is retried, and this time the recorder accepts it.
+    replay.startRecording.mockImplementation(async () => {
+      enabled = true
+    })
+    currentFlags = { f: true }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(2))
+  })
+
+  // Warm-up launch caches the linkedFlag config so the next launch evaluates it at bootstrap.
+  const warmUpLinkedFlag = async (): Promise<void> => {
+    currentSessionRecording = { linkedFlag: 'f', endpoint: '/s/' }
+    currentFlags = { f: false }
+    const warmup = newPostHog()
+    await warmup.ready()
+    await warmup.reloadFeatureFlagsAsync()
+    await wait(50)
+    await warmup.shutdown()
+    replay.start.mockClear()
+    replay.startRecording.mockClear()
+    replay.stopRecording.mockClear()
+  }
+
+  it('does not stop a native recorder that never started when the flag turns off', { timeout: 30000 }, async () => {
+    await warmUpLinkedFlag()
+
+    // Flag on, but the native plugin fails to start: replay was never initialized.
+    replay.start.mockRejectedValue(new Error('native start failed'))
+    currentFlags = { f: true }
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalled())
+    await wait(50)
+    expect((posthog as any)._sessionReplayNativeInitialized).toBe(false)
+    expect((posthog as any)._sessionReplayStartFailed).toBe(true)
+
+    // Flag off: there is no native recorder to stop.
+    currentFlags = { f: false }
+    await posthog.reloadFeatureFlagsAsync()
+    await wait(100)
+    expect(replay.stopRecording).not.toHaveBeenCalled()
+    expect((posthog as any)._sessionReplayStartFailed).toBe(false)
+  })
+
+  it(
+    'a failed stop of an active recording keeps it active without flagging a failed start',
+    { timeout: 30000 },
+    async () => {
+      await warmUpLinkedFlag()
+
+      currentFlags = { f: true }
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+      await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+      await wait(50)
+
+      // Flag off, but the stop throws: still recording, so the next reload retries the stop. The
+      // start never failed, so a matching trigger event must not re-run the start path.
+      replay.stopRecording.mockRejectedValueOnce(new Error('native stop failed'))
+      currentFlags = { f: false }
+      await posthog.reloadFeatureFlagsAsync()
+      await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+      await wait(50)
+      expect((posthog as any)._sessionReplayRecordingActive).toBe(true)
+      expect((posthog as any)._sessionReplayStartFailed).toBe(false)
+    }
+  )
+
   it('arms recording from updateFlags when the SDK never fetches flags (disableRemoteFeatureFlags)', async () => {
     // Warm-up launch (flag fetching enabled) caches the linkedFlag recording config and a
     // FALSE flag value, so the next launch evaluates the linked flag from cache at bootstrap.
