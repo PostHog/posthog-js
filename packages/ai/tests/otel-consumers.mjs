@@ -4,6 +4,8 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { build } from 'esbuild'
+import { Miniflare } from 'miniflare'
 
 const tests = dirname(fileURLToPath(import.meta.url))
 const root = resolve(tests, '../../..')
@@ -20,7 +22,8 @@ function run(command, args, cwd, log) {
 }
 
 function pnpm(args, cwd, log) {
-  return run(pnpmEntry ? process.execPath : 'pnpm', pnpmEntry ? [pnpmEntry, ...args] : args, cwd, log)
+  const script = pnpmEntry && /\.[cm]?js$/.test(pnpmEntry)
+  return run(script ? process.execPath : pnpmEntry || 'pnpm', script ? [pnpmEntry, ...args] : args, cwd, log)
 }
 
 const dependencies = {}
@@ -134,5 +137,64 @@ console.log('${sdk}: types, loading, upstream batching, filtering, redaction, fl
     const filename = `runtime.${format === 'cjs' ? 'cjs' : 'mjs'}`
     writeFileSync(join(consumer, filename), script)
     console.log(run(process.execPath, [filename], consumer, `runtime-${sdk}-${format}.log`).trim())
+  }
+
+  const worker = join(consumer, 'worker.mjs')
+  const bundle = await build({
+    stdin: {
+      contents: `
+import { ${sdk === '0.200.0' ? 'BasicTracerProvider' : 'TracerProvider'} as TracerProvider } from '${tracePackage}'
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
+export default { async fetch() {
+  const { PostHogSpanProcessor, PostHogTraceExporter } = await import('@posthog/ai/otel')
+  const exported = []
+  OTLPTraceExporter.prototype.export = function(spans, callback) {
+    exported.push(...spans.map(span => ({ name: span.name, prompt: span.attributes['gen_ai.prompt'] })))
+    callback({ code: 0 })
+  }
+  const processor = new PostHogSpanProcessor({ projectToken: 'phc_test' })
+  const provider = new TracerProvider({ spanProcessors: [processor] })
+  const tracer = provider.getTracer('workers-compatibility-test')
+  tracer.startSpan('gen_ai.flush', { attributes: { 'gen_ai.prompt': 'data:image/png;base64,aGVsbG8=' } }).end()
+  tracer.startSpan('http.request').end()
+  await processor.forceFlush()
+  const flushed = exported.slice()
+  tracer.startSpan('gen_ai.shutdown').end()
+  await provider.shutdown()
+  const exporter = new PostHogTraceExporter({ projectToken: 'phc_test' })
+  await exporter.shutdown()
+  return Response.json({ flushed, exported })
+} }
+`,
+      resolveDir: consumer,
+      sourcefile: 'worker-entry.mjs',
+    },
+    bundle: true,
+    platform: 'browser',
+    format: 'esm',
+    external: ['node:*'],
+    outfile: worker,
+    metafile: true,
+    logLevel: 'silent',
+  })
+  assert.ok(Object.keys(bundle.metafile.inputs).some((input) => input.includes(`${tracePackage}/`)))
+  const workerRuntime = new Miniflare({
+    modules: true,
+    scriptPath: worker,
+    modulesRoot: consumer,
+    compatibilityDate: '2026-07-30',
+    compatibilityFlags: ['nodejs_compat'],
+    cf: false,
+  })
+  try {
+    const response = await workerRuntime.dispatchFetch('http://localhost/')
+    assert.equal(response.status, 200, await response.clone().text())
+    assert.deepEqual(await response.json(), {
+      flushed: [{ name: 'gen_ai.flush', prompt: '[base64 image/png redacted]' }],
+      exported: [{ name: 'gen_ai.flush', prompt: '[base64 image/png redacted]' }, { name: 'gen_ai.shutdown' }],
+    })
+    console.log(`${sdk}: bundled Workers import, construction, filtering, redaction, flush and shutdown passed`)
+  } finally {
+    await workerRuntime.dispose()
   }
 }

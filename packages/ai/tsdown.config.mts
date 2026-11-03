@@ -48,7 +48,24 @@ export default defineConfig([
   },
   ...providers.map((provider) => ({
     ...commonConfig,
-    shims: provider === 'otel',
     entry: { [`${provider}/index`]: `src/${provider}/index.ts` },
+    // Preserve literal optional requires for consumer bundlers and native Node ESM.
+    plugins:
+      provider === 'otel'
+        ? [
+            {
+              name: 'external-batch-processor',
+              resolveId(id) {
+                if (id === './batchProcessor.cjs') return { id, external: true }
+              },
+            },
+          ]
+        : [],
   })),
+  {
+    ...commonConfig,
+    format: 'cjs',
+    dts: false,
+    entry: { 'otel/batchProcessor': 'src/otel/batchProcessor.cts' },
+  },
 ])

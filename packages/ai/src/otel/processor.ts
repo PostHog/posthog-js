@@ -1,7 +1,7 @@
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { Context } from '@opentelemetry/api'
 import type { SpanProcessor, ReadableSpan, Span } from './types'
-import { createBatchSpanProcessor } from './batchProcessor'
+import { createBatchSpanProcessor } from './batchProcessor.cjs'
 
 import { redactSpan } from './redact'
 import { stripContent } from './privacy'

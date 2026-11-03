@@ -39,6 +39,7 @@ function expectPublicBuildArtifacts(): void {
   const expectedArtifacts = Object.values(packageJson.exports)
     .flatMap((entry) => [entry.require, `${entry.require}.map`, entry.import, `${entry.import}.map`, entry.types])
     .map((path) => path.replace('./dist/', ''))
+    .concat(['otel/batchProcessor.cjs', 'otel/batchProcessor.cjs.map'])
     .sort()
 
   expect(listFiles(join(packageRoot, 'dist')).sort()).toEqual(expectedArtifacts)

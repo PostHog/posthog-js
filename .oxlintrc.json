@@ -177,7 +177,7 @@
             }
         },
         {
-            "files": ["**/*.cjs"],
+            "files": ["**/*.cjs", "**/*.cts"],
             "rules": {
                 "typescript/no-require-imports": "off"
             }
