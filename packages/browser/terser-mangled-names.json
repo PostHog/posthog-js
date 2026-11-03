@@ -250,6 +250,7 @@
         "_fireFeatureFlagsCallbacks",
         "_firesAt",
         "_firingFeatureFlagsCallbacks",
+        "_flagCallContext",
         "_flagCallsPendingCapture",
         "_flagListenerCleanup",
         "_flagToExperiments",

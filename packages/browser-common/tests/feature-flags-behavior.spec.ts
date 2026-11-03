@@ -567,6 +567,25 @@ describe('featureflags', () => {
             expect(flagCalledEvents()).toHaveLength(1)
         })
 
+        it.each([
+            ['drops it with per-session deduplication', true, 0],
+            ['sends it without per-session deduplication', false, 1],
+        ])(
+            'for a held read when the session rotates before the flush, %s',
+            (_, deduplicateCallsPerSession, expected) => {
+                config.deduplicateCallsPerSession = deduplicateCallsPerSession
+                featureFlags._hasLoadedFlags = true
+                client.isRateLimited = true
+                featureFlags.getFeatureFlag('beta-feature')
+
+                client.session = { ...client.session!, sessionId: 'later-session' }
+                client.isRateLimited = false
+                featureFlags.sendFlagCallsPendingCapture()
+
+                expect(flagCalledEvents()).toHaveLength(expected)
+            }
+        )
+
         it('retries one exposure per capture while the rate limit lasts', () => {
             featureFlags._hasLoadedFlags = true
             vi.mocked(client.capture).mockReturnValue(false)

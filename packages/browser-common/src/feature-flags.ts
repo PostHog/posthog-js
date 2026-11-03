@@ -290,17 +290,26 @@ export interface FeatureFlagsReloadResult {
 
 type ReloadCompletion = (result: FeatureFlagsReloadResult) => void
 
-/** The context of a flag read that is not reported yet. */
-type PendingFlagCall = {
+/** Who read a flag, and where. An exposure is reported only in the context of its read. */
+type FlagCallContext = {
     distinctId: string | undefined
-    value: string
     groups: Readonly<Record<string, string>>
+    sessionId: string | undefined
 }
 
-const haveSameGroups = (a: Readonly<Record<string, string>>, b: Readonly<Record<string, string>> = {}): boolean => {
+/** A flag read that is not reported yet. */
+type PendingFlagCall = {
+    value: string
+    context: FlagCallContext
+}
+
+const haveSameGroups = (a: Readonly<Record<string, string>>, b: Readonly<Record<string, string>>): boolean => {
     const keys = Object.keys(a)
     return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key])
 }
+
+const isSameFlagCallContext = (a: FlagCallContext, b: FlagCallContext): boolean =>
+    a.distinctId === b.distinctId && a.sessionId === b.sessionId && haveSameGroups(a.groups, b.groups)
 
 export class PostHogFeatureFlags implements Extension {
     readonly name: string = 'featureFlags'
@@ -1054,13 +1063,11 @@ export class PostHogFeatureFlags implements Extension {
                 if (!pending) {
                     continue
                 }
-                // An exposure must not be reported under an identity or a group that did not read the flag, or with a
-                // value the user did not see. Check the identity for each read, because a capture listener can call
-                // identify() during this loop.
+                // An exposure must not be reported outside the context of its read, or with a value the user did not
+                // see. Check the context for each read, because a capture listener can call identify() during this loop.
                 if (
-                    pending.distinctId !== this._client?.distinctId ||
                     pending.value !== String(flagVariants[key]) ||
-                    !haveSameGroups(pending.groups, this._client?.groups)
+                    !isSameFlagCallContext(pending.context, this._flagCallContext())
                 ) {
                     this._flagCallsPendingCapture.delete(key)
                     continue
@@ -1536,11 +1543,17 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _holdFlagCall(key: string, value: string): void {
-        this._flagCallsPendingCapture.set(key, {
+        this._flagCallsPendingCapture.set(key, { value, context: this._flagCallContext() })
+    }
+
+    private _flagCallContext(): FlagCallContext {
+        return {
             distinctId: this._client?.distinctId,
-            value,
             groups: { ...this._client?.groups },
-        })
+            // Exposures belong to a session only with per-session deduplication. Without it, a read stays valid
+            // across a session rotation.
+            sessionId: this._config.deduplicateCallsPerSession ? this._client?.session?.sessionId : undefined,
+        }
     }
 
     private _unmarkFlagCallReported(key: string, flagReportValue: string): void {
