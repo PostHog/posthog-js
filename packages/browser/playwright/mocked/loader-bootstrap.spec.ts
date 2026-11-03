@@ -105,7 +105,7 @@ for (const integrityCase of ['matching', 'mismatching', 'modified bytes']) {
         const approvedHash = `sha384-${createHash('sha384').update(coreSource).digest('base64')}`
         const integrity = integrityCase === 'mismatching' ? 'sha384-' + 'A'.repeat(64) : approvedHash
         const coreURL = `https://us-assets.i.posthog.com/static/${version}/array.js`
-        const requests: string[] = []
+        const scriptRequests: string[] = []
         await page.route('**/*', async (route) => {
             const url = route.request().url()
             if (url === 'https://customer.example/') {
@@ -128,8 +128,11 @@ for (const integrityCase of ['matching', 'mismatching', 'modified bytes']) {
             if (url === 'https://customer.example/bootstrap.js') {
                 return route.fulfill({ path: path.resolve(__dirname, '../../dist/loader-bootstrap.js') })
             }
-            if (url.startsWith('https://us-assets.i.posthog.com/')) {
-                requests.push(url)
+            if (url === 'https://us-assets.i.posthog.com/array/phc_integrity/config') {
+                return route.fulfill({ json: {} })
+            }
+            if (url.startsWith('https://us-assets.i.posthog.com/') && route.request().resourceType() === 'script') {
+                scriptRequests.push(url)
                 return route.fulfill({
                     contentType: 'application/javascript',
                     body:
@@ -142,7 +145,7 @@ for (const integrityCase of ['matching', 'mismatching', 'modified bytes']) {
             return route.fulfill({ status: 404, body: '' })
         })
         await page.goto('https://customer.example/', { waitUntil: 'load' })
-        expect(requests).toEqual([coreURL])
+        expect(scriptRequests).toEqual([coreURL])
         expect(await page.evaluate(() => (window as any).posthog.__loaded)).toBe(
             integrityCase === 'matching' ? true : undefined
         )
