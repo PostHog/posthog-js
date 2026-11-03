@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.445.1
+
+### Patch Changes
+
+- [#5504](https://github.com/PostHog/posthog-js/pull/5504) [`7e023a2`](https://github.com/PostHog/posthog-js/commit/7e023a2b1159cb8003d07b84df02898c7810869a) Thanks [@seandph](https://github.com/seandph)! - fix: `opt_in_capturing()` now captures the `$opt_in` event (or the custom `captureEventName`) only when the user was not already opted in. Consent tools often re-apply stored consent on every page load, which sent one billed `$opt_in` event per page. Opting out and back in, or calling `reset()` first, still captures it.
+  (2026-11-03)
+
 ## 1.445.0
 
 ### Minor Changes
