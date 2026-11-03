@@ -44,6 +44,8 @@ A stable `posthog-js` release uploads:
 - mutable major-version aliases under `/static/<major>/`; and
 - top-level compatibility aliases under `/static/`.
 
+The integrity manifest is published only under `/static/<version>/integrity.json`, never at the mutable aliases.
+
 Prerelease versions receive only immutable versioned assets. The workflow does not purge CDN caches. Mutable aliases use `Cache-Control: public, max-age=300`, so they can continue serving cached bytes for up to five minutes. Versioned assets use `Cache-Control: public, max-age=31536000, immutable`.
 
 ### `@posthog/browser` S3 publication
