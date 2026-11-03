@@ -248,6 +248,7 @@ jobs:
                   echo "PostHog pull request for $PACKAGE_NAME version $PACKAGE_VERSION ready: $PR_URL"
 
             - name: Update pull request metadata
+              if: ${{ steps.main-repo-pr.outputs.pull-request-number != '' }}
               env:
                   GH_TOKEN: ${{ steps.upgrader.outputs.token }}
                   PR_BODY: ${{ steps.generate-pr-details.outputs.body }}
@@ -260,6 +261,7 @@ jobs:
                       --body "$PR_BODY"
 
             - name: Assign reviewers
+              if: ${{ steps.main-repo-pr.outputs.pull-request-number != '' }}
               env:
                   GH_TOKEN: ${{ steps.upgrader.outputs.token }}
                   PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}

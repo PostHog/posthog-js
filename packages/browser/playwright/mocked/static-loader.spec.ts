@@ -1,15 +1,28 @@
 import { expect, test, Page, TestInfo } from '@playwright/test'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import type { PostHog } from '../../src/posthog-core'
 import { version } from '../../package.json'
 
 declare global {
     interface Window {
         loaderTestPosthog?: PostHog
+        loaderIntegrityTampered?: boolean
     }
 }
 
 type CapturedEvent = { event: string; properties: Record<string, unknown> }
+
+function approvedCoreIntegrity(testInfo: TestInfo): string {
+    const overrides = (testInfo.project.use as { staticOverrides?: Record<string, string> }).staticOverrides
+    if (overrides?.['array.js']) {
+        const core = readFileSync(path.resolve(__dirname, '../../dist', overrides['array.js']))
+        return `sha384-${createHash('sha384').update(core).digest('base64')}`
+    }
+    const manifest = JSON.parse(readFileSync(path.resolve(__dirname, '../../dist/integrity.json'), 'utf8'))
+    return manifest.files['array.js']
+}
 
 async function install(
     page: Page,
@@ -22,6 +35,8 @@ async function install(
         failCore = false,
         duplicate = false,
         dynamic = false,
+        coreIntegrity,
+        tamperCore = false,
         namespace = '',
     }: {
         region?: string
@@ -31,6 +46,8 @@ async function install(
         failCore?: boolean
         duplicate?: boolean
         dynamic?: boolean
+        coreIntegrity?: string
+        tamperCore?: boolean
         namespace?: string
     } = {}
 ) {
@@ -51,7 +68,8 @@ async function install(
     }
     const source = `${host}/static/${namespace ? namespace + '/' : ''}loader.js${tokenSource === 'query' ? '?project_token=phc_loader_test' : ''}`
     const tokenAttribute = tokenSource === 'attribute' ? ' data-project-token="phc_loader_test"' : ''
-    const tag = `<script src="${source}"${tokenAttribute} data-config='${JSON.stringify(options)}' crossorigin="anonymous"></script>`
+    const integrityAttribute = coreIntegrity ? ` data-core-integrity="${coreIntegrity}"` : ''
+    const tag = `<script src="${source}"${tokenAttribute}${integrityAttribute} data-config='${JSON.stringify(options)}' crossorigin="anonymous"></script>`
     const html = dynamic
         ? '<!doctype html><html><head></head><body>Loader test</body></html>'
         : `<!doctype html><html><head>${tag}${duplicate ? tag : ''}<script>
@@ -93,7 +111,15 @@ async function install(
                 status: failCore ? 404 : 200,
                 ...(failCore
                     ? { body: '' }
-                    : { path: path.resolve(__dirname, '../../dist', overrides?.['array.js'] || 'array.js') }),
+                    : tamperCore
+                      ? {
+                            body:
+                                readFileSync(
+                                    path.resolve(__dirname, '../../dist', overrides?.['array.js'] || 'array.js'),
+                                    'utf8'
+                                ) + ';window.loaderIntegrityTampered = true;',
+                        }
+                      : { path: path.resolve(__dirname, '../../dist', overrides?.['array.js'] || 'array.js') }),
                 headers,
             })
         }
@@ -137,6 +163,34 @@ for (const [region, tokenSource, namespace] of [
         expect(state.coreRequests).toEqual([
             `https://${region}-assets.i.posthog.com/static/${namespace ? namespace + '/' : ''}array.js`,
         ])
+        expect(state.errors).toEqual([])
+    })
+}
+
+test('a matching approved core integrity hash permits normal SDK loading', async ({ page }, testInfo) => {
+    const state = await install(page, testInfo, {
+        coreIntegrity: approvedCoreIntegrity(testInfo),
+        namespace: version,
+    })
+    await waitForSDK(page)
+    await expect.poll(() => state.events.filter(({ event }) => event === 'queued event')).toHaveLength(1)
+    expect(state.errors).toEqual([])
+})
+
+for (const tamperCore of [false, true]) {
+    test(`core integrity rejects ${tamperCore ? 'modified bytes' : 'a mismatching approved hash'} without fallback`, async ({
+        page,
+    }, testInfo) => {
+        const state = await install(page, testInfo, {
+            coreIntegrity: tamperCore ? approvedCoreIntegrity(testInfo) : 'sha384-' + 'A'.repeat(64),
+            tamperCore,
+            namespace: version,
+        })
+        await page.waitForLoadState('load')
+        expect(await page.evaluate(() => window.loaderIntegrityTampered)).toBeUndefined()
+        expect(await page.evaluate(() => window.loaderTestPosthog?.__loaded)).toBeUndefined()
+        expect(state.events).toEqual([])
+        expect(state.coreRequests).toEqual([`https://us-assets.i.posthog.com/static/${version}/array.js`])
         expect(state.errors).toEqual([])
     })
 }
