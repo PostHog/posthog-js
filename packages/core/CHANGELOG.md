@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.63.0
+
+### Minor Changes
+
+- [#5473](https://github.com/PostHog/posthog-js/pull/5473) [`5c8f314`](https://github.com/PostHog/posthog-js/commit/5c8f3140d68c0bd3b437958afd1e4ced33f4f83a) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: `parsePostHogCookie` and `readPostHogCookie` return the session's last activity and start timestamps
+  (2026-11-03)
+
 ## 1.62.1
 
 ### Patch Changes
