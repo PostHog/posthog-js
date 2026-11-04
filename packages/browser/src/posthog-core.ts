@@ -720,6 +720,8 @@ export class PostHog implements PostHogInterface {
     /**
      * Creates an uninitialized PostHog instance.
      *
+     * posthog-capability: function Object() { [native code] }
+     *
      * @remarks
      * Most browser applications should use the default exported singleton and call `posthog.init()`.
      * Construct a new instance only when you need to manage a separate SDK instance manually.
@@ -782,6 +784,8 @@ export class PostHog implements PostHogInterface {
 
     /**
      * Initializes a new instance of the PostHog capturing object.
+     *
+     * posthog-capability: setup
      *
      * @remarks
      * All new instances are added to the main posthog object as sub properties (such as
@@ -1758,6 +1762,8 @@ export class PostHog implements PostHogInterface {
     /**
      * Captures an event with optional properties and configuration.
      *
+     * posthog-capability: capture
+     *
      * @remarks
      * You can capture arbitrary object-like values as events. [Learn about capture best practices](/docs/product-analytics/capture-events)
      *
@@ -2411,6 +2417,8 @@ export class PostHog implements PostHogInterface {
     /**
      * Registers super properties that are included with all events.
      *
+     * posthog-capability: register
+     *
      * @remarks
      * Super properties are stored in persistence and automatically added to every event you capture.
      * These values will overwrite any existing super properties with the same keys.
@@ -2451,6 +2459,8 @@ export class PostHog implements PostHogInterface {
     /**
      * Registers super properties only if they haven't been set before.
      *
+     * posthog-capability: register
+     *
      * @remarks
      * Unlike `register()`, this method will not overwrite existing super properties.
      * Use this for properties that should only be set once, like signup date or initial referrer.
@@ -2487,6 +2497,8 @@ export class PostHog implements PostHogInterface {
 
     /**
      * Registers super properties for the current session only.
+     *
+     * posthog-capability: register
      *
      * @remarks
      * Session super properties are automatically added to all events during the current browser session.
@@ -2528,6 +2540,8 @@ export class PostHog implements PostHogInterface {
     /**
      * Removes a super property from persistent storage.
      *
+     * posthog-capability: unregister
+     *
      * @remarks
      * This will stop the property from being automatically included in future events.
      * The property will be permanently removed from the user's profile.
@@ -2550,6 +2564,8 @@ export class PostHog implements PostHogInterface {
 
     /**
      * Removes a session super property from the current session.
+     *
+     * posthog-capability: unregister
      *
      * @remarks
      * This will stop the property from being automatically included in future events for this session.
@@ -2611,6 +2627,8 @@ export class PostHog implements PostHogInterface {
     /**
      * Gets the value of a feature flag for the current user.
      *
+     * posthog-capability: get-feature-flag
+     *
      * @remarks
      * Returns the feature flag value which can be a boolean, string, or undefined.
      * Supports multivariate flags that can return custom string values. An evaluated boolean flag
@@ -2652,6 +2670,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Feature flags}
      *
+     * posthog-capability: get-feature-flag-payload
+     *
      * @example
      * ```js
      * const betaFeature = posthog.getFeatureFlagResult('beta-feature')
@@ -2682,6 +2702,8 @@ export class PostHog implements PostHogInterface {
      * By default, this method emits the `$feature_flag_called` event.
      *
      * {@label Feature flags}
+     *
+     * posthog-capability: get-feature-flag-result
      *
      * @example
      * ```js
@@ -2719,6 +2741,8 @@ export class PostHog implements PostHogInterface {
      * including globally inactive flags, are absent. Unlike `getFeatureFlag()`, this method does not
      * send a `$feature_flag_called` event.
      *
+     * posthog-capability: get-feature-flags
+     *
      * @returns {FeatureFlagResult[]} All loaded flags, or an empty array if none are loaded.
      */
     getAllFeatureFlags(): FeatureFlagResult[] {
@@ -2727,6 +2751,8 @@ export class PostHog implements PostHogInterface {
 
     /**
      * Checks if a feature flag is enabled for the current user.
+     *
+     * posthog-capability: is-feature-enabled
      *
      * @remarks
      * Returns `true` or `false` when the flag has an evaluation value. A `false` result means the
@@ -2769,6 +2795,8 @@ export class PostHog implements PostHogInterface {
      * Feature flag values are cached. If something has changed with your user and you'd like to refetch their flag values, call this method.
      *
      * {@label Feature flags}
+     *
+     * posthog-capability: reload-feature-flags
      *
      * @example
      * ```js
@@ -2980,6 +3008,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Feature flags}
      *
+     * posthog-capability: on-feature-flags
+     *
      * @public
      *
      * @example
@@ -3010,6 +3040,8 @@ export class PostHog implements PostHogInterface {
      * - context: { isLoaded: boolean, error?: string }: An object indicating if the surveys were loaded successfully
      *
      * {@label Surveys}
+     *
+     * posthog-capability: surveys
      *
      * @example
      * ```js
@@ -3054,6 +3086,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Surveys}
      *
+     * posthog-capability: surveys
+     *
      * @example
      * ```js
      * function callback(surveys, context) {
@@ -3078,6 +3112,8 @@ export class PostHog implements PostHogInterface {
      * Get surveys that should be enabled for the current user. See [fetching surveys documentation](/docs/surveys/implementing-custom-surveys#fetching-surveys-manually) for more details.
      *
      * {@label Surveys}
+     *
+     * posthog-capability: surveys
      *
      * @example
      * ```js
@@ -3117,6 +3153,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Surveys}
      *
+     * posthog-capability: surveys
+     *
      * @example
      * ```js
      * const unsubscribe = posthog.onActiveMatchingSurveysChanged((surveys) => {
@@ -3147,6 +3185,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Surveys}
      *
+     * posthog-capability: surveys
+     *
      * @example
      * ```js
      * posthog.renderSurvey(coolSurveyID, '#survey-container')
@@ -3165,6 +3205,8 @@ export class PostHog implements PostHogInterface {
 
     /**
      * Display a survey programmatically as either a popover or inline element.
+     *
+     * posthog-capability: surveys
      *
      * @param {string} surveyId The survey ID to display.
      * @param {DisplaySurveyOptions} [options] Display configuration. Defaults to a popover that respects dashboard conditions and delays.
@@ -3207,6 +3249,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Surveys}
      *
+     * posthog-capability: surveys
+     *
      * @param {string} surveyId The survey ID whose pending display should be cancelled.
      */
     cancelPendingSurvey(surveyId: string): void {
@@ -3219,6 +3263,8 @@ export class PostHog implements PostHogInterface {
      * Use `canRenderSurveyAsync` instead.
      *
      * {@label Surveys}
+     *
+     * posthog-capability: surveys
      *
      * @public
      * @deprecated
@@ -3239,6 +3285,8 @@ export class PostHog implements PostHogInterface {
      * Checks the feature flags associated with this Survey to see if the survey can be rendered.
      *
      * {@label Surveys}
+     *
+     * posthog-capability: surveys
      *
      * @example
      * ```js
@@ -3292,6 +3340,8 @@ export class PostHog implements PostHogInterface {
      * Learn more about [identifying users](/docs/product-analytics/identify)
      *
      * {@label Identification}
+     *
+     * posthog-capability: identify
      *
      * @remarks
      * By default, PostHog assigns each user a randomly generated `distinct_id`. Use this method to
@@ -3486,6 +3536,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Identification}
      *
+     * posthog-capability: set-person-properties
+     *
      * @remarks
      * Updates user properties that are stored with the person profile in PostHog.
      * If `person_profiles` is set to `identified_only` and no profile exists, this will create one.
@@ -3601,6 +3653,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Identification}
      *
+     * posthog-capability: group
+     *
      * @remarks
      * Groups allow you to analyze users collectively (e.g., by organization, team, or account).
      * This sets the group association for all subsequent events and reloads feature flags.
@@ -3699,6 +3753,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Feature flags}
      *
+     * posthog-capability: set-person-properties-for-flags
+     *
      * @example
      * ```js
      * // Set properties
@@ -3724,6 +3780,8 @@ export class PostHog implements PostHogInterface {
      * Resets the person properties for feature flags.
      *
      * {@label Feature flags}
+     *
+     * posthog-capability: reset-person-properties-for-flags
      *
      * @public
      *
@@ -3751,6 +3809,8 @@ export class PostHog implements PostHogInterface {
      * Takes in an object, the key of which is the group type.
      *
      * {@label Feature flags}
+     *
+     * posthog-capability: set-group-properties-for-flags
      *
      * @public
      *
@@ -3781,6 +3841,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Feature flags}
      *
+     * posthog-capability: reset-group-properties-for-flags
+     *
      * @public
      *
      * @example
@@ -3810,6 +3872,9 @@ export class PostHog implements PostHogInterface {
      * Always `reset()` first, then opt in.
      *
      * {@label Identification}
+     *
+     * posthog-capability: reset
+     *
      * @example
      * ```js
      * // reset on user logout
@@ -3999,6 +4064,8 @@ export class PostHog implements PostHogInterface {
     /**
      * Flushes any queued events and resolves once teardown is complete.
      *
+     * posthog-capability: shutdown
+     *
      * @remarks
      * This exists primarily for parity with the server-side
      * [Node.js SDK](/docs/libraries/node), whose `shutdown()` you call once before a
@@ -4115,6 +4182,8 @@ export class PostHog implements PostHogInterface {
     /**
      * Returns the current distinct ID for the user.
      *
+     * posthog-capability: get-distinct-id
+     *
      * @remarks
      * This is either the auto-generated ID or the ID set via `identify()`.
      * The distinct ID is used to associate events with users in PostHog.
@@ -4162,6 +4231,8 @@ export class PostHog implements PostHogInterface {
 
     /**
      * Returns the current session_id.
+     *
+     * posthog-capability: get-session-id
      *
      * @remarks
      * This should only be used for informative purposes.
@@ -4233,6 +4304,8 @@ export class PostHog implements PostHogInterface {
      * Creates an alias linking two distinct user identifiers. Learn more about [identifying users](/docs/product-analytics/identify)
      *
      * {@label Identification}
+     *
+     * posthog-capability: alias
      *
      * @remarks
      * PostHog will use this to link two distinct_ids going forward (not retroactively).
@@ -4388,6 +4461,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Session replay}
      *
+     * posthog-capability: start-session-recording
+     *
      * @public
      *
      * @example
@@ -4455,6 +4530,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Session replay}
      *
+     * posthog-capability: stop-session-recording
+     *
      * @public
      *
      * @example
@@ -4472,6 +4549,8 @@ export class PostHog implements PostHogInterface {
      * is currently running
      *
      * {@label Session replay}
+     *
+     * posthog-capability: is-session-replay-active
      *
      * @public
      *
@@ -4493,6 +4572,8 @@ export class PostHog implements PostHogInterface {
      * Capture a caught exception manually
      *
      * {@label Error tracking}
+     *
+     * posthog-capability: capture-exception
      *
      * @public
      *
@@ -4545,6 +4626,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Error tracking}
      *
+     * posthog-capability: exception-steps
+     *
      * @public
      *
      * @example
@@ -4565,6 +4648,8 @@ export class PostHog implements PostHogInterface {
      * Capture a log entry and send it to the PostHog logs endpoint.
      *
      * {@label Logs}
+     *
+     * posthog-capability: logs
      *
      * @public
      *
@@ -4590,6 +4675,8 @@ export class PostHog implements PostHogInterface {
 
     /**
      * Logger with convenience methods for each severity level.
+     *
+     * posthog-capability: logs
      *
      * @example
      * ```js
@@ -4725,6 +4812,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Initialization}
      *
+     * posthog-capability: function toString() { [native code] }
+     *
      * @internal
      */
     toString(): string {
@@ -4766,6 +4855,8 @@ export class PostHog implements PostHogInterface {
      *  'never'. Learn more about [person profiles](/docs/product-analytics/identify)
      *
      * {@label Identification}
+     *
+     * posthog-capability: create-person-profile
      *
      * @public
      *
@@ -4866,6 +4957,8 @@ export class PostHog implements PostHogInterface {
      * Opts the user into data capturing and persistence.
      *
      * {@label Privacy}
+     *
+     * posthog-capability: opt-in
      *
      * @remarks
      * Enables event tracking and data persistence (cookies/localStorage) for this PostHog instance.
@@ -5066,6 +5159,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Privacy}
      *
+     * posthog-capability: is-opt-out
+     *
      * @remarks
      * Returns the current consent status for event tracking and data persistence.
      *
@@ -5203,6 +5298,8 @@ export class PostHog implements PostHogInterface {
 
     /**
      * Enables or disables debug mode for detailed logging.
+     *
+     * posthog-capability: debug
      *
      * @remarks
      * Debug mode logs all PostHog calls to the browser console for troubleshooting.

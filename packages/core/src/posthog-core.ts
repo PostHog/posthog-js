@@ -315,6 +315,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    *
    * {@label Identification}
    *
+   * posthog-capability: get-anonymous-id
+   *
    * @example
    * ```js
    * // get the anonymous ID
@@ -444,6 +446,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     })
   }
 
+  /** posthog-capability: capture */
   capture(event: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     if (event === '$exception' && !options?._originatedFromCaptureException) {
       this._logger.warn(
@@ -558,6 +561,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     })
   }
 
+  /** posthog-capability: group-identify */
   groupIdentify(
     groupType: string,
     groupKey: string | number,
@@ -1028,6 +1032,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /**
    * Returns the current evaluation result for a feature flag. `enabled: false` is a conclusive
    * off result; `undefined` means no evaluation is available for the key.
+   *
+   * posthog-capability: get-feature-flag-result
    */
   getFeatureFlagResult(key: string, options?: FeatureFlagResultOptions): FeatureFlagResult | undefined {
     return this._getFeatureFlagResult(key, options)
@@ -1036,6 +1042,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /**
    * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
    * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
+   *
+   * posthog-capability: get-feature-flags
    */
   getAllFeatureFlags(): FeatureFlagResult[] {
     return flagDetailsToResults(this.getFeatureFlagDetails()?.flags ?? {})
@@ -1180,6 +1188,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /**
    * Returns the value of every loaded flag, keyed by flag key.
    *
+   * posthog-capability: get-feature-flags
+   *
    * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
    */
   getFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
@@ -1223,6 +1233,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   /**
    * Returns the values and payloads of every loaded flag, as two maps keyed by flag key.
+   *
+   * posthog-capability: get-feature-flags-and-payloads
    *
    * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
    */
@@ -1295,6 +1307,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return (await this.flagsAsync({ sendAnonDistinctId: sendAnonDistinctId }))?.featureFlags
   }
 
+  /** posthog-capability: on-feature-flags */
   onFeatureFlags(cb: (flags: PostHogFlagsResponse['featureFlags']) => void): () => void {
     return this.on('featureflags', async () => {
       const flags = this.getFeatureFlags()

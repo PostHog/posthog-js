@@ -499,6 +499,7 @@ export abstract class PostHogCoreStateless {
     return this.getPersistedProperty(PostHogPersistedProperty.OptedOut) ?? !this.defaultOptIn
   }
 
+  /** posthog-capability: opt-in */
   async optIn(): Promise<void> {
     this.wrap(() => {
       this.setPersistedProperty(PostHogPersistedProperty.OptedOut, false)
@@ -517,6 +518,8 @@ export abstract class PostHogCoreStateless {
 
   /**
    * Enables or disables debug mode for detailed logging.
+   *
+   * posthog-capability: debug
    *
    * @remarks
    * Debug mode logs all PostHog calls to the console for troubleshooting.
@@ -1202,6 +1205,7 @@ export abstract class PostHogCoreStateless {
     this._props = val
   }
 
+  /** posthog-capability: register */
   async register(properties: PostHogEventProperties): Promise<void> {
     this.wrap(() => {
       this.props = {
@@ -1212,6 +1216,7 @@ export abstract class PostHogCoreStateless {
     })
   }
 
+  /** posthog-capability: unregister */
   async unregister(property: string): Promise<void> {
     this.wrap(() => {
       delete this.props[property]
@@ -2081,6 +2086,8 @@ export abstract class PostHogCoreStateless {
    * Use flush() for per-request cleanup instead.
    *
    * {@label Initialization}
+   *
+   * posthog-capability: shutdown
    *
    * @example
    * ```js

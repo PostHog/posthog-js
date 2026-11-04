@@ -222,6 +222,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Initialize a new PostHog client instance.
    *
+   * posthog-capability: setup
+   *
    * @example
    * ```ts
    * // Basic initialization
@@ -361,6 +363,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this._flushKeepingRuntimeAlive(true)
   }
 
+  /** posthog-capability: flush */
   override async flush(): Promise<void> {
     // An app's crash handler often flushes and exits before the end of the turn, when autocapture would capture.
     this.errorTracking.capturePendingExceptions()
@@ -698,6 +701,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
    * returns the error `client_closed`.
    *
+   * posthog-capability: emails
+   *
    * @example
    * ```ts
    * const client = new PostHog('phc_...', { secretKey: 'phs_...', host: 'https://eu.i.posthog.com' })
@@ -813,6 +818,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Traces}
    *
+   * posthog-capability: traces
+   *
    * @experimental Subject to change in a minor release.
    *
    * @example
@@ -843,6 +850,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * begin a new trace.
    *
    * {@label Traces}
+   *
+   * posthog-capability: traces
    *
    * @experimental Subject to change in a minor release.
    *
@@ -878,6 +887,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * span is tracked synchronously there.
    *
    * {@label Traces}
+   *
+   * posthog-capability: traces
    *
    * @experimental Subject to change in a minor release.
    *
@@ -990,6 +1001,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Enable or disable debug logging.
    *
+   * posthog-capability: debug
+   *
    * @example
    * ```ts
    * // Enable debug logging
@@ -1066,6 +1079,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Capture an event manually.
    *
+   * posthog-capability: capture
+   *
    * @example
    * ```ts
    * // Basic capture
@@ -1092,6 +1107,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /**
    * Capture an event immediately (synchronously).
+   *
+   * posthog-capability: capture
    *
    * @example
    * ```ts
@@ -1151,6 +1168,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Capture}
    *
+   * posthog-capability: capture-ai
+   *
    * @param props - The event properties
    * @returns The event UUID, or `undefined` when the client is disabled
    */
@@ -1169,6 +1188,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * runtime may freeze before a background flush runs.
    *
    * {@label Capture}
+   *
+   * posthog-capability: capture-ai
    *
    * @param props - The event properties
    * @returns The event UUID, or `undefined` when the client is disabled
@@ -1192,6 +1213,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /**
    * Identify a user and set their properties.
+   *
+   * posthog-capability: identify
    *
    * @example
    * ```ts
@@ -1245,6 +1268,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Identify a user and set their properties immediately (synchronously).
    *
+   * posthog-capability: identify
+   *
    * @example
    * ```ts
    * // Basic immediate identify
@@ -1283,6 +1308,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /**
    * Set properties on a person profile.
+   *
+   * posthog-capability: set-person-properties
    *
    * @example
    * ```ts
@@ -1344,6 +1371,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Create an alias to link two distinct IDs together.
    *
+   * posthog-capability: alias
+   *
    * @example
    * ```ts
    * // Link an anonymous user to an identified user
@@ -1373,6 +1402,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /**
    * Create an alias to link two distinct IDs together immediately (synchronously).
+   *
+   * posthog-capability: alias
    *
    * @example
    * ```ts
@@ -1774,6 +1805,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * Local evaluation resolves cached inactive definitions to `false`; remote evaluation omits
    * globally inactive flags, so the result depends on which evaluation path is available.
    *
+   * posthog-capability: get-feature-flag
+   *
    * @example
    * ```ts
    * // Basic feature flag check
@@ -1850,6 +1883,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /**
    * Get the payload for a feature flag.
+   *
+   * posthog-capability: get-feature-flag-payload
    *
    * @example
    * ```ts
@@ -1938,6 +1973,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * A result with `enabled: false` is a conclusive off evaluation; `undefined` means no evaluation
    * is available. Local evaluation resolves cached inactive definitions to `enabled: false`, while
    * remote evaluation omits globally inactive flags.
+   *
+   * posthog-capability: get-feature-flag-result
    *
    * @example
    * ```ts
@@ -2045,6 +2082,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Check if a feature flag is enabled for a specific user.
    *
+   * posthog-capability: is-feature-enabled
+   *
    * @example
    * ```ts
    * // Basic feature flag check
@@ -2114,6 +2153,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Get all feature flag values for a specific user.
    *
+   * posthog-capability: get-feature-flags
+   *
    * @example
    * ```ts
    * // Get all flags for a user
@@ -2168,6 +2209,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /**
    * Get all feature flag values and payloads for a specific user.
+   *
+   * posthog-capability: get-feature-flags-and-payloads
    *
    * @example
    * ```ts
@@ -2324,6 +2367,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * **Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()`
    * to filter which flags get attached to a captured event without re-fetching.
+   *
+   * posthog-capability: evaluate-flags
    *
    * @example
    * Basic usage:
@@ -2669,6 +2714,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Create or update a group and its properties.
    *
+   * posthog-capability: group-identify
+   *
    * @example
    * ```ts
    * // Create a company group
@@ -2722,6 +2769,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Create or update a group and its properties immediately (synchronously).
    *
+   * posthog-capability: group-identify
+   *
    * @example
    * ```ts
    * // Immediately create or update a company group
@@ -2767,6 +2816,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /**
    * Reload feature flag definitions from the configured cache provider or PostHog for local evaluation.
+   *
+   * posthog-capability: reload-feature-flags
    *
    * @example
    * ```ts
@@ -3228,6 +3279,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Capture an error exception as an event.
    *
+   * posthog-capability: capture-exception
+   *
    * @example
    * ```ts
    * // Capture an error with user ID
@@ -3285,6 +3338,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /**
    * Capture an error exception as an event immediately (synchronously).
+   *
+   * posthog-capability: capture-exception
    *
    * @example
    * ```ts
