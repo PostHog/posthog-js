@@ -355,6 +355,8 @@ Upgrade `@posthog/ai` and `@posthog/mcp` to a version that accepts posthog-node 
 
 These versions accept both posthog-node 5 and 6. If your app does not list `posthog-node` in its own dependencies, upgrading `@posthog/ai` or `@posthog/mcp` can install posthog-node 6. List `posthog-node` in your dependencies so you choose when to move to 6.
 
+`@posthog/mcp` labels the whole client, as in 5.x: every event the client you pass to `instrument()` or `PostHogMCP` sends reports `$lib` `posthog-node-mcp` and the `@posthog/mcp` version. In 6.0 the client fixes this label when it first sends, so call `instrument()` or create `PostHogMCP` before the client captures anything. If your app also captures its own events, give MCP analytics its own client. To find MCP traffic, filter on `$mcp_*` events rather than `$lib`.
+
 ## posthog-node 5.x support
 
 posthog-node 5.x keeps receiving security fixes for at least one year after the 6.0 release.
