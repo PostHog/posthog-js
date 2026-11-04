@@ -1834,6 +1834,7 @@ function snapshot(
           textarea: true,
           select: true,
           password: true,
+          hidden: true,
         }
       : maskAllInputs === false
       ? {
