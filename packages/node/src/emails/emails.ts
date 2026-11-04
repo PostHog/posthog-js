@@ -463,8 +463,6 @@ function attachmentsOf(attachments: unknown): Record<string, unknown>[] {
   return Array.from(attachments, attachmentOf)
 }
 
-const ATTACHMENT_KEYS = new Set(['filename', 'content', 'contentType', 'contentId', 'path'])
-
 function attachmentOf(attachment: unknown, index: number): Record<string, unknown> {
   if (
     typeof attachment !== 'object' ||
@@ -478,7 +476,7 @@ function attachmentOf(attachment: unknown, index: number): Record<string, unknow
       `attachments__${index}`
     )
   }
-  const { filename, content, contentType, contentId, path } = attachment as Partial<
+  const { filename, content, contentType, contentId, path, ...unsupported } = attachment as Partial<
     Record<keyof EmailAttachment, unknown>
   >
   if (path !== undefined) {
@@ -488,14 +486,12 @@ function attachmentOf(attachment: unknown, index: number): Record<string, unknow
       `attachments__${index}__path`
     )
   }
-  const unknownKey = Object.entries(attachment).find(
-    ([key, value]) => !ATTACHMENT_KEYS.has(key) && value !== undefined
-  )?.[0]
-  if (unknownKey !== undefined) {
+  const unsupportedKey = Object.entries(unsupported).find(([, value]) => value !== undefined)?.[0]
+  if (unsupportedKey !== undefined) {
     throw invalid(
       'invalid_attachment',
-      `An attachment takes filename, content, contentType and contentId, not ${unknownKey}.`,
-      `attachments__${index}__${unknownKey}`
+      `An attachment takes filename, content, contentType and contentId, not ${unsupportedKey}.`,
+      `attachments__${index}__${unsupportedKey}`
     )
   }
   if (typeof content !== 'string' && !(content instanceof Uint8Array)) {
