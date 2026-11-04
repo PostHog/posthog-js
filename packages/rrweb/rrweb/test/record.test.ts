@@ -2533,6 +2533,21 @@ describe('record iframes', function (this: ISuite) {
       });
       expect(result).toEqual({ sameDocument: true, pagehides: 0 });
       await waitForRAF(ctx.page);
+      ctx.events = [];
+      const frame = (await ctx.page.$('iframe'))!;
+      const content = (await frame.contentFrame())!;
+      await content.click('button');
+      await content.click('button');
+      await waitForRAF(ctx.page);
+      expect(
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.MouseInteraction &&
+            event.data.type === MouseInteractions.Click,
+        ),
+      ).toHaveLength(2);
+
       for (let checkout = 0; checkout < 3; checkout++) {
         await ctx.page.evaluate(() => {
           (window as unknown as IWindow).rrweb.record.takeFullSnapshot(true);
@@ -2541,8 +2556,6 @@ describe('record iframes', function (this: ISuite) {
       }
 
       ctx.events = [];
-      const frame = (await ctx.page.$('iframe'))!;
-      const content = (await frame.contentFrame())!;
       await content.click('button');
       await content.click('button');
       await waitForRAF(ctx.page);
