@@ -53,8 +53,8 @@ import { getTimezone } from './utils/timezone'
 import { continueWith } from './utils/promise-utils'
 import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-reachability'
 
-const logger = createLogger('[FeatureFlags]')
-const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
+const logger = /* @__PURE__ */ createLogger('[FeatureFlags]')
+const forceDebugLogger = /* @__PURE__ */ createLogger('[FeatureFlags]', { debugEnabled: true })
 const FLAG_TIMEOUT_MSG = '" failed. Feature flags didn\'t load in time.'
 // Mirrors the event retry queue's status-0 budget: repeated requests that die
 // before any HTTP response while the browser reports itself online are usually

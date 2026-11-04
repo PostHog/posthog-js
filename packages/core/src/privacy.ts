@@ -40,13 +40,13 @@ const URL_PATTERN = /[a-z][a-z0-9+.-]{0,63}:[^\s<>"]+/gi
 // A character no URL match can contain, so a cut just after one splits no URL.
 const URL_END_PATTERN = /[\s<>"]/
 /** The same pattern without `g`, for asking whether a value holds a URL at all. */
-const URL_PATTERN_ONCE = new RegExp(URL_PATTERN.source, 'i')
+const URL_PATTERN_ONCE = /* @__PURE__ */ (() => new RegExp(URL_PATTERN.source, 'i'))()
 /** Finds the first scheme that brings a real authority, i.e. what the pattern required before it went authority-less. */
 const URL_AUTHORITY_SEARCH = /[a-z][a-z0-9+.-]{0,63}:\/\//i
 /** The same, anchored: does this match *open* with an authority? */
-const URL_AUTHORITY_PATTERN = new RegExp(`^${URL_AUTHORITY_SEARCH.source}`, 'i')
+const URL_AUTHORITY_PATTERN = /* @__PURE__ */ (() => new RegExp(`^${URL_AUTHORITY_SEARCH.source}`, 'i'))()
 /** Every authority start in a value, in order. */
-const URL_AUTHORITY_SEARCH_ALL = new RegExp(URL_AUTHORITY_SEARCH.source, 'gi')
+const URL_AUTHORITY_SEARCH_ALL = /* @__PURE__ */ (() => new RegExp(URL_AUTHORITY_SEARCH.source, 'gi'))()
 /** The field separators. `?` and `#` are structural only as delimiters — see {@link isStructural}. */
 const URL_FIELD_CHARACTERS = '=&'
 /** The legacy field separator. Never split on, only checked; see {@link sanitizeUrlFieldValue}. */
