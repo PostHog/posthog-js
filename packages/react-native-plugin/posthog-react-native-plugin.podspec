@@ -5,7 +5,7 @@ package = JSON.parse(File.read(File.join(__dir__, "package.json")))
 # Single source of truth for the posthog-ios native dependency version.
 # Used by the `spm_dependency` call below and must match the floor in
 # ios/Package.swift; bump this line when picking up a new posthog-ios release.
-posthog_ios_version = '3.92.7'
+posthog_ios_version = '4.0.0'
 
 Pod::Spec.new do |s|
   s.name         = "posthog-react-native-plugin"

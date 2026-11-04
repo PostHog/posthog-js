@@ -10,6 +10,8 @@ If you only use the plugin through `posthog-react-native`, you don't need any Ja
 | iOS deployment target                               | 13.0                                                            | 15.0                  |
 | macOS deployment target                             | 10.15                                                           | 11.0                  |
 | How `posthog-ios` is installed                      | CocoaPods trunk, or Swift Package Manager with `posthog.useSpm` | Swift Package Manager |
+| `posthog-ios` version                               | 3.x                                                             | 4.0                   |
+| Xcode                                               | Set by `posthog-ios` 3.x                                        | 26 or later           |
 
 Android `minSdk` stays at 23, and the plugin now requires `posthog-android` 4.0. `posthog-react-native` still accepts this plugin through its optional `>= 2.12.7` peer range, and 4.47.0 is the first version that loads the plugin.
 
@@ -36,6 +38,14 @@ platform :ios, '15.0'
 On React Native 0.75, `min_ios_version_supported` is 13.4, so those apps must raise the target. React Native 0.76 and later already default to 15.1.
 
 **If ignored:** `pod install` fails because the plugin needs a higher deployment target.
+
+### `posthog-ios` 4.0 and Xcode 26
+
+The plugin now requires `posthog-ios` 4.0, which needs Xcode 26 or later on every iOS install path.
+
+**If ignored:** on older Xcode versions, Swift Package Manager can't resolve `posthog-ios` and the build fails.
+
+If native code in your app calls `posthog-ios` directly, it must also handle the 4.0 API removals. See the [posthog-ios migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md).
 
 ### `posthog-ios` installs through Swift Package Manager
 
@@ -109,23 +119,27 @@ sdkReplayConfig: { throttleDelayMs: 500 }
 
 ### `screenshotModeBackgroundCapture` is ignored on iOS
 
-This experimental option no longer has any effect, and screenshots are captured on the main thread. `posthog-react-native` ## Native SDK 4.0: not merged yet
+This experimental option no longer has any effect, and screenshots are captured on the main thread. `posthog-react-native` still accepts the option, so nothing warns you. Remove it from `sessionReplayConfig`.
 
-<!-- Before release: finish #5237, move what shipped into the sections above, and delete this heading. -->
+### iOS session replay records only masked screenshots
 
-3.0.0 isn't meant to ship until it requires `posthog-ios` 4.0 ([#5237](https://github.com/PostHog/posthog-js/pull/5237)). That PR is open and could change, and this branch still pins `posthog-ios` 3.92.7. If it lands as written:
+`posthog-ios` 4.0 removes wireframe capture. The plugin already forced screenshot mode, so your recordings don't change. If native code in your app sets `sessionReplayConfig.screenshotMode`, remove it, because it no longer compiles.
 
-- iOS builds need Xcode 26 or later.
-- iOS native uploads, such as session replay and native crash reports, pause while cellular data is turned off for the app.
-- Apps on React Native's full Swift Package Manager integration leave out native surveys. The plugin doesn't use them, because surveys render in JavaScript.
-- Native code in your app that calls `posthog-ios` directly must handle its 4.0 API removals. See the [posthog-ios migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md).
+### iOS uploads pause while cellular data is off
 
-ipt.
+Native uploads, such as session replay and native crash reports, pause while cellular data is turned off for your app, instead of sending requests that fail.
 
-- Native code in your app that calls PostHog's iOS or Android SDK directly must handle their 4.0 API removals. See the [posthog-ios migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md).
+### Native surveys are left out of full Swift Package Manager apps
+
+Apps on React Native's full Swift Package Manager integration no longer bundle the native surveys from `posthog-ios`. The plugin doesn't use them, because surveys render in JavaScript. The CocoaPods path still includes the full SDK.
+
+## New in 3.0
+
+- Android `setup()` accepts `projectToken` as well as `apiKey` in `sdkOptions`, matching iOS. `apiKey` still works.
 
 ## Checklist
 
+- [ ] Your build machines use Xcode 26 or later.
 - [ ] React Native is 0.75 or later, or Expo SDK is 52 or later.
 - [ ] The iOS deployment target is 15.0 or later, and macOS is 11.0 or later if you ship it.
 - [ ] `posthog.useSpm` is gone from `ios/Podfile.properties.json`.

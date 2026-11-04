@@ -286,6 +286,7 @@ export type PostHogSessionReplayConfig = {
    * Main Thread Checker in your scheme's run diagnostics when enabling this.
    *
    * @default false
+   * @deprecated ignored by `@posthog/react-native-plugin` 3.0 and later, which always captures screenshots on the main thread
    */
   screenshotModeBackgroundCapture?: boolean
   /**
