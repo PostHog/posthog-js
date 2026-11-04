@@ -1,5 +1,6 @@
 ---
 'posthog-js': patch
+'@posthog/types': patch
 ---
 
-Include hidden input values when maskAllInputs is enabled and expose hidden in the type-specific masking options.
+Mask hidden input values in session replay when `maskAllInputs` is enabled, and accept `hidden` in `maskInputOptions`.
