@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.445.4
+
+### Patch Changes
+
+- [#5541](https://github.com/PostHog/posthog-js/pull/5541) [`13457bd`](https://github.com/PostHog/posthog-js/commit/13457bd62c8ec7e7fcc0f8c1afe0395c3aaebb2b) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Preserve CSS URL fragments when resolving relative paths in session recordings.
+  (2026-11-04)
+
+- [#5543](https://github.com/PostHog/posthog-js/pull/5543) [`720059d`](https://github.com/PostHog/posthog-js/commit/720059d13d7bc9bd7a118350ced0250234b419ae) Thanks [@veryayskiy](https://github.com/veryayskiy)! - skip the support widget's initial ticket list request for new anonymous visitors
+  (2026-11-04)
+
 ## 1.445.3
 
 ### Patch Changes
