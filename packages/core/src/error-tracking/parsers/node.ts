@@ -7,7 +7,7 @@ import { UNKNOWN_FUNCTION } from './base'
 
 /** Node Stack line parser */
 const FILENAME_MATCH = /^\s*[-]{4,}$/
-// `at async (file:1:2)` is a frame for a function named `async`, but `at async (name) (file:1:2)` is an async frame.
+// `at async (file:1:2)` is a function named `async`; `at async (name) (file:1:2)` is an async frame.
 const FULL_MATCH = /at (?:async (?!\((?!.*\)\s+\()))?(?:(.+?)\s+\()?(?:(.+):(\d+):(\d+)?|([^)]+))\)?/
 const PROMISE_COMBINATOR = /^Promise\.(?:all|any)$/
 const PROMISE_INDEX = /^index \d+$/
