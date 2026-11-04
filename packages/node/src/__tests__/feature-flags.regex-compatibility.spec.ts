@@ -65,7 +65,7 @@ describe('local regex compatibility', () => {
       expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
 
       expect(await posthog.getFeatureFlag('regex-flag', 'user', { personProperties })).toBe(operator === 'regex')
-      const flagsCalls = mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')
+      const flagsCalls = mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=4')
       expect(flagsCalls).toHaveLength(1)
       expect(JSON.parse(flagsCalls[0][1]?.body as string).person_properties).toEqual({ plan: 'é' })
     }
@@ -114,7 +114,7 @@ describe('local regex compatibility', () => {
       .toBeUndefined()
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
     expect.soft(await posthog.getFeatureFlag('regex-variant', 'user', { personProperties })).toBe('a')
-    expect(mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')).toHaveLength(1)
+    expect(mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=4')).toHaveLength(1)
   })
 
   it.each(
@@ -148,7 +148,7 @@ describe('local regex compatibility', () => {
       expect.soft(flags.unresolvedFlags['regex-variant']).toBe('unsupported_definition')
       expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
       expect.soft(await posthog.getFeatureFlag('regex-variant', 'user', { personProperties })).toBe(false)
-      expect(mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')).toHaveLength(1)
+      expect(mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=4')).toHaveLength(1)
     }
   )
 
@@ -309,7 +309,7 @@ describe('local regex compatibility', () => {
       )
       expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
       expect(await posthog.getFeatureFlag('regex-variant', 'user', { personProperties })).toBe('a')
-      expect(mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')).toHaveLength(1)
+      expect(mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=4')).toHaveLength(1)
     }
   )
 

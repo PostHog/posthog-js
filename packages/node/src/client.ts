@@ -14,6 +14,7 @@ import {
   PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogFeatureFlagsResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogFlagsResponse,
   PostHogMetrics,
@@ -62,6 +63,12 @@ import {
   FeatureFlagEvaluationsHost,
   FlagCalledEventParams,
 } from './feature-flag-evaluations'
+import {
+  FLAGS_RESPONSE_WITHOUT_TYPED_VALUES_MESSAGE,
+  isUnreadableFlagRecord,
+  parsedFlagRecordOf,
+  readFlagRecords,
+} from './flags-response'
 import {
   type FeatureFlagEvaluationContext,
   FeatureFlagsPoller,
@@ -192,6 +199,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   // last-writer-wins across the two signal sources (v2 /flags responses and the poller's
   // flag-definition loads) — both derive from the same per-team server config and converge.
   private _minimalFlagCalledEvents: boolean = false
+
+  // Whether this client has logged that /flags sent records without typed values.
+  private _loggedFlagsResponseWithoutTypedValues = false
 
   // Insertion-ordered LRU of the `$feature_flag_called` keys already reported per distinct id.
   // Map iteration order is insertion order, so the first entry is always the least recently used.
@@ -920,6 +930,28 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   protected override getEvaluationRuntime(): 'server' {
     return 'server'
+  }
+
+  /**
+   * posthog-node and posthog-edge request the v4 `/flags` response, which carries one typed
+   * value per flag plus its reason and rule metadata. A server that does not serve v4 answers
+   * with the older record, which is read as before. Other SDKs on the shared core keep `v=2`.
+   */
+  protected override getFlagsResponseVersion(): 4 {
+    return 4
+  }
+
+  /**
+   * Reads each flag record of a `/flags` response into its legacy rendering and keeps the parsed
+   * record, then reads the rest of the response with the shared reader.
+   */
+  protected override readFlagsResponse(response: unknown): PostHogFeatureFlagsResponse {
+    const { body, withoutTypedValues } = readFlagRecords(response)
+    if (withoutTypedValues && !this._loggedFlagsResponseWithoutTypedValues) {
+      this._loggedFlagsResponseWithoutTypedValues = true
+      this._logger.info(FLAGS_RESPONSE_WITHOUT_TYPED_VALUES_MESSAGE)
+    }
+    return super.readFlagsResponse(body)
   }
 
   /**
@@ -1708,7 +1740,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           }
         }
 
-        if (errors.length > 0) {
+        if (flagDetail !== undefined && isUnreadableFlagRecord(flagDetail)) {
+          // The record had a known field with the wrong JSON type, so the flag reads as disabled.
+          // A single-flag read reports what a failed /flags request reports: an unknown error
+          // and no request details.
+          featureFlagError = FeatureFlagError.UNKNOWN_ERROR
+          requestId = undefined
+          evaluatedAt = undefined
+        } else if (errors.length > 0) {
           featureFlagError = errors.join(',')
         }
       }
@@ -2510,6 +2549,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             reason: detail.reason?.description ?? detail.reason?.code,
             locallyEvaluated: false,
             hasExperiment: detail.metadata?.has_experiment,
+            parsed: parsedFlagRecordOf(detail),
           }
         }
       }

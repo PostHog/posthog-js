@@ -8,7 +8,7 @@ type ErrorResponse = {
 
 export const apiImplementationV4 = (flagsResponse: PostHogV2FlagsResponse | ErrorResponse) => {
   return (url: any): Promise<any> => {
-    if ((url as any).includes('/flags/?v=2')) {
+    if ((url as any).includes('/flags/?v=4')) {
       // Check if the response is a flags response or an error response
       return 'flags' in flagsResponse
         ? Promise.resolve({
@@ -126,7 +126,7 @@ export const anyLocalEvalCall = [
   'http://example.com/flags/definitions?token=TEST_API_KEY&send_cohorts',
   expect.any(Object),
 ]
-export const anyFlagsCall = ['http://example.com/flags/?v=2', expect.any(Object)]
+export const anyFlagsCall = ['http://example.com/flags/?v=4', expect.any(Object)]
 
 export const isPending = (promise: Promise<any>): boolean => {
   return util.inspect(promise).includes('pending')

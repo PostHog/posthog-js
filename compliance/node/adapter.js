@@ -62,10 +62,13 @@ app.get('/health', (req, res) => {
         sdk_name: 'posthog-node',
         sdk_version: require('../packages/node/package.json').version,
         adapter_version: '1.0.0',
-        capabilities:
-            CAPTURE_MODE === 'v1'
+        capabilities: [
+            ...(CAPTURE_MODE === 'v1'
                 ? ['capture_v1', 'capture_ai_v0', 'encoding_gzip']
-                : ['capture_v0', 'capture_ai_v0', 'encoding_gzip'],
+                : ['capture_v0', 'capture_ai_v0', 'encoding_gzip']),
+            // Remote /flags requests send ?v=4 and read the v4 flag record.
+            'flags_response_v4',
+        ],
     })
 })
 

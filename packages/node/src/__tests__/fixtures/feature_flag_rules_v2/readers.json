@@ -1,0 +1,1078 @@
+{
+  "schema": "schemas/flags_response_v4.schema.json",
+  "templates": {
+    "targeting_match_targeted_release": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": false,
+          "reason": {
+            "code": "targeting_match",
+            "condition_index": 0
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": false,
+            "payload": null,
+            "rule_type": "targeted_release",
+            "rule_id": "10000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "targeting_match_percentage_rollout": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": false,
+          "reason": {
+            "code": "targeting_match",
+            "condition_index": 0
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": false,
+            "payload": null,
+            "rule_type": "percentage_rollout",
+            "rule_id": "10000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "experiment_split": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": false,
+          "reason": {
+            "code": "experiment_split",
+            "condition_index": 0
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": true,
+            "payload": null,
+            "rule_type": "experiment",
+            "rule_id": "10000000-0000-4000-8000-000000000001",
+            "variant_key": "arm_a"
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "rollout_miss_percentage_rollout": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": false,
+          "reason": {
+            "code": "rollout_miss",
+            "condition_index": 0
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": false,
+            "payload": null,
+            "rule_type": "percentage_rollout",
+            "rule_id": "10000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "rollout_miss_experiment": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": false,
+          "reason": {
+            "code": "rollout_miss",
+            "condition_index": 0
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": true,
+            "payload": null,
+            "rule_type": "experiment",
+            "rule_id": "10000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "experiment_paused": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": false,
+          "reason": {
+            "code": "experiment_paused",
+            "condition_index": 0
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": true,
+            "payload": null,
+            "rule_type": "experiment",
+            "rule_id": "10000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "holdout": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": false,
+          "reason": {
+            "code": "holdout",
+            "condition_index": 0
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": true,
+            "payload": null,
+            "rule_type": "experiment",
+            "rule_id": "10000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "no_rule_match": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": false,
+          "reason": {
+            "code": "no_rule_match",
+            "condition_index": null
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": false,
+            "payload": null
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "missing_group_key": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": null,
+          "reason": {
+            "code": "missing_group_key",
+            "condition_index": null
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": false,
+            "payload": null
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "dependency_error": {
+      "errorsWhileComputingFlags": true,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": null,
+          "reason": {
+            "code": "dependency_error",
+            "condition_index": null
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": false,
+            "payload": null
+          },
+          "failed": true
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "error": {
+      "errorsWhileComputingFlags": true,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": null,
+          "reason": {
+            "code": "error",
+            "condition_index": null
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": false,
+            "payload": null
+          },
+          "failed": true
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "v1": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "value": "compact",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0
+          },
+          "metadata": {
+            "id": 202,
+            "version": 9,
+            "config_version": 1,
+            "has_experiment": false,
+            "variant_key": "compact",
+            "payload": "{\"columns\":2}"
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "omitted": {
+      "errorsWhileComputingFlags": false,
+      "flags": {},
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    },
+    "old_server": {
+      "errorsWhileComputingFlags": false,
+      "flags": {
+        "garden-layout": {
+          "key": "garden-layout",
+          "enabled": true,
+          "variant": "compact",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0
+          },
+          "metadata": {
+            "id": 202,
+            "version": 9,
+            "config_version": 2,
+            "rule_type": "experiment",
+            "rule_id": "10000000-0000-4000-8000-000000000001",
+            "variant_key": "arm_a"
+          }
+        }
+      },
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "evaluatedAt": 1800000000000
+    }
+  },
+  "cases": [
+    {
+      "id": "readers.complete_split",
+      "template": "experiment_split",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": true,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.partial_split_missing_config_version",
+      "template": "experiment_split",
+      "remove": [
+        "/flags/garden-layout/metadata/config_version"
+      ],
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": false,
+        "config_version": null,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "required",
+        "instance_path": "/flags/garden-layout/metadata",
+        "message_contains": "config_version"
+      },
+      "producer_expected": "invalid"
+    },
+    {
+      "id": "readers.partial_split_missing_rule_type",
+      "template": "experiment_split",
+      "remove": [
+        "/flags/garden-layout/metadata/rule_type"
+      ],
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "required",
+        "instance_path": "/flags/garden-layout/metadata",
+        "message_contains": "rule_type"
+      },
+      "producer_expected": "invalid"
+    },
+    {
+      "id": "readers.partial_split_missing_rule_id",
+      "template": "experiment_split",
+      "remove": [
+        "/flags/garden-layout/metadata/rule_id"
+      ],
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "required",
+        "instance_path": "/flags/garden-layout/metadata",
+        "message_contains": "rule_id"
+      },
+      "producer_expected": "invalid"
+    },
+    {
+      "id": "readers.partial_split_missing_variant_key",
+      "template": "experiment_split",
+      "remove": [
+        "/flags/garden-layout/metadata/variant_key"
+      ],
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "required",
+        "instance_path": "/flags/garden-layout/metadata",
+        "message_contains": "variant_key"
+      },
+      "producer_expected": "invalid"
+    },
+    {
+      "id": "readers.split_wrong_type_config_version",
+      "template": "experiment_split",
+      "set": {
+        "/flags/garden-layout/metadata/config_version": "2"
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": true,
+        "config_version": null,
+        "experiment_exposure": false,
+        "error_code": "PARSE_ERROR"
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "enum",
+        "instance_path": "/flags/garden-layout/metadata/config_version"
+      }
+    },
+    {
+      "id": "readers.split_wrong_type_rule_type",
+      "template": "experiment_split",
+      "set": {
+        "/flags/garden-layout/metadata/rule_type": 2
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": true,
+        "config_version": null,
+        "experiment_exposure": false,
+        "error_code": "PARSE_ERROR"
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "enum",
+        "instance_path": "/flags/garden-layout/metadata/rule_type"
+      }
+    },
+    {
+      "id": "readers.split_wrong_type_rule_id",
+      "template": "experiment_split",
+      "set": {
+        "/flags/garden-layout/metadata/rule_id": 3
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": true,
+        "config_version": null,
+        "experiment_exposure": false,
+        "error_code": "PARSE_ERROR"
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "type",
+        "instance_path": "/flags/garden-layout/metadata/rule_id"
+      }
+    },
+    {
+      "id": "readers.split_wrong_type_experiment_id",
+      "template": "experiment_split",
+      "set": {
+        "/flags/garden-layout/metadata/experiment_id": "301"
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": true,
+        "config_version": null,
+        "experiment_exposure": false,
+        "error_code": "PARSE_ERROR"
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "type",
+        "instance_path": "/flags/garden-layout/metadata/experiment_id"
+      }
+    },
+    {
+      "id": "readers.split_extra_experiment_id",
+      "template": "experiment_split",
+      "set": {
+        "/flags/garden-layout/metadata/experiment_id": 301
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": true,
+        "error_code": null
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "not",
+        "instance_path": "/flags/garden-layout/metadata"
+      }
+    },
+    {
+      "id": "readers.split_wrong_type_variant_key",
+      "template": "experiment_split",
+      "set": {
+        "/flags/garden-layout/metadata/variant_key": true
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": true,
+        "config_version": null,
+        "experiment_exposure": false,
+        "error_code": "PARSE_ERROR"
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "type",
+        "instance_path": "/flags/garden-layout/metadata/variant_key"
+      }
+    },
+    {
+      "id": "readers.wrong_rule_type_literal",
+      "template": "experiment_split",
+      "set": {
+        "/flags/garden-layout/metadata/rule_type": "percentage_rollout"
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "const",
+        "instance_path": "/flags/garden-layout/metadata/rule_type"
+      }
+    },
+    {
+      "id": "readers.unknown_fields",
+      "template": "experiment_split",
+      "set": {
+        "/future_envelope": {
+          "nested": true
+        },
+        "/flags/garden-layout/future_record": [],
+        "/flags/garden-layout/reason/future_reason": 3,
+        "/flags/garden-layout/metadata/future_metadata": "ignored"
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": true,
+        "error_code": null
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "additionalProperties",
+        "instance_path": "/flags/garden-layout"
+      }
+    },
+    {
+      "id": "readers.old_server_variant",
+      "template": "old_server",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": "compact",
+        "config_version": 1,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "required",
+        "instance_path": "/flags/garden-layout",
+        "message_contains": "value"
+      }
+    },
+    {
+      "id": "readers.old_server_boolean",
+      "template": "old_server",
+      "remove": [
+        "/flags/garden-layout/variant"
+      ],
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": true,
+        "config_version": 1,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "required",
+        "instance_path": "/flags/garden-layout",
+        "message_contains": "value"
+      }
+    },
+    {
+      "id": "readers.old_server_null_variant",
+      "template": "old_server",
+      "set": {
+        "/flags/garden-layout/variant": null
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": true,
+        "config_version": 1,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "required",
+        "instance_path": "/flags/garden-layout",
+        "message_contains": "value"
+      }
+    },
+    {
+      "id": "readers.old_server_false",
+      "template": "old_server",
+      "set": {
+        "/flags/garden-layout/enabled": false
+      },
+      "remove": [
+        "/flags/garden-layout/variant"
+      ],
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 1,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "required",
+        "instance_path": "/flags/garden-layout",
+        "message_contains": "value"
+      }
+    },
+    {
+      "id": "readers.v4_value_takes_precedence",
+      "template": "experiment_split",
+      "set": {
+        "/flags/garden-layout/enabled": true,
+        "/flags/garden-layout/variant": "wrong-channel"
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": true,
+        "error_code": null
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "additionalProperties",
+        "instance_path": "/flags/garden-layout"
+      }
+    },
+    {
+      "id": "readers.missing_flag",
+      "template": "omitted",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": null,
+        "experiment_exposure": false,
+        "error_code": "FLAG_NOT_FOUND"
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.targeting_match_targeted_release",
+      "template": "targeting_match_targeted_release",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.targeting_match_percentage_rollout",
+      "template": "targeting_match_percentage_rollout",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.rollout_miss_percentage_rollout",
+      "template": "rollout_miss_percentage_rollout",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.rollout_miss_experiment",
+      "template": "rollout_miss_experiment",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.experiment_paused",
+      "template": "experiment_paused",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.holdout",
+      "template": "holdout",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.holdout_variant_key",
+      "template": "holdout",
+      "set": {
+        "/flags/garden-layout/metadata/variant_key": "arm_a"
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "presence",
+        "keyword": "not",
+        "instance_path": "/flags/garden-layout/metadata"
+      }
+    },
+    {
+      "id": "readers.no_rule_match",
+      "template": "no_rule_match",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.missing_group_key",
+      "template": "missing_group_key",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": "INVALID_CONTEXT"
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.dependency_error",
+      "template": "dependency_error",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": "GENERAL"
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.error",
+      "template": "error",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": "GENERAL"
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.error_with_value",
+      "template": "error",
+      "set": {
+        "/flags/garden-layout/value": false
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": true,
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": "GENERAL"
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "type",
+        "instance_path": "/flags/garden-layout/value"
+      }
+    },
+    {
+      "id": "readers.malformed_sibling_isolation",
+      "template": "experiment_split",
+      "set": {
+        "/flags/sibling": {
+          "key": "sibling",
+          "value": [],
+          "reason": {
+            "code": "no_rule_match",
+            "condition_index": null
+          },
+          "metadata": {
+            "id": 203,
+            "version": 1,
+            "config_version": 2,
+            "has_experiment": false
+          }
+        }
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": true,
+        "error_code": null
+      },
+      "sibling_expectations": {
+        "sibling": {
+          "error_code": "PARSE_ERROR",
+          "experiment_exposure": false
+        }
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "type",
+        "instance_path": "/flags/sibling/value"
+      }
+    },
+    {
+      "id": "readers.partial_split_string_value",
+      "template": "experiment_split",
+      "set": {
+        "/flags/garden-layout/value": "usable-copy"
+      },
+      "remove": [
+        "/flags/garden-layout/metadata/variant_key"
+      ],
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": "usable-copy",
+        "config_version": 2,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "required",
+        "instance_path": "/flags/garden-layout/metadata",
+        "message_contains": "variant_key"
+      }
+    },
+    {
+      "id": "readers.v1_at_v4",
+      "template": "v1",
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": false,
+        "value": "compact",
+        "config_version": 1,
+        "experiment_exposure": false,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.v1_failed",
+      "template": "v1",
+      "set": {
+        "/flags/garden-layout/failed": true,
+        "/flags/garden-layout/value": null,
+        "/flags/garden-layout/reason": {
+          "code": "missing_dependency",
+          "condition_index": null
+        },
+        "/errorsWhileComputingFlags": true
+      },
+      "remove": [
+        "/flags/garden-layout/metadata/variant_key"
+      ],
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": true,
+        "config_version": 1,
+        "experiment_exposure": false,
+        "error_code": "GENERAL"
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.integral_json_number_context",
+      "template": "experiment_split",
+      "set": {
+        "/flags/garden-layout/metadata/config_version": 2.0,
+        "/flags/garden-layout/metadata/id": 201.0
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "garden-layout",
+        "caller_default": true,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": true,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    },
+    {
+      "id": "readers.flag_key_seed",
+      "template": "omitted",
+      "set": {
+        "/flags/seed": {
+          "key": "seed",
+          "value": false,
+          "reason": {
+            "code": "experiment_split",
+            "condition_index": 0
+          },
+          "metadata": {
+            "id": 201,
+            "version": 7,
+            "config_version": 2,
+            "has_experiment": true,
+            "payload": null,
+            "rule_type": "experiment",
+            "rule_id": "10000000-0000-4000-8000-000000000001",
+            "variant_key": "arm_a"
+          }
+        }
+      },
+      "expected": "reader",
+      "reader": {
+        "requested_key": "seed",
+        "caller_default": true,
+        "value": false,
+        "config_version": 2,
+        "experiment_exposure": true,
+        "error_code": null
+      },
+      "producer_expected": "valid"
+    }
+  ]
+}

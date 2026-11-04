@@ -1,5 +1,6 @@
 import { FeatureFlagValue, JsonType, UnresolvedFlagReason } from '@posthog/core'
 
+import type { ParsedFlagRecord } from './flags-response'
 import { FeatureFlagError } from './types'
 
 /**
@@ -19,6 +20,12 @@ export type EvaluatedFlagRecord = {
   locallyEvaluated: boolean
   /** Whether the flag is linked to an experiment; undefined when the server did not report it. */
   hasExperiment: boolean | undefined
+  /**
+   * The parsed `/flags` record of a remotely evaluated flag, with its typed value, failure
+   * state, reason and rule metadata, for the typed flag API. Absent for locally evaluated flags
+   * and flags with a value override.
+   */
+  parsed?: ParsedFlagRecord
 }
 
 /**

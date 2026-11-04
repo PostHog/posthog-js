@@ -104,7 +104,7 @@ describe('evaluateFlags', () => {
       expect(flags).toBeInstanceOf(FeatureFlagEvaluations)
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       const [url] = mockedFetch.mock.calls[0]
-      expect(url).toMatch(/\/flags\/\?v=2(?:&|$)/)
+      expect(url).toMatch(/\/flags\/\?v=4(?:&|$)/)
     })
 
     it('treats a runtime null flagKeys value as evaluating all flags', async () => {
@@ -567,18 +567,18 @@ describe('evaluateFlags', () => {
       await posthog.flush()
 
       const flagCallsAfterCapture = mockedFetch.mock.calls.filter((c) =>
-        (c[0] as string).includes('/flags/?v=2')
+        (c[0] as string).includes('/flags/?v=4')
       ).length
       const flagCallsBeforeCapture = mockedFetch.mock.calls
         .slice(0, callsAfterEvaluate)
-        .filter((c) => (c[0] as string).includes('/flags/?v=2')).length
+        .filter((c) => (c[0] as string).includes('/flags/?v=4')).length
       expect(flagCallsAfterCapture).toEqual(flagCallsBeforeCapture)
     })
 
     it('flags option takes precedence over sendFeatureFlags and warns when both passed', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
       const flags = await posthog.evaluateFlags('user-1')
-      const callsBefore = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2')).length
+      const callsBefore = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=4')).length
 
       posthog.capture({
         distinctId: 'user-1',
@@ -588,7 +588,7 @@ describe('evaluateFlags', () => {
       })
       await posthog.flush()
 
-      const callsAfter = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2')).length
+      const callsAfter = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=4')).length
       expect(callsAfter).toEqual(callsBefore)
 
       const pageViewed = captures.find((m) => m.event === 'page_viewed')
@@ -846,7 +846,7 @@ describe('evaluateFlags', () => {
       })
 
       // No remote /flags request since local evaluation covered it.
-      const remoteFlagCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2'))
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(0)
     })
 
@@ -869,7 +869,7 @@ describe('evaluateFlags', () => {
       expect(localEvaluationSpy).not.toHaveBeenCalled()
       expect(definitionsLoadSpy).not.toHaveBeenCalled()
       expect(definitionsReadSpy).not.toHaveBeenCalled()
-      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(0)
     })
 
@@ -904,7 +904,7 @@ describe('evaluateFlags', () => {
       expect(flags.getFlag('local-flag')).toBe(true)
       expect(flags.getFlag('remote-only')).toBe(true)
 
-      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(1)
       const [, init] = remoteFlagCalls[0]
       expect(JSON.parse((init as any).body as string).flag_keys_to_evaluate).toEqual(['local-flag', 'remote-only'])
@@ -935,7 +935,7 @@ describe('evaluateFlags', () => {
 
       // Node does not cache evaluateFlags() responses across calls. Each call still makes at most
       // one scoped fallback and keeps the local value when the server cannot resolve the typo.
-      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(2)
       for (const [, init] of remoteFlagCalls) {
         expect(JSON.parse((init as any).body as string).flag_keys_to_evaluate).toEqual(['local-flag', 'typo-flag'])
@@ -951,7 +951,7 @@ describe('evaluateFlags', () => {
       expect(flags.keys).toEqual(['local-flag'])
       expect(flags.getFlag('local-flag')).toBe(true)
       expect(flags.getFlag('remote-only')).toBeUndefined()
-      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(0)
     })
 
@@ -1031,7 +1031,7 @@ describe('evaluateFlags', () => {
       mockedFetch.mockClear()
     }
     const remoteFlagCalls = (): unknown[] =>
-      mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
     const flagCalledEvents = async (key?: string): Promise<any[]> => {
       await waitForPromises()
       return captures.filter(
