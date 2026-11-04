@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.445.6
+
+### Patch Changes
+
+- [#5548](https://github.com/PostHog/posthog-js/pull/5548) [`24917f0`](https://github.com/PostHog/posthog-js/commit/24917f02ec86c871e806fb2206ae0493a85bd1a5) Thanks [@haacked](https://github.com/haacked)! - The XHR transport now reports a timed-out request as `{ statusCode: 0, error }` with a named `AbortError`, as the fetch transport does. Feature flag requests sent over XHR now retry on timeout and record a `timeout` flag error.
+  (2026-11-04)
+
 ## 1.445.5
 
 ### Patch Changes
