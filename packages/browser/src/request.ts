@@ -298,26 +298,36 @@ const xhr = (options: TransportRequestOptions) => {
     if (options.timeout) {
         req.timeout = options.timeout
     }
-    req.onreadystatechange = () => {
-        // XMLHttpRequest.DONE == 4, except in safari 4
-        if (req.readyState === 4) {
-            const response: RequestResponse = {
-                statusCode: req.status,
-                text: req.responseText,
-            }
-            if (req.status === 200) {
-                try {
-                    response.json = JSON.parse(req.responseText)
-                } catch {
-                    // logger.error(e)
-                }
-            }
-
-            options.callback?.(
-                response,
-                readRetryAfter(() => req.getResponseHeader('Retry-After'))
-            )
+    // The spec fires `timeout` after the final `readystatechange` and before `loadend`.
+    // So the response is built in `onloadend`, which fires once per request after every outcome.
+    let timedOut = false
+    req.ontimeout = () => {
+        timedOut = true
+    }
+    req.onloadend = () => {
+        if (timedOut) {
+            const error = timeoutAbortReason(options.timeout)
+            logger.warn(error)
+            options.callback?.({ statusCode: 0, error })
+            return
         }
+
+        const response: RequestResponse = {
+            statusCode: req.status,
+            text: req.responseText,
+        }
+        if (req.status === 200) {
+            try {
+                response.json = JSON.parse(req.responseText)
+            } catch {
+                // logger.error(e)
+            }
+        }
+
+        options.callback?.(
+            response,
+            readRetryAfter(() => req.getResponseHeader('Retry-After'))
+        )
     }
     req.send(body)
 }

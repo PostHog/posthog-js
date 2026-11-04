@@ -60,7 +60,7 @@ describe.each(['fetch', 'XHR'] as const)('Retry-After through %s and RetryQueue'
                 readyState: 0,
                 status: 0,
                 responseText: '',
-                onreadystatechange: () => {},
+                onloadend: () => {},
                 open: vi.fn(),
                 setRequestHeader: vi.fn(),
                 getResponseHeader: () => {
@@ -74,7 +74,7 @@ describe.each(['fetch', 'XHR'] as const)('Retry-After through %s and RetryQueue'
                     xhr.readyState = 4
                     xhr.status = status
                     xhr.responseText = body
-                    xhr.onreadystatechange()
+                    xhr.onloadend()
                 },
             }
             return xhr as unknown as globalThis.XMLHttpRequest
