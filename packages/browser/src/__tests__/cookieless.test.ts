@@ -503,7 +503,7 @@ describe('cookieless', () => {
             // (distinct_id === sentinel), while a second tab (sharing the consent store) opts in. The
             // first tab never ran opt_in_capturing(), so it never healed its own distinct_id — it is no
             // longer in cookieless mode but still holds the sentinel. The sentinel must never leak out.
-            const optOutThenFlipConsentInAnotherTab = async () => {
+            const optOutThenFlipConsentInAnotherTab = async (tabAConfig: Partial<PostHogConfig> = {}) => {
                 const consentName = uuidv7()
                 const persistenceName = uuidv7()
 
@@ -512,6 +512,7 @@ describe('cookieless', () => {
                     cookieless_mode: 'on_reject',
                     consent_persistence_name: consentName,
                     persistence_name: persistenceName,
+                    ...tabAConfig,
                 })
                 tabA.opt_out_capturing()
                 expect(tabA.get_distinct_id()).toEqual('$posthog_cookieless')
@@ -559,6 +560,19 @@ describe('cookieless', () => {
                 expect(event.properties.distinct_id).toEqual(optedInDistinctId)
                 expect(event.properties.$device_id).toEqual(optedInDistinctId)
                 expect(event.properties.$cookieless_mode).toEqual(undefined)
+                expect(tabA.persistence?.isDisabled?.()).toBe(false)
+            })
+
+            it('heals the sentinel when opt_in_capturing() re-applies consent without capturing $opt_in', async () => {
+                // No pageview on opt-in, so nothing else captures and heals the sentinel.
+                const { tabA, beforeSendMock, optedInDistinctId } = await optOutThenFlipConsentInAnotherTab({
+                    capture_pageview: false,
+                })
+
+                tabA.opt_in_capturing()
+
+                expect(beforeSendMock.mock.calls.find(([e]) => e.event === '$opt_in')).toBeUndefined()
+                expect(tabA.get_distinct_id()).toEqual(optedInDistinctId)
                 expect(tabA.persistence?.isDisabled?.()).toBe(false)
             })
 

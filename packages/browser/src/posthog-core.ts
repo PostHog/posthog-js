@@ -2093,6 +2093,10 @@ export class PostHog implements PostHogInterface {
             this._send_retriable_request(requestOptions, transportOverride)
         }
 
+        // Consent can be granted without opt_in_capturing(), for example in another tab or by a consent manager cookie.
+        // Sending after this event keeps its rate limit token, and applies any identity change it picked up first.
+        this.featureFlags?.sendFlagCallsPendingCapture()
+
         return data
     }
 
@@ -4865,7 +4869,9 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Enables event tracking and data persistence (cookies/localStorage) for this PostHog instance.
-     * By default, captures an `$opt_in` event unless disabled.
+     * By default, captures an `$opt_in` event unless disabled. The event is only captured when the user was not
+     * already opted in, so calling this on every page load (for example from a consent tool callback that re-applies
+     * stored consent) sends it once per user rather than once per page.
      *
      * @example
      * ```js
@@ -4933,6 +4939,13 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        const wasAlreadyGranted = this.consent.consent === ConsentStatus.GRANTED
+        if (wasAlreadyGranted) {
+            // Consent granted in another tab leaves this tab holding the cookieless sentinel, and no $opt_in capture
+            // will heal it below. Adopt the shared identity before re-enabling persistence saves the stale one over it.
+            this._syncCookielessIdentity()
+        }
+
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
@@ -4951,10 +4964,17 @@ export class PostHog implements PostHogInterface {
             this.conversations?.loadIfEnabled()
         }
 
-        // Don't capture if captureEventName is null or false
-        if (isUndefined(options?.captureEventName) || options?.captureEventName) {
+        // Don't capture if captureEventName is null or false, or if consent was already granted. Consent tools
+        // often re-apply stored consent on every page load, which would otherwise send one event per page.
+        if (!wasAlreadyGranted && (isUndefined(options?.captureEventName) || options?.captureEventName)) {
             this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
         }
+
+        // Covers an opt in that captures no event. Adopt a sibling subdomain's identity first, so that a read made
+        // under the previous identity is dropped instead of reported under the new one.
+        this.persistence?.syncCookieProperties()
+        this._processCookieIdentityChange()
+        this.featureFlags?.sendFlagCallsPendingCapture()
 
         if (this.config.capture_pageview) {
             this._captureInitialPageview()

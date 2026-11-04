@@ -117,6 +117,26 @@ test('buildAssetUploadPlans publishes immutable semver assets, major-version ali
     )
 })
 
+test('buildAssetUploadPlans publishes integrity manifests only in the exact-version namespace', () => {
+    const assets: ReleaseAsset[] = [
+        { relativeKey: 'array.js', filePath: '/tmp/array.js', contentType: 'application/javascript' },
+        { relativeKey: 'integrity.json', filePath: '/tmp/integrity.json', contentType: 'application/json' },
+    ]
+    const plans = buildAssetUploadPlans('1.438.3', assets)
+    assert.deepEqual(
+        plans.immutable.map(({ key }) => key),
+        ['static/1.438.3/array.js', 'static/1.438.3/integrity.json']
+    )
+    assert.deepEqual(
+        plans.majorAlias.map(({ key }) => key),
+        ['static/1/array.js']
+    )
+    assert.deepEqual(
+        plans.compatibility.map(({ key }) => key),
+        ['static/array.js']
+    )
+})
+
 test('inferContentType restores aws-cli style MIME inference for release assets', () => {
     assert.equal(inferContentType('/tmp/assets/logo.svg'), 'image/svg+xml')
     assert.equal(inferContentType('/tmp/assets/font.woff2'), 'font/woff2')
