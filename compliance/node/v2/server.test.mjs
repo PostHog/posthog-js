@@ -613,6 +613,12 @@ test('the flags_response_v4 capability follows the installed client /flags versi
     )
 })
 
+test('the adapter declares the legacy payload getter', async (t) => {
+    const negotiation = await (await harness(t, {})).post('negotiate', { protocol })
+    assert.ok(negotiation.supported_routes.includes('/get_feature_flag_payload'))
+    assert.ok(negotiation.profiles[0].sdk_capabilities.includes('feature_flag_payloads'))
+})
+
 test('an invalid consumer directory fails allocation within its deadline', async (t) => {
     const { post } = await harness(t, { consumer: '/nonexistent/node-compliance-consumer' })
     await post(

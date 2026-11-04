@@ -155,6 +155,8 @@ export async function startServer({ consumer, mode = 'v0', format = 'cjs', host 
             'flags_v2',
             ...(requestsFlagsV4(consumer) ? ['flags_response_v4'] : []),
             'flags_getter_remote_uncached',
+            // The legacy payload getter returns the decoded JSON payload.
+            'feature_flag_payloads',
             'flag_snapshot_value_scalar',
             'flag_snapshot_payload_decoded',
             'flag_snapshot_missing_undefined',
