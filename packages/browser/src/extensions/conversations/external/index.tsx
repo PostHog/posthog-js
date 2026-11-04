@@ -534,6 +534,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (this._isWidgetEnabled && this._isDomainAllowed) {
             this._initializeWidget()
         } else {
+            // A later show() can come after another tab created a ticket on this session, so it must load the list.
+            this._skipInitialTicketsFetch = false
             logger.info('Widget not rendered', {
                 widgetEnabled: this._isWidgetEnabled,
                 domainAllowed: this._isDomainAllowed,

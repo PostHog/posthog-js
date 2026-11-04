@@ -313,11 +313,37 @@ describe('ConversationsManager', () => {
                 expect(ticketRequests()[0][0].url).toContain('identity_distinct_id=user-1')
             })
 
-            it('requests the ticket list when the widget initializes again', async () => {
-                manager = new ConversationsManager(mockConfig, mockPosthog)
-                await flushMicrotasks()
-                manager.hide()
-                manager.show()
+            it.each([
+                {
+                    name: 'the widget initializes again',
+                    start: async () => {
+                        manager = new ConversationsManager(mockConfig, mockPosthog)
+                        await flushMicrotasks()
+                        manager.hide()
+                        manager.show()
+                    },
+                },
+                {
+                    name: 'the widget did not render at boot',
+                    start: async () => {
+                        manager = new ConversationsManager({ ...mockConfig, widgetEnabled: false }, mockPosthog)
+                        await flushMicrotasks()
+                        act(() => manager.show())
+                    },
+                },
+                {
+                    name: 'a restore replaced the session',
+                    start: async () => {
+                        mockRestoreResponse = {
+                            statusCode: 200,
+                            json: { status: 'success', widget_session_id: 'restored-widget-session-id' },
+                        }
+                        window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-new-session')
+                        manager = new ConversationsManager(mockConfig, mockPosthog)
+                    },
+                },
+            ])('requests the ticket list when $name', async ({ start }) => {
+                await start()
                 await flushMicrotasks()
 
                 expect(ticketRequests()).toHaveLength(1)
