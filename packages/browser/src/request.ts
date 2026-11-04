@@ -243,7 +243,7 @@ const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestW
 }
 
 /**
- * Builds the reason used when aborting a fetch because our own request timeout elapsed.
+ * Builds the error that the fetch and XHR transports report when our own request timeout elapses.
  * It keeps `name === 'AbortError'` (so callers that detect timeouts by error name keep working)
  * but carries a descriptive message, so it is never a reason-less
  * `signal is aborted without reason` exception.
@@ -299,7 +299,7 @@ const xhr = (options: TransportRequestOptions) => {
         req.timeout = options.timeout
     }
     // The spec fires `timeout` after the final `readystatechange` and before `loadend`.
-    // So the response is built in `onloadend`, which fires once per request after every outcome.
+    // `onloadend` builds the response because it fires once per request, after every outcome.
     let timedOut = false
     req.ontimeout = () => {
         timedOut = true

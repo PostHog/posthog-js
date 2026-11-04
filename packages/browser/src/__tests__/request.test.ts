@@ -200,24 +200,6 @@ describe('request', () => {
             }
         })
 
-        it.each([200, 502])('completes once with malformed JSON at status %i', (statusCode) => {
-            const parseError = vi.spyOn(logger, 'error').mockImplementation(() => {})
-            try {
-                request(createRequest())
-                mockedXHR.status = statusCode
-                mockedXHR.responseText = '{wat'
-                mockedXHR.onloadend?.({} as ProgressEvent)
-                expect(mockCallback).toHaveBeenCalledWith({
-                    statusCode,
-                    json: undefined,
-                    text: '{wat',
-                })
-                expect(mockCallback).toHaveBeenCalledTimes(1)
-            } finally {
-                parseError.mockRestore()
-            }
-        })
-
         describe('completion', () => {
             // The XHR spec fires `readystatechange` (readyState 4) first, then the outcome
             // event (`load`, `error` or `timeout`), then `loadend`.
@@ -226,6 +208,24 @@ describe('request', () => {
                 mockedXHR[outcome]?.({} as ProgressEvent)
                 mockedXHR.onloadend?.({} as ProgressEvent)
             }
+
+            it.each([200, 502])('completes once with malformed JSON at status %i', (statusCode) => {
+                const parseError = vi.spyOn(logger, 'error').mockImplementation(() => {})
+                try {
+                    request(createRequest())
+                    mockedXHR.status = statusCode
+                    mockedXHR.responseText = '{wat'
+                    settle('onload')
+                    expect(mockCallback).toHaveBeenCalledWith({
+                        statusCode,
+                        json: undefined,
+                        text: '{wat',
+                    })
+                    expect(mockCallback).toHaveBeenCalledTimes(1)
+                } finally {
+                    parseError.mockRestore()
+                }
+            })
 
             it('reports a timeout once as status 0 with an AbortError', () => {
                 const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
