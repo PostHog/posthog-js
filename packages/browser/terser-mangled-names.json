@@ -267,6 +267,7 @@
         "_flushInterval",
         "_flushIntervalMs",
         "_flushJitter",
+        "_flushOnPageHide",
         "_flushPendingActivityTimestamp",
         "_flushPendingPageview",
         "_flushPromise",
