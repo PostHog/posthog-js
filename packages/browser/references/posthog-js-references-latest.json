@@ -4776,6 +4776,11 @@
           "name": "noRetries"
         },
         {
+          "description": "Called each time `_send_request` hands the request to the transport. It is not called on the paths that drop the request before the network.",
+          "type": "() => void",
+          "name": "onDispatch"
+        },
+        {
           "description": "Bypasses asynchronous CompressionStream gzip in favor of synchronous compression. Used for immediate requests so compression does not delay dispatch until after a navigation or page unload.",
           "type": "boolean",
           "name": "preferSyncCompression"

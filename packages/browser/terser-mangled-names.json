@@ -716,6 +716,7 @@
         "_reconcileCrossTabFeatureFlagPropertiesBeforeWrite",
         "_recordActivationTimestamp",
         "_recordConsoleEntry",
+        "_recordFlagsDuration",
         "_recordLivenessSignal",
         "_recordingStatus",
         "_recordingStatusFunction",
