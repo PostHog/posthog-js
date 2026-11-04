@@ -1,5 +1,6 @@
 ---
 '@posthog/core': patch
+'@posthog/mcp': patch
 'posthog-node': patch
 ---
 
