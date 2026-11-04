@@ -146,6 +146,16 @@ describe('Rate Limiter', () => {
             expect(persistedBucket['$capture_rate_limit'].tokens).toEqual(99) // limit - 1
         })
 
+        it('reports the limit without using a token or holding back the next warning', () => {
+            range(99).forEach(() => rateLimiter.clientRateLimitContext())
+            expect(rateLimiter.isClientRateLimited).toBe(false)
+            expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
+
+            expect(rateLimiter.isClientRateLimited).toBe(true)
+            rateLimiter.clientRateLimitContext()
+            expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
+        })
+
         it('captures a rate limit event the first time it is rate limited', () => {
             range(200).forEach(() => {
                 rateLimiter.clientRateLimitContext()
