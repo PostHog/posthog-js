@@ -447,7 +447,6 @@ function codeFormFields(send: UncheckedSend): Record<string, unknown> {
   }
 }
 
-// An empty list goes out as no list, because a server that doesn't take a field yet refuses it even empty.
 function unlessEmpty(field: string, list: unknown): Record<string, unknown> {
   return Array.isArray(list) && list.length === 0 ? {} : { [field]: list }
 }
@@ -460,7 +459,6 @@ function attachmentsOf(attachments: unknown): Record<string, unknown>[] {
   if (!Array.isArray(attachments)) {
     throw invalid('invalid_attachment', 'attachments must be a list of files.', 'attachments')
   }
-  // Array.from visits holes in a sparse array, which map() skips.
   return Array.from(attachments, attachmentOf)
 }
 
@@ -542,9 +540,12 @@ function isBase64(text: string): boolean {
   return text.length % 4 === 0 && BASE64_PATTERN.test(text)
 }
 
+function hasNodeBuffer(): boolean {
+  return typeof Buffer !== 'undefined'
+}
+
 function base64Of(bytes: Uint8Array): string {
-  // The edge runtime has no Buffer, so only there the bytes go through btoa, which is much slower.
-  if (typeof Buffer !== 'undefined') {
+  if (hasNodeBuffer()) {
     return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
   }
   const chunks: string[] = []
