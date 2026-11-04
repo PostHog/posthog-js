@@ -44,6 +44,13 @@ import { PostHogMetrics } from '../posthog-metrics'
 import { WebMCP } from './webmcp'
 
 type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
+type UnionToIntersection<U> = (U extends unknown ? (union: U) => void : never) extends (intersection: infer I) => void
+    ? I
+    : never
+
+// Avoid object spreads: their compiled helper calls retain unselected extensions in consumer bundles.
+const mergeExtensionGroups = <T extends ExtensionClasses[]>(...groups: T): UnionToIntersection<T[number]> =>
+    Object.assign({}, ...groups)
 
 /** Feature flags. */
 export const FeatureFlagsExtensions = {
@@ -124,25 +131,19 @@ export const WebMCPExtensions = {
 } as const satisfies ExtensionClasses
 
 /** All extensions — equivalent to the default `posthog-js` bundle. */
-// Avoid object spreads: their compiled helper calls retain unselected extensions in consumer bundles.
-export const AllExtensions = {
-    featureFlags: PostHogFeatureFlags,
-    sessionRecording: SessionRecording,
-    autocapture: BrowserAutocapture,
-    historyAutocapture: HistoryAutocapture,
-    heatmaps: Heatmaps,
-    deadClicksAutocapture: DeadClicksAutocapture,
-    webVitalsAutocapture: WebVitalsAutocapture,
-    exceptionObserver: ExceptionObserver,
-    exceptions: PostHogExceptions,
-    productTours: PostHogProductTours,
-    siteApps: SiteApps,
-    surveys: BrowserSurveys,
-    tracingHeaders: TracingHeaders,
-    toolbar: Toolbar,
-    experiments: WebExperiments,
-    conversations: PostHogConversations,
-    logs: PostHogLogs,
-    metrics: PostHogMetrics,
-    webMCP: WebMCP,
-} as const satisfies ExtensionClasses
+export const AllExtensions = /* @__PURE__ */ mergeExtensionGroups(
+    FeatureFlagsExtensions,
+    SessionReplayExtensions,
+    AnalyticsExtensions,
+    ErrorTrackingExtensions,
+    ProductToursExtensions,
+    SiteAppsExtensions,
+    SurveysExtensions,
+    TracingExtensions,
+    ToolbarExtensions,
+    ExperimentsExtensions,
+    ConversationsExtensions,
+    LogsExtensions,
+    MetricsExtensions,
+    WebMCPExtensions
+) satisfies ExtensionClasses

@@ -11,6 +11,7 @@ import { Extension } from './types'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
+// The read only matters when the toolbar is bundled; do not copy this annotation onto initialization that must always run.
 const STATE_FROM_WINDOW = /* @__PURE__ */ (() =>
     window?.location
         ? _getHashParam(window.location.hash, '__posthog') || _getHashParam(location.hash, 'state')

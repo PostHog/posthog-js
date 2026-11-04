@@ -79,4 +79,5 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
 
 export const logger = /* @__PURE__ */ _createLogger('[PostHog.js]')
 
-export const createLogger = /* @__PURE__ */ (() => logger.createLogger)()
+export const createLogger = (prefix: string, options?: CreateLoggerOptions): PosthogJsLogger =>
+    logger.createLogger(prefix, options)
