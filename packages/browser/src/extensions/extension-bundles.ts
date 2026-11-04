@@ -42,6 +42,7 @@ import { PostHogConversations } from './conversations/posthog-conversations'
 import { PostHogLogs } from '../posthog-logs'
 import { PostHogMetrics } from '../posthog-metrics'
 import { WebMCP } from './webmcp'
+import { extend } from '@posthog/browser-common/utils/general-utils'
 
 type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
 type UnionToIntersection<U> = (U extends unknown ? (union: U) => void : never) extends (intersection: infer I) => void
@@ -50,7 +51,7 @@ type UnionToIntersection<U> = (U extends unknown ? (union: U) => void : never) e
 
 // Avoid object spreads: their compiled helper calls retain unselected extensions in consumer bundles.
 const mergeExtensionGroups = <T extends ExtensionClasses[]>(...groups: T): UnionToIntersection<T[number]> =>
-    Object.assign({}, ...groups)
+    extend({}, ...groups) as UnionToIntersection<T[number]>
 
 /** Feature flags. */
 export const FeatureFlagsExtensions = {
