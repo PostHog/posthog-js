@@ -2,7 +2,7 @@
  *
  * These have the same lifespan as a session_id, meaning that if the session_id changes, these properties will be reset.
  *
- * We only store the entry URL and referrer, and derive many props (such as utm tags) from those.
+ * We store the entry URL and referrer, plus campaign overrides when URL sanitization changes attribution.
  *
  * Given that the cookie is limited to 4K bytes, we don't want to store too much data, so we chose not to store device
  * properties (such as browser, OS, etc) here, as usually getting the current value of those from event properties is
@@ -30,6 +30,7 @@ interface LegacySessionSourceProps {
 interface CurrentSessionSourceProps {
     r: string | undefined // Referrer, omitted when URL sanitization fails
     u: string | undefined // full URL
+    c?: Record<string, string | null> // Original values for campaigns changed by URL sanitization
 }
 
 interface StoredSessionSourceProps {
@@ -38,11 +39,13 @@ interface StoredSessionSourceProps {
 }
 
 const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProps | CurrentSessionSourceProps => {
+    const sanitizeUrl = posthog ? getUrlSanitizer(posthog.config) : undefined
     return getPersonInfo(
         posthog?.config.mask_personal_data_properties,
         posthog?.config.custom_personal_data_properties,
         posthog?.config.disable_capture_url_hashes,
-        posthog ? getUrlSanitizer(posthog.config) : undefined
+        sanitizeUrl,
+        sanitizeUrl
     )
 }
 
@@ -90,8 +93,11 @@ export class SessionPropsManager {
         if (!p) {
             return {}
         }
-        if ('r' in p || 'u' in p) {
-            return getPersonPropsFromInfo(p, this._instance.config.disable_capture_url_hashes)
+        if ('r' in p || 'u' in p || 'c' in p) {
+            return getPersonPropsFromInfo(
+                p,
+                this._instance.config.disable_capture_url_hashes && !this._instance.config.url_sanitization?.hash
+            )
         } else {
             return {
                 $referring_domain: p.referringDomain,

@@ -1275,17 +1275,54 @@ export interface WebMCPCaptureConfig {
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
 type NextOptions = { revalidate: false | 0 | number; tags: string[] }
 
-/** Controls SDK-recorded URL metadata, independently of pageview capture triggers. */
+/**
+ * Controls which parts of automatically collected URLs are recorded, independently of pageview capture triggers.
+ * Use with `PostHogConfig.url_sanitization`.
+ *
+ * @example
+ * ```js
+ * posthog.init('phc_TOKEN', {
+ *     url_sanitization: {
+ *         path: true,
+ *         query: false,
+ *         hash: false,
+ *         sanitize: (url) => {
+ *             if (url.pathname.startsWith('/reset/')) url.pathname = '/reset/'
+ *             return url
+ *         },
+ *     },
+ * })
+ * ```
+ */
 export interface UrlSanitizationOptions {
-    /** Include the pathname. Defaults to true. */
+    /**
+     * Include the URL pathname. Set to `false` to remove all path segments, leaving `/`.
+     * For example, `https://example.com/private/page` becomes `https://example.com/`.
+     *
+     * @default true
+     */
     path?: boolean
-    /** Include query parameters. Defaults to true. */
+    /**
+     * Include the URL query string. Set to `false` to remove all query parameters.
+     * For example, `https://example.com/page?token=secret` becomes `https://example.com/page`.
+     * Campaign properties are retained separately; see `PostHogConfig.url_sanitization`.
+     *
+     * @default true
+     */
     query?: boolean
-    /** Include the fragment. When omitted, inherits `disable_capture_url_hashes`. */
+    /**
+     * Include the URL fragment (the `#` and everything after it). Set to `false` to remove it.
+     * When omitted, fragments are included unless `disable_capture_url_hashes` is enabled.
+     * An explicit `true` or `false` takes precedence over `disable_capture_url_hashes`.
+     */
     hash?: boolean
     /**
-     * Rewrite a URL before component filtering and personal-data query masking.
-     * Return an absolute URL or URL string. Throwing or returning an invalid value omits the URL.
+     * Synchronously rewrite a URL before `path`, `query` and `hash` filtering, followed by
+     * existing personal-data query masking.
+     *
+     * Receives a fresh `URL` that you can mutate. Return that URL, another `URL`, or an absolute URL string.
+     * Asynchronous callbacks are not supported. Throwing or returning an invalid value omits the affected URL
+     * and its derived host/pathname, not the event, without throwing into application code.
      */
     sanitize?: (url: URL) => URL | string
 }
@@ -1474,12 +1511,22 @@ export interface PostHogConfig {
     disable_capture_url_hashes: boolean
 
     /**
-     * Sanitize current event URLs, referrers (including initial/session referrers), previous-pageview
-     * pathnames, autocapture links, and Web Vitals and log page URLs.
-     * Referrers are sanitized before persistence. Configure in init() to cover the first writes.
-     * Path and query default to included; omitted hash inherits disable_capture_url_hashes.
-     * The callback runs before component filtering and existing personal-data query masking.
-     * A failed callback omits the URL and its derived host/pathname without throwing into your application.
+     * Sanitize automatically collected current event URLs and their host/pathname, initial/session landing URLs
+     * and referrers, previous-pageview pathnames, autocapture links, and Web Vitals and log page URLs.
+     *
+     * Landing URLs and referrers are sanitized before persistence. Configure this in `init()` to cover the first
+     * attribution writes. Configuration changes affect future writes; previously persisted values are retained.
+     *
+     * Campaign values are extracted with existing personal-data masking before URL sanitization and retained
+     * separately when URL filtering changes attribution. Removing a campaign query parameter from a URL does not
+     * remove its campaign property. Use `mask_personal_data_properties` and `custom_personal_data_properties`
+     * to mask those values.
+     *
+     * Path and query default to included; omitted hash inherits `disable_capture_url_hashes`.
+     * The optional synchronous callback runs before component filtering and existing personal-data query masking.
+     * A failed callback omits the affected URL and its derived host/pathname without dropping the event or
+     * throwing into your application. See `UrlSanitizationOptions` for component details and a usage example.
+     * Leaving this option unset preserves existing behavior.
      *
      * @default undefined
      */

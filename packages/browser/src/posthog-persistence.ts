@@ -1725,16 +1725,19 @@ export class PostHogPersistence {
             return
         }
 
+        const sanitizeUrl = getUrlSanitizer(this._config)
         const personInfo = getPersonInfo(
             this._config.mask_personal_data_properties,
             this._config.custom_personal_data_properties,
             this._config.disable_capture_url_hashes,
-            getUrlSanitizer(this._config)
+            sanitizeUrl,
+            sanitizeUrl
         )
         this.register_once(
             {
                 [INITIAL_PERSON_INFO]: this._storesIdentityInCookie
                     ? {
+                          ...personInfo,
                           r: personInfo.r ? truncateForCookie(personInfo.r) : undefined,
                           u: personInfo.u ? truncateForCookie(personInfo.u) : undefined,
                       }
@@ -1761,7 +1764,7 @@ export class PostHogPersistence {
         if (initialPersonInfo) {
             const initialPersonProps = getInitialPersonPropsFromInfo(
                 initialPersonInfo,
-                this._config.disable_capture_url_hashes
+                this._config.disable_capture_url_hashes && !this._config.url_sanitization?.hash
             )
             extend(p, initialPersonProps)
         }
