@@ -57,9 +57,12 @@ on:
 
 # Concurrency control: only one release process can run at a time
 # This prevents race conditions if multiple releasable PRs merge simultaneously
-# A dry run uses its own group, so it cannot cancel a release that waits for approval.
+# Each maintenance branch and each dry run uses its own group, so it cannot cancel
+# a release from another branch that waits for approval.
 concurrency:
-    group: ${{ inputs.maintenance_dry_run == true && 'release-dry-run' || 'release' }}
+    group: >-
+        ${{ inputs.maintenance_dry_run == true && format('release-dry-run-{0}', github.ref_name) ||
+        github.ref_name != 'main' && format('release-{0}', github.ref_name) || 'release' }}
     cancel-in-progress: false
 
 jobs:
@@ -543,6 +546,22 @@ jobs:
                       exit 1
                   fi
 
+            # On main a package without a new version is skipped. A maintenance run
+            # exists to publish its package, so an existing version fails the run.
+            - name: Require unpublished maintenance release
+              if: >-
+                  needs.release-context.outputs.maintenance == 'true' &&
+                  matrix.package.name == needs.release-context.outputs.package
+              env:
+                  IS_NEW_VERSION: ${{ steps.check-package-version.outputs.is-new-version }}
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+              run: |
+                  if [ "$IS_NEW_VERSION" != 'true' ]; then
+                      echo "::error::$PACKAGE_NAME@$PACKAGE_VERSION already exists on npm, so this maintenance release has nothing to publish."
+                      exit 1
+                  fi
+
             - name: Ensure modern npm (OIDC support)
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: npm install -g npm@11.6.4
@@ -551,17 +570,23 @@ jobs:
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: pnpm install --frozen-lockfile && pnpm build
 
-            # pnpm publishes with --tag latest when no tag is given, so main is unchanged.
+            # Main passes no --tag and keeps the default `latest`. A maintenance
+            # release must never move `latest`.
             - name: Publish ${{ matrix.package.name }} to NPM
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: |
-                  if [ -z "$DIST_TAG" ]; then
-                      echo "::error::The release context has no npm dist-tag."
-                      exit 1
+                  tag_option=()
+                  if [ "$MAINTENANCE" = 'true' ]; then
+                      if [ -z "$DIST_TAG" ]; then
+                          echo "::error::The maintenance release context has no npm dist-tag."
+                          exit 1
+                      fi
+                      tag_option=(--tag "$DIST_TAG")
                   fi
-                  pnpm publish --filter=${{ matrix.package.name }} --access public --no-git-checks --tag "$DIST_TAG"
+                  pnpm publish --filter=${{ matrix.package.name }} --access public --no-git-checks "${tag_option[@]}"
               env:
                   DIST_TAG: ${{ needs.release-context.outputs.dist-tag }}
+                  MAINTENANCE: ${{ needs.release-context.outputs.maintenance }}
                   NPM_CONFIG_PROVENANCE: true
 
             - name: Create or verify package tag
