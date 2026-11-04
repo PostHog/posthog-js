@@ -12,6 +12,8 @@ import '@testing-library/jest-dom'
 import { act, fireEvent, screen } from '@testing-library/preact'
 import Config from '../../../config'
 
+const persistenceState = vi.hoisted(() => ({ isNewWidgetSession: false }))
+
 // Mock the persistence layer
 vi.mock('../../../extensions/conversations/external/persistence', () => {
     return {
@@ -19,6 +21,7 @@ vi.mock('../../../extensions/conversations/external/persistence', () => {
             let storedTicketId: string | null = null
             return {
                 getOrCreateWidgetSessionId: vi.fn().mockReturnValue('test-widget-session-id'),
+                isNewWidgetSession: vi.fn(() => persistenceState.isNewWidgetSession),
                 setWidgetSessionId: vi.fn(),
                 loadTicketId: vi.fn(() => storedTicketId),
                 saveTicketId: vi.fn((ticketId: string) => {
@@ -271,6 +274,54 @@ describe('ConversationsManager', () => {
                 })
             )
             expect(mockPosthog.capture).not.toHaveBeenCalledWith('$conversations_widget_loaded', expect.anything())
+        })
+
+        describe('with a widget session created on this page load', () => {
+            const ticketRequests = () =>
+                (mockPosthog._send_request as VitestMock).mock.calls.filter((call) =>
+                    (call[0].url as string).includes('/widget/tickets')
+                )
+
+            beforeEach(() => {
+                persistenceState.isNewWidgetSession = true
+            })
+
+            afterEach(() => {
+                persistenceState.isNewWidgetSession = false
+            })
+
+            it('renders without requesting the ticket list', async () => {
+                manager = new ConversationsManager(mockConfig, mockPosthog)
+                await flushMicrotasks()
+
+                expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
+                expect(ticketRequests()).toHaveLength(0)
+                expect(mockPosthog.capture).toHaveBeenCalledWith(
+                    '$conversations_widget_loaded',
+                    expect.objectContaining({ ticketCount: 0, initialView: 'messages' })
+                )
+            })
+
+            it('requests the ticket list when an identity is set', async () => {
+                mockPosthog.config.identity_distinct_id = 'user-1'
+                mockPosthog.config.identity_hash = 'hash-1'
+
+                manager = new ConversationsManager(mockConfig, mockPosthog)
+                await flushMicrotasks()
+
+                expect(ticketRequests()).toHaveLength(1)
+                expect(ticketRequests()[0][0].url).toContain('identity_distinct_id=user-1')
+            })
+
+            it('requests the ticket list when the widget initializes again', async () => {
+                manager = new ConversationsManager(mockConfig, mockPosthog)
+                await flushMicrotasks()
+                manager.hide()
+                manager.show()
+                await flushMicrotasks()
+
+                expect(ticketRequests()).toHaveLength(1)
+            })
         })
 
         it('should get user traits from PostHog persistence', async () => {

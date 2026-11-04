@@ -141,6 +141,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
     // SECURITY: widget_session_id is the key for access control
     // This is a random UUID that only this browser knows
     private _widgetSessionId: string
+    // True when this page load generated the widget_session_id, so the first ticket list
+    // fetch at boot can only return nothing. Cleared once it has been used or by restore.
+    private _skipInitialTicketsFetch: boolean
     private _isWidgetEnabled: boolean
     private _isDomainAllowed: boolean
     private _widgetState: ConversationsWidgetState = 'closed'
@@ -170,6 +173,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._persistence = new ConversationsPersistence(_posthog)
 
         this._widgetSessionId = this._persistence.getOrCreateWidgetSessionId()
+        this._skipInitialTicketsFetch = this._persistence.isNewWidgetSession()
 
         // Determine if widget should be shown based on config and domain
         this._isWidgetEnabled = config.widgetEnabled === true
@@ -614,6 +618,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (data.widget_session_id) {
             this._widgetSessionId = data.widget_session_id
             this._persistence.setWidgetSessionId(data.widget_session_id)
+            this._skipInitialTicketsFetch = false
         }
 
         if (data.migrated_ticket_ids?.length) {
@@ -1139,6 +1144,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Determine initial view based on ticket count
      */
     private async _determineInitialView(): Promise<{ view: WidgetView; tickets: Ticket[] }> {
+        // A brand-new anonymous session has no tickets on the server. Skipping the request
+        // keeps every first page view (including crawlers) out of the team's poll budget.
+        const skipFetch = this._skipInitialTicketsFetch && !this._currentTicketId && !this._identityFields()
+        this._skipInitialTicketsFetch = false
+        if (skipFetch) {
+            return { view: 'messages', tickets: [] }
+        }
+
         try {
             const identityBefore = this._posthog.config.identity_distinct_id
             const lifecycleGeneration = this._lifecycleGeneration
