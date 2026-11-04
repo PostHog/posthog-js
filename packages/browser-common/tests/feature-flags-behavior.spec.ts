@@ -450,6 +450,58 @@ describe('featureflags', () => {
         expect(client.capture).toHaveBeenCalled()
     })
 
+    describe('flag reads while capture is off', () => {
+        const flagCalledEvents = () =>
+            vi.mocked(client.capture).mock.calls.filter(([event]) => event === '$feature_flag_called')
+
+        it.each([
+            ['the same identity', 'blah id', 1],
+            ['another identity, which sends nothing', 'other-user', 0],
+        ])('sends the pending exposure when capture turns on under %s', (_, distinctIdAtConsent, expectedCount) => {
+            featureFlags._hasLoadedFlags = true
+            client.canCapture = false
+            featureFlags.getFeatureFlag('beta-feature')
+
+            client.distinctId = distinctIdAtConsent
+            client.canCapture = true
+            featureFlags.sendFlagCallsPendingCapture()
+
+            expect(flagCalledEvents()).toHaveLength(expectedCount)
+        })
+
+        it('stops sending pending exposures once a capture listener changes the identity', () => {
+            featureFlags._hasLoadedFlags = true
+            client.canCapture = false
+            featureFlags.getFeatureFlag('beta-feature')
+            featureFlags.getFeatureFlag('alpha-feature-2')
+
+            vi.mocked(client.capture).mockImplementation(() => {
+                client.distinctId = 'other-user'
+            })
+            client.canCapture = true
+            featureFlags.sendFlagCallsPendingCapture()
+
+            expect(flagCalledEvents()).toHaveLength(1)
+        })
+
+        it('keeps a pending exposure while the flag cache is expired', () => {
+            config.cacheTtlMs = 60 * 60 * 1000
+            client.kv.set({ $feature_flag_evaluated_at: Date.now() })
+            featureFlags._hasLoadedFlags = true
+            client.canCapture = false
+            featureFlags.getFeatureFlag('beta-feature')
+
+            vi.advanceTimersByTime(2 * 60 * 60 * 1000)
+            client.canCapture = true
+            featureFlags.sendFlagCallsPendingCapture()
+            expect(flagCalledEvents()).toHaveLength(0)
+
+            client.kv.set({ $feature_flag_evaluated_at: Date.now() })
+            featureFlags.sendFlagCallsPendingCapture()
+            expect(flagCalledEvents()).toHaveLength(1)
+        })
+    })
+
     describe('getFeatureFlagResult', () => {
         it('should return the result with flag value and payload for boolean flags', () => {
             featureFlags._hasLoadedFlags = true

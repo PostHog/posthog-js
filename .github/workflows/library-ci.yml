@@ -86,6 +86,31 @@ jobs:
       - name: Node edge runtime tests
         run: pnpm --filter=posthog-node test:edge-compat
 
+  ai-otel-consumers:
+    permissions:
+      contents: read
+    name: AI OTel consumers (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['22', '24']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          node_version: ${{ matrix.node-version }}
+          build: false
+
+      - name: Build AI SDK and dependencies
+        run: pnpm turbo run build --filter=@posthog/ai
+
+      - name: Test installed OTel consumers and Workers bundles
+        run: pnpm --filter @posthog/ai test:otel-consumers
+
   integration:
     permissions:
       contents: read
@@ -300,11 +325,6 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
-        with:
-          egress-policy: audit
-
       - name: Find existing compat comment
         if: ${{ needs.compat.outputs.has_failures == 'true' }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0

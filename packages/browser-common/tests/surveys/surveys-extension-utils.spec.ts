@@ -7,13 +7,15 @@ import {
     canActivateRepeatedly,
     doesSurveyUrlMatch,
     getFontFamily,
+    getPopoverPosition,
     getSurveySeen,
+    getTabWidgetPopupOverrides,
     hasWaitPeriodPassed,
     sendSurveyEvent,
     setInProgressSurveyState,
     getInProgressSurveyState,
 } from '../../src/surveys/surveys-extension-utils'
-import { SurveySchedule, SurveyType } from '../../src/survey-constants'
+import { SurveyPosition, SurveySchedule, SurveyType, SurveyWidgetType } from '../../src/survey-constants'
 import type { Survey } from '../../src/types/surveys'
 import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_LOGGER, SURVEY_SEEN_PREFIX } from '../../src/utils/survey-utils'
 
@@ -791,4 +793,37 @@ describe('sendSurveyEvent', () => {
             expect(host.reloadFlags).toHaveBeenCalledTimes(completed ? 1 : 0)
         }
     )
+})
+
+describe('getTabWidgetPopupOverrides', () => {
+    it.each([undefined, SurveyPosition.Right, SurveyPosition.NextToTrigger])(
+        'centres the popup next to the tab for position %s',
+        (position) => {
+            expect(getTabWidgetPopupOverrides(position)).toEqual({ top: '50%', bottom: 'auto' })
+        }
+    )
+
+    it.each([
+        SurveyPosition.Left,
+        SurveyPosition.Center,
+        SurveyPosition.TopLeft,
+        SurveyPosition.TopRight,
+        SurveyPosition.TopCenter,
+        SurveyPosition.MiddleLeft,
+        SurveyPosition.MiddleRight,
+        SurveyPosition.MiddleCenter,
+    ])('leaves the selected position %s alone', (position) => {
+        expect(getTabWidgetPopupOverrides(position)).toEqual({})
+    })
+
+    it('keeps tab popups at the selected position instead of next to the tab', () => {
+        // Regression test for the tab widget ignoring the selected position:
+        // merging the overrides over getPopoverPosition must not pull the
+        // popup back to the middle of the right edge.
+        const style = {
+            ...getPopoverPosition(SurveyType.Widget, SurveyPosition.Left, SurveyWidgetType.Tab),
+            ...getTabWidgetPopupOverrides(SurveyPosition.Left),
+        }
+        expect(style).toEqual({ left: '30px' })
+    })
 })

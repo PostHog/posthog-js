@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.63.0
+
+### Minor Changes
+
+- [#5473](https://github.com/PostHog/posthog-js/pull/5473) [`5c8f314`](https://github.com/PostHog/posthog-js/commit/5c8f3140d68c0bd3b437958afd1e4ced33f4f83a) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: `parsePostHogCookie` and `readPostHogCookie` return the session's last activity and start timestamps
+  (2026-11-03)
+
+## 1.62.1
+
+### Patch Changes
+
+- [#5505](https://github.com/PostHog/posthog-js/pull/5505) [`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85) Thanks [@majicmaj](https://github.com/majicmaj)! - Recognize self-declared Lightpanda headless browsers in bot detection.
+  (2026-11-02)
+
 ## 1.62.0
 
 ### Minor Changes

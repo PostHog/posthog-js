@@ -1,11 +1,11 @@
-import { isFunction, isObject, isString } from '@posthog/core'
+import { isFunction, isObject, isString, isNull } from '@posthog/core'
 import { document } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getQueryParam } from '@posthog/browser-common/utils/request-utils'
 import type { PostHogConfig } from '@posthog/types'
 import { assignableWindow } from '../utils/globals'
 import { createPostHogStub, QueuedInit } from '../utils/loader-stub'
-import { getSDKScriptURL } from '../utils/loader-script'
+import { getCoreIntegrity, getSDKScriptURL } from '../utils/loader-script'
 
 const logger = createLogger('[Loader]')
 
@@ -61,6 +61,12 @@ function load(): void {
         return
     }
 
+    const coreIntegrity = getCoreIntegrity(script)
+    if (isNull(coreIntegrity)) {
+        logger.critical('data-core-integrity must be a SHA-384 integrity hash')
+        return
+    }
+
     const url = document.createElement('a')
     url.href = script.src
     const deferInit = script.getAttribute('data-defer-init') === 'true'
@@ -75,6 +81,9 @@ function load(): void {
     core.src = getSDKScriptURL(url)
     core.async = true
     core.crossOrigin = 'anonymous'
+    if (coreIntegrity) {
+        core.integrity = coreIntegrity
+    }
     core.nonce = script.nonce
     core.onerror = () => logger.critical('Failed to load the PostHog SDK')
     script.parentNode?.insertBefore(core, script.nextSibling)
