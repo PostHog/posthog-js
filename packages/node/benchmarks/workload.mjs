@@ -15,13 +15,30 @@ export function loadSdk(sdkDirectory) {
 
 // The public fetch seam keeps benchmarks offline. It exercises loading, parsing and delivery
 // without including an HTTP server or retaining captured events in the measured process.
-export function transport(payloadBytes = 0) {
+export function transport(payloadBytes = 0, capacity = 1000) {
   let serializedDefinitions = ''
   const expectedPayload = 'x'.repeat(payloadBytes)
   const deliveredByUser = Object.fromEntries(users.map((user) => [user.distinctId, 0]))
+  const seen = new Uint8Array(capacity)
   const state = { definitions: 0, delivered: 0, deliveredByUser, requests: 0, invalidEvents: 0, unexpected: [] }
   return {
     state,
+    reset() {
+      state.definitions = 0
+      state.delivered = 0
+      state.requests = 0
+      state.invalidEvents = 0
+      state.unexpected.length = 0
+      seen.fill(0)
+      for (const user of users) deliveredByUser[user.distinctId] = 0
+    },
+    verifyDelivery(expected) {
+      assert.equal(state.delivered, expected, 'Delivered counts must match captures')
+      assert.equal(state.invalidEvents, 0, 'Payload, identity and unique sequence must match')
+      for (let i = 0; i < seen.length; i++) {
+        assert.equal(seen[i], i < expected ? 1 : 0, `Unexpected delivery count for sequence ${i}`)
+      }
+    },
     setDefinitions(value) {
       serializedDefinitions = JSON.stringify(value)
     },
@@ -37,14 +54,20 @@ export function transport(payloadBytes = 0) {
         state.requests++
         state.delivered += batch.length
         for (const event of batch) {
+          const sequence = event.properties?.sequence
           if (
             event.event !== 'benchmark' ||
-            !Object.hasOwn(deliveredByUser, event.distinct_id) ||
+            !Number.isInteger(sequence) ||
+            sequence < 0 ||
+            sequence >= seen.length ||
+            seen[sequence] !== 0 ||
+            event.distinct_id !== users[sequence % users.length]?.distinctId ||
             event.properties?.payload !== expectedPayload ||
             event.properties?.plan !== 'pro'
           ) {
             state.invalidEvents++
           } else {
+            seen[sequence] = 1
             deliveredByUser[event.distinct_id]++
           }
         }
@@ -58,7 +81,7 @@ export function transport(payloadBytes = 0) {
 
 export async function createWorkload(spec, sdkDirectory) {
   const { PostHog, entry } = loadSdk(sdkDirectory)
-  const network = transport(spec.payload_bytes)
+  const network = transport(spec.payload_bytes, spec.operations)
   const errors = []
   const isFlags = ['single', 'all', 'refresh'].includes(spec.mode)
   if (isFlags) network.setDefinitions(definitions(spec.flag_count))
@@ -79,13 +102,16 @@ export async function createWorkload(spec, sdkDirectory) {
     sendFeatureFlagEvents: false,
     personProperties: user.personProperties,
   }))
-  const events = users.map((user) => ({
-    event: 'benchmark',
-    distinctId: user.distinctId,
-    properties: { payload: 'x'.repeat(spec.payload_bytes ?? 0), plan: 'pro' },
-  }))
+  // Each call owns its properties; later captures never mutate submitted input.
+  const payload = 'x'.repeat(spec.payload_bytes ?? 0)
+  const events = isFlags
+    ? []
+    : Array.from({ length: spec.operations }, (_, sequence) => ({
+        event: 'benchmark',
+        distinctId: users[sequence % users.length].distinctId,
+        properties: { payload, plan: 'pro', sequence },
+      }))
   let captured = 0
-  const capturedByUser = Object.fromEntries(users.map((user) => [user.distinctId, 0]))
   let generation = 0
   const checks = { evaluations: 0 }
 
@@ -114,13 +140,6 @@ export async function createWorkload(spec, sdkDirectory) {
     }
   }
 
-  async function drain() {
-    await client.flush()
-    assert.equal(network.state.delivered, captured, 'Delivered counts must match captures')
-    assert.equal(network.state.invalidEvents, 0)
-    assert.deepEqual(network.state.deliveredByUser, capturedByUser)
-  }
-
   function checkTransport() {
     assert.deepEqual(network.state.unexpected, [], 'Local-only evaluation must not fall back remotely')
     assert.deepEqual(errors, [])
@@ -140,6 +159,22 @@ export async function createWorkload(spec, sdkDirectory) {
 
   return {
     entry,
+    async reset() {
+      // Only reset a phase after its public lifecycle and correctness checks complete.
+      await this.verify()
+      if (isFlags) {
+        generation = 0
+        network.setDefinitions(definitions(spec.flag_count, generation))
+        const previous = network.state.definitions
+        await client.reloadFeatureFlags()
+        assert.equal(network.state.definitions, previous + 1)
+        await checkFlags()
+        checkTransport()
+      }
+      captured = 0
+      checks.evaluations = 0
+      network.reset()
+    },
     async run(operations = spec.operations, checkpoint) {
       if (spec.mode === 'refresh') {
         for (let i = 0; i < operations; i++) {
@@ -148,22 +183,22 @@ export async function createWorkload(spec, sdkDirectory) {
           const previous = network.state.definitions
           await client.reloadFeatureFlags()
           assert.equal(network.state.definitions, previous + 1, 'Reload must fetch new definitions')
-          await checkFlags()
           if (checkpoint) await checkpoint(i + 1)
         }
       } else if (spec.mode === 'capture' || spec.mode === 'drain') {
+        assert.ok(captured + operations <= events.length, 'Reset before starting another capture phase')
         for (let offset = 0; offset < operations; offset += 100) {
           const end = Math.min(operations, offset + 100)
           for (let i = offset; i < end; i++) {
-            client.capture(events[i % events.length])
+            client.capture(events[captured])
             captured++
-            capturedByUser[users[i % users.length].distinctId]++
           }
           // capture() returns void; include its asynchronous preparation/enqueue microtasks.
           await setImmediate()
-          if (spec.mode === 'drain') await drain()
+          if (spec.mode === 'drain' && spec.drain_strategy === 'steady') await client.flush()
           if (checkpoint) await checkpoint(end)
         }
+        if (spec.mode === 'drain' && spec.drain_strategy === 'burst') await client.flush()
       } else {
         for (let offset = 0; offset < operations; offset += spec.concurrency) {
           if (spec.concurrency === 1) {
@@ -173,15 +208,26 @@ export async function createWorkload(spec, sdkDirectory) {
               Array.from({ length: Math.min(spec.concurrency, operations - offset) }, (_, i) => evaluate(offset + i))
             )
           }
-          if (checkpoint && offset % 32 === 0) await checkpoint(Math.min(offset + spec.concurrency, operations))
+          const completed = Math.min(offset + spec.concurrency, operations)
+          if (checkpoint && (completed % 32 === 0 || completed === operations)) await checkpoint(completed)
         }
       }
     },
     async verify() {
       if (isFlags) await checkFlags()
-      else await drain()
+      else {
+        // Enqueue delivery is outside measurement; completed-delivery verification cannot rescue a missed flush.
+        if (spec.mode === 'capture') await client.flush()
+        network.verifyDelivery(captured)
+      }
       checkTransport()
-      return { ...network.state, ...checks, captured }
+      return {
+        ...network.state,
+        deliveredByUser: { ...network.state.deliveredByUser },
+        ...checks,
+        captured,
+        generation,
+      }
     },
     async close() {
       await client.shutdown()

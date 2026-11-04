@@ -9,7 +9,7 @@ try {
   workload = await createWorkload(spec, sdkDirectory)
   const warmupOperations = spec.mode === 'refresh' ? 2 : Math.min(spec.operations, spec.flag_count === 1000 ? 32 : 160)
   await workload.run(warmupOperations)
-  await workload.verify()
+  await workload.reset()
   await settle()
   const result = { pass, operations: spec.operations, warmup_operations: warmupOperations, entry: workload.entry }
   if (pass === 'timing') {
@@ -24,10 +24,7 @@ try {
     await workload.run(spec.operations, async (completed) => {
       const current = memory()
       observedPeak = Math.max(observedPeak, current.rss)
-      if (spec.mode === 'refresh' && (completed % 5 === 0 || completed === spec.operations)) {
-        await settle()
-        result.checkpoints.push({ operations: completed, ...memory() })
-      }
+      result.checkpoints.push({ operations: completed, ...current })
     })
     result.elapsed_ns = Number(process.hrtime.bigint() - start)
     result.after_work = memory()
