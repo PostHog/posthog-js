@@ -54,6 +54,15 @@ describe('rebuild', function () {
     cache = createCache();
   });
 
+  it('rebuilds non-empty CDATA as text in an HTML document', () => {
+    const node = buildNodeWithSN(
+      { id: 1, type: NodeType.CDATA, textContent: 'text <with> content' },
+      { doc: document, mirror, hackCss: false, cache },
+    );
+    expect(node?.nodeType).toBe(Node.TEXT_NODE);
+    expect(node?.textContent).toBe('text <with> content');
+  });
+
   describe('rr_dataURL', function () {
     it('should rebuild dataURL', function () {
       const dataURI =

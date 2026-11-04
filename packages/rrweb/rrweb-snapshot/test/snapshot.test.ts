@@ -14,7 +14,7 @@ import snapshot, {
   serializeNodeWithId,
   onceLinkStylesheetUpToDate,
 } from '../src/snapshot';
-import { elementNode, serializedNodeWithId } from '../src/types';
+import { elementNode, serializedNodeWithId, NodeType } from '../src/types';
 import { Mirror, absolutifyURLs } from '../src/utils';
 
 const serializeNode = (node: Node): serializedNodeWithId | null => {
@@ -262,6 +262,36 @@ describe('scrollTop/scrollLeft', () => {
         rr_scrollTop: 10,
         rr_scrollLeft: 20,
       },
+    });
+  });
+});
+
+describe('CDATA text content', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  const createCDATA = (masked = false) => {
+    const xml = document.implementation.createDocument(null, 'root');
+    const node = xml.createCDATASection('private <value>');
+    const parent = document.createElement('div');
+    if (masked) parent.className = 'maskmask';
+    parent.appendChild(node);
+    document.body.appendChild(parent);
+    return node;
+  };
+
+  it('preserves CDATA content and its serialized node type', () => {
+    expect(serializeNode(createCDATA())).toMatchObject({
+      type: NodeType.CDATA,
+      textContent: 'private <value>',
+    });
+  });
+
+  it('applies the existing text masking rules to CDATA', () => {
+    expect(serializeNode(createCDATA(true))).toMatchObject({
+      type: NodeType.CDATA,
+      textContent: '******* *******',
     });
   });
 });

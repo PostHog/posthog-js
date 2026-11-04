@@ -743,18 +743,13 @@ function serializeNode(
         rootId,
       });
     case n.TEXT_NODE:
+    case n.CDATA_SECTION_NODE:
       return serializeTextNode(n as Text, {
         doc,
         needsMask,
         maskTextFn,
         rootId,
       });
-    case n.CDATA_SECTION_NODE:
-      return {
-        type: NodeType.CDATA,
-        textContent: '',
-        rootId,
-      };
     case n.COMMENT_NODE:
       return {
         type: NodeType.Comment,
@@ -832,7 +827,7 @@ function serializeTextNode(
   }
 
   return {
-    type: NodeType.Text,
+    type: n.nodeType === n.CDATA_SECTION_NODE ? NodeType.CDATA : NodeType.Text,
     textContent: text || '',
     isStyle,
     rootId,
