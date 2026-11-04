@@ -15,21 +15,36 @@ import type {
 } from '@posthog/browser-common'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import { logger } from '@posthog/browser-common/utils/logger'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+import { getTimezone } from '@posthog/browser-common/utils/timezone'
 import { Compression, isFunction, isUndefined, type Logger } from '@posthog/core'
 
 import Config from '../config'
 import { DEVICE_ID } from '../constants'
 import { AutocaptureExtension, FeatureFlagsExtension, LogsExtension, SurveysExtension } from '../extension-tokens'
 import { extendURLParams } from '../request'
+import { now } from '../utils/now'
 import type { PostHog } from '../posthog-core'
 import type {
     CaptureOptions,
     CaptureResult,
     EventName,
+    MetricAttributes,
     Properties,
     QueuedRequestWithOptions,
     RemoteConfigResult,
 } from '../types'
+
+const FLAGS_REQUEST_DURATION_METRIC = 'posthog.flags.request.duration'
+
+// OTel: a 4xx or 5xx response reports its status as the error type. Without a response,
+// the request timed out (an AbortError) or failed for another reason.
+const flagsErrorType = (status: number | undefined, error: unknown): string | undefined => {
+    if (status) {
+        return status >= 400 ? String(status) : undefined
+    }
+    return (error as Error | undefined)?.name === 'AbortError' ? 'timeout' : '_OTHER'
+}
 
 class BrowserClientKeyValueStore implements KeyValueStore {
     constructor(private readonly _instance: PostHog) {}
@@ -259,7 +274,42 @@ export class BrowserClientAdapter implements Client {
         // oxlint-disable-next-line compat/compat -- The shared Client transport is intentionally awaitable.
         return new Promise((resolve) => {
             requestOptions.callback = resolve
+            if (target === 'flags' && this.instance.config.metrics?.flags) {
+                let dispatchedAt: number | undefined
+                requestOptions.onDispatch = () => {
+                    dispatchedAt = now()
+                }
+                requestOptions.callback = (response) => {
+                    if (!isUndefined(dispatchedAt)) {
+                        this._recordFlagsDuration(endpoint, response, now() - dispatchedAt)
+                    }
+                    resolve(response)
+                }
+            }
             this.instance._send_request(requestOptions)
         })
+    }
+
+    private _recordFlagsDuration(endpoint: string, response: ApiResponse, durationMs: number): void {
+        try {
+            const status = response.statusCode || undefined
+            const attributes: MetricAttributes = {
+                'server.address': (convertToURL(endpoint)?.hostname ?? endpoint).replace(/^\[(.*)\]$/, '$1'),
+            }
+            if (status) {
+                attributes['http.response.status_code'] = status
+            }
+            const errorType = flagsErrorType(status, response.error)
+            if (errorType) {
+                attributes['error.type'] = errorType
+            }
+            const timezone = getTimezone()
+            if (timezone) {
+                attributes['client.timezone'] = timezone
+            }
+            this.instance.metrics?.histogram(FLAGS_REQUEST_DURATION_METRIC, durationMs, { unit: 'ms', attributes })
+        } catch (e) {
+            logger.error('Failed to record the /flags request duration', e)
+        }
     }
 }

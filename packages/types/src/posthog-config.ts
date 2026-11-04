@@ -1331,6 +1331,17 @@ export interface BrowserMetricsConfig extends MetricsConfig {
      * @default undefined
      */
     network?: boolean | NetworkMetricsConfig
+    /**
+     * Record the round trip of every `/flags` HTTP attempt as the histogram
+     * `posthog.flags.request.duration`, in milliseconds. Each retry is a separate
+     * sample. The timer starts when the SDK hands the request to the transport,
+     * so the duration includes compressing the request body. Samples carry the server host, the response status or error type,
+     * and the browser's IANA timezone as `client.timezone`. Requests that the SDK
+     * drops before they reach the network are not recorded.
+     *
+     * @default undefined
+     */
+    flags?: boolean
 }
 
 /**
