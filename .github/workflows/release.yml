@@ -414,38 +414,9 @@ jobs:
 
             - name: Check ${{ matrix.package.name }} version and detect an update
               id: check-package-version
-              env:
-                  INPUT_PATH: ${{ steps.get-package-path.outputs.path }}
-              run: &check-package-version |
-                  node --input-type=module <<'JS'
-                  import { spawnSync } from 'node:child_process'
-                  import { appendFileSync, readFileSync } from 'node:fs'
-                  import path from 'node:path'
-
-                  const { name, version } = JSON.parse(readFileSync(path.join(process.env.INPUT_PATH, 'package.json'), 'utf8'))
-                  const result = spawnSync('npm', ['view', name, 'versions', 'dist-tags', '--json'], { encoding: 'utf8' })
-                  if (result.error) {
-                      throw result.error
-                  }
-                  const metadata = JSON.parse(result.stdout)
-                  const isNewPackage = result.status !== 0 && metadata.error?.code === 'E404'
-                  if (result.status !== 0 && !isNewPackage) {
-                      throw new Error(result.stderr || result.stdout)
-                  }
-
-                  const outputs = {
-                      'is-new-version': isNewPackage || !metadata.versions.includes(version),
-                      'is-new-package': isNewPackage,
-                      ...(!isNewPackage && { 'published-version': metadata['dist-tags'].latest }),
-                      'committed-version': version,
-                  }
-                  appendFileSync(
-                      process.env.GITHUB_OUTPUT,
-                      Object.entries(outputs)
-                          .map(([key, value]) => `${key}=${value}\n`)
-                          .join('')
-                  )
-                  JS
+              uses: PostHog/check-package-version@abc438f5bf4810ab941c4919f570d7f7f4e89473 # v2.1.2
+              with:
+                  path: ${{ steps.get-package-path.outputs.path }}
 
             - name: Require unpublished npm target
               if: needs.recover-posthog-js-s3.result == 'success'
@@ -1145,9 +1116,9 @@ jobs:
 
             - name: Check posthog-js version
               id: check-version
-              env:
-                  INPUT_PATH: packages/browser
-              run: *check-package-version
+              uses: PostHog/check-package-version@abc438f5bf4810ab941c4919f570d7f7f4e89473 # v2.1.2
+              with:
+                  path: packages/browser
 
     build-s3-artifacts:
         name: Build posthog-js dist for S3
