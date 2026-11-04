@@ -1,5 +1,22 @@
 # posthog-js
 
+## 1.445.3
+
+### Patch Changes
+
+- [#5521](https://github.com/PostHog/posthog-js/pull/5521) [`a265612`](https://github.com/PostHog/posthog-js/commit/a265612621f6d8dd0eae5e2ba9bb6fd4dfe251d3) Thanks [@phillram](https://github.com/phillram)! - Web experiments that run on a feature flag now honor each variant's URL conditions, so a variant only changes the pages it targets.
+  (2026-11-04)
+
+## 1.445.2
+
+### Patch Changes
+
+- [#5481](https://github.com/PostHog/posthog-js/pull/5481) [`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` when the user opts in, without being read again. This fixes missing exposures from the React and React Native hooks, which read a flag once on mount.
+  (2026-11-04)
+- Updated dependencies [[`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6)]:
+  - @posthog/browser-common@0.10.5
+  - @posthog/core@1.63.1
+
 ## 1.445.1
 
 ### Patch Changes
