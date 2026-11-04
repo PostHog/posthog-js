@@ -6,17 +6,7 @@ import type { Page } from 'puppeteer';
 import type { eventWithTime } from '@posthog/rrweb-types';
 import { startServer, launchPuppeteer, getServerURL } from '../utils';
 
-// Build each checkout's recorder and its runtime prerequisites from the root:
-// pnpm turbo run build --filter=@posthog/core
-// pnpm --filter @posthog/rrweb-types exec vite build
-// pnpm --filter @posthog/rrweb-utils exec vite build
-// pnpm --filter @posthog/rrweb-record exec vite build
-// Then, from packages/rrweb/rrweb:
-// RRWEB_BENCH_BEFORE=/before/packages/rrweb/record/dist/rrweb-record.umd.cjs
-// RRWEB_BENCH_AFTER=/after/packages/rrweb/record/dist/rrweb-record.umd.cjs
-// pnpm exec vitest run test/benchmark/buffered-text-mutations.test.ts
-// PUPPETEER_EXECUTABLE_PATH selects a locally installed Chrome.
-// RRWEB_BENCH_OUTPUT optionally saves metadata, summaries and every sample as JSON.
+// Set RRWEB_BENCH_BEFORE and RRWEB_BENCH_AFTER to two rrweb-record builds.
 const suites = [
   { title: '1 node x 1 change', nodes: 1, changes: 1, attributes: false },
   { title: '1 node x 10 changes', nodes: 1, changes: 10, attributes: false },
@@ -150,8 +140,7 @@ describe('benchmark: buffered text mutations', () => {
             });
           }
         };
-        // rrweb checks constructor.toString() before choosing this realm's
-        // observer. Keep that check from bypassing our timing wrapper.
+        // rrweb checks toString() before using this observer.
         Object.defineProperty(window.MutationObserver, 'toString', {
           value: () => NativeMutationObserver.toString(),
         });
@@ -204,8 +193,7 @@ describe('benchmark: buffered text mutations', () => {
             );
             const texts = mutations.flatMap((mutation) => mutation.texts);
             const attrs = mutations.flatMap((mutation) => mutation.attributes);
-            // Check the final value for every distinct node, without requiring
-            // deduplication so the same benchmark runs against either revision.
+            // Check final values without requiring deduplication.
             const finalTexts = new Map(
               texts.map((text) => [text.id, text.value]),
             );
