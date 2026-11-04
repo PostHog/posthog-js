@@ -6,6 +6,8 @@ import { EventType, IncrementalSource } from '@posthog/rrweb-types';
 import type { eventWithTime } from '@posthog/rrweb-types';
 import record from '../../src/record';
 import { mutationBuffers } from '../../src/record/observer';
+import * as observers from '../../src/record/observer';
+import { IframeManager } from '../../src/record/iframe-manager';
 
 describe('same-origin iframe observers across checkouts', () => {
   let stop: (() => void) | undefined;
@@ -88,5 +90,50 @@ describe('same-origin iframe observers across checkouts', () => {
           event.data.texts.some((text) => text.value === 'restored'),
       ),
     ).toBe(true);
+  });
+
+  it('registers cleanup when an iframe gets an id after its first attach', async () => {
+    const iframeCleanups: ReturnType<typeof vi.fn>[] = [];
+    const initObservers = observers.initObservers;
+    vi.spyOn(observers, 'initObservers').mockImplementation(
+      (options, hooks) => {
+        const cleanup = vi.fn(initObservers(options, hooks));
+        if (options.doc !== document) iframeCleanups.push(cleanup);
+        return cleanup;
+      },
+    );
+    const addLoadListener = IframeManager.prototype.addLoadListener;
+    let firstAttach = true;
+    vi.spyOn(IframeManager.prototype, 'addLoadListener').mockImplementation(
+      function (listener) {
+        addLoadListener.call(this, (iframe) => {
+          if (!firstAttach) return listener(iframe);
+          firstAttach = false;
+          const getId = vi
+            .spyOn(record.mirror, 'getId')
+            .mockReturnValueOnce(-1);
+          try {
+            return listener(iframe);
+          } finally {
+            getId.mockRestore();
+          }
+        });
+      },
+    );
+
+    const iframe = await start();
+    expect(iframeCleanups).toHaveLength(1);
+    expect(record.mirror.getId(iframe)).not.toBe(-1);
+    record.takeFullSnapshot(true);
+    await vi.waitFor(() => expect(iframeCleanups).toHaveLength(2));
+    expect(iframeCleanups[1]).not.toHaveBeenCalled();
+
+    iframe.remove();
+    await vi.waitFor(() => expect(iframeCleanups[1]).toHaveBeenCalledOnce());
+    stop!();
+    stop = undefined;
+    expect(iframeCleanups[0]).toHaveBeenCalledOnce();
+    expect(iframeCleanups[1]).toHaveBeenCalledOnce();
+    expect(mutationBuffers).toHaveLength(0);
   });
 });

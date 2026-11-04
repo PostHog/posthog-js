@@ -1035,11 +1035,12 @@ function record<T = eventWithTime>(
     const loadListener = (iframeEl: HTMLIFrameElement) => {
       try {
         const doc = iframeEl.contentDocument;
-        if (!doc || observedIframeDocuments.has(doc)) return;
         const iframeId = mirror.getId(iframeEl);
+        if (!doc || (iframeId !== -1 && observedIframeDocuments.has(doc)))
+          return;
         const stopObserving = observe(doc);
         if (typeof stopObserving === 'function') {
-          observedIframeDocuments.add(doc);
+          if (iframeId !== -1) observedIframeDocuments.add(doc);
           const cleanup = () => {
             observedIframeDocuments.delete(doc);
             stopObserving();
