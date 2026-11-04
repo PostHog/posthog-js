@@ -36,6 +36,7 @@ const CLOUD_APP_HOSTS: Record<string, string> = {
 }
 const MAX_RETRY_DELAY_MS = 30_000
 const BASE64_CHUNK_BYTES = 0x8000
+const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
@@ -508,6 +509,13 @@ function attachmentOf(attachment: unknown, index: number): Record<string, unknow
       `attachments__${index}__content`
     )
   }
+  if (typeof content === 'string' && !isBase64(content)) {
+    throw invalid(
+      'invalid_attachment',
+      "An attachment's content string must be Base64. Pass text as a Buffer or a Uint8Array.",
+      `attachments__${index}__content`
+    )
+  }
   if (contentType !== undefined && typeof contentType !== 'string') {
     throw invalid(
       'invalid_attachment',
@@ -528,6 +536,10 @@ function attachmentOf(attachment: unknown, index: number): Record<string, unknow
     ...(contentType !== undefined && { content_type: contentType }),
     ...(contentId !== undefined && { content_id: contentId }),
   }
+}
+
+function isBase64(text: string): boolean {
+  return text.length % 4 === 0 && BASE64_PATTERN.test(text)
 }
 
 function base64Of(bytes: Uint8Array): string {
