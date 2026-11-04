@@ -494,11 +494,32 @@ function attachmentOf(attachment: unknown, index: number): Record<string, unknow
       `attachments__${index}__${unsupportedKey}`
     )
   }
+  if (typeof filename !== 'string' || filename === '') {
+    throw invalid(
+      'invalid_attachment',
+      "An attachment needs a filename, such as 'invoice.pdf'.",
+      `attachments__${index}__filename`
+    )
+  }
   if (typeof content !== 'string' && !(content instanceof Uint8Array)) {
     throw invalid(
       'invalid_attachment',
       'An attachment needs content: a Buffer, a Uint8Array or a Base64 string.',
       `attachments__${index}__content`
+    )
+  }
+  if (contentType !== undefined && typeof contentType !== 'string') {
+    throw invalid(
+      'invalid_attachment',
+      "An attachment's contentType must be a string, such as 'application/pdf'.",
+      `attachments__${index}__contentType`
+    )
+  }
+  if (contentId !== undefined && typeof contentId !== 'string') {
+    throw invalid(
+      'invalid_attachment',
+      "An attachment's contentId must be a string.",
+      `attachments__${index}__contentId`
     )
   }
   return {

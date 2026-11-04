@@ -634,6 +634,18 @@ describe('emails', () => {
       ["a file's bytes in place of an attachment", [Buffer.from('%PDF')], 'attachments__0'],
       ['a Base64 string in place of an attachment', ['JVBERi0='], 'attachments__0'],
       ['an attachment whose content is a number', [{ filename: 'a.txt', content: 42 }], 'attachments__0__content'],
+      ['an attachment without a filename', [{ content: 'YQ==' }], 'attachments__0__filename'],
+      ['an attachment with an empty filename', [{ filename: '', content: 'YQ==' }], 'attachments__0__filename'],
+      [
+        'an attachment whose contentType is not a string',
+        [{ filename: 'a.txt', content: 'YQ==', contentType: {} }],
+        'attachments__0__contentType',
+      ],
+      [
+        'an attachment whose contentId is not a string',
+        [{ filename: 'logo.png', content: 'AA==', contentId: 7 }],
+        'attachments__0__contentId',
+      ],
       [
         'an attachment with a key it does not take',
         [{ filename: 'logo.png', content: 'AA==', content_id: 'logo' }],
