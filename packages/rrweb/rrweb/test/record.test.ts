@@ -2461,6 +2461,35 @@ describe('record iframes', function (this: ISuite) {
     ]);
   });
 
+  it('captures each iframe mutation once after repeated full snapshots', async () => {
+    await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+    });
+    await waitForRAF(ctx.page);
+    for (let i = 0; i < 3; i++) {
+      await ctx.page.evaluate(() => {
+        (window as unknown as IWindow).rrweb.record.takeFullSnapshot(true);
+      });
+      await waitForRAF(ctx.page);
+    }
+    ctx.events = [];
+    await ctx.page.evaluate(() => {
+      document
+        .querySelector('iframe')!
+        .contentDocument!.querySelector('button')!.firstChild!.textContent =
+        'changed once';
+    });
+    await waitForRAF(ctx.page);
+    const textEvents = ctx.events.filter(
+      (event) =>
+        event.type === EventType.IncrementalSnapshot &&
+        event.data.source === IncrementalSource.Mutation &&
+        event.data.texts.some((text) => text.value === 'changed once'),
+    );
+    expect(textEvents).toHaveLength(1);
+  });
+
   it('captures stylesheet mutations in iframes', async () => {
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;

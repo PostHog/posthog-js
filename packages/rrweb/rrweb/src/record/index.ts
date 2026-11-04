@@ -1031,11 +1031,19 @@ function record<T = eventWithTime>(
       );
     };
 
+    const observedIframeDocuments = new WeakSet<Document>();
     const loadListener = (iframeEl: HTMLIFrameElement) => {
       try {
+        const doc = iframeEl.contentDocument;
+        if (!doc || observedIframeDocuments.has(doc)) return;
         const iframeId = mirror.getId(iframeEl);
-        const cleanup = observe(iframeEl.contentDocument!);
-        if (typeof cleanup === 'function') {
+        const stopObserving = observe(doc);
+        if (typeof stopObserving === 'function') {
+          observedIframeDocuments.add(doc);
+          const cleanup = () => {
+            observedIframeDocuments.delete(doc);
+            stopObserving();
+          };
           handlers.push(cleanup);
           // Accumulate cleanups across iframe navigations.
           if (iframeId !== -1) {
