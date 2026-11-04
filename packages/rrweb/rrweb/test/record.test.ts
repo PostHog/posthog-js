@@ -9,6 +9,7 @@ import {
   eventWithTime,
   EventType,
   IncrementalSource,
+  MouseInteractions,
   NodeType,
   styleSheetRuleData,
   selectionData,
@@ -2488,6 +2489,86 @@ describe('record iframes', function (this: ISuite) {
         event.data.texts.some((text) => text.value === 'changed once'),
     );
     expect(textEvents).toHaveLength(1);
+
+    await ctx.page.evaluate(() => {
+      document
+        .querySelector('iframe')!
+        .contentDocument!.querySelector('button')!
+        .click();
+    });
+    await waitForRAF(ctx.page);
+    expect(
+      ctx.events.filter(
+        (event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.MouseInteraction &&
+          event.data.type === MouseInteractions.Click,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('captures iframe clicks after same-document rewrites and repeated checkouts', async () => {
+    await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+    });
+    await waitForRAF(ctx.page);
+
+    for (let rewrite = 0; rewrite < 2; rewrite++) {
+      const result = await ctx.page.evaluate(async () => {
+        const iframe = document.querySelector('iframe')!;
+        const doc = iframe.contentDocument!;
+        let pagehides = 0;
+        iframe.contentWindow!.addEventListener('pagehide', () => pagehides++);
+        const loaded = new Promise<void>((resolve) =>
+          iframe.addEventListener('load', () => resolve(), { once: true }),
+        );
+        doc.open();
+        doc.write(
+          '<!DOCTYPE html><html><body><button>Rewritten</button></body></html>',
+        );
+        doc.close();
+        await loaded;
+        return { sameDocument: doc === iframe.contentDocument, pagehides };
+      });
+      expect(result).toEqual({ sameDocument: true, pagehides: 0 });
+      await waitForRAF(ctx.page);
+      for (let checkout = 0; checkout < 3; checkout++) {
+        await ctx.page.evaluate(() => {
+          (window as unknown as IWindow).rrweb.record.takeFullSnapshot(true);
+        });
+        await waitForRAF(ctx.page);
+      }
+
+      ctx.events = [];
+      const frame = (await ctx.page.$('iframe'))!;
+      const content = (await frame.contentFrame())!;
+      await content.click('button');
+      await content.click('button');
+      await waitForRAF(ctx.page);
+      expect(
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.MouseInteraction &&
+            event.data.type === MouseInteractions.Click,
+        ),
+      ).toHaveLength(2);
+
+      await content.evaluate(() => {
+        document.querySelector('button')!.firstChild!.textContent =
+          'rewritten once';
+      });
+      await waitForRAF(ctx.page);
+      expect(
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.Mutation &&
+            event.data.texts.some((text) => text.value === 'rewritten once'),
+        ),
+      ).toHaveLength(1);
+    }
   });
 
   it('captures stylesheet mutations in iframes', async () => {

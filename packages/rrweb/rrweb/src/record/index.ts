@@ -1031,18 +1031,40 @@ function record<T = eventWithTime>(
       );
     };
 
-    const observedIframeDocuments = new WeakSet<Document>();
+    const observedIframeDocuments = new WeakMap<Document, () => boolean>();
     const loadListener = (iframeEl: HTMLIFrameElement) => {
       try {
         const doc = iframeEl.contentDocument;
         const iframeId = mirror.getId(iframeEl);
-        if (!doc || (iframeId !== -1 && observedIframeDocuments.has(doc)))
-          return;
+        if (!doc) return;
+        const isObserved = observedIframeDocuments.get(doc);
+        if (iframeId !== -1 && isObserved) {
+          if (isObserved()) return;
+          runAndDetachIframeCleanup?.(iframeId);
+        }
         const stopObserving = observe(doc);
         if (typeof stopObserving === 'function') {
-          if (iframeId !== -1) observedIframeDocuments.add(doc);
+          // document.open() keeps the Document but clears its event listeners.
+          let listening = false;
+          const stopChecking = on(
+            'rrweb-check-iframe-observers',
+            () => {
+              listening = true;
+            },
+            doc,
+          );
+          if (iframeId !== -1) {
+            observedIframeDocuments.set(doc, () => {
+              listening = false;
+              const event = doc.createEvent('Event');
+              event.initEvent('rrweb-check-iframe-observers', false, false);
+              doc.dispatchEvent(event);
+              return listening;
+            });
+          }
           const cleanup = () => {
             observedIframeDocuments.delete(doc);
+            stopChecking();
             stopObserving();
           };
           handlers.push(cleanup);
