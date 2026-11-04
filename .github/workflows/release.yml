@@ -2089,10 +2089,10 @@ jobs:
         permissions:
             contents: read
         steps:
+            # The dispatched ref, which release-context checked is a maintenance branch.
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  ref: ${{ needs.release-context.outputs.branch }}
                   fetch-depth: 0
                   persist-credentials: false
 
