@@ -251,6 +251,33 @@ describe('flags v2', () => {
         expectedError: 'flag_missing',
       },
       {
+        case: 'response without flags',
+        status: 200,
+        json: vi.fn().mockResolvedValue({ errorsWhileComputingFlags: false, requestId: 'request-id' }),
+        expectedError: 'flag_missing',
+      },
+      {
+        case: 'response with null flags',
+        status: 200,
+        json: vi.fn().mockResolvedValue({ flags: null, errorsWhileComputingFlags: false, requestId: 'request-id' }),
+        expectedError: 'unknown_error',
+      },
+      {
+        case: 'response with string flags',
+        status: 200,
+        json: vi.fn().mockResolvedValue({ flags: 'not-an-object', errorsWhileComputingFlags: false }),
+        expectedError: 'unknown_error',
+      },
+      {
+        case: 'response with array flags',
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          flags: [{ key: 'error-flag', enabled: true, variant: undefined, reason: undefined, metadata: {} }],
+          errorsWhileComputingFlags: false,
+        }),
+        expectedError: 'unknown_error',
+      },
+      {
         case: 'network error',
         status: undefined,
         json: vi.fn(),
@@ -290,6 +317,30 @@ describe('flags v2', () => {
 
       it('getFeatureFlagPayload returns undefined', async () => {
         expect(await posthog.getFeatureFlagPayload('error-flag', 'some-distinct-id')).toBe(undefined)
+      })
+
+      it('getFeatureFlagResult returns undefined', async () => {
+        expect(await posthog.getFeatureFlagResult('error-flag', 'some-distinct-id')).toBe(undefined)
+      })
+
+      it('evaluateFlags returns an empty snapshot', async () => {
+        const flags = await posthog.evaluateFlags('some-distinct-id')
+        expect(flags.keys).toEqual([])
+        expect(flags.isEnabled('error-flag')).toBe(false)
+        expect(flags.getFlag('error-flag')).toBe(undefined)
+      })
+
+      it('capture with sendFeatureFlags sends the event without flag properties', async () => {
+        let capturedMessage: any
+        posthog.on('capture', (message) => {
+          capturedMessage = message
+        })
+
+        posthog.capture({ distinctId: 'some-distinct-id', event: 'test-event', sendFeatureFlags: true })
+        await waitForPromises()
+        expect(capturedMessage).toBeDefined()
+        expect(capturedMessage.event).toBe('test-event')
+        expect(Object.keys(capturedMessage.properties).filter((key) => key.startsWith('$feature/'))).toEqual([])
       })
 
       it('getAllFlags returns empty object', async () => {
