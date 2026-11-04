@@ -362,7 +362,8 @@ describe('PostHogGenkitSpanProcessor', () => {
 
   it('uses the distinct ID from the PostHog context', async () => {
     const posthog = new PostHog('phc_test', { host: 'http://127.0.0.1:9', flushAt: 1000 })
-    const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+    // posthog-node 6 sends AI events through captureAi.
+    const capture = vi.spyOn(posthog, 'captureAi').mockImplementation(() => undefined)
     processor = new PostHogGenkitSpanProcessor({ client: posthog })
 
     await posthog.withContext({ distinctId: 'context_user' }, () => createWeatherFlow()('Paris'))

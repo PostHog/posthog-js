@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks'
 import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base'
 import { PostHog } from 'posthog-node'
+import type { MockInstance } from 'vitest'
 import { PostHogGenkitSpanProcessor, type PostHogGenkitSpanProcessorOptions } from '../src/genkit'
 
 const spanKinds = [
@@ -12,7 +13,7 @@ const spanKinds = [
 
 describe('PostHogGenkitSpanProcessor with a custom OpenTelemetry provider', () => {
   let client: PostHog
-  let capture: ReturnType<typeof vi.spyOn<PostHog, 'capture'>>
+  let capture: MockInstance<Parameters<PostHog['captureAi']>, ReturnType<PostHog['captureAi']>>
   let providers: BasicTracerProvider[]
 
   function tracer(options: Omit<PostHogGenkitSpanProcessorOptions, 'client'> = {}) {
@@ -25,7 +26,8 @@ describe('PostHogGenkitSpanProcessor with a custom OpenTelemetry provider', () =
 
   beforeEach(() => {
     client = new PostHog('phc_test', { host: 'http://127.0.0.1:9', flushAt: 1000, flushInterval: 0 })
-    capture = vi.spyOn(client, 'capture').mockImplementation(() => {})
+    // posthog-node 6 sends AI events through captureAi.
+    capture = vi.spyOn(client, 'captureAi').mockImplementation(() => undefined)
     providers = []
   })
 
