@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.445.3
+
+### Patch Changes
+
+- [#5521](https://github.com/PostHog/posthog-js/pull/5521) [`a265612`](https://github.com/PostHog/posthog-js/commit/a265612621f6d8dd0eae5e2ba9bb6fd4dfe251d3) Thanks [@phillram](https://github.com/phillram)! - Web experiments that run on a feature flag now honor each variant's URL conditions, so a variant only changes the pages it targets.
+  (2026-11-04)
+
 ## 1.445.2
 
 ### Patch Changes
