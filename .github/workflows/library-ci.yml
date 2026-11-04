@@ -587,3 +587,25 @@ jobs:
           WRITE_MANGLED_PROPERTIES: 1
 
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
+
+  generate-references:
+    # Runs the generator the release workflow uses, so a doc comment or type that breaks it
+    # surfaces on the PR instead of blocking the release.
+    name: Generate references
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Generate Markdown SDK references
+        env:
+          SDK_SPECS: ${{ runner.temp }}/sdk-specs
+        run: |
+          git clone --depth 1 https://github.com/PostHog/sdk-specs "$SDK_SPECS"
+          pnpm generate-references

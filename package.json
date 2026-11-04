@@ -40,6 +40,7 @@
         "check:package-tarballs": "node scripts/check-package-tarballs.js",
         "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package",
         "bump": "pnpm changeset version",
+        "generate-references": "pnpm turbo --filter='posthog-js^...' --filter='posthog-node^...' --filter='posthog-react-native^...' build && node scripts/generate-sdk-reference.mjs browser && node scripts/generate-sdk-reference.mjs node && node scripts/generate-sdk-reference.mjs react-native",
         "test:rrweb-dev-watch": "node --test scripts/rrweb-dev-watch.test.mjs"
     },
     "devDependencies": {
@@ -63,6 +64,8 @@
         "rollup-plugin-visualizer": "^7.1.1",
         "ts-node": "^10.9.2",
         "turbo": "^2.9.16",
+        "typedoc": "0.28.20",
+        "typedoc-plugin-markdown": "4.14.1",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }

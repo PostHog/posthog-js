@@ -144,6 +144,9 @@ pnpm package
 # Watch mode - auto-regenerate tarballs on changes
 pnpm package:watch
 
+# Generate the Markdown SDK references (SDK_SPECS is a PostHog/sdk-specs checkout)
+SDK_SPECS=../sdk-specs pnpm generate-references
+
 # Clean all build artifacts
 pnpm clean
 
