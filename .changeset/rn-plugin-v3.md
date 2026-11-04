@@ -3,7 +3,7 @@
 'posthog-react-native': patch
 ---
 
-Release `@posthog/react-native-plugin` 3.0, with the upgrade steps in the [migration guide](https://github.com/PostHog/posthog-js/blob/main/packages/react-native-plugin/MIGRATION.md); `posthog-react-native` needs only the last entry
+Release `@posthog/react-native-plugin` 3.0, with the upgrade steps in the [migration guide](https://github.com/PostHog/posthog-js/blob/main/packages/react-native-plugin/MIGRATION.md); `posthog-react-native` needs only the last two entries
 
 - **Breaking:** require React Native 0.75 or later
 - **Breaking:** require iOS 15 or later and macOS 11 or later
@@ -13,9 +13,11 @@ Release `@posthog/react-native-plugin` 3.0, with the upgrade steps in the [migra
 - **Breaking:** remove the legacy `start()` method — call `setup()` instead
 - **Breaking:** ignore `iOSdebouncerDelayMs` and `androidDebouncerDelayMs` when calling `setup()` directly — pass `throttleDelayMs` instead
 - **Breaking:** ignore the experimental iOS session replay option `screenshotModeBackgroundCapture`
+- **Breaking:** require posthog-android 4.0
+- Always record Android session replay as masked screenshots, the mode the plugin already used
 - Accept `projectToken` as well as `apiKey` in `setup()` options on Android
-- Treat the plugin's `start()` method as optional in `posthog-react-native`
-- Deprecate `screenshotModeBackgroundCapture` in `posthog-react-native`
 - Always record iOS session replay as masked screenshots, the mode the plugin already used
 - Pause iOS native uploads (session replay, native crash reports) while cellular data is turned off for the app, instead of sending requests that fail
 - Stop bundling posthog-ios's native surveys in apps that use React Native's Swift Package Manager integration
+- Treat the plugin's `start()` method as optional in `posthog-react-native`
+- Deprecate `screenshotModeBackgroundCapture` in `posthog-react-native`

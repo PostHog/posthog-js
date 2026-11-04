@@ -158,7 +158,7 @@ class PosthogReactNativePluginModule(
               addBeforeSend { restoreJsFatalCaptureProperties(it) }
 
               // Always apply the session replay configuration so that recording started later
-              // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
+              // (e.g. startRecording or a linked feature flag) uses the right masking;
               // sessionReplayEnabled only controls whether recording starts at setup.
               val maskAllTextInputs = getBoolean(sdkReplayConfig, "maskAllTextInputs", DEFAULT_MASK_ALL_TEXT_INPUTS)
               val maskAllImages = getBoolean(sdkReplayConfig, "maskAllImages", DEFAULT_MASK_ALL_IMAGES)
@@ -167,7 +167,6 @@ class PosthogReactNativePluginModule(
               val throttleDelayMs = getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
 
               sessionReplay = sessionReplayEnabled
-              sessionReplayConfig.screenshot = true
               sessionReplayConfig.captureTouches = getBoolean(sdkReplayConfig, "captureTouches", true)
               sessionReplayConfig.captureLogcat = captureLog
               sessionReplayConfig.throttleDelayMs = throttleDelayMs.toLong()

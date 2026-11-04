@@ -13,7 +13,7 @@ If you only use the plugin through `posthog-react-native`, you don't need any Ja
 | `posthog-ios` version                               | 3.x                                                             | 4.0                   |
 | Xcode                                               | Set by `posthog-ios` 3.x                                        | 26 or later           |
 
-Android `minSdk` stays at 23. `posthog-react-native` still accepts this plugin through its optional `>= 2.12.7` peer range, and 4.47.0 is the first version that loads the plugin.
+Android `minSdk` stays at 23, and the plugin now requires `posthog-android` 4.0. `posthog-react-native` still accepts this plugin through its optional `>= 2.12.7` peer range, and 4.47.0 is the first version that loads the plugin.
 
 Expo SDK 52 is the first Expo SDK that meets the React Native and iOS requirements. The Expo config plugin needs no changes.
 
@@ -73,6 +73,10 @@ The plugin is still a CocoaPod, but it no longer depends on the `PostHog` pod. R
 - **Custom dSYM upload scripts can stop working.** `${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh` no longer exists. Use `${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh`. The `uploadNativeSymbols` build phase from the Expo config plugin already checks both paths.
 - **Remove `posthog-react-native-session-replay` if you still have it.** Its pod brings in `posthog-ios` from CocoaPods alongside the plugin's Swift package, and that combination is untested.
 
+### `posthog-android` 4.0
+
+If native code in your app calls `posthog-android` directly, it must handle the 4.0 API removals listed in the `posthog-android` changelog.
+
 ## API changes
 
 These apply only if your code calls the plugin directly.
@@ -109,6 +113,10 @@ sdkReplayConfig: { throttleDelayMs: 500 }
 
 **If ignored:** replay silently uses the 1000 ms default.
 
+### Android session replay records only masked screenshots
+
+`posthog-android` 4.0 removes wireframe capture. The plugin already forced screenshot mode, so your recordings don't change. If native code in your app sets `sessionReplayConfig.screenshot`, remove it, because it no longer compiles.
+
 ### `screenshotModeBackgroundCapture` is ignored on iOS
 
 This experimental option no longer has any effect, and screenshots are captured on the main thread. `posthog-react-native` still accepts the option, so nothing warns you. Remove it from `sessionReplayConfig`.
@@ -128,12 +136,6 @@ Apps on React Native's full Swift Package Manager integration no longer bundle t
 ## New in 3.0
 
 - Android `setup()` accepts `projectToken` as well as `apiKey` in `sdkOptions`, matching iOS. `apiKey` still works.
-
-## Native SDK 4.0: not merged yet
-
-<!-- Before release: finish #5476, move what shipped into the sections above, and delete this heading. -->
-
-Moving to `posthog-android` 4.0 is proposed ([#5476](https://github.com/PostHog/posthog-js/pull/5476)). That PR is open and could change, and this branch still pins `posthog-android` 3.74.2. If it lands as written, native code in your app that calls `posthog-android` directly must handle its 4.0 API removals.
 
 ## Checklist
 
