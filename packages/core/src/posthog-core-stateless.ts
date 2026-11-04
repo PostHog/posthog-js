@@ -15,6 +15,7 @@ import {
   PostHogV2FlagsResponse,
   PostHogV1FlagsResponse,
   PostHogFeatureFlagDetails,
+  PostHogFeatureFlagsResponse,
   FeatureFlagDetail,
   SurveyResponse,
   PostHogFetchResponse,
@@ -413,6 +414,22 @@ export abstract class PostHogCoreStateless {
     return undefined
   }
 
+  /**
+   * The `/flags` response version this client requests, sent as the `v` query parameter.
+   * Clients request `v=2` unless they override this together with {@link readFlagsResponse},
+   * which must read the response that version selects. This is an SDK seam, not a user option.
+   */
+  protected getFlagsResponseVersion(): 2 | 4 {
+    return 2
+  }
+
+  /**
+   * Reads a `/flags` response body. The default reads the v1 and v2 responses.
+   */
+  protected readFlagsResponse(body: unknown): PostHogFeatureFlagsResponse {
+    return normalizeFlagsResponse(body as PostHogV1FlagsResponse | PostHogV2FlagsResponse)
+  }
+
   // This is our abstracted storage. Each implementation should handle its own
   abstract getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined
   abstract setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void
@@ -807,7 +824,7 @@ export abstract class PostHogCoreStateless {
     await this._initPromise
 
     const configParam = fetchConfig ? '&config=true' : ''
-    const url = `${this.host}/flags/?v=2${configParam}`
+    const url = `${this.host}/flags/?v=${this.getFlagsResponseVersion()}${configParam}`
     const requestData: Record<string, any> = {
       token: this.projectToken,
       distinct_id: distinctId,
@@ -857,7 +874,7 @@ export abstract class PostHogCoreStateless {
       { retryCount: this.featureFlagsRequestMaxRetries, retryCheck: isRetryableFlagsFetchError },
       this.featureFlagsRequestTimeoutMs
     )
-      .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
+      .then((response) => ({ success: true as const, response: this.readFlagsResponse(response) }))
       .catch((error): GetFlagsResult => {
         this._events.emit('error', error)
         return { success: false, error: this.categorizeRequestError(error) }
