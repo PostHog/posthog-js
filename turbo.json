@@ -119,11 +119,6 @@
         "dev": {
             "cache": false,
             "persistent": true
-        },
-        "generate-references": {
-            "dependsOn": ["build"],
-            "cache": false,
-            "env": ["GENERATE_VERSIONED_REFERENCES"]
         }
     }
 }

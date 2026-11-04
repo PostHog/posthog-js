@@ -66,8 +66,6 @@ jobs:
           pnpm test:rrweb-package-exports
           pnpm test:rrweb-consumers
 
-      - run: pnpm test:docs-scripts
-
       - name: Test development watchers
         timeout-minutes: 10
         run: pnpm test:dev-watch
@@ -589,24 +587,3 @@ jobs:
           WRITE_MANGLED_PROPERTIES: 1
 
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
-
-  generate-references:
-    # Runs the same api-extractor pipeline the release workflow uses to bump
-    # versions, so type-extraction breakages (e.g. unresolved DOM globals in
-    # `@posthog/core` types when extracted from a non-DOM tsconfig) surface
-    # on the PR instead of blocking the release.
-    name: Generate references
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Setup environment
-        uses: ./.github/actions/setup
-        with:
-          build: false
-      - name: Generate public API references
-        run: pnpm generate-references
-
-      - name: Check public API references
-        run: pnpm check:public-api
