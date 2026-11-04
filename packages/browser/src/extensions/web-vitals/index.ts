@@ -101,6 +101,16 @@ export class WebVitalsAutocapture {
         return clientConfig || DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS
     }
 
+    private get _flushOnPageHide(): boolean {
+        const clientConfig = isObject(this._perfConfig) ? this._perfConfig.web_vitals_flush_on_page_hide : undefined
+        if (isBoolean(clientConfig)) {
+            return clientConfig
+        }
+
+        const defaults = this._instance.config.defaults
+        return !!(defaults && defaults !== 'unset' && defaults >= '2026-11-04')
+    }
+
     // The metrics we capture attribution for. `true` attributes all metrics, `false` none,
     // an array names them explicitly, and the default attributes INP and LCP only.
     public get attributionMetrics(): SupportedWebVitalsMetrics[] {
@@ -244,6 +254,10 @@ export class WebVitalsAutocapture {
     }
 
     private _flushToCapture = (onPageHide = false) => {
+        if (onPageHide && !this._flushOnPageHide) {
+            return
+        }
+
         clearTimeout(this._delayedFlushTimer)
         this._delayedFlushTimer = undefined
         if (this._buffer.metrics.length === 0) {

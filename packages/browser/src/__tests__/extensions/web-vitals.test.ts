@@ -5,6 +5,7 @@ import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../../posthog-core'
 import {
+    ConfigDefaults,
     FlagsResponse,
     PerformanceCaptureConfig,
     PostHogConfig,
@@ -259,7 +260,51 @@ describe('web vitals', () => {
                 ])
             })
 
+            it.each<[ConfigDefaults | undefined, boolean | undefined, boolean]>([
+                [undefined, undefined, false],
+                ['unset', undefined, false],
+                ['2026-08-30', undefined, false],
+                ['2026-11-04', undefined, true],
+                ['latest', undefined, true],
+                ['unset', true, true],
+                ['2026-08-30', true, true],
+                ['2026-11-04', false, false],
+                ['latest', false, false],
+            ])('uses defaults %s and page-hide option %s (flushes: %s)', (defaults, flushOnPageHide, shouldFlush) => {
+                posthog.set_config({
+                    defaults,
+                    capture_performance: {
+                        web_vitals: true,
+                        web_vitals_allowed_metrics: clientConfig,
+                        web_vitals_flush_on_page_hide: flushOnPageHide,
+                    },
+                })
+                const captureSpy = vi.spyOn(posthog, 'capture')
+                const visibilityState = vi.spyOn(document, 'visibilityState', 'get')
+                try {
+                    onCLSCallback?.({ name: 'CLS', value: 123.45 })
+                    vi.advanceTimersByTime(1000)
+                    visibilityState.mockReturnValue('hidden')
+                    document.dispatchEvent(new Event('visibilitychange'))
+                    window.dispatchEvent(new Event('pagehide'))
+
+                    const webVitalsCalls = () => captureSpy.mock.calls.filter(([event]) => event === '$web_vitals')
+                    expect(webVitalsCalls()).toHaveLength(shouldFlush ? 1 : 0)
+                    vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS - 1001)
+                    expect(webVitalsCalls()).toHaveLength(shouldFlush ? 1 : 0)
+                    vi.advanceTimersByTime(1)
+                    expect(webVitalsCalls()).toHaveLength(1)
+                    expect(webVitalsCalls()[0][2]).toEqual(
+                        shouldFlush ? { send_instantly: true, transport: 'sendBeacon' } : undefined
+                    )
+                } finally {
+                    visibilityState.mockRestore()
+                    captureSpy.mockRestore()
+                }
+            })
+
             it('flushes a pending web vital immediately on pagehide without resending on the timer (#5318)', () => {
+                ;(posthog.config.capture_performance as PerformanceCaptureConfig).web_vitals_flush_on_page_hide = true
                 const captureSpy = vi.spyOn(posthog, 'capture')
                 try {
                     onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
@@ -280,6 +325,7 @@ describe('web vitals', () => {
             })
 
             it('flushes on visibilitychange to hidden, but not on visible (#5318)', () => {
+                ;(posthog.config.capture_performance as PerformanceCaptureConfig).web_vitals_flush_on_page_hide = true
                 const captureSpy = vi.spyOn(posthog, 'capture')
                 const visibilityState = vi.spyOn(document, 'visibilityState', 'get')
                 try {

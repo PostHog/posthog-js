@@ -360,7 +360,8 @@ describe('config', () => {
             ['unset', 'unset'],
             ['2025-05-24', '2025-05-24'],
             ['2026-08-30', '2026-08-30'],
-            ['latest', '2026-08-30'],
+            ['2026-11-04', '2026-11-04'],
+            ['latest', '2026-11-04'],
         ] as const)('reports the applied defaults in event properties for %s', (defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', { defaults })
@@ -373,7 +374,7 @@ describe('config', () => {
             const posthog = new PostHog()
             posthog._init('test-token', { defaults: 'latest' })
 
-            expect(posthog.calculateEventProperties('$snapshot', {}).$config_defaults).toBe('2026-08-30')
+            expect(posthog.calculateEventProperties('$snapshot', {}).$config_defaults).toBe('2026-11-04')
         })
 
         it('preserves explicit overrides with the latest defaults', () => {

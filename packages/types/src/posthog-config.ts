@@ -270,6 +270,17 @@ export interface PerformanceCaptureConfig {
     web_vitals_delayed_flush_ms?: number
 
     /**
+     * Flush buffered web vitals immediately when the page becomes hidden or `pagehide` fires.
+     * This captures measurements that could otherwise be lost when the page closes, but can
+     * send multiple `$web_vitals` events per page visit as metric values change between hides.
+     * Set to `false` to keep the delayed flush behavior, at the risk of losing final measurements.
+     * An explicit value overrides the configuration defaults date.
+     *
+     * @default false before the `2026-11-04` defaults, otherwise true
+     */
+    web_vitals_flush_on_page_hide?: boolean
+
+    /**
      * Which web vitals metrics include attribution data. Attribution names the
      * cause of a metric, such as the slow interaction target for INP or the load-phase
      * breakdown for LCP, which is what makes a slow number diagnosable.
@@ -487,6 +498,7 @@ export interface HeatmapConfig {
 }
 
 export const CONFIG_DEFAULTS_DATES = Object.freeze([
+    '2026-11-04',
     '2026-08-30',
     '2026-08-29',
     '2026-06-25',
@@ -1983,6 +1995,7 @@ export interface PostHogConfig {
      * - `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)
      * - `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)
      * - `'2026-08-30'`: Defaults from '2026-08-29' plus `session_recording.captureJsonLd` defaults to `true`
+     * - `'2026-11-04'`: Defaults from '2026-08-30' plus `capture_performance.web_vitals_flush_on_page_hide` defaults to `true`
      *
      * @default 'unset'
      */

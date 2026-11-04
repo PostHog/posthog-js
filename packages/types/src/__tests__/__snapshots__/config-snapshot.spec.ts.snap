@@ -546,6 +546,7 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
   \\"properties_string_max_length\\": \\"number\\",
   \\"defaults\\": [
     \\"\\\\\\"latest\\\\\\"\\",
+    \\"\\\\\\"2026-11-04\\\\\\"\\",
     \\"\\\\\\"2026-08-30\\\\\\"\\",
     \\"\\\\\\"2026-08-29\\\\\\"\\",
     \\"\\\\\\"2026-06-25\\\\\\"\\",
@@ -892,6 +893,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
       \\"web_vitals_delayed_flush_ms\\": [
         \\"undefined\\",
         \\"number\\"
+      ],
+      \\"web_vitals_flush_on_page_hide\\": [
+        \\"undefined\\",
+        \\"false\\",
+        \\"true\\"
       ],
       \\"web_vitals_attribution\\": [
         \\"undefined\\",
