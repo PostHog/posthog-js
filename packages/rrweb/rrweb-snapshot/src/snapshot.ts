@@ -783,7 +783,9 @@ function serializeTextNode(
   const parentTagName = parent && (parent as HTMLElement).tagName;
   let text = dom.textContent(n);
   const isStyle = parentTagName === 'STYLE' ? true : undefined;
-  const isScript = parentTagName === 'SCRIPT' ? true : undefined;
+  const isScript =
+    typeof parentTagName === 'string' &&
+    parentTagName.toUpperCase() === 'SCRIPT';
   if (isStyle && text) {
     try {
       // try to read style sheet
@@ -827,7 +829,7 @@ function serializeTextNode(
   }
 
   return {
-    type: n.nodeType === n.CDATA_SECTION_NODE ? NodeType.CDATA : NodeType.Text,
+    type: NodeType.Text,
     textContent: text || '',
     isStyle,
     rootId,

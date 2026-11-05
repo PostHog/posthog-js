@@ -281,18 +281,74 @@ describe('CDATA text content', () => {
     return node;
   };
 
-  it('preserves CDATA content and its serialized node type', () => {
+  it('preserves CDATA content as a text record for older readers', () => {
     expect(serializeNode(createCDATA())).toMatchObject({
-      type: NodeType.CDATA,
+      type: NodeType.Text,
       textContent: 'private <value>',
     });
   });
 
   it('applies the existing text masking rules to CDATA', () => {
     expect(serializeNode(createCDATA(true))).toMatchObject({
-      type: NodeType.CDATA,
+      type: NodeType.Text,
       textContent: '******* *******',
     });
+  });
+
+  it('keeps imported SVG CDATA script source out of snapshots', () => {
+    const svg = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg"><script type="application/json">' +
+        '<![CDATA[{"email":"cdata-private@example.invalid"}]]></script></svg>',
+      'image/svg+xml',
+    );
+    const imported = svg.documentElement;
+    document.body.appendChild(imported);
+    expect(imported.querySelector('script')!.firstChild!.nodeType).toBe(
+      Node.CDATA_SECTION_NODE,
+    );
+    expect(
+      JSON.stringify(snapshot(document, { slimDOM: false })),
+    ).not.toContain('cdata-private@example.invalid');
+  });
+
+  it.each(['HTML', 'SVG'])('suppresses %s script text and CDATA', (type) => {
+    const xml = document.implementation.createDocument(null, 'root');
+    const script =
+      type === 'HTML'
+        ? document.createElement('script')
+        : document.createElementNS('http://www.w3.org/2000/svg', 'script');
+    script.setAttribute('type', 'application/json');
+    script.append(
+      document.createTextNode('private text'),
+      xml.createCDATASection('private CDATA'),
+    );
+    document.body.appendChild(script);
+
+    expect(snapshot(script, { slimDOM: false })).toMatchObject({
+      childNodes: [
+        { type: NodeType.Text, textContent: 'SCRIPT_PLACEHOLDER' },
+        { type: NodeType.Text, textContent: 'SCRIPT_PLACEHOLDER' },
+      ],
+    });
+    expect(snapshot(script, { slimDOM: { script: true } })).toBeNull();
+  });
+
+  it('masks and blocks imported SVG CDATA', () => {
+    const svg = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg"><text>' +
+        '<![CDATA[private <value>]]></text></svg>',
+      'image/svg+xml',
+    ).documentElement;
+    document.body.appendChild(svg);
+    svg.setAttribute('class', 'rr-mask');
+    expect(snapshot(svg)).toMatchObject({
+      childNodes: [{ childNodes: [{ textContent: '******* *******' }] }],
+    });
+    expect(snapshot(svg, { maskTextFn: () => 'hidden' })).toMatchObject({
+      childNodes: [{ childNodes: [{ textContent: 'hidden' }] }],
+    });
+    svg.setAttribute('class', 'rr-block');
+    expect(snapshot(svg)).toMatchObject({ childNodes: [] });
   });
 });
 

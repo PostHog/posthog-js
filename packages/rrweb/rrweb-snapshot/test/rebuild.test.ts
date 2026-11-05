@@ -4,7 +4,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { beforeEach, describe, expect as _expect, it, vi } from 'vitest';
-import {
+import rebuild, {
   adaptCssForReplay,
   buildNodeWithSN,
   createCache,
@@ -70,6 +70,24 @@ describe('rebuild', function () {
       expect(node?.textContent).toBe('text <with> content');
     },
   );
+
+  it('rebuilds a full document with literal SVG CDATA and a later sibling', () => {
+    const source = document.implementation.createHTMLDocument();
+    const svg = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg"><text id="literal">' +
+        '<![CDATA[</svg>& this is not markup<svg/>]]></text>' +
+        '<text id="after">after</text></svg>',
+      'image/svg+xml',
+    ).documentElement;
+    source.body.appendChild(svg);
+    const doc = document.implementation.createHTMLDocument();
+    rebuild(snapshot(source)!, { doc });
+    expect(doc.querySelector('#literal')?.textContent).toBe(
+      '</svg>& this is not markup<svg/>',
+    );
+    expect(doc.querySelector('#literal')?.childElementCount).toBe(0);
+    expect(doc.querySelector('#after')?.textContent).toBe('after');
+  });
 
   describe('rr_dataURL', function () {
     it('should rebuild dataURL', function () {
@@ -158,6 +176,14 @@ describe('rebuild', function () {
   });
 
   describe('script placeholder', function () {
+    it('suppresses script placeholders in stored CDATA records', () => {
+      const node = buildNodeWithSN(
+        { id: 1, type: NodeType.CDATA, textContent: 'SCRIPT_PLACEHOLDER' },
+        { doc: document, mirror, hackCss: false, cache },
+      );
+      expect(node?.textContent).toBe('');
+    });
+
     it('suppresses script CDATA when rebuilding a shadow root', function () {
       const xml = document.implementation.createDocument(null, 'root');
       const host = document.createElement('div');
