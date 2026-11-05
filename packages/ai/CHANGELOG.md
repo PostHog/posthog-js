@@ -1,5 +1,22 @@
 # posthog-ai
 
+## 8.18.4
+
+### Patch Changes
+
+- [#5563](https://github.com/PostHog/posthog-js/pull/5563) [`b1bbf31`](https://github.com/PostHog/posthog-js/commit/b1bbf31ab34b99bca0da47ee031fc7b420504f19) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Keep the refusal text of OpenAI Responses API outputs instead of dropping it from the captured `$ai_output_choices`
+  (2026-11-05)
+
+- [#5555](https://github.com/PostHog/posthog-js/pull/5555) [`a129e9f`](https://github.com/PostHog/posthog-js/commit/a129e9f726c52aa9ab15db949c42b1292df21c84) Thanks [@smitp1402](https://github.com/smitp1402)! - Count Gemini Interactions tool-use tokens in the captured input tokens.
+  (2026-11-05)
+
+## 8.18.3
+
+### Patch Changes
+
+- [#5530](https://github.com/PostHog/posthog-js/pull/5530) [`9909fee`](https://github.com/PostHog/posthog-js/commit/9909feeefd495083690af31b4c77227c2778af2a) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix loading and constructing the OpenTelemetry span processor in bundled Cloudflare Workers.
+  (2026-11-03)
+
 ## 8.18.2
 
 ### Patch Changes
