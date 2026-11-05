@@ -260,6 +260,8 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
               content.push({ type: 'text', text: contentItem.text })
             } else if (contentItem.text) {
               content.push({ type: 'text', text: contentItem.text })
+            } else if (contentItem.type === 'refusal' && contentItem.refusal) {
+              content.push({ type: 'refusal', refusal: contentItem.refusal })
             } else if (contentItem.type === 'input_image' && contentItem.image_url) {
               content.push({
                 type: 'image',
@@ -308,6 +310,17 @@ export const buildInlineDataBlock = (
   return { type: 'document', inline_data: { mime_type: mimeType, data } }
 }
 
+export const uint8ArrayToBase64 = (data: Uint8Array): string => {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(data).toString('base64')
+  }
+  let binary = ''
+  for (let i = 0; i < data.length; i++) {
+    binary += String.fromCharCode(data[i])
+  }
+  return btoa(binary)
+}
+
 export const formatInlineDataBlock = (
   inlineData: { mimeType?: string; mime_type?: string; data?: unknown },
   client?: FullAiCaptureGate
@@ -316,15 +329,7 @@ export const formatInlineDataBlock = (
   let data = inlineData.data
 
   if (data instanceof Uint8Array) {
-    if (typeof Buffer !== 'undefined') {
-      data = Buffer.from(data).toString('base64')
-    } else {
-      let binary = ''
-      for (let i = 0; i < data.length; i++) {
-        binary += String.fromCharCode(data[i])
-      }
-      data = btoa(binary)
-    }
+    data = uint8ArrayToBase64(data)
   }
 
   data = isFullAiCaptureEnabled(client) ? data : redactBase64DataUrl(data, mimeType)

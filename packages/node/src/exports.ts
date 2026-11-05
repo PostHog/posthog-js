@@ -1,8 +1,21 @@
 export * from './extensions/sentry-integration'
 export * from './extensions/express'
 export * from './types'
+export { enrichCurrentSpan } from './extensions/context/listeners'
 
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
+export { EmailError } from './emails/errors'
+export type { EmailErrorName } from './emails/errors'
+export type {
+  EmailDeliveryStatus,
+  Emails,
+  EmailStatus,
+  EmailWarning,
+  GetEmailResponse,
+  SendEmailOptions,
+  SendEmailResponse,
+  SendEmailResult,
+} from './emails/types'
 export type {
   FlagDefinitionCacheData,
   FlagDefinitionCacheInput,

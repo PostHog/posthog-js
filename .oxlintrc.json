@@ -125,6 +125,12 @@
     },
     "overrides": [
         {
+            "files": ["packages/next/tests/**", "packages/next/vitest.config.ts"],
+            "rules": {
+                "compat/compat": "off"
+            }
+        },
+        {
             "files": ["compliance/node/v2/**"],
             "env": { "node": true },
             "rules": {

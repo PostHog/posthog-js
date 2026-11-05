@@ -134,6 +134,66 @@ describe('Gemini Interactions API', () => {
     })
   })
 
+  test('counts tool-use tokens as input tokens', async () => {
+    const { posthog, gemini } = setup()
+    const usage = {
+      total_input_tokens: 20,
+      total_output_tokens: 195,
+      total_tool_use_tokens: 2014,
+      total_tokens: 2229,
+    }
+    provider.create.mockResolvedValue({ ...textInteraction, usage })
+
+    await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Summarize this page' })
+
+    expect(captured(posthog).properties).toMatchObject({
+      $ai_input_tokens: 2034,
+      $ai_output_tokens: 195,
+      $ai_usage: usage,
+    })
+  })
+  test('counts tool-use tokens as input tokens in a stream', async () => {
+    const { posthog, gemini } = setup()
+    const usage = {
+      total_input_tokens: 20,
+      total_output_tokens: 195,
+      total_tool_use_tokens: 2014,
+      total_tokens: 2229,
+    }
+    const events = [
+      {
+        event_type: 'interaction.created',
+        interaction: { id: 'v1_tool_stream', model: 'gemini-3.8-flash', status: 'in_progress' },
+      },
+      { event_type: 'step.start', index: 0, step: { type: 'model_output' } },
+      { event_type: 'step.delta', index: 0, delta: { type: 'text', text: 'PostHog is an analytics tool.' } },
+      { event_type: 'step.stop', index: 0 },
+      {
+        event_type: 'interaction.completed',
+        interaction: { id: 'v1_tool_stream', model: 'gemini-3.8-flash', status: 'completed', usage },
+      },
+    ]
+    provider.create.mockResolvedValue(
+      (async function* () {
+        yield* events
+      })()
+    )
+
+    const stream = await gemini.interactions.create({
+      model: 'gemini-3.8-flash',
+      input: 'Summarize this page',
+      stream: true,
+    })
+    const received = []
+    for await (const event of stream) received.push(event)
+
+    expect(captured(posthog).properties).toMatchObject({
+      $ai_input_tokens: 2034,
+      $ai_output_tokens: 195,
+      $ai_usage: usage,
+    })
+  })
+
   test('does not invent a completion id for a stateless provider response', async () => {
     const { posthog, gemini } = setup()
     provider.create.mockResolvedValue({

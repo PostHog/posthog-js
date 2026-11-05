@@ -1,6 +1,6 @@
 {
     "name": "@posthog/browser-common",
-    "version": "0.9.11",
+    "version": "0.10.7",
     "description": "Internal shared browser utilities and extension primitives for PostHog Browser SDKs",
     "license": "MIT",
     "repository": {
@@ -251,6 +251,7 @@
     "dependencies": {
         "@posthog/core": "workspace:^",
         "@posthog/types": "workspace:^",
+        "dompurify": "^3.4.13",
         "preact": "^10.29.3"
     },
     "devDependencies": {

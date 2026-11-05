@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.57.2",
+  "version": "5.61.3",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -16,6 +16,7 @@
     "lint": "oxlint --report-unused-disable-directives-severity error src",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "test:unit": "vitest run",
+    "test:benchmarks": "node --expose-gc --test --test-isolation=none benchmarks/controls.mjs",
     "test:edge-compat": "vitest run --config vitest.edge.config.ts",
     "prebuild": "node ../../tooling/write-version.mjs",
     "build": "rslib build",
@@ -49,16 +50,17 @@
     "@edge-runtime/vm": "^5.0.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/context-async-hooks": "^2.2.0",
+    "@opentelemetry/sdk-trace-base": "^2.10.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog/types": "workspace:^",
     "@rslib/core": "catalog:",
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
     "esbuild": "^0.25.0",
-    "rxjs": "^7.8.0",
     "@vitest/coverage-v8": "catalog:",
-    "vitest": "catalog:",
-    "typescript": "catalog:native"
+    "rxjs": "^7.8.0",
+    "typescript": "catalog:native",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.2.0",
@@ -120,6 +122,12 @@
       "import": "./dist/experimental.mjs",
       "require": "./dist/experimental.js",
       "default": "./dist/experimental.js"
+    },
+    "./otel": {
+      "types": "./dist/entrypoints/otel.d.ts",
+      "import": "./dist/entrypoints/otel.mjs",
+      "require": "./dist/entrypoints/otel.js",
+      "default": "./dist/entrypoints/otel.js"
     }
   }
 }

@@ -22,6 +22,7 @@ import {
   calculateWebSearchCount,
   getModelParams,
   isPrivacyModeEnabled,
+  uint8ArrayToBase64,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
 import { redactBase64DataUrl, sanitizeVercel } from '../sanitization'
@@ -81,16 +82,84 @@ type OutputContentItem =
   | { type: 'file'; name: string; mediaType: string; data: string }
   | { type: 'source'; sourceType: string; id: string; url: string; title: string }
 
-const redactFileData = (data: unknown, mediaType?: string, client?: FullAiCaptureGate): string | undefined => {
+// Ingestion offloads only data URLs with a concrete type/subtype, so `image/*` or `audio/L16;rate=24000` would stay inline.
+const dataUrlMediaType = (mediaType?: string): string =>
+  mediaType && /^[\w.+-]+\/[\w.+-]+$/.test(mediaType) ? mediaType : 'application/octet-stream'
+
+// posthog-node drops an AI event over 8 MiB whole, tokens and cost included, so the files in one event share this
+// budget and the overflow gets the placeholder. The headroom is for the rest of the event.
+const MAX_EVENT_FILE_BYTES = 7.5 * 1024 * 1024
+
+type FileBudget = { remaining: number }
+
+const newFileBudget = (): FileBudget => ({ remaining: MAX_EVENT_FILE_BYTES })
+
+const fitsBudget = (length: number, budget: FileBudget): boolean => {
+  if (length > budget.remaining) {
+    return false
+  }
+  budget.remaining -= length
+  return true
+}
+
+// The redactor reads the original value, so an over-budget file gets the same placeholder however it arrived.
+const fullCaptureDataUrl = (dataUrl: string, original: unknown, budget: FileBudget, mediaType?: string): string =>
+  fitsBudget(dataUrl.length, budget) ? dataUrl : String(redactBase64DataUrl(original, mediaType))
+
+const redactFileData = (
+  data: unknown,
+  mediaType: string | undefined,
+  client: FullAiCaptureGate | undefined,
+  budget: FileBudget
+): string | undefined => {
+  if (data instanceof Uint8Array) {
+    if (!isFullAiCaptureEnabled(client)) {
+      return String(redactBase64DataUrl(data, mediaType))
+    }
+    const prefix = `data:${dataUrlMediaType(mediaType)};base64,`
+    if (!fitsBudget(prefix.length + Math.ceil(data.length / 3) * 4, budget)) {
+      return String(redactBase64DataUrl(data, mediaType))
+    }
+    return prefix + uint8ArrayToBase64(data)
+  }
   if (data instanceof URL) {
     return isFullAiCaptureEnabled(client)
-      ? data.toString()
+      ? fullCaptureDataUrl(data.toString(), data.toString(), budget, mediaType)
       : redactBase64DataUrl(data.toString(), data.protocol === 'data:' ? mediaType : undefined)
   }
   if (isString(data)) {
-    return isFullAiCaptureEnabled(client) ? data : redactBase64DataUrl(data, mediaType)
+    if (!isFullAiCaptureEnabled(client)) {
+      return redactBase64DataUrl(data, mediaType)
+    }
+    // The AI SDK strips data URLs down to bare base64, which ingestion can't type. Anything else, such as an
+    // OpenAI file ID, passes through as it is.
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+      return fullCaptureDataUrl(data, data, budget, mediaType)
+    }
+    return fullCaptureDataUrl(`data:${dataUrlMediaType(mediaType)};base64,${data}`, data, budget, mediaType)
   }
   return undefined
+}
+
+const mapOutputFile = (
+  item: { data: unknown; mediaType: string },
+  client: FullAiCaptureGate | undefined,
+  budget: FileBudget
+): OutputContentItem => {
+  // Handle files similar to input mapping - avoid large base64 data
+  let fileData = redactFileData(item.data, item.mediaType, client, budget) ?? `[binary ${item.mediaType} file]`
+
+  // Skipped under full AI capture: media stays untouched, so no placeholder swap either.
+  if (
+    !isFullAiCaptureEnabled(client) &&
+    typeof item.data === 'string' &&
+    fileData === item.data &&
+    item.data.length > 1000
+  ) {
+    fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
+  }
+
+  return { type: 'file', name: 'generated_file', mediaType: item.mediaType, data: fileData }
 }
 
 const mapVercelParams = (params: any): Record<string, any> => {
@@ -105,7 +174,11 @@ const mapVercelParams = (params: any): Record<string, any> => {
   }
 }
 
-const mapVercelPrompt = (messages: LanguageModelPrompt, client?: FullAiCaptureGate): PostHogInput[] => {
+const mapVercelPrompt = (
+  messages: LanguageModelPrompt,
+  client?: FullAiCaptureGate,
+  budget: FileBudget = newFileBudget()
+): PostHogInput[] => {
   // Map and truncate individual content
   const inputs: PostHogInput[] = messages.map((message) => {
     let content: any
@@ -129,7 +202,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt, client?: FullAiCaptureGa
             }
           } else if (c.type === 'file') {
             // Redact base64 data URLs and raw base64 to prevent oversized events
-            const fileData = redactFileData(c.data, c.mediaType, client) ?? 'raw files not supported'
+            const fileData = redactFileData(c.data, c.mediaType, client, budget) ?? 'raw files not supported'
 
             return {
               type: 'file',
@@ -219,7 +292,11 @@ const mapVercelPrompt = (messages: LanguageModelPrompt, client?: FullAiCaptureGa
   return inputs
 }
 
-const mapVercelOutput = (result: LanguageModelContent[], client?: FullAiCaptureGate): PostHogInput[] => {
+const mapVercelOutput = (
+  result: LanguageModelContent[],
+  client: FullAiCaptureGate | undefined,
+  budget: FileBudget
+): PostHogInput[] => {
   const content: OutputContentItem[] = result.map((item) => {
     if (item.type === 'text') {
       return { type: 'text', text: truncate(item.text, client) }
@@ -240,25 +317,7 @@ const mapVercelOutput = (result: LanguageModelContent[], client?: FullAiCaptureG
       return { type: 'reasoning', text: truncate(item.text, client) }
     }
     if (item.type === 'file') {
-      // Handle files similar to input mapping - avoid large base64 data
-      let fileData = redactFileData(item.data, item.mediaType, client) ?? `[binary ${item.mediaType} file]`
-
-      // Skipped under full AI capture: media stays untouched, so no placeholder swap either.
-      if (
-        !isFullAiCaptureEnabled(client) &&
-        typeof item.data === 'string' &&
-        fileData === item.data &&
-        item.data.length > 1000
-      ) {
-        fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
-      }
-
-      return {
-        type: 'file',
-        name: 'generated_file',
-        mediaType: item.mediaType,
-        data: fileData,
-      }
+      return mapOutputFile(item, client, budget)
     }
     if (item.type === 'source') {
       return {
@@ -527,8 +586,12 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           const modelId =
             mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
           const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
+          const fileBudget = newFileBudget()
+          // Privacy mode drops the output, so skip encoding its files.
           // result.content is undefined when the model returns only tool calls with no text output
-          const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[], phClient)
+          const content = privacyMode
+            ? []
+            : mapVercelOutput((result.content ?? []) as LanguageModelContent[], phClient, fileBudget)
           const latency = (Date.now() - startTime) / 1000
           const providerMetadata = result.providerMetadata
           const additionalTokenValues = extractAdditionalTokenValues(providerMetadata, result.usage)
@@ -581,7 +644,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...baseOptions,
             model: modelId,
             provider: provider,
-            input: privacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
+            input: privacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient, fileBudget),
             output: content,
             latency,
             baseURL,
@@ -640,6 +703,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         const availableTools = extractAvailableToolCalls('vercel', params)
         const baseURL = extractBaseURL(model)
 
+        const fileBudget = newFileBudget()
+        const generatedFiles: OutputContentItem[] = []
         // Map to track in-progress tool calls
         const toolCallsInProgress = new Map<
           string,
@@ -711,6 +776,16 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
               })
             }
 
+            if (chunk.type === 'file') {
+              if (firstTokenTime === undefined) {
+                firstTokenTime = Date.now()
+              }
+              // Mapped now so the stream never holds a raw payload that capture would redact or drop.
+              if (!privacyMode) {
+                generatedFiles.push(mapOutputFile(chunk, phClient, fileBudget))
+              }
+            }
+
             if (chunk.type === 'error') {
               hasInBandError = true
               inBandError = chunk.error
@@ -767,6 +842,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 }
               }
 
+              content.push(...generatedFiles)
+
               const output =
                 content.length > 0
                   ? [
@@ -797,7 +874,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 ...baseOptions,
                 model: modelId,
                 provider: provider,
-                input: privacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
+                input: privacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient, fileBudget),
                 output,
                 latency,
                 timeToFirstToken,

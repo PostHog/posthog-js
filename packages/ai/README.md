@@ -93,6 +93,28 @@ Stopping iteration finalizes the generation data received so far.
 When iterating manually, await the query's `return()` or `Symbol.asyncDispose` method before shutting down PostHog.
 The SDK's synchronous `close()` method also starts finalization; await `return()` afterward to wait for it.
 
+## Genkit
+
+`PostHogGenkitSpanProcessor` from `@posthog/ai/genkit` reads the OpenTelemetry spans that Genkit already creates.
+Pass it to Genkit's `enableTelemetry({ spanProcessors: [...] })` from `genkit/tracing`, or to your own OpenTelemetry SDK.
+
+With npm, install with `npm install --legacy-peer-deps`, or add `legacy-peer-deps=true` to `.npmrc`.
+Without it, npm stops with `ERESOLVE`: Genkit 1.x installs `@opentelemetry/exporter-trace-otlp-http` 0.52, and `@posthog/ai/otel` declares it as an optional peer `>=0.200.0`.
+The Genkit processor does not import OpenTelemetry, so the older version is safe. pnpm only warns.
+
+- The root span of a trace, usually a flow, becomes an `$ai_trace`.
+- Each model call becomes an `$ai_generation`. The provider and model come from the Genkit model name, for example `vertexai/gemini-2.5-flash`.
+- Each embedder call becomes an `$ai_embedding`, without the vectors. Genkit does not report embedding token counts, so these events have no cost.
+- Tool calls, `generate` steps and other Genkit actions become `$ai_span` events.
+
+The `googleai` and `vertexai` plugin names are sent as the `gemini` and `vertex` providers, the same names the other integrations use.
+A streamed model call gives one `$ai_generation` with the complete response.
+Model parameters include only the common sampling settings.
+In span input and output, credential fields such as `apiKey`, `authorization` and `headers` are replaced with `[REDACTED]`.
+When `distinctId` is not set, events use the distinct ID from `client.withContext()` when each span starts, even if it ends outside that context.
+In serverless functions, `await flushTracing()` from `genkit/tracing` before the function returns, so the PostHog client sends its queued events.
+Capture and flush failures never reach the Genkit flow. Pass `onError` to see them.
+
 ## Questions?
 
 ### [Check out our community page.](https://posthog.com/posts)
@@ -147,6 +169,14 @@ UUID before iteration. `snapshot.iterItems({ pageSize, signal })` fetches one pa
 repeated iteration starts again at the same revision. Keep the client open until reads finish.
 Use the snapshot's `revisionId` for the experiment, even when individual items were introduced
 in earlier revisions. Source output and trace provenance never become a new execution's output.
+
+Set `modelVersion` on `new EvaluationItem({ modelVersion, output })` or
+`EvaluationItem.fromDatasetItem(row, { modelVersion, output })` to identify the model used for
+that execution. Each item can override the experiment's `modelVersion`; omitted or null values
+inherit the experiment default on the server. Dataset metadata never supplies this model.
+Model identifiers must be nonempty strings of at most 255 characters and are preserved without
+trimming. Explicit models survive serialization, retries, and recovery. Changing a model requires
+a new item UUID because model attribution is part of the immutable execution declaration.
 
 `scorers` provides create/get/list/update/createVersion/getVersion/listVersions. Configurations
 are typed by `kind`: `boolean`, `numeric`, or `categorical`. Store `currentVersionId` to pin a

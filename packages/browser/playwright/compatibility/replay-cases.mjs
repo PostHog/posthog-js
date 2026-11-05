@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { decodeReplay } from './normalize.mjs'
+import { settleReplayCompression } from './replay-compression.mjs'
 
 export const replayLifecycleScenarios = ['replay-idle', 'replay-rotation', 'replay-bounce', 'replay-minimum-duration']
 export const replayMinimumDurationMs = 5000
@@ -90,15 +91,16 @@ export async function exerciseReplayLifecycle({ scenario, page, received, expect
     page.on('request', started)
     page.on('requestfinished', finished)
     page.on('requestfailed', finished)
-    // Native HTTP runs outside the mocked clock. Drain each step before its
-    // response timeout can expire during a large simulated idle interval.
+    // Native HTTP and gzip run outside the mocked clock. Finish compression
+    // before a flush can inspect the buffer, and drain HTTP before its timeout.
     const advance = async (duration, fast = false) => {
+        await settleReplayCompression(page, expect)
         while (duration > 0) {
             const step = Math.min(duration, 1000)
             if (fast) await page.clock.fastForward(step)
             else await page.clock.runFor(step)
             await expect.poll(() => pending.size).toBe(0)
-            await page.evaluate(() => undefined)
+            await settleReplayCompression(page, expect)
             duration -= step
         }
     }

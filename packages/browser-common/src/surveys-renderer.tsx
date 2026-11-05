@@ -72,6 +72,7 @@ import {
     getSurveyStylesheet,
     addSurveyCSSVariablesToElement,
     getPopoverPosition,
+    getTabWidgetPopupOverrides,
 } from './surveys/surveys-extension-utils'
 import {
     extractPrefillParamsFromUrl,
@@ -2012,10 +2013,7 @@ export function FeedbackWidget({
         }
 
         if (survey.appearance?.widgetType === 'tab') {
-            setStyleOverrides({
-                top: '50%',
-                bottom: 'auto',
-            })
+            setStyleOverrides(getTabWidgetPopupOverrides(survey.appearance?.position))
         }
         const handleShowSurvey = (event: Event) => {
             const customEvent = event as CustomEvent
@@ -2041,6 +2039,7 @@ export function FeedbackWidget({
         readOnly,
         survey.id,
         survey.appearance?.widgetType,
+        survey.appearance?.position,
         survey.appearance?.widgetSelector,
         survey.appearance?.borderColor,
     ])

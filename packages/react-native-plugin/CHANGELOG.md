@@ -1,5 +1,26 @@
 # @posthog/react-native-plugin
 
+## 2.13.0
+
+### Minor Changes
+
+- [#5489](https://github.com/PostHog/posthog-js/pull/5489) [`a055ee6`](https://github.com/PostHog/posthog-js/commit/a055ee65e61a876a7b399271b9df026d22dbb144) Thanks [@ioannisj](https://github.com/ioannisj)! - Require posthog-android 3.74.2. Android apps that do not set `screenshotScale` now capture session replay screenshots at one pixel per dp, so uploads are smaller. Set `screenshotScale: 1` to keep native resolution. Session replay also records `FLAG_SECURE` windows fully masked and drops frames where an animating view would expose masked content.
+  (2026-10-30)
+
+## 2.12.8
+
+### Patch Changes
+
+- [#5482](https://github.com/PostHog/posthog-js/pull/5482) [`dfd56e6`](https://github.com/PostHog/posthog-js/commit/dfd56e6e567b46b074a25f0e598877594dd8bab6) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Require posthog-ios 3.92.7 so session replay screenshots without masks upload at the same size as masked ones. Before, they were encoded at native scale, which could leave replay minutes behind.
+  (2026-10-29)
+
+## 2.12.7
+
+### Patch Changes
+
+- [#5441](https://github.com/PostHog/posthog-js/pull/5441) [`39ff01a`](https://github.com/PostHog/posthog-js/commit/39ff01a86a20ca086e7b5dbbbd938e9d2115741b) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Upgrade the Android SDK to 3.72.9, which pulls in OkHttp 4.12.1 to block the compromised eMudhra intermediate certificates.
+  (2026-10-27)
+
 ## 2.12.6
 
 ### Patch Changes

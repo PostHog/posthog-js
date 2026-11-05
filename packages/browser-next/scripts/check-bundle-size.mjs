@@ -20,7 +20,7 @@ const autocaptureInput = /(^|\/)(autocapture|rageclick|autocapture-utils)\.(m?js
 const logsInput = /(^|\/)(logs|console-logs|logs-config|logs-utils)\.(m?js|ts)$/
 const surveysInput =
     /(^|\/)(surveys(?:-extension|-renderer|-storage)?|survey-event-receiver(?:-base)?|survey-action-matcher)\.(m?js|tsx?)$/
-const preactInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?preact\//
+const surveyUiInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?(?:preact|dompurify)\//
 const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
 const analyticsInput = /(^|\/)(capture-v1|analytics|analytics-delivery|lane)\.(m?js|ts)$/
 const automaticAnalyticsInput = /(^|\/)automatic-analytics\.(m?js|ts)$/
@@ -69,7 +69,7 @@ const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowF
         (input) =>
             (forbiddenInputs.some((pattern) => pattern.test(input)) &&
                 !(allowFlags && coreInput.test(input)) &&
-                !(allowSurveys && preactInput.test(input))) ||
+                !(allowSurveys && surveyUiInput.test(input))) ||
             (forbidAnalytics && analyticsInput.test(input)) ||
             (!allowFlags &&
                 (flagsInput.test(input) ||
@@ -113,7 +113,13 @@ const measureStatic = async (name, fixture, forbidAnalytics, allowFlags = false,
     )
 }
 
-const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automatic = true, allowSurveys = automatic) => {
+const measureLazy = async (
+    name = 'lazy',
+    fixture = 'fixtures/lazy.ts',
+    automatic = true,
+    allowSurveys = automatic,
+    initialSurveys = false
+) => {
     const outputDirectory = 'bundle-output'
     const result = await build({
         ...buildOptions,
@@ -150,19 +156,22 @@ const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automati
         return initial
     }
     const initial = staticClosure(entry)
-    const surveysOrchestration = Object.entries(result.metafile.outputs).find(([, details]) =>
-        details.entryPoint?.endsWith('/automatic-surveys.mjs')
-    )?.[0]
-    if (automatic && !surveysOrchestration) {
+    const surveyOrchestrations = Object.entries(result.metafile.outputs).filter(([, details]) =>
+        /\/(?:automatic-)?surveys\.mjs$/.test(details.entryPoint ?? '')
+    )
+    if (
+        automatic &&
+        !surveyOrchestrations.some(([, details]) => details.entryPoint.endsWith('/automatic-surveys.mjs'))
+    ) {
         throw new Error('The root must reference the automatic surveys orchestration chunk')
     }
-    if (surveysOrchestration) {
-        const inputs = [...staticClosure(surveysOrchestration)].flatMap((key) =>
+    for (const [orchestration] of surveyOrchestrations) {
+        const inputs = [...staticClosure(orchestration)].flatMap((key) =>
             Object.keys(result.metafile.outputs[key].inputs)
         )
-        if (inputs.some((input) => preactInput.test(input) || /surveys-renderer|survey-styles/.test(input))) {
+        if (inputs.some((input) => surveyUiInput.test(input) || /surveys-renderer|survey-styles/.test(input))) {
             throw new Error(
-                'Automatic surveys orchestration must keep renderer, Preact, and CSS behind its dynamic boundary'
+                'Surveys orchestration must keep renderer, Preact, DOMPurify, and CSS behind its dynamic boundary'
             )
         }
     }
@@ -185,7 +194,11 @@ const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automati
     ) {
         throw new Error('The lazy initial bundle must include the automatic analytics factory')
     }
-    await report(`${name} initial`, result, contents(initialKeys), initialKeys, true)
+    const initialInputs = initialKeys.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs))
+    if (initialInputs.some((input) => /surveys-renderer|survey-styles/.test(input))) {
+        throw new Error('The initial bundle must not include survey rendering or styles')
+    }
+    await report(`${name} initial`, result, contents(initialKeys), initialKeys, true, initialSurveys)
     const dynamicKeys = totalKeys.filter((key) => !initial.has(key))
     await report(`${name} dynamic`, result, contents(dynamicKeys), dynamicKeys, false, true, allowSurveys)
     await report(`${name} total`, result, contents(totalKeys), totalKeys, false, true, allowSurveys)
@@ -209,7 +222,7 @@ await measureStatic('static flags', 'fixtures/static-flags.ts', true, true)
 await measureLazy('dynamic flags', 'fixtures/dynamic-flags.ts', false)
 await measureStatic('static logs', 'fixtures/static-logs.ts', true, true)
 await measureLazy('dynamic logs', 'fixtures/dynamic-logs.ts', false)
-await measureStatic('static surveys', 'fixtures/static-surveys.ts', true, true, true)
+await measureLazy('explicit surveys', 'fixtures/static-surveys.ts', false, true, true)
 await measureLazy('dynamic surveys', 'fixtures/dynamic-surveys.ts', false, true)
 await measureStatic('static autocapture', 'fixtures/static-autocapture.ts', true, true)
 await measureLazy('dynamic autocapture', 'fixtures/dynamic-autocapture.ts', false)

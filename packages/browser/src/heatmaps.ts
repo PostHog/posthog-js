@@ -21,7 +21,7 @@ import type { Extension } from './extensions/types'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 
-const logger = createLogger('[Heatmaps]')
+const logger = /* @__PURE__ */ createLogger('[Heatmaps]')
 
 type HeatmapEventBuffer =
     | {

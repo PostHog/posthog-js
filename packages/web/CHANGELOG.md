@@ -1,5 +1,23 @@
 # posthog-js-lite
 
+## 4.13.3
+
+### Patch Changes
+
+- [#5481](https://github.com/PostHog/posthog-js/pull/5481) [`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` when the user opts in, without being read again. This fixes missing exposures from the React and React Native hooks, which read a flag once on mount.
+  (2026-11-04)
+- Updated dependencies [[`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6)]:
+  - @posthog/core@1.63.1
+
+## 4.13.2
+
+### Patch Changes
+
+- [#5431](https://github.com/PostHog/posthog-js/pull/5431) [`96d7ff2`](https://github.com/PostHog/posthog-js/commit/96d7ff2e394126e2bd03a2422f60b5892a85d87f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Deprecate `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` in favor of `getAllFeatureFlags()`, `onFeatureFlag()` in favor of `onFeatureFlags()`, the `cb` option of `reloadFeatureFlags()` in favor of `reloadFeatureFlagsAsync()`, and `overrideFeatureFlag()` in favor of `updateFlags()`. In React Native, also deprecate the `useFeatureFlagWithPayload()` hook in favor of `useFeatureFlagResult()`. They continue to work.
+  (2026-10-27)
+- Updated dependencies [[`96d7ff2`](https://github.com/PostHog/posthog-js/commit/96d7ff2e394126e2bd03a2422f60b5892a85d87f)]:
+  - @posthog/core@1.61.1
+
 ## 4.13.1
 
 ### Patch Changes

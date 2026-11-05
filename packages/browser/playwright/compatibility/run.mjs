@@ -8,6 +8,7 @@ import { runMatrix } from './matrix.mjs'
 import { assertLoaderProof } from './loader-proof.mjs'
 import { interactionScenarios, exerciseInteractions } from './interaction-cases.mjs'
 import { replayLifecycleScenarios, exerciseReplayLifecycle } from './replay-cases.mjs'
+import { trackReplayCompression } from './replay-compression.mjs'
 import { exerciseReplayNetwork, assertReplayNetworkCapture, freezeReplayDate } from './replay-network.mjs'
 import { compatibilityServer } from './server.mjs'
 import {
@@ -121,6 +122,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
     const interactionCase = interactionScenarios.includes(scenario)
     const replayLifecycleCase = replayLifecycleScenarios.includes(scenario)
     const controlledClock = interactionCase || replayLifecycleCase
+    if (replayLifecycleCase) await page.addInitScript(trackReplayCompression)
     if (controlledClock) {
         await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
         await page.clock.pauseAt(new Date('2024-01-01T00:00:01Z'))
@@ -165,7 +167,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 { origin: server.origin, config: legacyRecordingConfig }
             )
         await page.goto(server.origin, { waitUntil: 'domcontentloaded' })
-        if (mode !== 'snippet') await waitFor(() => window.__compat?.installed)
+        if (['npm', 'slim'].includes(mode)) await waitFor(() => window.__compat?.installed)
         await page.evaluate(
             ({ scenario, mode, comparison }) => {
                 window.__compat.mode = mode
@@ -174,6 +176,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             },
             { scenario, mode, comparison }
         )
+        await waitFor(() => window.__compat?.initialized)
         await release('core')
         await waitFor(() => window.__compat?.loaded)
         assert(
@@ -461,7 +464,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             await player.close()
         }
         if (interactionCase)
-            ui = await exerciseInteractions({ scenario, page, received, expect, origin: server.origin })
+            ui = await exerciseInteractions({ scenario, page, received, expect, origin: server.origin, comparison })
         await waitFor(() => window.__compat.promises.every((promise) => promise.state !== 'pending'))
         if (replayLifecycleCase)
             ({ replay, api } = await exerciseReplayLifecycle({
@@ -494,6 +497,24 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             )
             .toBe(1)
         const network = await received()
+        if (mode === 'loader') {
+            const bootstrap = network.requests.filter((request) => request.path === '/static/loader.js')
+            const coreRequests = network.requests.filter((request) => request.path.endsWith('/array.js'))
+            assert(
+                bootstrap.length === 1 &&
+                    bootstrap[0].status === 200 &&
+                    bootstrap[0].query.project_token?.length === 1 &&
+                    bootstrap[0].query.project_token[0] === 'phc_COMPAT',
+                'Missing or duplicate native loader request'
+            )
+            assert(
+                coreRequests.length === 1 &&
+                    coreRequests[0].status === 200 &&
+                    coreRequests[0].path === '/static/array.js' &&
+                    Object.keys(coreRequests[0].query).length === 0,
+                'Loader did not fetch exactly one core from its unversioned namespace without query parameters'
+            )
+        }
         if (scenario === 'replay') assertReplayNetworkCapture(network, server.inspect(), server.origin)
         if (scenario === 'web-vitals') assertWebVitalsDelivery(network)
         if (['surveys', 'surveys-auto'].includes(scenario)) {

@@ -66,6 +66,10 @@ export type PostHogCoreOptions = {
   /**
    * Whether to track that `getFeatureFlag` was called (used by Experiments)
    *
+   * In posthog-node this is also the default for reads from an `evaluateFlags()` snapshot
+   * (`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a
+   * single-flag getter, to override it for that call.
+   *
    * @default true
    */
   sendFeatureFlagEvent?: boolean

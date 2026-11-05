@@ -64,12 +64,12 @@ describe('SiteApps', () => {
             }),
             get_distinct_id: vi.fn().mockImplementation(() => 'distinctid'),
             _send_request: vi.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
-            featureFlags: new PostHogFeatureFlags(posthog),
             requestRouter: new RequestRouter(posthog),
             getGroups: () => ({ organization: '5' }),
             on: vi.fn(),
         } satisfies Partial<PostHog>)
 
+        posthog.featureFlags = new PostHogFeatureFlags(posthog)
         vi.spyOn(posthog.featureFlags, 'receivedFeatureFlags').mockImplementation(() => {})
         vi.spyOn(posthog.featureFlags, 'setReloadingPaused').mockImplementation(() => {})
         siteAppsInstance = new SiteApps(posthog)

@@ -231,9 +231,9 @@ The logs extension subscribes to the browser client's reset and consent-change n
 
 ### Surveys
 
-The root loads only optional surveys orchestration during initialization; it awaits setup, not remote configuration, renderer loading, or survey definitions. The orchestration module owns the literal dynamic import of the shared renderer. A successful remote configuration with a truthy surveys gate loads UI automatically. A false or unavailable gate leaves it deferred, while explicit survey APIs may initialize a non-automatic manager. If enabled remote configuration arrives later, that same manager starts its idempotent automatic-display loop unless automatic display is disabled; it is not replaced or duplicated. Static `@posthog/browser/surveys` includes that same renderer without a dynamic import. An explicit instance wins over `surveys`, and `surveys: false` omits automatic inclusion.
+The root loads only optional surveys orchestration during initialization; it awaits setup, not remote configuration, renderer loading, or survey definitions. The orchestration module owns the literal dynamic import of the shared renderer. A successful remote configuration with a truthy surveys gate loads UI automatically. A false or unavailable gate leaves it deferred, while explicit survey APIs may initialize a non-automatic manager. If enabled remote configuration arrives later, that same manager starts its idempotent automatic-display loop unless automatic display is disabled; it is not replaced or duplicated. The explicit `@posthog/browser/surveys` factory includes orchestration only and defers the same renderer through a literal dynamic import. Preact, CSS, and DOMPurify belong behind that boundary; DOMPurify initializes browser capabilities when its module loads, so it must not enter the import-pure factory graph. An explicit instance wins over `surveys`, and `surveys: false` omits automatic inclusion.
 
-Application-facing survey controls belong to the extension reference, obtained from the static factory or `getExtension()`. The extension receives host capabilities through ordinary setup and subscribes to `BrowserClient.onReset` for runtime cleanup. Renderer waiting and call coordination stay in the optional module; no post-init public registry installation is introduced. Manual `canRenderSurvey` resolves unavailable when disposed during loading or fetch. Callback delivery is suppressed after disposal.
+Application-facing survey controls belong to the extension reference, obtained from the explicit factory or `getExtension()`. The extension receives host capabilities through ordinary setup and subscribes to `BrowserClient.onReset` for runtime cleanup. Renderer waiting and call coordination stay in the optional module; no post-init public registry installation is introduced. Manual `canRenderSurvey` resolves unavailable when disposed during loading or fetch. Callback delivery is suppressed after disposal.
 
 The shared renderer, Preact components, CSS string, event/action receiver, and matching helpers are reused by legacy adapters. Capture, flags, submission IDs, configuration, and stylesheet preparation are explicit runtime capabilities, not a concrete PostHog facade. Legacy global routing, preview wrappers, and UUID behavior remain legacy-owned. Native capability reads occur at invocation/setup, preserving strict static-entry import purity.
 
@@ -460,6 +460,12 @@ Keep `sideEffects: false` while all entry points remain import-pure. If an expli
 Do not combine all entry points into one prebuilt runtime bundle.
 The package needs preserved ES module boundaries for consumer tree shaking.
 
+### CDN-only classic entry
+
+The standalone classic-script installer lives in `snippet/`, outside Rslib's `src` glob and the npm `files` allowlist. `build:cdn` emits `dist-cdn/script.js` with the complete initial core graph embedded, plus optional asynchronous chunks and source maps. Rspack's automatic public path captures the executing external script's directory synchronously and removes its query and fragment before loading chunks. There is no separate client download between the initial response and core construction.
+
+This deployment artifact intentionally initializes a client; it is not an npm export and does not change the import-purity contract or `sideEffects: false`. Keep the root factory's extension setup order, override precedence, snapshots, consent, and failure isolation unchanged. The installer delegates readiness to that factory. See the [script installation guide](./README.md#classic-script-installation-draft-cdn-distribution) for query configuration, global ownership, and ready-event semantics. `bundle-size:cdn` checks the generated initial graph and reports initial/deferred artifact sizes and module attribution; `test:snippet` runs the generated classic artifacts in plain HTML against the SDK mock server.
+
 ## 12. Bundle tests
 
 Measure code as a package consumer. Build the package before each measurement.
@@ -505,7 +511,7 @@ Each optional-feature check must report these values:
 Extend the bundle-size script when you add a new public entry point.
 Fail the check when a forbidden product or dependency enters the root graph.
 
-Add a stored baseline before the first public release. Review each later increase against that baseline.
+Review initial and total bundle measurements for runtime changes.
 An increase needs a user benefit and a short size explanation.
 
 ## 13. Review procedure

@@ -1,5 +1,66 @@
 # posthog-ai
 
+## 8.18.4
+
+### Patch Changes
+
+- [#5563](https://github.com/PostHog/posthog-js/pull/5563) [`b1bbf31`](https://github.com/PostHog/posthog-js/commit/b1bbf31ab34b99bca0da47ee031fc7b420504f19) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Keep the refusal text of OpenAI Responses API outputs instead of dropping it from the captured `$ai_output_choices`
+  (2026-11-05)
+
+- [#5555](https://github.com/PostHog/posthog-js/pull/5555) [`a129e9f`](https://github.com/PostHog/posthog-js/commit/a129e9f726c52aa9ab15db949c42b1292df21c84) Thanks [@smitp1402](https://github.com/smitp1402)! - Count Gemini Interactions tool-use tokens in the captured input tokens.
+  (2026-11-05)
+
+## 8.18.3
+
+### Patch Changes
+
+- [#5530](https://github.com/PostHog/posthog-js/pull/5530) [`9909fee`](https://github.com/PostHog/posthog-js/commit/9909feeefd495083690af31b4c77227c2778af2a) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix loading and constructing the OpenTelemetry span processor in bundled Cloudflare Workers.
+  (2026-11-03)
+
+## 8.18.2
+
+### Patch Changes
+
+- [#5520](https://github.com/PostHog/posthog-js/pull/5520) [`af74347`](https://github.com/PostHog/posthog-js/commit/af743477efddf80180d06c09c9b3bd9b12280f07) Thanks [@bernatixer](https://github.com/bernatixer)! - Vercel AI SDK file capture: keep provider file IDs like `file-abc123` as they are instead of turning them into data URLs, use the same placeholder for an over-budget file however it was passed, and skip encoding output files in privacy mode
+  (2026-11-02)
+- Updated dependencies [[`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85)]:
+  - @posthog/core@1.62.1
+
+## 8.18.1
+
+### Patch Changes
+
+- [#5496](https://github.com/PostHog/posthog-js/pull/5496) [`3611fd2`](https://github.com/PostHog/posthog-js/commit/3611fd2fab0559cb59046114493726619c8e14c2) Thanks [@bernatixer](https://github.com/bernatixer)! - Capture Vercel AI SDK file parts passed as bytes instead of recording "raw files not supported"
+  (2026-11-02)
+
+## 8.18.0
+
+### Minor Changes
+
+- [#5381](https://github.com/PostHog/posthog-js/pull/5381) [`bac61c2`](https://github.com/PostHog/posthog-js/commit/bac61c26d5b5f16b60936dc6cbb823364e1f9c48) Thanks [@Brian-1812](https://github.com/Brian-1812)! - Add a Genkit integration that captures flows, model calls, embedder calls and tool calls as AI observability events
+  (2026-11-02)
+
+## 8.17.2
+
+### Patch Changes
+
+- [#5439](https://github.com/PostHog/posthog-js/pull/5439) [`a22cbec`](https://github.com/PostHog/posthog-js/commit/a22cbecd47f5a727747e1113c5c0be992cbeda1d) Thanks [@posthog](https://github.com/apps/posthog)! - Fix `@posthog/ai/otel` so that it loads with OpenTelemetry JS 3.x, which has no `@opentelemetry/sdk-trace-base`.
+  (2026-10-29)
+
+## 8.17.1
+
+### Patch Changes
+
+- [#5478](https://github.com/PostHog/posthog-js/pull/5478) [`aa4ed5d`](https://github.com/PostHog/posthog-js/commit/aa4ed5deb82510af1b684988e4fe83739f02b7c2) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture an `$ai_generation` error event when an OpenAI, Azure OpenAI or Anthropic call with `stream: true` fails before the stream opens (for example a 401, 429 or invalid model). Before, only the non-streaming call captured those errors.
+  (2026-10-29)
+
+## 8.17.0
+
+### Minor Changes
+
+- [#5438](https://github.com/PostHog/posthog-js/pull/5438) [`acdbdd2`](https://github.com/PostHog/posthog-js/commit/acdbdd2123cb379fae9f0615ee0e9ef627fbe8f9) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add per-item model attribution to offline evaluations and dataset execution conversion.
+  (2026-10-26)
+
 ## 8.16.3
 
 ### Patch Changes
