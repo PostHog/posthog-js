@@ -57,6 +57,7 @@
     "@types/node": "^20.0.0",
     "esbuild": "^0.25.0",
     "@vitest/coverage-v8": "catalog:",
+    "nodemailer": "^10.3.0",
     "rxjs": "^7.8.0",
     "typescript": "catalog:native",
     "vitest": "catalog:"
@@ -127,6 +128,12 @@
       "import": "./dist/entrypoints/otel.mjs",
       "require": "./dist/entrypoints/otel.js",
       "default": "./dist/entrypoints/otel.js"
+    },
+    "./nodemailer": {
+      "types": "./dist/entrypoints/nodemailer.d.ts",
+      "import": "./dist/entrypoints/nodemailer.mjs",
+      "require": "./dist/entrypoints/nodemailer.js",
+      "default": "./dist/entrypoints/nodemailer.js"
     }
   }
 }

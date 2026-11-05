@@ -698,7 +698,7 @@ function asEmailError(error: unknown, message: string): EmailError {
   return error instanceof EmailError ? error : new EmailError({ code: 'unexpected_error', message, cause: error })
 }
 
-function isRetryable(error: EmailError): boolean {
+export function isRetryable(error: EmailError): boolean {
   // A send carries an idempotency key, so a retry can't queue a second email. A status read changes nothing.
   if (error.statusCode === undefined) {
     return error.code === 'network_error'
