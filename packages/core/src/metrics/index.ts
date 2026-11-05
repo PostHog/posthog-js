@@ -134,7 +134,7 @@ export class PostHogMetrics {
       value,
       unit: options?.unit,
       attributes: options?.attributes,
-      // A copy, so a beforeSend that edits the bounds in place cannot change the caller's array.
+      // The copy keeps a beforeSend that edits the bounds in place from changing the caller's array.
       bounds: isArray(options?.bounds) ? options.bounds.slice() : options?.bounds,
     })
   }
@@ -169,11 +169,7 @@ export class PostHogMetrics {
       return null
     }
     const window = this._series
-    this._series = new Map()
-    this._seriesCapWarned = false
-    this._typeByName = new Map()
-    this._typeCollisionWarned = new Set()
-    this._boundsConflictWarned = new Set()
+    this._startWindow()
     return this._buildPayload(window)
   }
 
@@ -184,14 +180,19 @@ export class PostHogMetrics {
     this._consecutiveFlushFailures = 0
     this._flushJitter = NO_JITTER
     this._flushTimer.clear()
-    this._series = new Map()
     this._flushPromise = null
+    this._startWindow()
+    this._boundsByHistogram = new Map()
+    this._boundsCapWarned = false
+  }
+
+  /** Clears the state that lives for one flush window. */
+  private _startWindow(): void {
+    this._series = new Map()
     this._seriesCapWarned = false
     this._typeByName = new Map()
     this._typeCollisionWarned = new Set()
     this._boundsConflictWarned = new Set()
-    this._boundsByHistogram = new Map()
-    this._boundsCapWarned = false
   }
 
   private _capture(sample: MetricSample): void {
@@ -315,8 +316,9 @@ export class PostHogMetrics {
   /**
    * The bounds a histogram sample folds into: the ones its histogram already
    * has, or the requested bounds (default when absent) for a new histogram.
-   * `current` is the bounds of the sample's series in this window, which skips
-   * the lookup. Returns `undefined` when the sample must be dropped.
+   * `current` is the bounds of the sample's series in this window. A histogram
+   * past the bounds limit has no map entry, so `current` keeps its series'
+   * bounds. Returns `undefined` when the sample must be dropped.
    */
   private _histogramBounds(
     name: string,
@@ -330,20 +332,16 @@ export class PostHogMetrics {
       )
       return undefined
     }
-    if (current) {
-      this._warnOnBoundsConflict(name, unit, current, requested)
-      return current
-    }
     const histogramKey = seriesKey('histogram', name, unit, undefined)
-    const fixed = this._boundsByHistogram.get(histogramKey)
+    const fixed = current ?? this._boundsByHistogram.get(histogramKey)
     if (fixed) {
-      this._warnOnBoundsConflict(name, unit, fixed, requested)
+      this._warnOnBoundsConflict(name, histogramKey, fixed, requested)
       return fixed
     }
     const bounds = requested ? requested.slice() : DEFAULT_HISTOGRAM_BOUNDS
-    // The map lives until reset(), so histogram names with interpolated IDs
-    // must not grow it without limit. Past the limit, a new histogram is still
-    // recorded, but its bounds hold only for its series in this window.
+    // The limit keeps histogram names with interpolated IDs from growing the
+    // map without bound. Past the limit, a new histogram is still recorded, but
+    // its bounds hold only for its series in this window.
     if (this._boundsByHistogram.size >= this._config.maxSeriesPerFlush) {
       if (!this._boundsCapWarned) {
         this._boundsCapWarned = true
@@ -360,15 +358,11 @@ export class PostHogMetrics {
 
   private _warnOnBoundsConflict(
     name: string,
-    unit: string | undefined,
+    histogramKey: string,
     fixed: number[],
     requested: number[] | undefined
   ): void {
-    if (sameBounds(fixed, requested ?? DEFAULT_HISTOGRAM_BOUNDS)) {
-      return
-    }
-    const histogramKey = seriesKey('histogram', name, unit, undefined)
-    if (this._boundsConflictWarned.has(histogramKey)) {
+    if (sameBounds(fixed, requested ?? DEFAULT_HISTOGRAM_BOUNDS) || this._boundsConflictWarned.has(histogramKey)) {
       return
     }
     this._boundsConflictWarned.add(histogramKey)
@@ -457,11 +451,7 @@ export class PostHogMetrics {
     // Snapshot and reset the window; samples captured while the send is in
     // flight fold into a fresh window instead of the one being sent.
     const window = this._series
-    this._series = new Map()
-    this._seriesCapWarned = false
-    this._typeByName = new Map()
-    this._typeCollisionWarned = new Set()
-    this._boundsConflictWarned = new Set()
+    this._startWindow()
 
     const generation = this._generation
     const outcome = await this._instance._sendMetricsBatch(this._buildPayload(window))
@@ -557,17 +547,18 @@ export class PostHogMetrics {
           ...exemplars,
         }
         metric.gauge!.dataPoints.push(dp)
-      } else if (state.hist) {
+      } else {
+        const hist = state.hist!
         const dp: OtlpHistogramDataPoint = {
           attributes,
           startTimeUnixNano: startNano,
           timeUnixNano: nowNano,
-          count: state.hist.count,
-          sum: state.hist.sum,
-          min: state.hist.min,
-          max: state.hist.max,
-          bucketCounts: state.hist.bucketCounts,
-          explicitBounds: state.hist.bounds,
+          count: hist.count,
+          sum: hist.sum,
+          min: hist.min,
+          max: hist.max,
+          bucketCounts: hist.bucketCounts,
+          explicitBounds: hist.bounds,
           ...exemplars,
         }
         metric.histogram!.dataPoints.push(dp)
@@ -603,7 +594,7 @@ export class PostHogMetrics {
           const hist = current.hist!
           const oldHist = old.hist!
           // Only a histogram past the bounds limit can change bounds between
-          // windows. Its unsent buckets cannot be added to the live ones, so the
+          // windows. Its unsent buckets cannot be added to the live ones. The
           // live window keeps its own data.
           if (!sameBounds(hist.bounds, oldHist.bounds)) {
             break

@@ -920,6 +920,7 @@
         "_startSelectionChangedObserver",
         "_startSwipeObserver",
         "_startVisibilityChangeObserver",
+        "_startWindow",
         "_start_queue_if_opted_in",
         "_staticAssetHostOverride",
         "_stopAfterCompressionQueueDrains",

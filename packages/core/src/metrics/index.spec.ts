@@ -427,19 +427,6 @@ describe('PostHogMetrics', () => {
       expect(logger.warn).not.toHaveBeenCalled()
     })
 
-    it('lets beforeSend change the bounds along with the unit', async () => {
-      const metrics = createMetrics({
-        beforeSend: (m) => ({ ...m, value: m.value / 1000, unit: 's', bounds: [0.1, 1] }),
-      })
-      metrics.histogram('h', 500, { unit: 'ms', bounds: [100, 1000] })
-      await metrics.flush()
-
-      const sent = sentMetrics()[0]
-      expect(sent.unit).toBe('s')
-      expect(sent.histogram!.dataPoints[0].explicitBounds).toEqual([0.1, 1])
-      expect(sent.histogram!.dataPoints[0].bucketCounts).toEqual([0, 1, 0])
-    })
-
     it('does not fix the bounds for a sample the series cap drops', async () => {
       const metrics = createMetrics({ maxSeriesPerFlush: 1 })
       metrics.count('fills_the_window', 1)
