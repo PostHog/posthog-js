@@ -42,9 +42,8 @@ export interface HistogramOptions extends CaptureMetricOptions {
      * client resets. A later sample that passes different bounds is recorded in
      * the fixed buckets and logs a warning, once per flush window. A sample with
      * invalid bounds is dropped with a warning. The client fixes the bounds of at
-     * most `maxSeriesPerFlush` histograms. Past that limit it logs one warning.
-     * For a new histogram, the first sample of each attribute series then sets
-     * that series' bounds, and they last only until the next flush.
+     * most `maxSeriesPerFlush` histograms. Past that limit, a new histogram ignores
+     * `bounds`, uses the default bounds, and the client logs one warning.
      */
     bounds?: number[]
 }

@@ -244,7 +244,7 @@ export class PostHogMetrics {
 
     let bounds: number[] | undefined
     if (filtered.type === 'histogram') {
-      bounds = this._histogramBounds(filtered.name, filtered.unit, filtered.bounds, state?.hist?.bounds)
+      bounds = this._histogramBounds(filtered.name, filtered.unit, filtered.bounds)
       if (!bounds) {
         return
       }
@@ -320,15 +320,14 @@ export class PostHogMetrics {
   /**
    * The bounds a histogram sample folds into: the ones its histogram already
    * has, or the requested bounds (default when absent) for a new histogram.
-   * `current` is the bounds of the sample's series in this window. A histogram
-   * past the bounds limit has no map entry, so `current` keeps its series'
-   * bounds. Returns `undefined` when the sample must be dropped.
+   * A histogram past the bounds limit has no map entry and always gets the
+   * default bounds, so its layout cannot change between windows. Returns
+   * `undefined` when the sample must be dropped.
    */
   private _histogramBounds(
     name: string,
     unit: string | undefined,
-    requested: number[] | undefined,
-    current: number[] | undefined
+    requested: number[] | undefined
   ): number[] | undefined {
     if (requested !== undefined && !isValidBounds(requested)) {
       this._logger.warn(
@@ -337,25 +336,26 @@ export class PostHogMetrics {
       return undefined
     }
     const histogramKey = seriesKey('histogram', name, unit, undefined)
-    const fixed = current ?? this._boundsByHistogram.get(histogramKey)
+    const fixed = this._boundsByHistogram.get(histogramKey)
     if (fixed) {
       this._warnOnBoundsConflict(name, histogramKey, fixed, requested)
       return fixed
     }
-    const bounds = requested ? requested.slice() : DEFAULT_HISTOGRAM_BOUNDS
     // The limit keeps histogram names with interpolated IDs from growing the
-    // map without bound. Past the limit, a new histogram is still recorded, but
-    // its bounds hold only for its series in this window.
+    // map without bound. The backend stores one set of bounds per series, so a
+    // histogram that is not in the map must not send different bounds in later
+    // windows. It gets the default bounds.
     if (this._boundsByHistogram.size >= this._config.maxSeriesPerFlush) {
       if (!this._boundsCapWarned) {
         this._boundsCapWarned = true
         this._logger.warn(
           `Histogram bounds limit reached (${this._config.maxSeriesPerFlush} distinct histograms); ` +
-            `new histograms keep their bounds only within one flush window. Reduce histogram name cardinality.`
+            `new histograms use the default bounds. Reduce histogram name cardinality.`
         )
       }
-      return bounds
+      return DEFAULT_HISTOGRAM_BOUNDS
     }
+    const bounds = requested ? requested.slice() : DEFAULT_HISTOGRAM_BOUNDS
     this._boundsByHistogram.set(histogramKey, bounds)
     return bounds
   }
@@ -582,12 +582,6 @@ export class PostHogMetrics {
         if (this._admitNewSeries()) {
           this._series.set(key, old)
         }
-        continue
-      }
-      // Only a histogram past the bounds limit can change bounds between
-      // windows. Its unsent buckets cannot be added to the live ones. The live
-      // series keeps none of the failed window's data or metadata.
-      if (current.hist && old.hist && !sameBounds(current.hist.bounds, old.hist.bounds)) {
         continue
       }
       current.windowStartMs = Math.min(current.windowStartMs, old.windowStartMs)

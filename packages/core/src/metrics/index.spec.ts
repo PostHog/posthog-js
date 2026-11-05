@@ -204,6 +204,7 @@ describe('PostHogMetrics', () => {
   })
 
   describe('histogram bounds', () => {
+    const DEFAULT_BOUNDS = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000]
     const histogramPoints = (name: string) =>
       sentMetrics()
         .filter((m) => m.name === name)
@@ -370,7 +371,7 @@ describe('PostHogMetrics', () => {
       expect(histogramPoints('h')[0].explicitBounds).toEqual([100, 200])
     })
 
-    it('records new histograms past the bounds limit without fixing their bounds, and warns once', async () => {
+    it('gives histograms past the bounds limit the default bounds in every window, and warns once', async () => {
       const metrics = createMetrics({ maxSeriesPerFlush: 2 })
       metrics.histogram('a', 1)
       metrics.histogram('b', 1)
@@ -382,14 +383,11 @@ describe('PostHogMetrics', () => {
       await metrics.flush()
 
       expect(sentMetrics().map((m) => m.name)).toEqual(['a', 'b', 'c', 'c', 'd'])
-      expect(histogramPoints('c').map((dp) => dp.explicitBounds)).toEqual([
-        [10, 20],
-        [100, 200],
-      ])
+      expect(histogramPoints('c').map((dp) => dp.explicitBounds)).toEqual([DEFAULT_BOUNDS, DEFAULT_BOUNDS])
       expect(warnings().filter((w) => w.includes('Histogram bounds limit reached'))).toHaveLength(1)
     })
 
-    it('keeps only the live window when a histogram past the bounds limit fails to send with other bounds', async () => {
+    it('merges a failed window of a histogram past the bounds limit into the live window', async () => {
       let traceparent: string | null = null
       mockInstance = createMockInstance({ getActiveSpan: () => ({ traceparent: () => traceparent }) })
       const metrics = createMetrics({ maxSeriesPerFlush: 1 })
@@ -400,24 +398,20 @@ describe('PostHogMetrics', () => {
         () => new Promise<SendMetricsBatchOutcome>((resolve) => (resolveSend = resolve))
       )
 
-      // The failed window's sample has an exemplar. The live window's sample has none.
       traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
       metrics.histogram('c', 15, { bounds: [10, 20] })
       const inflight = metrics.flush()
       traceparent = null
-      vi.advanceTimersByTime(5000)
-      const liveStartNano = String(Date.now()) + '000000'
       metrics.histogram('c', 150, { bounds: [100, 200] })
       resolveSend({ kind: 'retry-later', error: new Error('offline') })
       await inflight
       await metrics.flush()
 
       const dp = histogramPoints('c')[1]
-      expect(dp.explicitBounds).toEqual([100, 200])
-      expect(dp.bucketCounts).toEqual([0, 1, 0])
-      expect(dp.count).toBe(1)
-      expect(dp.startTimeUnixNano).toBe(liveStartNano)
-      expect(dp.exemplars).toBeUndefined()
+      expect(dp.explicitBounds).toEqual(DEFAULT_BOUNDS)
+      expect(dp.count).toBe(2)
+      expect(dp.sum).toBe(165)
+      expect(dp.bucketCounts.reduce((a, b) => a + b, 0)).toBe(2)
     })
 
     it('keeps the caller bounds intact when beforeSend edits them in place', async () => {
