@@ -177,12 +177,13 @@ On fresh low-level instances, tools with an `outputSchema` deliver new handles t
 
 A valid echoed conversation handle takes precedence over transport sessions. A request that already carries a transport session or a PostHog session token does not mint a new handle or append a prompt-back block. Requests carrying neither use the conversation fallback.
 
-Some host clients send their own conversation id in each request's `params._meta`. The SDK reads
-ChatGPT's `openai/session` and derives `$session_id` from it when the call carries no conversation
-handle and no transport session. Such a call mints no handle and gets no prompt-back block, so a
-server with `enableConversationId: false` still groups ChatGPT calls with tool schemas and results
-left unchanged. Each event records which source grouped it in `$mcp_session_source`:
-`conversation`, `transport`, `client_metadata`, or `generated`.
+Some MCP clients name the conversation in each tool call's `params._meta`: ChatGPT's
+`openai/session`, Codex's `sessionId`, and VS Code's `vscode.conversationId`. The SDK reads each key
+only from a request whose `User-Agent` or client name identifies that client, and derives
+`$session_id` from it ahead of any conversation handle or transport session. ChatGPT sends its id on
+every call, so its `tools/list` has no `conversation_id` argument and its results get no handle, even
+with `enableConversationId` on. Each event records which source grouped it in `$mcp_session_source`:
+`client_metadata`, `conversation`, `transport`, or `generated`.
 
 Intent, model capture, conversation correlation, exception capture, and `$mcp_initialize` are
 enabled by default. Missing-capability reporting and feedback collection remain disabled.
@@ -299,9 +300,11 @@ return preparedResult.result
 ```
 
 A persistent single-process dispatcher can omit `originalTool` after it has prepared its tool list.
-Pass `requestMeta` whenever the request supplies `_meta`; this enables recognized client metadata,
-including a host client's conversation id, without changing the arguments sent to the tool. Pass an existing transport or request session as
-`sessionId`. A valid echoed conversation handle takes precedence. Otherwise, the existing session
+Pass `requestMeta` whenever the request supplies `_meta`, and `headers` (plus `clientInfo` from a
+handshake bound to the request, if you hold one) so the SDK can recognize the client; this enables
+recognized client metadata and client conversation ids without changing the arguments sent to the
+tool. Pass the same `headers` to `prepareToolList`. Pass an existing transport or request session as
+`sessionId`. A client conversation id or a valid echoed conversation handle takes precedence. Otherwise, the existing session
 prevents a new handle from being minted. Set `enableConversationId: false` on `PostHogMCP` to keep
 the previous custom-dispatcher behavior.
 

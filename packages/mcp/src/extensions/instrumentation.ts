@@ -49,9 +49,10 @@ import {
   getSessionInfo,
   isModernEraRequest,
   newSessionId,
-  readClientConversation,
   resolveSession,
 } from './session'
+import { recognizeClient, readRequestClientSignals, resolveRequestClient } from './client-conversation'
+import type { ClientConversation, RequestClient } from './client-conversation'
 import { decodeSessionId, encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
@@ -160,11 +161,13 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   const isVirtualAnalyticsTool =
     resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability ||
     resolvedEventType === MCPAnalyticsEventType.mcpFeedback
+  const client = resolveRequestClient(request, extra, server)
   const ownership = getActiveAnalyticsParameterOwnership(
     data,
     request.params?.name,
     parameterOwnership,
-    isVirtualAnalyticsTool
+    isVirtualAnalyticsTool,
+    client
   )
   // Reading the argument and removing it are separate questions: deleting one the
   // application declared costs the customer their call, so the strip below still
@@ -172,7 +175,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   // can mislabel a property. Conversation minting also writes a prompt-back;
   // that separate tradeoff and its carried-session guard are recorded in ADR-0013.
   const canCaptureContextIntent = ownership.read.context
-  const conversation = resolveToolConversation(ownership.read.conversationId, request, extra)
+  const conversation = resolveToolConversation(ownership.read.conversationId, client, request, extra)
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership.strip)
   const schemaSessionId = resolveToolSchemaSessionId(data, extra)
 
@@ -187,6 +190,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     extra,
     startTime,
     conversation,
+    client.conversation,
     ownership,
     resolvedEventType,
     canCaptureContextIntent
@@ -229,20 +233,24 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   return finalResult
 }
 
+const NO_CONVERSATION: ConversationIdResolution = { minted: false, conversationId: undefined }
+
 function resolveToolConversation(
   enabled: boolean,
+  client: RequestClient,
   request: MCPRequestLike,
   extra?: CompatibleRequestHandlerExtra
 ): ConversationIdResolution {
+  // The client's own id wins, so a handle the agent echoes alongside it is ignored.
+  if (client.conversation) return NO_CONVERSATION
   const conversation = resolveConversationId(enabled, request.params?.arguments)
   // Echoed handles span reconnects; a new handle must not replace a session
   // already carried by this request or add a needless prompt-back to its result.
+  // A handle-free client names its conversation itself, so it is minted none.
   if (!conversation.minted) return conversation
   const carriedSession =
-    extra?.sessionId ||
-    decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra))) ||
-    readClientConversation(request.params?._meta)
-  return carriedSession ? { minted: false, conversationId: undefined } : conversation
+    client.row?.handleFree || extra?.sessionId || decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra)))
+  return carriedSession ? NO_CONVERSATION : conversation
 }
 
 interface PreparedToolEvent {
@@ -268,7 +276,8 @@ function getActiveAnalyticsParameterOwnership(
   data: MCPAnalyticsData,
   toolName: string | undefined,
   override: AnalyticsParameterOwnership | undefined,
-  isVirtualAnalyticsTool: boolean
+  isVirtualAnalyticsTool: boolean,
+  client: RequestClient
 ): ActiveAnalyticsParameterOwnership {
   const listed = toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined
   const ownership = override ?? listed
@@ -287,7 +296,8 @@ function getActiveAnalyticsParameterOwnership(
     // and fails closed — writing an undeclared key fails the customer's entire
     // tool result under `additionalProperties: false`. See ADR-0004 for the
     // per-request-instance gap this leaves and the planned fix.
-    outputInstructions: enabled.conversationId && listed?.outputInstructions === true,
+    // A handle-free client's listing never declared `_mcp_instructions`.
+    outputInstructions: enabled.conversationId && !client.row?.handleFree && listed?.outputInstructions === true,
   }
 }
 
@@ -330,6 +340,7 @@ async function prepareToolCallEvent(
   extra: CompatibleRequestHandlerExtra | undefined,
   startTime: Date,
   conversation: ConversationIdResolution,
+  clientConversation: ClientConversation | undefined,
   ownership: ActiveAnalyticsParameterOwnership,
   eventType: MCPAnalyticsEventType,
   canCaptureContextIntent: boolean
@@ -339,7 +350,7 @@ async function prepareToolCallEvent(
       server,
       extra,
       conversation.conversationId,
-      readClientConversation(request.params?._meta)
+      clientConversation
     )
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
@@ -574,12 +585,7 @@ async function captureResourceRequest(params: TraceRequestParams): Promise<unkno
   const startTime = new Date()
   let preparedEvent: PreparedToolEvent | null = null
   try {
-    const { sessionId, source: sessionSource } = resolveSession(
-      server,
-      extra,
-      undefined,
-      readClientConversation(request.params?._meta)
-    )
+    const { sessionId, source: sessionSource } = resolveSession(server, extra)
     const sessionInfo = getSessionInfo(server, data, sessionId)
     const event: McpEvent = {
       sessionId,
@@ -768,12 +774,7 @@ export async function handleListToolsRequest(
 ): Promise<CompatibleToolsListLike> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
-  const { sessionId, source: sessionSource } = resolveSession(
-    server,
-    extra,
-    undefined,
-    readClientConversation(request.params?._meta)
-  )
+  const { sessionId, source: sessionSource } = resolveSession(server, extra)
   // Snapshot before identify, metadata resolution, or the list handler can yield
   // to a concurrent request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -965,7 +966,10 @@ async function getTracedToolsList(
         tools = addModelParameterToTools(tools, getModelDescription(data.options.captureModel), data.logger)
       }
 
-      if (data.options.enableConversationId) {
+      // A handle-free client names the conversation in `_meta`, so the argument
+      // would only add a second, weaker grouping key.
+      const handleFree = recognizeClient(readRequestClientSignals(request, extra, server))?.handleFree === true
+      if (data.options.enableConversationId && !handleFree) {
         tools = addConversationIdToTools(tools, data.logger)
         tools = addInstructionsToOutputSchemas(tools, data.logger)
       }
@@ -1169,12 +1173,7 @@ export async function handleInitializeRequest(
 
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
   const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
-  const { sessionId, source: sessionSource } = resolveSession(
-    server,
-    extra,
-    undefined,
-    readClientConversation(request.params?._meta)
-  )
+  const { sessionId, source: sessionSource } = resolveSession(server, extra)
   // Snapshot before identify, metadata, or the initialize handler can yield to
   // another request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)
