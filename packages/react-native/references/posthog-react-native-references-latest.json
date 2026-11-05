@@ -4319,9 +4319,10 @@
           "name": "screenshotColorMode"
         },
         {
-          "description": "Schedule screenshot image capture on a background queue.\niOS only\nExperimental support\n\nWarning: Enabling this option will trigger Main Thread Checker warnings and may\nbriefly freeze the app the first time a screenshot is captured. Consider disabling\nMain Thread Checker in your scheme's run diagnostics when enabling this.",
+          "description": "Schedule screenshot image capture on a background queue.\niOS only\nExperimental support\n\nWarning: Enabling this option will trigger Main Thread Checker warnings and may\nbriefly freeze the app the first time a screenshot is captured. Consider disabling\nMain Thread Checker in your scheme's run diagnostics when enabling this.\nDeprecated: ignored by `@posthog/react-native-plugin` 3.0 and later, which always captures screenshots on the main thread",
           "type": "boolean",
-          "name": "screenshotModeBackgroundCapture"
+          "name": "screenshotModeBackgroundCapture",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Session replay sample rate between 0 and 1\nLocal config has precedence over remote config when both are set.\nIf undefined, sampling is controlled by remote config (when available).",
