@@ -7,7 +7,7 @@ import { propertyComparisons } from '@posthog/browser-common/utils/property-util
 import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/core'
 import { isStackOverflowError } from './utils/stack-overflow'
 
-const logger = createLogger('[Error tracking]')
+const logger = /* @__PURE__ */ createLogger('[Error tracking]')
 
 // Safari masks the URL of extension content scripts as `webkit-masked-url://hidden/`. It masks
 // some of the page's own scripts the same way, so a masked frame alone does not prove the
