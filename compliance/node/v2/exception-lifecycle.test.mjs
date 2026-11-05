@@ -113,7 +113,7 @@ for (const mode of ['v0', 'v1']) {
             assert.equal(exception.mechanism.handled, false)
             assert.equal(exception.mechanism.synthetic, false)
             assert.equal(exception.stacktrace.frames.at(-1).function, 'Immediate.crash')
-            // Fatal severity/source conformance is tracked separately in EXCEPTION_COVERAGE.md.
+            // These assertions characterize current fatal capture metadata.
             assert.equal(event.properties.$exception_level, 'error')
             assert.equal(Object.hasOwn(event.properties, '$exception_source'), false)
         })
