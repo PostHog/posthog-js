@@ -171,13 +171,16 @@ export function resolveSession(
  * minutes or more after the previous one, whichever source grouped that call. So
  * a call grouped by the client or the agent still rotates a stale id and resets
  * the clock, or a later call without either would rotate early.
+ *
+ * Only for a one-client connection (stdio): on a shared HTTP instance, keeping
+ * the instance's own session alive would group unrelated clients' requests.
  */
 function touchConnectionSession(
   server: MCPServerLike,
   data: MCPAnalyticsData,
   extra?: CompatibleRequestHandlerExtra
 ): void {
-  if (data.sessionSource !== 'generated' || extra?.sessionId) {
+  if (data.sessionSource !== 'generated' || extra?.sessionId || getRequestHeaders(extra)) {
     return
   }
   data.sessionId = getSessionIdFromMemory(data)

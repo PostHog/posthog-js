@@ -24,6 +24,7 @@ const VSCODE_ID = '3f1c2b7e-8d4a-4c6b-9a1e-5f2d7c8b9a0e'
 const VSCODE_SESSION = 'ses_0571acb894e6753d33e37e5c2b327c59'
 const HANDLE = '0190f0e8-7a6b-7c3d-9e4f-5a6b7c8d9e0f'
 const HANDLE_SESSION = 'ses_6df45f0102a182bcd5e8dd5dad6c65a0'
+const CODEX_CLIENT_META = { 'io.modelcontextprotocol/clientInfo': { name: 'codex-mcp-client', version: '0.50.0' } }
 const VSCODE_CLIENT_META = {
   'io.modelcontextprotocol/clientInfo': { name: 'Visual Studio Code', version: '1.105.0' },
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
@@ -260,11 +261,12 @@ describe('client conversation ids', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
       const pod = createPod({ enableConversationId: false })
-      const call = async (meta?: Record<string, unknown>): Promise<void> => {
-        await pod._requestHandlers.get('tools/call')!(
-          { method: 'tools/call', params: { name: 'search_docs', arguments: {}, ...(meta ? { _meta: meta } : {}) } },
-          requestExtra({ userAgent: CODEX })
-        )
+      // Over stdio: no HTTP request, so the client name recognizes Codex.
+      const call = async (meta: Record<string, unknown> = {}): Promise<void> => {
+        await pod._requestHandlers.get('tools/call')!({
+          method: 'tools/call',
+          params: { name: 'search_docs', arguments: {}, _meta: { ...CODEX_CLIENT_META, ...meta } },
+        })
       }
       await call()
       vi.advanceTimersByTime(gaps[0] * 60_000)
@@ -278,6 +280,32 @@ describe('client conversation ids', () => {
       expect(grouped.$session_id).toBe(CODEX_SESSION)
       expect(last.$mcp_session_source).toBe('generated')
       expect(last.$session_id === first.$session_id).toBe(!rotated)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps no session alive for ChatGPT calls on a shared HTTP pod', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const pod = createPod({ enableConversationId: false })
+      const call = async (userAgent: string, meta?: Record<string, unknown>): Promise<void> => {
+        await pod._requestHandlers.get('tools/call')!(
+          { method: 'tools/call', params: { name: 'search_docs', arguments: {}, ...(meta ? { _meta: meta } : {}) } },
+          requestExtra({ userAgent })
+        )
+      }
+      await call(OTHER)
+      for (let i = 0; i < 3; i++) {
+        vi.advanceTimersByTime(20 * 60_000)
+        await call(CHATGPT, { 'openai/session': CHATGPT_ID })
+      }
+      await call('another-client/2.0')
+      vi.useRealTimers()
+      await new Promise((resolve) => setTimeout(resolve, 25))
+
+      const calls = toolCalls()
+      expect(calls[calls.length - 1].$session_id).not.toBe(calls[0].$session_id)
     } finally {
       vi.useRealTimers()
     }
