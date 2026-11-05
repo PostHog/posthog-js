@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.63.2
+
+### Patch Changes
+
+- [#5544](https://github.com/PostHog/posthog-js/pull/5544) [`8ddb57f`](https://github.com/PostHog/posthog-js/commit/8ddb57fc895a04f92797d8f574a660659dff096b) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix tree shaking of unselected extensions and shared utilities when using the slim SDK.
+  (2026-11-05)
+
 ## 1.63.1
 
 ### Patch Changes

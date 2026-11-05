@@ -151,6 +151,20 @@ describe('posthog-metrics', () => {
         expect(resourceAttrs).toContainEqual({ key: 'service.name', value: { stringValue: 'renamed-service' } })
     })
 
+    it.each([
+        ['count', (m: PostHogMetrics) => m.count('orders_created')],
+        ['gauge', (m: PostHogMetrics) => m.gauge('queue_depth', 3)],
+        ['histogram', (m: PostHogMetrics) => m.histogram('posthog.flags.request.duration', 42, { unit: 'ms' })],
+    ])('drops a %s captured after dispose without starting a flush timer', async (_name, capture) => {
+        metrics.dispose()
+
+        capture(metrics)
+
+        expect(vi.getTimerCount()).toBe(0)
+        await metrics.flush()
+        expect(sentRequests()).toHaveLength(0)
+    })
+
     describe('network metrics', () => {
         const originalFetch = window.fetch
         const isFetchWrapped = (): boolean => !!(window.fetch as any).__posthog_wrapped__

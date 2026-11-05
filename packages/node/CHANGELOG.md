@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.61.3
+
+### Patch Changes
+
+- [#5532](https://github.com/PostHog/posthog-js/pull/5532) [`88744a9`](https://github.com/PostHog/posthog-js/commit/88744a9945691e8b88c0c9ee7f716ec6b93192af) Thanks [@marandaneto](https://github.com/marandaneto)! - Skip client-only flag warnings and unnecessary server fallback during bulk evaluation.
+  (2026-11-05)
+
 ## 5.61.2
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.420.0
+
+### Minor Changes
+
+- [#5547](https://github.com/PostHog/posthog-js/pull/5547) [`742f73f`](https://github.com/PostHog/posthog-js/commit/742f73f01e05fe6413704840d2ba6c0ad5cdf6ec) Thanks [@haacked](https://github.com/haacked)! - Add the experimental `metrics.flags` option. When it is on, the browser SDK records the round trip of every `/flags` HTTP attempt as the histogram `posthog.flags.request.duration`, with the server host, the response status or error type, and the browser's timezone as attributes. The option, the metric name, and its attributes may change or be removed in any release.
+  (2026-11-04)
+
 ## 1.419.0
 
 ### Minor Changes

@@ -11,13 +11,15 @@ import { Extension } from './types'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
-const STATE_FROM_WINDOW = window?.location
-    ? _getHashParam(window.location.hash, '__posthog') || _getHashParam(location.hash, 'state')
-    : null
+// The read only matters when the toolbar is bundled; do not copy this annotation onto initialization that must always run.
+const STATE_FROM_WINDOW = /* @__PURE__ */ (() =>
+    window?.location
+        ? _getHashParam(window.location.hash, '__posthog') || _getHashParam(location.hash, 'state')
+        : null)()
 
 const LOCALSTORAGE_KEY = '_postHogToolbarParams'
 
-const logger = createLogger('[Toolbar]')
+const logger = /* @__PURE__ */ createLogger('[Toolbar]')
 
 const ToolbarState = { UNINITIALIZED: 0, LOADING: 1, LOADED: 2 } as const
 type ToolbarState = (typeof ToolbarState)[keyof typeof ToolbarState]
