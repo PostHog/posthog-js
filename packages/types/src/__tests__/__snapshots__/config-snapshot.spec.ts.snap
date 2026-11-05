@@ -301,6 +301,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
           ]
         }
       ],
+      \\"flags\\": [
+        \\"undefined\\",
+        \\"false\\",
+        \\"true\\"
+      ],
       \\"serviceName\\": [
         \\"undefined\\",
         \\"string\\"
