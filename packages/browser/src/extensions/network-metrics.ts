@@ -9,7 +9,7 @@ import { now } from '../utils/now'
 import type { MetricAttributes, NetworkMetricsConfig, NetworkMetricsRequest } from '../types'
 import { patch } from './replay/rrweb-plugins/patch'
 
-const logger = createLogger('[NetworkMetrics]')
+const logger = /* @__PURE__ */ createLogger('[NetworkMetrics]')
 
 const DEFAULT_METRIC_NAME = 'http.client.request.duration'
 
