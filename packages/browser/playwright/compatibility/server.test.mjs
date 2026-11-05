@@ -136,6 +136,7 @@ test('XHR recovery holds the first real flags response until client cancellation
 
 test('XHR exhaustion holds every flags attempt and leaves unrelated delivery available', async (t) => {
     const { server, origin } = await fixture(t, 'xhr-timeout-exhausted')
+    server.releaseBarrier('flags')
     await fetch(origin + '/__compat/xhr-timeout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
