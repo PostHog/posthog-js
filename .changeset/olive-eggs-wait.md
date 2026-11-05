@@ -2,4 +2,4 @@
 'posthog-node': patch
 ---
 
-Skip local evaluation warnings for client-only feature flags.
+Skip client-only flag warnings and unnecessary server fallback during bulk evaluation.

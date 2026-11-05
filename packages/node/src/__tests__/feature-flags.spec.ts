@@ -7962,6 +7962,18 @@ describe('unresolvable flag warning', () => {
               ensure_experience_continuity: false,
               filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
             },
+            {
+              id: 4,
+              name: 'Client-only continuity flag',
+              key: 'client-only-continuity-flag',
+              active: true,
+              deleted: false,
+              rollout_percentage: null,
+              experiment_set: [],
+              evaluation_runtime: 'client' as const,
+              ensure_experience_continuity: true,
+              filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+            },
           ],
           group_type_mapping: {},
           cohorts: {},
@@ -7991,6 +8003,10 @@ describe('unresolvable flag warning', () => {
           expect(warnSpy).toHaveBeenCalledTimes(2)
           expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reason: experience_continuity'))
           expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reason: unsupported_definition'))
+          for (const [message] of warnSpy.mock.calls) {
+            expect(message).toContain('1 flag(s)')
+            expect(message).not.toContain('client-only-continuity-flag')
+          }
         }
         expect(posthog.getFeatureFlagEvaluationRuntime('continuity-flag')).toBe(runtime ?? 'all')
         expect(posthog.getFeatureFlagEvaluationRuntime('unsupported-flag')).toBe(runtime ?? 'all')

@@ -345,7 +345,9 @@ class FeatureFlagsPoller {
           } else if (e instanceof Error) {
             this.onError?.(new Error(`Error computing flag locally: ${flag.key}: ${e}`))
           }
-          fallbackToFlags = true
+          if (evaluationRuntimesMatch(normalizeEvaluationRuntime(flag.evaluation_runtime), 'server')) {
+            fallbackToFlags = true
+          }
         }
       })
     )
@@ -938,7 +940,7 @@ class FeatureFlagsPoller {
     const definitions = this.currentDefinitions()
     for (const flag of flags) {
       // Client-only definitions are retained for server-side bootstrapping.
-      if (flag.evaluation_runtime === 'client') {
+      if (!evaluationRuntimesMatch(normalizeEvaluationRuntime(flag.evaluation_runtime), 'server')) {
         continue
       }
       const reason = getDefinitionUnresolvedReason(flag, definitions)
