@@ -313,6 +313,38 @@ describe('PostHogGenkitSpanProcessor', () => {
     expect(generate.properties.$ai_output_state.request.config).toEqual({ temperature: 0.2, apiKey: '[REDACTED]' })
   })
 
+  it('keeps credentials a tool returns out of the next model input', async () => {
+    const ai = genkit({})
+    const getForecast = ai.defineTool(
+      {
+        name: 'getForecast',
+        description: 'Get the forecast',
+        inputSchema: z.object({ city: z.string() }),
+        outputSchema: z.object({ apiKey: z.string(), forecast: z.string() }),
+      },
+      async () => ({ apiKey: 'tool-secret', forecast: 'Sunny' })
+    )
+    ai.defineModel({ name: 'fake/forecast-model', supports: { tools: true } }, async (request) =>
+      request.messages.at(-1)?.role !== 'tool'
+        ? {
+            message: {
+              role: 'model',
+              content: [{ toolRequest: { name: 'getForecast', ref: 'call_1', input: { city: 'Paris' } } }],
+            },
+          }
+        : { message: { role: 'model', content: [{ text: 'Sunny.' }] } }
+    )
+
+    await ai.generate({ model: 'fake/forecast-model', prompt: 'Forecast for Paris?', tools: [getForecast] })
+
+    const events = capturedEvents(client)
+    expect(JSON.stringify(events)).not.toContain('tool-secret')
+    const followUp = events.filter((event) => event.event === '$ai_generation').at(-1)
+    const input = JSON.stringify(followUp.properties.$ai_input)
+    expect(input).toContain('Sunny')
+    expect(input).toContain('[REDACTED]')
+  })
+
   it.each([
     ['googleai/gemini-2.5-flash', 'gemini', 'gemini-2.5-flash'],
     ['vertexai/gemini-2.5-flash', 'vertex', 'gemini-2.5-flash'],
