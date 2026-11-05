@@ -52,19 +52,30 @@ function readConfig(): { projectToken: string; host: string; personalApiKey: str
  * a fresh client per call (and tearing it down with `shutdown()`) is wasted work — the client
  * carries no per-invocation state once `flush()` has drained its queue.
  *
- * Keyed by `projectToken|host` so a deployment that rotates its env vars (via `npx convex env set`)
+ * Keyed by `projectToken|host|secretKey` so a deployment that rotates its env vars (via `npx convex env set`)
  * picks up the new client without restarting the isolate.
  */
 const clientCache = new Map<string, PostHog>()
 
-function getClient(projectToken: string, host: string): PostHog {
-  const key = `${projectToken}|${host}`
+function getClient(projectToken: string, host: string, secretKey = ''): PostHog {
+  const key = `${projectToken}|${host}|${secretKey}`
   let client = clientCache.get(key)
   if (!client) {
-    client = new PostHog(projectToken, { host, flushAt: 1, flushInterval: 0 })
+    client = new PostHog(projectToken, {
+      host,
+      flushAt: 1,
+      flushInterval: 0,
+      ...(secretKey ? { secretKey, enableLocalEvaluation: false } : {}),
+    })
     clientCache.set(key, client)
   }
   return client
+}
+
+/** A client that can send email: the configured client, with `POSTHOG_SECRET_KEY` and no flag polling. */
+export function getEmailClient(): PostHog {
+  const { projectToken, host } = readConfig()
+  return getClient(projectToken, host, (env.POSTHOG_SECRET_KEY ?? '').trim())
 }
 
 /** Properties are JSON-serialized to bypass Convex's restriction on `$`-prefixed field names. */

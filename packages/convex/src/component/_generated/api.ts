@@ -9,6 +9,7 @@
  */
 
 import type * as crons from "../crons.js";
+import type * as emails from "../emails.js";
 import type * as lib from "../lib.js";
 import type * as version from "../version.js";
 
@@ -21,6 +22,7 @@ import { anyApi, componentsGeneric } from "convex/server";
 
 const fullApi: ApiFromModules<{
   crons: typeof crons;
+  emails: typeof emails;
   lib: typeof lib;
   version: typeof version;
 }> = anyApi as any;
