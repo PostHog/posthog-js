@@ -53,8 +53,8 @@ import { getTimezone } from './utils/timezone'
 import { continueWith } from './utils/promise-utils'
 import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-reachability'
 
-const logger = createLogger('[FeatureFlags]')
-const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
+const logger = /* @__PURE__ */ createLogger('[FeatureFlags]')
+const forceDebugLogger = /* @__PURE__ */ createLogger('[FeatureFlags]', { debugEnabled: true })
 const FLAG_TIMEOUT_MSG = '" failed. Feature flags didn\'t load in time.'
 // Mirrors the event retry queue's status-0 budget: repeated requests that die
 // before any HTTP response while the browser reports itself online are usually
@@ -290,6 +290,27 @@ export interface FeatureFlagsReloadResult {
 
 type ReloadCompletion = (result: FeatureFlagsReloadResult) => void
 
+/** Who read a flag, and where. An exposure is reported only in the context of its read. */
+type FlagCallContext = {
+    distinctId: string | undefined
+    groups: Readonly<Record<string, string>>
+    sessionId: string | undefined
+}
+
+/** A flag read that is not reported yet. */
+type PendingFlagCall = {
+    value: string
+    context: FlagCallContext
+}
+
+const haveSameGroups = (a: Readonly<Record<string, string>>, b: Readonly<Record<string, string>>): boolean => {
+    const keys = Object.keys(a)
+    return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key])
+}
+
+const isSameFlagCallContext = (a: FlagCallContext, b: FlagCallContext): boolean =>
+    a.distinctId === b.distinctId && a.sessionId === b.sessionId && haveSameGroups(a.groups, b.groups)
+
 export class PostHogFeatureFlags implements Extension {
     readonly name: string = 'featureFlags'
     _override_warning: boolean = false
@@ -316,6 +337,9 @@ export class PostHogFeatureFlags implements Extension {
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer: ReturnType<typeof setTimeout> | undefined
     private _firingFeatureFlagsCallbacks: boolean = false
+    // Flags read while capture was off or the client rate limit was on
+    private _flagCallsPendingCapture = new Map<string, PendingFlagCall>()
+    private _sendingFlagCallsPendingCapture: boolean = false
     private _flagsLoadedFromRemote: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
     private _consecutiveStatusZeroFailures: number = 0
@@ -1013,6 +1037,51 @@ export class PostHogFeatureFlags implements Extension {
 
     resetFlagCallReported(): void {
         this._remove(FLAG_CALL_REPORTED)
+        this._flagCallsPendingCapture = new Map()
+    }
+
+    /** Sends `$feature_flag_called` for the flags read while capture was off, once the client can capture. */
+    sendFlagCallsPendingCapture(): void {
+        // Each replay calls capture(), which calls this method again.
+        // Wait for a spare rate limit token. A retry without one is dropped again and makes the client send a rate
+        // limit warning.
+        if (
+            this._flagCallsPendingCapture.size === 0 ||
+            this._sendingFlagCallsPendingCapture ||
+            !this._client?.canCapture ||
+            this._client.isRateLimited
+        ) {
+            return
+        }
+        this._sendingFlagCallsPendingCapture = true
+        try {
+            const flagVariants = this.getFlagVariants()
+            // A read that the rate limit drops goes back into the map. Iterate over a copy, so that read waits for the
+            // next capture instead of looping here.
+            for (const key of Array.from(this._flagCallsPendingCapture.keys())) {
+                const pending = this._flagCallsPendingCapture.get(key)
+                if (!pending) {
+                    continue
+                }
+                // An exposure must not be reported outside the context of its read, or with a value the user did not
+                // see. Check the context for each read, because a capture listener can call identify() during this loop.
+                if (
+                    pending.value !== String(flagVariants[key]) ||
+                    !isSameFlagCallContext(pending.context, this._flagCallContext())
+                ) {
+                    this._flagCallsPendingCapture.delete(key)
+                    continue
+                }
+                this.getFeatureFlagResult(key)
+                // A read stays pending when the rate limit applies or the flag cache is expired. Both conditions also
+                // apply to the reads after it, so they wait for the next capture.
+                if (this._flagCallsPendingCapture.has(key)) {
+                    break
+                }
+            }
+        } finally {
+            this._sendingFlagCallsPendingCapture = false
+        }
     }
 
     _callFlagsEndpoint(options?: { disableFlags?: boolean }): void {
@@ -1348,12 +1417,25 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         if (options.send_event || !('send_event' in options)) {
-            const canCapture = this._client?.canCapture
-            // Older SDK versions marked flags as reported while capture was off, but the client dropped the event.
-            // Clear those marks so the exposure is sent after consent is granted.
-            if (!canCapture && Object.keys(flagCallReported).length > 0) {
-                flagCallReported = {}
-                this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
+            const captureOff = !this._client?.canCapture
+            // While the client rate limit applies, the client drops the event. Hold the read without capturing or
+            // marking it, so repeated reads stay cheap until sendFlagCallsPendingCapture() sends it.
+            const canCapture = !captureOff && !this._client?.isRateLimited
+            if (canCapture) {
+                this._flagCallsPendingCapture.delete(key)
+            } else {
+                // Older SDK versions marked flags as reported while capture was off, but the client dropped the event.
+                // Clear those marks so the exposure is sent after consent is granted.
+                if (captureOff && Object.keys(flagCallReported).length > 0) {
+                    flagCallReported = {}
+                    this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
+                }
+                // Callers such as the React hooks do not read the flag again after consent, so
+                // sendFlagCallsPendingCapture() reports this read. A value that is already reported needs no exposure,
+                // and with per-session deduplication a later send can land in a session that did not read the flag.
+                if (!flagCallReported[key]?.includes(flagReportValue)) {
+                    this._holdFlagCall(key, flagReportValue)
+                }
             }
             // The client drops the event while capture is off, so marking the flag as reported would suppress the
             // exposure after consent is granted.
@@ -1420,7 +1502,11 @@ export class PostHogFeatureFlags implements Extension {
                     properties.$feature_flag_error = errors.join(',')
                 }
 
-                this._captureFeatureFlagCalled(properties)
+                if (!this._captureFeatureFlagCalled(properties)) {
+                    // The client rate limit dropped the event. Remove the mark so the next capture sends the exposure.
+                    this._unmarkFlagCallReported(key, flagReportValue)
+                    this._holdFlagCall(key, flagReportValue)
+                }
             } else if (sessionIdToPersist) {
                 this._set({
                     [FLAG_CALL_REPORTED]: flagCallReported,
@@ -1446,12 +1532,38 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    private _captureFeatureFlagCalled(properties: Record<string, any | undefined>): void {
+    /** Returns `false` when the client rate limit dropped the event. */
+    private _captureFeatureFlagCalled(properties: Record<string, any | undefined>): boolean {
         try {
-            this._client?.capture('$feature_flag_called', properties)
+            return this._client?.capture('$feature_flag_called', properties) !== false
         } catch (error) {
             this._logger.error('Failed to capture feature flag call', error)
+            return true
         }
+    }
+
+    private _holdFlagCall(key: string, value: string): void {
+        this._flagCallsPendingCapture.set(key, { value, context: this._flagCallContext() })
+    }
+
+    private _flagCallContext(): FlagCallContext {
+        return {
+            distinctId: this._client?.distinctId,
+            groups: { ...this._client?.groups },
+            // Exposures belong to a session only with per-session deduplication. Without it, a read stays valid
+            // across a session rotation.
+            sessionId: this._config.deduplicateCallsPerSession ? this._client?.session?.sessionId : undefined,
+        }
+    }
+
+    private _unmarkFlagCallReported(key: string, flagReportValue: string): void {
+        const flagCallReported: Record<string, string[]> = this._prop(FLAG_CALL_REPORTED) || {}
+        const reportedValues = flagCallReported[key]
+        if (!isArray(reportedValues) || !reportedValues.includes(flagReportValue)) {
+            return
+        }
+        flagCallReported[key] = reportedValues.filter((value) => value !== flagReportValue)
+        this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
     }
 
     /*
@@ -2006,5 +2118,6 @@ export class PostHogFeatureFlags implements Extension {
         this._clearDebouncer()
         this._override_warning = false
         this._consecutiveStatusZeroFailures = 0
+        this._flagCallsPendingCapture = new Map()
     }
 }

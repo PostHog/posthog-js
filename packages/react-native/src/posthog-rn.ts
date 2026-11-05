@@ -431,6 +431,15 @@ export class PostHog extends PostHogCore {
   private _requestHeaders: { [header_name: string]: string } = {}
 
   /**
+   * The project token the client was created with.
+   *
+   * @deprecated Use `projectToken` instead. This will be removed in the next major version.
+   */
+  get apiKey(): string {
+    return this.projectToken
+  }
+
+  /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
    *
    * If you prefer not to use the PostHogProvider, you can initialize PostHog in its own file and import the instance from there.
@@ -442,7 +451,7 @@ export class PostHog extends PostHogCore {
    * // posthog.ts
    * import PostHog from 'posthog-react-native'
    *
-   * export const posthog = new PostHog('<ph_project_api_key>', {
+   * export const posthog = new PostHog('<ph_project_token>', {
    *   host: '<ph_client_api_host>'
    * })
    *
@@ -461,17 +470,17 @@ export class PostHog extends PostHogCore {
    *
    * @public
    *
-   * @param apiKey - Your PostHog project token, which starts with `phc_`. Find it in your project
+   * @param projectToken - Your PostHog project token, which starts with `phc_`. Find it in your project
    *   settings: https://us.posthog.com/settings/project-details#variables
    * @param options - PostHog configuration options
    */
-  constructor(apiKey: string, options?: PostHogOptions) {
-    const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
-    if (!normalizedApiKey) {
+  constructor(projectToken: string, options?: PostHogOptions) {
+    const normalizedProjectToken = typeof projectToken === 'string' ? projectToken.trim() : ''
+    if (!normalizedProjectToken) {
       console.error('You must pass your PostHog project token. The client will be disabled.')
     }
 
-    super(normalizedApiKey, options)
+    super(normalizedProjectToken, options)
     this._isInitialized = false
     // Replay has no macOS backend, so opt-in has nothing to restart there.
     this._sessionReplayWanted = options?.enableSessionReplay === true && !isMacOS()
@@ -1984,7 +1993,7 @@ export class PostHog extends PostHogCore {
   }
 
   private _isSameProjectAs(other: PostHog): boolean {
-    return other.apiKey === this.apiKey && other.host === this.host
+    return other.projectToken === this.projectToken && other.host === this.host
   }
 
   private _canTakeOverNativeSession(owner: PostHog): boolean {
@@ -3304,7 +3313,7 @@ export class PostHog extends PostHogCore {
     const pushOnlyInit = (enablePush || enableFatalJsCapture) && !enableSessionReplay && !enableNativeErrorTracking
 
     const sdkOptions = {
-      apiKey: this.apiKey,
+      apiKey: this.projectToken,
       host: this.host,
       debug: this.isDebug,
       distinctId: this.getDistinctId(),

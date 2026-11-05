@@ -11,7 +11,15 @@ import { request } from '../../request'
 import { RequestRouter } from '../../utils/request-router'
 import { PostHog } from '../../posthog-core'
 import type { PostHogPersistence } from '../../posthog-persistence'
-import type { CaptureOptions, Properties, Property, QueuedRequestWithOptions, RemoteConfigResult } from '../../types'
+import type {
+    CaptureOptions,
+    Properties,
+    Property,
+    QueuedRequestWithOptions,
+    RemoteConfigResult,
+    RequestResponse,
+    SessionIdChangedCallback,
+} from '../../types'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 
 interface MockPostHog extends PostHog {
@@ -121,7 +129,7 @@ describe('BrowserClientAdapter', () => {
     it('delegates session notifications without reading or creating a session', () => {
         const instance = createMockPostHog()
         const unsubscribe = vi.fn()
-        let notify!: (sessionId: string) => void
+        let notify!: SessionIdChangedCallback
         instance.onSessionId = vi.fn((listener) => {
             notify = listener
             listener('existing-session', 'window')
@@ -131,7 +139,7 @@ describe('BrowserClientAdapter', () => {
         const listener = vi.fn()
         const subscription = client.onSession(listener)
         expect(listener).toHaveBeenCalledWith('existing-session')
-        notify('next-session')
+        notify('next-session', 'window')
         expect(listener).toHaveBeenLastCalledWith('next-session')
         expect(instance.sessionManager!.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         subscription.dispose()
@@ -189,12 +197,12 @@ describe('BrowserClientAdapter', () => {
         expect(client?.logger).toBeDefined()
 
         const timestamp = new Date('2026-01-01T00:00:00Z')
-        const captureResult: void = client?.capture(
+        const captureResult: boolean | undefined = client?.capture(
             'test-event',
             { explicit: true },
             { timestamp, uuid: 'test-uuid', set: { plan: 'paid' }, setOnce: { source: 'test' } }
         )
-        expect(captureResult).toBeUndefined()
+        expect(captureResult).toBe(true)
         expect(instance.capture).toHaveBeenCalledWith('test-event', { explicit: true }, {
             timestamp,
             uuid: 'test-uuid',
@@ -490,7 +498,7 @@ describe('BrowserClientAdapter', () => {
         'exposes live consent separately from capture permission in cookieless mode %s',
         async (cookielessMode) => {
             const instance = await createPosthogInstance(undefined, {
-                cookieless_mode: cookielessMode,
+                cookieless_mode: cookielessMode || undefined,
                 capture_pageview: false,
                 advanced_disable_flags: true,
                 disable_session_recording: true,
@@ -652,6 +660,114 @@ describe('BrowserClientAdapter', () => {
         expect(send.mock.calls[0][0].callback).toBeUndefined()
     })
 
+    describe('flags request duration metric', () => {
+        const METRIC = 'posthog.flags.request.duration'
+        const BASE_ATTRIBUTES = { 'server.address': 'flags.example.com', 'client.timezone': 'Europe/Berlin' }
+        const histogram = vi.fn()
+
+        beforeEach(() => {
+            histogram.mockClear()
+            vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
+                timeZone: 'Europe/Berlin',
+            } as Intl.ResolvedDateTimeFormatOptions)
+        })
+
+        afterEach(() => {
+            vi.restoreAllMocks()
+        })
+
+        // A `dropped` response models a request that `_send_request` drops before the network.
+        // It calls back synchronously and never calls `onDispatch`.
+        function createClient(
+            metrics: { flags?: boolean } | undefined,
+            responses: (RequestResponse | { dropped: RequestResponse })[]
+        ): BrowserClientAdapter {
+            const instance = createMockPostHog()
+            instance.config.metrics = metrics
+            ;(instance as unknown as { metrics: { histogram: typeof histogram } }).metrics = { histogram }
+            const queue = [...responses]
+            vi.mocked(instance._send_request).mockImplementation(({ callback, onDispatch }) => {
+                const response = queue.shift()!
+                if ('dropped' in response) {
+                    callback?.(response.dropped)
+                    return
+                }
+                onDispatch?.()
+                setTimeout(() => callback?.(response), 0)
+            })
+            return new BrowserClientAdapter(instance)
+        }
+
+        it('records one sample per /flags attempt with timezone and status attributes', async () => {
+            const client = createClient({ flags: true }, [{ statusCode: 503 }, { statusCode: 200 }])
+
+            await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+            await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+            expect(histogram).toHaveBeenCalledTimes(2)
+            expect(histogram).toHaveBeenNthCalledWith(1, METRIC, expect.any(Number), {
+                unit: 'ms',
+                attributes: { ...BASE_ATTRIBUTES, 'http.response.status_code': 503, 'error.type': '503' },
+            })
+            expect(histogram).toHaveBeenNthCalledWith(2, METRIC, expect.any(Number), {
+                unit: 'ms',
+                attributes: { ...BASE_ATTRIBUTES, 'http.response.status_code': 200 },
+            })
+            expect(histogram.mock.calls[0][1]).toBeGreaterThanOrEqual(0)
+        })
+
+        it.each([
+            ['timeout', { statusCode: 0, error: Object.assign(new Error('timed out'), { name: 'AbortError' }) }],
+            ['_OTHER', { statusCode: 0, error: new TypeError('Failed to fetch') }],
+            ['_OTHER', { statusCode: 0 }],
+        ] as const)('reports error type %s when no response arrives', async (errorType, response) => {
+            const client = createClient({ flags: true }, [response])
+
+            await client.sendRequest('/flags/', { target: 'flags' })
+
+            expect(histogram).toHaveBeenCalledWith(METRIC, expect.any(Number), {
+                unit: 'ms',
+                attributes: { ...BASE_ATTRIBUTES, 'error.type': errorType },
+            })
+        })
+
+        it.each([
+            ['the option is off', undefined],
+            ['metrics.flags is false', { flags: false }],
+        ])('records nothing when %s', async (_name, metrics) => {
+            const client = createClient(metrics, [{ statusCode: 200 }])
+
+            await client.sendRequest('/flags/', { target: 'flags' })
+
+            expect(histogram).not.toHaveBeenCalled()
+        })
+
+        it('records nothing for a non-flags request', async () => {
+            const client = createClient({ flags: true }, [{ statusCode: 200 }])
+
+            await client.sendRequest('/api/surveys/', { method: 'GET' })
+
+            expect(histogram).not.toHaveBeenCalled()
+        })
+
+        it('records nothing when the request is dropped before the network', async () => {
+            const client = createClient({ flags: true }, [{ dropped: { statusCode: 429 } }])
+
+            await expect(client.sendRequest('/flags/', { target: 'flags' })).resolves.toEqual({ statusCode: 429 })
+
+            expect(histogram).not.toHaveBeenCalled()
+        })
+
+        it('resolves the request when recording throws', async () => {
+            histogram.mockImplementationOnce(() => {
+                throw new Error('boom')
+            })
+            const client = createClient({ flags: true }, [{ statusCode: 200 }])
+
+            await expect(client.sendRequest('/flags/', { target: 'flags' })).resolves.toEqual({ statusCode: 200 })
+        })
+    })
+
     it('serializes the caller-owned body through the selected browser transport', async () => {
         const open = vi.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation(() => undefined)
         const setRequestHeader = vi
@@ -719,6 +835,22 @@ describe('BrowserClientAdapter', () => {
 
         posthog.reset()
         expect(await client?.kv.get(extensionKey)).toBeUndefined()
+        await posthog.shutdown()
+    })
+
+    it.each([
+        ['an event that before_send drops', { before_send: () => null }, [true, true]],
+        [
+            'events past the client rate limit',
+            { rate_limiting: { events_per_second: 1, events_burst_limit: 1 } },
+            [true, false],
+        ],
+    ])('returns whether capture can be retried for %s', async (_, config, expected) => {
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        const posthog = await createPosthogInstance(undefined, { capture_pageview: false, ...config })
+        const client = posthog._getBrowserClientAdapter()
+
+        expect([client.capture('first-event'), client.capture('second-event')]).toEqual(expected)
         await posthog.shutdown()
     })
 

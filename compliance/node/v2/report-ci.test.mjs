@@ -47,17 +47,17 @@ function diagnostics(
     }
 }
 
-function report(mode, status = 'passed', suite = 'migration') {
+function report(mode, status = 'passed', origin = 'migration') {
     const profile = mode === 'v0' ? 'node-legacy' : 'node-analytics-v1'
-    const caseSource = suite === 'acceptance' ? { ...source, path: 'acceptance/public/identify.feature' } : source
+    const caseSource = origin === 'acceptance' ? { ...source, path: 'acceptance/public/identify.feature' } : source
     return {
         contract_version: 'sdk-compliance-v2-draft2',
-        run_id: `run-${suite}-${mode}`,
+        run_id: `run-${mode}`,
         profiles: [{ id: profile }],
         results: [
             {
                 profile_id: profile,
-                case_id: suite === 'acceptance' ? 'identify-example' : 'example',
+                case_id: origin === 'acceptance' ? 'identify-example' : 'example',
                 source: caseSource,
                 result: {
                     status,
@@ -141,32 +141,27 @@ async function exercise(options = {}) {
             const dir = join(root, `node-v2-${mode}`)
             mkdirSync(dir)
             writeFileSync(join(dir, 'source.txt'), options.source || sha)
-            for (const suite of ['acceptance', 'migration']) {
-                if (suite === 'acceptance' && options.missingAcceptance?.includes(mode)) continue
-                const folder = suite === 'acceptance' ? 'acceptance' : 'reports'
-                mkdirSync(join(dir, folder), { recursive: true })
-                const data =
-                    (suite === 'acceptance' ? options.acceptanceReports : options.reports)?.[mode] ||
-                    report(mode, 'passed', suite)
-                writeFileSync(join(dir, folder, 'report.json'), typeof data === 'string' ? data : JSON.stringify(data))
-                const candidate =
-                    suite === 'acceptance' ? options.acceptanceDiagnostics?.[mode] : options.diagnostics?.[mode]
-                if (candidate !== null && typeof data !== 'string') {
-                    const diagnostic = candidate ?? diagnostics(data)
-                    writeFileSync(
-                        join(dir, folder, 'report.json.diagnostics.json'),
-                        typeof diagnostic === 'string' ? diagnostic : JSON.stringify(diagnostic)
-                    )
-                }
+            if (options.missingReports?.includes(mode)) continue
+            const folder = join(dir, 'acceptance')
+            mkdirSync(folder)
+            const data = options.reports?.[mode] || report(mode)
+            writeFileSync(join(folder, 'report.json'), typeof data === 'string' ? data : JSON.stringify(data))
+            const candidate = options.diagnostics?.[mode]
+            if (candidate !== null && typeof data !== 'string') {
+                const diagnostic = candidate ?? diagnostics(data)
                 writeFileSync(
-                    join(dir, folder, 'cli-exit.txt'),
-                    (suite === 'acceptance' ? options.acceptanceExit : options.exit) || '0'
-                )
-                writeFileSync(
-                    join(dir, folder, 'report-check-exit.txt'),
-                    (suite === 'acceptance' ? options.acceptanceValidation : options.validation) || '0'
+                    join(folder, 'report.json.diagnostics.json'),
+                    typeof diagnostic === 'string' ? diagnostic : JSON.stringify(diagnostic)
                 )
             }
+            writeFileSync(
+                join(folder, 'cli-exit.txt'),
+                typeof options.exit === 'string' ? options.exit : options.exit?.[mode] || '0'
+            )
+            writeFileSync(
+                join(folder, 'report-check-exit.txt'),
+                typeof options.validation === 'string' ? options.validation : options.validation?.[mode] || '0'
+            )
         }
         let error
         try {
@@ -180,14 +175,21 @@ async function exercise(options = {}) {
     }
 }
 
+test('workflow invokes unified acceptance once per capture profile', () => {
+    assert.equal((workflow.match(/bash compliance\/node\/v2\/run-compliance\.sh/g) || []).length, 1)
+    assert.match(workflow, /mode: \[v0, v1\]/)
+    assert.match(workflow, /timeout-minutes: 60/)
+    assert.match(workflow, /SDK_COMPLIANCE_RUN_TIMEOUT_MS: '2400000'/)
+    assert.match(workflow, /"\$CAPTURE_MODE" "\$RUNNER_TEMP\/node-compliance\/acceptance"/)
+})
+
 test('creates one combined comment for both profiles and writes the same summary', async () => {
     const { summary, calls, error } = await exercise()
     assert.equal(error, undefined)
     assert.match(summary, /Capture v0/)
     assert.match(summary, /Capture v1/)
-    assert.match(summary, /Capture v0 — acceptance/)
-    assert.match(summary, /Capture v1 — migration/)
-    assert.equal((summary.match(/All selected cases passed/g) || []).length, 4)
+    assert.equal((summary.match(/^## Capture /gm) || []).length, 2)
+    assert.equal((summary.match(/All selected cases passed/g) || []).length, 2)
     assert.doesNotMatch(summary, /example|<details>/)
     assert.equal(calls[0], 'summary')
     assert.equal(calls.at(-1)[0], 'create')
@@ -205,39 +207,42 @@ test('updates the existing bot comment, ignoring a matching human comment', asyn
     assert.equal(calls.at(-1)[1].comment_id, 2)
 })
 
-test('shows acceptance failures without losing migration results', async () => {
+test('combines canonical and migrated outcomes in one acceptance section per profile', async () => {
+    const combined = report('v1')
+    combined.results.push(...report('v1', 'failed_assertion', 'acceptance').results)
     const { summary, error } = await exercise({
-        acceptanceReports: { v1: report('v1', 'failed_assertion', 'acceptance') },
-        acceptanceExit: '1',
-        acceptanceValidation: '1',
+        reports: { v1: combined },
+        exit: { v0: '0', v1: '1' },
+        validation: { v0: '0', v1: '1' },
     })
     assert.equal(error, undefined)
-    assert.match(summary, /Capture v1 — acceptance[\s\S]*❌ 1 non-passing/)
+    assert.match(summary, /Capture v1[\s\S]*✅ 1 passed \/ ❌ 1 non-passing/)
     assert.match(summary, /acceptance\/report.json.diagnostics.json/)
     assert.match(summary, /identify-example/)
-    assert.match(summary, /Capture v0 — migration/)
-    assert.equal((summary.match(/All selected cases passed/g) || []).length, 2)
+    assert.match(summary, /Harness exit: 1; report validation exit: 1/)
+    assert.equal((summary.match(/^## Capture /gm) || []).length, 2)
+    assert.equal((summary.match(/All selected cases passed/g) || []).length, 1)
 })
 
 test('shows failed cases without losing the other profile', async () => {
     const { summary, error } = await exercise({
         reports: { v0: report('v0', 'failed_assertion') },
-        exit: '1',
-        validation: '1',
+        exit: { v0: '1', v1: '0' },
+        validation: { v0: '1', v1: '0' },
     })
     assert.equal(error, undefined)
     assert.match(summary, /✅ 0 passed \/ ❌ 1 non-passing/)
     assert.match(summary, /Unexpected flag value/)
     assert.match(summary, /Capture v1/)
-    assert.equal((summary.match(/All selected cases passed/g) || []).length, 2)
+    assert.equal((summary.match(/All selected cases passed/g) || []).length, 1)
 })
 
 for (const options of [
     { missing: ['v0'] },
     { missing: ['v0', 'v1'] },
     { reports: { v0: 'not json' } },
-    { acceptanceReports: { v1: 'not json' } },
-    { missingAcceptance: ['v0'] },
+    { reports: { v1: 'not json' } },
+    { missingReports: ['v0'] },
     { source: 'wrong-sha' },
     { reports: { v0: report('v1') } },
 ]) {
@@ -306,7 +311,7 @@ test('renders attributed getter failure, public arguments, expected/actual, spec
     assert.ok(summary.includes(`https://github.com/PostHog/sdk-specs/blob/${specsCommit}/${source.path}#L1187`))
     assert.doesNotMatch(summary, /-secret|cccccccccccccccc|unknown|wire_requests/)
     assert.match(summary, /node-v2-v0/)
-    assert.match(summary, /reports\/report.json.diagnostics.json/)
+    assert.match(summary, /acceptance\/report.json.diagnostics.json/)
     assert.match(summary, /actions\/runs\/123#artifacts/)
 })
 

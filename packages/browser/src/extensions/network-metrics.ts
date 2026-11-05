@@ -5,15 +5,13 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import type { PostHog } from '../posthog-core'
 import { isPostHogXHR } from '../request'
+import { now } from '../utils/now'
 import type { MetricAttributes, NetworkMetricsConfig, NetworkMetricsRequest } from '../types'
 import { patch } from './replay/rrweb-plugins/patch'
 
-const logger = createLogger('[NetworkMetrics]')
+const logger = /* @__PURE__ */ createLogger('[NetworkMetrics]')
 
 const DEFAULT_METRIC_NAME = 'http.client.request.duration'
-
-// oxlint-disable-next-line compat/compat
-const now = (): number => (window?.performance?.now ? window.performance.now() : Date.now())
 
 // All-digit segments, or hex/uuid-like segments of 8+ characters that contain a digit.
 const isIdLikeSegment = (segment: string): boolean =>

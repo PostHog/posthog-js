@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.16.3",
+  "version": "8.18.3",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -16,6 +16,7 @@
     "clean": "rimraf dist",
     "test:unit": "vitest run && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs && node tests/evaluations-module-load.cjs",
+    "test:otel-consumers": "node tests/otel-consumers.mjs",
     "test:gemini-consumers": "node tests/gemini-consumer-types.mjs",
     "test:cassettes": "vitest run --config harness/vitest.config.ts",
     "test:cassettes:offline": "node harness/run-offline.mjs",
@@ -34,6 +35,9 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
     "@google/genai": "2.18.0",
+    "genkit": "^1.42.0",
+    "esbuild": "^0.25.0",
+    "miniflare": "4.20260730.0",
     "@langchain/core": "^1.2.17",
     "openai": "^6.49.0",
     "@openai/agents": "^0.8.0",
@@ -41,7 +45,12 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
     "@opentelemetry/otlp-exporter-base": "^0.200.0",
-    "@opentelemetry/sdk-trace-base": "^2.0.0",
+    "@opentelemetry/sdk-trace-base": "2.2.0",
+    "@rollup/plugin-commonjs": "28.0.6",
+    "@rollup/plugin-json": "6.1.0",
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "rollup": "catalog:",
+    "webpack": "5.108.1",
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/tsconfig-base": "workspace:*",
@@ -76,11 +85,11 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0 || ^2.18.0",
+    "genkit": "^1.0.0",
     "@langchain/core": "^1.2.3",
     "openai": "^6.48.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0 <1.0.0",
-    "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@ai-sdk/provider": "^2.0.0 || ^3.0.0 || ^4.0.0",
     "@openai/agents": "^0.8.0",
     "langchain": ">=1.5.5 <2.0.0",
@@ -99,6 +108,9 @@
     "@google/genai": {
       "optional": true
     },
+    "genkit": {
+      "optional": true
+    },
     "@langchain/core": {
       "optional": true
     },
@@ -112,9 +124,6 @@
       "optional": true
     },
     "@opentelemetry/exporter-trace-otlp-http": {
-      "optional": true
-    },
-    "@opentelemetry/sdk-trace-base": {
       "optional": true
     },
     "@ai-sdk/provider": {
@@ -154,6 +163,10 @@
       "types": "./dist/vercel/index.d.ts"
     },
     "./otel": {
+      "browser": {
+        "require": "./dist/otel/index.browser.cjs",
+        "import": "./dist/otel/index.browser.mjs"
+      },
       "require": "./dist/otel/index.cjs",
       "import": "./dist/otel/index.mjs",
       "types": "./dist/otel/index.d.ts"
@@ -187,6 +200,11 @@
       "types": "./dist/evaluations/index.d.ts",
       "import": "./dist/evaluations/index.mjs",
       "require": "./dist/evaluations/index.cjs"
+    },
+    "./genkit": {
+      "require": "./dist/genkit/index.cjs",
+      "import": "./dist/genkit/index.mjs",
+      "types": "./dist/genkit/index.d.ts"
     }
   },
   "directories": {

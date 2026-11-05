@@ -1,5 +1,40 @@
 # @posthog/types
 
+## 1.420.0
+
+### Minor Changes
+
+- [#5547](https://github.com/PostHog/posthog-js/pull/5547) [`742f73f`](https://github.com/PostHog/posthog-js/commit/742f73f01e05fe6413704840d2ba6c0ad5cdf6ec) Thanks [@haacked](https://github.com/haacked)! - Add the experimental `metrics.flags` option. When it is on, the browser SDK records the round trip of every `/flags` HTTP attempt as the histogram `posthog.flags.request.duration`, with the server host, the response status or error type, and the browser's timezone as attributes. The option, the metric name, and its attributes may change or be removed in any release.
+  (2026-11-04)
+
+## 1.419.0
+
+### Minor Changes
+
+- [#5480](https://github.com/PostHog/posthog-js/pull/5480) [`9bd0e80`](https://github.com/PostHog/posthog-js/commit/9bd0e807d019f06b08cd998b0bb72bac6dd2352e) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add support widget theming: `conversations.theme` init option, `posthog.conversations.setTheme()`, dark mode, and `--ph-conv-*` CSS custom properties
+  (2026-10-30)
+
+## 1.418.0
+
+### Minor Changes
+
+- [#5269](https://github.com/PostHog/posthog-js/pull/5269) [`950d034`](https://github.com/PostHog/posthog-js/commit/950d03423605d1567c90a3f27f50d4603a89ae45) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `$input_value` to autocapture `change` events for fields marked `data-ph-capture-value`, or matched by the new `autocapture.capture_value_css_selector_allowlist` option (CSS selectors or an `(element) => boolean` predicate).
+  (2026-10-28)
+
+## 1.417.0
+
+### Minor Changes
+
+- [#5405](https://github.com/PostHog/posthog-js/pull/5405) [`3150079`](https://github.com/PostHog/posthog-js/commit/31500798797e35187ca0a61bcf2af24d6ba45a96) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `defaults: 'latest'` to follow the newest defaults and report the applied date in events.
+  (2026-10-27)
+
+## 1.416.1
+
+### Patch Changes
+
+- [#5335](https://github.com/PostHog/posthog-js/pull/5335) [`cb34fe0`](https://github.com/PostHog/posthog-js/commit/cb34fe03c49feb636ea4537f6f6b05144d163dac) Thanks [@hpouillot](https://github.com/hpouillot)! - Correct the documented default for synchronous session replay fetch capture.
+  (2026-10-26)
+
 ## 1.416.0
 
 ### Minor Changes

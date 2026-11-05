@@ -2,11 +2,13 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath, URL } from 'node:url'
 import { configDefaults, defineConfig } from 'vitest/config'
+import { loaderMethods } from './scripts/loader-methods.mjs'
 
 const require = createRequire(import.meta.url)
 const fromRoot = (relativePath: string): string => fileURLToPath(new URL(relativePath, import.meta.url))
 
 export default defineConfig({
+    plugins: [loaderMethods()],
     define: {
         __SURVEY_CSS__: JSON.stringify(readFileSync(fromRoot('../browser-common/src/surveys/survey.css'), 'utf8')),
     },

@@ -280,6 +280,11 @@ export interface RequestWithOptions {
      * later retry instead of losing them silently.
      */
     fireCallbackOnDrop?: boolean
+    /**
+     * Called each time `_send_request` hands the request to the transport. It is
+     * not called on the paths that drop the request before the network.
+     */
+    onDispatch?: () => void
 }
 
 // Queued request types - the same as a request but with additional queueing information

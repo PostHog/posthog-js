@@ -6,9 +6,9 @@ import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-commo
 import { isFunction } from '@posthog/core'
 
 describe('config', () => {
-    it('keeps synchronous replay fetch disabled by default', () => {
-        expect(defaultConfig().__preview_replay_sync_fetch).toBe(false)
-        expect(defaultConfig('2026-05-30').__preview_replay_sync_fetch).toBe(false)
+    it('enables synchronous replay fetch by default for new cores', () => {
+        expect(defaultConfig().__preview_replay_sync_fetch).toBe(true)
+        expect(defaultConfig('2026-05-30').__preview_replay_sync_fetch).toBe(true)
     })
 
     describe('memory persistence without bootstrap.distinctID', () => {
@@ -329,6 +329,78 @@ describe('config', () => {
     })
 
     describe('compatibilityDate', () => {
+        it('applies all current defaults when defaults is latest', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: 'latest' })
+            expect(posthog.config).toMatchObject({
+                defaults: 'latest',
+                capture_pageview: 'history_change',
+                rageclick: {
+                    content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS,
+                    ignore_text_selection: true,
+                },
+                session_recording: {
+                    strictMinimumDuration: true,
+                    canvasCapture: { resolutionScale: 0.6 },
+                    streamNetworkBody: true,
+                    captureJsonLd: true,
+                },
+                external_scripts_inject_target: 'head',
+                internal_or_test_user_hostname: /^(localhost|127\.0\.0\.1)$/,
+                persistence_save_debounce_ms: 250,
+                split_storage: true,
+                detect_google_search_app: true,
+                disable_capture_url_hashes: true,
+                cookieWinsOnConflict: true,
+            })
+        })
+
+        it.each([
+            [undefined, 'unset'],
+            ['unset', 'unset'],
+            ['2025-05-24', '2025-05-24'],
+            ['2026-08-30', '2026-08-30'],
+            ['latest', '2026-08-30'],
+        ] as const)('reports the applied defaults in event properties for %s', (defaults, expected) => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults })
+
+            expect(posthog.calculateEventProperties('test_event', {}).$config_defaults).toBe(expected)
+            expect(posthog.config.defaults).toBe(defaults ?? 'unset')
+        })
+
+        it('reports the applied defaults date on replay snapshots with latest defaults', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: 'latest' })
+
+            expect(posthog.calculateEventProperties('$snapshot', {}).$config_defaults).toBe('2026-08-30')
+        })
+
+        it('preserves explicit overrides with the latest defaults', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                defaults: 'latest',
+                capture_pageview: false,
+                rageclick: { content_ignorelist: false },
+                persistence_save_debounce_ms: 0,
+                cookieWinsOnConflict: false,
+                session_recording: { captureJsonLd: false, canvasCapture: { resolutionScale: 0.8 } },
+            })
+            expect(posthog.config.capture_pageview).toBe(false)
+            expect(posthog.config.rageclick).toStrictEqual({
+                content_ignorelist: false,
+                ignore_text_selection: true,
+            })
+            expect(posthog.config.persistence_save_debounce_ms).toBe(0)
+            expect(posthog.config.cookieWinsOnConflict).toBe(false)
+            expect(posthog.config.session_recording).toStrictEqual({
+                strictMinimumDuration: true,
+                canvasCapture: { resolutionScale: 0.8 },
+                streamNetworkBody: true,
+                captureJsonLd: false,
+            })
+        })
+
         it('should set capture_pageview to true when defaults is undefined', () => {
             const posthog = new PostHog()
             posthog._init('test-token')

@@ -269,11 +269,6 @@ jobs:
         runs-on: ubuntu-latest
         permissions: {}
         steps:
-            - name: Audit runner egress
-              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
-              with:
-                  egress-policy: audit
-
             - name: Notify Slack - S3 recovery approval needed
               continue-on-error: true
               env:
@@ -524,11 +519,6 @@ jobs:
             matrix:
                 region: ${{ fromJSON(needs.validate.outputs.upload-matrix) }}
         steps:
-            - name: Audit runner egress
-              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
-              with:
-                  egress-policy: audit
-
             - name: Checkout current release tooling
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -637,11 +627,6 @@ jobs:
             matrix:
                 region: ${{ fromJSON(needs.validate.outputs.upload-matrix) }}
         steps:
-            - name: Audit runner egress
-              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
-              with:
-                  egress-policy: audit
-
             - name: Checkout current release tooling
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:

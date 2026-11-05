@@ -200,33 +200,74 @@ describe('request', () => {
             }
         })
 
-        it('calls the on callback handler when successful', async () => {
-            mockedXHR.status = 200
-            request(createRequest())
-            mockedXHR.onreadystatechange?.({} as Event)
-            expect(mockCallback).toHaveBeenCalledWith({
-                statusCode: 200,
-                json: 'something here',
-                text: '"something here"',
-            })
-        })
-
-        it.each([200, 502])('completes once with malformed JSON at status %i', (statusCode) => {
-            const parseError = vi.spyOn(logger, 'error').mockImplementation(() => {})
-            try {
-                request(createRequest())
-                mockedXHR.status = statusCode
-                mockedXHR.responseText = '{wat'
+        describe('completion', () => {
+            // The XHR spec fires `readystatechange` (readyState 4) first, then the outcome
+            // event (`load`, `error` or `timeout`), then `loadend`.
+            const settle = (outcome: 'onload' | 'onerror' | 'ontimeout') => {
                 mockedXHR.onreadystatechange?.({} as Event)
-                expect(mockCallback).toHaveBeenCalledWith({
-                    statusCode,
-                    json: undefined,
-                    text: '{wat',
-                })
-                expect(mockCallback).toHaveBeenCalledTimes(1)
-            } finally {
-                parseError.mockRestore()
+                mockedXHR[outcome]?.({} as ProgressEvent)
+                mockedXHR.onloadend?.({} as ProgressEvent)
             }
+
+            it.each([200, 502])('completes once with malformed JSON at status %i', (statusCode) => {
+                const parseError = vi.spyOn(logger, 'error').mockImplementation(() => {})
+                try {
+                    request(createRequest())
+                    mockedXHR.status = statusCode
+                    mockedXHR.responseText = '{wat'
+                    settle('onload')
+                    expect(mockCallback).toHaveBeenCalledWith({
+                        statusCode,
+                        json: undefined,
+                        text: '{wat',
+                    })
+                    expect(mockCallback).toHaveBeenCalledTimes(1)
+                } finally {
+                    parseError.mockRestore()
+                }
+            })
+
+            it('reports a timeout once as status 0 with an AbortError', () => {
+                const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+                try {
+                    request(createRequest({ timeout: 1234 }))
+                    mockedXHR.status = 0
+                    mockedXHR.responseText = ''
+                    settle('ontimeout')
+
+                    expect(mockedXHR.timeout).toBe(1234)
+                    expect(mockCallback).toHaveBeenCalledTimes(1)
+                    const [response] = mockCallback.mock.calls[0]
+                    expect(response).toEqual({ statusCode: 0, error: expect.any(Error) })
+                    expect(response.error.name).toBe('AbortError')
+                    expect(response.error.message).toBe('PostHog request timed out after 1234ms')
+                    expect(warn).toHaveBeenCalledWith(response.error)
+                } finally {
+                    warn.mockRestore()
+                }
+            })
+
+            it('reports a successful response once', () => {
+                request(createRequest())
+                settle('onload')
+
+                expect(mockCallback).toHaveBeenCalledTimes(1)
+                expect(mockCallback).toHaveBeenCalledWith({
+                    statusCode: 200,
+                    json: 'something here',
+                    text: '"something here"',
+                })
+            })
+
+            it('reports a network error once as status 0 without an error', () => {
+                request(createRequest({ timeout: 1234 }))
+                mockedXHR.status = 0
+                mockedXHR.responseText = ''
+                settle('onerror')
+
+                expect(mockCallback).toHaveBeenCalledTimes(1)
+                expect(mockCallback).toHaveBeenCalledWith({ statusCode: 0, text: '' })
+            })
         })
 
         it('does not set XHR credentials', () => {

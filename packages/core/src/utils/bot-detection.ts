@@ -78,6 +78,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
 
   // headless browsers
   'headlesschrome',
+  'lightpanda',
   'cypress',
   // we don't block electron here, as many customers use posthog-js in electron apps
 

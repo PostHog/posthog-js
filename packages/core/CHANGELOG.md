@@ -1,5 +1,61 @@
 # @posthog/core
 
+## 1.63.2
+
+### Patch Changes
+
+- [#5544](https://github.com/PostHog/posthog-js/pull/5544) [`8ddb57f`](https://github.com/PostHog/posthog-js/commit/8ddb57fc895a04f92797d8f574a660659dff096b) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix tree shaking of unselected extensions and shared utilities when using the slim SDK.
+  (2026-11-05)
+
+## 1.63.1
+
+### Patch Changes
+
+- [#5481](https://github.com/PostHog/posthog-js/pull/5481) [`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` when the user opts in, without being read again. This fixes missing exposures from the React and React Native hooks, which read a flag once on mount.
+  (2026-11-04)
+
+## 1.63.0
+
+### Minor Changes
+
+- [#5473](https://github.com/PostHog/posthog-js/pull/5473) [`5c8f314`](https://github.com/PostHog/posthog-js/commit/5c8f3140d68c0bd3b437958afd1e4ced33f4f83a) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: `parsePostHogCookie` and `readPostHogCookie` return the session's last activity and start timestamps
+  (2026-11-03)
+
+## 1.62.1
+
+### Patch Changes
+
+- [#5505](https://github.com/PostHog/posthog-js/pull/5505) [`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85) Thanks [@majicmaj](https://github.com/majicmaj)! - Recognize self-declared Lightpanda headless browsers in bot detection.
+  (2026-11-02)
+
+## 1.62.0
+
+### Minor Changes
+
+- [#5418](https://github.com/PostHog/posthog-js/pull/5418) [`c705824`](https://github.com/PostHog/posthog-js/commit/c705824357b00a1187302224a58f478d1f652a54) Thanks [@mayteio](https://github.com/mayteio)! - `parseRetryAfterMs` takes an optional cap, so a caller can read a `Retry-After` longer than five minutes.
+  (2026-10-30)
+
+## 1.61.2
+
+### Patch Changes
+
+- [#5252](https://github.com/PostHog/posthog-js/pull/5252) [`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a) Thanks [@andehen](https://github.com/andehen)! - Document that `sendFeatureFlagEvent` is also the default for posthog-node `evaluateFlags()` snapshot reads.
+  (2026-10-28)
+
+## 1.61.1
+
+### Patch Changes
+
+- [#5431](https://github.com/PostHog/posthog-js/pull/5431) [`96d7ff2`](https://github.com/PostHog/posthog-js/commit/96d7ff2e394126e2bd03a2422f60b5892a85d87f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Deprecate `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` in favor of `getAllFeatureFlags()`, `onFeatureFlag()` in favor of `onFeatureFlags()`, the `cb` option of `reloadFeatureFlags()` in favor of `reloadFeatureFlagsAsync()`, and `overrideFeatureFlag()` in favor of `updateFlags()`. In React Native, also deprecate the `useFeatureFlagWithPayload()` hook in favor of `useFeatureFlagResult()`. They continue to work.
+  (2026-10-27)
+
+## 1.61.0
+
+### Minor Changes
+
+- [#5436](https://github.com/PostHog/posthog-js/pull/5436) [`43ad061`](https://github.com/PostHog/posthog-js/commit/43ad061185c7f8b0a36ed87bb6a28214d4224e9d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add the `projectToken` prop to `PostHogProvider` and the `projectToken` property to the client, and deprecate the `apiKey` prop and property in favor of them. `apiKey` keeps working, and `projectToken` wins when both are set.
+  (2026-10-26)
+
 ## 1.60.1
 
 ### Patch Changes
