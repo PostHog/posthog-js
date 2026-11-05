@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.18.5
+
+### Patch Changes
+
+- [#5556](https://github.com/PostHog/posthog-js/pull/5556) [`b63702f`](https://github.com/PostHog/posthog-js/commit/b63702f5ae225e7a4b1b8cc9e5bbbb9aa32422d9) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Genkit: redact credentials in model messages, so a credential that a tool returns no longer reaches `$ai_input`.
+  (2026-11-05)
+
 ## 8.18.4
 
 ### Patch Changes
