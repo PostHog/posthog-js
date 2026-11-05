@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.25.1
+
+### Patch Changes
+
+- [#5573](https://github.com/PostHog/posthog-js/pull/5573) [`88dbf08`](https://github.com/PostHog/posthog-js/commit/88dbf08e319a60ec1f5c4eeaca25a55a3fa54fe6) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Reworded the descriptions of the injected `conversation_id` and `llm_model` arguments and the `get_more_tools` and `send_feedback` virtual tools so they describe the field instead of instructing the model. This changes your published tool definitions; if your server is listed in the ChatGPT or Claude directories, those platforms may re-review the updated tools.
+  (2026-11-05)
+
 ## 0.25.0
 
 ### Minor Changes

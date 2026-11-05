@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.447.1
+
+### Patch Changes
+
+- [#5576](https://github.com/PostHog/posthog-js/pull/5576) [`9ee327d`](https://github.com/PostHog/posthog-js/commit/9ee327d090bffbb564627404b9819994c1327dda) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Reworded the description of the `llm_model` argument that `capture_webmcp` adds to WebMCP tools, so it no longer points the model at its system prompt.
+  (2026-11-05)
+
 ## 1.447.0
 
 ### Minor Changes
