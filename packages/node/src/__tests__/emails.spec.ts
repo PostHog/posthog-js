@@ -307,6 +307,22 @@ describe('emails', () => {
     expect(marked).toMatchObject({ 'X-PostHog-Integration': 'nodemailer/5.61.2', 'User-Agent': 'posthog-node/1.2.3' })
     expect(unmarked).not.toHaveProperty('X-PostHog-Integration')
     expect(unmarked['User-Agent']).toBe('posthog-node/1.2.3')
+    const [markedBody, unmarkedBody] = fetch.mock.calls.map(([, options]) => JSON.parse(options.body))
+    expect(markedBody).not.toHaveProperty('integration')
+    expect(markedBody).toEqual(unmarkedBody)
+  })
+
+  it('names the integration on each retry of a send', async () => {
+    replies = [rejected(503, 'delivery_unavailable'), accepted()]
+
+    const pending = send({ integration: 'nodemailer/5.61.2' })
+    await vi.runAllTimersAsync()
+
+    expect((await pending).data?.id).toBe('msg_1')
+    expect(fetch.mock.calls.map(([, options]) => options.headers['X-PostHog-Integration'])).toEqual([
+      'nodemailer/5.61.2',
+      'nodemailer/5.61.2',
+    ])
   })
 
   it.each([
