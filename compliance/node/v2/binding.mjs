@@ -10,6 +10,7 @@ export const routes = [
     '/group_identify',
     '/capture_exception',
     '/evaluate_flags/read',
+    '/opt_out',
     '/flush',
     '/get_feature_flag',
     '/reload_feature_flags',
@@ -146,6 +147,35 @@ function timestamp(value) {
         blocked('timestamp-representation', 'Timestamp cannot be represented losslessly by Date')
     }
     return date
+}
+function exceptionFixture(descriptor) {
+    if (!object(descriptor)) blocked('exception-fixture', 'Expected an exception fixture descriptor')
+    if (own(descriptor, 'value')) {
+        checkKeys(descriptor, ['value'], '/capture_exception/error')
+        return descriptor.value
+    }
+    checkKeys(descriptor, ['type', 'message', 'stack', 'cause', 'errors'], '/capture_exception/error')
+    const constructors = { Error, TypeError, RangeError, AggregateError }
+    if (
+        typeof descriptor.type !== 'string' ||
+        !own(constructors, descriptor.type) ||
+        typeof descriptor.message !== 'string'
+    )
+        blocked('exception-fixture', 'Native fixture requires a supported Error type and a string message')
+    const options = own(descriptor, 'cause') ? { cause: exceptionFixture(descriptor.cause) } : undefined
+    let error
+    if (descriptor.type === 'AggregateError') {
+        if (!Array.isArray(descriptor.errors)) blocked('exception-fixture', 'AggregateError requires an errors array')
+        error = new AggregateError(descriptor.errors.map(exceptionFixture), descriptor.message, options)
+    } else {
+        if (own(descriptor, 'errors')) blocked('exception-fixture', 'Only AggregateError accepts errors')
+        error = new constructors[descriptor.type](descriptor.message, options)
+    }
+    if (own(descriptor, 'stack')) {
+        if (typeof descriptor.stack !== 'string') blocked('exception-fixture', 'Expected a string stack fixture')
+        error.stack = descriptor.stack
+    }
+    return error
 }
 function jsonData(value, ancestors = new Set()) {
     if (value === null || ['string', 'boolean'].includes(typeof value)) return true
@@ -303,14 +333,11 @@ export class Binding {
                     )
                 )
             } else if (route === '/capture_exception') {
-                checkKeys(args, ['error', 'distinct_id', 'properties'], route)
-                if (!object(args.error)) blocked('exception-fixture', 'Expected a native exception descriptor')
-                checkKeys(args.error, ['type', 'message'], `${route}/error`)
-                if (args.error.type !== 'TypeError' || typeof args.error.message !== 'string')
-                    blocked('exception-fixture', 'Native fixture requires TypeError and a string message')
-                const parameters = [new TypeError(args.error.message)]
-                if (own(args, 'distinct_id') || own(args, 'properties')) parameters.push(args.distinct_id)
-                if (own(args, 'properties')) parameters.push(args.properties)
+                checkKeys(args, ['error', 'distinct_id', 'properties', 'uuid', 'flags'], route)
+                const parameters = [exceptionFixture(args.error)]
+                const optional = ['distinct_id', 'properties', 'uuid', 'flags']
+                const last = optional.findLastIndex((key) => own(args, key))
+                for (let index = 0; index <= last; index++) parameters.push(args[optional[index]])
                 result = this.client.captureException(...parameters)
             } else if (route === '/evaluate_flags/read') {
                 checkKeys(args, ['distinct_id', 'options', 'reads'], route)
@@ -320,6 +347,9 @@ export class Binding {
                 if (own(args, 'options')) parameters.push(rename(args.options, evaluationFields, `${route}/options`))
                 const snapshot = await this.client.evaluateFlags(...parameters)
                 result = await snapshotReads(snapshot, args.reads)
+            } else if (route === '/opt_out') {
+                checkKeys(args, [], route)
+                result = await this.client.optOut()
             } else if (route === '/flush') {
                 checkKeys(args, [], route)
                 result = await this.client.flush()
@@ -351,6 +381,7 @@ export class Binding {
                         route === '/alias' ||
                         route === '/group_identify' ||
                         route === '/capture_exception' ||
+                        route === '/opt_out' ||
                         route === '/flush' ||
                         route === '/reload_feature_flags'
                 ),
