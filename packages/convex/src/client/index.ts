@@ -1,5 +1,6 @@
 import type { Scheduler } from 'convex/server'
 import type { ComponentApi } from '../component/_generated/component.js'
+import type { EmailSendFailure, SentEmail } from '../component/emails.js'
 import {
   type FeatureFlagResult,
   type FeatureFlagValue,
@@ -37,6 +38,64 @@ export type PostHogEvent = {
 export type BeforeSendFn = (event: PostHogEvent) => PostHogEvent | null
 
 export type IdentifyFn = (ctx: any) => Promise<{ distinctId: string } | null>
+
+export type { EmailSendFailure, SentEmail }
+
+/** A file sent with the email. */
+export type EmailAttachment = {
+  filename: string
+  /** The file's content, Base64 encoded. */
+  content: string
+  contentType?: string
+  /** Shows the file inline where the HTML has `<img src="cid:...">` with this id. */
+  contentId?: string
+}
+
+/** One email with content your code rendered. Needs `html`, `text` or both. */
+export type SendEmailArgs = {
+  /** One recipient address. */
+  to: string
+  subject: string
+  /** A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender. */
+  from?: string
+  replyTo?: string | string[]
+  cc?: string | string[]
+  bcc?: string | string[]
+  attachments?: EmailAttachment[]
+  /** The recipient's distinct ID in your product. Without it, the email's events go to the address. */
+  distinctId?: string
+  /** Groups the email's metrics in PostHog, such as `'order-shipped'`. Letters, digits, `-` and `_`, at most 400. */
+  templateKey?: string
+  /** Covers retries outside this call too. `enqueueEmail` makes one when you pass none. */
+  idempotencyKey?: string
+  captureEngagement?: boolean
+  /** PostHog templates can't be sent from Convex: render the email in your code. */
+  templateId?: never
+} & ({ html: string; text?: string } | { html?: string; text: string })
+
+export type EmailRefusal = 'template_unsupported' | 'invalid_template_key'
+
+/** The email can't be sent as asked, so nothing was sent or queued. */
+export class UnsupportedEmailError extends Error {
+  readonly refusal: EmailRefusal
+
+  constructor(refusal: EmailRefusal, detail: string) {
+    super(`PostHog cannot send this email: ${refusal}. ${detail}`)
+    this.name = 'UnsupportedEmailError'
+    this.refusal = refusal
+  }
+}
+
+/** A queue that retries a failed action, such as a `Workpool` from `@convex-dev/workpool`. */
+export type EmailQueue<Ctx, WorkId> = {
+  enqueueAction(ctx: Ctx, fn: any, args: any, options: { retry: true }): Promise<WorkId>
+}
+
+const TEMPLATE_KEY = /^[a-zA-Z0-9_-]{1,400}$/
+const INTEGRATION_NAME = 'convex'
+
+const listOf = (addresses: string | string[] | undefined): string[] | undefined =>
+  typeof addresses === 'string' ? [addresses] : addresses
 
 export function normalizeError(error: unknown): {
   message: string
@@ -80,16 +139,54 @@ export function normalizeError(error: unknown): {
 export class PostHog {
   private beforeSend?: BeforeSendFn | BeforeSendFn[]
   private identifyFn?: IdentifyFn
+  private defaultTemplateKey: string
 
   constructor(
     public component: ComponentApi,
     options?: {
       beforeSend?: BeforeSendFn | BeforeSendFn[]
       identify?: IdentifyFn
+      /** `defaultTemplateKey` names emails sent without a `templateKey`. Without it, they are named `convex`. */
+      emails?: { defaultTemplateKey?: string }
     }
   ) {
     this.beforeSend = options?.beforeSend
     this.identifyFn = options?.identify
+    this.defaultTemplateKey = options?.emails?.defaultTemplateKey ?? INTEGRATION_NAME
+  }
+
+  /**
+   * Send one email now, with `POSTHOG_SECRET_KEY`. Action context only. Resolves when PostHog
+   * queued the email. A failed send throws a `ConvexError` whose `data` is an `EmailSendFailure`.
+   */
+  async sendEmail(ctx: RunActionCtx, email: SendEmailArgs): Promise<SentEmail> {
+    return (await ctx.runAction(this.component.emails.send, this.emailSend(email))) as SentEmail
+  }
+
+  /**
+   * Queue one email on a retrying queue, such as a Workpool. Makes the idempotency key now, so every
+   * attempt reuses it and a retry never sends twice. Retryable failures retry; others stop.
+   */
+  async enqueueEmail<Ctx, WorkId>(ctx: Ctx, queue: EmailQueue<Ctx, WorkId>, email: SendEmailArgs): Promise<WorkId> {
+    const send = this.emailSend(email)
+    const idempotencyKey = send.idempotencyKey ?? crypto.randomUUID()
+    return await queue.enqueueAction(ctx, this.component.emails.send, { ...send, idempotencyKey }, { retry: true })
+  }
+
+  private emailSend(email: SendEmailArgs) {
+    if (email.templateId !== undefined) {
+      throw new UnsupportedEmailError('template_unsupported', 'Render the email in your code and send its html.')
+    }
+    if (email.templateKey !== undefined && !TEMPLATE_KEY.test(email.templateKey)) {
+      throw new UnsupportedEmailError('invalid_template_key', 'Use letters, digits, - and _, at most 400.')
+    }
+    return {
+      ...email,
+      templateKey: email.templateKey ?? this.defaultTemplateKey,
+      replyTo: listOf(email.replyTo),
+      cc: listOf(email.cc),
+      bcc: listOf(email.bcc),
+    }
   }
 
   /**

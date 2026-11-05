@@ -14,6 +14,11 @@ export default defineComponent('posthog', {
     POSTHOG_HOST: v.optional(v.string()),
     POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
     /**
+     * A project secret API key (`phs_…`) with the `transactional_email:write` scope. Optional;
+     * only `sendEmail` and `enqueueEmail` need it.
+     */
+    POSTHOG_SECRET_KEY: v.optional(v.string()),
+    /**
      * Polling interval for the local-evaluation refresh, in whole seconds. Optional (defaults
      * to 60). Convex component env vars are string-typed on the wire and only forwarded at
      * runtime, so it's read by the self-rescheduling refresh loop in `lib.ts` rather than at

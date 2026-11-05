@@ -23,6 +23,34 @@ import type { FunctionReference } from "convex/server";
  */
 export type ComponentApi<Name extends string | undefined = string | undefined> =
   {
+    emails: {
+      send: FunctionReference<
+        "action",
+        "internal",
+        {
+          attachments?: Array<{
+            content: string;
+            contentId?: string;
+            contentType?: string;
+            filename: string;
+          }>;
+          bcc?: Array<string>;
+          captureEngagement?: boolean;
+          cc?: Array<string>;
+          distinctId?: string;
+          from?: string;
+          html?: string;
+          idempotencyKey?: string;
+          replyTo?: Array<string>;
+          subject: string;
+          templateKey: string;
+          text?: string;
+          to: string;
+        },
+        { message_id: string; replayed: boolean },
+        Name
+      >;
+    };
     lib: {
       alias: FunctionReference<
         "action",
