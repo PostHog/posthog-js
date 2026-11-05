@@ -299,6 +299,10 @@ async function handleToolCallRequest(
       ? getAnalyticsParameterOwnership(registeredTool.inputSchema, registeredTool.outputSchema)
       : undefined,
     inputSchema: registeredTool?.inputSchema,
+    // Adapters such as @rekog/mcp-nest dispatch tools the registry never holds,
+    // so a registry miss counts only if the server's own listing agrees.
+    isToolRegistered: async () =>
+      toolName ? registeredTool !== undefined || isToolAdvertised(server, toolName, extra, data.logger) : undefined,
     takeCapturedError: () => {
       const captured = extra?.__mcp_analytics_error
       if (extra) {

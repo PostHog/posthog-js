@@ -184,9 +184,8 @@ enabled by default. Missing-capability reporting and feedback collection remain 
 instrument(server, posthog, { captureModel: false, enableConversationId: false })
 ```
 
-Model capture adds a required `llm_model` argument to compatible tool schemas. Dispatch never
-enforces it, so servers keep working; strict-schema clients see the new field. Set
-`captureModel: false` to leave schemas untouched. Conversation correlation adds an optional
+Model capture adds an optional `llm_model` argument to compatible tool schemas. Strict-schema
+clients see the new field. Set `captureModel: false` to leave schemas untouched. Conversation correlation adds an optional
 `conversation_id` argument and returns a handle in eligible tool results. Clients must echo that
 handle to group later calls; calls without it mint new handles. Set `enableConversationId: false`
 to retain transport-based session grouping and unchanged response content. Custom `PostHogMCP`
@@ -227,7 +226,7 @@ Omit `serverBuild` when the deployment does not provide a reliable value.
 
 `captureModel` is **on** by default. The SDK records the best model id visible to the
 server as `$mcp_llm_model`. Recognized client metadata wins with source `client_metadata`. Otherwise,
-the SDK injects a required `llm_model` parameter and records the answer with source `self_reported`.
+the SDK injects an optional `llm_model` parameter and records the answer with source `self_reported`.
 
 MCP does not standardize or attest model identity. Client metadata and self-report are both
 unverified. Use the value to spot degradation across models, never for billing or access control.

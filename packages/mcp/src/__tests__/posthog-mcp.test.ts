@@ -402,7 +402,7 @@ describe('PostHogMCP', () => {
       try {
         const prepared = client.prepareToolList(tools)
         expect(prepared[0].inputSchema?.properties?.llm_model).toMatchObject({ type: 'string' })
-        expect(prepared[0].inputSchema?.required).toContain('llm_model')
+        expect(prepared[0].inputSchema?.required ?? []).not.toContain('llm_model')
 
         const call = client.prepareToolCall('execute-sql', {
           query: 'select 1',
@@ -870,6 +870,19 @@ describe('PostHogMCP', () => {
       expect(p[PostHogMCPAnalyticsProperty.IntentSource]).toBe('context_parameter')
       expect(p[PostHogMCPAnalyticsProperty.LlmModel]).toBe('claude-sonnet-4-20250514')
       expect(p[PostHogMCPAnalyticsProperty.LlmModelSource]).toBe('self_reported')
+    })
+  })
+
+  describe('captureUnknownTool', () => {
+    it('emits only $mcp_unknown_tool with the requested name and session', async () => {
+      posthog.captureUnknownTool({ toolName: 'no_such_tool', sessionId: 'ses_123' })
+      await tick()
+
+      expect(capture.getCaptures().map((c) => c.event)).toEqual([PostHogMCPAnalyticsEvent.UnknownTool])
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.UnknownTool).properties).toMatchObject({
+        [PostHogMCPAnalyticsProperty.ToolName]: 'no_such_tool',
+        [PostHogMCPAnalyticsProperty.SessionId]: 'ses_123',
+      })
     })
   })
 

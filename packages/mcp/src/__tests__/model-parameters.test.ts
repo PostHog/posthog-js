@@ -29,13 +29,13 @@ afterEach(() => {
 /**
  * --- Unit tests: `addModelParameterToTool` / `addModelParameterToTools` ---
  *
- * Same pure-function contract as the `context` injection: mutate a JSON-Schema
- * tool descriptor to add a required `llm_model` string parameter.
+ * Same pure-function contract as the `context` injection, except that
+ * `llm_model` is optional: mutate a JSON-Schema tool descriptor to add it.
  */
 describe('addModelParameterToTool', () => {
   it.each([
-    ['no inputSchema', { name: 'tool' }],
-    ['empty inputSchema {}', { name: 'tool', inputSchema: {} }],
+    ['no inputSchema', { name: 'tool' }, undefined],
+    ['empty inputSchema {}', { name: 'tool', inputSchema: {} }, undefined],
     [
       'inputSchema with existing properties + required',
       {
@@ -46,24 +46,16 @@ describe('addModelParameterToTool', () => {
           required: ['text'],
         },
       },
+      ['text'],
     ],
-  ])('injects a string llm_model param + marks it required (%s)', (_, tool) => {
+  ])('injects an optional string llm_model param (%s)', (_, tool, required) => {
     const result = addModelParameterToTool(tool as Parameters<typeof addModelParameterToTool>[0])
 
     expect(result.inputSchema?.properties?.llm_model).toEqual({
       type: 'string',
       description: DEFAULT_MODEL_PARAMETER_DESCRIPTION,
     })
-    expect(result.inputSchema?.required).toContain('llm_model')
-  })
-
-  it('preserves existing required fields when adding llm_model', () => {
-    const result = addModelParameterToTool({
-      name: 'tool',
-      inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-    })
-
-    expect(result.inputSchema?.required).toEqual(expect.arrayContaining(['text', 'llm_model']))
+    expect(result.inputSchema?.required).toEqual(required)
   })
 
   it('removes additionalProperties:false (would otherwise reject the injected param)', () => {
@@ -219,7 +211,7 @@ describe('Model capture — integration with an instrumented server', () => {
     // llm_model if injection runs after the append.
     expect(virtualTool).toBeDefined()
     expect(virtualTool.inputSchema.properties.llm_model).toBeDefined()
-    expect(virtualTool.inputSchema.required).toContain('llm_model')
+    expect(virtualTool.inputSchema.required).not.toContain('llm_model')
     // Its own context parameter is untouched — that argument is the report itself.
     expect(virtualTool.inputSchema.properties.context).toBeDefined()
     expect(virtualTool.inputSchema.required).toContain('context')

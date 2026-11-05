@@ -944,23 +944,6 @@ describe('Low-level Server — synthetic tools/call fallback', () => {
     expect(handlersOf(server).has('tools/call')).toBe(true)
   })
 
-  it('captures a call for an unclaimed tool and still reports it as unknown', async () => {
-    const server = new Server({ name: 'no dispatcher', version: '1.0.0' }, { capabilities: { tools: {} } })
-    instrument(server, fakePostHog())
-
-    const fallback = handlersOf(server).get('tools/call')
-    await expect(fallback?.({ method: 'tools/call', params: { name: 'nope', arguments: {} } })).rejects.toThrow(
-      'Unknown tool: nope'
-    )
-
-    await new Promise((r) => setTimeout(r, 50))
-    const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
-    expect(toolCalls).toHaveLength(1)
-    expect(toolCalls[0].properties.$mcp_resource_name).toBe('nope')
-    expect(toolCalls[0].properties.$mcp_is_error).toBe(true)
-    expect(eventCapture.findCapturesByEvent('$exception')).toHaveLength(1)
-  })
-
   it('does not displace a tools/call handler that already exists', async () => {
     const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
     try {

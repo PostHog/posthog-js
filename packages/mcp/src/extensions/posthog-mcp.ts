@@ -17,6 +17,7 @@ import type {
   PrepareToolListOptions,
   ToolCallCaptureData,
   ToolsListCaptureData,
+  UnknownToolCaptureData,
 } from '../types'
 import {
   buildFeedbackEventProperties,
@@ -476,6 +477,17 @@ export class PostHogMCP extends PostHog {
     event.parameters = data.parameters
     applyIntent(event, data.context, 'context_parameter')
     setEventModel(event, data.llmModel, data.llmModelSource)
+    this.#emit(event)
+  }
+
+  /**
+   * Capture a call to a tool your server does not have. Emits
+   * `$mcp_unknown_tool`. Use it instead of {@link captureToolCall} when your
+   * dispatcher rejects the name, so the call is not counted as a tool call.
+   */
+  captureUnknownTool(data: UnknownToolCaptureData): void {
+    const event = baseEvent(MCPAnalyticsEventType.mcpUnknownTool, data)
+    event.resourceName = data.toolName
     this.#emit(event)
   }
 

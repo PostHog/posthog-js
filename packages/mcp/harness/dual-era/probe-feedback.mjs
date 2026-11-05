@@ -79,10 +79,11 @@ function assertListing(label, tools) {
   )
   const annotations = descriptor?.annotations
   check(
-    `${label} · annotations mark it read-only, idempotent, non-destructive`,
-    annotations?.readOnlyHint === true &&
-      annotations?.idempotentHint === true &&
-      annotations?.destructiveHint === false,
+    `${label} · annotations mark it as a tool that records data`,
+    annotations?.readOnlyHint === false &&
+      annotations?.destructiveHint === false &&
+      annotations?.idempotentHint === false &&
+      annotations?.openWorldHint === false,
     JSON.stringify(annotations)
   )
 }

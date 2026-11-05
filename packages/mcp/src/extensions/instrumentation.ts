@@ -128,6 +128,12 @@ interface TraceToolCallParams {
    * read it here to capture the real stack rather than the result envelope.
    */
   takeCapturedError?: () => unknown
+  /**
+   * Asked only once the call is rejected: `false` when the server has no tool
+   * by this name, `undefined` when the SDK cannot tell. A rejected call to an
+   * unregistered tool is recorded as `$mcp_unknown_tool`, not as a tool call.
+   */
+  isToolRegistered?: () => Promise<boolean | undefined>
 }
 
 /**
@@ -152,6 +158,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     extraEventProperties,
     omitCapturedParameters,
     takeCapturedError,
+    isToolRegistered,
   } = params
   const resolvedEventType = eventType ?? MCPAnalyticsEventType.mcpToolsCall
   // The SDK's own virtual tools carry their intent in their own arguments, so
@@ -190,6 +197,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     resolvedEventType,
     canCaptureContextIntent
   )
+  const hostProperties = preparedEvent?.event.properties
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
     const sessionSchemas =
       (preparedEvent.event.sessionId ? data.toolInputSchemas.get(preparedEvent.event.sessionId) : undefined) ??
@@ -217,11 +225,22 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   try {
     result = await execute(downstreamRequest)
   } catch (error) {
-    publishFailedToolEvent(server, preparedEvent, error, startTime, conversation, data.logger)
+    if (preparedEvent && conversation.minted) {
+      preparedEvent.event.conversationId = undefined
+    }
+    if ((await isToolRegistered?.()) === false) {
+      publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
+    } else {
+      publishFailedToolEvent(server, preparedEvent, error, startTime, data.logger)
+    }
     throw error
   }
 
   const finalResult = applyConversationInstructions(preparedEvent?.event ?? null, result, conversation, ownership)
+  if (isToolResultError(result) && (await isToolRegistered?.()) === false) {
+    publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
+    return finalResult
+  }
   // `result`, not `finalResult`: the error is read from what the tool produced,
   // before the conversation handle was written into it. See below.
   publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
@@ -469,7 +488,6 @@ function publishFailedToolEvent(
   preparedEvent: PreparedToolEvent | null,
   error: unknown,
   startTime: Date,
-  conversation: ConversationIdResolution,
   logger: LoggerFn
 ): void {
   if (!preparedEvent) {
@@ -477,15 +495,50 @@ function publishFailedToolEvent(
   }
   const { event, requestAttribution } = preparedEvent
   try {
-    if (conversation.minted) {
-      event.conversationId = undefined
-    }
     event.isError = true
     event.error = captureException(error)
     event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, logger, requestAttribution)
   } catch (publishError) {
     logger(`Warning: PostHog MCP analytics failed to publish failed tool event - ${publishError}`)
+  }
+}
+
+/**
+ * The agent asked for a tool the server does not have, so the call is not a
+ * tool call: only the requested name, identity, and session are recorded.
+ */
+function publishUnknownToolEvent(
+  server: MCPServerLike,
+  preparedEvent: PreparedToolEvent | null,
+  properties: McpEvent['properties'],
+  logger: LoggerFn
+): void {
+  if (!preparedEvent) {
+    return
+  }
+  const { event, requestAttribution } = preparedEvent
+  try {
+    captureEvent(
+      server,
+      {
+        eventType: MCPAnalyticsEventType.mcpUnknownTool,
+        timestamp: event.timestamp,
+        resourceName: event.resourceName,
+        sessionId: event.sessionId,
+        conversationId: event.conversationId,
+        clientName: event.clientName,
+        clientVersion: event.clientVersion,
+        protocolVersion: event.protocolVersion,
+        clientUserAgent: event.clientUserAgent,
+        vendorClient: event.vendorClient,
+        properties,
+      },
+      logger,
+      requestAttribution
+    )
+  } catch (publishError) {
+    logger(`Warning: PostHog MCP analytics failed to publish unknown tool event - ${publishError}`)
   }
 }
 
