@@ -1363,6 +1363,10 @@ export class PostHogPersistence {
             this._refreshKeys(META_IDENTIFIER_PERSISTENCE_KEYS)
             return
         }
+        this._refreshMetaIdentifiersIfStorageChanged()
+    }
+
+    private _refreshMetaIdentifiersIfStorageChanged(): void {
         const snapshot = this._storageSnapshot()
         if (!isUndefined(snapshot) && snapshot === this._metaIdentifierStorageSnapshot) {
             return
@@ -1378,23 +1382,29 @@ export class PostHogPersistence {
     }
 
     /**
-     * Capture can build person properties before a debounced write lands, so adopt a sibling's
-     * Meta identifiers first.
+     * Adopt a sibling's Meta identifiers before capture builds person properties: a debounced
+     * write may not have landed, and a sibling's write is readable before its storage event.
      */
     refreshMetaIdentifiersBeforeCapture(): void {
         if (this._disabled || this._cookieSyncSuppressed) {
             return
         }
-        if (this._usesMetaIdentifierSnapshotRefresh()) {
-            this.refreshMetaIdentifiers()
-        } else {
+        if (!this._usesMetaIdentifierSnapshotRefresh()) {
             this._adoptMetaIdentifiersFromCookie()
+        }
+        if (this._tracksMetaIdentifierStorageSnapshot()) {
+            this._refreshMetaIdentifiersIfStorageChanged()
         }
     }
 
     // The cookie store and sessionStorage (shared by same-origin frames) get no storage event.
     private _usesMetaIdentifierSnapshotRefresh(): boolean {
         return this._storage === cookieStore || this._storage === sessionStore
+    }
+
+    // localStorage stores get a storage event, but only after a sibling's write is already readable.
+    private _tracksMetaIdentifierStorageSnapshot(): boolean {
+        return this._usesMetaIdentifierSnapshotRefresh() || this._splitStorageEligible
     }
 
     private _storageSnapshot(): string | undefined {
@@ -1499,7 +1509,7 @@ export class PostHogPersistence {
             this._localIdentityChangePending = false
             this._metaIdentifierChangePending.clear()
         }
-        if (writeResult === 'written' && this._usesMetaIdentifierSnapshotRefresh()) {
+        if (writeResult === 'written' && this._tracksMetaIdentifierStorageSnapshot()) {
             this._rememberMetaIdentifierStorageSnapshot()
         }
         if (crossTabPropertiesChanged) {
@@ -1534,7 +1544,7 @@ export class PostHogPersistence {
                 }
             })
         }
-        if (mainWriteResult === 'written' && this._usesMetaIdentifierSnapshotRefresh()) {
+        if (mainWriteResult === 'written' && this._tracksMetaIdentifierStorageSnapshot()) {
             this._rememberMetaIdentifierStorageSnapshot()
         }
         for (const group of PERSISTENCE_STORAGE_GROUPS) {

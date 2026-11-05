@@ -414,6 +414,91 @@ describe('capture() hot path', () => {
         expect(p.lastEvent().$set?.$fbc).toBeUndefined()
     })
 
+    describe.each<PostHogConfig['persistence']>(['localStorage', 'localStorage+cookie'])(
+        'when a sibling write is readable before its storage event (persistence: %s)',
+        (persistence) => {
+            const debounced = { persistence, persistence_save_debounce_ms: 250 }
+            const ours = { value: 'fb.1.1700000000000.ours', delivered: true }
+
+            const setupWithCachedFbc = () => {
+                const capture = setupMetaCapture(debounced)
+                capture.posthog.persistence!.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: ours })
+                capture.posthog.persistence!.flush()
+                return capture
+            }
+
+            it.each<[string, Partial<PostHogConfig>, boolean]>([
+                ['before the storage event', {}, false],
+                ['after the storage event', {}, true],
+                ['with no debounce', { persistence_save_debounce_ms: 0 }, false],
+                ['when the cookie wins', { cookieWinsOnConflict: true }, false],
+            ])('sends the newer $fbc instead of the cached one %s', (_, config, storageEventFirst) => {
+                const token = uuidv7()
+                const p = setupMetaCapture({ ...debounced, ...config }, token, `${token}-p`)
+                p.posthog.persistence!.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: ours })
+                p.posthog.persistence!.flush()
+                const sibling = { value: 'fb.1.1700000000001.sibling', delivered: false }
+
+                const q = setupMetaCapture({ ...debounced, ...config }, token, `${token}-q`)
+                q.posthog.persistence!.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: sibling })
+                q.posthog.persistence!.flush()
+                if (storageEventFirst) {
+                    siblingStorageEventArrives(p.storageKey, localStorage.getItem(p.storageKey)!)
+                }
+                p.posthog.capture('conversion')
+
+                expect(p.lastEvent().$set?.$fbc).toBe(sibling.value)
+            })
+
+            it('does not send a $fbc a sibling reset cleared', () => {
+                const token = uuidv7()
+                const p = setupMetaCapture(debounced, token, `${token}-p`)
+                p.posthog.persistence!.register({
+                    [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: ours.value, delivered: false },
+                })
+                p.posthog.persistence!.flush()
+
+                const q = setupMetaCapture(debounced, token, `${token}-q`)
+                q.posthog.persistence!.flush()
+                q.posthog.reset()
+                expect(localStorage.getItem(p.storageKey)).toBeNull()
+
+                p.posthog.capture('after the sibling reset')
+
+                expect(p.lastEvent().$set?.$fbc).toBeUndefined()
+            })
+
+            it('keeps a local $fbc that is still waiting for the debounced write', () => {
+                const { posthog, lastEvent, storageKey } = setupWithCachedFbc()
+                const local = { value: 'fb.1.1700000000002.local', delivered: false }
+                const sibling = { value: 'fb.1.1700000000001.sibling', delivered: false }
+
+                posthog.persistence!.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: local })
+                siblingWrites(storageKey, (entry) => (entry[PERSISTENCE_FACEBOOK_CLICK_ID] = sibling))
+                posthog.capture('conversion')
+
+                expect(lastEvent().$set?.$fbc).toBe(local.value)
+            })
+
+            it('stops parsing the persistence entry once the sibling write is adopted', () => {
+                const { posthog, storageKey } = setupWithCachedFbc()
+                posthog.persistence!.register({ $active_feature_flags: ACTIVE_FEATURE_FLAGS })
+                posthog.persistence!.flush()
+
+                siblingWrites(storageKey, (entry) => {
+                    entry[PERSISTENCE_FACEBOOK_CLICK_ID] = { value: 'fb.1.1700000000001.sibling', delivered: true }
+                })
+                const parseSpy = vi.spyOn(JSON, 'parse')
+                for (let i = 0; i < 5; i++) {
+                    posthog.capture('$autocapture')
+                }
+
+                // The hybrid store's parse writes the merged entry back, which costs one more parse.
+                expect(persistenceEntryParses(parseSpy)).toHaveLength(persistence === 'localStorage' ? 1 : 2)
+            })
+        }
+    )
+
     it('keeps a cookie-only $fbc on the first write when localStorage has no entry yet', () => {
         const token = uuidv7()
         const storageKey = `ph_${token}_posthog`
