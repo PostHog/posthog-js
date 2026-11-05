@@ -1,7 +1,13 @@
 import type { RenderedChunk } from 'rollup'
 import path from 'node:path'
 import { createStableChunkId } from '@posthog/plugin-utils'
-import { chunkFingerprint } from './chunk-fingerprint'
+import { createChunkFingerprint } from './chunk-fingerprint'
+
+let chunkFingerprint: ReturnType<typeof createChunkFingerprint>
+
+beforeEach(() => {
+    chunkFingerprint = createChunkFingerprint()
+})
 
 function chunk(fileName: string, moduleId: string, extra: Partial<RenderedChunk> = {}): RenderedChunk {
     return {
@@ -30,6 +36,42 @@ function id(code: string, entry: RenderedChunk, dependencies: RenderedChunk[]): 
 }
 
 describe('chunkFingerprint', () => {
+    it('normalizes a shared dependency once per output and keeps importer fingerprints compact', () => {
+        const shared = chunk('chunk-!~{001}~.js', 'shared.js', {
+            moduleIds: Array.from({ length: 1000 }, (_, i) => path.resolve(`shared/module-${i}.js`)),
+        })
+        const pages = Array.from({ length: 12 }, (_, i) =>
+            chunk(`page-${i}.js`, `page-${i}.js`, { imports: [shared.fileName] })
+        )
+        const chunks = Object.fromEntries([shared, ...pages].map((item) => [item.fileName, item]))
+        const normalizeModules = vi.spyOn(shared.moduleIds, 'map')
+        try {
+            let bytes = 0
+            for (const page of pages) {
+                bytes += Buffer.byteLength(chunkFingerprint(`import './${shared.fileName}'; run();`, page, chunks))
+            }
+
+            expect.soft(normalizeModules).toHaveBeenCalledTimes(1)
+            expect.soft(bytes).toBeLessThan(pages.length * 1024)
+        } finally {
+            normalizeModules.mockRestore()
+        }
+    })
+
+    it('isolates identities between interleaved outputs with the same chunk filenames', () => {
+        const dependency = chunk('chunk-!~{001}~.js', 'a.js')
+        const entry = chunk('entry.js', 'entry.js', { imports: [dependency.fileName] })
+        const code = `import './${dependency.fileName}';`
+        const firstOutput = { [entry.fileName]: entry, [dependency.fileName]: dependency }
+        const secondOutput = { ...firstOutput, [dependency.fileName]: chunk(dependency.fileName, 'b.js') }
+
+        const first = chunkFingerprint(code, entry, firstOutput)
+        const second = chunkFingerprint(code, entry, secondOutput)
+
+        expect(second).not.toBe(first)
+        expect(chunkFingerprint(code, entry, firstOutput)).toBe(first)
+    })
+
     it('preserves dependency identity when static and dynamic import placeholders are renumbered', () => {
         const a = chunk('chunk-!~{001}~.js', 'a.js')
         const b = chunk('chunk-!~{002}~.js', 'b.js')

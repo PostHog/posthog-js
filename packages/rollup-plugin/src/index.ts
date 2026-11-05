@@ -13,7 +13,7 @@ import {
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import MagicString from 'magic-string'
-import { chunkFingerprint } from './chunk-fingerprint.js'
+import { createChunkFingerprint } from './chunk-fingerprint.js'
 
 // Re-export for backward compatibility
 export type PostHogRollupPluginOptions = PluginConfig
@@ -94,6 +94,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
     // same release. Cleared in buildStart because a watch-mode rebuild can land on a new commit,
     // which is a different release.
     let releaseIdPromise: Promise<string | undefined> | undefined
+    let chunkFingerprint = createChunkFingerprint()
     let warnedAboutMissingRelease = false
     const chunkIdsByPreliminaryFileName = new Map<string, Set<string>>()
 
@@ -134,6 +135,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
 
         buildStart() {
             releaseIdPromise = undefined
+            chunkFingerprint = createChunkFingerprint()
             warnedAboutMissingRelease = false
             chunkIdsByPreliminaryFileName.clear()
             pendingSnippetLinesByPreliminaryFileName.clear()
