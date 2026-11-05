@@ -8,6 +8,10 @@ SDK usage examples and code snippets live in the official documentation so they 
 
 - [MCP analytics docs](https://posthog.com/docs/mcp-analytics)
 
+## Versioning
+
+From 1.0.0, `@posthog/mcp` follows semver for its API and for the events it sends. A minor or patch release doesn't rename or remove a `$mcp_*` event or property, change its type, or change which requests send an event, so saved insights keep working across upgrades. It may add events and properties, and redact more of a captured value. The rules come from the [MCP analytics spec](https://github.com/PostHog/sdk-specs/blob/main/openspec/specs/mcp-analytics/spec.md), section "Event schema stability".
+
 ## Stateless & multi-pod servers
 
 On stateless deployments the SDK mints the `Mcp-Session-Id` response header at `initialize`
