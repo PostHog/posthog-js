@@ -13,6 +13,7 @@ import {
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import MagicString from 'magic-string'
+import { chunkFingerprint } from './chunk-fingerprint.js'
 
 // Re-export for backward compatibility
 export type PostHogRollupPluginOptions = PluginConfig
@@ -183,7 +184,12 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
         // another `order: 'pre'` hook registered before this plugin.
         renderChunk: {
             order: 'post',
-            handler(code: string, chunk: RenderedChunk, outputOptions?: NormalizedOutputOptions) {
+            handler(
+                code: string,
+                chunk: RenderedChunk,
+                outputOptions?: NormalizedOutputOptions,
+                meta?: { chunks: Record<string, RenderedChunk> }
+            ) {
                 if (!posthogOptions.sourcemaps.enabled) return null
                 if (!JS_CHUNK_REGEX.test(chunk.fileName)) return null
                 // Already carries an id (watch-mode re-render, another tool)
@@ -225,7 +231,10 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 // Its layout differs from the same code with the snippet inside, and a shared id
                 // would let one layout's upload overwrite the other's symbol set.
                 releaseIdPromise ??= resolveReleaseId(posthogOptions)
-                const chunkId = createStableChunkId(snippetLines ? `${SNIPPET_PLACEHOLDER}\n${code}` : code)
+                const fingerprint = chunkFingerprint(code, chunk, meta?.chunks)
+                const chunkId = createStableChunkId(
+                    snippetLines ? `${SNIPPET_PLACEHOLDER}\n${fingerprint}` : fingerprint
+                )
                 rememberChunkId(chunk.fileName, chunkId)
                 return releaseIdPromise.then((releaseId) => {
                     // A build that identifies no release still symbolicates from its chunk ids, so
