@@ -3,15 +3,19 @@ import { MediaTypeContext } from './media_type_context'
 
 const STRONG_CONTEXT_MIN_LENGTH = 64
 const WEAK_CONTEXT_MIN_LENGTH = 1024
+const MAX_NODES = 10_000
+const TRUNCATED = '[Truncated]'
 
 export class BinaryContentRedactor {
-  private visited: WeakSet<object> = new WeakSet()
+  private ancestors: WeakSet<object> = new WeakSet()
+  private remainingNodes = MAX_NODES
 
   constructor(private readonly recognizer: Base64Recognizer = new Base64Recognizer()) {}
 
   redact<T>(value: T, mediaType?: string): T
   redact(value: unknown, mediaType?: string): unknown {
-    this.visited = new WeakSet()
+    this.ancestors = new WeakSet()
+    this.remainingNodes = MAX_NODES
     return this.walk(value, mediaType ? new MediaTypeContext(undefined, undefined, mediaType) : MediaTypeContext.EMPTY)
   }
 
@@ -30,8 +34,11 @@ export class BinaryContentRedactor {
       return this.redactLeaf(value, ctx)
     }
 
-    if (this.visited.has(value)) return null
-    this.visited.add(value)
+    if (this.ancestors.has(value)) return null
+    // Shared references are walked once per path, so the unfolded tree can be exponentially larger than the input.
+    if (this.remainingNodes <= 0) return TRUNCATED
+    this.remainingNodes--
+    this.ancestors.add(value)
     try {
       if (Array.isArray(value)) {
         return value.map((item) => this.walk(item, ctx))
@@ -49,8 +56,7 @@ export class BinaryContentRedactor {
       }
       return out
     } finally {
-      // Only ancestors count as a cycle. An object reachable by two paths is not one.
-      this.visited.delete(value)
+      this.ancestors.delete(value)
     }
   }
 

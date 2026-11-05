@@ -273,13 +273,6 @@ describe('redactBinaryContent', () => {
   })
 
   describe('cycle guard', () => {
-    it('does not stack overflow on circular references', () => {
-      const a: any = { name: 'a' }
-      const b: any = { name: 'b', back: a }
-      a.forward = b
-      expect(() => redactBinaryContent(a)).not.toThrow()
-    })
-
     it('replaces only the back reference of a cycle with null', () => {
       const a: any = { name: 'a' }
       const b: any = { name: 'b', back: a }
@@ -297,6 +290,14 @@ describe('redactBinaryContent', () => {
         { role: 'user', content: [{ type: 'text', text: 'shared' }] },
         { role: 'user', content: [{ type: 'text', text: 'shared' }] },
       ])
+    })
+
+    it('bounds the walk when shared references fan out exponentially', () => {
+      let node: any = { leaf: true }
+      for (let i = 0; i < 40; i++) node = { a: node, b: node }
+      const start = Date.now()
+      expect(JSON.stringify(redactBinaryContent(node))).toContain('[Truncated]')
+      expect(Date.now() - start).toBeLessThan(2000)
     })
 
     it('keeps an object that appears twice in the same array and redacts it both times', () => {
