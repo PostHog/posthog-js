@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.446.3
+
+### Patch Changes
+
+- [#5560](https://github.com/PostHog/posthog-js/pull/5560) [`e22dedb`](https://github.com/PostHog/posthog-js/commit/e22dedbd6f7393e2bcebee84bae6b5185d9fe67a) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Use native sibling accessors when recording insertion positions so patched DOM getters do not reorder replayed nodes.
+  (2026-11-05)
+
 ## 1.446.2
 
 ### Patch Changes
