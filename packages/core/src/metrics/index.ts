@@ -213,13 +213,13 @@ export class PostHogMetrics {
       this._logger.warn(`Dropping metric '${filtered.name}': value must be a finite number`)
       return
     }
+    if (filtered.type !== 'count' && filtered.type !== 'gauge' && filtered.type !== 'histogram') {
+      this._logger.warn(`Dropping metric '${filtered.name}': unknown type '${String(filtered.type)}'`)
+      return
+    }
     // Checked after beforeSend so a hook can't turn a count negative either.
     if (filtered.type === 'count' && filtered.value < 0) {
       this._logger.warn(`Dropping count '${filtered.name}': counters are monotonic, value must be >= 0`)
-      return
-    }
-    if (filtered.type !== 'count' && filtered.type !== 'gauge' && filtered.type !== 'histogram') {
-      this._logger.warn(`Dropping metric '${filtered.name}': unknown type '${String(filtered.type)}'`)
       return
     }
 
@@ -551,7 +551,7 @@ export class PostHogMetrics {
           ...exemplars,
         }
         metric.gauge!.dataPoints.push(dp)
-      } else {
+      } else if (state.type === 'histogram') {
         const hist = state.hist!
         const dp: OtlpHistogramDataPoint = {
           attributes,
