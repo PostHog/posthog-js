@@ -44,8 +44,9 @@ export interface HistogramOptions extends CaptureMetricOptions {
      * invalid bounds is dropped with a warning. The client fixes the bounds of at
      * most `maxSeriesPerFlush` histograms. Past that limit, the client drops samples
      * of a new histogram that pass bounds other than the defaults, and logs one
-     * warning. Each client fixes bounds on its own, so every client must pass the
-     * same bounds for the same histogram.
+     * warning. Each client fixes bounds on its own. PostHog stores one set of
+     * bounds per histogram series and reads every client's counts against it.
+     * Every client must therefore pass the same bounds for the same histogram.
      */
     bounds?: number[]
 }

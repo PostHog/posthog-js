@@ -353,7 +353,10 @@ export class PostHogMetrics {
             `new histograms that pass custom bounds are dropped. Reduce histogram name cardinality.`
         )
       }
-      return requested && !sameBounds(requested, DEFAULT_HISTOGRAM_BOUNDS) ? undefined : DEFAULT_HISTOGRAM_BOUNDS
+      if (requested && !sameBounds(requested, DEFAULT_HISTOGRAM_BOUNDS)) {
+        return undefined
+      }
+      return DEFAULT_HISTOGRAM_BOUNDS
     }
     const bounds = requested ? requested.slice() : DEFAULT_HISTOGRAM_BOUNDS
     this._boundsByHistogram.set(histogramKey, bounds)
