@@ -584,6 +584,12 @@ export class PostHogMetrics {
         }
         continue
       }
+      // Only a histogram past the bounds limit can change bounds between
+      // windows. Its unsent buckets cannot be added to the live ones. The live
+      // series keeps none of the failed window's data or metadata.
+      if (current.hist && old.hist && !sameBounds(current.hist.bounds, old.hist.bounds)) {
+        continue
+      }
       current.windowStartMs = Math.min(current.windowStartMs, old.windowStartMs)
       // The live window's exemplar is newer; the old one only fills a gap.
       current.exemplar = current.exemplar ?? old.exemplar
@@ -597,12 +603,6 @@ export class PostHogMetrics {
         case 'histogram': {
           const hist = current.hist!
           const oldHist = old.hist!
-          // Only a histogram past the bounds limit can change bounds between
-          // windows. Its unsent buckets cannot be added to the live ones. The
-          // failed window's samples for this series are discarded.
-          if (!sameBounds(hist.bounds, oldHist.bounds)) {
-            break
-          }
           hist.count += oldHist.count
           hist.sum += oldHist.sum
           hist.min = Math.min(hist.min, oldHist.min)
