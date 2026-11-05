@@ -1487,7 +1487,7 @@ describe('record', function (this: ISuite) {
   });
 
   it('captures adopted stylesheets in nested shadow doms and iframes', async () => {
-    await ctx.page.evaluate(() => {
+    const fixture = await ctx.page.evaluateHandle(() => {
       document.body.innerHTML = `
         <div id="shadow-host-1">entry</div>
       `;
@@ -1522,19 +1522,36 @@ describe('record', function (this: ISuite) {
         emit,
       });
 
-      setTimeout(() => {
-        sheet1.insertRule!('div { display: inline ; }', 1);
-        sheet2.replaceSync!('h1 { font-size: large; }');
-      }, 100);
-
-      setTimeout(() => {
-        const sheet3 = new iframeWin.CSSStyleSheet();
-        sheet3.replaceSync!('span {background-color: red;}');
-        iframeDocument!.adoptedStyleSheets = [sheet3, sheet2];
-        shadowHost.shadowRoot!.adoptedStyleSheets = [sheet1, sheet3];
-      }, 150);
+      return { iframeDocument: iframeDocument!, shadowHost, sheet1, sheet2 };
     });
-    await ctx.page.waitForTimeout(200);
+    // All nested iframe and shadow root sheets must be recorded before mutation.
+    await waitForCondition(
+      () =>
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.AdoptedStyleSheet,
+        ).length === 2,
+    );
+    await fixture.evaluate(({ iframeDocument, shadowHost, sheet1, sheet2 }) => {
+      sheet1.insertRule!('div { display: inline ; }', 1);
+      sheet2.replaceSync!('h1 { font-size: large; }');
+
+      const iframeWin = iframeDocument.defaultView!;
+      const sheet3 = new iframeWin.CSSStyleSheet();
+      sheet3.replaceSync!('span {background-color: red;}');
+      iframeDocument.adoptedStyleSheets = [sheet3, sheet2];
+      shadowHost.shadowRoot!.adoptedStyleSheets = [sheet1, sheet3];
+    });
+    await waitForCondition(
+      () =>
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.AdoptedStyleSheet,
+        ).length === 4,
+    );
+    await fixture.dispose();
     await assertSnapshot(ctx.events);
   });
 
