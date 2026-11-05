@@ -5,7 +5,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { assignableWindow } from './utils/globals'
 import type { RequestResponse } from '@posthog/types'
 
-const logger = createLogger('[RemoteConfig]')
+const logger = /* @__PURE__ */ createLogger('[RemoteConfig]')
 
 export class RemoteConfigLoader {
     constructor(private readonly _instance: PostHog) {}
