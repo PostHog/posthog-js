@@ -864,6 +864,9 @@ importers:
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
+      nodemailer:
+        specifier: ^10.3.0
+        version: 10.3.0
       rxjs:
         specifier: ^7.8.0
         version: 7.8.2
@@ -14799,6 +14802,10 @@ packages:
   node-stream-zip@1.15.0:
     resolution: {integrity: sha512-LN4fydt9TqhZhThkZIVQnF9cwjU3qmUH9h78Mx/K7d3VvfRqqwthLwJEUOEL0QPZ0XQmNN7be5Ggit5+4dq3Bw==}
     engines: {node: '>=0.12.0'}
+
+  nodemailer@10.3.0:
+    resolution: {integrity: sha512-LsqM+Sxjap8BMgxQuVvABoEcm9ed2f3h2e0ohB7kV3sl9+4IaXlxC0DT8CQelg/S0he38gT4yT0RH1pvZxHf+A==}
+    engines: {node: '>=20.0.0'}
 
   nopt@8.1.0:
     resolution: {integrity: sha512-ieGu42u/Qsa4TFktmaKEwM6MQH0pOWnaB3htzh0JRtx84+Mebc0cbZYN5bC+6WTZ4+77xrL9Pn5m7CV6VIkV7A==}
@@ -36086,6 +36093,8 @@ snapshots:
   node-releases@2.0.58: {}
 
   node-stream-zip@1.15.0: {}
+
+  nodemailer@10.3.0: {}
 
   nopt@8.1.0:
     dependencies:
