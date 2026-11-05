@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.446.2
+
+### Patch Changes
+
+- [#5542](https://github.com/PostHog/posthog-js/pull/5542) [`7be658c`](https://github.com/PostHog/posthog-js/commit/7be658c34060839750a54bb9d65c5ce1ef89048e) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Avoid duplicate same-origin iframe observers after full snapshots during session recording.
+  (2026-11-05)
+
 ## 1.446.1
 
 ### Patch Changes
