@@ -216,9 +216,7 @@ describe('PostHogMetrics', () => {
       metrics.histogram('h', 1)
       await metrics.flush()
 
-      expect(histogramPoints('h')[0].explicitBounds).toEqual([
-        0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000,
-      ])
+      expect(histogramPoints('h')[0].explicitBounds).toEqual(DEFAULT_BOUNDS)
     })
 
     it('buckets values with the bounds the caller passes', async () => {
@@ -411,7 +409,11 @@ describe('PostHogMetrics', () => {
       expect(dp.explicitBounds).toEqual(DEFAULT_BOUNDS)
       expect(dp.count).toBe(2)
       expect(dp.sum).toBe(165)
-      expect(dp.bucketCounts.reduce((a, b) => a + b, 0)).toBe(2)
+      // 15 falls in (10, 25] and 150 in (100, 250].
+      expect(dp.bucketCounts).toEqual([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0])
+      expect(dp.min).toBe(15)
+      expect(dp.max).toBe(150)
+      expect(dp.exemplars?.map((e) => e.asDouble)).toEqual([15])
     })
 
     it('keeps the caller bounds intact when beforeSend edits them in place', async () => {
