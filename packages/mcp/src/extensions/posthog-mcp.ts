@@ -393,7 +393,7 @@ export class PostHogMCP extends PostHog {
     const resolvedConversation = resolveConversationId(canReadConversationId, args)
     const clientConversation = readClientConversation(options.requestMeta)
     const carriedSessionId =
-      options.sessionId ??
+      options.sessionId ||
       (clientConversation && deriveSessionIdFromClientConversation(clientConversation.key, clientConversation.id))
     const conversation =
       resolvedConversation.minted && carriedSessionId

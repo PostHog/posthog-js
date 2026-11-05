@@ -81,6 +81,36 @@ describe('client-supplied conversation id', () => {
     }
   )
 
+  it.each([
+    { method: 'tools/list', params: {}, event: '$mcp_tools_list' },
+    {
+      method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'ChatGPT', version: '1' } },
+      event: '$mcp_initialize',
+    },
+  ])('groups $method by the client conversation id', async ({ method, params, event }) => {
+    const pod = createPod()
+    await pod._requestHandlers.get(method)!({
+      method,
+      params: { ...params, _meta: { 'openai/session': CHATGPT_SESSION } },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 25))
+
+    const [captured] = capture.findCapturesByEvent(event)
+    expect(captured.properties.$session_id).toBe(
+      deriveSessionIdFromClientConversation('openai/session', CHATGPT_SESSION)
+    )
+    expect(captured.properties.$mcp_session_source).toBe('client_metadata')
+  })
+
+  it('records the instance session source on custom events', async () => {
+    const analytics = instrument(new Server({ name: 'pod', version: '1.0.0' }, { capabilities: {} }), fakePostHog())
+    await analytics.capture({ event: 'custom_thing' })
+
+    const [captured] = capture.findCapturesByEvent('custom_thing')
+    expect(captured.properties.$mcp_session_source).toBe('generated')
+  })
+
   it('separates different client conversations', async () => {
     await callOnFreshPod({ meta: { 'openai/session': 'chat-a' } })
     await callOnFreshPod({ meta: { 'openai/session': 'chat-b' } })
@@ -163,6 +193,12 @@ describe('client-supplied conversation id', () => {
         options: { requestMeta: { 'openai/session': CHATGPT_SESSION }, sessionId: 'ses_carried' },
         args: {},
         expected: 'ses_carried',
+      },
+      {
+        name: 'treats an empty carried session as absent',
+        options: { requestMeta: { 'openai/session': CHATGPT_SESSION }, sessionId: '' },
+        args: {},
+        expected: deriveSessionIdFromClientConversation('openai/session', CHATGPT_SESSION),
       },
     ])('$name', ({ options, args, expected }) => {
       const call = client.prepareToolCall('get_plan', args, options)

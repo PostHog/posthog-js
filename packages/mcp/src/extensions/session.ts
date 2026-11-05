@@ -210,7 +210,12 @@ export function resolveSession(
   data.sessionId = sessionId
   data.lastActivity = new Date()
   setServerTrackingData(server, data)
-  return { sessionId, source: data.sessionSource === 'generated' ? 'generated' : 'transport' }
+  return { sessionId, source: instanceSessionSource(data) }
+}
+
+/** The source of the session this instance holds: steps 2 and 4 of {@link resolveSession}. */
+export function instanceSessionSource(data: MCPAnalyticsData): MCPAnalyticsSessionSource {
+  return data.sessionSource === 'generated' ? 'generated' : 'transport'
 }
 
 /**
