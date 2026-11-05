@@ -7862,6 +7862,55 @@ describe('error handling and backoff', () => {
     await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // Still blocked
   })
+
+  it.each([401, 403])('reports a key that cannot read definitions (%i) once, not on every poll', async (statusCode) => {
+    const mockFetch = createMockFetch(statusCode)
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      ...posthogImmediateResolveOptions,
+    })
+    const errors: Error[] = []
+    posthog.on('error', (error: Error) => errors.push(error))
+
+    await posthog.reloadFeatureFlags()
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+
+    expect(mockFetch.callCount).toBeGreaterThan(5)
+    expect(errors).toHaveLength(1)
+    expect(errors[0].message).toContain('Feature flags: Read')
+    expect(errors[0].message).toContain('enableLocalEvaluation: false')
+  })
+
+  it('reports a rejected key again after definitions loaded in between', async () => {
+    const statuses = [401, 401, 200, 401, 401]
+    const mockFetch = vi.fn(() =>
+      Promise.resolve({
+        status: statuses.shift() ?? 401,
+        text: () => Promise.resolve(''),
+        json: () => Promise.resolve({ flags: [], group_type_mapping: {}, cohorts: {} }),
+        headers: { get: () => null },
+      })
+    )
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      ...posthogImmediateResolveOptions,
+    })
+    const errors: Error[] = []
+    posthog.on('error', (error: Error) => errors.push(error))
+
+    for (let poll = 0; poll < 5; poll++) {
+      await posthog.reloadFeatureFlags()
+    }
+
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+    expect(errors).toHaveLength(2)
+  })
 })
 
 describe('unresolvable flag warning', () => {

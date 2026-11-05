@@ -176,6 +176,7 @@ class FeatureFlagsPoller {
   private pollerStopped: boolean = false
   private flagsEtag?: string
   private nextFetchAllowedAt?: number
+  private reportedRejectedKey: boolean = false
   private strictLocalEvaluation: boolean
   private flagDefinitionsLoadedAt?: number
   private onMinimalFlagCalledEvents?: (enabled: boolean) => void
@@ -1093,6 +1094,20 @@ class FeatureFlagsPoller {
     this.shouldBeginExponentialBackoff = false
     this.backOffCount = 0
     this.nextFetchAllowedAt = undefined
+    this.reportedRejectedKey = false
+  }
+
+  private reportRejectedKeyOnce(status: number): void {
+    if (this.reportedRejectedKey) {
+      this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] Flag definitions request rejected again (${status})`))
+      return
+    }
+    this.reportedRejectedKey = true
+    this.onError?.(
+      new ClientError(
+        `Your secret key can't load feature flag definitions for local evaluation (${status}). The key is invalid or lacks the Feature flags: Read scope. Add the scope to the key, or set enableLocalEvaluation: false if you don't evaluate flags locally. This is reported once until definitions load. More information: https://posthog.com/docs/feature-flags/local-evaluation`
+      )
+    )
   }
 
   async _loadFeatureFlags(): Promise<void> {
@@ -1173,13 +1188,6 @@ class FeatureFlagsPoller {
           this.clearBackoff()
           return
 
-        case 401:
-          // Invalid API key
-          this.beginBackoff()
-          throw new ClientError(
-            `Your project key or secret key is invalid. Setting next polling interval to ${this.getPollingInterval()}ms. More information: https://posthog.com/docs/api#rate-limiting`
-          )
-
         case 402:
           // Quota exceeded - clear all flags
           console.warn(
@@ -1194,12 +1202,11 @@ class FeatureFlagsPoller {
           this.onMinimalFlagCalledEvents?.(false)
           return
 
+        case 401:
         case 403:
-          // Permissions issue
           this.beginBackoff()
-          throw new ClientError(
-            `Your secret key does not have permission to fetch feature flag definitions for local evaluation. Setting next polling interval to ${this.getPollingInterval()}ms. Are you sure you're using the correct secret and Project API key pair? More information: https://posthog.com/docs/api/overview`
-          )
+          this.reportRejectedKeyOnce(res.status)
+          return
 
         case 429:
           // Rate limited
