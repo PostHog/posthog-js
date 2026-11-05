@@ -218,6 +218,10 @@ export class PostHogMetrics {
       this._logger.warn(`Dropping count '${filtered.name}': counters are monotonic, value must be >= 0`)
       return
     }
+    if (filtered.type !== 'count' && filtered.type !== 'gauge' && filtered.type !== 'histogram') {
+      this._logger.warn(`Dropping metric '${filtered.name}': unknown type '${String(filtered.type)}'`)
+      return
+    }
 
     // Snapshot: the key is computed from these values, so a caller mutating
     // the object after capture must not change the stored series. Reading and
@@ -595,7 +599,7 @@ export class PostHogMetrics {
           const oldHist = old.hist!
           // Only a histogram past the bounds limit can change bounds between
           // windows. Its unsent buckets cannot be added to the live ones. The
-          // live window keeps its own data.
+          // failed window's samples for this series are discarded.
           if (!sameBounds(hist.bounds, oldHist.bounds)) {
             break
           }

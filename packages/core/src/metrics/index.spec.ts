@@ -299,9 +299,10 @@ describe('PostHogMetrics', () => {
       expect(logger.warn).not.toHaveBeenCalled()
     })
 
-    it('keeps the first bounds across flush windows', async () => {
+    it('keeps the first bounds across flush windows and warns on a conflict once per window', async () => {
       const metrics = createMetrics()
       metrics.histogram('h', 150, { bounds: [100, 200] })
+      metrics.histogram('h', 150, { bounds: [10, 20] })
       await metrics.flush()
       metrics.histogram('h', 150, { bounds: [10, 20] })
       await metrics.flush()
@@ -310,6 +311,7 @@ describe('PostHogMetrics', () => {
         [100, 200],
         [100, 200],
       ])
+      expect(warnings().filter((w) => w.includes("Histogram 'h' already uses the bounds"))).toHaveLength(2)
     })
 
     it('merges a failed window back into a live window with the same bounds', async () => {
@@ -326,6 +328,9 @@ describe('PostHogMetrics', () => {
       expect(dp.explicitBounds).toEqual([100, 200])
       expect(dp.bucketCounts).toEqual([1, 1, 0])
       expect(dp.count).toBe(2)
+      expect(dp.sum).toBe(200)
+      expect(dp.min).toBe(50)
+      expect(dp.max).toBe(150)
     })
 
     it('lets reset() clear the bounds so the next sample sets them again', async () => {
@@ -1062,6 +1067,18 @@ describe('PostHogMetrics', () => {
       metrics.count('a', 1)
       await metrics.flush()
       expect(mockInstance._sendMetricsBatch).not.toHaveBeenCalled()
+    })
+
+    it('drops a sample whose beforeSend result has an unknown type and still sends the rest', async () => {
+      const metrics = createMetrics({
+        beforeSend: (m) => (m.name === 'bad' ? ({ name: m.name, value: m.value } as any) : m),
+      })
+      metrics.count('good', 1)
+      metrics.count('bad', 1)
+      await metrics.flush()
+
+      expect(sentMetrics().map((m) => m.name)).toEqual(['good'])
+      expect((logger.warn as vi.Mock).mock.calls.some((c) => String(c[0]).includes('unknown type'))).toBe(true)
     })
 
     it('drops the sample when beforeSend throws', async () => {
