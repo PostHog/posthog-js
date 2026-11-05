@@ -295,6 +295,37 @@ describe('emails', () => {
   })
 
   it.each([
+    ['a template', {}],
+    ['content from code', { templateId: undefined, templateKey: 'welcome', subject: 'Hi', text: 'Hi' }],
+  ])('names the integration that sent %s on that send only', async (_name, form) => {
+    replies = [accepted(), accepted()]
+
+    await send({ ...form, integration: 'nodemailer/5.61.2' })
+    await send(form)
+
+    const [marked, unmarked] = fetch.mock.calls.map(([, options]) => options.headers)
+    expect(marked).toMatchObject({ 'X-PostHog-Integration': 'nodemailer/5.61.2', 'User-Agent': 'posthog-node/1.2.3' })
+    expect(unmarked).not.toHaveProperty('X-PostHog-Integration')
+    expect(unmarked['User-Agent']).toBe('posthog-node/1.2.3')
+  })
+
+  it.each([
+    ['no version', 'nodemailer'],
+    ['an upper-case name', 'Nodemailer/1.0.0'],
+    ['a space', 'node mailer/1.0.0'],
+    ['a name over 40 characters', `${'n'.repeat(41)}/1.0.0`],
+    ['a version over 40 characters', `nodemailer/${'1'.repeat(41)}`],
+    ['a line break', 'nodemailer/1.0.0\r\nX-Evil: 1'],
+    ['a number', 42],
+  ])('refuses an integration with %s before sending', async (_name, integration) => {
+    const { data, error } = await send({ integration })
+
+    expect(data).toBeNull()
+    expect(error).toMatchObject({ code: 'invalid_integration', name: 'validation_error', field: 'integration' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it.each([
     [undefined, undefined, 'https://us.posthog.com'],
     ['https://us.i.posthog.com', undefined, 'https://us.posthog.com'],
     ['https://eu.i.posthog.com/', undefined, 'https://eu.posthog.com'],

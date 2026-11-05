@@ -19,6 +19,12 @@ export interface SendEmailBase {
   idempotencyKey?: string
   /** Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. */
   maxRetries?: number
+  /**
+   * Names the library that made this send, as `<name>/<version>`, such as `'nodemailer/5.61.2'`, so PostHog
+   * can tell its sends apart. Set by integrations that send through this client, not by app code.
+   * Lower-case letters, digits and hyphens for the name, at most 40 each side.
+   */
+  integration?: string
 }
 
 /** A template made transactional in PostHog, sent by its ID. */
