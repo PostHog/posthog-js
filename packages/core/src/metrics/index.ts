@@ -320,9 +320,8 @@ export class PostHogMetrics {
   /**
    * The bounds a histogram sample folds into: the ones its histogram already
    * has, or the requested bounds (default when absent) for a new histogram.
-   * A histogram past the bounds limit has no map entry and always gets the
-   * default bounds, so its layout cannot change between windows. Returns
-   * `undefined` when the sample must be dropped.
+   * A histogram past the bounds limit has no map entry and gets only the
+   * default bounds. Returns `undefined` when the sample must be dropped.
    */
   private _histogramBounds(
     name: string,
@@ -342,18 +341,19 @@ export class PostHogMetrics {
       return fixed
     }
     // The limit keeps histogram names with interpolated IDs from growing the
-    // map without bound. The backend stores one set of bounds per series, so a
-    // histogram that is not in the map must not send different bounds in later
-    // windows. It gets the default bounds.
+    // map without bound. The backend stores one set of bounds per series. A
+    // histogram that is not in the map therefore sends only the default bounds,
+    // and a sample that asks for other bounds is dropped. Otherwise this client
+    // could send other bounds than earlier windows or other clients sent.
     if (this._boundsByHistogram.size >= this._config.maxSeriesPerFlush) {
       if (!this._boundsCapWarned) {
         this._boundsCapWarned = true
         this._logger.warn(
           `Histogram bounds limit reached (${this._config.maxSeriesPerFlush} distinct histograms); ` +
-            `new histograms use the default bounds. Reduce histogram name cardinality.`
+            `new histograms that pass custom bounds are dropped. Reduce histogram name cardinality.`
         )
       }
-      return DEFAULT_HISTOGRAM_BOUNDS
+      return requested && !sameBounds(requested, DEFAULT_HISTOGRAM_BOUNDS) ? undefined : DEFAULT_HISTOGRAM_BOUNDS
     }
     const bounds = requested ? requested.slice() : DEFAULT_HISTOGRAM_BOUNDS
     this._boundsByHistogram.set(histogramKey, bounds)

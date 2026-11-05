@@ -369,20 +369,40 @@ describe('PostHogMetrics', () => {
       expect(histogramPoints('h')[0].explicitBounds).toEqual([100, 200])
     })
 
-    it('gives histograms past the bounds limit the default bounds in every window, and warns once', async () => {
+    it('drops new histograms that pass custom bounds past the bounds limit, and warns once', async () => {
       const metrics = createMetrics({ maxSeriesPerFlush: 2 })
       metrics.histogram('a', 1)
       metrics.histogram('b', 1)
       await metrics.flush()
       metrics.histogram('c', 15, { bounds: [10, 20] })
-      await metrics.flush()
-      metrics.histogram('c', 150, { bounds: [100, 200] })
       metrics.histogram('d', 1)
       await metrics.flush()
+      metrics.histogram('c', 150, { bounds: [100, 200] })
+      metrics.histogram('d', 1, { bounds: [...DEFAULT_BOUNDS] })
+      await metrics.flush()
 
-      expect(sentMetrics().map((m) => m.name)).toEqual(['a', 'b', 'c', 'c', 'd'])
-      expect(histogramPoints('c').map((dp) => dp.explicitBounds)).toEqual([DEFAULT_BOUNDS, DEFAULT_BOUNDS])
+      expect(sentMetrics().map((m) => m.name)).toEqual(['a', 'b', 'd', 'd'])
+      expect(histogramPoints('d').map((dp) => dp.explicitBounds)).toEqual([DEFAULT_BOUNDS, DEFAULT_BOUNDS])
       expect(warnings().filter((w) => w.includes('Histogram bounds limit reached'))).toHaveLength(1)
+    })
+
+    it('never sends one histogram with different bounds from two clients when only one is past the bounds limit', async () => {
+      const instanceA = createMockInstance()
+      const instanceB = createMockInstance()
+      const clientA = createMetrics({ maxSeriesPerFlush: 1 }, instanceA)
+      const clientB = createMetrics({ maxSeriesPerFlush: 1 }, instanceB)
+
+      clientA.histogram('h', 150, { bounds: [100, 200] })
+      await clientA.flush()
+      clientB.histogram('other', 1)
+      await clientB.flush()
+      clientB.histogram('h', 150, { bounds: [100, 200] })
+      await clientB.flush()
+
+      const bounds = [...sentMetrics(instanceA), ...sentMetrics(instanceB)]
+        .filter((m) => m.name === 'h')
+        .map((m) => m.histogram!.dataPoints[0].explicitBounds)
+      expect(bounds).toEqual([[100, 200]])
     })
 
     it('merges a failed window of a histogram past the bounds limit into the live window', async () => {
@@ -397,10 +417,10 @@ describe('PostHogMetrics', () => {
       )
 
       traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
-      metrics.histogram('c', 15, { bounds: [10, 20] })
+      metrics.histogram('c', 15)
       const inflight = metrics.flush()
       traceparent = null
-      metrics.histogram('c', 150, { bounds: [100, 200] })
+      metrics.histogram('c', 150)
       resolveSend({ kind: 'retry-later', error: new Error('offline') })
       await inflight
       await metrics.flush()
