@@ -34,7 +34,7 @@ async function getWeather(latitude: number, longitude: number, locationName: str
 
 async function main() {
     const result = streamText({
-        model: anthropic('claude-sonnet-4-5-20250929'),
+        model: anthropic('claude-sonnet-5-5'),
         experimental_telemetry: {
             isEnabled: true,
             functionId: 'anthropic-streaming',

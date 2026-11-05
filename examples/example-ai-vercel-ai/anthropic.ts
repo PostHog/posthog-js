@@ -25,7 +25,7 @@ const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 async function main() {
     const { text } = await generateText({
-        model: anthropic('claude-sonnet-4-5-20250929'),
+        model: anthropic('claude-sonnet-5-5'),
         experimental_telemetry: {
             isEnabled: true,
             functionId: 'anthropic-generate',
