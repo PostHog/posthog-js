@@ -148,6 +148,7 @@ export type {
     MetricAttributes,
     MetricType,
     CaptureMetricOptions,
+    HistogramOptions,
     MetricSample,
     BeforeSendMetricFn,
     OtlpMetricsPayload,

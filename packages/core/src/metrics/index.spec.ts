@@ -203,6 +203,255 @@ describe('PostHogMetrics', () => {
     })
   })
 
+  describe('histogram bounds', () => {
+    const histogramPoints = (name: string) =>
+      sentMetrics()
+        .filter((m) => m.name === name)
+        .flatMap((m) => m.histogram!.dataPoints)
+    const warnings = () => (logger.warn as vi.Mock).mock.calls.map((c) => String(c[0]))
+
+    it('uses the OpenTelemetry default bounds when none are passed', async () => {
+      const metrics = createMetrics()
+      metrics.histogram('h', 1)
+      await metrics.flush()
+
+      expect(histogramPoints('h')[0].explicitBounds).toEqual([
+        0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000,
+      ])
+    })
+
+    it('buckets values with the bounds the caller passes', async () => {
+      const metrics = createMetrics()
+      // (-inf, 100] ← 50 and 100, (100, 200] ← 150, overflow ← 201.
+      for (const v of [50, 100, 150, 201]) {
+        metrics.histogram('h', v, { bounds: [100, 200] })
+      }
+      await metrics.flush()
+
+      const dp = histogramPoints('h')[0]
+      expect(dp.explicitBounds).toEqual([100, 200])
+      expect(dp.bucketCounts).toEqual([2, 1, 1])
+      expect(dp.min).toBe(50)
+      expect(dp.max).toBe(201)
+    })
+
+    it('copies the bounds so a caller mutating its array cannot change the buckets', async () => {
+      const metrics = createMetrics()
+      const bounds = [100, 200]
+      metrics.histogram('h', 150, { bounds })
+      bounds[0] = 175
+      metrics.histogram('h', 150, { bounds: [100, 200] })
+      await metrics.flush()
+
+      const dp = histogramPoints('h')[0]
+      expect(dp.explicitBounds).toEqual([100, 200])
+      expect(dp.bucketCounts).toEqual([0, 2, 0])
+      // The second call passes equal bounds in a new array, which is not a conflict.
+      expect(logger.warn).not.toHaveBeenCalled()
+    })
+
+    it('records a sample with conflicting bounds in the first bounds and warns once', async () => {
+      const metrics = createMetrics()
+      metrics.histogram('h', 150, { bounds: [100, 200] })
+      metrics.histogram('h', 150, { bounds: [10, 20, 30] })
+      metrics.histogram('h', 150, { bounds: [10, 20, 30] })
+      metrics.histogram('h', 150)
+      await metrics.flush()
+
+      const dp = histogramPoints('h')[0]
+      expect(dp.explicitBounds).toEqual([100, 200])
+      expect(dp.bucketCounts).toEqual([0, 4, 0])
+      expect(warnings().filter((w) => w.includes("Histogram 'h' already uses the bounds"))).toHaveLength(1)
+    })
+
+    it('treats omitted bounds as the default when checking for a conflict', async () => {
+      const metrics = createMetrics()
+      metrics.histogram('h', 1)
+      metrics.histogram('h', 1, { bounds: [100, 200] })
+      await metrics.flush()
+
+      expect(histogramPoints('h')[0].explicitBounds).toHaveLength(15)
+      expect(warnings().some((w) => w.includes("Histogram 'h' already uses the bounds"))).toBe(true)
+    })
+
+    it('fixes the bounds per histogram across attribute series', async () => {
+      const metrics = createMetrics()
+      metrics.histogram('h', 150, { bounds: [100, 200], attributes: { route: 'a' } })
+      metrics.histogram('h', 150, { bounds: [10, 20], attributes: { route: 'b' } })
+      await metrics.flush()
+
+      const points = histogramPoints('h')
+      expect(points).toHaveLength(2)
+      expect(points.map((dp) => dp.explicitBounds)).toEqual([
+        [100, 200],
+        [100, 200],
+      ])
+    })
+
+    it('keeps the bounds of a histogram separate per unit', async () => {
+      const metrics = createMetrics()
+      metrics.histogram('h', 1, { unit: 'ms', bounds: [100, 200] })
+      metrics.histogram('h', 1, { unit: 's', bounds: [1, 2, 3] })
+      await metrics.flush()
+
+      const byUnit = Object.fromEntries(sentMetrics().map((m) => [m.unit, m.histogram!.dataPoints[0].explicitBounds]))
+      expect(byUnit).toEqual({ ms: [100, 200], s: [1, 2, 3] })
+      expect(logger.warn).not.toHaveBeenCalled()
+    })
+
+    it('keeps the first bounds across flush windows', async () => {
+      const metrics = createMetrics()
+      metrics.histogram('h', 150, { bounds: [100, 200] })
+      await metrics.flush()
+      metrics.histogram('h', 150, { bounds: [10, 20] })
+      await metrics.flush()
+
+      expect(histogramPoints('h').map((dp) => dp.explicitBounds)).toEqual([
+        [100, 200],
+        [100, 200],
+      ])
+    })
+
+    it('merges a failed window back into a live window with the same bounds', async () => {
+      mockInstance._sendMetricsBatch
+        .mockResolvedValueOnce({ kind: 'retry-later', error: new Error('offline') })
+        .mockResolvedValue({ kind: 'ok' })
+      const metrics = createMetrics()
+      metrics.histogram('h', 50, { bounds: [100, 200] })
+      await metrics.flush()
+      metrics.histogram('h', 150, { bounds: [10, 20] })
+      await metrics.flush()
+
+      const dp = histogramPoints('h')[1]
+      expect(dp.explicitBounds).toEqual([100, 200])
+      expect(dp.bucketCounts).toEqual([1, 1, 0])
+      expect(dp.count).toBe(2)
+    })
+
+    it('lets reset() clear the bounds so the next sample sets them again', async () => {
+      const metrics = createMetrics()
+      metrics.histogram('h', 150, { bounds: [100, 200] })
+      metrics.reset()
+      metrics.histogram('h', 15, { bounds: [10, 20] })
+      await metrics.flush()
+
+      expect(histogramPoints('h').map((dp) => dp.explicitBounds)).toEqual([[10, 20]])
+      expect(logger.warn).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['empty', []],
+      ['not an array', 'nope'],
+      ['not increasing', [100, 100]],
+      ['decreasing', [200, 100]],
+      ['non-finite', [100, Infinity]],
+      ['NaN', [NaN]],
+      ['non-number', [100, '200']],
+    ])('drops a sample whose bounds are %s', async (_name, bounds) => {
+      const metrics = createMetrics()
+      metrics.histogram('h', 1, { bounds: bounds as any })
+      await metrics.flush()
+
+      expect(sentMetrics()).toHaveLength(0)
+      expect(warnings().some((w) => w.includes("Dropping histogram 'h': bounds must be"))).toBe(true)
+    })
+
+    it('does not fix the bounds from a sample with invalid bounds', async () => {
+      const metrics = createMetrics()
+      metrics.histogram('h', 1, { bounds: [200, 100] })
+      metrics.histogram('h', 150, { bounds: [100, 200] })
+      await metrics.flush()
+
+      expect(histogramPoints('h')[0].explicitBounds).toEqual([100, 200])
+    })
+
+    it('records new histograms past the bounds limit without fixing their bounds, and warns once', async () => {
+      const metrics = createMetrics({ maxSeriesPerFlush: 2 })
+      metrics.histogram('a', 1)
+      metrics.histogram('b', 1)
+      await metrics.flush()
+      metrics.histogram('c', 15, { bounds: [10, 20] })
+      await metrics.flush()
+      metrics.histogram('c', 150, { bounds: [100, 200] })
+      metrics.histogram('d', 1)
+      await metrics.flush()
+
+      expect(sentMetrics().map((m) => m.name)).toEqual(['a', 'b', 'c', 'c', 'd'])
+      expect(histogramPoints('c').map((dp) => dp.explicitBounds)).toEqual([
+        [10, 20],
+        [100, 200],
+      ])
+      expect(warnings().filter((w) => w.includes('Histogram bounds limit reached'))).toHaveLength(1)
+    })
+
+    it('keeps the live window when a histogram past the bounds limit fails to send with other bounds', async () => {
+      const metrics = createMetrics({ maxSeriesPerFlush: 1 })
+      metrics.histogram('a', 1)
+      await metrics.flush()
+      let resolveSend!: (outcome: SendMetricsBatchOutcome) => void
+      mockInstance._sendMetricsBatch.mockImplementationOnce(
+        () => new Promise<SendMetricsBatchOutcome>((resolve) => (resolveSend = resolve))
+      )
+
+      metrics.histogram('c', 15, { bounds: [10, 20] })
+      const inflight = metrics.flush()
+      metrics.histogram('c', 150, { bounds: [100, 200] })
+      resolveSend({ kind: 'retry-later', error: new Error('offline') })
+      await inflight
+      await metrics.flush()
+
+      const dp = histogramPoints('c')[1]
+      expect(dp.explicitBounds).toEqual([100, 200])
+      expect(dp.bucketCounts).toEqual([0, 1, 0])
+      expect(dp.count).toBe(1)
+    })
+
+    it('keeps the caller bounds intact when beforeSend edits them in place', async () => {
+      const metrics = createMetrics({
+        beforeSend: (m) => {
+          m.bounds?.forEach((b, i) => (m.bounds![i] = b / 1000))
+          m.value /= 1000
+          m.unit = 's'
+          return m
+        },
+      })
+      const bounds = [100, 1000]
+      metrics.histogram('h', 500, { unit: 'ms', bounds })
+      metrics.histogram('h', 500, { unit: 'ms', bounds })
+      await metrics.flush()
+
+      expect(bounds).toEqual([100, 1000])
+      const dp = histogramPoints('h')[0]
+      expect(dp.explicitBounds).toEqual([0.1, 1])
+      expect(dp.bucketCounts).toEqual([0, 2, 0])
+      expect(logger.warn).not.toHaveBeenCalled()
+    })
+
+    it('lets beforeSend change the bounds along with the unit', async () => {
+      const metrics = createMetrics({
+        beforeSend: (m) => ({ ...m, value: m.value / 1000, unit: 's', bounds: [0.1, 1] }),
+      })
+      metrics.histogram('h', 500, { unit: 'ms', bounds: [100, 1000] })
+      await metrics.flush()
+
+      const sent = sentMetrics()[0]
+      expect(sent.unit).toBe('s')
+      expect(sent.histogram!.dataPoints[0].explicitBounds).toEqual([0.1, 1])
+      expect(sent.histogram!.dataPoints[0].bucketCounts).toEqual([0, 1, 0])
+    })
+
+    it('does not fix the bounds for a sample the series cap drops', async () => {
+      const metrics = createMetrics({ maxSeriesPerFlush: 1 })
+      metrics.count('fills_the_window', 1)
+      metrics.histogram('h', 1, { bounds: [10, 20] })
+      await metrics.flush()
+      metrics.histogram('h', 150, { bounds: [100, 200] })
+      await metrics.flush()
+
+      expect(histogramPoints('h').map((dp) => dp.explicitBounds)).toEqual([[100, 200]])
+    })
+  })
+
   describe('exemplars', () => {
     const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
     const SPAN_ID = '00f067aa0ba902b7'
