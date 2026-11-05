@@ -6,7 +6,7 @@ import { ConvexError, v, type Value } from 'convex/values'
 import { Workpool, type WorkId, type WorkpoolComponent } from '@convex-dev/workpool'
 import posthogTest from '../test.js'
 import type { ComponentApi } from '../component/_generated/component.js'
-import { PostHog, UnsupportedEmailError, type SendEmailArgs } from './index.js'
+import { PostHog, type SendEmailArgs } from './index.js'
 
 const SEND_URL = 'https://us.posthog.com/api/projects/@current/messaging/send/email/'
 const MESSAGE_ID = '01a18356-c56c-0001-e494-7666bc915188'
@@ -180,10 +180,9 @@ describe('sending email through the component', () => {
       const ctx = { runAction: vi.fn(), scheduler: { runAfter: vi.fn() } }
       const queue = { enqueueAction: vi.fn() }
 
-      await expect(posthog.sendEmail(ctx, email as SendEmailArgs)).rejects.toMatchObject({ refusal })
-      await expect(posthog.enqueueEmail(ctx, queue, email as SendEmailArgs)).rejects.toBeInstanceOf(
-        UnsupportedEmailError
-      )
+      const refused = { code: refusal, retryable: false }
+      expect(await failureOf(posthog.sendEmail(ctx, email as SendEmailArgs))).toMatchObject(refused)
+      expect(await failureOf(posthog.enqueueEmail(ctx, queue, email as SendEmailArgs))).toMatchObject(refused)
 
       expect(ctx.runAction).not.toHaveBeenCalled()
       expect(queue.enqueueAction).not.toHaveBeenCalled()

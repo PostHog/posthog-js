@@ -1,4 +1,5 @@
 import type { Scheduler } from 'convex/server'
+import { ConvexError } from 'convex/values'
 import type { ComponentApi } from '../component/_generated/component.js'
 import type { EmailSendFailure, SentEmail } from '../component/emails.js'
 import {
@@ -73,19 +74,6 @@ export type SendEmailArgs = {
   templateId?: never
 } & ({ html: string; text?: string } | { html?: string; text: string })
 
-export type EmailRefusal = 'template_unsupported' | 'invalid_template_key'
-
-/** The email can't be sent as asked, so nothing was sent or queued. */
-export class UnsupportedEmailError extends Error {
-  readonly refusal: EmailRefusal
-
-  constructor(refusal: EmailRefusal, detail: string) {
-    super(`PostHog cannot send this email: ${refusal}. ${detail}`)
-    this.name = 'UnsupportedEmailError'
-    this.refusal = refusal
-  }
-}
-
 /** A queue that retries a failed action, such as a `Workpool` from `@convex-dev/workpool`. */
 export type EmailQueue<Ctx, WorkId> = {
   enqueueAction(ctx: Ctx, fn: any, args: any, options: { retry: true }): Promise<WorkId>
@@ -94,8 +82,9 @@ export type EmailQueue<Ctx, WorkId> = {
 const TEMPLATE_KEY = /^[a-zA-Z0-9_-]{1,400}$/
 const INTEGRATION_NAME = 'convex'
 
-const listOf = (addresses: string | string[] | undefined): string[] | undefined =>
-  typeof addresses === 'string' ? [addresses] : addresses
+/** The email can't be sent as asked, so nothing was sent or queued. */
+const refusal = (code: string, detail: string): ConvexError<EmailSendFailure> =>
+  new ConvexError({ code, detail, retryable: false })
 
 export function normalizeError(error: unknown): {
   message: string
@@ -175,18 +164,12 @@ export class PostHog {
 
   private emailSend(email: SendEmailArgs) {
     if (email.templateId !== undefined) {
-      throw new UnsupportedEmailError('template_unsupported', 'Render the email in your code and send its html.')
+      throw refusal('template_unsupported', 'Render the email in your code and send its html.')
     }
     if (email.templateKey !== undefined && !TEMPLATE_KEY.test(email.templateKey)) {
-      throw new UnsupportedEmailError('invalid_template_key', 'Use letters, digits, - and _, at most 400.')
+      throw refusal('invalid_template_key', 'Use letters, digits, - and _, at most 400.')
     }
-    return {
-      ...email,
-      templateKey: email.templateKey ?? this.defaultTemplateKey,
-      replyTo: listOf(email.replyTo),
-      cc: listOf(email.cc),
-      bcc: listOf(email.bcc),
-    }
+    return { ...email, templateKey: email.templateKey ?? this.defaultTemplateKey }
   }
 
   /**

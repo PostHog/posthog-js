@@ -6,6 +6,8 @@ import { version } from './version.js'
 
 const WORKPOOL_NON_RETRYABLE = '__convexWorkpoolNonRetryable'
 
+const addresses = v.union(v.string(), v.array(v.string()))
+
 const sentEmail = v.object({ message_id: v.string(), replayed: v.boolean() })
 
 export type SentEmail = Infer<typeof sentEmail>
@@ -28,9 +30,9 @@ export const send = action({
     html: v.optional(v.string()),
     text: v.optional(v.string()),
     from: v.optional(v.string()),
-    replyTo: v.optional(v.array(v.string())),
-    cc: v.optional(v.array(v.string())),
-    bcc: v.optional(v.array(v.string())),
+    replyTo: v.optional(addresses),
+    cc: v.optional(addresses),
+    bcc: v.optional(addresses),
     attachments: v.optional(
       v.array(
         v.object({

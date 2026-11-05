@@ -34,14 +34,14 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             contentType?: string;
             filename: string;
           }>;
-          bcc?: Array<string>;
+          bcc?: string | Array<string>;
           captureEngagement?: boolean;
-          cc?: Array<string>;
+          cc?: string | Array<string>;
           distinctId?: string;
           from?: string;
           html?: string;
           idempotencyKey?: string;
-          replyTo?: Array<string>;
+          replyTo?: string | Array<string>;
           subject: string;
           templateKey: string;
           text?: string;
