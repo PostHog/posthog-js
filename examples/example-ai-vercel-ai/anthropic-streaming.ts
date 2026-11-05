@@ -42,6 +42,8 @@ async function main() {
                 posthog_distinct_id: 'example-user',
             },
         },
+        // Claude Sonnet 5.5 rejects non-default sampling; AI SDK v4 sends temperature 0 unless set
+        temperature: 1,
         maxTokens: 1024,
         messages: [
             { role: 'system', content: 'You are a helpful assistant with access to weather data.' },

@@ -33,6 +33,8 @@ async function main() {
                 posthog_distinct_id: 'example-user',
             },
         },
+        // Claude Sonnet 5.5 rejects non-default sampling; AI SDK v4 sends temperature 0 unless set
+        temperature: 1,
         prompt: 'Explain observability in three sentences.',
     })
 
