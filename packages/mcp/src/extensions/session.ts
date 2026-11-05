@@ -138,11 +138,14 @@ export function resolveSession(
     throw new Error('Server tracking data not found')
   }
 
-  // 1 and 2 belong to this one request, so they return before the shared-state
-  // writes at the end: persisting them (or advancing lastActivity) would leak one
-  // chat's session onto a concurrent chat's `tools/list`. On an instance that
-  // never processed `initialize`, the request's token is still the only source of
-  // client identity, so it is applied either way.
+  // 1 and 2 belong to this one request, so they are never persisted: that would
+  // leak one chat's session onto a concurrent chat's `tools/list`. They still
+  // count as activity on the connection (see `touchConnectionSession`). On an
+  // instance that never processed `initialize`, the request's token is still the
+  // only source of client identity, so it is applied either way.
+  if (clientConversation || conversationId) {
+    touchConnectionSession(server, data, extra)
+  }
   if (clientConversation) {
     applyTokenClientIdentity(data, extra)
     return { sessionId: deriveSessionIdFromClientConversation(clientConversation), source: 'client_metadata' }
@@ -161,6 +164,25 @@ export function resolveSession(
   data.lastActivity = new Date()
   setServerTrackingData(server, data)
   return { sessionId, source: instanceSessionSource(data) }
+}
+
+/**
+ * A one-client connection's id rotates on the first tool call that arrives 30
+ * minutes or more after the previous one, whichever source grouped that call. So
+ * a call grouped by the client or the agent still rotates a stale id and resets
+ * the clock, or a later call without either would rotate early.
+ */
+function touchConnectionSession(
+  server: MCPServerLike,
+  data: MCPAnalyticsData,
+  extra?: CompatibleRequestHandlerExtra
+): void {
+  if (data.sessionSource !== 'generated' || extra?.sessionId) {
+    return
+  }
+  data.sessionId = getSessionIdFromMemory(data)
+  data.lastActivity = new Date()
+  setServerTrackingData(server, data)
 }
 
 /** The source of the session this instance holds: steps 3 and 4 of {@link resolveSession}. */

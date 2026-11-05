@@ -253,6 +253,36 @@ describe('client conversation ids', () => {
     expect(recognizeClient({ userAgent: CHATGPT, clientName: 'codex-mcp-client' })).toBe(CLIENT_CONVERSATION_ROWS[0])
   })
 
+  it.each([
+    { name: 'keeps', gaps: [20, 20], rotated: false },
+    { name: 'rotates', gaps: [40, 1], rotated: true },
+  ])('$name a connection session across calls grouped by a client id', async ({ gaps, rotated }) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const pod = createPod({ enableConversationId: false })
+      const call = async (meta?: Record<string, unknown>): Promise<void> => {
+        await pod._requestHandlers.get('tools/call')!(
+          { method: 'tools/call', params: { name: 'search_docs', arguments: {}, ...(meta ? { _meta: meta } : {}) } },
+          requestExtra({ userAgent: CODEX })
+        )
+      }
+      await call()
+      vi.advanceTimersByTime(gaps[0] * 60_000)
+      await call({ sessionId: CODEX_ID })
+      vi.advanceTimersByTime(gaps[1] * 60_000)
+      await call()
+      vi.useRealTimers()
+      await new Promise((resolve) => setTimeout(resolve, 25))
+
+      const [first, grouped, last] = toolCalls()
+      expect(grouped.$session_id).toBe(CODEX_SESSION)
+      expect(last.$mcp_session_source).toBe('generated')
+      expect(last.$session_id === first.$session_id).toBe(!rotated)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('records the instance session source on custom events', async () => {
     const analytics = instrument(new Server({ name: 'pod', version: '1.0.0' }, { capabilities: {} }), fakePostHog())
     await analytics.capture({ event: 'custom_thing' })
