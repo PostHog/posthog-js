@@ -155,6 +155,13 @@ describe('posthog-node/nodemailer', () => {
         {},
         {},
       ],
+      [
+        '11-headers-ignored-and-refused, with the ignored header as a list',
+        {},
+        { ...ORDER_SHIPPED, headers: [{ key: 'Message-ID', value: '<x@example.com>' }] },
+        {},
+        {},
+      ],
     ])('%s sends one request', async (_name, options, mail, extraBody, extraHeaders) => {
       replies = [{ status: 202, body: { message_id: MESSAGE_ID, replayed: false } }]
 
@@ -207,6 +214,17 @@ describe('posthog-node/nodemailer', () => {
         'unsupported_header',
       ],
       [
+        '11-headers-ignored-and-refused, with the headers as a list',
+        {
+          ...ORDER_SHIPPED,
+          headers: [
+            { key: 'Message-ID', value: '<x@example.com>' },
+            { key: 'X-Campaign', value: 'spring' },
+          ],
+        },
+        'unsupported_header',
+      ],
+      [
         '13-refuse-envelope-mismatch',
         { ...ORDER_SHIPPED, envelope: { from: 'bounce@example.com', to: ['ana@example.com'] } },
         'envelope_mismatch',
@@ -235,6 +253,21 @@ describe('posthog-node/nodemailer', () => {
       'unsupported_part',
     ],
     ['a raw message', { raw: 'Subject: hi\r\n\r\nhi' }, 'unsupported_part'],
+    [
+      'an attachment with a raw source',
+      { attachments: [{ filename: 'notes.txt', content: 'hello', raw: 'Content-Type: text/plain\r\n\r\nother' }] },
+      'unsupported_part',
+    ],
+    [
+      'an attachment with its own headers',
+      {
+        html: '<img src="cid:logo">',
+        attachments: [
+          { filename: 'logo.png', content: 'iVBORw0KGgo=', encoding: 'base64', headers: { 'Content-ID': '<logo>' } },
+        ],
+      },
+      'unsupported_header',
+    ],
     ['a high priority', { priority: 'high' as const }, 'unsupported_priority'],
     ['a reply thread', { inReplyTo: '<earlier@example.com>' }, 'unsupported_header'],
     ['a list header', { list: { unsubscribe: 'https://example.com/unsubscribe' } }, 'unsupported_header'],

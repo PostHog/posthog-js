@@ -12,6 +12,17 @@ const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 const NEEDS_QUOTES = /[()<>[\]:;@\\,."]/
 const IGNORED_HEADERS = new Set(['message-id', 'date', 'mime-version', 'x-mailer'])
 
+/**
+ * Refuses what `normalize()` drops: an attachment's `raw` source, which Nodemailer would send in place of its content.
+ * Reads the message data before `normalize()`.
+ */
+export function refuseBeforeNormalize(data: { attachments?: unknown } | undefined): void {
+  const attachments = Array.isArray(data?.attachments) ? data.attachments : []
+  if (attachments.some((attachment) => attachment?.raw !== undefined)) {
+    throw unsupported('unsupported_part')
+  }
+}
+
 /** A send the SDK checks again: subject, html and text stay as Nodemailer has them. */
 export type MappedSend = Omit<SendCodeEmailOptions, 'subject' | 'html' | 'text'> & {
   subject?: string
@@ -82,17 +93,29 @@ function formatSender({ name, address }: NormalizedAddress): string {
 }
 
 function unsupportedPart(mail: NormalizedMail): PostHogRefusal | undefined {
-  const hasExtraPart =
-    Boolean(mail.watchHtml || mail.amp || mail.icalEvent || mail.raw || mail.alternatives?.length) ||
-    Boolean(mail.attachments?.some((attachment) => attachment.raw !== undefined))
+  const hasExtraPart = Boolean(mail.watchHtml || mail.amp || mail.icalEvent || mail.raw || mail.alternatives?.length)
   return hasExtraPart ? 'unsupported_part' : undefined
 }
 
-function unsupportedHeader({ normalizedHeaders, sender, from }: NormalizedMail): PostHogRefusal | undefined {
+function unsupportedHeader(mail: NormalizedMail): PostHogRefusal | undefined {
+  const { sender, from } = mail
   const isIgnored = (name: string): boolean => IGNORED_HEADERS.has(name) || name.startsWith('content-')
-  const hasHeader = Object.keys(normalizedHeaders ?? {}).some((name) => !isIgnored(name.toLowerCase()))
+  const hasHeader =
+    headerNames(mail.headers).some((name) => !isIgnored(name.toLowerCase())) ||
+    Boolean(mail.list || mail.references || mail.inReplyTo)
+  const hasAttachmentHeader = Boolean(
+    mail.attachments?.some((attachment) => attachment.headers && Object.keys(attachment.headers).length > 0)
+  )
   const hasSender = Boolean(sender?.address) && sender?.address?.toLowerCase() !== from?.address?.toLowerCase()
-  return hasHeader || hasSender ? 'unsupported_header' : undefined
+  return hasHeader || hasAttachmentHeader || hasSender ? 'unsupported_header' : undefined
+}
+
+/** Nodemailer takes headers as an object or as a list of `{ key, value }`, and skips a header without a value. */
+function headerNames(headers: NormalizedMail['headers']): string[] {
+  if (Array.isArray(headers)) {
+    return headers.filter((header) => header?.value).map((header) => header.key)
+  }
+  return Object.keys(headers ?? {}).filter((name) => headers?.[name])
 }
 
 function envelopeMismatch(mail: NormalizedMail, recipients: string[]): PostHogRefusal | undefined {
@@ -121,7 +144,11 @@ function attachmentOf(attachment: NormalizedAttachment): EmailAttachment {
   const { content = '', encoding, filename, contentType, cid } = attachment
   return {
     filename: filename || '',
-    content: typeof content === 'string' ? Buffer.from(content, (encoding as BufferEncoding) ?? 'utf8') : content,
+    // normalize() hands over a file's bytes as Base64, which the SDK sends as it is
+    content:
+      typeof content === 'string' && encoding !== 'base64'
+        ? Buffer.from(content, (encoding as BufferEncoding) ?? 'utf8')
+        : content,
     ...(contentType && { contentType }),
     ...(cid && { contentId: cid }),
   }

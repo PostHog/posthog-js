@@ -70,7 +70,7 @@ export interface NormalizedAttachment {
   contentType?: string
   contentDisposition?: string
   cid?: string
-  raw?: unknown
+  headers?: object
 }
 
 /** The message as Nodemailer's `MailMessage.normalize()` hands it over: contents resolved, addresses parsed. */
@@ -90,15 +90,22 @@ export interface NormalizedMail {
   alternatives?: unknown[]
   raw?: unknown
   attachments?: NormalizedAttachment[]
-  normalizedHeaders?: Record<string, string>
+  headers?: Record<string, unknown> | { key: string; value: unknown }[]
+  list?: unknown
+  references?: unknown
+  inReplyTo?: unknown
   envelope?: { from?: string | false; to?: string[] }
   priority?: string
   posthog?: PostHogMailOptions
 }
 
-/** The part of Nodemailer's `MailMessage` a transport reads. */
+/**
+ * The part of Nodemailer's `MailMessage` a transport reads. `normalize` hands over Nodemailer's own data type, so
+ * its data stays `unknown` here and the transport reads it as a `NormalizedMail`.
+ */
 export interface NodemailerMail {
-  normalize(callback: (error: Error | null, data?: NormalizedMail) => void): void
+  data?: { attachments?: unknown }
+  normalize(callback: (error: Error | null, data?: unknown) => void): void
 }
 
 export type NodemailerDone = (error: Error | null, info?: PostHogSentMessageInfo) => void

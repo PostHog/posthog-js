@@ -2,7 +2,7 @@ import { isRetryable } from '../emails/emails'
 import type { EmailError } from '../emails/errors'
 import type { SendCodeEmailOptions } from '../emails/types'
 import { version } from '../version'
-import { mapMail } from './mapper'
+import { mapMail, refuseBeforeNormalize } from './mapper'
 import type {
   NodemailerMail,
   NormalizedMail,
@@ -22,6 +22,7 @@ const INTEGRATION = `nodemailer/${version}`
  */
 export function createPostHogTransport({ client, defaultTemplateKey }: PostHogTransportOptions): PostHogTransport {
   const sendThroughPostHog = async (mail: NodemailerMail): Promise<PostHogSentMessageInfo> => {
+    refuseBeforeNormalize(mail.data)
     const mapped = mapMail(await normalize(mail), defaultTemplateKey)
     const { data, error } = await client.emails.send({ ...(mapped as SendCodeEmailOptions), integration: INTEGRATION })
     if (error) {
@@ -43,7 +44,9 @@ export function createPostHogTransport({ client, defaultTemplateKey }: PostHogTr
 }
 
 function normalize(mail: NodemailerMail): Promise<NormalizedMail> {
-  return new Promise((resolve, reject) => mail.normalize((error, data) => (error ? reject(error) : resolve(data!))))
+  return new Promise((resolve, reject) =>
+    mail.normalize((error, data) => (error ? reject(error) : resolve(data as NormalizedMail)))
+  )
 }
 
 function sendError(error: EmailError): PostHogSendError {
