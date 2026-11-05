@@ -551,7 +551,7 @@ export class PostHogMetrics {
           ...exemplars,
         }
         metric.gauge!.dataPoints.push(dp)
-      } else if (state.type === 'histogram') {
+      } else {
         const hist = state.hist!
         const dp: OtlpHistogramDataPoint = {
           attributes,
