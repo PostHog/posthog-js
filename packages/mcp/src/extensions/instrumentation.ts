@@ -46,10 +46,11 @@ import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
 import {
   deriveSessionIdFromMCPSession,
-  getSessionId,
   getSessionInfo,
   isModernEraRequest,
   newSessionId,
+  readClientConversation,
+  resolveSession,
 } from './session'
 import { decodeSessionId, encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
@@ -171,7 +172,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   // can mislabel a property. Conversation minting also writes a prompt-back;
   // that separate tradeoff and its carried-session guard are recorded in ADR-0013.
   const canCaptureContextIntent = ownership.read.context
-  const conversation = resolveToolConversation(ownership.read.conversationId, request.params?.arguments, extra)
+  const conversation = resolveToolConversation(ownership.read.conversationId, request, extra)
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership.strip)
   const schemaSessionId = resolveToolSchemaSessionId(data, extra)
 
@@ -230,14 +231,17 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
 
 function resolveToolConversation(
   enabled: boolean,
-  args: unknown,
+  request: MCPRequestLike,
   extra?: CompatibleRequestHandlerExtra
 ): ConversationIdResolution {
-  const conversation = resolveConversationId(enabled, args)
+  const conversation = resolveConversationId(enabled, request.params?.arguments)
   // Echoed handles span reconnects; a new handle must not replace a session
   // already carried by this request or add a needless prompt-back to its result.
   if (!conversation.minted) return conversation
-  const carriedSession = extra?.sessionId || decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra)))
+  const carriedSession =
+    extra?.sessionId ||
+    decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra))) ||
+    readClientConversation(request.params?._meta)
   return carriedSession ? { minted: false, conversationId: undefined } : conversation
 }
 
@@ -331,7 +335,12 @@ async function prepareToolCallEvent(
   canCaptureContextIntent: boolean
 ): Promise<PreparedToolEvent | null> {
   try {
-    const sessionId = getSessionId(server, extra, conversation.conversationId)
+    const { sessionId, source: sessionSource } = resolveSession(
+      server,
+      extra,
+      conversation.conversationId,
+      readClientConversation(request.params?._meta)
+    )
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
     const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -339,6 +348,7 @@ async function prepareToolCallEvent(
     const toolName = request.params?.name
     const event: McpEvent = {
       sessionId,
+      sessionSource,
       conversationId: conversation.conversationId,
       resourceName: toolName || 'Unknown Tool Name',
       parameters: buildCapturedMcpParameters(downstreamRequest),
@@ -564,10 +574,11 @@ async function captureResourceRequest(params: TraceRequestParams): Promise<unkno
   const startTime = new Date()
   let preparedEvent: PreparedToolEvent | null = null
   try {
-    const sessionId = getSessionId(server, extra)
+    const { sessionId, source: sessionSource } = resolveSession(server, extra)
     const sessionInfo = getSessionInfo(server, data, sessionId)
     const event: McpEvent = {
       sessionId,
+      sessionSource,
       eventType,
       parameters: buildCapturedMcpParameters(request),
       resourceName: eventType === MCPAnalyticsEventType.mcpResourcesRead ? request.params?.uri : undefined,
@@ -752,12 +763,13 @@ export async function handleListToolsRequest(
 ): Promise<CompatibleToolsListLike> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
-  const sessionId = getSessionId(server, extra)
+  const { sessionId, source: sessionSource } = resolveSession(server, extra)
   // Snapshot before identify, metadata resolution, or the list handler can yield
   // to a concurrent request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)
   const event: McpEvent = {
     sessionId,
+    sessionSource,
     parameters: buildCapturedMcpParameters(request),
     eventType: MCPAnalyticsEventType.mcpToolsList,
     timestamp: startTime,
@@ -1016,7 +1028,7 @@ export function cacheToolCategories(
  * client name/version is lost after `initialize`. Fix: mint the
  * `Mcp-Session-Id` response header as a token carrying both. Clients replay
  * the header on every request, so any pod recovers them with no server-side
- * store (decoded in `getSessionId`). See ADR-0003.
+ * store (decoded in `resolveSession`). See ADR-0003.
  *
  * The header only reaches the wire when response headers are built after the
  * handler runs — StreamableHTTP with `enableJsonResponse: true`. SSE flushes
@@ -1147,7 +1159,7 @@ export async function handleInitializeRequest(
 
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
   const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
-  const sessionId = getSessionId(server, extra)
+  const { sessionId, source: sessionSource } = resolveSession(server, extra)
   // Snapshot before identify, metadata, or the initialize handler can yield to
   // another request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -1159,6 +1171,7 @@ export async function handleInitializeRequest(
   }
   const event: McpEvent = {
     sessionId,
+    sessionSource,
     resourceName: request.params?.name || 'Unknown Tool Name',
     eventType: MCPAnalyticsEventType.mcpInitialize,
     parameters: buildCapturedMcpParameters(request),

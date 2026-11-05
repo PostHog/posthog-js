@@ -47,6 +47,7 @@ export function captureEvent(
   const fullEvent: McpEvent = {
     id: eventInput.id || '',
     sessionId: eventInput.sessionId || data.sessionId,
+    sessionSource: eventInput.sessionSource,
     eventType: eventInput.eventType || MCPAnalyticsEventType.custom,
     eventName: eventInput.eventName,
     timestamp: eventInput.timestamp || new Date(),

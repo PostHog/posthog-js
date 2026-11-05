@@ -8,6 +8,7 @@ import type {
   CompatibleRequestHandlerExtra,
   MCPAnalyticsData,
   MCPRequestLike,
+  MCPAnalyticsSessionSource,
   MCPServerLike,
   ServerClientInfoLike,
   SessionInfo,
@@ -105,23 +106,71 @@ export function deriveSessionIdFromConversation(conversationId: string): string 
 }
 
 /**
- * Resolves the session id for a request. Three steps, first match wins:
+ * Host clients that put their own conversation id in a request's `params._meta`,
+ * by key. ChatGPT documents `openai/session` as an anonymized id "for correlating
+ * tool calls within the same ChatGPT session".
+ */
+export const CLIENT_CONVERSATION_META_KEYS = ['openai/session'] as const
+
+export interface ClientConversation {
+  key: (typeof CLIENT_CONVERSATION_META_KEYS)[number]
+  id: string
+}
+
+/** Printable ASCII only, so every SDK hashes the same characters (see `ids.ts`). */
+const CLIENT_CONVERSATION_ID_SHAPE = /^[\x20-\x7e]{1,256}$/
+
+/** Reads the first recognized client conversation id off a request's `params._meta`. */
+export function readClientConversation(meta: unknown): ClientConversation | undefined {
+  if (!(meta && typeof meta === 'object')) {
+    return undefined
+  }
+  for (const key of CLIENT_CONVERSATION_META_KEYS) {
+    const id = (meta as Record<string, unknown>)[key]
+    if (typeof id === 'string' && CLIENT_CONVERSATION_ID_SHAPE.test(id)) {
+      return { key, id }
+    }
+  }
+  return undefined
+}
+
+/**
+ * Keyed so two hosts' ids, or a host id and a conversation handle, never share a
+ * hash input. Part of the cross-SDK contract, like
+ * {@link deriveSessionIdFromConversation}.
+ */
+export function deriveSessionIdFromClientConversation(key: string, id: string): string {
+  return deterministicPrefixedId('ses', `${key}:${id}`)
+}
+
+export interface ResolvedSession {
+  sessionId: string
+  source: MCPAnalyticsSessionSource
+}
+
+/**
+ * Resolves the session for a request. Four steps, first match wins:
  *
  *   1. the agent carried a `conversation_id` tool argument   — 2026-07-28
  *   2. the request carried a session id                      — 2025-11-25
- *   3. nothing was carried, so reuse this instance's own id  — stdio
+ *   3. the host client carried its own conversation id       — `params._meta`
+ *   4. nothing was carried, so reuse this instance's own id  — stdio
  *
  * The split mirrors the two protocol revisions. 2026-07-28 removed protocol-level
  * sessions, so the only thing that can carry a session across calls is the agent
  * itself (1). 2025-11-25 kept the session on the connection, so the request
- * carries it (2). 3 is for stdio, where neither applies — there is no
- * HTTP request to carry anything, and no agent handle unless the host opted in.
+ * carries it (2). Some hosts carry a conversation id without being asked (3); it
+ * ranks below 1 and 2 so it only groups calls that would otherwise fragment, and
+ * never regroups a session those already hold. 4 is for stdio, where nothing else
+ * applies — there is no HTTP request to carry anything, and no agent handle
+ * unless the host opted in.
  */
-export function getSessionId(
+export function resolveSession(
   server: MCPServerLike,
   extra?: CompatibleRequestHandlerExtra,
-  conversationId?: string
-): string {
+  conversationId?: string,
+  clientConversation?: ClientConversation
+): ResolvedSession {
   const data = getServerTrackingData(server)
   if (!data) {
     throw new Error('Server tracking data not found')
@@ -138,21 +187,30 @@ export function getSessionId(
     // identity — without this, tool calls go out unattributed
     // on exactly the deployments this branch exists for.
     applyTokenClientIdentity(data, extra)
-    return deriveSessionIdFromConversation(conversationId)
+    return { sessionId: deriveSessionIdFromConversation(conversationId), source: 'conversation' }
   }
 
   // 2. A session id the request itself carried (undefined if it carried none).
   const carriedByRequest = readSessionIdFromRequest(data, extra)
 
-  // 3. Nothing carried, so fall back to the id this instance already holds.
+  // 3. Per-chat like 1, so it returns before the shared-state writes for the
+  // same reason.
+  if (!carriedByRequest && clientConversation) {
+    return {
+      sessionId: deriveSessionIdFromClientConversation(clientConversation.key, clientConversation.id),
+      source: 'client_metadata',
+    }
+  }
+
+  // 4. Nothing carried, so fall back to the id this instance already holds.
   const sessionId = carriedByRequest ?? getSessionIdFromMemory(data)
 
-  // 2 and 3 are connection-scoped, so their result is remembered for the
-  // next request on this instance. 1 never reaches here.
+  // 2 and 4 are connection-scoped, so their result is remembered for the
+  // next request on this instance. 1 and 3 never reach here.
   data.sessionId = sessionId
   data.lastActivity = new Date()
   setServerTrackingData(server, data)
-  return sessionId
+  return { sessionId, source: data.sessionSource === 'generated' ? 'generated' : 'transport' }
 }
 
 /**
@@ -181,7 +239,7 @@ function applyTokenClientIdentity(
  * 2. The session id a request carried. Two sources, tried in order: our own token
  * on the `mcp-session-id` header, then the raw session id a stateful transport
  * issued. Returns undefined when the request carried neither, which is what
- * sends the caller on to 3.
+ * sends the caller on to 3 and 4.
  *
  * Both are 2025-11-25 mechanisms; the 2026-07-28 revision removed the header
  * outright, so this step is legacy-only once era detection lands (ADR-0003).
@@ -207,7 +265,7 @@ function readSessionIdFromRequest(data: MCPAnalyticsData, extra?: CompatibleRequ
 }
 
 /**
- * 3. The request carried nothing, so keep the id this instance already holds —
+ * 4. The request carried nothing, so keep the id this instance already holds —
  * minted once at `instrument()`. This is what groups a stdio server's calls,
  * where there is no header and no transport session to read.
  *

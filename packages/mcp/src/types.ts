@@ -321,6 +321,8 @@ export interface MCPAnalyticsModelOptions {
 export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
 export type MCPAnalyticsModelSource = 'client_metadata' | 'self_reported'
+/** Which source grouped the call into its `$session_id`, first match wins. */
+export type MCPAnalyticsSessionSource = 'conversation' | 'transport' | 'client_metadata' | 'generated'
 
 export type ToolCallback =
   | ((
@@ -433,6 +435,7 @@ export interface Event {
   serverName?: string
   serverVersion?: string
   sessionId: string
+  sessionSource?: MCPAnalyticsSessionSource
   timestamp: Date
   toolCategory?: string
   toolDescription?: string
@@ -771,7 +774,7 @@ export interface PrepareToolCallOptions {
    * by that name is dispatched normally instead of being flagged as feedback.
    */
   originalTool?: { inputSchema?: unknown; outputSchema?: unknown }
-  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
+  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata and conversation ids. */
   requestMeta?: JsonRecord
   /**
    * A session id carried by the request or transport. A valid echoed

@@ -54,7 +54,11 @@ import {
 } from './model-parameters'
 import { McpEventSink } from './sink'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
-import { deriveSessionIdFromConversation } from './session'
+import {
+  deriveSessionIdFromClientConversation,
+  deriveSessionIdFromConversation,
+  readClientConversation,
+} from './session'
 import { validateServerBuild } from './server-build'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
 
@@ -387,12 +391,16 @@ export class PostHogMCP extends PostHog {
     const strippedArgs = stripContext(args)
     const canReadConversationId = this.#enableConversationId && (ownership?.conversationId ?? true)
     const resolvedConversation = resolveConversationId(canReadConversationId, args)
+    const clientConversation = readClientConversation(options.requestMeta)
+    const carriedSessionId =
+      options.sessionId ??
+      (clientConversation && deriveSessionIdFromClientConversation(clientConversation.key, clientConversation.id))
     const conversation =
-      resolvedConversation.minted && options.sessionId
+      resolvedConversation.minted && carriedSessionId
         ? ({ minted: false, conversationId: undefined } as const)
         : resolvedConversation
     const conversationId = conversation.conversationId
-    const sessionId = conversationId ? deriveSessionIdFromConversation(conversationId) : options.sessionId
+    const sessionId = conversationId ? deriveSessionIdFromConversation(conversationId) : carriedSessionId
     // A supplied `originalTool` is a real application tool by this name (it
     // comes from the host's own list, which never holds the virtual tool), so
     // the real tool wins — the stateless twin of instrument()'s listing-derived

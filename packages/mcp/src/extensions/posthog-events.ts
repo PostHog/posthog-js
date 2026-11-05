@@ -91,6 +91,9 @@ function addSessionIdProperty(event: Event, properties: Record<string, unknown>)
   if (typeof event.sessionId === 'string' && event.sessionId.length > 0) {
     properties[PostHogMCPAnalyticsProperty.SessionId] = event.sessionId
   }
+  if (event.sessionSource) {
+    properties[PostHogMCPAnalyticsProperty.SessionSource] = event.sessionSource
+  }
 }
 
 function addConversationIdProperty(event: Event, properties: Record<string, unknown>): void {
