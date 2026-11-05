@@ -11,6 +11,7 @@ import {
 } from '../src/rebuild';
 import { NodeType } from '@posthog/rrweb-types';
 import { createMirror, Mirror, normalizeCssString } from '../src/utils';
+import snapshot from '../src/snapshot';
 
 const expect = _expect as unknown as {
   <T = unknown>(actual: T): {
@@ -54,14 +55,21 @@ describe('rebuild', function () {
     cache = createCache();
   });
 
-  it('rebuilds non-empty CDATA as text in an HTML document', () => {
-    const node = buildNodeWithSN(
-      { id: 1, type: NodeType.CDATA, textContent: 'text <with> content' },
-      { doc: document, mirror, hackCss: false, cache },
-    );
-    expect(node?.nodeType).toBe(Node.TEXT_NODE);
-    expect(node?.textContent).toBe('text <with> content');
-  });
+  it.each(['HTML', 'XML'])(
+    'rebuilds non-empty CDATA as text in an %s document',
+    (type) => {
+      const doc =
+        type === 'HTML'
+          ? document
+          : document.implementation.createDocument(null, 'root');
+      const node = buildNodeWithSN(
+        { id: 1, type: NodeType.CDATA, textContent: 'text <with> content' },
+        { doc, mirror, hackCss: false, cache },
+      );
+      expect(node?.nodeType).toBe(Node.TEXT_NODE);
+      expect(node?.textContent).toBe('text <with> content');
+    },
+  );
 
   describe('rr_dataURL', function () {
     it('should rebuild dataURL', function () {
@@ -150,6 +158,26 @@ describe('rebuild', function () {
   });
 
   describe('script placeholder', function () {
+    it('suppresses script CDATA when rebuilding a shadow root', function () {
+      const xml = document.implementation.createDocument(null, 'root');
+      const host = document.createElement('div');
+      const shadow = host.attachShadow({ mode: 'open' });
+      const script = document.createElement('script');
+      script.appendChild(xml.createCDATASection('window.recorded = true;'));
+      shadow.appendChild(script);
+
+      const serialized = snapshot(host)!;
+      const node = buildNodeWithSN(serialized, {
+        doc: document,
+        mirror,
+        hackCss: false,
+        cache,
+      }) as HTMLElement;
+
+      expect(node.shadowRoot?.querySelector('noscript')).not.toBeNull();
+      expect(node.shadowRoot?.textContent).toBe('');
+    });
+
     it('rebuilds a <script> as an empty <noscript> so the placeholder never renders', function () {
       const node = buildNodeWithSN(
         {
