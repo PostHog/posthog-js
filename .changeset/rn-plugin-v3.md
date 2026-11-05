@@ -13,6 +13,8 @@ Release `@posthog/react-native-plugin` 3.0, with the upgrade steps in the [migra
 - **Breaking:** remove the legacy `start()` method — call `setup()` instead
 - **Breaking:** ignore `iOSdebouncerDelayMs` and `androidDebouncerDelayMs` when calling `setup()` directly — pass `throttleDelayMs` instead
 - **Breaking:** ignore the experimental iOS session replay option `screenshotModeBackgroundCapture`
+- **Breaking:** send iOS native events (crash reports, fatal JS errors, push notification opens) to capture v1 (`/i/v1/analytics/events`) with `Authorization: Bearer <projectToken>`, replacing any `Authorization` from `requestHeaders` — serve this path on reverse proxies and self-hosted instances
+- **Breaking:** report `$locale` on iOS native events as the device language with its region, such as `de-CH` instead of `de`, and add `$app_language`
 - **Breaking:** require posthog-android 4.0
 - Always record Android session replay as masked screenshots, the mode the plugin already used
 - Accept `projectToken` as well as `apiKey` in `setup()` options on Android
