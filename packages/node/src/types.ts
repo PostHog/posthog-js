@@ -237,7 +237,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * Local evaluation can also use definitions from `flagDefinitionCacheProvider` without
    * this credential. Remote config payload decryption via `getRemoteConfigPayload`
    * still requires it. `emails.send` needs a Project Secret API Key with the
-   * `hog_flow:write` scope; set `enableLocalEvaluation: false` when the key is only for email.
+   * `transactional_email:write` scope; set `enableLocalEvaluation: false` when the key is only for email.
    * Prefer this over the deprecated
    * `personalApiKey` option; when both are set, `secretKey` takes precedence.
    *
@@ -952,7 +952,7 @@ export interface IPostHog {
 
   /**
    * @description The `posthog.emails` API: sends transactional email from PostHog email templates.
-   * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope.
+   * Needs `secretKey`, a project secret API key with the `transactional_email:write` scope.
    */
   readonly emails: Emails
 

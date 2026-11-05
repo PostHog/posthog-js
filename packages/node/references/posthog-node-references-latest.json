@@ -2830,7 +2830,7 @@
       "name": "IPostHog",
       "properties": [
         {
-          "description": "The `posthog.emails` API: sends transactional email from PostHog email templates. Needs `secretKey`, a project secret API key with the `hog_flow:write` scope.",
+          "description": "The `posthog.emails` API: sends transactional email from PostHog email templates. Needs `secretKey`, a project secret API key with the `transactional_email:write` scope.",
           "type": "Emails",
           "name": "emails"
         },
@@ -3888,7 +3888,7 @@
           "name": "traces"
         },
         {
-          "description": "Credential for fetching local feature flag definitions, decrypting remote config and\nsending email.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. `emails.send` needs a Project Secret API Key with the\n`hog_flow:write` scope; set `enableLocalEvaluation: false` when the key is only for email.\nPrefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
+          "description": "Credential for fetching local feature flag definitions, decrypting remote config and\nsending email.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. `emails.send` needs a Project Secret API Key with the\n`transactional_email:write` scope; set `enableLocalEvaluation: false` when the key is only for email.\nPrefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
           "type": "string",
           "name": "secretKey"
         },
