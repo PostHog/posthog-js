@@ -241,20 +241,21 @@ function captureFreeText(value: string): string {
 }
 
 /**
- * A declared extra is agent-supplied like the core free-text fields, so its
- * strings, keys, and numbers get the same intent-grade pass (with the key-based
+ * A declared extra is agent-supplied like the core free-text fields, so a
+ * string extra, and the strings, keys, and numbers inside an object extra, get
+ * the same intent-grade pass (with the key-based
  * redaction `sanitizeFreeTextValue` keeps for nested objects), then non-scalars
  * are JSON-stringified and everything is bounded. Sanitizing before stringifying
  * reads each key and string as written, where the JSON text would glue an
  * escape's letter (`\n4111…`) to the identifier after it.
  */
 function captureExtraValue(value: unknown): unknown {
+  if (value == null || typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
   const sanitized = sanitizeFreeTextValue(value)
   if (typeof sanitized === 'string') {
     return truncateFeedbackText(sanitized, MAX_FEEDBACK_TEXT_LENGTH)
-  }
-  if (sanitized == null || typeof sanitized === 'number' || typeof sanitized === 'boolean') {
-    return sanitized
   }
   try {
     return truncateFeedbackText(JSON.stringify(sanitized), MAX_FEEDBACK_TEXT_LENGTH)

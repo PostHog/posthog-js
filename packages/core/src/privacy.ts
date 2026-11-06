@@ -642,27 +642,34 @@ function findCardCandidate(text: string, from: number): [start: number, end: num
 }
 
 /**
- * Where the card that starts at the digit group at `first` ends, or -1: the
- * shortest run of whole groups whose 13–19 digits pass Luhn. The shortest
- * leaves a field after the card, such as the SSN in
- * `4111111111111111 078-05-1120`, for its own pattern. Checking group-aligned
- * runs rather than arbitrary digit windows keeps the false-positive rate at
- * Luhn's own ~1-in-10.
+ * Where the card that starts at the digit group at `first` ends, or -1. It is
+ * the run's own end when every group left passes Luhn as one card, so a 19-digit
+ * card is not cut at a 16-digit prefix that happens to pass too. Otherwise it is
+ * the shortest run of whole groups whose 13–19 digits pass Luhn, which leaves a
+ * field after the card, such as the SSN in `4111111111111111 078-05-1120`, for
+ * its own pattern. Checking group-aligned runs rather than arbitrary digit
+ * windows keeps the false-positive rate at Luhn's own ~1-in-10.
  */
 function cardEnd(run: string, first: number): number {
   let digits = ''
+  let shortest = -1
   for (let groupStart = first; groupStart < run.length;) {
     const groupEnd = digitsEnd(run, groupStart)
     digits += run.slice(groupStart, groupEnd)
     if (digits.length > 19) {
-      return -1
+      break
     }
     if (digits.length >= 13 && passesLuhn(digits)) {
-      return groupEnd
+      if (groupEnd === run.length) {
+        return groupEnd
+      }
+      if (shortest < 0) {
+        shortest = groupEnd
+      }
     }
     groupStart = groupEnd + 1
   }
-  return -1
+  return shortest
 }
 
 /**

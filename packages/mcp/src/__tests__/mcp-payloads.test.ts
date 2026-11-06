@@ -87,6 +87,20 @@ describe('buildCapturedMcpParameters', () => {
     expect(reads).toBeLessThanOrEqual(200)
   })
 
+  it('does not count undefined arguments toward the entry limit', () => {
+    const entries = [
+      ...Array.from({ length: 60 }, (_, i) => [`u${i}`, undefined]),
+      ...Array.from({ length: 90 }, (_, i) => [`k${i}`, i]),
+    ]
+
+    const parameters = buildCapturedMcpParameters({
+      method: 'tools/call',
+      params: { name: 't', arguments: Object.fromEntries(entries) },
+    }) as { request: { params: { arguments: Record<string, unknown> } } }
+
+    expect(Object.keys(parameters.request.params.arguments)).toHaveLength(90)
+  })
+
   it.each([
     ['first', 100],
     ['last', 101],
@@ -548,6 +562,11 @@ describe('redactPii', () => {
       'Moving funds [redacted] [redacted] now.',
     ],
     ['a card followed by an SSN', 'Card 4111111111111111 078-05-1120 on file.', 'Card [redacted] [redacted] on file.'],
+    [
+      'a 19-digit card whose 16-digit prefix passes Luhn',
+      'Card 6759 0000 0000 0000 005 on file.',
+      'Card [redacted] on file.',
+    ],
     [
       'a grouped card followed by an SSN',
       'Card 4111 1111 1111 1111 078-05-1120 on file.',

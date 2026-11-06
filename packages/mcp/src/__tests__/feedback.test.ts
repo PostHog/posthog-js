@@ -275,7 +275,11 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await capture.start()
       instrument(server, fakePostHog(), {
         collectFeedback: {
-          extraProperties: { retry_count: { type: 'number' }, from_cache: { type: 'boolean' } },
+          extraProperties: {
+            retry_count: { type: 'number' },
+            from_cache: { type: 'boolean' },
+            occurred_at_ms: { type: 'number' },
+          },
         },
       })
 
@@ -285,12 +289,14 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
         summary: longSummary,
         retry_count: 3,
         from_cache: false,
+        occurred_at_ms: 1789000000007,
       })
 
       await new Promise((r) => setTimeout(r, 50))
       const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
       expect(p.$mcp_feedback_retry_count).toBe(3)
       expect(p.$mcp_feedback_from_cache).toBe(false)
+      expect(p.$mcp_feedback_occurred_at_ms).toBe(1789000000007)
       const summary = p[PostHogMCPAnalyticsProperty.FeedbackSummary] as string
       expect(summary.length).toBe(2048 + '...'.length)
       expect(summary.endsWith('...')).toBe(true)

@@ -64,8 +64,9 @@ function pickCapturedFields(request: unknown): unknown {
 }
 
 /**
- * The arguments without `context`, so it does not count toward the entry limit.
- * Copies one more than the limit, enough for the limit to see that more remain.
+ * The arguments without `context` and without `undefined` values, which the
+ * entry limit does not count either. Copies one more than the limit, enough for
+ * the limit to see that more remain.
  */
 function argumentsWithoutContext(args: JsonRecord): JsonRecord {
   const kept: [string, unknown][] = []
@@ -73,8 +74,9 @@ function argumentsWithoutContext(args: JsonRecord): JsonRecord {
     if (kept.length > MAX_BREADTH) {
       break
     }
-    if (key !== CONTEXT_ARGUMENT_NAME) {
-      kept.push([key, args[key]])
+    const value = key === CONTEXT_ARGUMENT_NAME ? undefined : args[key]
+    if (value !== undefined) {
+      kept.push([key, value])
     }
   }
   return Object.fromEntries(kept)
