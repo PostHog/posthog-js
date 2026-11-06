@@ -132,6 +132,9 @@ class PosthogReactNativePluginModule(
               // answer, not a default the SDK may override from its own persisted copy.
               persistOptOut = false
               preloadFeatureFlags = thePreloadFeatureFlags
+              // React Native apps usually translate in JS, so the resources' locale often isn't
+              // the language on screen. JS reports the language it displays through setAppLanguage.
+              detectAppLanguage = false
               captureDeepLinks = false
               captureApplicationLifecycleEvents = false
               captureScreenViews = false
@@ -206,6 +209,9 @@ class PosthogReactNativePluginModule(
                 sdkVersion = theSdkVersion
               }
             }
+          // Set before setup so the cold-start push open captured below carries it. The shared
+          // instance keeps it across setup, and an empty value clears one an earlier JS client left.
+          PostHog.setAppLanguage(getString(sdkOptions, "appLanguage", ""))
           PostHogAndroid.setup(context, config)
 
           setIdentify(config.cachePreferences, distinctId, anonymousId)
@@ -333,6 +339,20 @@ class PosthogReactNativePluginModule(
       }
     } catch (e: Throwable) {
       logError("setOptOut", e)
+    } finally {
+      promise.resolve(null)
+    }
+  }
+
+  @ReactMethod
+  fun setAppLanguage(
+    language: String?,
+    promise: Promise,
+  ) {
+    try {
+      PostHog.setAppLanguage(language)
+    } catch (e: Throwable) {
+      logError("setAppLanguage", e)
     } finally {
       promise.resolve(null)
     }
