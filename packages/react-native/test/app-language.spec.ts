@@ -135,6 +135,12 @@ describe('setAppLanguage', () => {
     expect(setAppLanguageMock).toHaveBeenCalledWith('de')
   })
 
+  it('clears the native language on setup when none is set', async () => {
+    await newClient('test-token', { enableSessionReplay: true })
+
+    await waitForExpect(2000, () => expect(setAppLanguageMock).toHaveBeenCalledWith(null))
+  })
+
   it('forwards changes and clears to native after setup', async () => {
     const client = await newClient('test-token', { enableSessionReplay: true })
     await waitForExpect(2000, () => expect(native.setup).toHaveBeenCalled())
@@ -147,7 +153,8 @@ describe('setAppLanguage', () => {
 
   it("keeps another project's language off the native SDK", async () => {
     await newClient('test-token', { enableSessionReplay: true })
-    await waitForExpect(2000, () => expect(native.setup).toHaveBeenCalled())
+    await waitForExpect(2000, () => expect(setAppLanguageMock).toHaveBeenCalledWith(null))
+    setAppLanguageMock.mockClear()
     const other = await newClient('other-project-token', { enableSessionReplay: true })
     await wait(50)
 

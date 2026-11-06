@@ -3433,11 +3433,9 @@ export class PostHog extends PostHogCore {
         // earlier optIn() keeps winning and sdkOptions.optOut alone can't opt a user back out.
         // Only an explicit optOut()/optIn() overwrites it, so re-assert JS consent every setup.
         await OptionalReactNativePlugin.setOptOut?.(this.optedOut)
-        // setAppLanguage() calls made before setup were skipped, so native starts from the
-        // current value.
-        if (this._appLanguage !== undefined) {
-          await OptionalReactNativePlugin.setAppLanguage?.(this._appLanguage)
-        }
+        // setAppLanguage() calls made before setup were skipped, and the native SDK is shared by
+        // the process, so sync it to this client's value, clearing one an earlier client left.
+        await OptionalReactNativePlugin.setAppLanguage?.(this._appLanguage ?? null)
         if (wasSessionReplayEnabled) {
           // if somehow the SDK is already enabled with a different sessionId, we reset it
           this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
