@@ -285,8 +285,8 @@ export function setPostHogAndroidNativeSymbolsExtension(
     'posthog {',
     '    uploadNativeSymbols = true',
     `    includeNativeSymbolSources = ${includeSource}`,
-    `    skipOnConflict = ${skipOnConflict}`,
-    `    force = ${force}`,
+    ...(skipOnConflict ? ['    skipOnConflict = true'] : []),
+    ...(force ? ['    force = true'] : []),
     '}',
     POSTHOG_NATIVE_SYMBOLS_END,
   ].join('\n')
@@ -308,8 +308,8 @@ function configureKotlinNativeSymbols(
     'extensions.getByName("posthog").withGroovyBuilder {',
     '    setProperty("uploadNativeSymbols", true)',
     `    setProperty("includeNativeSymbolSources", ${includeSource})`,
-    `    setProperty("skipOnConflict", ${skipOnConflict})`,
-    `    setProperty("force", ${force})`,
+    ...(skipOnConflict ? ['    setProperty("skipOnConflict", true)'] : []),
+    ...(force ? ['    setProperty("force", true)'] : []),
     '}',
     POSTHOG_NATIVE_SYMBOLS_END,
   ].join('\n')

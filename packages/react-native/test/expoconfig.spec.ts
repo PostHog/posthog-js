@@ -1395,6 +1395,22 @@ describe('postHogExpoPlugin Android native symbols', () => {
     expect(result.app).not.toContain('project.ext.')
   })
 
+  it.each(['groovy', 'kotlin'] as const)(
+    'keeps a variable plugin classpath compatible without conflict options in %s',
+    async (language) => {
+      const project = projectBuildGradle.replace(
+        'classpath("com.android.tools.build:gradle")',
+        'classpath("com.android.tools.build:gradle")\n        classpath("com.posthog:posthog-android-gradle-plugin:$posthogVersion")'
+      )
+      const result = await compilePlugin(project, {}, language)
+
+      expect(result.project).toBe(project)
+      for (const property of ['skipOnConflict', 'force']) {
+        expect(result.app).not.toContain(language === 'kotlin' ? `setProperty("${property}",` : `    ${property} =`)
+      }
+    }
+  )
+
   it.each(['groovy', 'kotlin'] as const)('forwards native upload conflict options in %s', async (language) => {
     for (const option of ['skipOnConflict', 'force'] as const) {
       const result = await compilePlugin(
@@ -1404,15 +1420,11 @@ describe('postHogExpoPlugin Android native symbols', () => {
       )
       const otherOption = option === 'skipOnConflict' ? 'force' : 'skipOnConflict'
       expect(result.app).toContain(language === 'kotlin' ? `setProperty("${option}", true)` : `    ${option} = true`)
-      expect(result.app).toContain(
-        language === 'kotlin' ? `setProperty("${otherOption}", false)` : `    ${otherOption} = false`
-      )
+      expect(result.app).not.toContain(language === 'kotlin' ? `setProperty("${otherOption}",` : `    ${otherOption} =`)
 
       const reset = await compilePlugin(result.project, {}, language, result.app)
       for (const property of ['skipOnConflict', 'force']) {
-        expect(reset.app).toContain(
-          language === 'kotlin' ? `setProperty("${property}", false)` : `    ${property} = false`
-        )
+        expect(reset.app).not.toContain(language === 'kotlin' ? `setProperty("${property}",` : `    ${property} =`)
       }
       expect(await compilePlugin(reset.project, {}, language, reset.app)).toEqual(reset)
 
@@ -1509,12 +1521,10 @@ describe('setPostHogAndroidNativeSymbolsExtension', () => {
     const result = setPostHogAndroidNativeSymbolsExtension(appBuildGradle, false)
     const lines = result.split('\n')
     const applyIdx = lines.indexOf('apply plugin: "com.posthog.android"')
-    expect(lines.slice(applyIdx + 2, applyIdx + 8)).toEqual([
+    expect(lines.slice(applyIdx + 2, applyIdx + 6)).toEqual([
       'posthog {',
       '    uploadNativeSymbols = true',
       '    includeNativeSymbolSources = false',
-      '    skipOnConflict = false',
-      '    force = false',
       '}',
     ])
   })
