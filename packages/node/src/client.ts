@@ -172,6 +172,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
   private _traces?: PostHogTraces
+  /** Resolved once on first event; `null` means no service name is configured. */
+  private _serviceName?: string | null
   private _spanContext?: SpanContextManager
 
   private readonly captureMode: CaptureMode
@@ -3354,17 +3356,22 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /**
    * The configured service name, stamped on events as `service_name` so events
-   * from several services sharing one project can be told apart. Resolved the
-   * same way as the metrics and traces `service.name` (host resource attribute,
-   * then `traces.serviceName`, then `metrics.serviceName`). Lowest precedence:
-   * a property set by the caller, the context or `register` wins.
+   * from several services sharing one project can be told apart. Resolved with
+   * the same resolvers as the traces and metrics `service.name`, so the event
+   * carries the name the telemetry does: traces first (resource attributes,
+   * host attributes, then `serviceName`), then metrics. Lowest precedence: a
+   * property set by the caller, the context or `register` wins.
    */
   private _serviceNameProperties(): PostHogEventProperties {
-    const serviceName =
-      (this.hostResourceAttributes()['service.name'] as string | undefined) ||
-      this.options.traces?.serviceName ||
-      this.options.metrics?.serviceName
-    return serviceName ? { service_name: serviceName } : {}
+    if (this._serviceName === undefined) {
+      this._serviceName =
+        (this.options.traces
+          ? resolveTracesConfig(this.options.traces, this.hostResourceAttributes()).serviceName
+          : undefined) ||
+        resolveMetricsConfig(this.options.metrics).serviceName ||
+        null
+    }
+    return this._serviceName ? { service_name: this._serviceName } : {}
   }
 
   private async _prepareEventMessage(
@@ -3400,7 +3407,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           ...(contextData?.properties || {}),
           ...(properties || {}),
         }
-      : { ...(properties || {}) }
+      : { ...this._serviceNameProperties(), ...(properties || {}) }
 
     if (event === '$exception' && !('$trace_id' in mergedProperties || '$span_id' in mergedProperties)) {
       Object.assign(mergedProperties, await getActiveTraceProperties())
