@@ -147,6 +147,9 @@ pnpm package:watch
 # Generate API reference documentation
 pnpm generate-references
 
+# Generate the Markdown SDK references (SDK_SPECS is a PostHog/sdk-specs checkout)
+SDK_SPECS=../sdk-specs pnpm generate-markdown-references
+
 # Clean all build artifacts
 pnpm clean
 

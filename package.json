@@ -44,6 +44,7 @@
         "generate-references": "pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",
         "generate-references:versioned": "GENERATE_VERSIONED_REFERENCES=1 pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",
         "check:public-api": "node scripts/check-public-api.js",
+        "generate-markdown-references": "pnpm turbo --filter='posthog-js^...' --filter='posthog-node^...' --filter='posthog-react-native^...' build && node scripts/generate-sdk-reference.mjs browser && node scripts/generate-sdk-reference.mjs node && node scripts/generate-sdk-reference.mjs react-native",
         "test:rrweb-dev-watch": "node --test scripts/rrweb-dev-watch.test.mjs"
     },
     "devDependencies": {
@@ -70,6 +71,9 @@
         "rollup-plugin-visualizer": "^7.1.1",
         "ts-node": "^10.9.2",
         "turbo": "^2.9.16",
+        "typedoc": "0.28.20",
+        "typedoc-plugin-markdown": "4.14.1",
+        "typedoc-plugin-missing-exports": "4.1.4",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }
