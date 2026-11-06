@@ -605,5 +605,8 @@ jobs:
         env:
           SDK_SPECS: ${{ runner.temp }}/sdk-specs
         run: |
-          git clone --depth 1 https://github.com/PostHog/sdk-specs "$SDK_SPECS"
+          scripts/fetch-sdk-specs.sh "$SDK_SPECS"
           pnpm generate-references
+
+      - name: Check public API references
+        run: pnpm check:public-api

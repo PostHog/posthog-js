@@ -53,7 +53,19 @@
   "PostHog.unregister": "unregister",
   "PostHog.unregisterForSession": "unregister",
   "PostHog.unsetPersonProperties": "set-person-properties",
+  "PostHogErrorBoundary": "capture-exception",
+  "PostHogMaskView": "session-replay-privacy",
+  "PostHogProvider": "setup",
+  "PostHogSurveyProvider": "surveys",
+  "Questions": "surveys",
+  "SurveyModal": "surveys",
   "new PostHog(...)": "setup",
+  "useFeatureFlag": "get-feature-flag",
+  "useFeatureFlagResult": "get-feature-flag-result",
+  "useFeatureFlagWithPayload": "get-feature-flag-payload",
+  "useFeatureFlags": "get-feature-flags",
+  "useNavigationTracker": "screen",
+  "usePostHog": "setup",
   "utils": [
     "PostHog.capturePushNotificationOpened",
     "PostHog.getDeviceId",
@@ -67,7 +79,9 @@
   ],
   "hidden": [
     "PostHog.apiKey",
+    "PostHog.disableSurveys",
     "PostHog.fetch",
+    "PostHog.flushAt",
     "PostHog.getCommonEventProperties",
     "PostHog.getCustomUserAgent",
     "PostHog.getFeatureFlagPayloads",
@@ -75,9 +89,13 @@
     "PostHog.getLibraryVersion",
     "PostHog.getPersistedProperty",
     "PostHog.getSurveysStateless",
+    "PostHog.host",
     "PostHog.initReactNativeNavigation",
     "PostHog.onFeatureFlag",
     "PostHog.overrideFeatureFlag",
+    "PostHog.preloadFeatureFlags",
+    "PostHog.projectToken",
     "PostHog.setPersistedProperty"
-  ]
+  ],
+  "next": []
 }

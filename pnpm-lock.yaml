@@ -191,6 +191,9 @@ importers:
       typedoc-plugin-markdown:
         specifier: 4.14.1
         version: 4.14.1(typedoc@0.28.20(typescript@5.8.2))
+      typedoc-plugin-missing-exports:
+        specifier: 4.1.4
+        version: 4.1.4(typedoc@0.28.20(typescript@5.8.2))
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -18118,6 +18121,11 @@ packages:
     engines: {node: '>= 18'}
     peerDependencies:
       typedoc: 0.28.x
+
+  typedoc-plugin-missing-exports@4.1.4:
+    resolution: {integrity: sha512-tIay6z6MRb/4+mfWgKNPR6qEM5rz9S8rTiz0JWmSb/66A6AlZIl9q+1lAFygj4n8GHH1fsqKYQNt9JbNcuE0Uw==}
+    peerDependencies:
+      typedoc: ^0.28.1
 
   typedoc@0.28.20:
     resolution: {integrity: sha512-uSKqkh8Cr48vllnEy+jdaAgOeR6Y+QCBW7usgUsKj7gJEfR7stw9U/fE49LBnj2tPRKPY0c0EBJSWe9Appmplg==}
@@ -38070,10 +38078,8 @@ snapshots:
       which: 2.0.2
       yargs: 17.7.2
     transitivePeerDependencies:
-      - bufferutil
       - supports-color
       - typescript
-      - utf-8-validate
 
   react-native-codegen@0.69.2(@babel/preset-env@7.28.5(@babel/core@7.28.5)):
     dependencies:
@@ -40391,6 +40397,10 @@ snapshots:
   typedarray@0.0.6: {}
 
   typedoc-plugin-markdown@4.14.1(typedoc@0.28.20(typescript@5.8.2)):
+    dependencies:
+      typedoc: 0.28.20(typescript@5.8.2)
+
+  typedoc-plugin-missing-exports@4.1.4(typedoc@0.28.20(typescript@5.8.2)):
     dependencies:
       typedoc: 0.28.20(typescript@5.8.2)
 

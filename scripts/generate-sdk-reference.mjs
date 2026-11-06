@@ -40,17 +40,16 @@ const TYPE_KINDS = Kind.Interface | Kind.TypeAlias | Kind.Enum | Kind.Class
 /** Each sdk-specs capability's slug and title in sentence case, in the README's order. */
 function capabilities(checkout) {
     const readme = fs.readFileSync(path.join(checkout, 'README.md'), 'utf8')
-    const rows = [...readme.matchAll(/^\| ([^|]+?) \| \[`openspec\/specs\/([a-z0-9-]+)\/spec\.md`\]/gm)]
     const acronyms = { id: 'ID', ai: 'AI', http: 'HTTP', mcp: 'MCP' }
-    const titles = Object.fromEntries(
-        rows.map(([, name, slug]) => [
-            slug,
-            name
-                .split(' ')
-                .map((w) => acronyms[w.toLowerCase()] ?? w.toLowerCase())
-                .join(' '),
-        ])
-    )
+    const prefix = '[`openspec/specs/'
+    const titles = {}
+    // A capability row is `| Name | [`openspec/specs/<slug>/spec.md`](...) |`.
+    for (const line of readme.split('\n')) {
+        const [, name, spec] = line.split('|').map((cell) => cell.trim())
+        if (!line.startsWith('| ') || !spec?.startsWith(prefix) || !spec.includes('/spec.md`]')) continue
+        const words = name.split(' ').map((w) => acronyms[w.toLowerCase()] ?? w.toLowerCase())
+        titles[spec.slice(prefix.length, spec.indexOf('/spec.md'))] = words.join(' ')
+    }
     const order = [...FIRST, ...Object.keys(titles).filter((s) => !FIRST.includes(s))]
     return Object.fromEntries(
         order.filter((s) => titles[s]).map((s) => [s, titles[s][0].toUpperCase() + titles[s].slice(1)])
@@ -100,69 +99,73 @@ function renderer(app, project) {
     page.project = project
     page.filename = page.url = 'reference.md'
     const ctx = theme.getRenderContext(page)
+    // The reference is one page, so a reflection renders as plain text, not a link to another page.
+    ctx.urlTo = () => ''
+    // A member doesn't say where it's inherited from or what it overrides. Tables keep their column.
+    const inheritance = ctx.partials.inheritance
+    ctx.partials.inheritance = (model, options) => (options.headingLevel === -1 ? inheritance(model, options) : '')
     return (refl, name) => {
-        let md = ctx.partials.member(refl, { headingLevel: 3 }).trim()
-        // Links point at pages this one doesn't have.
-        md = md.replace(/\[([^\]]+)\]\((?:[^)\s]*\.md[^)\s]*|#[^)\s]*)\)/g, '$1')
-        md = md.replace(
-            /^#+ (?:Inherited from|Overrides|Implementation of|Implementations)\n[\s\S]*?(?=^#|(?![\s\S]))/gm,
-            ''
+        const lines = ctx.partials.member(refl, { headingLevel: 3 }).trim().split('\n')
+        // The label replaces the plugin's heading, and runs of blank lines become one.
+        const body = (lines[0].startsWith('#') ? lines.slice(1) : ['', ...lines]).filter(
+            (line, i, all) => line !== '' || all[i - 1] !== ''
         )
-        md = md.replace(/\n{3,}/g, '\n\n')
-        return /^#{1,6} /.test(md) ? md.replace(/^#{1,6} .*$/m, `### \`${name}\``) : `### \`${name}\`\n\n${md}`
+        return [`### \`${name}\``, ...body].join('\n')
     }
 }
 
-/** The package's capability map, checked against the members it names and sdk-specs. */
-function capabilityMap(labels, caps) {
-    const { utils, hidden, ...mapped } = JSON.parse(fs.readFileSync(path.join(docsDir, 'capabilities.json'), 'utf8'))
-    const fail = (message) => {
-        process.stderr.write(`docs/capabilities.json: ${message}\n`)
+/**
+ * The package's capability map, checked against the symbols it names and sdk-specs. Every label must be in
+ * exactly one of the map, `utils` and `hidden`. `next` lists labels that only the next major has, and a
+ * next major's page doesn't check that the other labels exist.
+ */
+function capabilityMap(labels, caps, current) {
+    const file = JSON.parse(fs.readFileSync(path.join(docsDir, 'capabilities.json'), 'utf8'))
+    const { utils, hidden, next, ...mapped } = file
+    const problems = []
+    const fail = (message) => problems.push(`docs/capabilities.json: ${message}`)
+    const listed = [...Object.keys(mapped), ...utils, ...hidden]
+    for (const label of listed) {
+        if (listed.indexOf(label) !== listed.lastIndexOf(label)) fail(`${label} is listed more than once`)
+        if (current && !labels.includes(label) && !next.includes(label)) fail(`no symbol for ${label}`)
+    }
+    for (const [label, slug] of Object.entries(mapped)) if (!caps[slug]) fail(`${label}: ${slug} isn't in sdk-specs`)
+    for (const label of labels) if (!listed.includes(label)) fail(`map ${label}, or add it to utils or hidden`)
+    if (problems.length) {
+        process.stderr.write(problems.join('\n') + '\n')
         process.exit(1)
-    }
-    for (const [label, slug] of Object.entries(mapped)) {
-        if (!labels.includes(label)) fail(`no symbol for ${label}`)
-        if (!caps[slug]) fail(`${label}: ${slug} isn't in sdk-specs`)
-    }
-    for (const label of labels) {
-        if (!mapped[label] && !utils.includes(label) && !hidden.includes(label))
-            fail(`map ${label}, or add it to utils or hidden`)
     }
     return { mapped, hidden }
 }
 
-function reference(app, project, config, caps) {
+function reference(app, project, caps, current) {
     const render = renderer(app, project)
-    const order = Object.keys(caps)
     const exported = project.children.filter(isPublic)
     const main = exported.find((c) => c.name === 'PostHog')
-    const members = (cls) =>
-        (cls.children ?? []).filter(
-            (m) => m.kindOf(MEMBER_KINDS) && isPublic(m) && (!m.kindOf(Kind.Property) || commentOf(m))
-        )
-    const labelOf = (m) => (m.kind === Kind.Constructor ? `new PostHog(...)` : `PostHog.${m.name}`)
-    const { mapped, hidden } = capabilityMap(members(main).map(labelOf), caps)
-    const used = new Set(members(main).filter((m) => !hidden.includes(labelOf(m))))
-    const mine = [...used]
-        .map((m) => ({ tag: mapped[labelOf(m)], md: () => render(m, labelOf(m)) }))
-        .sort((a, b) => (order.indexOf(a.tag) + 1 || 1e9) - (order.indexOf(b.tag) + 1 || 1e9))
+    // Every public PostHog member and every other public export goes through the capability map.
+    const members = (main.children ?? []).filter((m) => m.kindOf(MEMBER_KINDS) && isPublic(m))
+    const others = exported.filter((r) => r !== main && r.kindOf(Kind.Function | Kind.Variable | Kind.Class))
+    const labelOf = (r) =>
+        r.parent !== main ? r.name : r.kind === Kind.Constructor ? 'new PostHog(...)' : `PostHog.${r.name}`
+    const all = [...members, ...others]
+    const { mapped, hidden } = capabilityMap(all.map(labelOf), caps, current)
+    const shown = all.filter((r) => !hidden.includes(labelOf(r)))
     const out = []
     for (const [slug, title] of Object.entries(caps)) {
-        const tagged = mine.filter((e) => e.tag === slug)
-        if (tagged.length) out.push(`## ${title}`, ...tagged.map((e) => e.md()))
+        const tagged = shown.filter((r) => mapped[labelOf(r)] === slug)
+        if (tagged.length) out.push(`## ${title}`, ...tagged.map((r) => render(r, labelOf(r))))
     }
-    const loose = exported.filter(
-        (r) => r.kindOf(Kind.Function) || (r.kindOf(Kind.Variable) && r.type?.declaration?.signatures)
-    )
-    for (const r of loose) used.add(r)
-    const untagged = mine.filter((e) => !caps[e.tag])
-    out.push('## SDK utils', ...untagged.map((e) => e.md()), ...loose.map((r) => render(r, r.name)))
-    // Types: everything the rendered symbols mention, and what those mention in turn.
-    const types = new Set()
-    const queue = [...used]
+    out.push('## SDK utils', ...shown.filter((r) => !mapped[labelOf(r)]).map((r) => render(r, labelOf(r))))
+    // Types: every exported type, every type a shown symbol mentions, and what those mention in turn.
+    // PostHog's base classes are left out, because their members are already PostHog's.
+    const bases = new Set()
+    for (let c = main; c.extendedTypes?.[0]?.reflection; c = c.extendedTypes[0].reflection) bases.add(c)
+    const isType = (t) => t.kindOf(TYPE_KINDS) && isPublic(t) && t !== main && !bases.has(t) && !others.includes(t)
+    const types = new Set(exported.filter(isType))
+    const queue = [...shown, ...types]
     while (queue.length) {
         for (const t of referenced(queue.pop())) {
-            if (t.kindOf(TYPE_KINDS) && isPublic(t) && t !== main && !types.has(t) && project.children.includes(t)) {
+            if (isType(t) && !types.has(t)) {
                 types.add(t)
                 queue.push(t)
             }
@@ -173,11 +176,9 @@ function reference(app, project, config, caps) {
 }
 
 function frontMatter(title, sections, logo) {
-    const slug = (h) =>
-        h
-            .toLowerCase()
-            .replace(/[^\w\- ]/g, '')
-            .replace(/ /g, '-')
+    // The heading's anchor: lowercase letters, digits, `_` and `-`, with spaces as `-`.
+    const kept = (c) => c === ' ' || c === '-' || c === '_' || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+    const slug = (h) => [...h.toLowerCase()].filter(kept).join('').split(' ').join('-')
     const toc = sections.filter((s) => s.startsWith('## ')).map((s) => s.slice(3))
     const head = [`title: "${title}"`, 'sidebar: Docs', 'showTitle: true', 'contentMaxWidthClass: max-w-full']
     const entries = toc.map((h) => `  - value: "${h}"\n    url: ${slug(h)}\n    depth: 0`)
@@ -191,9 +192,11 @@ function nest(markdown) {
         .trim()
         .split('\n')
         .flatMap((line) => {
-            fenced ^= /^\s*```/.test(line)
-            if (fenced || !/^#{1,5} /.test(line)) return [line]
-            return line.startsWith('# ') ? [] : [`#${line}`]
+            fenced ^= line.trimStart().startsWith('```')
+            let level = 0
+            while (line[level] === '#') level++
+            if (fenced || level < 1 || level > 5 || line[level] !== ' ') return [line]
+            return level === 1 ? [] : [`#${line}`]
         })
         .join('\n')
 }
@@ -220,10 +223,14 @@ const major = Number(values.major ?? declared)
 const app = await Application.bootstrapWithPlugins({
     entryPoints: [path.join(pkgDir, config.entry)],
     tsconfig: path.join(pkgDir, 'tsconfig.json'),
-    plugin: [fileURLToPath(import.meta.resolve('typedoc-plugin-markdown'))],
+    // missing-exports documents the types a page names that the package doesn't export, such as @posthog/core's.
+    plugin: ['typedoc-plugin-markdown', 'typedoc-plugin-missing-exports'].map((p) =>
+        fileURLToPath(import.meta.resolve(p))
+    ),
     excludePrivate: true,
     excludeProtected: true,
     excludeExternals: true,
+    excludeInternal: true,
     skipErrorChecking: true,
     logLevel: 'Error',
     // plugin-markdown options
@@ -242,11 +249,13 @@ const app = await Application.bootstrapWithPlugins({
 })
 const project = await app.convert()
 if (!project) process.exit(1)
+// TypeDoc calls a destructured parameter `__namedParameters` when no `@param` tag names it.
+for (const p of project.getReflectionsByKind(Kind.Parameter)) if (p.name === '__namedParameters') p.name = 'options'
 
 let body
 app.renderer.on(MarkdownRendererEvent.BEGIN, () => {
     const started = nest(fs.readFileSync(path.join(docsDir, 'getting-started.md'), 'utf8'))
-    body = ['## Getting started', started, ...reference(app, project, config, capabilities(specs))]
+    body = ['## Getting started', started, ...reference(app, project, capabilities(specs), declared >= major)]
 })
 await app.generateOutputs(project)
 fs.rmSync(app.options.getValue('markdown'), { recursive: true, force: true })
