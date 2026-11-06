@@ -40,6 +40,7 @@ const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
+const INTEGRATION_PATTERN = /^[a-z0-9-]{1,40}\/[0-9A-Za-z.+-]{1,40}$/
 
 type EveryField<Form> = Record<keyof Form, true>
 type UncheckedSend = { [Field in keyof SendTemplateEmailOptions]?: unknown }
@@ -56,6 +57,7 @@ const SHARED_FIELDS: EveryField<SendEmailBase> = {
   distinctId: true,
   idempotencyKey: true,
   maxRetries: true,
+  integration: true,
 }
 const TEMPLATE_FIELDS: EveryField<TemplateEmailForm> = { templateId: true, templateData: true }
 const CODE_FIELDS: EveryField<CodeEmailForm> = {
@@ -109,6 +111,7 @@ interface PreparedSend {
   body: string
   idempotencyKey: string
   maxRetries: number
+  integration?: string
 }
 
 interface Reply {
@@ -167,6 +170,7 @@ export class EmailSender implements Emails {
       const headers = this.headers(secretKey, {
         'Content-Type': 'application/json',
         'Idempotency-Key': prepared.idempotencyKey,
+        ...(prepared.integration !== undefined && { 'X-PostHog-Integration': prepared.integration }),
       })
       const result = await this.withRetries(prepared.maxRetries, async () =>
         parseSendReply(await this.request(appHost + prepared.path, 'POST', headers, prepared.body))
@@ -340,7 +344,7 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
   const send: UncheckedSend = options ?? {}
-  const { to, distinctId, idempotencyKey, maxRetries } = send
+  const { to, distinctId, idempotencyKey, maxRetries, integration } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
   }
@@ -361,12 +365,20 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   if (maxRetries !== undefined && !isRetryCount(maxRetries)) {
     throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
   }
+  if (integration !== undefined && (typeof integration !== 'string' || !INTEGRATION_PATTERN.test(integration))) {
+    throw invalid(
+      'invalid_integration',
+      "integration must be '<name>/<version>', such as 'nodemailer/5.61.2': a lower-case name of letters, digits and hyphens.",
+      'integration'
+    )
+  }
 
   return {
     path: SEND_PATH,
     body: safeJsonStringify({ ...content, to }),
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
+    integration,
   }
 }
 
