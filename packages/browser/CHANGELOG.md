@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.447.3
+
+### Patch Changes
+
+- [#5562](https://github.com/PostHog/posthog-js/pull/5562) [`8e042cb`](https://github.com/PostHog/posthog-js/commit/8e042cba3dbb63e861f2aaea8612bceea298a1c6) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Preserve non-empty CDATA content with text masking and rebuild it as text in HTML documents.
+  (2026-11-06)
+
 ## 1.447.2
 
 ### Patch Changes
