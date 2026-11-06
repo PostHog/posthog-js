@@ -906,7 +906,11 @@ describe('JSON text', () => {
   })
 })
 
-describe('sanitizing a long string with no place to cut', () => {
+const presignedUrlLine = `https://bucket.s3.amazonaws.com/a.pdf?X-Amz-Security-Token=${'Z'.repeat(883)}&X-Amz-Signature=${'a'.repeat(64)}\n`
+const redactedPresignedUrlLine =
+  'https://bucket.s3.amazonaws.com/a.pdf?X-Amz-Security-Token=%5Bredacted%5D&X-Amz-Signature=%5Bredacted%5D\n'
+
+describe('sanitizing a multi-megabyte string', () => {
   const medianMilliseconds = (run: () => unknown): number => {
     const times = Array.from({ length: 5 }, () => {
       const start = performance.now()
@@ -926,6 +930,10 @@ describe('sanitizing a long string with no place to cut', () => {
     [
       'a URL whose userinfo and token sit past the window',
       (length: number) => `https:secretuser${'a'.repeat(length)}@localhost/?api_key=phc_123456789012345678901234567890`,
+    ],
+    [
+      'pre-signed URL lines that redaction shrinks tenfold',
+      (length: number) => presignedUrlLine.repeat(Math.ceil(length / presignedUrlLine.length)),
     ],
   ] as const
 
@@ -997,9 +1005,29 @@ describe('sanitizing strings longer than truncation keeps', () => {
         97
       )}[redacted]...`,
     ],
+    // Redacting shrinks these tenfold, so even the largest window keeps less than twice what truncation keeps.
+    [
+      'pre-signed URL lines past the largest window',
+      presignedUrlLine.repeat(1_000),
+      `${redactedPresignedUrlLine.repeat(4 * 128).slice(0, -32_768)}...`,
+    ],
   ])('scans only the window truncation can keep: %s', (_case, value, expected) => {
     expect(sanitizeCapturedValue(value)).toBe(expected)
     expect(sanitizeCapturedValue(value, { redactPayloadPersonalData: true })).toBe(expected)
     expect(sanitizeFreeTextValue(value)).toBe(expected)
   })
+
+  it.each([
+    ['payload', (value: string) => sanitizeCapturedValue(value, { redactPayloadPersonalData: true })],
+    ['intent', (value: string) => sanitizeFreeTextValue(value)],
+  ] as const)(
+    'drops a match cut at the widest window edge when redaction shrinks the head below what truncation keeps: %s',
+    (_name, sanitize) => {
+      const tokenCount = Math.floor((4 * WINDOW - 12) / 305)
+      const padding = ' '.repeat(4 * WINDOW - 12 - 305 * tokenCount)
+      const value = `${`phc_${'a'.repeat(300)} `.repeat(tokenCount)}${padding}john.doe@example.com and more`
+
+      expect(sanitize(value)).toBe('...')
+    }
+  )
 })

@@ -560,17 +560,22 @@ function scanWindowLength(options: TextSanitizationOptions): number {
  * Runs `redact` over only the window of `value` that truncation can keep, so a
  * multi-megabyte tool result costs about the same as the part captured.
  * Redaction shrinks text, so a window that ends up too short to cover
- * truncation's cut falls back to the whole string. Either way the kept part
- * reads exactly as if the whole string were redacted.
+ * truncation's cut doubles, up to four times its first length. The kept part
+ * reads as the start of what redacting the whole string would give.
  */
 function redactCapturedHead(
   value: string,
   redact: (value: string) => string,
-  options: TextSanitizationOptions
+  options: TextSanitizationOptions,
+  windowLength = scanWindowLength(options)
 ): string {
-  const windowLength = scanWindowLength(options)
   return value.length > windowLength
-    ? keepHead(value, redact(value.slice(0, windowLength)), redact, options)
+    ? keepHead(
+        redact(value.slice(0, windowLength)),
+        windowLength,
+        () => redactCapturedHead(value, redact, options, 2 * windowLength),
+        options
+      )
     : redact(value)
 }
 
@@ -583,28 +588,39 @@ function redactCapturedHead(
 function redactCapturedText(
   value: string,
   redact: (value: string) => string,
-  options: TextSanitizationOptions
+  options: TextSanitizationOptions,
+  windowLength = scanWindowLength(options)
 ): string {
-  const windowLength = scanWindowLength(options)
   if (value.length <= windowLength) {
     return redactUrls(redact(value))
   }
   const head = redact(value.slice(0, windowLength))
   const urlStart = URL_END_PATTERN.test(value[windowLength]) ? -1 : trailingUrlStart(head)
   return urlStart === -1
-    ? keepHead(value, redactUrls(head), (whole) => redactUrls(redact(whole)), options)
+    ? keepHead(
+        redactUrls(head),
+        windowLength,
+        () => redactCapturedText(value, redact, options, 2 * windowLength),
+        options
+      )
     : redactUrls(head.slice(0, urlStart)) + REDACTED_VALUE + options.truncationSuffix
 }
 
 function keepHead(
-  value: string,
   head: string,
-  redact: (value: string) => string,
+  windowLength: number,
+  redactWiderWindow: () => string,
   options: TextSanitizationOptions
 ): string {
   // Twice what truncation keeps, so a match split where the head was cut sits
   // past the part truncation keeps.
-  return head.length >= 2 * options.maxStringLength ? head + options.truncationSuffix : redact(value)
+  if (head.length >= 2 * options.maxStringLength) {
+    return head + options.truncationSuffix
+  }
+  // At the widest window, drop the stretch a split match could sit in instead.
+  return windowLength < 4 * scanWindowLength(options)
+    ? redactWiderWindow()
+    : head.slice(0, -options.maxStringLength) + options.truncationSuffix
 }
 
 /** Where the URL that runs to the end of `text` starts, or -1. */
