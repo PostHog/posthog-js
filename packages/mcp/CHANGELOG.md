@@ -1,5 +1,15 @@
 # @posthog/mcp
 
+## 0.25.2
+
+### Patch Changes
+
+- [#5545](https://github.com/PostHog/posthog-js/pull/5545) [`28fe8c0`](https://github.com/PostHog/posthog-js/commit/28fe8c0aa0577db27affcc7445ab72d2a1f6ebb2) Thanks [@onmax](https://github.com/onmax)! - Parse Node stack frames for functions named `async` without a leading parenthesis in the filename.
+  (2026-11-06)
+- Updated dependencies [[`28fe8c0`](https://github.com/PostHog/posthog-js/commit/28fe8c0aa0577db27affcc7445ab72d2a1f6ebb2)]:
+  - @posthog/core@1.64.1
+  - posthog-node@5.63.1
+
 ## 0.25.1
 
 ### Patch Changes
