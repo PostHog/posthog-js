@@ -135,13 +135,14 @@ Native uploads, such as session replay and native crash reports, pause while cel
 `posthog-ios` 4.0 and `posthog-android` 4.0 send the events the plugin captures natively to `/i/v1/analytics/events` instead of `/batch`: native crash reports, fatal JavaScript crashes reported natively, and push notification opens. Events captured in JavaScript still go to `/batch`.
 
 - If you self-host PostHog or send events through a reverse proxy, make sure it serves `/i/v1/*` before you upgrade.
+- The proxy must pass `Authorization` and `Content-Encoding` through unchanged. A proxy set up from PostHog's [proxy guides](https://posthog.com/docs/advanced/proxy) before 29 October 2026 strips `Authorization`, so PostHog answers `401` and drops the native events. Update it from the current guide. PostHog's managed reverse proxy needs no change.
 - These requests send `Authorization: Bearer <projectToken>`, which replaces any `Authorization` header you set in `requestHeaders`. Session replay requests still send yours, so authenticate your proxy with a different header, such as `X-Proxy-Token`.
 - A proxy that redirects these requests, other than with a 307 or 308 to the same origin as `host`, drops them.
 - These events report `$locale` as a full language tag with region, such as `de-CH` or `zh-Hant-TW` instead of `de` or `zh-TW`, and add `$app_language`, the language your app shows.
 
 See [Capture v1](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#capture-v1) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#locale-and-app_language) in the `posthog-ios` migration guide, and [Endpoints](https://github.com/PostHog/posthog-android/blob/main/docs/migration-3.x-to-4.0.md#endpoints) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-android/blob/main/docs/migration-3.x-to-4.0.md#locale-and-app_language) in the `posthog-android` one.
 
-**If ignored:** a proxy that answers `404` gets a retry about every 30 seconds from each running app, and the native events stay queued on the device only until a full queue evicts them (1000 events by default), oldest first. Other errors, such as `403` or `405`, drop them.
+**If ignored:** a proxy that answers `404` gets a retry about every 30 seconds from each running app, and the native events stay queued on the device only until a full queue evicts them (1000 events by default), oldest first. Other errors, such as `401`, `403` or `405`, drop them.
 
 ### Native surveys are left out of full Swift Package Manager apps
 
@@ -163,5 +164,5 @@ Apps on React Native's full Swift Package Manager integration no longer bundle t
 - [ ] `posthog-react-native-session-replay` is removed.
 - [ ] Direct `start()` calls now use `setup()`, and direct `setup()` calls pass `throttleDelayMs`.
 - [ ] `screenshotModeBackgroundCapture` is removed.
-- [ ] Reverse proxies and self-hosted instances serve `/i/v1/*`, proxies don't authenticate with `Authorization`, and they don't redirect capture requests to another origin.
+- [ ] Reverse proxies and self-hosted instances serve `/i/v1/*`, proxies pass `Authorization` and `Content-Encoding` through and don't authenticate with `Authorization`, and they don't redirect capture requests to another origin.
 - [ ] Native code and native libraries that call `posthog-ios` or `posthog-android` directly are updated for 4.0.
