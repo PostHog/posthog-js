@@ -144,7 +144,9 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
   describe('config validation', () => {
     it('throws out of instrument() on a config error instead of silently disabling all analytics', () => {
       expect(() =>
-        instrument(server, fakePostHog(), { collectFeedback: { extraProperties: { summary: { type: 'string' } } } })
+        instrument(server, fakePostHog(), {
+          collectFeedback: { extraProperties: { summary: { type: 'string' } } },
+        })
       ).toThrow(/collides/)
       expect(() => instrument(server, fakePostHog(), { collectFeedback: { extraRequired: ['nope'] } })).toThrow(
         /not declared/
@@ -508,14 +510,38 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
         feedback_type: 'issue',
         summary: 'A tool failed.',
         reporter: 'jane@example.com',
-        meta: { contact: 'john@example.com' },
+        meta: { contact: 'john@example.com', 'ada@example.com': 'vip' },
       })
 
       await new Promise((r) => setTimeout(r, 50))
       const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
       expect(p.$mcp_feedback_reporter).toBe('[redacted]')
       expect(p.$mcp_feedback_meta).not.toContain('john@example.com')
+      expect(p.$mcp_feedback_meta).not.toContain('ada@example.com')
       expect(p.$mcp_feedback_meta).toContain('[redacted]')
+
+      await capture.stop()
+    })
+
+    it.each([
+      ['a card', { 'card\n4111111111111111': 1 }, '4111111111111111'],
+      ['an SSN', { 'ssn\n078-05-1120': 1 }, '078-05-1120'],
+      ['a public IPv4', { 'ip\n203.0.113.77': 1 }, '203.0.113.77'],
+      ['a phone', { 'tel\n+1 415 555 0177': 1 }, '555 0177'],
+      ['an IPv6', { nested: { 'x\t2001:db8::7334': 1 } }, '2001:db8::7334'],
+      ['a card-number integer', { n: 4111111111111111 }, '4111111111111111'],
+      ['a negative card-number integer', { n: -4111111111111111 }, '4111111111111111'],
+    ])('redacts %s in a stringified extra, keeping valid JSON', async (_label, meta, identifier) => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), { collectFeedback: { extraProperties: { meta: { type: 'object' } } } })
+
+      await callTool(client, SEND_FEEDBACK, { feedback_type: 'issue', summary: 'A tool failed.', meta })
+
+      await new Promise((r) => setTimeout(r, 50))
+      const captured = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties.$mcp_feedback_meta
+      expect(captured).not.toContain(identifier)
+      expect(() => JSON.parse(captured as string)).not.toThrow()
 
       await capture.stop()
     })

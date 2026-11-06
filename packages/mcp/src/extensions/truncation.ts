@@ -161,24 +161,30 @@ function visitObject(
   maxStringLength: number,
   memo: WeakSet<object>
 ): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
-  const keys = Object.keys(obj)
-  let count = 0
-
-  for (const key of keys) {
-    if (count >= maxBreadth) {
-      result['...'] = '[MaxProperties ~]'
+  const entries: [string, unknown][] = []
+  for (const key of Object.keys(obj)) {
+    if (entries.length >= maxBreadth) {
+      entries.push(['...', '[MaxProperties ~]'])
       break
     }
     // Skip undefined values — matches JSON.stringify behavior (omits undefined properties)
     if (obj[key] === undefined) {
       continue
     }
-    result[key] = visit(obj[key], remainingDepth, maxBreadth, maxStringLength, memo)
-    count++
+    entries.push([key, visit(obj[key], remainingDepth, maxBreadth, maxStringLength, memo)])
   }
 
-  return result
+  // Not assigned: assigning a parsed `__proto__` key sets the prototype and drops the member.
+  return Object.fromEntries(entries)
+}
+
+/**
+ * Applies the entry and nesting limits to a payload but leaves its strings
+ * whole, so the sanitizer reads at most what the event can keep and still sees
+ * past a string's cut.
+ */
+export function limitEntries(payload: unknown): unknown {
+  return normalize(payload, MAX_DEPTH, MAX_BREADTH, Infinity)
 }
 
 // --- Field-level truncation helpers ---
