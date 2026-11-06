@@ -1204,7 +1204,8 @@ type PostHogPluginProps = {
    * upload build phase; posthog-ios's `upload-symbols.sh` forwards it as `--skip-on-conflict`
    * to `posthog-cli dsym upload` on posthog-ios >= 3.64.7 (with posthog-cli >= 0.7.12) and
    * ignores it on older versions, where dSYM conflicts keep failing the build. On Android,
-   * also forwards the option to native symbol uploads through the Gradle plugin (>= 1.8.0).
+   * also sets the Gradle plugin's shared default for native symbol and ProGuard mapping uploads
+   * (>= 1.8.0). Explicit upload task settings can override it.
    *
    * Mutually exclusive with `force`: posthog-cli rejects the two flags together, so enabling
    * both stops the prebuild.
@@ -1221,9 +1222,10 @@ type PostHogPluginProps = {
    * `uploadNativeSymbols` is enabled, also sets `POSTHOG_FORCE=1` in the iOS dSYM upload build
    * phase; posthog-ios's `upload-symbols.sh` forwards it as `--force` to `posthog-cli dsym upload`
    * on versions that read the variable and ignores it on older ones, where dSYM conflicts keep
-   * failing the build. On Android, also forwards the option to native symbol uploads through
-   * the Gradle plugin (>= 1.8.0). `uploadNativeSymbols: { includeSource: true }` already overwrites
-   * native symbols unless `skipOnConflict` is enabled.
+   * failing the build. On Android, also sets the Gradle plugin's shared default for native
+   * symbol and ProGuard mapping uploads (>= 1.8.0). Explicit upload task settings can override it.
+   * `uploadNativeSymbols: { includeSource: true }` already overwrites native symbols unless
+   * `skipOnConflict` is enabled.
    *
    * Mutually exclusive with `skipOnConflict`: posthog-cli rejects the two flags together, so
    * enabling both stops the prebuild.
