@@ -912,6 +912,52 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_output_choices).toEqual([{ type: 'message', content: 'Hello!' }])
     })
 
+    it('includes reasoning tokens from Responses API output token details', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'response',
+          response_id: 'resp_reasoning',
+          _response: {
+            id: 'resp_reasoning',
+            model: 'o4-mini',
+            output: [],
+            usage: {
+              input_tokens: 100,
+              output_tokens: 500,
+              output_tokens_details: { reasoning_tokens: 400 },
+            },
+          },
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const call = mockClient.capture.mock.calls[0][0]
+      expect(call.properties.$ai_reasoning_tokens).toBe(400)
+    })
+
+    it('omits reasoning tokens when Responses API usage has no output token details', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'response',
+          response_id: 'resp_no_reasoning',
+          _response: {
+            id: 'resp_no_reasoning',
+            model: 'gpt-4o',
+            output: [],
+            usage: { input_tokens: 100, output_tokens: 500 },
+          },
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const call = mockClient.capture.mock.calls[0][0]
+      expect(call.properties).not.toHaveProperty('$ai_reasoning_tokens')
+    })
+
     it('truncates oversized response span payloads', async () => {
       const largeContent = 'x'.repeat(220000)
       const span = createMockSpan({
