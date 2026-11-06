@@ -1,6 +1,7 @@
 import type { CompatibleRequestHandlerExtra, McpEvent, MCPRequestLike, MCPServerLike } from '../types'
 import { hasClientVersionAccessor, hasNegotiatedProtocolVersionAccessor } from './detect'
 import { readHeaderValue } from './headers'
+import { getServerTrackingData } from './internal'
 import { getRequestHeaders } from './request-headers'
 
 /**
@@ -198,6 +199,24 @@ export function resolveClientIdentity({ request, extra, server }: ClientIdentity
   return result.clientName || result.clientVersion || result.protocolVersion ? result : undefined
 }
 
+/** The host's `options.clientInfo` callback, which outranks the whole chain. Never throws. */
+function readHostClientInfo(
+  server: MCPServerLike | undefined,
+  request: MCPRequestLike,
+  extra?: CompatibleRequestHandlerExtra
+): { name?: string; version?: string } | undefined {
+  const resolver = server ? getServerTrackingData(server)?.options.clientInfo : undefined
+  if (typeof resolver !== 'function') {
+    return undefined
+  }
+  try {
+    const value = resolver(request, extra)
+    return value && typeof value === 'object' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Stamps whatever the chain resolved onto the event being built for *this*
  * request, so it carries `$mcp_client_name`, `$mcp_client_version` and
@@ -217,8 +236,15 @@ export function stampClientIdentity(
   extra?: CompatibleRequestHandlerExtra,
   server?: MCPServerLike
 ): void {
-  const info = resolveClientIdentity({ request, extra, server })
-  if (!info) {
+  const info = resolveClientIdentity({ request, extra, server }) ?? {}
+  const host = readHostClientInfo(server, request, extra)
+  if (host?.name) {
+    info.clientName = host.name
+  }
+  if (host?.version) {
+    info.clientVersion = host.version
+  }
+  if (!info.clientName && !info.clientVersion && !info.protocolVersion) {
     return
   }
   if (info.clientName) {
