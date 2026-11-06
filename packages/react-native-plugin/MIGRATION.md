@@ -138,11 +138,23 @@ Native uploads, such as session replay and native crash reports, pause while cel
 - The proxy must pass `Authorization` and `Content-Encoding` through unchanged. A proxy set up from PostHog's [proxy guides](https://posthog.com/docs/advanced/proxy) before 29 October 2026 strips `Authorization`, so PostHog answers `401` and drops the native events. Update it from the current guide. PostHog's managed reverse proxy needs no change.
 - These requests send `Authorization: Bearer <projectToken>`, which replaces any `Authorization` header you set in `requestHeaders`. Session replay requests still send yours, so authenticate your proxy with a different header, such as `X-Proxy-Token`.
 - A proxy that redirects these requests, other than with a 307 or 308 to the same origin as `host`, drops them.
-- These events report `$locale` as a full language tag with region, such as `de-CH` or `zh-Hant-TW` instead of `de` or `zh-TW`, and add `$app_language`, the language your app shows.
+- These events report `$locale` as a full language tag with region, such as `de-CH` or `zh-Hant-TW` instead of `de` or `zh-TW`, and can carry `$app_language` (see below).
 
 See [Capture v1](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#capture-v1) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#locale-and-app_language) in the `posthog-ios` migration guide, and [Endpoints](https://github.com/PostHog/posthog-android/blob/main/docs/migration-3.x-to-4.0.md#endpoints) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-android/blob/main/docs/migration-3.x-to-4.0.md#locale-and-app_language) in the `posthog-android` one.
 
 **If ignored:** a proxy that answers `404` gets a retry about every 30 seconds from each running app, and the native events stay queued on the device only until a full queue evicts them (1000 events by default), oldest first. Other errors, such as `401`, `403` or `405`, drop them.
+
+### Native events carry `$app_language` only after you set it
+
+The plugin turns off the language detection in `posthog-ios` 4.0 and `posthog-android` 4.0, because React Native apps usually translate in JavaScript and the native SDKs can't see that language. Native events carry `$app_language` only after you call `posthog.setAppLanguage()` from `posthog-react-native` 4.86.0 or later. Call it at startup and whenever the language changes. The value also goes on JavaScript events.
+
+```ts
+posthog.setAppLanguage(i18n.language)
+```
+
+If your app creates PostHog clients for more than one project, native events take the language only from clients of the project the native SDK was set up for. The other clients still add it to their own JavaScript events.
+
+**If ignored:** native events and JavaScript events carry no `$app_language`, as with 2.x.
 
 ### Native surveys are left out of full Swift Package Manager apps
 
@@ -165,4 +177,5 @@ Apps on React Native's full Swift Package Manager integration no longer bundle t
 - [ ] Direct `start()` calls now use `setup()`, and direct `setup()` calls pass `throttleDelayMs`.
 - [ ] `screenshotModeBackgroundCapture` is removed.
 - [ ] Reverse proxies and self-hosted instances serve `/i/v1/*`, proxies pass `Authorization` and `Content-Encoding` through and don't authenticate with `Authorization`, and they don't redirect capture requests to another origin.
+- [ ] If you want `$app_language`, your app calls `posthog.setAppLanguage()`.
 - [ ] Native code and native libraries that call `posthog-ios` or `posthog-android` directly are updated for 4.0.
