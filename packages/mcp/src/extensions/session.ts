@@ -104,9 +104,28 @@ export function deriveSessionIdFromConversation(conversationId: string): string 
   return deterministicPrefixedId('ses', conversationId)
 }
 
+function readHostSessionId(
+  data: MCPAnalyticsData,
+  request: MCPRequestLike,
+  extra?: CompatibleRequestHandlerExtra
+): string | undefined {
+  const resolver = data.options.sessionId
+  if (typeof resolver !== 'function') {
+    return undefined
+  }
+  try {
+    const value = resolver(request, extra)
+    return typeof value === 'string' && value.length > 0 ? value : undefined
+  } catch {
+    // a host callback must never fail the tool call
+    return undefined
+  }
+}
+
 /**
- * Resolves the session id for a request. Three steps, first match wins:
+ * Resolves the session id for a request. Four steps, first match wins:
  *
+ *   0. the host's `options.sessionId` callback returned one
  *   1. the agent carried a `conversation_id` tool argument   — 2026-07-28
  *   2. the request carried a session id                      — 2025-11-25
  *   3. nothing was carried, so reuse this instance's own id  — stdio
@@ -120,11 +139,20 @@ export function deriveSessionIdFromConversation(conversationId: string): string 
 export function getSessionId(
   server: MCPServerLike,
   extra?: CompatibleRequestHandlerExtra,
-  conversationId?: string
+  conversationId?: string,
+  request?: MCPRequestLike
 ): string {
   const data = getServerTrackingData(server)
   if (!data) {
     throw new Error('Server tracking data not found')
+  }
+
+  // 0. The host said which session this request belongs to (`options.sessionId`).
+  // Per-request like 1, so it returns before the shared-state writes.
+  const hostSessionId = request ? readHostSessionId(data, request, extra) : undefined
+  if (hostSessionId) {
+    applyTokenClientIdentity(data, extra)
+    return deriveSessionIdFromConversation(hostSessionId)
   }
 
   // 1. The agent's conversation handle — the only id that survives reconnects,
