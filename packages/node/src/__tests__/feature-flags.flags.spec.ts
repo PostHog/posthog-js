@@ -278,6 +278,12 @@ describe('flags v2', () => {
         expectedError: 'unknown_error',
       },
       {
+        case: 'response with number flags',
+        status: 200,
+        json: vi.fn().mockResolvedValue({ flags: 5, errorsWhileComputingFlags: false }),
+        expectedError: 'unknown_error',
+      },
+      {
         case: 'network error',
         status: undefined,
         json: vi.fn(),
@@ -366,6 +372,31 @@ describe('flags v2', () => {
         expect(capturedMessage.event).toBe('$feature_flag_called')
         expect(capturedMessage.properties.$feature_flag_error).toBe(expectedError)
       })
+    })
+
+    it('reports a response with non-object flags to error listeners when debug is off', async () => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        ...posthogImmediateResolveOptions,
+      })
+      mockedFetch.mockImplementation(
+        apiImplementationV4({
+          status: 200,
+          json: vi.fn().mockResolvedValue({ flags: null, errorsWhileComputingFlags: false }),
+        })
+      )
+      const errorHandler = vi.fn()
+      posthog.on('error', errorHandler)
+
+      expect(await posthog.getAllFlags('some-distinct-id')).toEqual({})
+      expect(errorHandler).toHaveBeenCalledTimes(1)
+      expect(await posthog.getFeatureFlag('error-flag', 'some-distinct-id')).toBe(undefined)
+      expect(errorHandler).toHaveBeenCalledTimes(2)
+      for (const [error] of errorHandler.mock.calls) {
+        expect(error).toBeInstanceOf(Error)
+        expect(error.message).toContain('non-object `flags` field')
+      }
+      await posthog.shutdown()
     })
   })
 })

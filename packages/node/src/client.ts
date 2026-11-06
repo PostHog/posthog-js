@@ -1534,7 +1534,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Treats a `/flags` body whose `flags` field is not an object (for example `null`, a string or
    * an array) like a failed request. Every remote flag read goes through this method, so callers
-   * get the same fallback and `$feature_flag_error` as for a failed request instead of a `TypeError`.
+   * get the same fallback, `$feature_flag_error` and `error` event as for a failed request instead of a `TypeError`.
    */
   protected override async getFeatureFlagDetailsStateless(
     distinctId: string,
@@ -1553,7 +1553,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       flagKeysToEvaluate
     )
     if (details !== undefined && !isPlainObject(details.flags)) {
-      this._logger.warn('[FEATURE FLAGS] Ignoring a /flags response whose `flags` field is not an object')
+      const message = '/flags response has a non-object `flags` field, treating it as a failed request'
+      this._logger.warn(`[FEATURE FLAGS] ${message}`)
+      this._events.emit('error', new Error(message))
       return undefined
     }
     return details
