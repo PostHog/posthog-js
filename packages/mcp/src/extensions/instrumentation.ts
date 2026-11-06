@@ -830,6 +830,9 @@ export async function isToolListed(
   return page.nextCursor ? undefined : false
 }
 
+/** A host listing slower than this can't tell an unknown tool from a failing one. */
+const LISTING_PROBE_DEADLINE_MS = 1000
+
 async function readFirstToolsPage(
   server: MCPServerLike,
   toolName: string,
@@ -841,14 +844,21 @@ async function readFirstToolsPage(
     return undefined
   }
 
+  let deadline: ReturnType<typeof setTimeout> | undefined
+  const missedDeadline = new Promise<undefined>((resolve) => {
+    deadline = setTimeout(() => resolve(undefined), LISTING_PROBE_DEADLINE_MS)
+  })
   try {
-    const response = (await listHandler({ method: 'tools/list', params: {} }, extra)) as CompatibleToolsListLike
+    const listing = listHandler({ method: 'tools/list', params: {} }, extra)
+    const response = (await Promise.race([listing, missedDeadline])) as CompatibleToolsListLike | undefined
     return response && Array.isArray(response.tools) ? response : undefined
   } catch (error) {
     logger(
       `Warning: PostHog MCP analytics could not determine whether "${toolName}" is advertised; delegating to the server - ${error}`
     )
     return undefined
+  } finally {
+    clearTimeout(deadline)
   }
 }
 

@@ -205,6 +205,7 @@ describe('a tools/call for a tool the server does not have', () => {
     })
 
     afterEach(async () => {
+      vi.useRealTimers()
       releaseListing()
       await posthog.shutdown()
     })
@@ -235,5 +236,37 @@ describe('a tools/call for a tool the server does not have', () => {
         expect(eventCapture.getCaptures().map((c) => c.event)).toEqual(published)
       }
     )
+
+    it.each(['throw', 'result'] as const)(
+      'reports a call that fails in 0 ms (%s) as 0 ms, not the listing time',
+      async (fails) => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        await callTool(highLevelWithOwnDispatcher({ listing, fails }), 'search_docs', posthog)
+
+        vi.setSystemTime(Date.now() + 500)
+        releaseListing()
+        await posthog.flush()
+
+        const [toolCall] = eventCapture.findCapturesByEvent('$mcp_tool_call')
+        expect(toolCall.properties.$mcp_duration_ms).toBe(0)
+      }
+    )
+
+    it('publishes a failed tool call once a listing that never settles misses its one-second deadline', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      const neverSettles = new Promise<void>(() => {})
+
+      const outcome = await callTool(highLevelWithOwnDispatcher({ listing: neverSettles }), 'no_such_tool', posthog)
+      expect(outcome).toMatch(/^thrown: no_such_tool failed/)
+
+      let flushed = false
+      const flush = posthog.flush().then(() => (flushed = true))
+      await vi.advanceTimersByTimeAsync(999)
+      expect(flushed).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await flush
+      expect(eventCapture.getCaptures().map((c) => c.event)).toEqual(['$mcp_tool_call', '$exception'])
+    })
   })
 })
