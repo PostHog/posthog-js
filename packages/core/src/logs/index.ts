@@ -83,6 +83,11 @@ export class PostHogLogs {
     this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [])
   }
 
+  /** True while the endpoint's `Retry-After` window is open, so a host's automatic flush can skip logs. */
+  get throttled(): boolean {
+    return this._retryAfter.isOpen()
+  }
+
   /**
    * Clears the flush timer and rate-cap state. The host owns the record queue
    * and clears it separately (the browser empties its in-memory store).
@@ -481,8 +486,14 @@ export class PostHogLogs {
     })
   }
 
-  private _flushInBackground(): void {
-    void this.flush()
+  /**
+   * `flush()` for a host that drives logs from its own flush cycle. Never rejects, and when
+   * records remain (a failed send, or captures that landed mid-flush) re-arms the timer with
+   * backoff, as the pipeline's own timer flush does. A bare `flush()` clears the timer and
+   * leaves nothing to retry the records once traffic stops.
+   */
+  flushInBackground(): Promise<void> {
+    return this.flush()
       .then(
         () => {
           this._consecutiveFlushFailures = 0
@@ -502,5 +513,9 @@ export class PostHogLogs {
           this._flushTimer.armNoEarlierThan(this._nextFlushDelay())
         }
       })
+  }
+
+  private _flushInBackground(): void {
+    void this.flushInBackground()
   }
 }
