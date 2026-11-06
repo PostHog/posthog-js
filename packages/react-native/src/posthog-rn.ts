@@ -3435,7 +3435,14 @@ export class PostHog extends PostHogCore {
         await OptionalReactNativePlugin.setOptOut?.(this.optedOut)
         // setAppLanguage() calls made before setup were skipped, and the native SDK is shared by
         // the process, so sync it to this client's value, clearing one an earlier client left.
-        await OptionalReactNativePlugin.setAppLanguage?.(this._appLanguage ?? null)
+        // Bounded and isolated like _enqueueNative: a hung or failing call must not stall setup
+        // or the commands queued behind it.
+        await raceWithTimeout(
+          Promise.resolve(OptionalReactNativePlugin.setAppLanguage?.(this._appLanguage ?? null)),
+          NATIVE_CALL_TIMEOUT_MS,
+          () =>
+            this._logger.warn(`Native PostHog setAppLanguage timed out after ${NATIVE_CALL_TIMEOUT_MS}ms; continuing.`)
+        ).catch((e) => this._logger.warn(`Native PostHog setAppLanguage failed: ${e}.`))
         if (wasSessionReplayEnabled) {
           // if somehow the SDK is already enabled with a different sessionId, we reset it
           this._resetSessionId(OptionalReactNativePlugin, String(sessionId))

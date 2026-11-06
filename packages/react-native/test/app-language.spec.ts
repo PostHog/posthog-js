@@ -141,6 +141,17 @@ describe('setAppLanguage', () => {
     await waitForExpect(2000, () => expect(setAppLanguageMock).toHaveBeenCalledWith(null))
   })
 
+  it('finishes native setup when setAppLanguage fails', async () => {
+    setAppLanguageMock.mockRejectedValueOnce(new Error('bridge gone'))
+    const client = await newClient('test-token', { enableSessionReplay: true })
+    await waitForExpect(2000, () => expect(setAppLanguageMock).toHaveBeenCalledWith(null))
+
+    client.setAppLanguage('de')
+
+    await waitForExpect(2000, () => expect(setAppLanguageMock).toHaveBeenLastCalledWith('de'))
+    expect(native.setup).toHaveBeenCalledTimes(1)
+  })
+
   it('forwards changes and clears to native after setup', async () => {
     const client = await newClient('test-token', { enableSessionReplay: true })
     await waitForExpect(2000, () => expect(native.setup).toHaveBeenCalled())
