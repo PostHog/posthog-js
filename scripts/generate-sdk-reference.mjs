@@ -3,7 +3,8 @@
  * typedoc-plugin-markdown. Our code only groups and orders the symbols and writes the front matter.
  *
  * The package's docs/capabilities.json maps each PostHog member's label to a PostHog/sdk-specs
- * capability, shown in the sdk-specs README's order. Its `utils` lists the members that go to SDK utils.
+ * capability, shown in the sdk-specs README's order. Its `utils` lists the members that go to SDK utils, and
+ * its `hidden` lists the internal and deprecated members that the page leaves out.
  *
  *     node scripts/generate-sdk-reference.mjs <browser|node|react-native> [--sdk-specs DIR] [--major N] [--source DIR]
  *
@@ -114,7 +115,7 @@ function renderer(app, project) {
 
 /** The package's capability map, checked against the members it names and sdk-specs. */
 function capabilityMap(labels, caps) {
-    const { utils, ...mapped } = JSON.parse(fs.readFileSync(path.join(docsDir, 'capabilities.json'), 'utf8'))
+    const { utils, hidden, ...mapped } = JSON.parse(fs.readFileSync(path.join(docsDir, 'capabilities.json'), 'utf8'))
     const fail = (message) => {
         process.stderr.write(`docs/capabilities.json: ${message}\n`)
         process.exit(1)
@@ -123,8 +124,11 @@ function capabilityMap(labels, caps) {
         if (!labels.includes(label)) fail(`no symbol for ${label}`)
         if (!caps[slug]) fail(`${label}: ${slug} isn't in sdk-specs`)
     }
-    for (const label of labels) if (!mapped[label] && !utils.includes(label)) fail(`map ${label} or add it to utils`)
-    return mapped
+    for (const label of labels) {
+        if (!mapped[label] && !utils.includes(label) && !hidden.includes(label))
+            fail(`map ${label}, or add it to utils or hidden`)
+    }
+    return { mapped, hidden }
 }
 
 function reference(app, project, config, caps) {
@@ -136,9 +140,9 @@ function reference(app, project, config, caps) {
         (cls.children ?? []).filter(
             (m) => m.kindOf(MEMBER_KINDS) && isPublic(m) && (!m.kindOf(Kind.Property) || commentOf(m))
         )
-    const used = new Set(members(main))
     const labelOf = (m) => (m.kind === Kind.Constructor ? `new PostHog(...)` : `PostHog.${m.name}`)
-    const mapped = capabilityMap([...used].map(labelOf), caps)
+    const { mapped, hidden } = capabilityMap(members(main).map(labelOf), caps)
+    const used = new Set(members(main).filter((m) => !hidden.includes(labelOf(m))))
     const mine = [...used]
         .map((m) => ({ tag: mapped[labelOf(m)], md: () => render(m, labelOf(m)) }))
         .sort((a, b) => (order.indexOf(a.tag) + 1 || 1e9) - (order.indexOf(b.tag) + 1 || 1e9))

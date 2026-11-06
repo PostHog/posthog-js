@@ -23,6 +23,9 @@ tableOfContents:
   - value: "Alias"
     url: alias
     depth: 0
+  - value: "Capture AI"
+    url: capture-ai
+    depth: 0
   - value: "Capture exception"
     url: capture-exception
     depth: 0
@@ -71,6 +74,9 @@ tableOfContents:
   - value: "Is feature enabled"
     url: is-feature-enabled
     depth: 0
+  - value: "Is opt out"
+    url: is-opt-out
+    depth: 0
   - value: "Is session replay active"
     url: is-session-replay-active
     depth: 0
@@ -85,6 +91,9 @@ tableOfContents:
     depth: 0
   - value: "Reload feature flags"
     url: reload-feature-flags
+    depth: 0
+  - value: "Reset"
+    url: reset
     depth: 0
   - value: "Reset group properties for flags"
     url: reset-group-properties-for-flags
@@ -115,6 +124,12 @@ tableOfContents:
     depth: 0
   - value: "Unregister"
     url: unregister
+    depth: 0
+  - value: "Autocapture"
+    url: autocapture
+    depth: 0
+  - value: "Remote config"
+    url: remote-config
     depth: 0
   - value: "Surveys"
     url: surveys
@@ -403,6 +418,47 @@ posthog.alias('distinct_id')
 
 
 
+## Capture AI
+
+### `PostHog.captureTraceFeedback`
+
+> **captureTraceFeedback**(`traceId`, `userFeedback`): `void`
+
+Capture written user feedback for a LLM trace. Numeric values are converted to strings.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `traceId` | `string` \| `number` | The trace ID to capture feedback for. |
+| `userFeedback` | `string` | The feedback to capture. |
+
+#### Returns
+
+`void`
+
+
+
+### `PostHog.captureTraceMetric`
+
+> **captureTraceMetric**(`traceId`, `metricName`, `metricValue`): `void`
+
+Capture a metric for a LLM trace. Numeric values are converted to strings.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `traceId` | `string` \| `number` | The trace ID to capture the metric for. |
+| `metricName` | `string` | The name of the metric to capture. |
+| `metricValue` | `string` \| `number` \| `boolean` | The value of the metric to capture. |
+
+#### Returns
+
+`void`
+
+
+
 ## Capture exception
 
 ### `PostHog.captureException`
@@ -483,6 +539,16 @@ posthog.createPersonProfile()
 
 
 ## Debug
+
+### `PostHog.isDebug`
+
+> **get** **isDebug**(): `boolean`
+
+##### Returns
+
+`boolean`
+
+
 
 ### `PostHog.debug`
 
@@ -580,6 +646,48 @@ await posthog.flush()
 #### See
 
 flushLogs
+
+
+
+### `PostHog.flushWithPendingPromises`
+
+> **flushWithPendingPromises**(): `Promise`\<`void`\>
+
+Flushes the queue of pending events.
+
+This function will return a promise that will resolve when the flush is complete,
+or reject if there was an error (for example if the server or network is down).
+
+If there is already a flush in progress, this function will wait for that flush to complete.
+
+It's recommended to do error handling in the callback of the promise.
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Example
+
+```js
+// flush with error handling
+posthog.flush().then(() => {
+  console.log('Flush complete')
+}).catch((err) => {
+  console.error('Flush failed', err)
+})
+```
+
+#### Throws
+
+PostHogFetchHttpError
+
+#### Throws
+
+PostHogFetchNetworkError
+
+#### Throws
+
+Error
 
 
 
@@ -846,6 +954,25 @@ posthog.group('company', 'company_id_in_your_db', {
 
 
 
+### `PostHog.groups`
+
+> **groups**(`groups`): `void`
+
+** GROUPS
+*
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `groups` | `PostHogGroupProperties` |
+
+#### Returns
+
+`void`
+
+
+
 ## Group identify
 
 ### `PostHog.groupIdentify`
@@ -949,6 +1076,28 @@ const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaul
 
 
 
+## Is opt out
+
+### `PostHog.isDisabled`
+
+> **get** **isDisabled**(): `boolean`
+
+##### Returns
+
+`boolean`
+
+
+
+### `PostHog.optedOut`
+
+> **get** **optedOut**(): `boolean`
+
+##### Returns
+
+`boolean`
+
+
+
 ## Is session replay active
 
 ### `PostHog.isSessionReplayActive`
@@ -1014,6 +1163,28 @@ posthog.optIn()
 
 
 
+### `PostHog.optOut`
+
+> **optOut**(): `Promise`\<`void`\>
+
+Opts the user out of data capture.
+
+You can completely opt-out users from data capture. Once this has been called it is persisted and will be respected until optIn is called again or the reset function is called.
+The promise resolves once session replay has stopped.
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Example
+
+```js
+// opt out of tracking
+posthog.optOut()
+```
+
+
+
 ## Register
 
 ### `PostHog.register`
@@ -1044,6 +1215,22 @@ posthog.register({
     team_id: 22,
 })
 ```
+
+
+
+### `PostHog.registerForSession`
+
+> **registerForSession**(`properties`): `void`
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `properties` | `PostHogEventProperties` |
+
+#### Returns
+
+`void`
 
 
 
@@ -1102,6 +1289,63 @@ posthog.reloadFeatureFlagsAsync().then((refreshedFlags) => console.log(refreshed
 
 When the `disableRemoteFeatureFlags` option is set, no request is made and the
 promise resolves with the currently stored flags (from `bootstrap` or `updateFlags()`).
+
+
+
+## Reset
+
+### `PostHog.reset`
+
+> **reset**(`propertiesToKeep?`): `void`
+
+Resets the user's ID and anonymous ID after logout.
+
+To reset the user's ID and anonymous ID, call reset. Usually you would do this right after the user logs out.
+This also clears all stored super properties and more.
+
+By default (when `propertiesToKeep` is not provided), the app lifecycle properties
+(`InstalledAppBuild` and `InstalledAppVersion`) are automatically preserved to prevent
+duplicate "Application Installed" events on the next app launch.
+
+If you pass `propertiesToKeep` explicitly, only the properties you specify will be preserved.
+To keep the default app lifecycle behavior, include `PostHogPersistedProperty.InstalledAppBuild`
+and `PostHogPersistedProperty.InstalledAppVersion` in your array.
+
+Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
+(`PostHogPersistedProperty.LogsQueue`) are always preserved regardless of
+what is passed in `propertiesToKeep`, to ensure in-flight data is not lost.
+
+The project-level remote config (`PostHogPersistedProperty.RemoteConfig`,
+`PostHogPersistedProperty.SessionReplay`, `PostHogPersistedProperty.Surveys`) is also
+always preserved — it is not user data — so session replay and surveys keep working
+after an identity change. The user-specific survey state (`SurveysSeen`,
+`SurveyLastSeenDate`) is still cleared.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `propertiesToKeep?` | `PostHogPersistedProperty`[] | Optional array of persisted properties to preserve during reset. When not provided, app lifecycle and device bucketing properties are automatically preserved. When provided, only the specified properties are preserved. The event queue and logs queue are always preserved regardless. |
+
+#### Returns
+
+`void`
+
+#### Examples
+
+```js
+// reset after logout (preserves app lifecycle properties by default)
+posthog.reset()
+```
+
+```js
+// reset but keep feature flag overrides and app lifecycle properties
+posthog.reset([
+  PostHogPersistedProperty.OverrideFeatureFlags,
+  PostHogPersistedProperty.InstalledAppBuild,
+  PostHogPersistedProperty.InstalledAppVersion,
+])
+```
 
 
 
@@ -1283,6 +1527,26 @@ posthog.setPersonProperties({ plan: 'premium' }, undefined, false)
 
 
 
+### `PostHog.unsetPersonProperties`
+
+> **unsetPersonProperties**(`propertyNames`, `reloadFeatureFlags?`): `void`
+
+Removes properties from the person profile associated with the current `distinct_id`.
+Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+
+#### Parameters
+
+| Parameter | Type | Default value | Description |
+| ------ | ------ | ------ | ------ |
+| `propertyNames` | `string` \| `string`[] | `undefined` | The name (or names) of the person properties to remove. |
+| `reloadFeatureFlags?` | `boolean` | `true` | Whether to reload feature flags after removing the properties. Defaults to true. |
+
+#### Returns
+
+`void`
+
+
+
 ## Set person properties for flags
 
 ### `PostHog.setPersonPropertiesForFlags`
@@ -1443,63 +1707,23 @@ posthog.unregister('icecream pref')
 
 
 
-## Surveys
+### `PostHog.unregisterForSession`
 
-### `PostHog.getSurveys`
+> **unregisterForSession**(`property`): `void`
 
-> **getSurveys**(): `Promise`\<`Survey`[]\>
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `property` | `string` |
 
 #### Returns
 
-`Promise`\<`Survey`[]\>
-
-## SDK utils
-
-### `PostHog.apiKey`
-
-> **get** **apiKey**(): `string`
-
-The project token the client was created with.
-
-##### Deprecated
-
-Use `projectToken` instead. This will be removed in the next major version.
-
-##### Returns
-
-`string`
+`void`
 
 
 
-### `PostHog.isDebug`
-
-> **get** **isDebug**(): `boolean`
-
-##### Returns
-
-`boolean`
-
-
-
-### `PostHog.isDisabled`
-
-> **get** **isDisabled**(): `boolean`
-
-##### Returns
-
-`boolean`
-
-
-
-### `PostHog.optedOut`
-
-> **get** **optedOut**(): `boolean`
-
-##### Returns
-
-`boolean`
-
-
+## Autocapture
 
 ### `PostHog.autocapture`
 
@@ -1519,6 +1743,30 @@ Use `projectToken` instead. This will be removed in the next major version.
 `void`
 
 
+
+## Remote config
+
+### `PostHog.reloadRemoteConfigAsync`
+
+> **reloadRemoteConfigAsync**(): `Promise`\<`PostHogRemoteConfig` \| `undefined`\>
+
+#### Returns
+
+`Promise`\<`PostHogRemoteConfig` \| `undefined`\>
+
+
+
+## Surveys
+
+### `PostHog.getSurveys`
+
+> **getSurveys**(): `Promise`\<`Survey`[]\>
+
+#### Returns
+
+`Promise`\<`Survey`[]\>
+
+## SDK utils
 
 ### `PostHog.capturePushNotificationOpened`
 
@@ -1554,124 +1802,6 @@ Not supported on web.
 
 `Promise`\<`void`\>
 
-### `PostHog.captureTraceFeedback`
-
-> **captureTraceFeedback**(`traceId`, `userFeedback`): `void`
-
-Capture written user feedback for a LLM trace. Numeric values are converted to strings.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `traceId` | `string` \| `number` | The trace ID to capture feedback for. |
-| `userFeedback` | `string` | The feedback to capture. |
-
-#### Returns
-
-`void`
-
-
-
-### `PostHog.captureTraceMetric`
-
-> **captureTraceMetric**(`traceId`, `metricName`, `metricValue`): `void`
-
-Capture a metric for a LLM trace. Numeric values are converted to strings.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `traceId` | `string` \| `number` | The trace ID to capture the metric for. |
-| `metricName` | `string` | The name of the metric to capture. |
-| `metricValue` | `string` \| `number` \| `boolean` | The value of the metric to capture. |
-
-#### Returns
-
-`void`
-
-
-
-### `PostHog.fetch`
-
-> **fetch**(`url`, `options`): `Promise`\<`PostHogFetchResponse`\>
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `url` | `string` |
-| `options` | `PostHogFetchOptions` |
-
-#### Returns
-
-`Promise`\<`PostHogFetchResponse`\>
-
-
-
-### `PostHog.flushWithPendingPromises`
-
-> **flushWithPendingPromises**(): `Promise`\<`void`\>
-
-Flushes the queue of pending events.
-
-This function will return a promise that will resolve when the flush is complete,
-or reject if there was an error (for example if the server or network is down).
-
-If there is already a flush in progress, this function will wait for that flush to complete.
-
-It's recommended to do error handling in the callback of the promise.
-
-#### Returns
-
-`Promise`\<`void`\>
-
-#### Example
-
-```js
-// flush with error handling
-posthog.flush().then(() => {
-  console.log('Flush complete')
-}).catch((err) => {
-  console.error('Flush failed', err)
-})
-```
-
-#### Throws
-
-PostHogFetchHttpError
-
-#### Throws
-
-PostHogFetchNetworkError
-
-#### Throws
-
-Error
-
-
-
-### `PostHog.getCommonEventProperties`
-
-> **getCommonEventProperties**(): `PostHogEventProperties`
-
-#### Returns
-
-`PostHogEventProperties`
-
-
-
-### `PostHog.getCustomUserAgent`
-
-> **getCustomUserAgent**(): `string`
-
-#### Returns
-
-`string`
-
-
-
 ### `PostHog.getDeviceId`
 
 > **getDeviceId**(): `string`
@@ -1696,64 +1826,6 @@ The device ID, or an empty string if not yet initialized
 
 
 
-### `PostHog.getFeatureFlagPayloads`
-
-> **getFeatureFlagPayloads**(): \{\[`key`: `string`\]: `JsonType`; \} \| `undefined`
-
-Returns the payload of every loaded flag, keyed by flag key.
-
-#### Returns
-
-\{\[`key`: `string`\]: `JsonType`; \} \| `undefined`
-
-#### Deprecated
-
-Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
-
-
-
-### `PostHog.getLibraryId`
-
-> **getLibraryId**(): `string`
-
-#### Returns
-
-`string`
-
-
-
-### `PostHog.getLibraryVersion`
-
-> **getLibraryVersion**(): `string`
-
-#### Returns
-
-`string`
-
-
-
-### `PostHog.getPersistedProperty`
-
-> **getPersistedProperty**\<`T`\>(`key`): `T` \| `undefined`
-
-#### Type Parameters
-
-| Type Parameter |
-| ------ |
-| <a id="type-parameter-t-1"></a> `T` |
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `key` | `PostHogPersistedProperty` |
-
-#### Returns
-
-`T` \| `undefined`
-
-
-
 ### `PostHog.getSurveyDisplayLanguageOverride`
 
 > **getSurveyDisplayLanguageOverride**(): `string` \| `null`
@@ -1761,52 +1833,6 @@ Use `getAllFeatureFlags()` instead, which returns each flag's value and payload 
 #### Returns
 
 `string` \| `null`
-
-### `PostHog.getSurveysStateless`
-
-> **getSurveysStateless**(): `Promise`\<`Survey`[]\>
-
-** SURVEYS
-*
-
-#### Returns
-
-`Promise`\<`Survey`[]\>
-
-
-
-### `PostHog.groups`
-
-> **groups**(`groups`): `void`
-
-** GROUPS
-*
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `groups` | `PostHogGroupProperties` |
-
-#### Returns
-
-`void`
-
-
-
-### `PostHog.initReactNativeNavigation`
-
-> **initReactNativeNavigation**(`options`): `boolean`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `options` | `PostHogAutocaptureOptions` |
-
-#### Returns
-
-`boolean`
 
 ### `PostHog.on`
 
@@ -1822,89 +1848,6 @@ Use `getAllFeatureFlags()` instead, which returns each flag's value and payload 
 #### Returns
 
 () => `void`
-
-
-
-### `PostHog.onFeatureFlag`
-
-> **onFeatureFlag**(`key`, `cb`): () => `void`
-
-Calls `cb` with the flag's value whenever flags load.
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `key` | `string` |
-| `cb` | (`value`) => `void` |
-
-#### Returns
-
-() => `void`
-
-#### Deprecated
-
-Use `onFeatureFlags()` and read the flag with `getFeatureFlagResult()` in the callback.
-
-
-
-### `PostHog.optOut`
-
-> **optOut**(): `Promise`\<`void`\>
-
-Opts the user out of data capture.
-
-You can completely opt-out users from data capture. Once this has been called it is persisted and will be respected until optIn is called again or the reset function is called.
-The promise resolves once session replay has stopped.
-
-#### Returns
-
-`Promise`\<`void`\>
-
-#### Example
-
-```js
-// opt out of tracking
-posthog.optOut()
-```
-
-
-
-### `PostHog.overrideFeatureFlag`
-
-> **overrideFeatureFlag**(`flags`): `Promise`\<`void`\>
-
-Overrides the values of the given flags locally until cleared with `null`.
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `flags` | \{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `null` |
-
-#### Returns
-
-`Promise`\<`void`\>
-
-#### Deprecated
-
-Use `updateFlags()` instead. To keep the values from being replaced by the next flags load, also set `disableRemoteFeatureFlags`.
-
-
-
-### `PostHog.registerForSession`
-
-> **registerForSession**(`properties`): `void`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `properties` | `PostHogEventProperties` |
-
-#### Returns
-
-`void`
 
 
 
@@ -1947,113 +1890,9 @@ Not supported on web or macOS.
 
 `Promise`\<`void`\>
 
-### `PostHog.reloadRemoteConfigAsync`
-
-> **reloadRemoteConfigAsync**(): `Promise`\<`PostHogRemoteConfig` \| `undefined`\>
-
-#### Returns
-
-`Promise`\<`PostHogRemoteConfig` \| `undefined`\>
-
-
-
-### `PostHog.reset`
-
-> **reset**(`propertiesToKeep?`): `void`
-
-Resets the user's ID and anonymous ID after logout.
-
-To reset the user's ID and anonymous ID, call reset. Usually you would do this right after the user logs out.
-This also clears all stored super properties and more.
-
-By default (when `propertiesToKeep` is not provided), the app lifecycle properties
-(`InstalledAppBuild` and `InstalledAppVersion`) are automatically preserved to prevent
-duplicate "Application Installed" events on the next app launch.
-
-If you pass `propertiesToKeep` explicitly, only the properties you specify will be preserved.
-To keep the default app lifecycle behavior, include `PostHogPersistedProperty.InstalledAppBuild`
-and `PostHogPersistedProperty.InstalledAppVersion` in your array.
-
-Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
-(`PostHogPersistedProperty.LogsQueue`) are always preserved regardless of
-what is passed in `propertiesToKeep`, to ensure in-flight data is not lost.
-
-The project-level remote config (`PostHogPersistedProperty.RemoteConfig`,
-`PostHogPersistedProperty.SessionReplay`, `PostHogPersistedProperty.Surveys`) is also
-always preserved — it is not user data — so session replay and surveys keep working
-after an identity change. The user-specific survey state (`SurveysSeen`,
-`SurveyLastSeenDate`) is still cleared.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `propertiesToKeep?` | `PostHogPersistedProperty`[] | Optional array of persisted properties to preserve during reset. When not provided, app lifecycle and device bucketing properties are automatically preserved. When provided, only the specified properties are preserved. The event queue and logs queue are always preserved regardless. |
-
-#### Returns
-
-`void`
-
-#### Examples
-
-```js
-// reset after logout (preserves app lifecycle properties by default)
-posthog.reset()
-```
-
-```js
-// reset but keep feature flag overrides and app lifecycle properties
-posthog.reset([
-  PostHogPersistedProperty.OverrideFeatureFlags,
-  PostHogPersistedProperty.InstalledAppBuild,
-  PostHogPersistedProperty.InstalledAppVersion,
-])
-```
-
-
-
 ### `PostHog.resetSessionId`
 
 > **resetSessionId**(): `void`
-
-#### Returns
-
-`void`
-
-
-
-### `PostHog.setPersistedProperty`
-
-> **setPersistedProperty**\<`T`\>(`key`, `value`): `void`
-
-#### Type Parameters
-
-| Type Parameter |
-| ------ |
-| <a id="type-parameter-t-2"></a> `T` |
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `key` | `PostHogPersistedProperty` |
-| `value` | `T` \| `null` |
-
-#### Returns
-
-`void`
-
-
-
-### `PostHog.unregisterForSession`
-
-> **unregisterForSession**(`property`): `void`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `property` | `string` |
 
 #### Returns
 
@@ -2077,26 +1916,6 @@ Not supported on web or macOS.
 #### Returns
 
 `Promise`\<`void`\>
-
-### `PostHog.unsetPersonProperties`
-
-> **unsetPersonProperties**(`propertyNames`, `reloadFeatureFlags?`): `void`
-
-Removes properties from the person profile associated with the current `distinct_id`.
-Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
-
-#### Parameters
-
-| Parameter | Type | Default value | Description |
-| ------ | ------ | ------ | ------ |
-| `propertyNames` | `string` \| `string`[] | `undefined` | The name (or names) of the person properties to remove. |
-| `reloadFeatureFlags?` | `boolean` | `true` | Whether to reload feature flags after removing the properties. Defaults to true. |
-
-#### Returns
-
-`void`
-
-
 
 ### `PostHog.updateFlags`
 
