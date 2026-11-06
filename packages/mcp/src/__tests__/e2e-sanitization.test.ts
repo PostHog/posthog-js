@@ -268,3 +268,107 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     }
   })
 })
+
+describe('E2E payload personal data', () => {
+  const accounts = '{"accounts":{"ada@example.com":{"plan":"pro"}},"card":4111111111111111,"count":3}'
+
+  type Properties = Record<string, unknown>
+  const text = (value: unknown) => JSON.stringify(value)
+  const firstText = (properties: Properties) =>
+    (properties.$mcp_response as { content: { text: string }[] }).content[0].text
+
+  it.each([
+    {
+      scenario: 'personal data in arguments and results is redacted by default',
+      options: {},
+      args: { email: 'ada@example.com', limit: 5 },
+      result: async () => ({
+        content: [{ type: 'text' as const, text: 'Customer ada@example.com last seen from 203.0.113.7' }],
+      }),
+      check: (call: Properties) => {
+        expect(text(call.$mcp_parameters)).not.toContain('ada@example.com')
+        expect((call.$mcp_parameters as any).request.params.arguments).toEqual({ email: '[redacted]', limit: 5 })
+        expect(text(call.$mcp_response)).not.toContain('ada@example.com')
+        expect(text(call.$mcp_response)).not.toContain('203.0.113.7')
+      },
+    },
+    {
+      scenario: 'a personal key and a card number in a result are redacted and its JSON stays valid',
+      options: {},
+      args: {},
+      result: async () => ({
+        content: [{ type: 'text' as const, text: accounts }],
+        structuredContent: JSON.parse(accounts),
+      }),
+      check: (call: Properties) => {
+        expect(text(call.$mcp_response)).not.toContain('ada@example.com')
+        expect(text(call.$mcp_response)).not.toContain('4111111111111111')
+        expect(firstText(call)).toBe('{"accounts":{"[redacted]":{"plan":"pro"}},"card":"[redacted]","count":3}')
+      },
+    },
+    {
+      scenario: 'identifiers that only look like personal data are kept in payloads',
+      options: {},
+      args: {},
+      result: async () => ({
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Order 415-555-0142 built with v22.11.0.3, db at 127.0.0.1:5432, client ip:203.0.113.7, support +1 415 555 0142',
+          },
+        ],
+      }),
+      check: (call: Properties) => {
+        expect(firstText(call)).toBe(
+          'Order 415-555-0142 built with v22.11.0.3, db at 127.0.0.1:5432, client ip:[redacted], support [redacted]'
+        )
+      },
+    },
+    {
+      scenario: 'turning the option off keeps personal data in payloads but not in intent',
+      options: { redactPayloadPersonalData: false },
+      args: { email: 'ada@example.com', context: 'look up ada@example.com' },
+      result: async () => ({ content: [{ type: 'text' as const, text: 'Customer ada@example.com' }] }),
+      check: (call: Properties) => {
+        expect(text(call.$mcp_parameters)).toContain('ada@example.com')
+        expect(text(call.$mcp_response)).toContain('ada@example.com')
+        expect(call.$mcp_intent).toBe('look up [redacted]')
+      },
+    },
+    {
+      scenario: 'personal data in error text and exceptions is redacted by default',
+      options: {},
+      args: {},
+      result: async (): Promise<never> => {
+        throw new Error('No account for ada@example.com')
+      },
+      check: (call: Properties, everything: unknown) => {
+        expect(call.$mcp_error_message).toBe('No account for [redacted]')
+        expect(text(everything)).not.toContain('ada@example.com')
+      },
+    },
+  ])('$scenario', async ({ options, args, result, check }) => {
+    const { server, client, cleanup } = await setupTestServerAndClient()
+    const eventCapture = new EventCapture()
+    await eventCapture.start()
+
+    try {
+      const { instrument } = await import('../index')
+      await instrument(server, fakePostHog(), { enableConversationId: false, ...options })
+      server.registerTool(
+        'lookup',
+        { inputSchema: { email: z.string().optional(), limit: z.number().optional() } },
+        result as never
+      )
+
+      await client.request({ method: 'tools/call', params: { name: 'lookup', arguments: args } }, CallToolResultSchema)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      const [call] = eventCapture.findCapturesByEvent('$mcp_tool_call')
+      check(call.properties, eventCapture.getCaptures())
+    } finally {
+      await eventCapture.stop()
+      await cleanup()
+    }
+  })
+})

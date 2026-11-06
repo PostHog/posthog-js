@@ -10,11 +10,11 @@ import type { BeforeSendFn, Event, McpEvent } from '../types'
 import { log, type LoggerFn } from './logger'
 import { type PostHogCaptureEvent, buildPostHogCaptureEvents } from './posthog-events'
 import { newPrefixedId } from './ids'
-import { sanitizeEvent } from './sanitization'
+import { type PayloadSanitizationOptions, sanitizeEvent } from './sanitization'
 import { truncateEvent } from './truncation'
 
 /** Per-event toggles consulted by the sink when fanning out an event. */
-export interface McpCaptureOptions {
+export interface McpCaptureOptions extends PayloadSanitizationOptions {
   enableExceptionAutocapture: boolean
   /** Inspect/modify/drop hook applied to each fanned-out payload before capture. */
   beforeSend?: BeforeSendFn
@@ -39,7 +39,7 @@ export async function processMcpEvent(
   let processed: McpEvent = event
 
   try {
-    processed = sanitizeEvent(processed)
+    processed = sanitizeEvent(processed, options)
   } catch (err) {
     logger(`Failed to sanitize event: ${err}`)
     return null

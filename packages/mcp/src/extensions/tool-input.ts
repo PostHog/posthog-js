@@ -1,5 +1,6 @@
 import type { InputAliasMap, JsonRecord, ShouldRecordInputKeyFn, ToolInputOptions } from '../types'
 import { PostHogMCPAnalyticsProperty } from './constants'
+import { sanitizeCapturedValue } from './mcp-payloads'
 import { getObjectShape, isZodRawShapeCompat, unwrapInputSchema } from './mcp-sdk-compat'
 
 const MAX_INPUT_KEYS = 20
@@ -71,7 +72,11 @@ export function getToolInputProperties(input: unknown, inputSchema?: unknown, op
     let hasRedacted = false
     for (const key of keys) {
       const isDeclared = known.has(key)
-      if (key.length <= MAX_KEY_LENGTH && shouldRecord(record, key, isDeclared)) {
+      if (
+        key.length <= MAX_KEY_LENGTH &&
+        sanitizeCapturedValue(key, { redactPayloadPersonalData: true }) === key &&
+        shouldRecord(record, key, isDeclared)
+      ) {
         ;(isDeclared ? declared : undeclared).push(key)
       } else {
         hasRedacted = true

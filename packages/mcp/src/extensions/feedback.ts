@@ -263,7 +263,7 @@ function captureExtraValue(value: unknown): unknown {
     return sanitized
   }
   try {
-    return truncateFeedbackText(JSON.stringify(sanitized), MAX_FEEDBACK_TEXT_LENGTH)
+    return truncateFeedbackText(sanitizeFreeText(JSON.stringify(sanitized)), MAX_FEEDBACK_TEXT_LENGTH)
   } catch {
     return undefined
   }

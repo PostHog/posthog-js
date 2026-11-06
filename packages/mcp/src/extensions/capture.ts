@@ -101,6 +101,7 @@ export function captureEvent(
 
   return sink.capture(fullEvent, {
     enableExceptionAutocapture: data.options.enableExceptionAutocapture ?? true,
+    redactPayloadPersonalData: data.options.redactPayloadPersonalData ?? true,
     beforeSend: data.options.beforeSend,
   })
 }

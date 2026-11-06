@@ -92,6 +92,8 @@ export interface PostHogMCPOptions extends PostHogOptions {
    * `llm_model` argument as fallback. On by default; `false` disables it.
    */
   captureModel?: MCPAnalyticsOptions['captureModel']
+  /** See {@link MCPAnalyticsOptions.redactPayloadPersonalData}. */
+  redactPayloadPersonalData?: boolean
   /**
    * Correlate calls with an agent-carried `conversation_id` and a derived
    * PostHog session id. On by default; `false` leaves schemas, arguments, tool
@@ -159,6 +161,7 @@ export class PostHogMCP extends PostHog {
   readonly #feedbackOptions: CollectFeedbackOptions | undefined
   readonly #captureModel: MCPAnalyticsOptions['captureModel']
   readonly #enableConversationId: boolean
+  readonly #redactPayloadPersonalData: boolean
   readonly #serverBuild: string | undefined
   readonly #analyticsParameterOwnership = new Map<string, AnalyticsParameterOwnership>()
 
@@ -177,6 +180,7 @@ export class PostHogMCP extends PostHog {
     }
     this.#captureModel = options.captureModel
     this.#enableConversationId = options.enableConversationId ?? true
+    this.#redactPayloadPersonalData = options.redactPayloadPersonalData ?? true
     this.#serverBuild = serverBuild
     applyMcpLibIdentity(this)
   }
@@ -507,7 +511,10 @@ export class PostHogMCP extends PostHog {
   #emit(event: McpEvent): void {
     event.serverBuild = this.#serverBuild
     void this.#sink
-      .capture(event, { enableExceptionAutocapture: this.options.enableExceptionAutocapture ?? true })
+      .capture(event, {
+        enableExceptionAutocapture: this.options.enableExceptionAutocapture ?? true,
+        redactPayloadPersonalData: this.#redactPayloadPersonalData,
+      })
       .catch((error) => log(`Warning: PostHogMCP failed to capture event - ${error}`))
   }
 

@@ -496,13 +496,14 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
         feedback_type: 'issue',
         summary: 'A tool failed.',
         reporter: 'jane@example.com',
-        meta: { contact: 'john@example.com' },
+        meta: { contact: 'john@example.com', 'ada@example.com': 'vip' },
       })
 
       await new Promise((r) => setTimeout(r, 50))
       const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
       expect(p.$mcp_feedback_reporter).toBe('[redacted]')
       expect(p.$mcp_feedback_meta).not.toContain('john@example.com')
+      expect(p.$mcp_feedback_meta).not.toContain('ada@example.com')
       expect(p.$mcp_feedback_meta).toContain('[redacted]')
 
       await capture.stop()

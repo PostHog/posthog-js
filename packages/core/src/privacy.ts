@@ -6,6 +6,8 @@
 export interface TextSanitizationOptions {
   maxStringLength: number
   truncationSuffix: string
+  /** Applies {@link redactPayloadPii} to captured strings and object keys, and redacts numbers that pass as card numbers. */
+  redactPayloadPersonalData?: boolean
 }
 
 const REDACTED_VALUE = '[redacted]'
@@ -120,6 +122,24 @@ const DIGIT_GROUP_PATTERN = /\d+/g
 // digit run is never taken for a phone number.
 const PHONE_NANP_PATTERN = /(^|[^\w+])((?:\+?1[ ./-]?)?(?:\(\d{3}\)[ ./-]?|\d{3}[ ./-])\d{3}[ ./-]\d{4})(?![\w])/g
 const PHONE_INTL_PATTERN = /(^|[^\w])(\+\d{1,3}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
+
+// The payload pass is narrower because tool payloads carry identifiers that only
+// look like personal data: versions glued to a letter, digit, or `.`, internal
+// addresses, and `415-555-0142`-shaped order numbers.
+const PAYLOAD_IPV4_PATTERN =
+  /(^|[^A-Za-z0-9.])((?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))(?!\d|\.\d)/g
+const NON_PUBLIC_IPV4_RANGES = [
+  '127.0.0.0/8',
+  '10.0.0.0/8',
+  '172.16.0.0/12',
+  '192.168.0.0/16',
+  '169.254.0.0/16',
+  '0.0.0.0/32',
+]
+const PHONE_PARENTHESIZED_PATTERN = /(^|[^\w+])((?:\+?1[ ./-]?)?\(\d{3}\)[ ./-]?\d{3}[ ./-]\d{4})(?![\w])/g
+const PAYLOAD_PHONE_INTL_PATTERN = /(^|[^\w])((?:\+|00|011)[ .-]?[1-9]\d{0,2}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
+const JSON_VALUE_START_PATTERN = /[:,[]\s*$/
+const JSON_VALUE_END_PATTERN = /^\s*[,}\]]/
 
 type JsonRecord = Record<string, unknown>
 
@@ -556,9 +576,10 @@ function headLength(value: string, scannedHeadLength: number): number {
 }
 
 function sanitizeString(value: string, options: TextSanitizationOptions): string {
+  const redactPersonalData = options.redactPayloadPersonalData ? redactPayloadPii : (head: string) => head
   return isBinaryBlob(value)
     ? BINARY_REDACTED_VALUE
-    : redactCapturedHead(value, (head) => redactUrls(redactCredentials(head)), options)
+    : redactCapturedHead(value, (head) => redactUrls(redactPersonalData(redactCredentials(head))), options)
 }
 
 /**
@@ -660,8 +681,68 @@ export function redactPii(value: string): string {
   return result
 }
 
+function ipv4ToNumber(address: string): number {
+  return address.split('.').reduce((value, octet) => value * 256 + Number(octet), 0)
+}
+
+function isPublicIpv4(address: string): boolean {
+  const value = ipv4ToNumber(address)
+  return !NON_PUBLIC_IPV4_RANGES.some((range) => {
+    const [network, prefixLength] = range.split('/')
+    const size = 2 ** (32 - Number(prefixLength))
+    return Math.floor(value / size) === ipv4ToNumber(network) / size
+  })
+}
+
+/**
+ * {@link redactCardInMatch}, writing a card that stands as a bare JSON number as
+ * the string `"[redacted]"`, so a tool result's JSON text copy stays valid JSON.
+ */
+function redactCardKeepingJson(match: string, offset: number, text: string): string {
+  const redacted = redactCardInMatch(match)
+  const end = offset + match.length
+  return redacted === REDACTED_VALUE &&
+    JSON_VALUE_START_PATTERN.test(text.slice(Math.max(0, offset - 64), offset)) &&
+    JSON_VALUE_END_PATTERN.test(text.slice(end, end + 64))
+    ? `"${REDACTED_VALUE}"`
+    : redacted
+}
+
+function isCardNumber(value: number): boolean {
+  const digits = String(value)
+  return /^\d{13,19}$/.test(digits) && passesLuhn(digits)
+}
+
+/**
+ * {@link redactPii} narrowed for tool arguments, results, and errors: an IPv4
+ * address only when public and not glued to a version, and a phone number only
+ * with an international prefix or a parenthesized area code. A string with
+ * nothing to redact comes back as received, Unicode spaces included.
+ */
+export function redactPayloadPii(value: string): string {
+  const normalized = value.replace(UNICODE_SPACE_PATTERN, ' ')
+  let result = normalized.replace(EMAIL_PATTERN, REDACTED_VALUE)
+  result = result.replace(PAYLOAD_IPV4_PATTERN, (match, prefix: string, address: string) =>
+    isPublicIpv4(address) ? prefix + REDACTED_VALUE : match
+  )
+  result = result.replace(IPV6_PATTERN, `$1${REDACTED_VALUE}`)
+  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, redactCardKeepingJson)
+  result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
+  result = result.replace(PHONE_PARENTHESIZED_PATTERN, `$1${REDACTED_VALUE}`)
+  result = result.replace(PAYLOAD_PHONE_INTL_PATTERN, `$1${REDACTED_VALUE}`)
+  return result === normalized ? value : result
+}
+
 export function sanitizeCapturedValue(value: unknown, options: TextSanitizationOptions): unknown {
-  return sanitizeValueWith(value, (stringValue) => sanitizeString(stringValue, options))
+  const string = (stringValue: string): string => sanitizeString(stringValue, options)
+  if (!options.redactPayloadPersonalData) {
+    return sanitizeValueWith(value, { string })
+  }
+  return sanitizeValueWith(value, {
+    string,
+    key: (key) => redactCapturedHead(key, redactPayloadPii, options),
+    number: (number) => (isCardNumber(number) ? REDACTED_VALUE : number),
+  })
 }
 
 /**
@@ -670,20 +751,44 @@ export function sanitizeCapturedValue(value: unknown, options: TextSanitizationO
  * values get structured-PII redaction in the load-bearing order too.
  */
 export function sanitizeFreeTextValue(value: unknown, options: TextSanitizationOptions): unknown {
-  return sanitizeValueWith(value, (stringValue) => sanitizeFreeText(stringValue, options))
+  return sanitizeValueWith(value, { string: (stringValue) => sanitizeFreeText(stringValue, options) })
 }
 
-function sanitizeValueWith(value: unknown, sanitizeStringFn: (value: string) => string): unknown {
+/** What a walk rewrites. Object keys and numbers are kept as received unless a pass is given for them. */
+interface ValuePasses {
+  string: (value: string) => string
+  key?: (key: string) => string
+  number?: (value: number) => unknown
+}
+
+/** Orders by Unicode code point, which `<` does not for characters outside the Basic Multilingual Plane. */
+function compareCodePoints(left: string, right: string): number {
+  for (let index = 0; index < left.length && index < right.length;) {
+    const leftPoint = left.codePointAt(index)!
+    const rightPoint = right.codePointAt(index)!
+    if (leftPoint !== rightPoint) {
+      return leftPoint - rightPoint
+    }
+    index += leftPoint > 0xffff ? 2 : 1
+  }
+  return left.length - right.length
+}
+
+function sanitizeValueWith(value: unknown, passes: ValuePasses): unknown {
   if (value == null) {
     return value
   }
 
   if (typeof value === 'string') {
-    return sanitizeStringFn(value)
+    return passes.string(value)
+  }
+
+  if (typeof value === 'number' && passes.number) {
+    return passes.number(value)
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => sanitizeValueWith(item, sanitizeStringFn))
+    return value.map((item) => sanitizeValueWith(item, passes))
   }
 
   if (value instanceof Date) {
@@ -695,8 +800,15 @@ function sanitizeValueWith(value: unknown, sanitizeStringFn: (value: string) => 
   }
 
   const result: JsonRecord = {}
+  const receivedKeys = new Map<string, string>()
   for (const [key, nestedValue] of Object.entries(value)) {
-    result[key] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, sanitizeStringFn)
+    const sanitizedKey = passes.key ? passes.key(key) : key
+    const keptKey = receivedKeys.get(sanitizedKey)
+    if (keptKey !== undefined && compareCodePoints(keptKey, key) <= 0) {
+      continue
+    }
+    receivedKeys.set(sanitizedKey, key)
+    result[sanitizedKey] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, passes)
   }
   return result
 }

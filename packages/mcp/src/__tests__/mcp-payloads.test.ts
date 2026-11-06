@@ -1,5 +1,6 @@
 import {
   buildCapturedMcpParameters,
+  redactPayloadPii,
   redactPii,
   sanitizeCapturedValue,
   sanitizeFreeTextValue,
@@ -525,6 +526,60 @@ describe('redactPii', () => {
     const start = Date.now()
     expect(redactPii(pathological)).toBe(pathological)
     expect(Date.now() - start).toBeLessThan(1000)
+  })
+})
+
+describe('redactPayloadPii', () => {
+  it.each([
+    ['an email address', 'Customer ada@example.com', 'Customer [redacted]'],
+    ['a public IPv4 after a space', 'last seen from 203.0.113.7', 'last seen from [redacted]'],
+    ['a public IPv4 after a colon', 'client ip:203.0.113.7', 'client ip:[redacted]'],
+    ['a public IPv4 after an @', 'user@203.0.113.7', 'user@[redacted]'],
+    ['a public IPv4 in a URL', 'http://203.0.113.7/', 'http://[redacted]/'],
+    ['a public IPv4 just outside 172.16.0.0/12', 'peer 172.32.0.1', 'peer [redacted]'],
+    ['a four-part version after a colon, which reads like an address', 'node:22.11.0.3', 'node:[redacted]'],
+    ['an IPv6 address', 'from 2001:db8::ff00:42:8329 now', 'from [redacted] now'],
+    ['a phone with + and a country code', 'support +1 415 555 0142', 'support [redacted]'],
+    ['a phone with the 00 prefix', 'call 0044 20 7946 0958 today', 'call [redacted] today'],
+    ['a phone with the 011 prefix', 'call 011 44 20 7946 0958 today', 'call [redacted] today'],
+    ['a phone with a parenthesized area code', 'call (415) 555-0142 today', 'call [redacted] today'],
+    ['a phone with +1 and a parenthesized area code', 'call +1 (415) 555-0142 today', 'call [redacted] today'],
+    ['a Luhn-valid card', 'card 4111 1111 1111 1111 on file', 'card [redacted] on file'],
+    ['a US SSN', 'SSN 123-45-6789', 'SSN [redacted]'],
+    [
+      'a card written as a JSON number, quoted',
+      '{"card":4111111111111111,"count":3}',
+      '{"card":"[redacted]","count":3}',
+    ],
+    ['a card in a JSON array, quoted', '[ 4111111111111111 ]', '[ "[redacted]" ]'],
+    ['a card inside a JSON string, unquoted', '{"note":"4111111111111111"}', '{"note":"[redacted]"}'],
+  ])('redacts %s', (_label, input, expected) => {
+    expect(redactPayloadPii(input)).toBe(expected)
+  })
+
+  it.each([
+    ['a US phone without a prefix or parentheses', 'Order 415-555-0142'],
+    ['a version after a letter', 'built with v22.11.0.3'],
+    ['a five-part version', 'release 1.2.3.4.5'],
+    ['an address followed by a digit-led field', 'release 203.0.113.7.4'],
+    ['a public IPv4 directly after a letter', 'IP203.0.113.7'],
+    ['a loopback address with a port', 'db at 127.0.0.1:5432'],
+    ['a 10/8 address', 'host 10.20.30.40'],
+    ['a 172.16/12 address', 'host 172.31.255.1'],
+    ['a 192.168/16 address', 'host 192.168.1.10'],
+    ['a link-local address', 'metadata 169.254.169.254'],
+    ['the unspecified address', 'bind 0.0.0.0'],
+    ['a Luhn-invalid long digit run', 'order 1234567890123456'],
+    ['a date and time', 'at 2024-01-15 12:30 UTC'],
+  ])('keeps %s', (_label, input) => {
+    expect(redactPayloadPii(input)).toBe(input)
+  })
+
+  it.each([
+    ['a US phone without a prefix', 'Order 415-555-0142'],
+    ['a loopback address', 'db at 127.0.0.1'],
+  ])('leaves the intent pass redacting %s', (_label, input) => {
+    expect(redactPii(input)).not.toBe(input)
   })
 })
 

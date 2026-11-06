@@ -81,6 +81,22 @@ describe('getToolInputProperties', () => {
     })
   })
 
+  it.each([
+    ['personal data', 'ada@example.com'],
+    ['a PostHog token', 'phc_AbCdEfGhIjKlMnOpQrStUvWx'],
+    ['URL credentials', 'https://svc:hunter2@internal.test/doc'],
+  ])('does not record a declared name carrying %s', (_label, name) => {
+    expect(
+      getToolInputProperties(
+        { id: 1, [name]: 1 },
+        { properties: { id: {}, [name]: {} } },
+        {
+          shouldRecordInputKey: () => true,
+        }
+      )
+    ).toEqual({ $mcp_input_keys: ['id', '[redacted]'] })
+  })
+
   describe('inputAliases', () => {
     const schema = { properties: { id: {}, key: {}, name: {} } }
     const inputAliases = { id: ['experimentId', 'experiment_id'], key: ['flagKey'], name: ['title'] }

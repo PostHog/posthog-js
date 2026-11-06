@@ -13,7 +13,7 @@ export const MAX_EVENT_BYTES = 102_400 // 100KB
 
 // --- Field-level limit constants ---
 const MAX_USER_INTENT_LENGTH = 2048
-const MAX_ERROR_MESSAGE_LENGTH = 2048
+export const MAX_ERROR_MESSAGE_LENGTH = 2048
 const MAX_RESOURCE_NAME_LENGTH = 256
 const MAX_METADATA_LENGTH = 256
 const MAX_STACK_FRAMES = 50

@@ -254,6 +254,21 @@ describe('PostHogMCP', () => {
     })
 
     it.each([
+      [{}, '[redacted]'],
+      [{ redactPayloadPersonalData: false }, 'ada@example.com'],
+    ])('applies the payload personal data pass to manual captures with options %j', async (options, email) => {
+      const client = newClient(options)
+      try {
+        client.captureToolCall({ toolName: 'lookup', distinctId: 'user-123', parameters: { email: 'ada@example.com' } })
+        await tick()
+
+        expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_parameters).toEqual({ email })
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it.each([
       {
         name: 'trims a direct model value',
         llmModel: '  claude-sonnet-4-20250514  ',

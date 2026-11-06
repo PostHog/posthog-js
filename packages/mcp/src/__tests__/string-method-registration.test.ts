@@ -178,8 +178,9 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
 
   it.each([
     ['file:///guide.md', 'file:///guide.md', false],
-    ['https://fakeuser:fakepass@example.com/guide', 'https://%5Bredacted%5D@example.com/guide', false],
-    ['https://fakeuser:fakepass@example.com/guide', 'https://%5Bredacted%5D@example.com/guide', true],
+    // The personal data pass reads `fakepass@example.com` as an email before the URL pass runs.
+    ['https://fakeuser:fakepass@example.com/guide', '[redacted]', false],
+    ['https://fakeuser:fakepass@example.com/guide', '[redacted]', true],
     [
       'https://example.com/guide?token=fakesecret&chapter=intro',
       'https://example.com/guide?token=%5Bredacted%5D&chapter=intro',

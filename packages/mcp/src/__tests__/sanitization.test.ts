@@ -492,14 +492,17 @@ describe('sanitizeEvent - exception values', () => {
 describe('sanitizeEvent - resource name', () => {
   // `$identify` names its request the same way a read does, so gating redaction
   // on the read event type used to publish the raw address alongside the person.
-  it.each(['mcp:resources/read', 'identify', '$exception'])(
-    'redacts credentials from a %s resource name',
-    (eventType) => {
-      const event = makeEvent({ eventType, resourceName: 'https://fakeuser:fakepass@example.com/guide' })
+  // On a read the personal data pass runs first and takes `fakepass@example.com`
+  // for an email, so the URL no longer parses and is redacted whole.
+  it.each([
+    ['mcp:resources/read', '[redacted]'],
+    ['identify', 'https://%5Bredacted%5D@example.com/guide'],
+    ['$exception', 'https://%5Bredacted%5D@example.com/guide'],
+  ])('redacts credentials from a %s resource name', (eventType, expected) => {
+    const event = makeEvent({ eventType, resourceName: 'https://fakeuser:fakepass@example.com/guide' })
 
-      expect(sanitizeEvent(event).resourceName).toBe('https://%5Bredacted%5D@example.com/guide')
-    }
-  )
+    expect(sanitizeEvent(event).resourceName).toBe(expected)
+  })
 })
 
 describe('sanitizeEvent - intent PII redaction', () => {
@@ -558,22 +561,25 @@ describe('sanitizeEvent - intent PII redaction', () => {
     )
   })
 
-  it('does not redact the same PII shapes from structured parameters or responses', () => {
-    const event = makeEvent({
-      userIntent: 'Enriching the profile for dave@example.com from the CRM.',
-      parameters: { email: 'dave@example.com', ip: '203.0.113.42' },
-      response: { content: [{ type: 'text', text: 'Matched dave@example.com at 203.0.113.42.' }] },
-    })
+  it.each([
+    [true, '[redacted]', 'Matched [redacted] at [redacted].'],
+    [false, 'dave@example.com', 'Matched dave@example.com at 203.0.113.42.'],
+  ])(
+    'redacts the intent whatever the payload option, and payloads only when it is on (%s)',
+    (redactPayloadPersonalData, email, text) => {
+      const event = makeEvent({
+        userIntent: 'Enriching the profile for dave@example.com from the CRM.',
+        parameters: { email: 'dave@example.com', limit: 5 },
+        response: { content: [{ type: 'text', text: 'Matched dave@example.com at 203.0.113.42.' }] },
+      })
 
-    const result = sanitizeEvent(event)
+      const result = sanitizeEvent(event, { redactPayloadPersonalData })
 
-    expect(result.userIntent).toBe('Enriching the profile for [redacted] from the CRM.')
-    // Structured tool data keeps the same shapes: they are often legitimate here.
-    expect(result.parameters).toEqual({ email: 'dave@example.com', ip: '203.0.113.42' })
-    expect((result.response as { content: { text: string }[] }).content[0].text).toBe(
-      'Matched dave@example.com at 203.0.113.42.'
-    )
-  })
+      expect(result.userIntent).toBe('Enriching the profile for [redacted] from the CRM.')
+      expect(result.parameters).toEqual({ email, limit: 5 })
+      expect((result.response as { content: { text: string }[] }).content[0].text).toBe(text)
+    }
+  )
 
   it('does not mutate the original intent string', () => {
     const original = 'Paging on-call about ticket from user@example.com right now.'
@@ -582,6 +588,75 @@ describe('sanitizeEvent - intent PII redaction', () => {
     sanitizeEvent(event)
 
     expect(event.userIntent).toBe(original)
+  })
+})
+
+describe('sanitizeEvent - payload personal data', () => {
+  const accounts = '{"accounts":{"ada@example.com":{"plan":"pro"}},"card":4111111111111111,"count":3}'
+
+  it('redacts a personal key and a card number and keeps the JSON text copy valid', () => {
+    const event = makeEvent({
+      response: { content: [{ type: 'text', text: accounts }], structuredContent: JSON.parse(accounts) },
+    })
+
+    const response = sanitizeEvent(event).response as { content: { text: string }[]; structuredContent: unknown }
+
+    const redacted = { accounts: { '[redacted]': { plan: 'pro' } }, card: '[redacted]', count: 3 }
+    expect(response.structuredContent).toEqual(redacted)
+    expect(JSON.parse(response.content[0].text)).toEqual(redacted)
+  })
+
+  it.each([
+    [{ 'bob@example.com': 'second', 'ada@example.com': 'first' }],
+    [{ 'ada@example.com': 'first', 'bob@example.com': 'second' }],
+  ])('keeps the entry whose received key sorts first when redacted keys collide (%j)', (parameters) => {
+    expect(sanitizeEvent(makeEvent({ parameters })).parameters).toEqual({ '[redacted]': 'first' })
+  })
+
+  it.each([
+    ['a non-card number', 1234567890123456],
+    ['a small number', 42],
+    ['a boolean', true],
+  ])('keeps %s', (_label, value) => {
+    expect(sanitizeEvent(makeEvent({ parameters: { value } })).parameters).toEqual({ value })
+  })
+
+  it.each([
+    [true, 'No account for [redacted]', 'file:///users/[redacted]/notes.md'],
+    [false, 'No account for ada@example.com', 'file:///users/ada@example.com/notes.md'],
+  ])(
+    'applies to exception values and a read resource URI only when on (%s)',
+    (redactPayloadPersonalData, value, uri) => {
+      const event = makeEvent({
+        eventType: 'mcp:resources/read',
+        resourceName: 'file:///users/ada@example.com/notes.md',
+        isError: true,
+        error: {
+          $exception_list: [
+            { type: 'Error', value: 'No account for ada@example.com', mechanism: { type: 'generic', handled: true } },
+          ],
+          $exception_level: 'error',
+        },
+      })
+
+      const result = sanitizeEvent(event, { redactPayloadPersonalData })
+
+      expect(result.error?.$exception_list[0].value).toBe(value)
+      expect(result.resourceName).toBe(uri)
+    }
+  )
+
+  it('redacts an address split by the exception value limit whole', () => {
+    const value = `${'x'.repeat(2_040)} ada@example.com ${'y'.repeat(5_000)}`
+    const event = makeEvent({
+      isError: true,
+      error: {
+        $exception_list: [{ type: 'Error', value, mechanism: { type: 'generic', handled: true } }],
+        $exception_level: 'error',
+      },
+    })
+
+    expect(sanitizeEvent(event).error?.$exception_list[0].value).not.toContain('ada@')
   })
 })
 

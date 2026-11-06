@@ -4,9 +4,16 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { ErrorProperties, Event, McpEvent } from '../types'
+import { MCPAnalyticsEventType } from './event-types'
 import { sanitizeCapturedValue, sanitizeFreeText } from './mcp-payloads'
+import { MAX_ERROR_MESSAGE_LENGTH } from './truncation'
 
 type SanitizedRecord = Record<string, unknown>
+type Sanitize = (value: unknown) => unknown
+
+export interface PayloadSanitizationOptions {
+  redactPayloadPersonalData: boolean
+}
 
 function isRecord(value: unknown): value is SanitizedRecord {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -21,22 +28,29 @@ function isRecord(value: unknown): value is SanitizedRecord {
  * This is a synchronous operation that returns a new object without mutating the original.
  * It should run after customer redaction in the event pipeline.
  */
-export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
+export function sanitizeEvent<T extends Event | McpEvent>(
+  event: T,
+  { redactPayloadPersonalData }: PayloadSanitizationOptions = { redactPayloadPersonalData: true }
+): T {
   const result = { ...event }
+  const sanitizePayload: Sanitize = (value) => sanitizeCapturedValue(value, { redactPayloadPersonalData })
 
   if (result.response != null) {
-    result.response = sanitizeResponse(result.response)
+    result.response = sanitizeResponse(result.response, sanitizePayload)
   }
 
   if (result.parameters != null) {
-    result.parameters = sanitizeParameters(result.parameters)
+    result.parameters = sanitizeParameters(result.parameters, sanitizePayload)
   }
 
   // Every event type, not just `resources/read`: the `$exception` sibling
   // carries the same name, and a tool or prompt name is free text an
   // application can spell as a URL too.
   if (result.resourceName != null) {
-    result.resourceName = sanitizeCapturedValue(result.resourceName) as string
+    result.resourceName = sanitizeCapturedValue(result.resourceName, {
+      redactPayloadPersonalData:
+        redactPayloadPersonalData && result.eventType === MCPAnalyticsEventType.mcpResourcesRead,
+    }) as string
   }
 
   // The intent comes straight from an agent-narrated `context` string, so it can
@@ -55,7 +69,7 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
   }
 
   if (result.error != null) {
-    result.error = sanitizeExceptionValues(result.error)
+    result.error = sanitizeExceptionValues(result.error, redactPayloadPersonalData)
   }
 
   return result
@@ -65,7 +79,7 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
  * Sanitizes exception messages before they fan out to both the primary MCP
  * event's error-message property and the `$exception` sibling.
  */
-function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
+function sanitizeExceptionValues(error: ErrorProperties, redactPayloadPersonalData: boolean): ErrorProperties {
   if (!Array.isArray(error.$exception_list)) {
     return error
   }
@@ -74,7 +88,10 @@ function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
     ...error,
     $exception_list: error.$exception_list.map((exception) => ({
       ...exception,
-      value: sanitizeCapturedValue(exception.value) as string,
+      value: sanitizeCapturedValue(exception.value, {
+        redactPayloadPersonalData,
+        maxStringLength: MAX_ERROR_MESSAGE_LENGTH,
+      }) as string,
     })),
   }
 }
@@ -83,28 +100,28 @@ function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
  * Sanitizes response content blocks by replacing non-text content types
  * with informative redaction messages.
  */
-function sanitizeResponse(response: unknown): unknown {
+function sanitizeResponse(response: unknown, sanitize: Sanitize): unknown {
   // Sanitize each kept block on its own, so the pass never scans the data of replaced blocks.
   if (isRecord(response) && Array.isArray(response.content)) {
-    const result = sanitizeCapturedValue({ ...response, content: [] }) as SanitizedRecord
-    result.content = response.content.map(sanitizeContentBlock)
+    const result = sanitize({ ...response, content: [] }) as SanitizedRecord
+    result.content = response.content.map((block) => sanitizeContentBlock(block, sanitize))
     return result
   }
-  return sanitizeCapturedValue(response)
+  return sanitize(response)
 }
 
 /**
  * Sanitizes a single content block based on its type discriminator.
  */
-function sanitizeContentBlock(block: unknown): unknown {
+function sanitizeContentBlock(block: unknown, sanitize: Sanitize): unknown {
   if (!isRecord(block)) {
-    return sanitizeCapturedValue(block)
+    return sanitize(block)
   }
 
   switch (block.type) {
     case 'text':
     case 'resource_link':
-      return sanitizeCapturedValue(block)
+      return sanitize(block)
 
     case 'image':
       return {
@@ -119,12 +136,12 @@ function sanitizeContentBlock(block: unknown): unknown {
       }
 
     case 'resource':
-      return sanitizeResourceBlock(block)
+      return sanitizeResourceBlock(block, sanitize)
 
     default:
       return {
         type: 'text',
-        text: `[unsupported content type "${sanitizeCapturedValue(block.type)}" redacted - not supported by PostHog MCP analytics]`,
+        text: `[unsupported content type "${sanitize(block.type)}" redacted - not supported by PostHog MCP analytics]`,
       }
   }
 }
@@ -134,20 +151,20 @@ function sanitizeContentBlock(block: unknown): unknown {
  * BlobResourceContents (has `blob` field) are redacted.
  * TextResourceContents (has `text` field) pass through.
  */
-function sanitizeResourceBlock(block: SanitizedRecord): unknown {
+function sanitizeResourceBlock(block: SanitizedRecord, sanitize: Sanitize): unknown {
   if (isRecord(block.resource) && 'blob' in block.resource) {
     return {
       type: 'text',
       text: '[binary resource content redacted - not supported by PostHog MCP analytics]',
     }
   }
-  return sanitizeCapturedValue(block)
+  return sanitize(block)
 }
 
 /**
  * Recursively scans parameters for large base64-encoded strings and replaces them.
  * Uses a size gate (10KB) to avoid regex testing on small strings.
  */
-function sanitizeParameters(obj: unknown): unknown {
-  return sanitizeCapturedValue(obj)
+function sanitizeParameters(obj: unknown, sanitize: Sanitize): unknown {
+  return sanitize(obj)
 }

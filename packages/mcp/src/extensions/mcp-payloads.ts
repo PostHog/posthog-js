@@ -4,6 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import {
+  redactPayloadPii,
   redactPii,
   sanitizeCapturedValue as sanitizeCoreCapturedValue,
   sanitizeFreeText as sanitizeCoreFreeText,
@@ -24,14 +25,14 @@ function isRecord(value: unknown): value is JsonRecord {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-export { redactPii }
+export { redactPayloadPii, redactPii }
 
 export function sanitizeFreeText(value: string): string {
   return sanitizeCoreFreeText(value, SANITIZATION_OPTIONS)
 }
 
-export function sanitizeCapturedValue(value: unknown): unknown {
-  return sanitizeCoreCapturedValue(value, SANITIZATION_OPTIONS)
+export function sanitizeCapturedValue(value: unknown, options?: Partial<TextSanitizationOptions>): unknown {
+  return sanitizeCoreCapturedValue(value, { ...SANITIZATION_OPTIONS, ...options })
 }
 
 export function sanitizeFreeTextValue(value: unknown): unknown {

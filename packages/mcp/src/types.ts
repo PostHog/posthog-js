@@ -150,6 +150,17 @@ export interface MCPAnalyticsOptions {
    * fanning out into PostHog error tracking.
    */
   enableExceptionAutocapture?: boolean
+  /**
+   * Redact personal data from tool arguments, results, error messages, exception
+   * values, and resource read URIs. Defaults to `true`. Emails, Luhn-valid card
+   * numbers, US social security numbers, IPv6 and public IPv4 addresses, and
+   * phone numbers written with an international prefix or a parenthesized area
+   * code become `[redacted]`. Set to `false` when your tools return personal
+   * data on purpose: `beforeSend` can drop a value but cannot restore one. The
+   * intent and feedback text keep their redaction, and credentials are redacted
+   * everywhere either way.
+   */
+  redactPayloadPersonalData?: boolean
   /** Inject a required `context` parameter on every tool to capture user intent. */
   context?: boolean | MCPAnalyticsContextOptions
   /**
