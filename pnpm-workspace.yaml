@@ -104,10 +104,6 @@ packageExtensions:
 minimumReleaseAgeExclude:
   - '@posthog/cli'
   - '@posthog/coherence@1.10.1'
-  # Lets @posthog/next and @posthog/nuxt resolve posthog-node 5.58.0, the first with posthog-node/otel, before it is 7 days old. Remove after 2026-11-04.
-  - '@posthog/core@1.61.1'
-  - '@posthog/types@1.417.0'
-  - posthog-node@5.58.0
   - posthog-react-native-session-replay
   - web-vitals@6.2.1
 
