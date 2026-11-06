@@ -24,9 +24,9 @@ Expo SDK 52 is the first Expo SDK that meets the React Native and iOS requiremen
 
 `posthog-ios` now installs through React Native's `spm_dependency` helper, which first ships in 0.75.
 
-**If ignored:** `pod install` fails with `requires React Native 0.75 or later`. Android builds fail below 0.71 with `Could not find com.facebook.react:react-android`. Android apps on 0.71 to 0.74 still build, but they are outside the supported range and get a peer dependency warning.
+**If ignored:** `pod install` fails with `requires React Native 0.75 or later`. Android builds fail below 0.71 with `Could not find com.facebook.react:react-android`. Android apps on 0.71 to 0.74 are outside the supported range: npm stops the install with an `ERESOLVE` peer dependency error unless you pass `--legacy-peer-deps`, and the Android build then needs the Kotlin 2.0 change below.
 
-On Android, React Native 0.75 and 0.76 apps need Kotlin 2.0 or later. Their templates use Kotlin 1.9, which can't read the Kotlin 2.1 libraries that `posthog-android` depends on. Plugin 2.x already had this requirement, and React Native 0.77 and later already use Kotlin 2.0.21. Set the version and pin the Kotlin Gradle plugin to it:
+On Android, React Native 0.76 and earlier apps need Kotlin 2.0 or later. The 0.74 to 0.76 templates use Kotlin 1.9, which can't read the Kotlin 2.1 libraries that `posthog-android` depends on. Plugin 2.x already had this requirement, and React Native 0.77 and later already use Kotlin 2.0.21 or later. Set the version and pin the Kotlin Gradle plugin to it:
 
 ```groovy
 // android/build.gradle
