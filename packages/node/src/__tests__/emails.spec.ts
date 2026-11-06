@@ -7,6 +7,7 @@ const TEMPLATE_ID = '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b'
 const SEND_URL = 'https://us.posthog.com/api/projects/@current/messaging/send/email/'
 const MESSAGE_ID = '01a18356-c56c-0001-e494-7666bc915188'
 const STATUS_URL = `https://us.posthog.com/api/projects/@current/messaging/emails/${MESSAGE_ID}/`
+const PREFERENCES_URL = 'https://us.posthog.com/api/projects/@current/messaging/preferences/'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 type Reply = Error | { status: number; body?: unknown; headers?: Record<string, string> }
@@ -662,6 +663,120 @@ describe('emails', () => {
 
       expect(data?.status).toBe('bounced')
       expect(fetch).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('setPreferences', () => {
+    const applied = (fields: Record<string, unknown> = {}): Reply => ({
+      status: 200,
+      body: { identifier: 'user@example.com', all_marketing: null, topics: { newsletter: false }, ...fields },
+    })
+
+    const setPreferences = (
+      options: Record<string, unknown> = { to: 'user@example.com', topics: { newsletter: false } }
+    ): ReturnType<PostHog['emails']['setPreferences']> =>
+      posthog.emails.setPreferences(options as unknown as Parameters<PostHog['emails']['setPreferences']>[0])
+
+    it('posts every change in one request to the app host', async () => {
+      replies = [applied({ all_marketing: true, topics: { newsletter: true, 'product-updates': false } })]
+
+      const { data, error } = await setPreferences({
+        to: 'user@example.com',
+        allMarketing: false,
+        topics: { newsletter: true },
+      })
+
+      expect(error).toBeNull()
+      expect(data).toEqual({
+        to: 'user@example.com',
+        allMarketing: true,
+        topics: { newsletter: true, 'product-updates': false },
+      })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      const [url, options] = fetch.mock.calls[0]
+      expect(url).toBe(PREFERENCES_URL)
+      expect(options.method).toBe('POST')
+      expect(options.headers).toEqual({
+        Authorization: `Bearer ${SECRET_KEY}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'posthog-node/1.2.3',
+      })
+      expect(JSON.parse(options.body)).toEqual({
+        identifier: 'user@example.com',
+        all_marketing: false,
+        topics: { newsletter: true },
+      })
+    })
+
+    it('leaves out the changes the call does not make', async () => {
+      replies = [applied()]
+
+      await setPreferences({ to: 'user@example.com', allMarketing: false })
+
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ identifier: 'user@example.com', all_marketing: false })
+    })
+
+    it('reports an unknown topic as unknown_topic without a retry', async () => {
+      replies = [
+        {
+          status: 404,
+          body: { type: 'invalid_request', code: 'unknown_topic', detail: 'No topic newsletter.', attr: null },
+        },
+      ]
+
+      const { data, error } = await setPreferences()
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'unknown_topic', name: 'not_found', message: 'No topic newsletter.' })
+      expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['a topic value that is not a boolean', { topics: { newsletter: 'false' } }],
+      ['no topics', { topics: null }],
+      ['an all_marketing value that is not a boolean', { all_marketing: 'false' }],
+    ])('reports a reply with %s as api_error', async (_label, fields) => {
+      replies = [applied(fields)]
+
+      const { data, error } = await setPreferences()
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'api_error', statusCode: 200 })
+    })
+
+    it('retries an unavailable service, because the same change twice ends the same', async () => {
+      replies = [rejected(503), applied()]
+
+      const pending = setPreferences()
+      await vi.runAllTimersAsync()
+      const { data } = await pending
+
+      expect(data?.topics).toEqual({ newsletter: false })
+      expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('needs a secret key', async () => {
+      makeClient({ secretKey: undefined })
+
+      const { error } = await setPreferences()
+
+      expect(error).toMatchObject({ code: 'missing_secret_key', name: 'missing_api_key' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['an empty recipient', { to: ' ', allMarketing: false }, 'invalid_recipient'],
+      ['no change', { to: 'user@example.com', topics: {} }, 'invalid_preferences'],
+      ['a non-boolean all marketing', { to: 'user@example.com', allMarketing: 'no' }, 'invalid_preferences'],
+      ['a topic list', { to: 'user@example.com', topics: ['newsletter'] }, 'invalid_preferences'],
+      ['a non-boolean topic', { to: 'user@example.com', topics: { newsletter: 'off' } }, 'invalid_preferences'],
+    ])('rejects %s before sending', async (_name, options, code) => {
+      const { data, error } = await setPreferences(options)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code, name: 'validation_error' })
+      expect(fetch).not.toHaveBeenCalled()
     })
   })
 })

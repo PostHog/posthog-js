@@ -2208,6 +2208,27 @@
       "path": "src/emails/errors.ts"
     },
     {
+      "id": "EmailPreferences",
+      "name": "EmailPreferences",
+      "properties": [
+        {
+          "description": "`false` when the recipient opted out of all marketing, `true` when they opted back in, `null` when they never chose.",
+          "type": "boolean | null",
+          "name": "allMarketing"
+        },
+        {
+          "type": "string",
+          "name": "to"
+        },
+        {
+          "description": "Topic key to `false` (opted out) or `true` (opted in), for every topic the recipient chose.",
+          "type": "Record<string, boolean>",
+          "name": "topics"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
       "id": "Emails",
       "name": "Emails",
       "properties": [],
@@ -4594,6 +4615,35 @@
         }
       ],
       "path": "src/extensions/sentry-integration.ts"
+    },
+    {
+      "id": "SetEmailPreferencesOptions",
+      "name": "SetEmailPreferencesOptions",
+      "properties": [
+        {
+          "description": "`false` opts the recipient out of every marketing topic. `true` lifts that opt-out. Applied before `topics`.",
+          "type": "boolean",
+          "name": "allMarketing"
+        },
+        {
+          "description": "The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients.",
+          "type": "string",
+          "name": "to"
+        },
+        {
+          "description": "Topic key to `false` to opt the recipient out of that topic, or `true` to opt them back in. Topic keys are the ones you set under Workflows opt-outs. Opting back in to one marketing topic after an all-marketing opt-out lifts that opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out keep their current choice.",
+          "type": "Record<string, boolean>",
+          "name": "topics"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
+      "id": "SetEmailPreferencesResponse",
+      "name": "SetEmailPreferencesResponse",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "{\n    data: EmailPreferences;\n    error: null;\n} | {\n    data: null;\n    error: EmailError;\n}"
     },
     {
       "id": "SetPersonPropertiesMessage",

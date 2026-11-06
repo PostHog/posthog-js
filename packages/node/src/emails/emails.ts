@@ -10,6 +10,7 @@ import {
 import { EmailError } from './errors'
 import type {
   CodeEmailForm,
+  EmailPreferences,
   EmailStatus,
   EmailWarning,
   Emails,
@@ -19,11 +20,14 @@ import type {
   SendEmailResponse,
   SendEmailResult,
   SendTemplateEmailOptions,
+  SetEmailPreferencesOptions,
+  SetEmailPreferencesResponse,
   TemplateEmailForm,
 } from './types'
 
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const STATUS_PATH = '/api/projects/@current/messaging/emails/{messageId}/'
+const PREFERENCES_PATH = '/api/projects/@current/messaging/preferences/'
 const US_APP_HOST = 'https://us.posthog.com'
 const EU_APP_HOST = 'https://eu.posthog.com'
 const CLOUD_APP_HOSTS: Record<string, string> = {
@@ -112,9 +116,9 @@ interface Reply {
 }
 
 /**
- * Sends one transactional email per call to the messaging send API on the app host, and reads
- * the status of a sent email. Owns the attempt loop, so every attempt of a send carries the same
- * idempotency key.
+ * Sends one transactional email per call to the messaging send API on the app host, reads the
+ * status of a sent email, and sets a recipient's topic preferences. Owns the attempt loop, so every
+ * attempt of a send carries the same idempotency key.
  */
 export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
@@ -134,6 +138,10 @@ export class EmailSender implements Emails {
     return this.track(this.getUntracked(id))
   }
 
+  setPreferences(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse> {
+    return this.track(this.setPreferencesUntracked(options))
+  }
+
   private track<T>(pending: Promise<T>): Promise<T> {
     this.inFlight.add(pending)
     void pending.finally(() => this.inFlight.delete(pending))
@@ -141,7 +149,7 @@ export class EmailSender implements Emails {
   }
 
   /**
-   * Resolves when every send and status read in flight, retries included, has settled.
+   * Resolves when every send, status read and preferences change in flight, retries included, has settled.
    * Kept apart from the client's pending-promise queue, so a send in its retry backoff does not hold back `flush()`.
    */
   async drain(): Promise<void> {
@@ -191,6 +199,23 @@ export class EmailSender implements Emails {
       return { data: status, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Reading the email status failed unexpectedly.') }
+    }
+  }
+
+  private async setPreferencesUntracked(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse> {
+    try {
+      const body = preparePreferences(options)
+      const { appHost, secretKey } = this.connect(
+        'no preferences changed',
+        'Setting email preferences needs secretKey, a project secret API key with the messaging_preference:write scope.'
+      )
+      const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
+      const preferences = await this.withRetries(this.config.maxRetries, async () =>
+        parsePreferencesReply(await this.request(appHost + PREFERENCES_PATH, 'POST', headers, body))
+      )
+      return { data: preferences, error: null }
+    } catch (error) {
+      return { data: null, error: asEmailError(error, 'Setting the email preferences failed unexpectedly.') }
     }
   }
 
@@ -362,6 +387,35 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
+}
+
+function preparePreferences(options: SetEmailPreferencesOptions): string {
+  const fallback: Partial<SetEmailPreferencesOptions> = {}
+  const { to, allMarketing, topics } = options ?? fallback
+  if (typeof to !== 'string' || !to.trim()) {
+    throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
+  }
+  if (allMarketing !== undefined && typeof allMarketing !== 'boolean') {
+    throw invalid('invalid_preferences', 'allMarketing must be true or false.', 'allMarketing')
+  }
+  if (
+    topics !== undefined &&
+    (typeof topics !== 'object' ||
+      topics === null ||
+      Array.isArray(topics) ||
+      !Object.values(topics).every((value) => typeof value === 'boolean'))
+  ) {
+    throw invalid('invalid_preferences', 'topics must map each topic key to true or false.', 'topics')
+  }
+  const hasTopics = topics !== undefined && Object.keys(topics).length > 0
+  if (allMarketing === undefined && !hasTopics) {
+    throw invalid('invalid_preferences', 'Set allMarketing, topics, or both.', 'topics')
+  }
+  return safeJsonStringify({
+    identifier: to,
+    ...(allMarketing === undefined ? {} : { all_marketing: allMarketing }),
+    ...(hasTopics ? { topics } : {}),
+  })
 }
 
 function isRetryCount(value: unknown): value is number {
@@ -546,6 +600,31 @@ function parseStatusReply({ status, payload, retryAfterMs }: Reply): EmailStatus
   return { id, status: deliveryStatus, createdAt, statusAt, reason: text(fields.reason) ?? null }
 }
 
+function parsePreferencesReply({ status, payload, retryAfterMs }: Reply): EmailPreferences {
+  const fields = replyFields(payload)
+  if (status < 200 || status >= 300) {
+    throw replyError(fields, status, retryAfterMs)
+  }
+  const to = text(fields.identifier)
+  const allMarketing = fields.all_marketing
+  const topics = fields.topics
+  if (
+    !to ||
+    !(allMarketing === null || typeof allMarketing === 'boolean') ||
+    topics === null ||
+    typeof topics !== 'object' ||
+    Array.isArray(topics) ||
+    !Object.values(topics).every((value) => typeof value === 'boolean')
+  ) {
+    throw new EmailError({
+      code: 'api_error',
+      message: 'PostHog answered without the preferences.',
+      statusCode: status,
+    })
+  }
+  return { to, allMarketing, topics: topics as Record<string, boolean> }
+}
+
 function replyError(fields: Record<string, unknown>, status: number, retryAfterMs: number | undefined): EmailError {
   return new EmailError({
     code: text(fields.code) ?? 'api_error',
@@ -565,6 +644,7 @@ function asEmailError(error: unknown, message: string): EmailError {
 
 function isRetryable(error: EmailError): boolean {
   // A send carries an idempotency key, so a retry can't queue a second email. A status read changes nothing.
+  // A preferences change sets each named choice to a value, so repeating it ends the same.
   if (error.statusCode === undefined) {
     return error.code === 'network_error'
   }

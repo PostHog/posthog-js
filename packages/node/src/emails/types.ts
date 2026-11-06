@@ -124,8 +124,44 @@ export interface EmailStatus {
 export type GetEmailResponse = { data: EmailStatus; error: null } | { data: null; error: EmailError }
 
 /**
+ * Options for `posthog.emails.setPreferences()`. Set `allMarketing`, `topics`, or both.
+ */
+export interface SetEmailPreferencesOptions {
+  /**
+   * The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and
+   * `jane@example.com` are two recipients.
+   */
+  to: string
+  /** `false` opts the recipient out of every marketing topic. `true` lifts that opt-out. Applied before `topics`. */
+  allMarketing?: boolean
+  /**
+   * Topic key to `false` to opt the recipient out of that topic, or `true` to opt them back in. Topic keys are the
+   * ones you set under Workflows opt-outs. Opting back in to one marketing topic after an all-marketing opt-out lifts
+   * that opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out
+   * keep their current choice.
+   */
+  topics?: Record<string, boolean>
+}
+
+/** A recipient's preferences after the change. */
+export interface EmailPreferences {
+  to: string
+  /** `false` when the recipient opted out of all marketing, `true` when they opted back in, `null` when they never chose. */
+  allMarketing: boolean | null
+  /** Topic key to `false` (opted out) or `true` (opted in), for every topic the recipient chose. */
+  topics: Record<string, boolean>
+}
+
+/**
+ * What `posthog.emails.setPreferences()` resolves to. Exactly one of `data` and `error` is set.
+ * The promise does not reject.
+ */
+export type SetEmailPreferencesResponse = { data: EmailPreferences; error: null } | { data: null; error: EmailError }
+
+/**
  * The `posthog.emails` API: sends transactional email from PostHog email templates or from
- * content your code rendered, and reads the status of each email it sent.
+ * content your code rendered, reads the status of each email it sent, and sets a recipient's
+ * topic preferences.
  */
 export interface Emails {
   /**
@@ -145,4 +181,16 @@ export interface Emails {
    * seconds after the send. Network errors, rate limits and an unavailable service are retried.
    */
   get(id: string): Promise<GetEmailResponse>
+
+  /**
+   * Opt one recipient out of topics, or back in, in one request. PostHog saves the whole change at once. The same
+   * change twice ends the same, but a retry that lands after a newer change for the same recipient undoes that
+   * change. A failed call may still have saved the change. Workflows sends skip a marketing topic the recipient
+   * opted out of.
+   *
+   * Resolves to `{ data, error }` and does not reject. The error code is `unknown_topic` when a topic key names no
+   * topic of the project, and nothing is saved. A plain `not_found` means the PostHog instance has no preferences
+   * API yet. Network errors, rate limits and an unavailable service are retried.
+   */
+  setPreferences(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse>
 }
