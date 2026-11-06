@@ -5,8 +5,13 @@ import { createStableChunkId } from '@posthog/plugin-utils'
 const HASH_PLACEHOLDER = /!~\{[\w$]+\}~/g
 
 function chunkIdentity(chunk: RenderedChunk) {
-    const moduleId = (id: string) =>
-        path.isAbsolute(id) ? path.relative(process.cwd(), id).split(path.sep).join('/') : id
+    const moduleId = (id: string) => {
+        const virtualPrefix = id.startsWith('\0') ? '\0' : ''
+        const filePath = virtualPrefix ? id.slice(1) : id
+        return path.isAbsolute(filePath)
+            ? `${virtualPrefix}${path.relative(process.cwd(), filePath).split(path.sep).join('/')}`
+            : id
+    }
     return {
         facadeModuleId: chunk.facadeModuleId ? moduleId(chunk.facadeModuleId) : null,
         moduleIds: chunk.moduleIds.map(moduleId).sort(),

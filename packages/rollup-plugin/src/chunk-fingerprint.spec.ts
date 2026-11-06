@@ -36,6 +36,38 @@ function id(code: string, entry: RenderedChunk, dependencies: RenderedChunk[]): 
 }
 
 describe('chunkFingerprint', () => {
+    it.each(['moduleIds', 'facadeModuleId'])('normalizes NUL-prefixed %s across checkout roots', (field) => {
+        const roots = [path.resolve('checkout-a'), path.resolve('checkout-b')]
+        const cwd = vi.spyOn(process, 'cwd')
+        try {
+            const ids = roots.map((root) => {
+                cwd.mockReturnValue(root)
+                const virtualId = `\0${path.join(root, 'dep.cjs')}?commonjs-exports`
+                const dependency = chunk(
+                    'chunk-!~{001}~.js',
+                    path.join(root, 'dep.cjs'),
+                    field === 'moduleIds' ? { moduleIds: [virtualId] } : { facadeModuleId: virtualId }
+                )
+                const entry = chunk('entry.js', path.join(root, 'entry.js'), { imports: [dependency.fileName] })
+                return id(`import './${dependency.fileName}'; run();`, entry, [dependency])
+            })
+
+            expect(ids[1]).toBe(ids[0])
+        } finally {
+            cwd.mockRestore()
+        }
+    })
+
+    it.each(['absolute path', 'opaque virtual name'])('preserves the NUL prefix for an %s', (kind) => {
+        const moduleId = kind === 'absolute path' ? path.resolve('dep.cjs') : 'commonjsHelpers.js'
+        const dependency = chunk('chunk-!~{001}~.js', 'unused.js', { moduleIds: [moduleId] })
+        const virtual = { ...dependency, moduleIds: [`\0${moduleId}`] }
+        const entry = chunk('entry.js', 'entry.js', { imports: [dependency.fileName] })
+        const code = `import './${dependency.fileName}'; run();`
+
+        expect(id(code, entry, [virtual])).not.toBe(id(code, entry, [dependency]))
+    })
+
     it('normalizes a shared dependency once per output and keeps importer fingerprints compact', () => {
         const shared = chunk('chunk-!~{001}~.js', 'shared.js', {
             moduleIds: Array.from({ length: 1000 }, (_, i) => path.resolve(`shared/module-${i}.js`)),
