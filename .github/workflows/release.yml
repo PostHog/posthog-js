@@ -217,6 +217,13 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
+            - name: Generate Markdown SDK references
+              env:
+                  SDK_SPECS: ${{ runner.temp }}/sdk-specs
+              run: |
+                  git clone --depth 1 https://github.com/PostHog/sdk-specs "$SDK_SPECS"
+                  pnpm generate-markdown-references
+
             - name: Update lockfile
               run: pnpm install
 
