@@ -3352,6 +3352,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this._prepareEventMessage(props)
   }
 
+  /**
+   * The configured service name, stamped on events as `service_name` so events
+   * from several services sharing one project can be told apart. Resolved the
+   * same way as the metrics and traces `service.name` (host resource attribute,
+   * then `traces.serviceName`, then `metrics.serviceName`). Lowest precedence:
+   * a property set by the caller, the context or `register` wins.
+   */
+  private _serviceNameProperties(): PostHogEventProperties {
+    const serviceName =
+      (this.hostResourceAttributes()['service.name'] as string | undefined) ||
+      this.options.traces?.serviceName ||
+      this.options.metrics?.serviceName
+    return serviceName ? { service_name: serviceName } : {}
+  }
+
   private async _prepareEventMessage(
     props: EventMessage,
     options: { includeContextProperties?: boolean } = {}
@@ -3380,6 +3395,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const mergedProperties = includeContextProperties
       ? {
+          ...this._serviceNameProperties(),
           ...this.props,
           ...(contextData?.properties || {}),
           ...(properties || {}),
