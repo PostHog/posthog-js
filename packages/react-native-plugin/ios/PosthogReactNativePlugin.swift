@@ -483,6 +483,9 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             }
         }
 
+        // Set before setup so the push open setup captures on a cold launch carries it. The shared
+        // instance keeps it across setup, and nil clears a value an earlier JS client left.
+        PostHogSDK.shared.setAppLanguage(sdkOptions["appLanguage"] as? String)
         PostHogSDK.shared.setup(config)
 
         self.config = config

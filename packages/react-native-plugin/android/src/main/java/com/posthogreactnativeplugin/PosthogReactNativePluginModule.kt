@@ -209,6 +209,9 @@ class PosthogReactNativePluginModule(
                 sdkVersion = theSdkVersion
               }
             }
+          // Set before setup so the cold-start push open captured below carries it. The shared
+          // instance keeps it across setup, and an empty value clears one an earlier JS client left.
+          PostHog.setAppLanguage(getString(sdkOptions, "appLanguage", ""))
           PostHogAndroid.setup(context, config)
 
           setIdentify(config.cachePreferences, distinctId, anonymousId)
