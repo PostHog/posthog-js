@@ -213,7 +213,7 @@ jobs:
 
             - name: Update versions and changelogs
               run: |
-                  pnpm bump && pnpm generate-references:versioned
+                  pnpm bump
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
@@ -222,7 +222,7 @@ jobs:
                   SDK_SPECS: ${{ runner.temp }}/sdk-specs
               run: |
                   git clone --depth 1 https://github.com/PostHog/sdk-specs "$SDK_SPECS"
-                  pnpm generate-markdown-references
+                  pnpm generate-references
 
             - name: Update lockfile
               run: pnpm install
