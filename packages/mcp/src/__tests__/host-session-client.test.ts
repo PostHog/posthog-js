@@ -28,6 +28,9 @@ describe('options.sessionId and options.clientInfo', () => {
 
   const lowLevel = () => server.server as MCPServerLike
 
+  /** The test client completes a real handshake; silence it to isolate the host callback. */
+  const withoutHandshakeIdentity = () => vi.spyOn(lowLevel(), 'getClientVersion').mockReturnValue(undefined)
+
   it('derives the session from the host value, deterministically', () => {
     instrument(server, fakePostHog(), { sessionId: () => 'host-session-1' })
     const a = getSessionId(lowLevel(), undefined, undefined, request)
@@ -86,6 +89,7 @@ describe('options.sessionId and options.clientInfo', () => {
   })
 
   it('stamps a host client even when the SDK resolved nothing', () => {
+    withoutHandshakeIdentity()
     instrument(server, fakePostHog(), { clientInfo: () => ({ name: 'host-client' }) })
     const event: McpEvent = {}
     stampClientIdentity(event, request, undefined, lowLevel())
@@ -94,6 +98,7 @@ describe('options.sessionId and options.clientInfo', () => {
   })
 
   it('leaves the event alone when the callback returns nothing or throws', () => {
+    withoutHandshakeIdentity()
     for (const clientInfo of [
       () => null,
       () => undefined,
