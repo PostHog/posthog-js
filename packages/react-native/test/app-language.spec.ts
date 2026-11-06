@@ -131,25 +131,14 @@ describe('setAppLanguage', () => {
 
     await client.registerPushNotificationToken('device-token')
 
-    expect(native.setup).toHaveBeenCalled()
-    expect(setAppLanguageMock).toHaveBeenCalledWith('de')
+    expect(native.setup!.mock.calls[0][1]).toMatchObject({ appLanguage: 'de' })
   })
 
   it('clears the native language on setup when none is set', async () => {
     await newClient('test-token', { enableSessionReplay: true })
 
-    await waitForExpect(2000, () => expect(setAppLanguageMock).toHaveBeenCalledWith(null))
-  })
-
-  it('finishes native setup when setAppLanguage fails', async () => {
-    setAppLanguageMock.mockRejectedValueOnce(new Error('bridge gone'))
-    const client = await newClient('test-token', { enableSessionReplay: true })
-    await waitForExpect(2000, () => expect(setAppLanguageMock).toHaveBeenCalledWith(null))
-
-    client.setAppLanguage('de')
-
-    await waitForExpect(2000, () => expect(setAppLanguageMock).toHaveBeenLastCalledWith('de'))
-    expect(native.setup).toHaveBeenCalledTimes(1)
+    await waitForExpect(2000, () => expect(native.setup).toHaveBeenCalled())
+    expect(native.setup!.mock.calls[0][1]).toMatchObject({ appLanguage: null })
   })
 
   it('forwards changes and clears to native after setup', async () => {
@@ -164,8 +153,7 @@ describe('setAppLanguage', () => {
 
   it("keeps another project's language off the native SDK", async () => {
     await newClient('test-token', { enableSessionReplay: true })
-    await waitForExpect(2000, () => expect(setAppLanguageMock).toHaveBeenCalledWith(null))
-    setAppLanguageMock.mockClear()
+    await waitForExpect(2000, () => expect(native.setup).toHaveBeenCalled())
     const other = await newClient('other-project-token', { enableSessionReplay: true })
     await wait(50)
 

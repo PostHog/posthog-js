@@ -1095,7 +1095,8 @@ export class PostHog extends PostHogCore {
    *
    * The value is kept in memory only and survives `reset()`. A `$app_language` you `register()`
    * wins over it. With `@posthog/react-native-plugin` 3.0 or later, events the native SDK
-   * captures itself, such as crashes and push opens, carry it too.
+   * captures itself, such as crashes and push opens, carry it too. Call it right after creating
+   * the client so a push open that launched the app carries it as well.
    *
    * {@label Capture}
    *
@@ -3368,6 +3369,9 @@ export class PostHog extends PostHogCore {
       // Native-sent requests (session replay, crash uploads) bypass the JS request path,
       // so the configured headers are passed through to the native plugin as well.
       requestHeaders: this._requestHeaders,
+      // Applied before native setup, so the push open setup captures on a cold launch carries it.
+      // null clears a value an earlier client left on the process-wide native SDK.
+      appLanguage: this._appLanguage ?? null,
     }
 
     // Log header names only: requestHeaders values can carry secrets (e.g. an Authorization token).
@@ -3433,16 +3437,6 @@ export class PostHog extends PostHogCore {
         // earlier optIn() keeps winning and sdkOptions.optOut alone can't opt a user back out.
         // Only an explicit optOut()/optIn() overwrites it, so re-assert JS consent every setup.
         await OptionalReactNativePlugin.setOptOut?.(this.optedOut)
-        // setAppLanguage() calls made before setup were skipped, and the native SDK is shared by
-        // the process, so sync it to this client's value, clearing one an earlier client left.
-        // Bounded and isolated like _enqueueNative: a hung or failing call must not stall setup
-        // or the commands queued behind it.
-        await raceWithTimeout(
-          Promise.resolve(OptionalReactNativePlugin.setAppLanguage?.(this._appLanguage ?? null)),
-          NATIVE_CALL_TIMEOUT_MS,
-          () =>
-            this._logger.warn(`Native PostHog setAppLanguage timed out after ${NATIVE_CALL_TIMEOUT_MS}ms; continuing.`)
-        ).catch((e) => this._logger.warn(`Native PostHog setAppLanguage failed: ${e}.`))
         if (wasSessionReplayEnabled) {
           // if somehow the SDK is already enabled with a different sessionId, we reset it
           this._resetSessionId(OptionalReactNativePlugin, String(sessionId))

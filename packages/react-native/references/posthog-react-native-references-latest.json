@@ -1134,7 +1134,7 @@
         },
         {
           "category": "Capture",
-          "description": "Sets the `$app_language` property: the language your app displays, sent with every event.\nDefault: not set, so events carry no `$app_language`. React Native apps usually translate in JavaScript (for example with i18next), which the SDK can't see, so call this at startup and whenever the language changes. Compare `$locale`, which is the device language.\nThe value is kept in memory only and survives `reset()`. A `$app_language` you `register()` wins over it. With `@posthog/react-native-plugin` 3.0 or later, events the native SDK captures itself, such as crashes and push opens, carry it too.",
+          "description": "Sets the `$app_language` property: the language your app displays, sent with every event.\nDefault: not set, so events carry no `$app_language`. React Native apps usually translate in JavaScript (for example with i18next), which the SDK can't see, so call this at startup and whenever the language changes. Compare `$locale`, which is the device language.\nThe value is kept in memory only and survives `reset()`. A `$app_language` you `register()` wins over it. With `@posthog/react-native-plugin` 3.0 or later, events the native SDK captures itself, such as crashes and push opens, carry it too. Call it right after creating the client so a push open that launched the app carries it as well.",
           "details": null,
           "id": "setAppLanguage",
           "showDocs": true,
