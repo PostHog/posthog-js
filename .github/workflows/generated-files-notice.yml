@@ -63,11 +63,6 @@ jobs:
           printf '  * %s\n' "${MATCHING_PATHS[@]}"
           cat <<'EOF'
 
-          Reference JSON files are api-extractor output. Latest references are
-          updated by the "Generate References" workflow
-          (.github/workflows/generate-references.yml), while versioned references
-          are updated by the release workflow.
-
           CHANGELOG.md files are Changesets output, updated by the release bot's
           "chore: update versions and lockfile" commits.
 
