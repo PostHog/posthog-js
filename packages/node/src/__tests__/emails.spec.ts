@@ -22,6 +22,28 @@ const rejected = (status: number, code?: string, headers: Record<string, string>
   headers,
 })
 
+const REPORT = Buffer.alloc(40_000, 'report')
+const EXTRAS = {
+  cc: 'finance@example.com',
+  bcc: ['audit@example.com', 'archive@example.com'],
+  attachments: [
+    { filename: 'receipt.txt', content: Buffer.from('hello') },
+    { filename: 'logo.png', content: new Uint8Array([0, 255, 1]), contentType: 'image/png', contentId: 'logo' },
+    { filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS', contentType: 'text/calendar' },
+    { filename: 'report.txt', content: REPORT },
+  ],
+}
+const EXTRAS_ON_THE_WIRE = {
+  cc: ['finance@example.com'],
+  bcc: ['audit@example.com', 'archive@example.com'],
+  attachments: [
+    { filename: 'receipt.txt', content: 'aGVsbG8=' },
+    { filename: 'logo.png', content: 'AP8B', content_type: 'image/png', content_id: 'logo' },
+    { filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS', content_type: 'text/calendar' },
+    { filename: 'report.txt', content: REPORT.toString('base64') },
+  ],
+}
+
 describe('emails', () => {
   vi.useFakeTimers()
 
@@ -171,6 +193,22 @@ describe('emails', () => {
       },
     ],
     [
+      'copies and attachments',
+      { templateKey: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>', ...EXTRAS },
+      {
+        template_key: 'receipt',
+        subject: 'Your receipt',
+        html: '<p>Thanks</p>',
+        ...EXTRAS_ON_THE_WIRE,
+        capture_engagement: true,
+      },
+    ],
+    [
+      'empty copies and attachments, which it leaves out',
+      { templateKey: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>', cc: [], bcc: [], attachments: [] },
+      { template_key: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>', capture_engagement: true },
+    ],
+    [
       'an empty reply-to list, which it leaves out',
       {
         templateKey: 'password-reset',
@@ -199,6 +237,48 @@ describe('emails', () => {
       to: 'user@example.com',
       distinct_id: 'user_123',
     })
+  })
+
+  it('encodes attachment bytes without Buffer, as on the edge runtime', async () => {
+    replies = [accepted()]
+    const bytes = Uint8Array.from({ length: 70_000 }, (_, index) => (index * 7) % 256)
+    const expected = Buffer.from(bytes).toString('base64')
+    vi.stubGlobal('Buffer', undefined)
+    try {
+      await posthog.emails.send({
+        to: 'user@example.com',
+        templateKey: 'receipt',
+        subject: 'Your receipt',
+        html: '<p>Thanks</p>',
+        attachments: [{ filename: 'scan.bin', content: bytes }],
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+
+    expect(JSON.parse(fetch.mock.calls[0][1].body).attachments[0].content).toBe(expected)
+  })
+
+  it('retries a send with attachments with the bytes and key of the first attempt', async () => {
+    replies = [rejected(503, 'delivery_unavailable'), accepted()]
+    const file = Buffer.from('invoice')
+
+    const pending = posthog.emails.send({
+      to: 'user@example.com',
+      templateKey: 'receipt',
+      subject: 'Your receipt',
+      html: '<p>Thanks</p>',
+      attachments: [{ filename: 'invoice.txt', content: file }],
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    file.fill(0)
+    await vi.runAllTimersAsync()
+
+    expect((await pending).data?.id).toBe('msg_1')
+    const [first, retry] = fetch.mock.calls.map(([, options]) => options.body)
+    expect(retry).toBe(first)
+    expect(JSON.parse(first).attachments[0].content).toBe(Buffer.from('invoice').toString('base64'))
+    expect(new Set(sentHeaders()).size).toBe(1)
   })
 
   it('names the provider the client moved from on every request', async () => {
@@ -522,6 +602,13 @@ describe('emails', () => {
         { templateId: TEMPLATE_ID, captureEngagement: false },
         'captureEngagement',
       ],
+      ['cc on the template form', { templateId: TEMPLATE_ID, cc: 'finance@example.com' }, 'cc'],
+      ['bcc on the template form', { templateId: TEMPLATE_ID, bcc: ['audit@example.com'] }, 'bcc'],
+      [
+        'attachments on the template form',
+        { templateId: TEMPLATE_ID, attachments: [{ filename: 'a.txt', content: 'YQ==' }] },
+        'attachments',
+      ],
       ['a code send without a subject', { templateKey: 'welcome', html: '<p>Hi</p>' }, 'subject'],
       ['a code send without html or text', { templateKey: 'welcome', subject: 'Hi' }, 'html'],
       ['a code send with html that is not a string', { ...CODE_SEND, html: 1 }, 'html'],
@@ -537,6 +624,55 @@ describe('emails', () => {
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['attachments that are not a list', { filename: 'a.txt', content: 'YQ==' }, 'attachments'],
+      ['a hole in a sparse list of attachments', new Array(1), 'attachments__0'],
+      ['an attachment without content', [{ filename: 'a.txt' }], 'attachments__0__content'],
+      ["a file's bytes in place of an attachment", [Buffer.from('%PDF')], 'attachments__0'],
+      ['a Base64 string in place of an attachment', ['JVBERi0='], 'attachments__0'],
+      ['an attachment whose content is a number', [{ filename: 'a.txt', content: 42 }], 'attachments__0__content'],
+      [
+        'an attachment whose content is text, not Base64',
+        [{ filename: 'a.txt', content: 'hello world' }],
+        'attachments__0__content',
+      ],
+      [
+        'an attachment whose Base64 lacks its padding',
+        [{ filename: 'a.txt', content: 'YQ' }],
+        'attachments__0__content',
+      ],
+      ['an attachment without a filename', [{ content: 'YQ==' }], 'attachments__0__filename'],
+      ['an attachment with an empty filename', [{ filename: '', content: 'YQ==' }], 'attachments__0__filename'],
+      [
+        'an attachment whose contentType is not a string',
+        [{ filename: 'a.txt', content: 'YQ==', contentType: {} }],
+        'attachments__0__contentType',
+      ],
+      [
+        'an attachment whose contentId is not a string',
+        [{ filename: 'logo.png', content: 'AA==', contentId: 7 }],
+        'attachments__0__contentId',
+      ],
+      [
+        'an attachment with a key it does not take',
+        [{ filename: 'logo.png', content: 'AA==', content_id: 'logo' }],
+        'attachments__0__content_id',
+      ],
+      [
+        "a Resend attachment path, which PostHog can't fetch",
+        [
+          { filename: 'terms.txt', content: 'dGVybXM=' },
+          { filename: 'a.pdf', path: 'https://example.com/a.pdf' },
+        ],
+        'attachments__1__path',
+      ],
+    ])('refuses %s before sending', async (_name, attachments, field) => {
+      const { error } = await sendForm({ ...CODE_SEND, attachments })
+
+      expect(error).toMatchObject({ code: 'invalid_attachment', name: 'validation_error', field })
       expect(fetch).not.toHaveBeenCalled()
     })
 

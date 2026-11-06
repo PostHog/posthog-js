@@ -10,6 +10,7 @@ import {
 import { EmailError } from './errors'
 import type {
   CodeEmailForm,
+  EmailAttachment,
   EmailStatus,
   EmailWarning,
   Emails,
@@ -34,6 +35,8 @@ const CLOUD_APP_HOSTS: Record<string, string> = {
   'https://eu.posthog.com': EU_APP_HOST,
 }
 const MAX_RETRY_DELAY_MS = 30_000
+const BASE64_CHUNK_BYTES = 0x8000
+const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
@@ -61,6 +64,9 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   from: true,
   replyTo: true,
   captureEngagement: true,
+  cc: true,
+  bcc: true,
+  attachments: true,
   html: true,
   text: true,
 }
@@ -398,7 +404,7 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
 }
 
 function codeContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
-  const { templateKey, subject, html, text, from, replyTo, captureEngagement } = send
+  const { templateKey, subject, html, text } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -419,17 +425,134 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
   if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
   }
-  const sendsReplyTo = replyTo !== undefined && !(Array.isArray(replyTo) && replyTo.length === 0)
   return {
     template_key: templateKey,
     subject,
     ...(html !== undefined && { html }),
     ...(text !== undefined && { text }),
-    ...(from !== undefined && { from }),
-    ...(sendsReplyTo && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
-    capture_engagement: captureEngagement ?? true,
+    ...codeFormFields(send),
     ...(distinctId !== undefined && { distinct_id: distinctId }),
   }
+}
+
+function codeFormFields(send: UncheckedSend): Record<string, unknown> {
+  const { from, replyTo, cc, bcc, attachments, captureEngagement } = send
+  return {
+    ...(from !== undefined && { from }),
+    ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
+    ...(cc !== undefined && unlessEmpty('cc', addressList(cc))),
+    ...(bcc !== undefined && unlessEmpty('bcc', addressList(bcc))),
+    ...(attachments !== undefined && unlessEmpty('attachments', attachmentsOf(attachments))),
+    capture_engagement: captureEngagement ?? true,
+  }
+}
+
+function unlessEmpty(field: string, list: unknown): Record<string, unknown> {
+  return Array.isArray(list) && list.length === 0 ? {} : { [field]: list }
+}
+
+function addressList(addresses: unknown): unknown {
+  return typeof addresses === 'string' ? [addresses] : addresses
+}
+
+function attachmentsOf(attachments: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(attachments)) {
+    throw invalid('invalid_attachment', 'attachments must be a list of files.', 'attachments')
+  }
+  return Array.from(attachments, attachmentOf)
+}
+
+function attachmentOf(attachment: unknown, index: number): Record<string, unknown> {
+  if (
+    typeof attachment !== 'object' ||
+    attachment === null ||
+    Array.isArray(attachment) ||
+    ArrayBuffer.isView(attachment)
+  ) {
+    throw invalid(
+      'invalid_attachment',
+      "An attachment is an object with filename and content. Pass the file's bytes as its content.",
+      `attachments__${index}`
+    )
+  }
+  const { filename, content, contentType, contentId, path, ...unsupported } = attachment as Partial<
+    Record<keyof EmailAttachment, unknown>
+  >
+  if (path !== undefined) {
+    throw invalid(
+      'invalid_attachment',
+      "PostHog can't fetch an attachment from a path or URL. Read the file and pass its content instead.",
+      `attachments__${index}__path`
+    )
+  }
+  const unsupportedKey = Object.entries(unsupported).find(([, value]) => value !== undefined)?.[0]
+  if (unsupportedKey !== undefined) {
+    throw invalid(
+      'invalid_attachment',
+      `An attachment takes filename, content, contentType and contentId, not ${unsupportedKey}.`,
+      `attachments__${index}__${unsupportedKey}`
+    )
+  }
+  if (typeof filename !== 'string' || filename === '') {
+    throw invalid(
+      'invalid_attachment',
+      "An attachment needs a filename, such as 'invoice.pdf'.",
+      `attachments__${index}__filename`
+    )
+  }
+  if (typeof content !== 'string' && !(content instanceof Uint8Array)) {
+    throw invalid(
+      'invalid_attachment',
+      'An attachment needs content: a Buffer, a Uint8Array or a Base64 string.',
+      `attachments__${index}__content`
+    )
+  }
+  if (typeof content === 'string' && !isBase64(content)) {
+    throw invalid(
+      'invalid_attachment',
+      "An attachment's content string must be Base64. Pass text as a Buffer or a Uint8Array.",
+      `attachments__${index}__content`
+    )
+  }
+  if (contentType !== undefined && typeof contentType !== 'string') {
+    throw invalid(
+      'invalid_attachment',
+      "An attachment's contentType must be a string, such as 'application/pdf'.",
+      `attachments__${index}__contentType`
+    )
+  }
+  if (contentId !== undefined && typeof contentId !== 'string') {
+    throw invalid(
+      'invalid_attachment',
+      "An attachment's contentId must be a string.",
+      `attachments__${index}__contentId`
+    )
+  }
+  return {
+    filename,
+    content: typeof content === 'string' ? content : base64Of(content),
+    ...(contentType !== undefined && { content_type: contentType }),
+    ...(contentId !== undefined && { content_id: contentId }),
+  }
+}
+
+function isBase64(text: string): boolean {
+  return text.length % 4 === 0 && BASE64_PATTERN.test(text)
+}
+
+function hasNodeBuffer(): boolean {
+  return typeof Buffer !== 'undefined'
+}
+
+function base64Of(bytes: Uint8Array): string {
+  if (hasNodeBuffer()) {
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
+  }
+  const chunks: string[] = []
+  for (let start = 0; start < bytes.length; start += BASE64_CHUNK_BYTES) {
+    chunks.push(String.fromCharCode(...bytes.subarray(start, start + BASE64_CHUNK_BYTES)))
+  }
+  return btoa(chunks.join(''))
 }
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {

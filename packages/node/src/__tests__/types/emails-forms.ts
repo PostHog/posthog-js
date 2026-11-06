@@ -7,6 +7,19 @@ export const forms: SendEmailOptions[] = [
   { to, templateId, templateData: { name: 'Jane' } },
   { to, templateKey: 'reset', subject: 'Reset', html: '<p>Reset</p>', replyTo: ['help@example.com'] },
   { to, templateKey: 'reset', subject: 'Reset', text: 'Reset', from: 'security@example.com', captureEngagement: false },
+  {
+    to,
+    templateKey: 'receipt',
+    subject: 'Receipt',
+    html: '<p>Thanks</p>',
+    cc: 'finance@example.com',
+    bcc: ['audit@example.com'],
+    attachments: [
+      { filename: 'receipt.pdf', content: Buffer.from('pdf') },
+      { filename: 'logo.png', content: new Uint8Array([1]), contentType: 'image/png', contentId: 'logo' },
+      { filename: 'invite.ics', content: 'QkVHSU4=' },
+    ],
+  },
 ]
 
 export const wrongCombinations: SendEmailOptions[] = [
@@ -22,4 +35,16 @@ export const wrongCombinations: SendEmailOptions[] = [
   { to, templateKey: 'reset', html: '<p>Reset</p>' },
   // @ts-expect-error content from code takes no template data
   { to, templateKey: 'reset', subject: 'Reset', html: '<p>Reset</p>', templateData: { name: 'J' } },
+  // @ts-expect-error a template made in PostHog keeps its own copies
+  { to, templateId, cc: 'finance@example.com' },
+  // @ts-expect-error a template made in PostHog keeps its own attachments
+  { to, templateId, attachments: [{ filename: 'a.txt', content: 'YQ==' }] },
+  {
+    to,
+    templateKey: 'invoice',
+    subject: 'Invoice',
+    html: '<p>I</p>',
+    // @ts-expect-error PostHog can't fetch an attachment from a path
+    attachments: [{ filename: 'a.pdf', path: '/a.pdf' }],
+  },
 ]
