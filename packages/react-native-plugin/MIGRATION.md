@@ -26,6 +26,24 @@ Expo SDK 52 is the first Expo SDK that meets the React Native and iOS requiremen
 
 **If ignored:** `pod install` fails with `requires React Native 0.75 or later`. Android builds fail below 0.71 with `Could not find com.facebook.react:react-android`. Android apps on 0.71 to 0.74 still build, but they are outside the supported range and get a peer dependency warning.
 
+On Android, React Native 0.75 and 0.76 apps need Kotlin 2.0 or later. Their templates use Kotlin 1.9, which can't read the Kotlin 2.1 libraries that `posthog-android` depends on. Plugin 2.x already had this requirement, and React Native 0.77 and later already use Kotlin 2.0.21. Set the version and pin the Kotlin Gradle plugin to it:
+
+```groovy
+// android/build.gradle
+buildscript {
+    ext {
+        kotlinVersion = "2.0.21"
+    }
+    dependencies {
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+    }
+}
+```
+
+Expo SDK 52 uses React Native 0.76. Set `android.kotlinVersion=2.0.21` in `android/gradle.properties` and add the version to the `kotlin-gradle-plugin` classpath in the generated `android/build.gradle`. Setting only `android.kotlinVersion`, for example with `expo-build-properties`, fails with `Could not find org.jetbrains.kotlin:kotlin-compose-compiler-plugin-embeddable:1.9.25`.
+
+**If ignored:** the Android build fails with `Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.1.0, but the compiler version 1.9.0 can read versions up to 2.0.0.`
+
 ### iOS 15 and macOS 11
 
 ```ruby
@@ -67,12 +85,13 @@ The plugin is still a CocoaPod, but it no longer depends on the `PostHog` pod. R
 - `install! 'cocoapods', :deduplicate_targets => false`
 - Several targets that use the plugin with different `platform` or `use_frameworks!` settings
 
+**Remove `posthog-react-native-session-replay`.** Its pod still installs `posthog-ios` 3.x from CocoaPods, next to the plugin's Swift package. `pod install` succeeds, but the Xcode build fails with `error: Redefinition of module 'PostHog'`. Uninstall the package and run `pod install` again. The plugin replaces it, and `posthog-react-native` already prefers the plugin when both are installed.
+
 **Changes with no install error:**
 
 - **Builds fetch `posthog-ios` from GitHub.** Xcode resolves it from `https://github.com/PostHog/posthog-ios.git`, so build machines need access to it. `Podfile.lock` no longer records its version.
 - **Your own native code may stop compiling.** React Native's helper adds the package only to the plugin's pod target, not your app target. We haven't tested this case, but if your app target has `import PostHog` and it no longer resolves, add `posthog-ios` to that target as a Swift package with a compatible version.
 - **Custom dSYM upload scripts can stop working.** `${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh` no longer exists. Use `${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh`. The `uploadNativeSymbols` build phase from the Expo config plugin already checks both paths.
-- **Remove `posthog-react-native-session-replay` if you still have it.** Its pod brings in `posthog-ios` from CocoaPods alongside the plugin's Swift package, and that combination is untested.
 
 ### `posthog-android` 4.0
 
@@ -156,12 +175,13 @@ Apps on React Native's full Swift Package Manager integration no longer bundle t
 
 - [ ] Your build machines use Xcode 26 or later.
 - [ ] React Native is 0.75 or later, or Expo SDK is 52 or later.
+- [ ] Android apps on React Native 0.75 or 0.76, including Expo SDK 52, build with Kotlin 2.0 or later.
 - [ ] The iOS deployment target is 15.0 or later, and macOS is 11.0 or later if you ship it.
 - [ ] `posthog.useSpm` is gone from `ios/Podfile.properties.json`.
 - [ ] Your Podfile doesn't use `generate_multiple_pod_projects`, `deduplicate_targets => false`, or plugin targets with mixed platform or linkage settings.
 - [ ] Build machines can reach `github.com/PostHog/posthog-ios`.
 - [ ] Native `import PostHog` code still compiles, and custom dSYM upload scripts are updated.
-- [ ] `posthog-react-native-session-replay` is removed.
+- [ ] `posthog-react-native-session-replay` is removed. If it isn't, the iOS build fails with `Redefinition of module 'PostHog'`.
 - [ ] Direct `start()` calls now use `setup()`, and direct `setup()` calls pass `throttleDelayMs`.
 - [ ] `screenshotModeBackgroundCapture` is removed.
 - [ ] Reverse proxies and self-hosted instances serve `/i/v1/*`, proxies pass `Authorization` and `Content-Encoding` through and don't authenticate with `Authorization`, and they don't redirect capture requests to another origin.

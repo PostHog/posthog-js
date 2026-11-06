@@ -9,6 +9,7 @@ Release `@posthog/react-native-plugin` 3.0. See the [migration guide](https://gi
 - **Breaking:** require posthog-ios 4.0, which needs Xcode 26
 - **Breaking:** require posthog-android 4.0
 - **Breaking:** resolve posthog-ios through Swift Package Manager instead of CocoaPods trunk and ignore the `posthog.useSpm` Podfile property
+- **Breaking:** fail iOS builds that also include `posthog-react-native-session-replay` with `Redefinition of module 'PostHog'` — remove that package
 - **Breaking:** fail `pod install` for Podfiles that use `generate_multiple_pod_projects`, `deduplicate_targets => false`, or plugin targets with different platforms or `use_frameworks!` linkage
 - **Breaking:** remove the legacy `start()` method — call `setup()` instead
 - **Breaking:** ignore `iOSdebouncerDelayMs` and `androidDebouncerDelayMs` when calling `setup()` directly — pass `throttleDelayMs` instead
