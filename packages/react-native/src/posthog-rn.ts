@@ -868,9 +868,10 @@ export class PostHog extends PostHogCore {
       ...super.getCommonEventProperties(),
       ...this._appProperties,
       // A registered $app_language wins, as on the native SDKs. Common properties override
-      // registered ones, so skip ours rather than overwrite it.
+      // registered and session ones, so skip ours rather than overwrite it.
       ...(this._appLanguage !== undefined &&
-        this.props.$app_language === undefined && { $app_language: this._appLanguage }),
+        this.props.$app_language === undefined &&
+        this.sessionProps.$app_language === undefined && { $app_language: this._appLanguage }),
       $screen_height: height,
       $screen_width: width,
     }

@@ -111,6 +111,14 @@ describe('setAppLanguage', () => {
     expect((await captured(client, { $app_language: 'es' })).$app_language).toBe('es')
   })
 
+  it('loses to a session-registered $app_language', async () => {
+    const client = await newClient()
+    client.setAppLanguage('de')
+    client.registerForSession({ $app_language: 'fr' })
+
+    expect((await captured(client)).$app_language).toBe('fr')
+  })
+
   it('forwards a language set before native setup once setup runs', async () => {
     const client = await newClient('test-token', {
       persistence: 'memory',
