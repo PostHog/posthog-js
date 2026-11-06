@@ -243,7 +243,7 @@ const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestW
 }
 
 /**
- * Builds the reason used when aborting a fetch because our own request timeout elapsed.
+ * Builds the error that the fetch and XHR transports report when our own request timeout elapses.
  * It keeps `name === 'AbortError'` (so callers that detect timeouts by error name keep working)
  * but carries a descriptive message, so it is never a reason-less
  * `signal is aborted without reason` exception.
@@ -298,26 +298,36 @@ const xhr = (options: TransportRequestOptions) => {
     if (options.timeout) {
         req.timeout = options.timeout
     }
-    req.onreadystatechange = () => {
-        // XMLHttpRequest.DONE == 4, except in safari 4
-        if (req.readyState === 4) {
-            const response: RequestResponse = {
-                statusCode: req.status,
-                text: req.responseText,
-            }
-            if (req.status === 200) {
-                try {
-                    response.json = JSON.parse(req.responseText)
-                } catch {
-                    // logger.error(e)
-                }
-            }
-
-            options.callback?.(
-                response,
-                readRetryAfter(() => req.getResponseHeader('Retry-After'))
-            )
+    // The spec fires `timeout` after the final `readystatechange` and before `loadend`.
+    // `onloadend` builds the response because it fires once per request, after every outcome.
+    let timedOut = false
+    req.ontimeout = () => {
+        timedOut = true
+    }
+    req.onloadend = () => {
+        if (timedOut) {
+            const error = timeoutAbortReason(options.timeout)
+            logger.warn(error)
+            options.callback?.({ statusCode: 0, error })
+            return
         }
+
+        const response: RequestResponse = {
+            statusCode: req.status,
+            text: req.responseText,
+        }
+        if (req.status === 200) {
+            try {
+                response.json = JSON.parse(req.responseText)
+            } catch {
+                // logger.error(e)
+            }
+        }
+
+        options.callback?.(
+            response,
+            readRetryAfter(() => req.getResponseHeader('Retry-After'))
+        )
     }
     req.send(body)
 }

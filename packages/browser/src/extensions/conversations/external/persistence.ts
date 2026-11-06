@@ -40,6 +40,7 @@ function storageKey(posthog: PostHog): string | null {
  */
 export class ConversationsPersistence {
     private _cachedWidgetSessionId: string | null = null
+    private _createdWidgetSessionId: boolean = false
     private _storageKey: string | null
 
     constructor(private readonly _posthog: PostHog) {
@@ -65,6 +66,7 @@ export class ConversationsPersistence {
         if (!sessionId) {
             sessionId = uuidv7()
             this._write({ widgetSessionId: sessionId })
+            this._createdWidgetSessionId = true
         }
 
         this._cachedWidgetSessionId = sessionId
@@ -72,10 +74,19 @@ export class ConversationsPersistence {
     }
 
     /**
+     * Whether getOrCreateWidgetSessionId() generated a new ID instead of reading a stored one.
+     * The server cannot have tickets for a session ID that did not exist before.
+     */
+    isNewWidgetSession(): boolean {
+        return this._createdWidgetSessionId
+    }
+
+    /**
      * Overwrite the widget session ID (used by restore flow).
      */
     setWidgetSessionId(id: string): void {
         this._cachedWidgetSessionId = id
+        this._createdWidgetSessionId = false
         const data = this._read() || {}
         this._write({ ...data, widgetSessionId: id })
     }

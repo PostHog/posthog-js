@@ -1,5 +1,21 @@
 # @posthog/browser-common
 
+## 0.10.7
+
+### Patch Changes
+
+- [#5544](https://github.com/PostHog/posthog-js/pull/5544) [`8ddb57f`](https://github.com/PostHog/posthog-js/commit/8ddb57fc895a04f92797d8f574a660659dff096b) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix tree shaking of unselected extensions and shared utilities when using the slim SDK.
+  (2026-11-05)
+- Updated dependencies [[`8ddb57f`](https://github.com/PostHog/posthog-js/commit/8ddb57fc895a04f92797d8f574a660659dff096b)]:
+  - @posthog/core@1.63.2
+
+## 0.10.6
+
+### Patch Changes
+
+- [#5488](https://github.com/PostHog/posthog-js/pull/5488) [`358a77e`](https://github.com/PostHog/posthog-js/commit/358a77e55f9a5597d2ec36e2fc61442d580110e6) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - A `$feature_flag_called` event that the client rate limit drops is now sent again at the next capture. Before, the flag was marked as reported and its exposure was lost.
+  (2026-11-04)
+
 ## 0.10.5
 
 ### Patch Changes

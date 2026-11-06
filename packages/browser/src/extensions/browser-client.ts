@@ -15,14 +15,39 @@ import type {
 } from '@posthog/browser-common'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import { logger } from '@posthog/browser-common/utils/logger'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+import { getTimezone } from '@posthog/browser-common/utils/timezone'
 import { Compression, isFunction, isUndefined, type Logger } from '@posthog/core'
 
 import Config from '../config'
 import { DEVICE_ID } from '../constants'
 import { AutocaptureExtension, FeatureFlagsExtension, LogsExtension, SurveysExtension } from '../extension-tokens'
 import { extendURLParams } from '../request'
+import { now } from '../utils/now'
 import type { PostHog } from '../posthog-core'
-import type { CaptureOptions, EventName, Properties, QueuedRequestWithOptions, RemoteConfigResult } from '../types'
+import type {
+    CaptureOptions,
+    CaptureResult,
+    EventName,
+    MetricAttributes,
+    Properties,
+    QueuedRequestWithOptions,
+    RemoteConfigResult,
+} from '../types'
+
+const FLAGS_REQUEST_DURATION_METRIC = 'posthog.flags.request.duration'
+// Finer than the default bounds between 50ms and 5s, where most browser round trips land.
+// The edges include 150, 300, 500 and 1000 so p95 can be compared with the status page thresholds.
+const FLAGS_REQUEST_DURATION_BOUNDS = [50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]
+
+// OTel: a 4xx or 5xx response reports its status as the error type. Without a response,
+// the request timed out (an AbortError) or failed for another reason.
+const flagsErrorType = (status: number | undefined, error: unknown): string | undefined => {
+    if (status) {
+        return status >= 400 ? String(status) : undefined
+    }
+    return (error as Error | undefined)?.name === 'AbortError' ? 'timeout' : '_OTHER'
+}
 
 class BrowserClientKeyValueStore implements KeyValueStore {
     constructor(private readonly _instance: PostHog) {}
@@ -166,6 +191,10 @@ export class BrowserClientAdapter implements Client {
         return isFunction(this.instance.is_capturing) ? this.instance.is_capturing() : !this.isOptedOut
     }
 
+    get isRateLimited(): boolean {
+        return !!this.instance.rateLimiter?.isClientRateLimited
+    }
+
     get projectToken(): string {
         return this.instance.config.token
     }
@@ -192,10 +221,9 @@ export class BrowserClientAdapter implements Client {
         return extension as T | undefined
     }
 
-    capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): void {
+    capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): boolean {
         if (!options) {
-            this.instance.capture(event as EventName, properties)
-            return
+            return this._notRateLimited(this.instance.capture(event as EventName, properties))
         }
 
         const captureOptions: CaptureOptions = {
@@ -205,7 +233,13 @@ export class BrowserClientAdapter implements Client {
             $set_once: options.setOnce as Properties | undefined,
             ...(options.delivery === 'unload' ? { transport: 'sendBeacon' as const, send_instantly: true } : {}),
         }
-        this.instance.capture(event as EventName, properties, captureOptions)
+        return this._notRateLimited(this.instance.capture(event as EventName, properties, captureOptions))
+    }
+
+    private _notRateLimited(result: CaptureResult | undefined): boolean {
+        // capture() returns undefined for every dropped event. The rate limiter tells a rate limit drop apart from
+        // a drop the app chose, for example in before_send.
+        return !isUndefined(result) || !this.instance.rateLimiter?.lastEventRateLimited
     }
 
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {
@@ -243,7 +277,46 @@ export class BrowserClientAdapter implements Client {
         // oxlint-disable-next-line compat/compat -- The shared Client transport is intentionally awaitable.
         return new Promise((resolve) => {
             requestOptions.callback = resolve
+            if (target === 'flags' && this.instance.config.metrics?.flags) {
+                let dispatchedAt: number | undefined
+                requestOptions.onDispatch = () => {
+                    dispatchedAt = now()
+                }
+                requestOptions.callback = (response) => {
+                    if (!isUndefined(dispatchedAt)) {
+                        this._recordFlagsDuration(endpoint, response, now() - dispatchedAt)
+                    }
+                    resolve(response)
+                }
+            }
             this.instance._send_request(requestOptions)
         })
+    }
+
+    private _recordFlagsDuration(endpoint: string, response: ApiResponse, durationMs: number): void {
+        try {
+            const status = response.statusCode || undefined
+            const attributes: MetricAttributes = {
+                'server.address': (convertToURL(endpoint)?.hostname ?? endpoint).replace(/^\[(.*)\]$/, '$1'),
+            }
+            if (status) {
+                attributes['http.response.status_code'] = status
+            }
+            const errorType = flagsErrorType(status, response.error)
+            if (errorType) {
+                attributes['error.type'] = errorType
+            }
+            const timezone = getTimezone()
+            if (timezone) {
+                attributes['client.timezone'] = timezone
+            }
+            this.instance.metrics?.histogram(FLAGS_REQUEST_DURATION_METRIC, durationMs, {
+                unit: 'ms',
+                attributes,
+                bounds: FLAGS_REQUEST_DURATION_BOUNDS,
+            })
+        } catch (e) {
+            logger.error('Failed to record the /flags request duration', e)
+        }
     }
 }

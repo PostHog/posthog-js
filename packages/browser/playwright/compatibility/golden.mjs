@@ -8,6 +8,9 @@ export const MATRIX = Object.freeze({
     browsers: Object.freeze(['chromium', 'firefox', 'webkit']),
     scenarios: Object.freeze([
         'core',
+        'xhr',
+        'xhr-timeout-recovery',
+        'xhr-timeout-exhausted',
         'autocapture',
         'surveys',
         'surveys-auto',

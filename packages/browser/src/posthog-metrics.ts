@@ -1,6 +1,6 @@
 import Config from './config'
 import { PostHog } from './posthog-core'
-import type { CaptureMetricOptions, OtlpMetricsPayload } from './types'
+import type { CaptureMetricOptions, HistogramOptions, OtlpMetricsPayload } from './types'
 import { PostHogMetrics as CorePostHogMetrics, resolveMetricsConfig } from '@posthog/core'
 import type { SendMetricsBatchOutcome } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
@@ -59,7 +59,11 @@ export class PostHogMetrics implements Extension {
     // core lazily and rebuild when `config.metrics` is swapped (e.g. via
     // `set_config`). A rebuild drops the old core's pending window — acceptable
     // for a config swap, which is rare and usually happens at startup.
-    private _getCore(): CorePostHogMetrics {
+    // A disposed extension returns no core, so a late capture cannot restart the flush timer.
+    private _getCore(): CorePostHogMetrics | undefined {
+        if (this._disposed) {
+            return undefined
+        }
         const metricsConfig = this._instance?.config?.metrics
         if (!this._core || this._resolvedFrom !== metricsConfig) {
             this._core?.reset()
@@ -71,17 +75,17 @@ export class PostHogMetrics implements Extension {
 
     /** Add to a counter — things that only go up. Value defaults to 1. */
     count(name: string, value: number = 1, options?: CaptureMetricOptions): void {
-        this._getCore().count(name, value, options)
+        this._getCore()?.count(name, value, options)
     }
 
     /** Record the current value of something that goes up and down. */
     gauge(name: string, value: number, options?: CaptureMetricOptions): void {
-        this._getCore().gauge(name, value, options)
+        this._getCore()?.gauge(name, value, options)
     }
 
     /** Record one observation of a distribution (latency, payload size). */
-    histogram(name: string, value: number, options?: CaptureMetricOptions): void {
-        this._getCore().histogram(name, value, options)
+    histogram(name: string, value: number, options?: HistogramOptions): void {
+        this._getCore()?.histogram(name, value, options)
     }
 
     /**

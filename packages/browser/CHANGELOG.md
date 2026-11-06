@@ -1,5 +1,89 @@
 # posthog-js
 
+## 1.447.1
+
+### Patch Changes
+
+- [#5576](https://github.com/PostHog/posthog-js/pull/5576) [`9ee327d`](https://github.com/PostHog/posthog-js/commit/9ee327d090bffbb564627404b9819994c1327dda) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Reworded the description of the `llm_model` argument that `capture_webmcp` adds to WebMCP tools, so it no longer points the model at its system prompt.
+  (2026-11-05)
+
+## 1.447.0
+
+### Minor Changes
+
+- [#5580](https://github.com/PostHog/posthog-js/pull/5580) [`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f) Thanks [@haacked](https://github.com/haacked)! - `metrics.histogram()` accepts a `bounds` option that sets the histogram's bucket boundaries, and `beforeSend` sees and can change them. The first sample of a histogram (name and unit) fixes its bounds until the client resets. A later sample with different bounds is recorded in the fixed buckets and logs a warning, and a sample with invalid bounds is dropped. The experimental `posthog.flags.request.duration` histogram now uses the bounds `[50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]` ms, so its p50 and p95 resolve between 50ms and 5s. This changes the metric's buckets, which its experimental status allows.
+  (2026-11-05)
+
+### Patch Changes
+
+- Updated dependencies [[`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f)]:
+  - @posthog/core@1.64.0
+  - @posthog/types@1.421.0
+
+## 1.446.3
+
+### Patch Changes
+
+- [#5560](https://github.com/PostHog/posthog-js/pull/5560) [`e22dedb`](https://github.com/PostHog/posthog-js/commit/e22dedbd6f7393e2bcebee84bae6b5185d9fe67a) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Use native sibling accessors when recording insertion positions so patched DOM getters do not reorder replayed nodes.
+  (2026-11-05)
+
+## 1.446.2
+
+### Patch Changes
+
+- [#5542](https://github.com/PostHog/posthog-js/pull/5542) [`7be658c`](https://github.com/PostHog/posthog-js/commit/7be658c34060839750a54bb9d65c5ce1ef89048e) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Avoid duplicate same-origin iframe observers after full snapshots during session recording.
+  (2026-11-05)
+
+## 1.446.1
+
+### Patch Changes
+
+- [#5544](https://github.com/PostHog/posthog-js/pull/5544) [`8ddb57f`](https://github.com/PostHog/posthog-js/commit/8ddb57fc895a04f92797d8f574a660659dff096b) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix tree shaking of unselected extensions and shared utilities when using the slim SDK.
+  (2026-11-05)
+- Updated dependencies [[`8ddb57f`](https://github.com/PostHog/posthog-js/commit/8ddb57fc895a04f92797d8f574a660659dff096b)]:
+  - @posthog/core@1.63.2
+  - @posthog/browser-common@0.10.7
+
+## 1.446.0
+
+### Minor Changes
+
+- [#5547](https://github.com/PostHog/posthog-js/pull/5547) [`742f73f`](https://github.com/PostHog/posthog-js/commit/742f73f01e05fe6413704840d2ba6c0ad5cdf6ec) Thanks [@haacked](https://github.com/haacked)! - Add the experimental `metrics.flags` option. When it is on, the browser SDK records the round trip of every `/flags` HTTP attempt as the histogram `posthog.flags.request.duration`, with the server host, the response status or error type, and the browser's timezone as attributes. The option, the metric name, and its attributes may change or be removed in any release.
+  (2026-11-04)
+
+### Patch Changes
+
+- [#5547](https://github.com/PostHog/posthog-js/pull/5547) [`742f73f`](https://github.com/PostHog/posthog-js/commit/742f73f01e05fe6413704840d2ba6c0ad5cdf6ec) Thanks [@haacked](https://github.com/haacked)! - `posthog.metrics` drops a counter, gauge, or histogram recorded after `posthog.shutdown()`. A late sample no longer restarts the metrics flush timer.
+  (2026-11-04)
+- Updated dependencies [[`742f73f`](https://github.com/PostHog/posthog-js/commit/742f73f01e05fe6413704840d2ba6c0ad5cdf6ec)]:
+  - @posthog/types@1.420.0
+
+## 1.445.6
+
+### Patch Changes
+
+- [#5548](https://github.com/PostHog/posthog-js/pull/5548) [`24917f0`](https://github.com/PostHog/posthog-js/commit/24917f02ec86c871e806fb2206ae0493a85bd1a5) Thanks [@haacked](https://github.com/haacked)! - The XHR transport now reports a timed-out request as `{ statusCode: 0, error }` with a named `AbortError`, as the fetch transport does. Feature flag requests sent over XHR now retry on timeout and record a `timeout` flag error.
+  (2026-11-04)
+
+## 1.445.5
+
+### Patch Changes
+
+- [#5488](https://github.com/PostHog/posthog-js/pull/5488) [`358a77e`](https://github.com/PostHog/posthog-js/commit/358a77e55f9a5597d2ec36e2fc61442d580110e6) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - A `$feature_flag_called` event that the client rate limit drops is now sent again at the next capture. Before, the flag was marked as reported and its exposure was lost.
+  (2026-11-04)
+- Updated dependencies [[`358a77e`](https://github.com/PostHog/posthog-js/commit/358a77e55f9a5597d2ec36e2fc61442d580110e6)]:
+  - @posthog/browser-common@0.10.6
+
+## 1.445.4
+
+### Patch Changes
+
+- [#5541](https://github.com/PostHog/posthog-js/pull/5541) [`13457bd`](https://github.com/PostHog/posthog-js/commit/13457bd62c8ec7e7fcc0f8c1afe0395c3aaebb2b) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Preserve CSS URL fragments when resolving relative paths in session recordings.
+  (2026-11-04)
+
+- [#5543](https://github.com/PostHog/posthog-js/pull/5543) [`720059d`](https://github.com/PostHog/posthog-js/commit/720059d13d7bc9bd7a118350ced0250234b419ae) Thanks [@veryayskiy](https://github.com/veryayskiy)! - skip the support widget's initial ticket list request for new anonymous visitors
+  (2026-11-04)
+
 ## 1.445.3
 
 ### Patch Changes

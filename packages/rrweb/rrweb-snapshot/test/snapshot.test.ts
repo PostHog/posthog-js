@@ -90,6 +90,38 @@ describe('absolute url to stylesheet', () => {
     );
   });
 
+  it.each(['', "'", '"'])(
+    'preserves fragment path segments and ignores the base fragment (quote: %s)',
+    (quote) => {
+      expect(
+        absolutifyURLs(
+          `url(${quote}../icons.svg#icons/../check${quote})`,
+          href + '#route/details',
+        ),
+      ).toBe(`url(${quote}http://localhost/icons.svg#icons/../check${quote})`);
+    },
+  );
+
+  it('preserves fragments in inline style URLs', () => {
+    const dom = new JSDOM('', {
+      url: 'https://example.com/app/page#/settings/profile',
+    });
+    try {
+      expect(
+        transformAttribute(
+          dom.window.document,
+          'div',
+          'style',
+          'background-image: url(./icons.svg#icons/../check)',
+        ),
+      ).toBe(
+        'background-image: url(https://example.com/app/icons.svg#icons/../check)',
+      );
+    } finally {
+      dom.window.close();
+    }
+  });
+
   it('can handle absolute path', () => {
     expect(absolutifyURLs('url("/a.jpg")', href)).toEqual(
       `url("http://localhost/a.jpg")`,
