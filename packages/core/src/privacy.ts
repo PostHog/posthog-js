@@ -552,11 +552,14 @@ function redactUrls(value: string): string {
   return sanitizeUrlsInString(value, { allowNestedUrls: true, stripPunctuation: true })
 }
 
+function scanWindowLength(options: TextSanitizationOptions): number {
+  return 4 * options.maxStringLength
+}
+
 /**
- * Runs `redact` over only the head of `value` that truncation can keep, so a
- * multi-megabyte tool result costs about the same as the part captured. The head
- * ends where no URL crosses it, because a URL is redacted or kept on the whole
- * address. Redaction shrinks text, so a head that ends up too short to cover
+ * Runs `redact` over only the window of `value` that truncation can keep, so a
+ * multi-megabyte tool result costs about the same as the part captured.
+ * Redaction shrinks text, so a window that ends up too short to cover
  * truncation's cut falls back to the whole string. Either way the kept part
  * reads exactly as if the whole string were redacted.
  */
@@ -565,29 +568,53 @@ function redactCapturedHead(
   redact: (value: string) => string,
   options: TextSanitizationOptions
 ): string {
-  const scannedHeadLength = 4 * options.maxStringLength
-  if (value.length > scannedHeadLength) {
-    const head = redact(value.slice(0, headLength(value, scannedHeadLength)))
-    // Twice what truncation keeps, so a match split where the head was cut sits
-    // past the part truncation keeps.
-    if (head.length >= 2 * options.maxStringLength) {
-      return head + options.truncationSuffix
-    }
-  }
-  return redact(value)
+  const windowLength = scanWindowLength(options)
+  return value.length > windowLength
+    ? keepHead(value, redact(value.slice(0, windowLength)), redact, options)
+    : redact(value)
 }
 
 /**
- * The scanned head, shortened only to where a URL that would cross the cut
- * starts. Any URL after the last character that ends one runs to the cut.
+ * {@link redactCapturedHead} with the URL pass after `redact`. A URL is redacted
+ * or kept on the whole address, and the part that decides it, such as the `@`
+ * closing a user, can sit past the window, so a URL that runs past the window is
+ * replaced whole and nothing after it is read.
  */
-function headLength(value: string, scannedHeadLength: number): number {
-  let lastUrlEnd = scannedHeadLength
-  while (lastUrlEnd > 0 && !URL_END_PATTERN.test(value[lastUrlEnd - 1])) {
+function redactCapturedText(
+  value: string,
+  redact: (value: string) => string,
+  options: TextSanitizationOptions
+): string {
+  const windowLength = scanWindowLength(options)
+  if (value.length <= windowLength) {
+    return redactUrls(redact(value))
+  }
+  const head = redact(value.slice(0, windowLength))
+  const urlStart = URL_END_PATTERN.test(value[windowLength]) ? -1 : trailingUrlStart(head)
+  return urlStart === -1
+    ? keepHead(value, redactUrls(head), (whole) => redactUrls(redact(whole)), options)
+    : redactUrls(head.slice(0, urlStart)) + REDACTED_VALUE + options.truncationSuffix
+}
+
+function keepHead(
+  value: string,
+  head: string,
+  redact: (value: string) => string,
+  options: TextSanitizationOptions
+): string {
+  // Twice what truncation keeps, so a match split where the head was cut sits
+  // past the part truncation keeps.
+  return head.length >= 2 * options.maxStringLength ? head + options.truncationSuffix : redact(value)
+}
+
+/** Where the URL that runs to the end of `text` starts, or -1. */
+function trailingUrlStart(text: string): number {
+  let lastUrlEnd = text.length
+  while (lastUrlEnd > 0 && !URL_END_PATTERN.test(text[lastUrlEnd - 1])) {
     lastUrlEnd--
   }
-  const crossingUrl = URL_PATTERN_ONCE.exec(value.slice(lastUrlEnd, scannedHeadLength))
-  return crossingUrl ? lastUrlEnd + crossingUrl.index : scannedHeadLength
+  const url = URL_PATTERN_ONCE.exec(text.slice(lastUrlEnd))
+  return url ? lastUrlEnd + url.index : -1
 }
 
 function sanitizeString(value: string, options: TextSanitizationOptions): string {
@@ -595,7 +622,7 @@ function sanitizeString(value: string, options: TextSanitizationOptions): string
     return BINARY_REDACTED_VALUE
   }
   const redactPersonalData = options.redactPayloadPersonalData ? redactPayloadPii : (head: string) => head
-  return redactCapturedHead(value, (head) => redactUrls(redactPersonalData(redactCredentials(head))), options)
+  return redactCapturedText(value, (head) => redactPersonalData(redactCredentials(head)), options)
 }
 
 /**
@@ -614,7 +641,7 @@ export function sanitizeFreeText(value: string, options: TextSanitizationOptions
   if (isBinaryBlob(value)) {
     return BINARY_REDACTED_VALUE
   }
-  return redactCapturedHead(value, (head) => redactUrls(redactPii(redactCredentials(head))), options)
+  return redactCapturedText(value, (head) => redactPii(redactCredentials(head)), options)
 }
 
 function passesLuhn(digits: string): boolean {

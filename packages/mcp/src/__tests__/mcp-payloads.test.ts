@@ -470,7 +470,7 @@ describe('URL credential redaction', () => {
     const html = `<p>Hi</p><img src="data:image/png;base64,${'iVBORw0KGgo'.repeat(1_000_000)}" alt="logo"/>`
     const authoritySearch = vi.spyOn(String.prototype, 'matchAll')
     try {
-      expect(sanitizeCapturedValue(html)).toBe(html)
+      expect(sanitizeCapturedValue(html)).toBe('<p>Hi</p><img src="[redacted]...')
       expect(authoritySearch).not.toHaveBeenCalled()
     } finally {
       authoritySearch.mockRestore()
@@ -920,16 +920,20 @@ describe('sanitizing a long string with no place to cut', () => {
     ['payload option off', (value: string) => sanitizeCapturedValue(value)],
     ['intent', (value: string) => sanitizeFreeText(value)],
   ] as const
-  const units = [
-    ['digits joined by - and .', '1-1.'],
-    ['comma-separated ids', '1000000,'],
+  const values = [
+    ['digits joined by - and .', (length: number) => '1-1.'.repeat(length / 4)],
+    ['comma-separated ids', (length: number) => '1000000,'.repeat(length / 8)],
+    [
+      'a URL whose userinfo and token sit past the window',
+      (length: number) => `https:secretuser${'a'.repeat(length)}@localhost/?api_key=phc_123456789012345678901234567890`,
+    ],
   ] as const
 
   it.each(
-    sanitizers.flatMap(([name, sanitize]) => units.map(([label, unit]) => [name, label, unit, sanitize] as const))
-  )('costs the %s pass on 8MB of %s about what it costs on 1MB', (_name, _label, unit, sanitize) => {
-    const small = unit.repeat(1_000_000 / unit.length)
-    const large = unit.repeat(8_000_000 / unit.length)
+    sanitizers.flatMap(([name, sanitize]) => values.map(([label, value]) => [name, label, value, sanitize] as const))
+  )('costs the %s pass on 8MB of %s about what it costs on 1MB', (_name, _label, value, sanitize) => {
+    const small = value(1_000_000)
+    const large = value(8_000_000)
     sanitize(small)
 
     expect(medianMilliseconds(() => sanitize(large)) / medianMilliseconds(() => sanitize(small))).toBeLessThan(3)
@@ -955,7 +959,7 @@ describe('sanitizing strings longer than truncation keeps', () => {
     [
       'a credential URL cut at the window edge',
       `${filler(WINDOW - 44)}https://example.com/?api_key=secretsecretsecretsecret more`,
-      `${filler(WINDOW - 44)}...`,
+      `${filler(WINDOW - 44)}[redacted]...`,
     ],
     [
       'an attachment',
@@ -968,28 +972,34 @@ describe('sanitizing strings longer than truncation keeps', () => {
       `${filler(12)}a. ${`${token} `.repeat(4_000)}and more`,
       `${filler(12)}a. ${'[redacted] '.repeat(4_000)}and more`,
     ],
-    // A URL running past the head is judged whole: its credentials and field count can sit beyond the cut.
+    // A URL running past the window is replaced whole: its credentials and field count can sit beyond the cut.
     [
-      'a URL whose credentials sit past the head',
+      'a URL whose credentials sit past the window',
       `${filler(996)}https:secretuser${'a'.repeat(WINDOW)}@localhost/path`,
-      `${filler(996)}https://%5Bredacted%5D@localhost/path`,
+      `${filler(996)}[redacted]...`,
     ],
     [
-      'a URI whose field count passes the limit past the head',
+      'a URL opening the value whose userinfo and token sit past the window',
+      `https:secretuser${'a'.repeat(WINDOW)}@localhost/path?api_key=${token}`,
+      '[redacted]...',
+    ],
+    [
+      'a URI whose field count passes the limit past the window',
       `${filler(996)}resource:private/${'p'.repeat(WINDOW)}?${'a=1&'.repeat(200)}`,
-      `${filler(996)}[redacted]`,
+      `${filler(996)}[redacted]...`,
     ],
     [
       'pre-signed URLs',
       `https://bucket.s3.amazonaws.com/a.pdf?X-Amz-Security-Token=${'Z'.repeat(1_200)}&X-Amz-Signature=${'a'.repeat(64)}\n`.repeat(
         200
       ),
-      'https://bucket.s3.amazonaws.com/a.pdf?X-Amz-Security-Token=%5Bredacted%5D&X-Amz-Signature=%5Bredacted%5D\n'.repeat(
-        200
-      ),
+      `${'https://bucket.s3.amazonaws.com/a.pdf?X-Amz-Security-Token=%5Bredacted%5D&X-Amz-Signature=%5Bredacted%5D\n'.repeat(
+        97
+      )}[redacted]...`,
     ],
   ])('scans only the window truncation can keep: %s', (_case, value, expected) => {
     expect(sanitizeCapturedValue(value)).toBe(expected)
+    expect(sanitizeCapturedValue(value, { redactPayloadPersonalData: true })).toBe(expected)
     expect(sanitizeFreeTextValue(value)).toBe(expected)
   })
 })
