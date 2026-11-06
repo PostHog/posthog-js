@@ -120,8 +120,8 @@ function assertAppFlow(label, { tools, call, resources, read, recorder, protocol
     JSON.stringify(tool?._meta)
   )
   check(
-    `${label} · model parameter is advertised`,
-    tool?.inputSchema?.properties?.llm_model?.type === 'string' && tool?.inputSchema?.required?.includes('llm_model')
+    `${label} · model parameter is advertised as optional`,
+    tool?.inputSchema?.properties?.llm_model?.type === 'string' && !tool?.inputSchema?.required?.includes('llm_model')
   )
   check(
     `${label} · structured result and _meta survive tools/call`,

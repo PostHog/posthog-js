@@ -12,6 +12,7 @@ import type {
 import { PostHogMCPAnalyticsProperty } from './constants'
 import { log, type LoggerFn } from './logger'
 import { sanitizeFreeText, sanitizeFreeTextValue } from './mcp-payloads'
+import { VIRTUAL_TOOL_ANNOTATIONS } from './tools'
 import { TRUNCATION_SUFFIX } from './truncation'
 
 export const SEND_FEEDBACK_TOOL_NAME = 'send_feedback' as const
@@ -150,16 +151,7 @@ export function getFeedbackToolDescriptor(options: CollectFeedbackOptions = {}):
       },
       required: ['feedback_type', 'summary', ...extraRequired],
     },
-    annotations: {
-      title: 'Send feedback',
-      readOnlyHint: true,
-      // Interacts with an external entity: the report lands in analytics.
-      openWorldHint: true,
-      // Only records the feedback, so repeat calls are harmless — and advertising
-      // it as idempotent makes agents more willing to call it proactively.
-      idempotentHint: true,
-      destructiveHint: false,
-    },
+    annotations: { ...VIRTUAL_TOOL_ANNOTATIONS },
   }
 }
 
