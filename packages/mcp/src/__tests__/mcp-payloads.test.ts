@@ -3,6 +3,7 @@ import {
   redactPayloadPii,
   redactPii,
   sanitizeCapturedValue,
+  sanitizeFreeText,
   sanitizeFreeTextValue,
 } from '../extensions/mcp-payloads'
 
@@ -67,6 +68,38 @@ describe('buildCapturedMcpParameters', () => {
     buildCapturedMcpParameters({ method: 'tools/call', params: { name: 't', arguments: args } })
 
     expect(reads).toBeLessThanOrEqual(200)
+  })
+
+  const realArguments = (count: number): [string, number][] =>
+    Array.from({ length: count }, (_, index) => [`k${index}`, index])
+
+  it.each([
+    ['first', 100],
+    ['first', 101],
+    ['in the middle', 100],
+    ['last', 100],
+    ['last', 101],
+    ['absent', 100],
+    ['absent', 101],
+  ])('keeps the first 100 real arguments with context %s among %i', (position, count) => {
+    const real = realArguments(count)
+    const context: [string, string][] = position === 'absent' ? [] : [['context', 'why']]
+    const entries =
+      position === 'first'
+        ? [...context, ...real]
+        : position === 'last'
+          ? [...real, ...context]
+          : [...real.slice(0, 50), ...context, ...real.slice(50)]
+
+    const parameters = buildCapturedMcpParameters({
+      method: 'tools/call',
+      params: { name: 't', arguments: Object.fromEntries(entries) },
+    }) as { request: { params: { arguments: Record<string, unknown> } } }
+
+    expect(parameters.request.params.arguments).toEqual({
+      ...Object.fromEntries(real.slice(0, 100)),
+      ...(count > 100 ? { '...': '[MaxProperties ~]' } : {}),
+    })
   })
 
   it('redacts PostHog tokens from captured string values', () => {
@@ -456,6 +489,7 @@ describe('redactPii', () => {
       'Looking up orders for [redacted] before refunding.',
     ],
     ['an email with a maximal 64-char local part', `from ${'a'.repeat(64)}@example.com now`, 'from [redacted] now'],
+    ['an email with an accented local part', 'Writing to josé@example.com now.', 'Writing to [redacted] now.'],
     [
       'an IPv4 address',
       'Blocking traffic from 203.0.113.42 after abuse.',
@@ -557,6 +591,7 @@ describe('redactPii', () => {
 describe('redactPayloadPii', () => {
   it.each([
     ['an email address', 'Customer ada@example.com', 'Customer [redacted]'],
+    ['an email address with an accented local part', 'Customer josé@example.com', 'Customer [redacted]'],
     ['a public IPv4 after a space', 'last seen from 203.0.113.7', 'last seen from [redacted]'],
     ['a public IPv4 after a colon', 'client ip:203.0.113.7', 'client ip:[redacted]'],
     ['a public IPv4 after an @', 'user@203.0.113.7', 'user@[redacted]'],
@@ -601,13 +636,42 @@ describe('redactPayloadPii', () => {
     ['a fraction of 16 digits', '[0.4111111111111111]'],
     ['a negative card-shaped number', '[-4111111111111111]'],
     ['a card-shaped number with a fraction', '[4111111111111111.5]'],
-    ['a card-shaped number with an exponent', '[4111111111111111e0]'],
     ['a card grouped with dots', 'ref 4111.1111.1111.1111'],
     ['a negative card-shaped JSON member', '{"n":-4111111111111111}'],
     ['a fraction starting 011', '[620.0119256973267]'],
     ['a fraction starting 00', '[0.0012345678901]'],
+    ['two dates', '2024-08-12 2022-03-03'],
+    ['two dates whose tail passes the card checksum', '2027-03-14 2020-08-20'],
+    ['two US phone-shaped numbers', '385-353-6556 200-426-7992'],
+    ['two US phone-shaped numbers, the first passing the checksum', '813-545-4304 607-403-3631'],
+    ['a US phone-shaped number ending in a zero-padded group', '874-426-0063 247-900-7184'],
+    ['six-digit ids', '769677 908755 886773'],
+    ['ZIP+4 codes', '98432-1669 62609-6852'],
   ])('keeps %s', (_label, input) => {
     expect(redactPayloadPii(input)).toBe(input)
+  })
+
+  describe('ordinary number lists', () => {
+    let seed = 99
+    const random = (low: number, high: number): number =>
+      low + Math.floor(((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31) * (high - low + 1))
+    const pad = (value: number, length: number): string => String(value).padStart(length, '0')
+    const date = (): string => `${random(2015, 2027)}-${pad(random(1, 12), 2)}-${pad(random(1, 28), 2)}`
+    const phone = (): string => `${random(200, 999)}-${random(200, 999)}-${pad(random(0, 9999), 4)}`
+
+    it.each([
+      ['date pairs', () => `${date()} ${date()}`],
+      ['US phone-shaped pairs', () => `${phone()} ${phone()}`],
+      ['six-digit id lists', () => `${random(100000, 999999)} ${random(100000, 999999)} ${random(100000, 999999)}`],
+      [
+        'ZIP+4 lists',
+        () => `${random(10000, 99999)}-${random(1000, 9999)} ${random(10000, 99999)}-${random(1000, 9999)}`,
+      ],
+    ])('keeps every one of 2000 %s', (_label, generate) => {
+      const lists = Array.from({ length: 2000 }, generate)
+
+      expect(lists.filter((list) => redactPayloadPii(list) !== list)).toEqual([])
+    })
   })
 
   it.each([
@@ -620,12 +684,26 @@ describe('redactPayloadPii', () => {
 
 describe('card numbers', () => {
   it.each([
-    ['grouped 4-4-4-3', 'amex 3782 8224 6310 005', 'amex [redacted]', 'amex [redacted]'],
-    ['grouped 4-4-5', 'visa 4222 2222 22222', 'visa [redacted]', 'visa [redacted]'],
-    ['grouped 4-4-4-1', 'visa 4222 2222 2222 2', 'visa [redacted]', 'visa [redacted]'],
-    ['grouped 5-5-5-1', 'pan 41111 11111 11111 1', 'pan [redacted]', 'pan [redacted]'],
-    ['grouped in pairs', 'pan 41 11 11 11 11 11 11 11', 'pan [redacted]', 'pan [redacted]'],
+    ['grouped 4-4-4-3', 'amex 3782 8224 6310 005', 'amex [redacted]', 'amex 3782 8224 6310 005'],
+    ['grouped 4-4-5', 'visa 4222 2222 22222', 'visa [redacted]', 'visa 4222 2222 22222'],
+    ['grouped 4-4-4-1', 'visa 4222 2222 2222 2', 'visa [redacted]', 'visa 4222 2222 2222 2'],
+    ['grouped 5-5-5-1', 'pan 41111 11111 11111 1', 'pan [redacted]', 'pan 41111 11111 11111 1'],
+    ['grouped in pairs', 'pan 41 11 11 11 11 11 11 11', 'pan [redacted]', 'pan 41 11 11 11 11 11 11 11'],
     ['grouped 4-4-4-4-3', 'pan 6212 3456 7890 1234 569', 'pan [redacted]', 'pan [redacted]'],
+    ['grouped 4-6-5', 'amex 3782 822463 10005', 'amex [redacted]', 'amex [redacted]'],
+    ['grouped 4-6-4', 'diners 3056 930902 5904', 'diners [redacted]', 'diners [redacted]'],
+    [
+      'grouped 4-4-4-4 after a leading group',
+      'ref 1234 4111 1111 1111 1111',
+      'ref 1234 [redacted]',
+      'ref 1234 [redacted]',
+    ],
+    [
+      'grouped 4-4-4-4 and followed by an SSN',
+      'card 4111 1111 1111 1111 078-05-1120',
+      'card [redacted] [redacted]',
+      'card [redacted] [redacted]',
+    ],
     ['glued to a word by a dash', 'card-4111111111111111', 'card-[redacted]', 'card-[redacted]'],
     ['glued to a word by a dot', 'No.4111111111111111', 'No.[redacted]', 'No.[redacted]'],
     ['grouped by dashes and glued by one', 'ref-4111-1111-1111-1111', 'ref-[redacted]', 'ref-[redacted]'],
@@ -684,10 +762,65 @@ describe('JSON text', () => {
   describe.each(passes)('through the %s pass', (_pass, sanitize) => {
     it.each(
       identifiers.flatMap(([label, identifier]) =>
-        escapes.flatMap((escape) => containers.map(([name, wrap]) => [label, escape, name, identifier, wrap] as const))
+        escapes
+          // An escaped letter reads as part of the address after it; see the escaped characters below.
+          .filter((escape) => !(label === 'an email' && escape === '\\u00e9'))
+          .flatMap((escape) => containers.map(([name, wrap]) => [label, escape, name, identifier, wrap] as const))
       )
     )('redacts %s after %s, %s, in place', (_label, escape, _container, identifier, wrap) => {
       expect(sanitize(wrap(member(escape, identifier)))).toBe(wrap(member(escape, '[redacted]')))
+    })
+
+    it.each([
+      ['an address with an escaped @', '{"e":"ada\\u0040example.com"}', '{"e":"[redacted]"}'],
+      ['an address with an escaped dot', '{"e":"ada@example\\u002ecom"}', '{"e":"[redacted]"}'],
+      ['an address with an escaped last letter', '{"e":"ada@example.co\\u006d"}', '{"e":"[redacted]"}'],
+      ['an address with an escaped accented letter', '{"e":"jos\\u00e9@example.com"}', '{"e":"[redacted]"}'],
+      ['an address after an escaped letter, with it', '{"e":"x\\u00e9ada@example.com"}', '{"e":"[redacted]"}'],
+      ['an address after an escaped line break', '{"e":"x\\u000aada@example.com"}', '{"e":"x\\u000a[redacted]"}'],
+      ['a card grouped by escaped spaces', '{"c":"4111\\u00201111\\u00201111\\u00201111"}', '{"c":"[redacted]"}'],
+      ['a card grouped by escaped NNBSP', '{"c":"4111\\u202f1111\\u202f1111\\u202f1111"}', '{"c":"[redacted]"}'],
+      ['a card grouped by escaped dashes', '{"c":"4111\\u002d1111\\u002d1111\\u002d1111"}', '{"c":"[redacted]"}'],
+      ['a card before an escaped letter', '{"c":"4111111111111111\\u00e9"}', '{"c":"[redacted]\\u00e9"}'],
+      ['an SSN grouped by escaped dashes', '{"s":"078\\u002d05\\u002d1120"}', '{"s":"[redacted]"}'],
+      ['a phone grouped by escaped spaces', '{"p":"+1\\u0020415\\u0020555\\u00200142"}', '{"p":"[redacted]"}'],
+      ['a phone grouped by an escaped NBSP', '{"p":"+44\\u00a020 7946 0958"}', '{"p":"[redacted]"}'],
+      ['a public IPv4 with an escaped dot', '{"i":"203.0.113\\u002e7"}', '{"i":"[redacted]"}'],
+      ['a PostHog token with an escaped letter', '{"t":"phc_\\u0061bcdefghijklmnopqrstuvwxyz"}', '{"t":"[redacted]"}'],
+      ['a card after an escaped quote', '{"a":"\\u0022","n":4111111111111111}', '{"a":"\\u0022","n":"[redacted]"}'],
+    ])('redacts %s, keeping the JSON valid', (_label, text, expected) => {
+      const sanitized = sanitize(text) as string
+
+      expect(sanitized).toBe(expected)
+      expect(() => JSON.parse(sanitized)).not.toThrow()
+    })
+
+    it.each([
+      ['a card with a zero fraction', '{"n":4111111111111111.0}'],
+      ['a card with an exponent', '[4111111111111111e0]'],
+      ['a card written with a fraction and an exponent', '[41111111111111110e-1]'],
+      ['a 19-digit card with a zero fraction', '[6212345678901234569.00]'],
+    ])('replaces %s written as a JSON number whole', (_label, text) => {
+      const sanitized = sanitize(text) as string
+      const parsed: unknown = JSON.parse(sanitized)
+
+      expect(JSON.stringify(parsed)).not.toMatch(/\d{13}/)
+      expect(sanitized).toContain('"[redacted]"')
+    })
+
+    it.each([2, 4, 10])('quotes a card nested 7 levels deep in JSON indented by %i', (indent) => {
+      let value: unknown = [4111111111111111]
+      for (let level = 0; level < 6; level++) {
+        value = { level: value }
+      }
+
+      expect(JSON.parse(sanitize(JSON.stringify(value, null, indent)) as string)).toEqual(
+        JSON.parse(JSON.stringify(value).replace('4111111111111111', '"[redacted]"'))
+      )
+    })
+
+    it('reads a text that is only a card number as prose, leaving it unquoted', () => {
+      expect(sanitize('4111111111111111')).toBe('[redacted]')
     })
 
     it.each(escapes.flatMap((escape) => containers.map(([name, wrap]) => [escape, name, wrap] as const)))(
@@ -743,6 +876,10 @@ describe('JSON text', () => {
     expect(sanitizeCapturedValue(text, { redactPayloadPersonalData: true })).toBe(text)
   })
 
+  it('replaces a negative card written as a JSON number whole through the intent pass', () => {
+    expect(sanitizeFreeTextValue('{"a":-4111111111111111}')).toBe('{"a":"[redacted]"}')
+  })
+
   it.each(escapes)('redacts a PostHog token after %s with the payload option off', (escape) => {
     const text = member(escape, 'phc_123456789012345678901234567890')
 
@@ -764,8 +901,46 @@ describe('JSON text', () => {
     it('keeps them in a JSON text copy longer than the scanned window', () => {
       const text = JSON.stringify(floats)
 
-      expect(sanitize(text)).toBe(text)
+      expect(sanitize(text)).toBe(`${text.slice(0, 131_072)}...`)
     })
+  })
+})
+
+describe('sanitizing a long string with no place to cut', () => {
+  const medianMilliseconds = (run: () => unknown): number => {
+    const times = Array.from({ length: 5 }, () => {
+      const start = performance.now()
+      run()
+      return performance.now() - start
+    })
+    return times.sort((a, b) => a - b)[2]
+  }
+  const sanitizers = [
+    ['payload', (value: string) => sanitizeCapturedValue(value, { redactPayloadPersonalData: true })],
+    ['payload option off', (value: string) => sanitizeCapturedValue(value)],
+    ['intent', (value: string) => sanitizeFreeText(value)],
+  ] as const
+  const units = [
+    ['digits joined by - and .', '1-1.'],
+    ['comma-separated ids', '1000000,'],
+  ] as const
+
+  it.each(
+    sanitizers.flatMap(([name, sanitize]) => units.map(([label, unit]) => [name, label, unit, sanitize] as const))
+  )('costs the %s pass on 8MB of %s about what it costs on 1MB', (_name, _label, unit, sanitize) => {
+    const small = unit.repeat(1_000_000 / unit.length)
+    const large = unit.repeat(8_000_000 / unit.length)
+    sanitize(small)
+
+    expect(medianMilliseconds(() => sanitize(large)) / medianMilliseconds(() => sanitize(small))).toBeLessThan(3)
+  })
+
+  it.each([
+    ['redactPii', redactPii],
+    ['redactPayloadPii', redactPayloadPii],
+    ['the intent pass', sanitizeFreeText],
+  ] as const)('%s does not overflow the stack on 12MB of digits joined by - and .', (_name, redact) => {
+    expect(() => redact('1-1.'.repeat(3_000_000))).not.toThrow()
   })
 })
 
@@ -775,8 +950,8 @@ describe('sanitizing strings longer than truncation keeps', () => {
   const filler = (length: number): string => 'lorem ipsum '.repeat(Math.ceil(length / 12)).slice(0, length)
 
   it.each([
-    ['plain text', filler(5_000_000), `${filler(WINDOW - 2)}...`],
-    ['a token cut at the window edge', filler(WINDOW - 32) + token, `${filler(WINDOW - 32)}...`],
+    ['plain text', filler(5_000_000), `${filler(WINDOW)}...`],
+    ['a token cut at the window edge', filler(WINDOW - 32) + token, `${filler(WINDOW - 32)}[redacted]...`],
     [
       'a credential URL cut at the window edge',
       `${filler(WINDOW - 44)}https://example.com/?api_key=secretsecretsecretsecret more`,

@@ -11,7 +11,7 @@ import {
   sanitizeFreeTextValue as sanitizeCoreFreeTextValue,
   type TextSanitizationOptions,
 } from '@posthog/core'
-import { limitEntries, MAX_STRING_LENGTH, TRUNCATION_SUFFIX } from './truncation'
+import { limitEntries, MAX_BREADTH, MAX_STRING_LENGTH, TRUNCATION_SUFFIX } from './truncation'
 
 const CONTEXT_ARGUMENT_NAME = 'context'
 const CAPTURED_REQUEST_FIELDS = ['id', 'jsonrpc', 'method', 'params']
@@ -47,20 +47,36 @@ export function sanitizeFreeTextValue(value: unknown): unknown {
  * argument object costs what a call at those limits costs.
  */
 export function buildCapturedMcpParameters(request: unknown): JsonRecord {
-  const captured = limitEntries({ request: pickCapturedFields(request) }) as { request: unknown }
-  omitContextArgument(captured.request)
-  return sanitizeCapturedValue(captured) as JsonRecord
+  return sanitizeCapturedValue(limitEntries({ request: pickCapturedFields(request) })) as JsonRecord
 }
 
 function pickCapturedFields(request: unknown): unknown {
   if (!isRecord(request)) {
     return request
   }
-  return Object.fromEntries(CAPTURED_REQUEST_FIELDS.filter((key) => key in request).map((key) => [key, request[key]]))
+  const fields = Object.fromEntries(
+    CAPTURED_REQUEST_FIELDS.filter((key) => key in request).map((key) => [key, request[key]])
+  )
+  const { params } = fields
+  if (isRecord(params) && isRecord(params.arguments) && Object.hasOwn(params.arguments, CONTEXT_ARGUMENT_NAME)) {
+    fields.params = { ...params, arguments: argumentsWithoutContext(params.arguments) }
+  }
+  return fields
 }
 
-function omitContextArgument(request: unknown): void {
-  if (isRecord(request) && isRecord(request.params) && isRecord(request.params.arguments)) {
-    delete request.params.arguments[CONTEXT_ARGUMENT_NAME]
+/**
+ * The arguments without `context`, so it does not count toward the entry limit.
+ * Copies one more than the limit, enough for the limit to see that more remain.
+ */
+function argumentsWithoutContext(args: JsonRecord): JsonRecord {
+  const kept: [string, unknown][] = []
+  for (const key of Object.keys(args)) {
+    if (kept.length > MAX_BREADTH) {
+      break
+    }
+    if (key !== CONTEXT_ARGUMENT_NAME) {
+      kept.push([key, args[key]])
+    }
   }
+  return Object.fromEntries(kept)
 }

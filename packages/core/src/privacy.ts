@@ -105,14 +105,14 @@ const IPV6_PATTERN =
 // A separator (space, dot, or dash) is required between the 3-2-4 groups so bare
 // 9-digit IDs are never mistaken for an SSN.
 const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
-// A run of >=13 digits optionally grouped by a single space, dot, dash, or
-// slash. This only marks the numeric region; `redactCardInMatch` then looks for
-// the actual card as a run of whole separator-delimited groups that passes Luhn,
-// so an adjacent field such as an expiry (`4111 1111 1111 1111 12/30`) is not
-// absorbed into a failing check that would leak the card.
-const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,}\b/g
-// Matches each separator-delimited digit group inside a card candidate.
-const DIGIT_GROUP_PATTERN = /\d+/g
+// How cards are printed when grouped, shortest first so a field after a card is
+// left for its own pattern. An ungrouped card is one run of 13–19 digits.
+const CARD_GROUPINGS = [
+  [4, 4, 4, 4],
+  [4, 4, 4, 4, 3],
+  [4, 6, 4],
+  [4, 6, 5],
+]
 // Phone matching is structural rather than "any 10–15 digits", so dates
 // (`2024-01-15 12:30`) and dotted versions are not mistaken for numbers. Two
 // forms: a North-American 3-3-4 grouping, and an international number that must
@@ -136,24 +136,27 @@ const NON_PUBLIC_IPV4_RANGES = [
   '169.254.0.0/16',
   '0.0.0.0/32',
 ]
-// Digits grouped only by single spaces or dashes: a `.` makes a fraction or a
-// version, not a card. A leading `-` or `.` belongs to a negative number or a
-// fraction unless a letter comes before it (`card-4111…`, `No.4111…`), and a
-// trailing `.` and digit or exponent to a number the run is only part of.
-const PAYLOAD_CARD_CANDIDATE_PATTERN = /(^|[^\w.-]|[A-Za-z_][.-])(\d(?:[ -]?\d){12,})(?!\w|\.\d)/g
 const PHONE_PARENTHESIZED_PATTERN = /(^|[^\w+])((?:\+?1[ ./-]?)?\(\d{3}\)[ ./-]?\d{3}[ ./-]\d{4})(?![\w])/g
-// Not after a `.`, where `00` or `011` starts a fraction's digits.
-const PAYLOAD_PHONE_INTL_PATTERN = /(^|[^\w.])((?:\+|00|011)[ .-]?[1-9]\d{0,2}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
-const JSON_VALUE_START_PATTERN = /[:,[]\s*$/
-const JSON_VALUE_END_PATTERN = /^\s*[,}\]]/
+// Not after a `.`, where `00` or `011` starts a fraction's digits, nor after a
+// `-`, where it is the last group of a dashed number (`874-426-0063`).
+const PAYLOAD_PHONE_INTL_PATTERN = /(^|[^\w.-])((?:\+|00|011)[ .-]?[1-9]\d{0,2}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
+// A number in JSON value position: after `:`, `,` or `[`, and before `,`, `}` or `]`.
+const JSON_NUMBER_PATTERN = /([:,[]\s*)(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)(?=\s*[,}\]])/g
+const JSON_NUMBER_PARTS_PATTERN = /^-?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/
+const WORD_CHARACTER_PATTERN = /\w/
 // A JSON or JavaScript string escape. Read as text, its letter or hex digits glue
 // to what follows: `"x\nada@example.com"` holds the address `nada@example.com`,
 // and `"x\n4111…"` has no boundary before the card.
 const ESCAPE_PATTERN = /\\(?:["\\/bfnrt]|u[0-9A-Fa-f]{4})/g
-// What the identifier patterns read in place of each escape character: neither a
-// word character nor any pattern's separator, so a masked escape ends an
-// identifier without joining the digit groups on either side of it into one.
+// What the identifier patterns read in place of an escaped control character,
+// quote, or backslash: neither a word character nor any pattern's separator, so
+// it ends an identifier without joining the digit groups on either side of it.
 const ESCAPE_MASK = '\u0000'
+// What they read in place of a non-ASCII character other than a space, escaped or
+// not: legal in an address's local part, so `josé@example.com` is redacted whole,
+// but not a word character, so a card written right before one still ends there.
+const NON_ASCII_STAND_IN = '%'
+const NON_ASCII_PATTERN = /[\u0080-\uffff]/g
 
 function shouldRedactKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERN.test(key)
@@ -541,7 +544,7 @@ function isBinaryBlob(value: string): boolean {
 
 /** Replaces PostHog API keys wherever they appear in a string. */
 function redactCredentials(value: string): string {
-  return redactIdentifiers(value, [[POSTHOG_TOKEN_PATTERN, redactWhole]])
+  return redactIdentifiers(value, [[matching(POSTHOG_TOKEN_PATTERN), redactWhole]])
 }
 
 /** Replaces every URL-shaped match, credentials and all. */
@@ -574,13 +577,17 @@ function redactCapturedHead(
   return redact(value)
 }
 
-/** The scanned head, shortened to end just after the last character that ends a URL. */
+/**
+ * The scanned head, shortened only to where a URL that would cross the cut
+ * starts. Any URL after the last character that ends one runs to the cut.
+ */
 function headLength(value: string, scannedHeadLength: number): number {
-  let end = scannedHeadLength
-  while (end > 0 && !URL_END_PATTERN.test(value[end - 1])) {
-    end--
+  let lastUrlEnd = scannedHeadLength
+  while (lastUrlEnd > 0 && !URL_END_PATTERN.test(value[lastUrlEnd - 1])) {
+    lastUrlEnd--
   }
-  return end
+  const crossingUrl = URL_PATTERN_ONCE.exec(value.slice(lastUrlEnd, scannedHeadLength))
+  return crossingUrl ? lastUrlEnd + crossingUrl.index : scannedHeadLength
 }
 
 function sanitizeString(value: string, options: TextSanitizationOptions): string {
@@ -630,46 +637,160 @@ function passesLuhn(digits: string): boolean {
   return sum % 10 === 0
 }
 
-// A card candidate can span more than one card plus adjacent fields (e.g. an
-// expiry, or a second card). This redacts every card in it: scanning
-// left-to-right over the whole separator-delimited digit groups, at each start it
-// takes the shortest run whose joined digits are 13–19 long and pass Luhn, redacts
-// just that span, and resumes after it; a group that begins no valid run is kept
-// and skipped. The shortest run leaves a field after the card, such as the SSN in
-// `4111111111111111 078-05-1120`, for its own pattern. Checking group-aligned
-// runs rather than arbitrary digit windows keeps the false-positive rate at
-// Luhn's own ~1-in-10, instead of letting a chance-valid sub-window of an
-// ordinary long ID trigger redaction.
-function redactCardInMatch(match: string): string {
-  const groups: { digits: string; start: number; end: number }[] = []
-  for (let m = DIGIT_GROUP_PATTERN.exec(match); m !== null; m = DIGIT_GROUP_PATTERN.exec(match)) {
-    groups.push({ digits: m[0], start: m.index, end: m.index + m[0].length })
+/** Where the card that starts at digit group `first` of a run ends, or -1. */
+type CardEnd = (run: string, first: number) => number
+
+/** How a pass reads card numbers: what joins digit groups, where a run of groups may start and end, and which groups make a card. */
+interface CardReading {
+  separators: string
+  startsAt: (text: string, index: number) => boolean
+  endsAt: (text: string, index: number) => boolean
+  cardEnd: CardEnd
+}
+
+function isDigitAt(text: string, index: number): boolean {
+  const code = text.charCodeAt(index)
+  return code >= 48 && code <= 57
+}
+
+function isWordAt(text: string, index: number): boolean {
+  return index >= 0 && index < text.length && WORD_CHARACTER_PATTERN.test(text[index])
+}
+
+function digitsEnd(text: string, index: number): number {
+  let end = index
+  while (isDigitAt(text, end)) {
+    end++
   }
-  let output = ''
-  let cursor = 0
-  let first = 0
-  while (first < groups.length) {
+  return end
+}
+
+/**
+ * The intent reads any run of whole groups joined by one space, dot, dash, or
+ * slash: at each group, the shortest run whose 13–19 digits pass Luhn. The
+ * shortest leaves a field after the card, such as the SSN in
+ * `4111111111111111 078-05-1120`, for its own pattern.
+ */
+const INTENT_CARDS: CardReading = {
+  separators: ' ./-',
+  startsAt: (text, index) => !isWordAt(text, index - 1),
+  endsAt: (text, index) => !isWordAt(text, index),
+  cardEnd: (run, first) => {
     let digits = ''
-    let matchedLast = -1
-    for (let last = first; last < groups.length; last++) {
-      digits += groups[last].digits
+    for (let groupStart = first; groupStart < run.length;) {
+      const groupEnd = digitsEnd(run, groupStart)
+      digits += run.slice(groupStart, groupEnd)
       if (digits.length > 19) {
-        break
+        return -1
       }
       if (digits.length >= 13 && passesLuhn(digits)) {
-        matchedLast = last
-        break
+        return groupEnd
+      }
+      groupStart = groupEnd + 1
+    }
+    return -1
+  },
+}
+
+/**
+ * The payload reads only digits grouped by single spaces or dashes, the way
+ * cards are printed: one group of 13–19 digits or one of {@link CARD_GROUPINGS}.
+ * Any other grouping is a date, a phone number, or a list of ids. A `.` makes a
+ * fraction or a version, so a leading `-` or `.` belongs to a negative number or
+ * a fraction unless a letter comes before it (`card-4111…`, `No.4111…`), and a
+ * trailing `.` and digit or a letter to a number the run is only part of.
+ */
+const PAYLOAD_CARDS: CardReading = {
+  separators: ' -',
+  startsAt: (text, index) => {
+    const before = text[index - 1]
+    return (
+      index === 0 ||
+      (before === '.' || before === '-' ? /[A-Za-z_]/.test(text[index - 2] ?? '') : !isWordAt(text, index - 1))
+    )
+  },
+  endsAt: (text, index) => !isWordAt(text, index) && !(text[index] === '.' && isDigitAt(text, index + 1)),
+  cardEnd: (run, first) => {
+    const lengths: number[] = []
+    for (let groupStart = first; groupStart < run.length && lengths.length < 5;) {
+      const groupEnd = digitsEnd(run, groupStart)
+      lengths.push(groupEnd - groupStart)
+      groupStart = groupEnd + 1
+    }
+    if (lengths[0] >= 13) {
+      return isCardDigits(run.slice(first, first + lengths[0])) ? first + lengths[0] : -1
+    }
+    for (const grouping of CARD_GROUPINGS) {
+      const end = first + grouping.reduce((sum, length) => sum + length + 1, -1)
+      if (
+        grouping.every((length, index) => lengths[index] === length) &&
+        passesLuhn(run.slice(first, end).replace(/\D/g, ''))
+      ) {
+        return end
       }
     }
-    if (matchedLast >= 0) {
-      output += match.slice(cursor, groups[first].start) + REDACTED_VALUE
-      cursor = groups[matchedLast].end
-      first = matchedLast + 1
+    return -1
+  },
+}
+
+/**
+ * Finds the next run of 13 or more digits in whole groups that `reading` allows.
+ * A loop rather than a pattern: a backtracking pattern over a megabyte-long run
+ * of digit groups overflows the stack.
+ */
+function findCardRun(reading: CardReading): Finder {
+  return (text, from) => {
+    for (let start = from; start < text.length; start++) {
+      if (!isDigitAt(text, start) || isDigitAt(text, start - 1) || !reading.startsAt(text, start)) {
+        continue
+      }
+      let digits = 0
+      let end = -1
+      let groupStart = start
+      for (;;) {
+        const groupEnd = digitsEnd(text, groupStart)
+        digits += groupEnd - groupStart
+        if (digits >= 13 && reading.endsAt(text, groupEnd)) {
+          end = groupEnd
+        }
+        groupStart = groupEnd + 1
+        if (!reading.separators.includes(text[groupEnd]) || !isDigitAt(text, groupStart)) {
+          break
+        }
+      }
+      if (end >= 0) {
+        return [start, end]
+      }
+      start = groupStart - 1
+    }
+    return null
+  }
+}
+
+/**
+ * Redacts every card in a run of digit groups. A run can hold more than one card
+ * plus adjacent fields, such as an expiry or a second card, so the groups are
+ * scanned left to right: a card is redacted and the scan resumes after it, and a
+ * group that starts no card is kept.
+ */
+function redactCardsInRun(run: string, cardEnd: CardEnd): string {
+  let output = ''
+  let cursor = 0
+  for (let first = 0; first < run.length;) {
+    const end = cardEnd(run, first)
+    if (end >= 0) {
+      output += run.slice(cursor, first) + REDACTED_VALUE
+      cursor = end
+      first = end + 1
     } else {
-      first++
+      first = digitsEnd(run, first) + 1
     }
   }
-  return output + match.slice(cursor)
+  return output + run.slice(cursor)
+}
+
+function cardRule(reading: CardReading): Rule {
+  return [findCardRun(reading), (run) => redactCardsInRun(run, reading.cardEnd)]
 }
 
 /**
@@ -683,53 +804,133 @@ function redactCardInMatch(match: string): string {
  */
 export function redactPii(value: string): string {
   return redactIdentifiers(value, [
-    [EMAIL_PATTERN, redactWhole],
-    [IPV4_PATTERN, redactWhole],
-    [IPV6_PATTERN, redactWhole],
-    [CREDIT_CARD_CANDIDATE_PATTERN, cardRedaction()],
-    [US_SSN_PATTERN, redactWhole],
-    [PHONE_NANP_PATTERN, redactWhole],
-    [PHONE_INTL_PATTERN, redactWhole],
+    [matching(EMAIL_PATTERN), redactWhole],
+    [matching(IPV4_PATTERN), redactWhole],
+    [matching(IPV6_PATTERN), redactWhole],
+    [matching(JSON_NUMBER_PATTERN), jsonNumberRedaction((token) => isIntegerCard(token) || holdsIntentCard(token))],
+    cardRule(INTENT_CARDS),
+    [matching(US_SSN_PATTERN), redactWhole],
+    [matching(PHONE_NANP_PATTERN), redactWhole],
+    [matching(PHONE_INTL_PATTERN), redactWhole],
   ])
 }
 
+function holdsIntentCard(text: string): boolean {
+  return redactIdentifiers(text, [cardRule(INTENT_CARDS)]) !== text
+}
+
 /** What one identifier is replaced with, given where it starts in the text the patterns read. */
-type Redaction = (identifier: string, start: number, masked: string) => string
+type Redaction = (identifier: string, start: number, read: string) => string
+
+/** Where the next identifier at or after `from` starts and ends in the text the patterns read, if any. */
+type Finder = (read: string, from: number) => [start: number, end: number] | null
+
+type Rule = [find: Finder, redact: Redaction]
 
 const redactWhole: Redaction = () => REDACTED_VALUE
 
 /**
- * Applies each pattern in turn, matching it against a copy of `value` that has
- * the same length: horizontal Unicode spaces read as an ASCII space and every
- * escape character as {@link ESCAPE_MASK}. A match never contains a masked
- * character, so each replacement lands at the same offsets in `value`, no escape
- * is ever cut in half, and text outside a match comes back byte for byte.
- *
- * A pattern matches its identifier whole, or captures the boundary before it in
- * group 1 and the identifier in group 2.
+ * A pattern that matches its identifier whole, or captures the boundary before
+ * it in group 1 and the identifier in group 2.
  */
-function redactIdentifiers(value: string, rules: [RegExp, Redaction][]): string {
+function matching(pattern: RegExp): Finder {
+  return (read, from) => {
+    pattern.lastIndex = from
+    const match = pattern.exec(read)
+    if (match === null) {
+      return null
+    }
+    const end = match.index + match[0].length
+    return [end - (match[2] ?? match[0]).length, end]
+  }
+}
+
+/** A text as the identifier patterns read it, and where each of its characters came from. */
+interface EscapeReading {
+  read: string
+  /** The offset in the text of the character the patterns read at `index`; `read.length` maps to the text's end. */
+  offset: (index: number) => number
+}
+
+/** Horizontal Unicode spaces read as an ASCII space, and other non-ASCII characters as {@link NON_ASCII_STAND_IN}. */
+function readCharacters(text: string): string {
+  return text.replace(UNICODE_SPACE_PATTERN, ' ').replace(NON_ASCII_PATTERN, NON_ASCII_STAND_IN)
+}
+
+/**
+ * Reads `text` as {@link readCharacters} does, and each escape in it as one
+ * character: an escaped control character, quote, or backslash as
+ * {@link ESCAPE_MASK}, and any other `\uXXXX` as the character it encodes would
+ * read, so `ada\u0040example.com` and `4111\u00201111…` read as what they are.
+ */
+function readEscapes(text: string): EscapeReading {
+  const spaced = readCharacters(text)
+  if (!text.includes('\\')) {
+    return { read: spaced, offset: (index) => index }
+  }
+  const offsets = new Int32Array(text.length + 1)
+  let read = ''
+  let cursor = 0
+  const copyUpTo = (end: number): void => {
+    for (let index = cursor; index < end; index++) {
+      offsets[read.length + index - cursor] = index
+    }
+    read += spaced.slice(cursor, end)
+  }
+  for (const escape of spaced.matchAll(ESCAPE_PATTERN)) {
+    copyUpTo(escape.index)
+    offsets[read.length] = escape.index
+    read += escapeStandIn(escape[0])
+    cursor = escape.index + escape[0].length
+  }
+  copyUpTo(text.length)
+  offsets[read.length] = text.length
+  return { read, offset: (index) => offsets[index] }
+}
+
+function escapeStandIn(escape: string): string {
+  if (escape[1] !== 'u') {
+    return ESCAPE_MASK
+  }
+  const code = parseInt(escape.slice(2), 16)
+  if (
+    code < 0x20 ||
+    (code >= 0x7f && code <= 0x9f) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x22 ||
+    code === 0x5c
+  ) {
+    return ESCAPE_MASK
+  }
+  return readCharacters(String.fromCharCode(code))
+}
+
+/**
+ * Applies each rule in turn to `value` as {@link readEscapes} reads it, and
+ * splices each replacement over the characters the identifier was read from.
+ * An identifier that covers part of an escape covers all of it, so the text
+ * stays valid JSON, and text outside an identifier comes back byte for byte.
+ */
+function redactIdentifiers(value: string, rules: Rule[]): string {
   let text = value
-  let masked = value
-    .replace(UNICODE_SPACE_PATTERN, ' ')
-    .replace(ESCAPE_PATTERN, (escape) => ESCAPE_MASK.repeat(escape.length))
-  for (const [pattern, redact] of rules) {
-    let redactedText = ''
-    let redactedMasked = ''
+  let reading = readEscapes(text)
+  for (const [find, redact] of rules) {
+    const { read, offset } = reading
+    let redacted = ''
     let cursor = 0
-    pattern.lastIndex = 0
-    for (let match = pattern.exec(masked); match !== null; match = pattern.exec(masked)) {
-      const identifier = match[2] ?? match[0]
-      const start = match.index + match[0].length - identifier.length
-      const replacement = redact(identifier, start, masked)
+    for (let span = find(read, 0); span !== null; span = find(read, span[1])) {
+      const identifier = read.slice(span[0], span[1])
+      const replacement = redact(identifier, span[0], read)
       if (replacement !== identifier) {
-        redactedText += text.slice(cursor, start) + replacement
-        redactedMasked += masked.slice(cursor, start) + replacement
-        cursor = start + identifier.length
+        redacted += text.slice(cursor, offset(span[0])) + replacement
+        cursor = offset(span[1])
       }
     }
-    text = redactedText + text.slice(cursor)
-    masked = redactedMasked + masked.slice(cursor)
+    if (cursor > 0) {
+      text = redacted + text.slice(cursor)
+      reading = readEscapes(text)
+    }
   }
   return text
 }
@@ -748,35 +949,50 @@ function isPublicIpv4(address: string): boolean {
 }
 
 /**
- * {@link redactCardInMatch} for one text, writing a card that stands as a bare
- * JSON number as the string `"[redacted]"`, so JSON text stays valid JSON. A card
- * stands outside every JSON string when an even number of quotes precede it;
- * escaped quotes are masked, so they are not counted. The count carries over from
- * one card to the next, so a text full of cards is read once, not once per card.
+ * Writes a JSON number for which `isCard` holds as the string `"[redacted]"`,
+ * whole, so JSON text stays valid JSON. A number stands outside every JSON
+ * string when an even number of quotes precede it; escaped quotes are masked, so
+ * they are not counted. The count carries over from one number to the next, so a
+ * text full of numbers is read once, not once per number.
  */
-function cardRedaction(): Redaction {
+function jsonNumberRedaction(isCard: (token: string) => boolean): Redaction {
   let quotes = 0
   let counted = 0
-  return (candidate, start, masked) => {
-    const redacted = redactCardInMatch(candidate)
-    if (redacted !== REDACTED_VALUE) {
-      return redacted
-    }
+  return (token, start, read) => {
     for (; counted < start; counted++) {
-      quotes += masked[counted] === '"' ? 1 : 0
+      quotes += read[counted] === '"' ? 1 : 0
     }
-    const end = start + candidate.length
-    return quotes % 2 === 0 &&
-      JSON_VALUE_START_PATTERN.test(masked.slice(Math.max(0, start - 64), start)) &&
-      JSON_VALUE_END_PATTERN.test(masked.slice(end, end + 64))
-      ? `"${REDACTED_VALUE}"`
-      : REDACTED_VALUE
+    return quotes % 2 === 0 && isCard(token) ? `"${REDACTED_VALUE}"` : token
   }
 }
 
-function isCardNumber(value: number): boolean {
-  const digits = String(value)
+function isCardDigits(digits: string): boolean {
   return /^\d{13,19}$/.test(digits) && passesLuhn(digits)
+}
+
+function isCardNumber(value: number): boolean {
+  return isCardDigits(String(value))
+}
+
+/**
+ * Whether a JSON number token equals a card number, read from its digits rather
+ * than parsed, so a 19-digit card past 2^53 is judged exactly:
+ * `4111111111111111.0` and `41111111111111110e-1` are both the card.
+ */
+function isIntegerCard(token: string): boolean {
+  const [, whole, fraction = '', exponent = '0'] = JSON_NUMBER_PARTS_PATTERN.exec(token) ?? []
+  if (whole === undefined) {
+    return false
+  }
+  const digits = whole + fraction
+  const significant = digits.replace(/^0+/, '')
+  const integerLength = whole.length + Number(exponent) - (digits.length - significant.length)
+  return (
+    integerLength >= 13 &&
+    integerLength <= 19 &&
+    !/[1-9]/.test(significant.slice(integerLength)) &&
+    isCardDigits(significant.slice(0, integerLength).padEnd(integerLength, '0'))
+  )
 }
 
 /**
@@ -787,13 +1003,14 @@ function isCardNumber(value: number): boolean {
  */
 export function redactPayloadPii(value: string): string {
   return redactIdentifiers(value, [
-    [EMAIL_PATTERN, redactWhole],
-    [PAYLOAD_IPV4_PATTERN, (address) => (isPublicIpv4(address) ? REDACTED_VALUE : address)],
-    [IPV6_PATTERN, redactWhole],
-    [PAYLOAD_CARD_CANDIDATE_PATTERN, cardRedaction()],
-    [US_SSN_PATTERN, redactWhole],
-    [PHONE_PARENTHESIZED_PATTERN, redactWhole],
-    [PAYLOAD_PHONE_INTL_PATTERN, redactWhole],
+    [matching(EMAIL_PATTERN), redactWhole],
+    [matching(PAYLOAD_IPV4_PATTERN), (address) => (isPublicIpv4(address) ? REDACTED_VALUE : address)],
+    [matching(IPV6_PATTERN), redactWhole],
+    [matching(JSON_NUMBER_PATTERN), jsonNumberRedaction((token) => token[0] !== '-' && isIntegerCard(token))],
+    cardRule(PAYLOAD_CARDS),
+    [matching(US_SSN_PATTERN), redactWhole],
+    [matching(PHONE_PARENTHESIZED_PATTERN), redactWhole],
+    [matching(PAYLOAD_PHONE_INTL_PATTERN), redactWhole],
   ])
 }
 
