@@ -486,8 +486,14 @@ export class PostHogLogs {
     })
   }
 
-  private _flushInBackground(): void {
-    void this.flush()
+  /**
+   * `flush()` for a host that drives logs from its own flush cycle. Never rejects, and when
+   * records remain (a failed send, or captures that landed mid-flush) re-arms the timer with
+   * backoff, as the pipeline's own timer flush does. A bare `flush()` clears the timer and
+   * leaves nothing to retry the records once traffic stops.
+   */
+  flushInBackground(): Promise<void> {
+    return this.flush()
       .then(
         () => {
           this._consecutiveFlushFailures = 0
@@ -507,5 +513,9 @@ export class PostHogLogs {
           this._flushTimer.armNoEarlierThan(this._nextFlushDelay())
         }
       })
+  }
+
+  private _flushInBackground(): void {
+    void this.flushInBackground()
   }
 }

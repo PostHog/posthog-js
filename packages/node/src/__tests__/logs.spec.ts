@@ -171,6 +171,47 @@ describe('PostHog Node.js logs', () => {
     expect(logsCalls()).toHaveLength(refusals)
   })
 
+  it('retries logs on the timer after an explicit flush fails', async () => {
+    mockedFetch.mockImplementation(async (url: any) =>
+      String(url).includes('/i/v1/logs')
+        ? ({ status: 503, headers: { get: () => null }, text: async () => '' } as any)
+        : ({ status: 200, headers: { get: () => null }, text: async () => '' } as any)
+    )
+    create({ logs: { flushIntervalMs: 1000 } })
+    posthog.logger.info('retry me')
+    await posthog.flush()
+    expect(records()).toHaveLength(1)
+
+    // Ingestion recovers and traffic stops: only the re-armed logs timer can deliver it.
+    mockedFetch.mockResolvedValue({ status: 200, headers: { get: () => null }, text: async () => '' } as any)
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(records()).toHaveLength(2)
+  })
+
+  it('does not let a stalled logs endpoint hold up the event drain on shutdown', async () => {
+    let releaseLogs: () => void = () => {}
+    mockedFetch.mockImplementation((url: any) =>
+      String(url).includes('/i/v1/logs')
+        ? new Promise((resolve) => {
+            releaseLogs = () => resolve({ status: 200, headers: { get: () => null }, text: async () => '' } as any)
+          })
+        : Promise.resolve({ status: 200, headers: { get: () => null }, text: async () => '' } as any)
+    )
+    create({ flushAt: 100, flushInterval: 60_000 })
+    posthog.logger.info('stalls')
+    posthog.capture({ distinctId: 'u', event: 'must send' })
+
+    const shutdown = posthog.shutdown(1000)
+    await vi.advanceTimersByTimeAsync(10)
+    const eventCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/batch'))
+    expect(eventCalls).toHaveLength(1)
+
+    releaseLogs()
+    await vi.advanceTimersByTimeAsync(1000)
+    await shutdown
+  })
+
   describe('config', () => {
     it.each([0, -1, 0.5, NaN, Infinity])('falls back to the default batch size for %s', (value) => {
       expect(resolveNodeLogsConfig({ maxBatchRecordsPerPost: value }).maxBatchRecordsPerPost).toBe(

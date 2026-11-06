@@ -353,7 +353,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
     // Same as spans: an automatic flush leaves logs alone while the endpoint's Retry-After window is open.
     if (this._logs && !(skipThrottledSpans && this._logs.throttled)) {
-      others.push(this._logs.flush().catch(() => {}))
+      // Not `flush()`: it clears the logs timer, and a failure here must re-arm it.
+      others.push(this._logs.flushInBackground())
     }
     if (others.length === 0) {
       return events
@@ -3113,6 +3114,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this._isShutdown = true
     // Sends that started before shutdown keep running alongside the flushes below, within the same budget.
     const emailsDrained = this._emails?.drain()
+    // Logs drain alongside the other pipelines rather than ahead of them, so a stalled
+    // logs endpoint can't spend the budget traces and events need.
+    const logs = this._logs
+    const logsDrained = logs
+      ? raceWithTimeout(
+          logs.flush().catch(() => {}),
+          Math.max(0, shutdownDeadlineMs - Date.now())
+        ).then(() => {
+          logs.reset()
+          // Retire a flush that lost the race: otherwise, when it settles with records
+          // left, its background retry re-arms the timer and keeps sending after shutdown.
+          logs.clearQueue()
+        })
+      : undefined
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
@@ -3133,16 +3148,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // merged back onto a re-armed timer after teardown.
       this._metrics.reset()
     }
-    if (this._logs) {
-      await raceWithTimeout(
-        this._logs.flush().catch(() => {}),
-        Math.max(0, shutdownDeadlineMs - Date.now())
-      )
-      this._logs.reset()
-      // Retire a flush that lost the race: otherwise, when it settles with records
-      // left, its background retry re-arms the timer and keeps sending after shutdown.
-      this._logs.clearQueue()
-    }
     if (this._traces) {
       // Same treatment as metrics: send what's queued, raced against the shared
       // shutdown budget, then reset so a losing flush can't re-arm a timer.
@@ -3159,6 +3164,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return await super._shutdown(remainingMs)
     } finally {
       await emailsSettled
+      await logsDrained
       this._distinctIdHasSentFlagCalls.clear()
       resolve?.()
     }
