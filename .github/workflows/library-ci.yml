@@ -608,5 +608,12 @@ jobs:
       - name: Generate public API references
         run: pnpm generate-references
 
+      - name: Generate Markdown SDK references
+        env:
+          SDK_SPECS: ${{ runner.temp }}/sdk-specs
+        run: |
+          scripts/fetch-sdk-specs.sh "$SDK_SPECS"
+          pnpm generate-markdown-references
+
       - name: Check public API references
         run: pnpm check:public-api

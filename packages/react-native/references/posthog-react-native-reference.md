@@ -131,6 +131,9 @@ tableOfContents:
   - value: "Remote config"
     url: remote-config
     depth: 0
+  - value: "Session replay privacy"
+    url: session-replay-privacy
+    depth: 0
   - value: "Surveys"
     url: surveys
     depth: 0
@@ -226,7 +229,80 @@ export function MyApp1() {
 }
 ```
 
+### `PostHogProvider`
 
+> **PostHogProvider**(`props`): `Element` \| `null`
+
+PostHogProvider is a React component that provides PostHog functionality to your React Native app. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
+
+Autocapturing navigation requires further configuration. See the [React Native SDK navigation docs](https://posthog.com/docs/libraries/react-native#capturing-screen-views)
+for more information about autocapturing navigation.
+
+This is the recommended way to set up PostHog for React Native. This utilizes the Context API to pass the PostHog client around, enable autocapture.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `props` | `PostHogProviderProps` | The PostHogProvider props |
+
+#### Returns
+
+`Element` \| `null`
+
+#### Examples
+
+```jsx
+// Add to App.(js|ts)
+import { usePostHog, PostHogProvider } from 'posthog-react-native'
+
+export function MyApp() {
+    return (
+        <PostHogProvider projectToken="<ph_project_token>" options={{
+            host: '<ph_client_api_host>',
+        }}>
+            <MyComponent />
+        </PostHogProvider>
+    )
+}
+
+// And access the PostHog client via the usePostHog hook
+import { usePostHog } from 'posthog-react-native'
+
+const MyComponent = () => {
+    const posthog = usePostHog()
+
+    useEffect(() => {
+        posthog.capture("event_name")
+    }, [posthog])
+}
+
+```
+
+```jsx
+// Using with existing client
+import { PostHog } from 'posthog-react-native'
+
+const posthog = new PostHog('<ph_project_token>', {
+    host: '<ph_client_api_host>'
+})
+
+export function MyApp() {
+    return (
+        <PostHogProvider client={posthog}>
+            <MyComponent />
+        </PostHogProvider>
+    )
+}
+```
+
+### `usePostHog`
+
+> **usePostHog**(): `PostHog`
+
+#### Returns
+
+`PostHog`
 
 ## Capture
 
@@ -245,8 +321,6 @@ export function MyApp1() {
 #### Returns
 
 `void`
-
-
 
 ## Identify
 
@@ -290,8 +364,6 @@ posthog.identify('distinctID', {
   }
 })
 ```
-
-
 
 ## Logs
 
@@ -416,8 +488,6 @@ For example, if a distinct ID used on the frontend is not available in your back
 posthog.alias('distinct_id')
 ```
 
-
-
 ## Capture AI
 
 ### `PostHog.captureTraceFeedback`
@@ -437,8 +507,6 @@ Capture written user feedback for a LLM trace. Numeric values are converted to s
 
 `void`
 
-
-
 ### `PostHog.captureTraceMetric`
 
 > **captureTraceMetric**(`traceId`, `metricName`, `metricValue`): `void`
@@ -456,8 +524,6 @@ Capture a metric for a LLM trace. Numeric values are converted to strings.
 #### Returns
 
 `void`
-
-
 
 ## Capture exception
 
@@ -508,7 +574,75 @@ posthog.captureException(error, {
 })
 ```
 
+### `PostHogErrorBoundary`
 
+- `Component`\<`PostHogErrorBoundaryProps`, `PostHogErrorBoundaryState`\>
+
+#### Constructors
+
+##### Constructor
+
+> **new PostHogErrorBoundary**(`props`): `PostHogErrorBoundary`
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `props` | `PostHogErrorBoundaryProps` |
+
+###### Returns
+
+`PostHogErrorBoundary`
+
+#### Properties
+
+| Property | Modifier | Type | Default value | Description | Overrides |
+| ------ | ------ | ------ | ------ | ------ | ------ |
+| <a id="context"></a> `context` | `public` | `object` | `undefined` | If using the new style context, re-declare this in your class to be the `React.ContextType` of your `static contextType`. Should be used with type annotation or static contextType. `static contextType = MyContext // For TS pre-3.7: context!: React.ContextType<typeof MyContext> // For TS 3.7 and above: declare context: React.ContextType<typeof MyContext>` **See** [https://react.dev/reference/react/Component#context](https://react.dev/reference/react/Component#context) | `React.Component.context` |
+| `context.client` | `public` | `PostHog` | `undefined` | - | - |
+| <a id="contexttype"></a> `contextType` | `static` | `Context`\<\{ `client`: `PostHog`; \}\> | `PostHogContext` | If set, `this.context` will be set at runtime to the current value of the given Context. Usage: `type MyContext = number const Ctx = React.createContext<MyContext>(0) class Foo extends React.Component { static contextType = Ctx context!: React.ContextType<typeof Ctx> render () { return <>My context's value: {this.context}</>; } }` **See** [https://react.dev/reference/react/Component#static-contexttype](https://react.dev/reference/react/Component#static-contexttype) | `React.Component.contextType` |
+
+#### Methods
+
+##### componentDidCatch()
+
+> **componentDidCatch**(`error`, `errorInfo`): `void`
+
+Catches exceptions generated in descendant components. Unhandled exceptions will cause
+the entire component tree to unmount.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `error` | `unknown` |
+| `errorInfo` | `ErrorInfo` |
+
+###### Returns
+
+`void`
+
+##### render()
+
+> **render**(): `ReactNode`
+
+###### Returns
+
+`ReactNode`
+
+##### getDerivedStateFromError()
+
+> `static` **getDerivedStateFromError**(`error`): `Partial`\<`PostHogErrorBoundaryState`\>
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `error` | `unknown` |
+
+###### Returns
+
+`Partial`\<`PostHogErrorBoundaryState`\>
 
 ## Create person profile
 
@@ -536,8 +670,6 @@ If `personProfiles` is 'always' or a profile already exists, this is a no-op.
 posthog.createPersonProfile()
 ```
 
-
-
 ## Debug
 
 ### `PostHog.isDebug`
@@ -547,8 +679,6 @@ posthog.createPersonProfile()
 ##### Returns
 
 `boolean`
-
-
 
 ### `PostHog.debug`
 
@@ -582,8 +712,6 @@ posthog.debug(true)
 // disable debug mode
 posthog.debug(false)
 ```
-
-
 
 ## Exception steps
 
@@ -647,8 +775,6 @@ await posthog.flush()
 
 flushLogs
 
-
-
 ### `PostHog.flushWithPendingPromises`
 
 > **flushWithPendingPromises**(): `Promise`\<`void`\>
@@ -689,8 +815,6 @@ PostHogFetchNetworkError
 
 Error
 
-
-
 ## Get anonymous ID
 
 ### `PostHog.getAnonymousId`
@@ -716,8 +840,6 @@ const anonId = posthog.getAnonymousId()
 console.log('Anonymous ID:', anonId)
 ```
 
-
-
 ## Get distinct ID
 
 ### `PostHog.getDistinctId`
@@ -741,8 +863,6 @@ The current user's distinct ID
 // get current distinct ID
 const distinctId = posthog.getDistinctId()
 ```
-
-
 
 ## Get feature flag
 
@@ -780,7 +900,20 @@ The current feature flag value, or undefined if flags are unavailable
 const value = posthog.getFeatureFlag('key-for-your-boolean-flag')
 ```
 
+### `useFeatureFlag`
 
+> **useFeatureFlag**(`flag`, `client?`): `FeatureFlagValue` \| `undefined`
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `flag` | `string` |
+| `client?` | `PostHog` |
+
+#### Returns
+
+`FeatureFlagValue` \| `undefined`
 
 ## Get feature flag payload
 
@@ -815,7 +948,26 @@ Use `getFeatureFlagResult()` instead, which returns the flag value and payload f
 const payload = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')?.payload
 ```
 
+### `useFeatureFlagWithPayload`
 
+> **useFeatureFlagWithPayload**(`flag`, `client?`): `FeatureFlagWithPayload`
+
+Returns a flag's value and payload, and updates when flags reload.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `flag` | `string` |
+| `client?` | `PostHog` |
+
+#### Returns
+
+`FeatureFlagWithPayload`
+
+#### Deprecated
+
+Use `useFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
 
 ## Get feature flag result
 
@@ -837,7 +989,20 @@ off result; `undefined` means no evaluation is available for the key.
 
 `FeatureFlagResult` \| `undefined`
 
+### `useFeatureFlagResult`
 
+> **useFeatureFlagResult**(`flag`, `client?`): `FeatureFlagResult` \| `undefined`
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `flag` | `string` |
+| `client?` | `PostHog` |
+
+#### Returns
+
+`FeatureFlagResult` \| `undefined`
 
 ## Get feature flags
 
@@ -851,8 +1016,6 @@ the flags from the last load (no network request) and does not send a `$feature_
 #### Returns
 
 `FeatureFlagResult`[]
-
-
 
 ### `PostHog.getFeatureFlags`
 
@@ -868,7 +1031,19 @@ Returns the value of every loaded flag, keyed by flag key.
 
 Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
 
+### `useFeatureFlags`
 
+> **useFeatureFlags**(`client?`): \{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `undefined`
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `client?` | `PostHog` |
+
+#### Returns
+
+\{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `undefined`
 
 ## Get feature flags and payloads
 
@@ -891,8 +1066,6 @@ Returns the values and payloads of every loaded flag, as two maps keyed by flag 
 
 Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
 
-
-
 ## Get session ID
 
 ### `PostHog.getSessionId`
@@ -911,8 +1084,6 @@ The stored session ID for the current session. This may be an empty string if th
 
 This should only be used for informative purposes.
 Any actual internal use case for the session_id should be handled by the sessionManager.
-
-
 
 ## Group
 
@@ -952,8 +1123,6 @@ posthog.group('company', 'company_id_in_your_db', {
 })
 ```
 
-
-
 ### `PostHog.groups`
 
 > **groups**(`groups`): `void`
@@ -970,8 +1139,6 @@ posthog.group('company', 'company_id_in_your_db', {
 #### Returns
 
 `void`
-
-
 
 ## Group identify
 
@@ -991,8 +1158,6 @@ posthog.group('company', 'company_id_in_your_db', {
 #### Returns
 
 `void`
-
-
 
 ## Is feature enabled
 
@@ -1074,8 +1239,6 @@ const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')
 const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })
 ```
 
-
-
 ## Is opt out
 
 ### `PostHog.isDisabled`
@@ -1086,8 +1249,6 @@ const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaul
 
 `boolean`
 
-
-
 ### `PostHog.optedOut`
 
 > **get** **optedOut**(): `boolean`
@@ -1095,8 +1256,6 @@ const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaul
 ##### Returns
 
 `boolean`
-
-
 
 ## Is session replay active
 
@@ -1136,8 +1295,6 @@ const isActive = await posthog.isSessionReplayActive()
 
 () => `void`
 
-
-
 ## Opt in
 
 ### `PostHog.optIn`
@@ -1161,8 +1318,6 @@ When opting in after an opt-out, session replay restarts in a new session if the
 posthog.optIn()
 ```
 
-
-
 ### `PostHog.optOut`
 
 > **optOut**(): `Promise`\<`void`\>
@@ -1182,8 +1337,6 @@ The promise resolves once session replay has stopped.
 // opt out of tracking
 posthog.optOut()
 ```
-
-
 
 ## Register
 
@@ -1216,8 +1369,6 @@ posthog.register({
 })
 ```
 
-
-
 ### `PostHog.registerForSession`
 
 > **registerForSession**(`properties`): `void`
@@ -1231,8 +1382,6 @@ posthog.register({
 #### Returns
 
 `void`
-
-
 
 ## Reload feature flags
 
@@ -1261,8 +1410,6 @@ flag values via `updateFlags()` instead.
 posthog.reloadFeatureFlags()
 ```
 
-
-
 ### `PostHog.reloadFeatureFlagsAsync`
 
 > **reloadFeatureFlagsAsync**(): `Promise`\<`Record`\<`string`, `string` \| `boolean`\> \| `undefined`\>
@@ -1289,8 +1436,6 @@ posthog.reloadFeatureFlagsAsync().then((refreshedFlags) => console.log(refreshed
 
 When the `disableRemoteFeatureFlags` option is set, no request is made and the
 promise resolves with the currently stored flags (from `bootstrap` or `updateFlags()`).
-
-
 
 ## Reset
 
@@ -1347,8 +1492,6 @@ posthog.reset([
 ])
 ```
 
-
-
 ## Reset group properties for flags
 
 ### `PostHog.resetGroupPropertiesForFlags`
@@ -1374,8 +1517,6 @@ Resets group properties for feature flag evaluation.
 posthog.resetGroupPropertiesForFlags()
 ```
 
-
-
 ## Reset person properties for flags
 
 ### `PostHog.resetPersonPropertiesForFlags`
@@ -1400,8 +1541,6 @@ Resets person properties for feature flag evaluation.
 // reset person properties for flags
 posthog.resetPersonPropertiesForFlags()
 ```
-
-
 
 ## Screen
 
@@ -1445,6 +1584,22 @@ posthog.screen('dashboard', {
 })
 ```
 
+### `useNavigationTracker`
+
+> `const` **useNavigationTracker**: (`options?`, `navigationRef?`, `client?`) => `void`
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options?` | `PostHogAutocaptureNavigationTrackerOptions` |
+| `navigationRef?` | `PostHogNavigationRef` |
+| `client?` | `PostHog` |
+
+#### Returns
+
+`void`
+
 ## Set group properties for flags
 
 ### `PostHog.setGroupPropertiesForFlags`
@@ -1473,8 +1628,6 @@ When you change the group, these properties are reset.
 // set group properties for flags
 posthog.setGroupPropertiesForFlags({'company': {'property1': 'value', property2: 'value2'}})
 ```
-
-
 
 ## Set person properties
 
@@ -1525,8 +1678,6 @@ posthog.setPersonProperties(
 posthog.setPersonProperties({ plan: 'premium' }, undefined, false)
 ```
 
-
-
 ### `PostHog.unsetPersonProperties`
 
 > **unsetPersonProperties**(`propertyNames`, `reloadFeatureFlags?`): `void`
@@ -1544,8 +1695,6 @@ Learn more about [identifying users](https://posthog.com/docs/product-analytics/
 #### Returns
 
 `void`
-
-
 
 ## Set person properties for flags
 
@@ -1576,8 +1725,6 @@ Successive calls are additive: all properties you set are combined together and 
 // set person properties for flags
 posthog.setPersonPropertiesForFlags({'property1': 'value', property2: 'value2'})
 ```
-
-
 
 ## Shutdown
 
@@ -1612,8 +1759,6 @@ process.on('SIGINT', async () => {
   process.exit(0)
 })
 ```
-
-
 
 ## Start session recording
 
@@ -1705,8 +1850,6 @@ Super Properties are persisted across sessions so you have to explicitly remove 
 posthog.unregister('icecream pref')
 ```
 
-
-
 ### `PostHog.unregisterForSession`
 
 > **unregisterForSession**(`property`): `void`
@@ -1720,8 +1863,6 @@ posthog.unregister('icecream pref')
 #### Returns
 
 `void`
-
-
 
 ## Autocapture
 
@@ -1742,8 +1883,6 @@ posthog.unregister('icecream pref')
 
 `void`
 
-
-
 ## Remote config
 
 ### `PostHog.reloadRemoteConfigAsync`
@@ -1754,7 +1893,46 @@ posthog.unregister('icecream pref')
 
 `Promise`\<`PostHogRemoteConfig` \| `undefined`\>
 
+## Session replay privacy
 
+### `PostHogMaskView`
+
+> **PostHogMaskView**(`options`): `Element`
+
+PostHogMaskView is a wrapper component that hides its children from PostHog
+session recordings without compromising accessibility.
+
+It works by:
+- Setting `accessibilityLabel` to `"ph-no-capture"` to hide the content from session recordings
+- Setting `importantForAccessibility` to `"no"` to prevent the wrapper View from hiding
+  accessible content on Android (since `accessibilityLabel` would otherwise interfere)
+- Setting `collapsable={false}` so React Native keeps this wrapper in the native view hierarchy
+  (otherwise layout-only view flattening can remove it and masking is not detected on iOS/Android)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | `PostHogMaskViewProps` |
+
+#### Returns
+
+`Element`
+
+#### Example
+
+```jsx
+import { PostHogMaskView } from 'posthog-react-native'
+
+function SensitiveForm() {
+  return (
+    <PostHogMaskView>
+      <TextInput placeholder="Credit card number" />
+      <TextInput placeholder="CVV" />
+    </PostHogMaskView>
+  )
+}
+```
 
 ## Surveys
 
@@ -1765,6 +1943,57 @@ posthog.unregister('icecream pref')
 #### Returns
 
 `Promise`\<`Survey`[]\>
+
+### `PostHogSurveyProvider`
+
+> **PostHogSurveyProvider**(`props`): `Element`
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `props` | `PostHogSurveyProviderProps` |
+
+#### Returns
+
+`Element`
+
+### `Questions`
+
+> **Questions**(`options`): `Element`
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | \{ `appearance`: `SurveyAppearanceTheme`; `client?`: `PostHog`; `initialProgress?`: `SurveyProgress`; `onProgressChange?`: (`progress`, `completed`) => `boolean`; `onResponsesChange?`: (`responses`) => `void`; `onSubmit`: () => `void`; `styleOverrides?`: `StyleProp`\<`ViewStyle`\>; `survey`: `Survey`; `surveyLanguage?`: `string` \| `null`; \} |
+| `options.appearance` | `SurveyAppearanceTheme` |
+| `options.client?` | `PostHog` |
+| `options.initialProgress?` | `SurveyProgress` |
+| `options.onProgressChange?` | (`progress`, `completed`) => `boolean` |
+| `options.onResponsesChange?` | (`responses`) => `void` |
+| `options.onSubmit` | () => `void` |
+| `options.styleOverrides?` | `StyleProp`\<`ViewStyle`\> |
+| `options.survey` | `Survey` |
+| `options.surveyLanguage?` | `string` \| `null` |
+
+#### Returns
+
+`Element`
+
+### `SurveyModal`
+
+> **SurveyModal**(`props`): `Element` \| `null`
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `props` | `SurveyModalProps` |
+
+#### Returns
+
+`Element` \| `null`
 
 ## SDK utils
 
@@ -1824,8 +2053,6 @@ The device ID, or an empty string if not yet initialized
 
 `PostHogFeatureFlagDetails` \| `undefined`
 
-
-
 ### `PostHog.getSurveyDisplayLanguageOverride`
 
 > **getSurveyDisplayLanguageOverride**(): `string` \| `null`
@@ -1848,8 +2075,6 @@ The device ID, or an empty string if not yet initialized
 #### Returns
 
 () => `void`
-
-
 
 ### `PostHog.registerPushNotificationToken`
 
@@ -1897,8 +2122,6 @@ Not supported on web or macOS.
 #### Returns
 
 `void`
-
-
 
 ### `PostHog.unregisterPushNotificationToken`
 
@@ -1964,255 +2187,67 @@ posthog.updateFlags({ 'my-flag': true }, { 'my-flag': { color: 'blue' } })
 posthog.updateFlags({ 'my-flag': false }, undefined, { merge: true })
 ```
 
-
-
-### `useNavigationTracker`
-
-> `const` **useNavigationTracker**: (`options?`, `navigationRef?`, `client?`) => `void`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `options?` | `PostHogAutocaptureNavigationTrackerOptions` |
-| `navigationRef?` | `PostHogNavigationRef` |
-| `client?` | `PostHog` |
-
-#### Returns
-
-`void`
-
-### `PostHogMaskView`
-
-> **PostHogMaskView**(`__namedParameters`): `Element`
-
-PostHogMaskView is a wrapper component that hides its children from PostHog
-session recordings without compromising accessibility.
-
-It works by:
-- Setting `accessibilityLabel` to `"ph-no-capture"` to hide the content from session recordings
-- Setting `importantForAccessibility` to `"no"` to prevent the wrapper View from hiding
-  accessible content on Android (since `accessibilityLabel` would otherwise interfere)
-- Setting `collapsable={false}` so React Native keeps this wrapper in the native view hierarchy
-  (otherwise layout-only view flattening can remove it and masking is not detected on iOS/Android)
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `__namedParameters` | `PostHogMaskViewProps` |
-
-#### Returns
-
-`Element`
-
-#### Example
-
-```jsx
-import { PostHogMaskView } from 'posthog-react-native'
-
-function SensitiveForm() {
-  return (
-    <PostHogMaskView>
-      <TextInput placeholder="Credit card number" />
-      <TextInput placeholder="CVV" />
-    </PostHogMaskView>
-  )
-}
-```
-
-### `PostHogProvider`
-
-> **PostHogProvider**(`props`): `Element` \| `null`
-
-PostHogProvider is a React component that provides PostHog functionality to your React Native app. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
-
-Autocapturing navigation requires further configuration. See the [React Native SDK navigation docs](https://posthog.com/docs/libraries/react-native#capturing-screen-views)
-for more information about autocapturing navigation.
-
-This is the recommended way to set up PostHog for React Native. This utilizes the Context API to pass the PostHog client around, enable autocapture.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `props` | `PostHogProviderProps` | The PostHogProvider props |
-
-#### Returns
-
-`Element` \| `null`
-
-#### Examples
-
-```jsx
-// Add to App.(js|ts)
-import { usePostHog, PostHogProvider } from 'posthog-react-native'
-
-export function MyApp() {
-    return (
-        <PostHogProvider projectToken="<ph_project_token>" options={{
-            host: '<ph_client_api_host>',
-        }}>
-            <MyComponent />
-        </PostHogProvider>
-    )
-}
-
-// And access the PostHog client via the usePostHog hook
-import { usePostHog } from 'posthog-react-native'
-
-const MyComponent = () => {
-    const posthog = usePostHog()
-
-    useEffect(() => {
-        posthog.capture("event_name")
-    }, [posthog])
-}
-
-```
-
-```jsx
-// Using with existing client
-import { PostHog } from 'posthog-react-native'
-
-const posthog = new PostHog('<ph_project_token>', {
-    host: '<ph_client_api_host>'
-})
-
-export function MyApp() {
-    return (
-        <PostHogProvider client={posthog}>
-            <MyComponent />
-        </PostHogProvider>
-    )
-}
-```
-
-### `PostHogSurveyProvider`
-
-> **PostHogSurveyProvider**(`props`): `Element`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `props` | `PostHogSurveyProviderProps` |
-
-#### Returns
-
-`Element`
-
-### `Questions`
-
-> **Questions**(`__namedParameters`): `Element`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `__namedParameters` | \{ `appearance`: `SurveyAppearanceTheme`; `client?`: `PostHog`; `initialProgress?`: `SurveyProgress`; `onProgressChange?`: (`progress`, `completed`) => `boolean`; `onResponsesChange?`: (`responses`) => `void`; `onSubmit`: () => `void`; `styleOverrides?`: `StyleProp`\<`ViewStyle`\>; `survey`: `Survey`; `surveyLanguage?`: `string` \| `null`; \} |
-| `__namedParameters.appearance` | `SurveyAppearanceTheme` |
-| `__namedParameters.client?` | `PostHog` |
-| `__namedParameters.initialProgress?` | `SurveyProgress` |
-| `__namedParameters.onProgressChange?` | (`progress`, `completed`) => `boolean` |
-| `__namedParameters.onResponsesChange?` | (`responses`) => `void` |
-| `__namedParameters.onSubmit` | () => `void` |
-| `__namedParameters.styleOverrides?` | `StyleProp`\<`ViewStyle`\> |
-| `__namedParameters.survey` | `Survey` |
-| `__namedParameters.surveyLanguage?` | `string` \| `null` |
-
-#### Returns
-
-`Element`
-
-### `SurveyModal`
-
-> **SurveyModal**(`props`): `Element` \| `null`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `props` | `SurveyModalProps` |
-
-#### Returns
-
-`Element` \| `null`
-
-### `useFeatureFlag`
-
-> **useFeatureFlag**(`flag`, `client?`): `FeatureFlagValue` \| `undefined`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `flag` | `string` |
-| `client?` | `PostHog` |
-
-#### Returns
-
-`FeatureFlagValue` \| `undefined`
-
-### `useFeatureFlagResult`
-
-> **useFeatureFlagResult**(`flag`, `client?`): `FeatureFlagResult` \| `undefined`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `flag` | `string` |
-| `client?` | `PostHog` |
-
-#### Returns
-
-`FeatureFlagResult` \| `undefined`
-
-### `useFeatureFlags`
-
-> **useFeatureFlags**(`client?`): \{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `undefined`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `client?` | `PostHog` |
-
-#### Returns
-
-\{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `undefined`
-
-### `useFeatureFlagWithPayload`
-
-> **useFeatureFlagWithPayload**(`flag`, `client?`): `FeatureFlagWithPayload`
-
-Returns a flag's value and payload, and updates when flags reload.
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `flag` | `string` |
-| `client?` | `PostHog` |
-
-#### Returns
-
-`FeatureFlagWithPayload`
-
-#### Deprecated
-
-Use `useFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
-
-### `usePostHog`
-
-> **usePostHog**(): `PostHog`
-
-#### Returns
-
-`PostHog`
-
 ## Types
+
+### `ActionStepStringMatching`
+
+> **ActionStepStringMatching** = *typeof* `ActionStepStringMatching`\[keyof *typeof* `ActionStepStringMatching`\]
+
+Sync with plugin-server/src/types.ts
+
+### `ActionStepType`
+
+> **ActionStepType** = `object`
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="event"></a> `event?` | `string` | - |
+| <a id="href"></a> `href?` | `string` | - |
+| <a id="href_matching"></a> `href_matching?` | `ActionStepStringMatching` | **Default** `ActionStepStringMatching.Exact` |
+| <a id="selector"></a> `selector?` | `string` | - |
+| <a id="text"></a> `text?` | `string` | - |
+| <a id="text_matching"></a> `text_matching?` | `ActionStepStringMatching` | **Default** `StringMatching.Exact` |
+| <a id="url"></a> `url?` | `string` | - |
+| <a id="url_matching"></a> `url_matching?` | `ActionStepStringMatching` | **Default** `StringMatching.Contains` |
+
+### `AutocaptureOptions`
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-androidndkcrashes"></a> `androidNdkCrashes?` | `boolean` | Enables autocapture of native C/C++ (NDK) crashes on Android, through the optional native plugin. Requires Android 12 (API 31) or later and exception autocapture enabled in the project's error tracking settings. An NDK crash kills the process immediately, so it is captured on the next app launch from the records the OS kept, which means properties such as `$app_version` and the identity describe that launch rather than the crash. The first launch after enabling this also captures the native crashes the OS still holds from before. For readable stack traces, upload the app's `.so` debug symbols. With Expo, set `uploadNativeSymbols` on the `posthog-react-native/expo` config plugin: https://posthog.com/docs/error-tracking/upload-source-maps/react-native#native-crash-symbolication Ignored on other platforms. Disabled by default. Requires `@posthog/react-native-plugin` 2.12.0 or newer. |
+| <a id="property-console"></a> `console?` | `boolean` \| `LogLevel`[] | - |
+| <a id="property-nativecrashes"></a> `nativeCrashes?` | `boolean` | Enables native iOS/Android/macOS crash autocapture through the optional native plugin. On Android this covers Java/Kotlin crashes; native C/C++ (NDK) crashes are enabled with `androidNdkCrashes`. On Apple platforms it covers signal crashes too. Disabled by default. Requires `@posthog/react-native-plugin` installed (2.2.0 or newer for macOS). |
+| <a id="property-uncaughtexceptions"></a> `uncaughtExceptions?` | `boolean` | - |
+| <a id="property-unhandledrejections"></a> `unhandledRejections?` | `boolean` | - |
+
+### `BasicSurveyQuestion`
+
+> **BasicSurveyQuestion** = `SurveyQuestionBase` & `object`
+
+#### Type Declaration
+
+| Name | Type |
+| ------ | ------ |
+| `type` | *typeof* `SurveyQuestionType.Open` |
+
+### `BeforeSendFn`
+
+> **BeforeSendFn** = (`event`) => `CaptureEvent` \| `null`
+
+Function type for the `before_send` hook.
+Receives an event and can return a modified event or null to drop the event.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `event` | `CaptureEvent` |
+
+#### Returns
+
+`CaptureEvent` \| `null`
 
 ### `BeforeSendLogFn`
 
@@ -2245,6 +2280,28 @@ function that throws also drops the record (the error is logged).
 logs: { beforeSend: (record) => ({ ...record, body: record.body.replace(/token=\S+/g, 'token=[REDACTED]') }) }
 ```
 
+### `CaptureEvent`
+
+> **CaptureEvent** = `object`
+
+Represents an event before it's sent to PostHog.
+This is the interface exposed to the `before_send` hook, matching the web SDK's `CaptureResult`.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="set"></a> `$set?` | `PostHogEventProperties` | Properties to set on the person (overrides existing values) |
+| <a id="set_once"></a> `$set_once?` | `PostHogEventProperties` | Properties to set on the person only once (does not override existing values) |
+| <a id="event-1"></a> `event` | `string` | The name of the event |
+| <a id="properties"></a> `properties?` | `PostHogEventProperties` | Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage) |
+| <a id="timestamp"></a> `timestamp?` | `Date` | Timestamp for the event |
+| <a id="uuid"></a> `uuid?` | `string` | UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID. |
+
+### `CaptureLogger`
+
+> **CaptureLogger** = `Logger`
+
 ### `CaptureLogOptions`
 
 | Property | Type | Description |
@@ -2256,9 +2313,152 @@ logs: { beforeSend: (record) => ({ ...record, body: record.body.replace(/token=\
 | <a id="property-trace_flags"></a> `trace_flags?` | `number` | W3C trace flags (default: 0) |
 | <a id="property-trace_id"></a> `trace_id?` | `string` | Trace ID for correlation — 32 hex chars |
 
+### `Compression`
+
+| Enumeration Member | Value |
+| ------ | ------ |
+| <a id="enumeration-member-base64"></a> `Base64` | `"base64"` |
+| <a id="enumeration-member-gzipjs"></a> `GZipJS` | `"gzip-js"` |
+
+### `EndBranching`
+
+> **EndBranching** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="type"></a> `type` | *typeof* `SurveyQuestionBranchingType.End` |
+
+### `ErrorTrackingOptions`
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-autocapture"></a> `autocapture?` | `boolean` \| `AutocaptureOptions` |
+| <a id="property-exceptionsteps"></a> `exceptionSteps?` | `ExceptionStepsOptions` |
+
+### `EvaluationReason`
+
+> **EvaluationReason** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="code"></a> `code` | `string` \| `undefined` |
+| <a id="condition_index"></a> `condition_index` | `number` \| `undefined` |
+| <a id="description"></a> `description` | `string` \| `undefined` |
+
+### `EventHint`
+
+- `CoercingContext`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-mechanism-1"></a> `mechanism?` | `Partial`\<`Mechanism`\> |
+| <a id="property-skipfirstlines-1"></a> `skipFirstLines?` | `number` |
+| <a id="property-syntheticexception-1"></a> `syntheticException?` | `Error` \| `null` |
+
+### `ExceptionStepsOptions`
+
+Controls the breadcrumb-style exception steps recorded via `addExceptionStep` and attached
+to captured exceptions as `$exception_steps`.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-enabled"></a> `enabled?` | `boolean` | Whether exception steps are recorded and attached. **Default** `true` |
+| <a id="property-maxbytes"></a> `maxBytes?` | `number` | Total UTF-8 byte budget (~32KB) for the in-memory buffer. Oldest steps are evicted first when exceeded. **Default** `32768` |
+
+### `FeatureFlagDetail`
+
+> **FeatureFlagDetail** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="enabled-1"></a> `enabled` | `boolean` |
+| <a id="failed"></a> `failed?` | `boolean` |
+| <a id="key"></a> `key` | `string` |
+| <a id="metadata"></a> `metadata` | `FeatureFlagMetadata` \| `undefined` |
+| <a id="reason"></a> `reason` | `EvaluationReason` \| `undefined` |
+| <a id="variant"></a> `variant` | `string` \| `undefined` |
+
+### `FeatureFlagMetadata`
+
+> **FeatureFlagMetadata** = `object`
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="description-1"></a> `description` | `string` \| `undefined` | - |
+| <a id="has_experiment"></a> `has_experiment?` | `boolean` | Whether the flag is linked to an experiment. Absent when the server does not report it. |
+| <a id="id"></a> `id` | `number` \| `undefined` | - |
+| <a id="payload"></a> `payload` | `string` \| `undefined` | - |
+| <a id="version"></a> `version` | `number` \| `undefined` | - |
+
+### `FeatureFlagResult`
+
+> **FeatureFlagResult** = `object`
+
+Result of evaluating a feature flag, including both the flag value and its payload.
+
+#### Properties
+
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="enabled-2"></a> `enabled` | `readonly` | `boolean` | Whether the returned feature flag evaluation is enabled. `false` is a conclusive off result. |
+| <a id="key-1"></a> `key` | `readonly` | `string` | - |
+| <a id="payload-1"></a> `payload?` | `readonly` | `JsonType` | - |
+| <a id="variant-1"></a> `variant?` | `readonly` | `string` | - |
+
+### `FeatureFlagResultOptions`
+
+> **FeatureFlagResultOptions** = `object`
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="sendevent"></a> `sendEvent?` | `boolean` | Whether to send a $feature_flag_called event. Defaults to true. |
+
+### `FeatureFlagValue`
+
+> **FeatureFlagValue** = `string` \| `boolean`
+
 ### `FeatureFlagWithPayload`
 
 > **FeatureFlagWithPayload** = \[`FeatureFlagValue` \| `undefined`, `JsonType` \| `undefined`\]
+
+### `IsFeatureEnabledOptions`
+
+> **IsFeatureEnabledOptions** = `FeatureFlagResultOptions` & `object`
+
+#### Type Declaration
+
+| Name | Type | Description |
+| ------ | ------ | ------ |
+| `defaultValue?` | `boolean` | Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. |
+
+### `JsonType`
+
+> **JsonType** = `string` \| `number` \| `boolean` \| `null` \| \{\[`key`: `string`\]: `JsonType`; \} \| `JsonType`[] \| `JsonType`[]
+
+### `LinkSurveyQuestion`
+
+> **LinkSurveyQuestion** = `SurveyQuestionBase` & `object`
+
+#### Type Declaration
+
+| Name | Type |
+| ------ | ------ |
+| `link?` | `string` \| `null` |
+| `type` | *typeof* `SurveyQuestionType.Link` |
 
 ### `LogAttributes`
 
@@ -2268,11 +2468,215 @@ logs: { beforeSend: (record) => ({ ...record, body: record.body.replace(/token=\
 
 > **LogAttributeValue** = `string` \| `number` \| `boolean` \| `null` \| `undefined` \| `unknown`[] \| `Record`\<`string`, `unknown`\>
 
+### `Logger`
+
+Per-level convenience logger. Each method captures a structured log record
+at the corresponding severity, equivalent to
+`posthog.captureLog({ body, level, attributes })`.
+
+#### Example
+
+```ts
+posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+posthog.logger.error('payment failed', { code: 'E001' })
+```
+
+#### Methods
+
+##### debug()
+
+> **debug**(`body`, `attributes?`): `void`
+
+Debug-level detail. Verbose, only useful while diagnosing.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+##### error()
+
+> **error**(`body`, `attributes?`): `void`
+
+Error. Operation failed; the app may continue.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+##### fatal()
+
+> **fatal**(`body`, `attributes?`): `void`
+
+Fatal. Operation failed; the app likely cannot continue.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+##### info()
+
+> **info**(`body`, `attributes?`): `void`
+
+Informational. Normal app events worth recording.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+##### trace()
+
+> **trace**(`body`, `attributes?`): `void`
+
+Lowest severity. Trace-level diagnostic detail.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+##### warn()
+
+> **warn**(`body`, `attributes?`): `void`
+
+Warning. Something unexpected but non-fatal.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+### `LogLevel`
+
+> **LogLevel** = `"debug"` \| `"log"` \| `"info"` \| `"warn"` \| `"error"`
+
 ### `LogSeverityLevel`
 
 > **LogSeverityLevel** = `"trace"` \| `"debug"` \| `"info"` \| `"warn"` \| `"error"` \| `"fatal"`
 
 Log capture types
+
+### `Mechanism`
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-exception_id"></a> `exception_id?` | `number` |
+| <a id="property-handled"></a> `handled?` | `boolean` |
+| <a id="property-parent_id"></a> `parent_id?` | `number` |
+| <a id="property-source"></a> `source?` | `string` |
+| <a id="property-synthetic-2"></a> `synthetic?` | `boolean` |
+| <a id="property-type-4"></a> `type?` | `string` |
+
+### `MultipleSurveyQuestion`
+
+> **MultipleSurveyQuestion** = `SurveyQuestionBase` & `object`
+
+#### Type Declaration
+
+| Name | Type |
+| ------ | ------ |
+| `choices` | `string`[] |
+| `hasOpenChoice?` | `boolean` |
+| `shuffleOptions?` | `boolean` |
+| `skipSubmitButton?` | `boolean` |
+| `type` | *typeof* `SurveyQuestionType.SingleChoice` \| *typeof* `SurveyQuestionType.MultipleChoice` |
+
+### `NextQuestionBranching`
+
+> **NextQuestionBranching** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="type-2"></a> `type` | *typeof* `SurveyQuestionBranchingType.NextQuestion` |
+
+### `PartialWithRequired`
+
+> **PartialWithRequired**\<`T`, `K`\> = `{ [P in K]: T[P] }` & `{ [P in Exclude<keyof T, K>]?: T[P] }`
+
+Creates a type with all properties of T, but makes only K properties required while the rest remain optional.
+
+#### Type Parameters
+
+| Type Parameter | Description |
+| ------ | ------ |
+| <a id="type-parameter-t-8"></a> `T` | The base type containing all properties |
+| <a id="type-parameter-k"></a> `K` *extends* keyof `T` | Union type of keys from T that should be required |
+
+#### Example
+
+```ts
+interface User {
+  id: number;
+  name: string;
+  email?: string;
+  age?: number;
+}
+
+// Makes 'id' and 'name' required, but 'email' and 'age' optional
+type RequiredUser = PartialWithRequired<User, 'id' | 'name'>;
+
+const user: RequiredUser = {
+  id: 1,      // Must be provided
+  name: "John" // Must be provided
+  // email and age are optional
+};
+```
+
+### `PostHogAutocaptureElement`
+
+> **PostHogAutocaptureElement** = `object` & `PostHogEventProperties`
+
+#### Type Declaration
+
+| Name | Type |
+| ------ | ------ |
+| `$el_text?` | `string` |
+| `href?` | `string` |
+| `nth_child?` | `number` |
+| `nth_of_type?` | `number` |
+| `order?` | `number` |
+| `tag_name` | `string` |
 
 ### `PostHogAutocaptureNavigationTrackerOptions`
 
@@ -2303,6 +2707,65 @@ Log capture types
 | <a id="nocaptureprop"></a> `noCaptureProp?` | `string` | Prop name used to prevent autocapture on an element and its children **Default** `'ph-no-capture'` |
 | <a id="propstocapture"></a> `propsToCapture?` | `string`[] | List of prop names to capture from elements **Default** `['style', 'testID', 'accessibilityLabel', 'ph-label', 'children']` |
 
+### `PostHogCaptureOptions`
+
+> **PostHogCaptureOptions** = `object`
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="_originatedfromcaptureexception"></a> `_originatedFromCaptureException?` | `boolean` | Internal flag set by captureException() to indicate this $exception event originated from the proper exception capture path. Used to warn users who call capture('$exception') directly. |
+| <a id="disablegeoip"></a> `disableGeoip?` | `boolean` | - |
+| <a id="timestamp-2"></a> `timestamp?` | `Date` | If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. |
+| <a id="uuid-1"></a> `uuid?` | `string` | If provided overrides the auto-generated event UUID. Must be a valid UUID. |
+
+### `PostHogCoreOptions`
+
+> **PostHogCoreOptions** = `object`
+
+#### Extended by
+
+- `PostHogOptions`
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="addtracingheaders"></a> `addTracingHeaders?` | `string`[] | A list of hostnames for which to inject PostHog tracing headers (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests. Use this to link requests made from your app to session replays and LLM traces in PostHog. When set, the global `fetch` is patched on initialization and the headers are added to requests whose hostname matches one of the entries. Requires the SDK to wire up `patchFetchForTracingHeaders` against this option (currently supported in posthog-react-native). |
+| <a id="before_send"></a> `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. |
+| <a id="bootstrap"></a> `bootstrap?` | `object` | Option to bootstrap the library with given distinctId and feature flags |
+| `bootstrap.distinctId?` | `string` | - |
+| `bootstrap.featureFlagPayloads?` | `Record`\<`string`, `JsonType`\> | - |
+| `bootstrap.featureFlags?` | `Record`\<`string`, `FeatureFlagValue`\> | - |
+| `bootstrap.isIdentifiedId?` | `boolean` | - |
+| <a id="defaultoptin"></a> `defaultOptIn?` | `boolean` | If set to false the SDK will not track until the `optIn` function is called. **Default** `true` |
+| <a id="disable_capture_url_hashes"></a> `disable_capture_url_hashes?` | `boolean` | Whether to strip URL fragments (`#...`) from automatically captured URL fields. Disabled by default for backwards compatibility. Set to `true` to strip hashes from: - `$current_url` on automatically captured browser events, including `$pageview` - `$initial_current_url` - `$session_entry_url` - `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture - Next.js Pages Router `$pageview` `$current_url` - web vitals `$current_url` - logs `url.full` - conversations `current_url` and `request_url` - session replay rrweb meta/custom-event `href` URLs - heatmap data URLs If your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change. If you want to capture hashes selectively, leave this as `false` and use `before_send` to remove sensitive hash values before events are sent. **Default** `false` |
+| <a id="disablecompression"></a> `disableCompression?` | `boolean` | Whether to disable GZIP compression **Default** `false` |
+| <a id="disabled"></a> `disabled?` | `boolean` | If set to true the SDK is essentially disabled (useful for local environments where you don't want to track anything) **Default** `false` |
+| <a id="disablegeoip-1"></a> `disableGeoip?` | `boolean` | Whether to disable GeoIP lookups **Default** `false` |
+| <a id="disableremoteconfig"></a> ~~`disableRemoteConfig?`~~ | `boolean` | Whether to load remote config when initialized or not **Deprecated** Remote config is now always loaded and this option is a no-op. It will be removed in a future version. **Default** `false` |
+| <a id="disableremotefeatureflags"></a> `disableRemoteFeatureFlags?` | `boolean` | Advanced: whether to disable fetching and evaluating feature flags from PostHog entirely. When set to true, `reloadFeatureFlags()` and the reloads triggered by `identify()`, `group()`, `setPersonPropertiesForFlags()` and `reset()` become no-ops, and any request to the flags endpoint that still goes out (e.g. to fetch remote config or surveys) carries `disable_flags: true` so the server skips flag evaluation. Flag values must be supplied via the `bootstrap` option or `updateFlags()` instead; `getFeatureFlag()` and related methods keep working against those values. Until `updateFlags()` runs, reads return their not-loaded defaults, so use `bootstrap` for any flags needed at startup. Equivalent to the web SDK's `advanced_disable_feature_flags`. Note: surveys gated on feature flags will not evaluate unless the survey targeting flags are also provided via `updateFlags()`. This option cannot be toggled at runtime. `posthog-node` inherits this option but does not implement it (no-op). **Default** `false` |
+| <a id="disablesurveys-2"></a> `disableSurveys?` | `boolean` | Whether to load surveys when initialized or not Requires the `PostHogSurveyProvider` to be used **Default** `false` |
+| <a id="evaluationcontexts"></a> `evaluationContexts?` | readonly `string`[] | Evaluation contexts for feature flags. When set, only feature flags that have at least one matching evaluation tag will be evaluated for this SDK instance. Feature flags with no evaluation tags will always be evaluated. Examples: ['production', 'web', 'mobile'] **Default** `undefined` |
+| <a id="evaluationenvironments"></a> ~~`evaluationEnvironments?`~~ | readonly `string`[] | Evaluation environments for feature flags. **Deprecated** Use evaluationContexts instead. This property will be removed in a future version. |
+| <a id="featureflagsrequestmaxretries"></a> `featureFlagsRequestMaxRetries?` | `number` | How many times feature flag requests retry after a transient network error. Set to 0 to disable feature flag request retries. **Default** `1` |
+| <a id="featureflagsrequesttimeoutms"></a> `featureFlagsRequestTimeoutMs?` | `number` | Timeout in milliseconds for feature flag calls **Default** `10000 for stateful clients, 3000 for stateless` |
+| <a id="fetchretrycount"></a> `fetchRetryCount?` | `number` | How many times we will retry HTTP requests **Default** `3` |
+| <a id="fetchretrydelay"></a> `fetchRetryDelay?` | `number` | The delay between HTTP request retries in milliseconds **Default** `3000` |
+| <a id="flushat-2"></a> `flushAt?` | `number` | The number of events to queue before sending to PostHog (flushing) **Default** `20` |
+| <a id="flushinterval"></a> `flushInterval?` | `number` | The interval in milliseconds between periodic flushes **Default** `10000` |
+| <a id="historicalmigration"></a> `historicalMigration?` | `boolean` | Special flag to indicate ingested data is for a historical migration **Default** `false` |
+| <a id="host-2"></a> `host?` | `string` | PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com' **Default** `'https://us.i.posthog.com'` |
+| <a id="maxbatchsize"></a> `maxBatchSize?` | `number` | The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`) **Default** `100` |
+| <a id="maxqueuesize"></a> `maxQueueSize?` | `number` | The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`) **Default** `1000` |
+| <a id="personprofiles"></a> `personProfiles?` | `"always"` \| `"identified_only"` \| `"never"` | Determines when to create Person Profiles for users. - 'always': Always create a person profile for every user (anonymous and identified). - 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group(). Events captured before identification will NOT have person profiles and will be anonymous events. - 'never': Never create person profiles. identify(), alias(), and group() will be no-ops. **Default** `'identified_only'` **Examples** `// Only create profiles when users are identified (recommended for most apps) const posthog = new PostHog('<api_key>', { personProfiles: 'identified_only', }) // Later when user logs in: posthog.identify('user-123', { email: 'user@example.com' })` `// Always create profiles (for apps where you want to track all users) const posthog = new PostHog('<api_key>', { personProfiles: 'always', })` `// Never create profiles (anonymous analytics only) const posthog = new PostHog('<api_key>', { personProfiles: 'never', })` |
+| <a id="preloadfeatureflags-2"></a> `preloadFeatureFlags?` | `boolean` | Whether to load feature flags when initialized or not **Default** `true` |
+| <a id="remoteconfigrequesttimeoutms"></a> `remoteConfigRequestTimeoutMs?` | `number` | Timeout in milliseconds for remote config calls **Default** `3000` |
+| <a id="requesttimeout"></a> `requestTimeout?` | `number` | Timeout in milliseconds for any calls **Default** `10000` |
+| <a id="sendfeatureflagevent"></a> `sendFeatureFlagEvent?` | `boolean` | Whether to track that `getFeatureFlag` was called (used by Experiments) In posthog-node this is also the default for reads from an `evaluateFlags()` snapshot (`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a single-flag getter, to override it for that call. **Default** `true` |
+| <a id="sessionexpirationtimeseconds"></a> `sessionExpirationTimeSeconds?` | `number` | For Session Analysis how long before we expire a session in seconds **Default** `1800` |
+
 ### `PostHogCustomAppProperties`
 
 | Property | Type | Description |
@@ -2328,6 +2791,82 @@ Log capture types
 | ------ | ------ |
 | <a id="property-getitem"></a> `getItem` | (`key`) => `string` \| `Promise`\<`string` \| `null`\> \| `null` |
 | <a id="property-setitem"></a> `setItem` | (`key`, `value`) => `void` \| `Promise`\<`void`\> |
+
+### `PostHogErrorBoundaryFallbackProps`
+
+> **PostHogErrorBoundaryFallbackProps** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="componentstack"></a> `componentStack` | `string` |
+| <a id="error"></a> `error` | `unknown` |
+| <a id="reseterror"></a> `resetError` | () => `void` |
+
+### `PostHogErrorBoundaryProps`
+
+> **PostHogErrorBoundaryProps** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="additionalproperties"></a> `additionalProperties?` | `Properties` \| ((`error`) => `Properties`) |
+| <a id="children"></a> `children?` | `React.ReactNode` \| (() => `React.ReactNode`) |
+| <a id="fallback"></a> `fallback?` | `React.ReactNode` \| `FunctionComponent`\<`PostHogErrorBoundaryFallbackProps`\> |
+
+### `PostHogErrorBoundaryState`
+
+> **PostHogErrorBoundaryState** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="componentstack"></a> `componentStack` | `string` \| `null` |
+| <a id="error-2"></a> `error` | `unknown` |
+| <a id="haserror"></a> `hasError` | `boolean` |
+
+### `PostHogEventProperties`
+
+> **PostHogEventProperties** = `object`
+
+#### Index Signature
+
+\[`key`: `string`\]: `JsonType`
+
+### `PostHogFeatureFlagDetails`
+
+> **PostHogFeatureFlagDetails** = `PartialWithRequired`\<`PostHogFlagsResponse`, `"flags"` \| `"featureFlags"` \| `"featureFlagPayloads"` \| `"requestId"`\>
+
+These are the fields we care about from PostHogFlagsResponse for feature flags.
+
+### `PostHogFlagsResponse`
+
+> **PostHogFlagsResponse** = `Omit`\<`PostHogRemoteConfig`, `"hasFeatureFlags"`\> & `object`
+
+#### Type Declaration
+
+| Name | Type | Description |
+| ------ | ------ | ------ |
+| `errorsWhileComputingFlags` | `boolean` | - |
+| `evaluatedAt?` | `number` | - |
+| `featureFlagPayloads` | `object` | - |
+| `featureFlags` | `object` | - |
+| `flags` | `object` | - |
+| `minimalFlagCalledEvents?` | `boolean` | Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the project opted in; omitted otherwise. Absence always means full events. |
+| `quotaLimited?` | `string`[] | - |
+| `requestId?` | `string` | - |
+| `sessionRecording?` | `boolean` \| \{\[`key`: `string`\]: `JsonType`; \} | - |
+
+### `PostHogGroupProperties`
+
+> **PostHogGroupProperties** = `object`
+
+#### Index Signature
+
+\[`type`: `string`\]: `string` \| `number`
 
 ### `PostHogLogsConfig`
 
@@ -2535,6 +3074,22 @@ Called by the native SDK with the current `distinctId` and `appId`. Return
 | <a id="thresholdpoints"></a> `thresholdPoints?` | `number` | Maximum pixel distance between consecutive taps for them to still count toward a rage click. **Default** `30` |
 | <a id="timeoutinterval"></a> `timeoutInterval?` | `number` | Maximum time in seconds allowed between consecutive taps. **Default** `1.0` |
 
+### `PostHogRemoteConfig`
+
+> **PostHogRemoteConfig** = `object`
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="captureperformance"></a> `capturePerformance?` | `boolean` \| \{\[`key`: `string`\]: `JsonType`; \} | Capture performance remote config. Either a boolean (false = disabled) or a map with configuration. When a map, `network_timing` (boolean) controls whether network timing capture is enabled remotely. |
+| <a id="errortracking-1"></a> `errorTracking?` | `boolean` \| \{\[`key`: `string`\]: `JsonType`; \} | Error tracking remote config. Either a boolean (false = disabled) or a map with configuration. When a map, `autocaptureExceptions` (boolean) controls whether automatic exception capture is enabled remotely. |
+| <a id="hasfeatureflags"></a> `hasFeatureFlags?` | `boolean` | Indicates if the team has any flags enabled (if not we don't need to load them) |
+| <a id="logs"></a> `logs?` | `boolean` \| \{\[`key`: `string`\]: `JsonType`; \} | Logs feature remote config. When a map, `captureConsoleLogs` (boolean) is the local opt-in flag for `console.*` autocapture (read by the JS SDK's `PostHogLogs` extension to decide whether to load the autocapture bundle). |
+| <a id="sessionrecording"></a> `sessionRecording?` | `boolean` \| \{\[`key`: `string`\]: `JsonType`; \} | - |
+| <a id="supportedcompression"></a> `supportedCompression?` | `Compression`[] | Supported compression algorithms |
+| <a id="surveys"></a> `surveys?` | `boolean` \| `Survey`[] | Whether surveys are enabled |
+
 ### `PostHogSessionReplayConfig`
 
 > **PostHogSessionReplayConfig** = `object`
@@ -2573,6 +3128,69 @@ Called by the native SDK with the current `distinctId` and `appId`. Return
 | <a id="client"></a> `client?` | `PostHog` | - |
 | <a id="defaultsurveyappearance"></a> `defaultSurveyAppearance?` | `SurveyAppearance` | The default appearance for surveys when not specified in PostHog. Accepts the React Native-only appearance fields as well (e.g. `maxFontSizeMultiplier`) — they are merged into the same theme object the survey components read, and PostHog never sends them down. |
 | <a id="overrideappearancewithdefault"></a> `overrideAppearanceWithDefault?` | `boolean` | If true, PosHog appearance will be ignored and defaultSurveyAppearance is always used. |
+
+### `Properties`
+
+> **Properties** = `Record`\<`string`, `any`\>
+
+### `Properties`
+
+> **Properties** = `Record`\<`string`, `Property`\>
+
+### `Property`
+
+> **Property** = `any`
+
+Common types shared across PostHog SDKs
+
+### `PropertyFilters`
+
+> **PropertyFilters** = `Record`\<`string`, \{ `operator`: `PropertyOperator`; `values`: `string`[]; \}\>
+
+### `PropertyMatchType`
+
+> **PropertyMatchType** = `SurveyMatchType`
+
+### `PropertyOperator`
+
+> **PropertyOperator** = `PropertyMatchType` \| `"gt"` \| `"lt"`
+
+### `RatingSurveyQuestion`
+
+> **RatingSurveyQuestion** = `SurveyQuestionBase` & `object`
+
+#### Type Declaration
+
+| Name | Type |
+| ------ | ------ |
+| `display` | `SurveyRatingDisplay` |
+| `lowerBoundLabel` | `string` |
+| `scale` | `2` \| `3` \| `5` \| `7` \| `10` |
+| `skipSubmitButton?` | `boolean` |
+| `type` | *typeof* `SurveyQuestionType.Rating` |
+| `upperBoundLabel` | `string` |
+
+### `ResponseBasedBranching`
+
+> **ResponseBasedBranching** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="responsevalues"></a> `responseValues` | `Record`\<`string`, `any`\> |
+| <a id="type-3"></a> `type` | *typeof* `SurveyQuestionBranchingType.ResponseBased` |
+
+### `SpecificQuestionBranching`
+
+> **SpecificQuestionBranching** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="index"></a> `index` | `number` |
+| <a id="type-4"></a> `type` | *typeof* `SurveyQuestionBranchingType.SpecificQuestion` |
 
 ### `Survey`
 
@@ -2613,6 +3231,18 @@ Called by the native SDK with the current `distinctId` and `appId`. Return
 | <a id="translations"></a> `translations?` | `Record`\<`string`, `SurveyTranslation`\> |
 | <a id="type"></a> `type` | `SurveyType` |
 
+### `SurveyActionType`
+
+> **SurveyActionType** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="id-1"></a> `id` | `number` |
+| <a id="name"></a> `name?` | `string` |
+| <a id="steps"></a> `steps?` | `ActionStepType`[] |
+
 ### `SurveyAppearance`
 
 React Native survey appearance, including native-only text scaling options.
@@ -2625,38 +3255,82 @@ React Native survey appearance, including native-only text scaling options.
 
 | Property | Type | Description | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-allowgoback"></a> `allowGoBack?` | `boolean` | - | `CoreSurveyAppearance.allowGoBack` |
-| <a id="property-autodisappear"></a> `autoDisappear?` | `boolean` | - | `CoreSurveyAppearance.autoDisappear` |
-| <a id="property-backbuttontext"></a> `backButtonText?` | `string` | - | `CoreSurveyAppearance.backButtonText` |
-| <a id="property-backgroundcolor"></a> `backgroundColor?` | `string` | - | `CoreSurveyAppearance.backgroundColor` |
-| <a id="property-bordercolor"></a> `borderColor?` | `string` | - | `CoreSurveyAppearance.borderColor` |
-| <a id="property-displayintroscreen"></a> `displayIntroScreen?` | `boolean` | - | `CoreSurveyAppearance.displayIntroScreen` |
-| <a id="property-displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` | - | `CoreSurveyAppearance.displayThankYouMessage` |
-| <a id="property-inputbackground"></a> `inputBackground?` | `string` | - | `CoreSurveyAppearance.inputBackground` |
-| <a id="property-inputtextcolor"></a> `inputTextColor?` | `string` | - | `CoreSurveyAppearance.inputTextColor` |
-| <a id="property-introscreenbuttontext"></a> `introScreenButtonText?` | `string` | - | `CoreSurveyAppearance.introScreenButtonText` |
-| <a id="property-introscreendescription"></a> `introScreenDescription?` | `string` | - | `CoreSurveyAppearance.introScreenDescription` |
-| <a id="property-introscreendescriptioncontenttype"></a> `introScreenDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | `CoreSurveyAppearance.introScreenDescriptionContentType` |
-| <a id="property-introscreenheader"></a> `introScreenHeader?` | `string` | - | `CoreSurveyAppearance.introScreenHeader` |
+| <a id="property-allowgoback"></a> `allowGoBack?` | `boolean` | - | `SurveyAppearance.allowGoBack` |
+| <a id="property-autodisappear"></a> `autoDisappear?` | `boolean` | - | `SurveyAppearance.autoDisappear` |
+| <a id="property-backbuttontext"></a> `backButtonText?` | `string` | - | `SurveyAppearance.backButtonText` |
+| <a id="property-backgroundcolor"></a> `backgroundColor?` | `string` | - | `SurveyAppearance.backgroundColor` |
+| <a id="property-bordercolor"></a> `borderColor?` | `string` | - | `SurveyAppearance.borderColor` |
+| <a id="property-displayintroscreen"></a> `displayIntroScreen?` | `boolean` | - | `SurveyAppearance.displayIntroScreen` |
+| <a id="property-displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` | - | `SurveyAppearance.displayThankYouMessage` |
+| <a id="property-inputbackground"></a> `inputBackground?` | `string` | - | `SurveyAppearance.inputBackground` |
+| <a id="property-inputtextcolor"></a> `inputTextColor?` | `string` | - | `SurveyAppearance.inputTextColor` |
+| <a id="property-introscreenbuttontext"></a> `introScreenButtonText?` | `string` | - | `SurveyAppearance.introScreenButtonText` |
+| <a id="property-introscreendescription"></a> `introScreenDescription?` | `string` | - | `SurveyAppearance.introScreenDescription` |
+| <a id="property-introscreendescriptioncontenttype"></a> `introScreenDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | `SurveyAppearance.introScreenDescriptionContentType` |
+| <a id="property-introscreenheader"></a> `introScreenHeader?` | `string` | - | `SurveyAppearance.introScreenHeader` |
 | <a id="property-maxfontsizemultiplier"></a> `maxFontSizeMultiplier?` | `number` \| `Partial`\<`Record`\<`SurveyTextRole`, `number`\>\> | Caps how far survey text may grow under the OS text-size setting, as a multiple of its base size - React Native's `maxFontSizeMultiplier`, applied to every semantic `Text` and `TextInput` the survey renders. Icon-only text fallbacks do not scale because they occupy fixed-size icon boxes. Pass a number to cap every role at once, or an object to cap them separately: a survey headline can usually take more scaling than a numeral inside a rating button, and a host app that already caps its own text by role will want to match those ceilings here. `maxFontSizeMultiplier: 1.6 // or maxFontSizeMultiplier: { question: 1.5, description: 1.8, ratingNumber: 1.2 }` Roles left out of the object are uncapped, as they are today. Use `0` for no maximum, or a value of `1` or greater to set a cap. Other values below `1` (such as `0.8`) do not shrink text and are unsupported by React Native; depending on the platform and version, they may be ignored or rejected. Leave it unset (the default) and survey text scales without a ceiling. That is what the OS asks for, but not always what a fixed-size survey card can hold - at the largest accessibility sizes an unbounded 18pt headline renders roughly one word per line. React Native only inherits this prop through nested `Text`, so a host app cannot apply it from the outside - it has to come in here. **Default** `undefined (no ceiling)` | - |
-| <a id="property-placeholder"></a> `placeholder?` | `string` | - | `CoreSurveyAppearance.placeholder` |
-| <a id="property-position"></a> `position?` | `SurveyPosition` | - | `CoreSurveyAppearance.position` |
-| <a id="property-ratingbuttonactivecolor"></a> `ratingButtonActiveColor?` | `string` | - | `CoreSurveyAppearance.ratingButtonActiveColor` |
-| <a id="property-ratingbuttoncolor"></a> `ratingButtonColor?` | `string` | - | `CoreSurveyAppearance.ratingButtonColor` |
-| <a id="property-shufflequestions"></a> `shuffleQuestions?` | `boolean` | - | `CoreSurveyAppearance.shuffleQuestions` |
-| <a id="property-submitbuttoncolor"></a> `submitButtonColor?` | `string` | - | `CoreSurveyAppearance.submitButtonColor` |
-| <a id="property-submitbuttontext"></a> `submitButtonText?` | `string` | - | `CoreSurveyAppearance.submitButtonText` |
-| <a id="property-submitbuttontextcolor"></a> `submitButtonTextColor?` | `string` | - | `CoreSurveyAppearance.submitButtonTextColor` |
-| <a id="property-surveypopupdelayseconds"></a> `surveyPopupDelaySeconds?` | `number` | - | `CoreSurveyAppearance.surveyPopupDelaySeconds` |
-| <a id="property-textcolor"></a> `textColor?` | `string` | - | `CoreSurveyAppearance.textColor` |
-| <a id="property-thankyoumessageclosebuttontext"></a> `thankYouMessageCloseButtonText?` | `string` | - | `CoreSurveyAppearance.thankYouMessageCloseButtonText` |
-| <a id="property-thankyoumessagedescription"></a> `thankYouMessageDescription?` | `string` | - | `CoreSurveyAppearance.thankYouMessageDescription` |
-| <a id="property-thankyoumessagedescriptioncontenttype"></a> `thankYouMessageDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | `CoreSurveyAppearance.thankYouMessageDescriptionContentType` |
-| <a id="property-thankyoumessageheader"></a> `thankYouMessageHeader?` | `string` | - | `CoreSurveyAppearance.thankYouMessageHeader` |
-| <a id="property-widgetcolor"></a> `widgetColor?` | `string` | - | `CoreSurveyAppearance.widgetColor` |
-| <a id="property-widgetlabel"></a> `widgetLabel?` | `string` | - | `CoreSurveyAppearance.widgetLabel` |
-| <a id="property-widgetselector"></a> `widgetSelector?` | `string` | - | `CoreSurveyAppearance.widgetSelector` |
-| <a id="property-widgettype"></a> `widgetType?` | `SurveyWidgetType` | - | `CoreSurveyAppearance.widgetType` |
+| <a id="property-placeholder"></a> `placeholder?` | `string` | - | `SurveyAppearance.placeholder` |
+| <a id="property-position"></a> `position?` | `SurveyPosition` | - | `SurveyAppearance.position` |
+| <a id="property-ratingbuttonactivecolor"></a> `ratingButtonActiveColor?` | `string` | - | `SurveyAppearance.ratingButtonActiveColor` |
+| <a id="property-ratingbuttoncolor"></a> `ratingButtonColor?` | `string` | - | `SurveyAppearance.ratingButtonColor` |
+| <a id="property-shufflequestions"></a> `shuffleQuestions?` | `boolean` | - | `SurveyAppearance.shuffleQuestions` |
+| <a id="property-submitbuttoncolor"></a> `submitButtonColor?` | `string` | - | `SurveyAppearance.submitButtonColor` |
+| <a id="property-submitbuttontext"></a> `submitButtonText?` | `string` | - | `SurveyAppearance.submitButtonText` |
+| <a id="property-submitbuttontextcolor"></a> `submitButtonTextColor?` | `string` | - | `SurveyAppearance.submitButtonTextColor` |
+| <a id="property-surveypopupdelayseconds"></a> `surveyPopupDelaySeconds?` | `number` | - | `SurveyAppearance.surveyPopupDelaySeconds` |
+| <a id="property-textcolor"></a> `textColor?` | `string` | - | `SurveyAppearance.textColor` |
+| <a id="property-thankyoumessageclosebuttontext"></a> `thankYouMessageCloseButtonText?` | `string` | - | `SurveyAppearance.thankYouMessageCloseButtonText` |
+| <a id="property-thankyoumessagedescription"></a> `thankYouMessageDescription?` | `string` | - | `SurveyAppearance.thankYouMessageDescription` |
+| <a id="property-thankyoumessagedescriptioncontenttype"></a> `thankYouMessageDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | `SurveyAppearance.thankYouMessageDescriptionContentType` |
+| <a id="property-thankyoumessageheader"></a> `thankYouMessageHeader?` | `string` | - | `SurveyAppearance.thankYouMessageHeader` |
+| <a id="property-widgetcolor"></a> `widgetColor?` | `string` | - | `SurveyAppearance.widgetColor` |
+| <a id="property-widgetlabel"></a> `widgetLabel?` | `string` | - | `SurveyAppearance.widgetLabel` |
+| <a id="property-widgetselector"></a> `widgetSelector?` | `string` | - | `SurveyAppearance.widgetSelector` |
+| <a id="property-widgettype"></a> `widgetType?` | `SurveyWidgetType` | - | `SurveyAppearance.widgetType` |
+
+### `SurveyAppearance`
+
+> **SurveyAppearance** = `object`
+
+#### Extended by
+
+- `SurveyAppearance`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="allowgoback"></a> `allowGoBack?` | `boolean` |
+| <a id="autodisappear"></a> `autoDisappear?` | `boolean` |
+| <a id="backbuttontext"></a> `backButtonText?` | `string` |
+| <a id="backgroundcolor"></a> `backgroundColor?` | `string` |
+| <a id="bordercolor"></a> `borderColor?` | `string` |
+| <a id="displayintroscreen"></a> `displayIntroScreen?` | `boolean` |
+| <a id="displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` |
+| <a id="inputbackground"></a> `inputBackground?` | `string` |
+| <a id="inputtextcolor"></a> `inputTextColor?` | `string` |
+| <a id="introscreenbuttontext"></a> `introScreenButtonText?` | `string` |
+| <a id="introscreendescription"></a> `introScreenDescription?` | `string` |
+| <a id="introscreendescriptioncontenttype"></a> `introScreenDescriptionContentType?` | `SurveyQuestionDescriptionContentType` |
+| <a id="introscreenheader"></a> `introScreenHeader?` | `string` |
+| <a id="placeholder"></a> `placeholder?` | `string` |
+| <a id="position"></a> `position?` | `SurveyPosition` |
+| <a id="ratingbuttonactivecolor"></a> `ratingButtonActiveColor?` | `string` |
+| <a id="ratingbuttoncolor"></a> `ratingButtonColor?` | `string` |
+| <a id="shufflequestions"></a> `shuffleQuestions?` | `boolean` |
+| <a id="submitbuttoncolor"></a> `submitButtonColor?` | `string` |
+| <a id="submitbuttontext"></a> `submitButtonText?` | `string` |
+| <a id="submitbuttontextcolor"></a> `submitButtonTextColor?` | `string` |
+| <a id="surveypopupdelayseconds"></a> `surveyPopupDelaySeconds?` | `number` |
+| <a id="textcolor"></a> `textColor?` | `string` |
+| <a id="thankyoumessageclosebuttontext"></a> `thankYouMessageCloseButtonText?` | `string` |
+| <a id="thankyoumessagedescription"></a> `thankYouMessageDescription?` | `string` |
+| <a id="thankyoumessagedescriptioncontenttype"></a> `thankYouMessageDescriptionContentType?` | `SurveyQuestionDescriptionContentType` |
+| <a id="thankyoumessageheader"></a> `thankYouMessageHeader?` | `string` |
+| <a id="widgetcolor"></a> `widgetColor?` | `string` |
+| <a id="widgetlabel"></a> `widgetLabel?` | `string` |
+| <a id="widgetselector"></a> `widgetSelector?` | `string` |
+| <a id="widgettype"></a> `widgetType?` | `SurveyWidgetType` |
 
 ### `SurveyAppearanceTheme`
 
@@ -2670,6 +3344,17 @@ React Native survey appearance, including native-only text scaling options.
 | `maxFontSizeMultiplier?` | `SurveyAppearance`\[`"maxFontSizeMultiplier"`\] |
 | `placeholder?` | `string` |
 | `textColor?` | `string` |
+
+### `SurveyEventWithFilters`
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-name-3"></a> `name` | `string` |
+| <a id="property-propertyfilters"></a> `propertyFilters?` | `PropertyFilters` |
+
+### `SurveyMatchType`
+
+> **SurveyMatchType** = *typeof* `SurveyMatchType`\[keyof *typeof* `SurveyMatchType`\]
 
 ### `SurveyModalProps`
 
@@ -2689,6 +3374,80 @@ React Native survey appearance, including native-only text scaling options.
 | <a id="survey-1"></a> `survey` | `Survey` |
 | <a id="surveylanguage"></a> `surveyLanguage` | `string` \| `null` |
 
+### `SurveyPosition`
+
+> **SurveyPosition** = *typeof* `SurveyPosition`\[keyof *typeof* `SurveyPosition`\]
+
+### `SurveyProgress`
+
+> **SurveyProgress** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="questionindex"></a> `questionIndex` | `number` |
+| <a id="questionorder"></a> `questionOrder` | `number`[] |
+| <a id="questionsnapshots"></a> `questionSnapshots` | `Record`\<`string`, `string`\> |
+| <a id="responses"></a> `responses` | `SurveyResponses` |
+| <a id="submissionid"></a> `submissionId` | `string` |
+| <a id="surveylanguage"></a> `surveyLanguage?` | `string` \| `null` |
+
+### `SurveyQuestion`
+
+> **SurveyQuestion** = `BasicSurveyQuestion` \| `LinkSurveyQuestion` \| `RatingSurveyQuestion` \| `MultipleSurveyQuestion`
+
+### `SurveyQuestionBase`
+
+> **SurveyQuestionBase** = `object`
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="branching"></a> `branching?` | `NextQuestionBranching` \| `EndBranching` \| `ResponseBasedBranching` \| `SpecificQuestionBranching` |
+| <a id="buttontext"></a> `buttonText?` | `string` |
+| <a id="description-2"></a> `description?` | `string` \| `null` |
+| <a id="descriptioncontenttype"></a> `descriptionContentType?` | `SurveyQuestionDescriptionContentType` |
+| <a id="id-2"></a> `id` | `string` |
+| <a id="optional"></a> `optional?` | `boolean` |
+| <a id="originalquestionindex"></a> `originalQuestionIndex` | `number` |
+| <a id="question"></a> `question` | `string` |
+| <a id="translations"></a> `translations?` | `Record`\<`string`, `SurveyQuestionTranslation`\> |
+| <a id="validation"></a> `validation?` | `SurveyValidationRule`[] |
+
+### `SurveyQuestionDescriptionContentType`
+
+> **SurveyQuestionDescriptionContentType** = *typeof* `SurveyQuestionDescriptionContentType`\[keyof *typeof* `SurveyQuestionDescriptionContentType`\]
+
+### `SurveyQuestionTranslation`
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-buttontext"></a> `buttonText?` | `string` |
+| <a id="property-choices"></a> `choices?` | `string`[] |
+| <a id="property-description"></a> `description?` | `string` \| `null` |
+| <a id="property-link"></a> `link?` | `string` \| `null` |
+| <a id="property-lowerboundlabel"></a> `lowerBoundLabel?` | `string` |
+| <a id="property-question"></a> `question?` | `string` |
+| <a id="property-upperboundlabel"></a> `upperBoundLabel?` | `string` |
+
+### `SurveyRatingDisplay`
+
+> **SurveyRatingDisplay** = *typeof* `SurveyRatingDisplay`\[keyof *typeof* `SurveyRatingDisplay`\]
+
+### `SurveyResponses`
+
+> **SurveyResponses** = `Record`\<`string`, `SurveyResponseValue`\>
+
+### `SurveyResponseValue`
+
+> **SurveyResponseValue** = `string` \| `number` \| `string`[] \| `null`
+
+### `SurveySchedule`
+
+> **SurveySchedule** = *typeof* `SurveySchedule`\[keyof *typeof* `SurveySchedule`\]
+
 ### `SurveyTextRole`
 
 > **SurveyTextRole** = `"question"` \| `"description"` \| `"header"` \| `"choice"` \| `"input"` \| `"button"` \| `"ratingLabel"` \| `"ratingNumber"` \| `"validationHint"`
@@ -2697,3 +3456,37 @@ The distinct kinds of text a survey renders, each at its own base size. They
 are separate because one ceiling cannot serve all of them: `question` is an
 18pt headline that can wrap freely, while `ratingNumber` sits inside a
 fixed-width button and has nowhere to grow.
+
+### `SurveyTranslation`
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-backbuttontext"></a> `backButtonText?` | `string` |
+| <a id="property-introscreenbuttontext"></a> `introScreenButtonText?` | `string` |
+| <a id="property-introscreendescription"></a> `introScreenDescription?` | `string` |
+| <a id="property-introscreenheader"></a> `introScreenHeader?` | `string` |
+| <a id="property-name-4"></a> `name?` | `string` |
+| <a id="property-submitbuttontext"></a> `submitButtonText?` | `string` |
+| <a id="property-thankyoumessageclosebuttontext"></a> `thankYouMessageCloseButtonText?` | `string` |
+| <a id="property-thankyoumessagedescription"></a> `thankYouMessageDescription?` | `string` |
+| <a id="property-thankyoumessageheader"></a> `thankYouMessageHeader?` | `string` |
+
+### `SurveyType`
+
+> **SurveyType** = *typeof* `SurveyType`\[keyof *typeof* `SurveyType`\]
+
+### `SurveyValidationRule`
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-errormessage"></a> `errorMessage?` | `string` |
+| <a id="property-type-5"></a> `type` | `SurveyValidationType` |
+| <a id="property-value-4"></a> `value?` | `number` |
+
+### `SurveyValidationType`
+
+> **SurveyValidationType** = *typeof* `SurveyValidationType`\[keyof *typeof* `SurveyValidationType`\]
+
+### `SurveyWidgetType`
+
+> **SurveyWidgetType** = *typeof* `SurveyWidgetType`\[keyof *typeof* `SurveyWidgetType`\]

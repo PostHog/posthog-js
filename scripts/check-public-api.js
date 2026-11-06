@@ -1,9 +1,16 @@
+/* eslint-disable no-console, typescript/no-require-imports -- A CommonJS CI check that reports to the terminal. */
 const { execFileSync } = require('child_process')
 
 const referencePaths = [
     'packages/browser/references/posthog-js-references-latest.json',
     'packages/node/references/posthog-node-references-latest.json',
     'packages/react-native/references/posthog-react-native-references-latest.json',
+    'packages/browser/references/posthog-js-1.md',
+    'packages/browser/references/posthog-js-reference.md',
+    'packages/node/references/posthog-node-5.md',
+    'packages/node/references/posthog-node-reference.md',
+    'packages/react-native/references/posthog-react-native-4.md',
+    'packages/react-native/references/posthog-react-native-reference.md',
 ]
 
 let status
@@ -15,7 +22,9 @@ try {
 }
 
 if (status) {
-    console.error('Public API references are out of date. Run `pnpm generate-references` and commit the updated latest reference files.')
+    console.error(
+        'Public API references are out of date. Run `pnpm generate-references` and `pnpm generate-markdown-references`, and commit the updated reference files.'
+    )
     console.error(status)
 
     try {
@@ -24,6 +33,7 @@ if (status) {
             ['diff', '--no-ext-diff', '--no-color', 'HEAD', '--', ...referencePaths],
             {
                 encoding: 'utf8',
+                maxBuffer: 256 * 1024 * 1024,
             }
         ).trim()
         const untrackedDiffs = status
@@ -37,6 +47,7 @@ if (status) {
                         ['diff', '--no-ext-diff', '--no-color', '--no-index', '--', '/dev/null', path],
                         {
                             encoding: 'utf8',
+                            maxBuffer: 256 * 1024 * 1024,
                         }
                     ).trim()
                 } catch (error) {
