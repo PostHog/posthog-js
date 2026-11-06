@@ -321,6 +321,8 @@ export interface MCPAnalyticsModelOptions {
 export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
 export type MCPAnalyticsModelSource = 'client_metadata' | 'self_reported'
+/** Which source grouped the call into its `$session_id`, first match wins. */
+export type MCPAnalyticsSessionSource = 'conversation' | 'transport' | 'client_metadata' | 'generated'
 
 export type ToolCallback =
   | ((
@@ -433,6 +435,7 @@ export interface Event {
   serverName?: string
   serverVersion?: string
   sessionId: string
+  sessionSource?: MCPAnalyticsSessionSource
   timestamp: Date
   toolCategory?: string
   toolDescription?: string
@@ -682,6 +685,12 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
   parameters?: unknown
   /** Captured tool result → `$mcp_response` (sanitized + truncated). */
   response?: unknown
+  /**
+   * The `tools/call` request's `_meta`. With the {@link McpCaptureCommon.clientUserAgent}
+   * or `_meta` client name that recognizes the client, its conversation id (such
+   * as ChatGPT's `openai/session`) sets `$session_id` in place of `sessionId`.
+   */
+  requestMeta?: JsonRecord
   /** Wall-clock duration → `$mcp_duration_ms`. */
   durationMs?: number
   /** Whether the call failed → `$mcp_is_error`. */
@@ -759,6 +768,12 @@ export interface PrepareToolListOptions {
    * {@link PostHogMCP.captureFeedback} and reply with `sendFeedbackResult()`.
    */
   collectFeedback?: boolean
+  /**
+   * The `tools/list` request's HTTP headers. A client recognized by its
+   * `User-Agent` as naming its conversation in `_meta` (ChatGPT) gets no
+   * `conversation_id` argument.
+   */
+  headers?: Record<string, unknown>
 }
 
 /** Options for {@link PostHogMCP.prepareToolCall}. */
@@ -771,12 +786,22 @@ export interface PrepareToolCallOptions {
    * by that name is dispatched normally instead of being flagged as feedback.
    */
   originalTool?: { inputSchema?: unknown; outputSchema?: unknown }
-  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
+  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata and conversation ids. */
   requestMeta?: JsonRecord
   /**
-   * A session id carried by the request or transport. A valid echoed
-   * `conversation_id` takes precedence. Otherwise this value prevents the SDK
-   * from minting a second session handle.
+   * The request's HTTP headers. Their `User-Agent` recognizes clients that name
+   * their conversation in `_meta`, such as ChatGPT's `openai/session`.
+   */
+  headers?: Record<string, unknown>
+  /**
+   * The `initialize` `clientInfo`, when you hold one bound to this request's
+   * transport session. Recognizes a client over stdio, which has no `User-Agent`.
+   */
+  clientInfo?: { name?: string; version?: string }
+  /**
+   * A session id carried by the request or transport. A client conversation id
+   * or a valid echoed `conversation_id` takes precedence. Otherwise this value
+   * prevents the SDK from minting a second session handle.
    */
   sessionId?: string
 }

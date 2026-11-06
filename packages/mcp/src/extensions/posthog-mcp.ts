@@ -55,6 +55,14 @@ import {
 import { McpEventSink } from './sink'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { deriveSessionIdFromConversation } from './session'
+import {
+  deriveSessionIdFromClientConversation,
+  readClientConversation,
+  readClientSignals,
+  recognizeClient,
+} from './client-conversation'
+import type { ClientConversationRow } from './client-conversation'
+import { resolveClientIdentity } from './client-identity'
 import { validateServerBuild } from './server-build'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
 
@@ -197,6 +205,11 @@ export class PostHogMCP extends PostHog {
   /** Capture a tool invocation. Emits `$mcp_tool_call` (+ an `$exception` sibling on error). */
   captureToolCall(data: ToolCallCaptureData): void {
     const event = baseEvent(MCPAnalyticsEventType.mcpToolsCall, data)
+    applyClientConversation(
+      event,
+      recognizeClient({ userAgent: event.clientUserAgent, clientName: readMetaClientName(data.requestMeta) }),
+      data.requestMeta
+    )
     event.resourceName = data.toolName
     event.toolDescription = data.toolDescription
     event.toolCategory = data.category
@@ -307,7 +320,9 @@ export class PostHogMCP extends PostHog {
       )
     }
 
-    if (this.#enableConversationId) {
+    // A handle-free client names the conversation in `_meta` instead.
+    const handleFree = recognizeClient(readClientSignals(options.headers, undefined, undefined))?.handleFree === true
+    if (this.#enableConversationId && !handleFree) {
       prepared = prepared.map((tool) =>
         typeof tool.name === 'string' && ownershipByName.get(tool.name)?.conversationId === false
           ? tool
@@ -386,13 +401,23 @@ export class PostHogMCP extends PostHog {
       : undefined
     const strippedArgs = stripContext(args)
     const canReadConversationId = this.#enableConversationId && (ownership?.conversationId ?? true)
-    const resolvedConversation = resolveConversationId(canReadConversationId, args)
+    const client = recognizeClient(
+      readClientSignals(options.headers, readMetaClientName(options.requestMeta), options.clientInfo?.name)
+    )
+    const clientConversation = readClientConversation(client, options.requestMeta)
+    // Same order as instrument(): the client's id, then the handle, then the
+    // transport session. A carried session or a handle-free client is minted no handle.
+    const resolvedConversation = clientConversation
+      ? NO_CONVERSATION
+      : resolveConversationId(canReadConversationId, args)
     const conversation =
-      resolvedConversation.minted && options.sessionId
-        ? ({ minted: false, conversationId: undefined } as const)
-        : resolvedConversation
+      resolvedConversation.minted && (options.sessionId || client?.handleFree) ? NO_CONVERSATION : resolvedConversation
     const conversationId = conversation.conversationId
-    const sessionId = conversationId ? deriveSessionIdFromConversation(conversationId) : options.sessionId
+    const sessionId = clientConversation
+      ? deriveSessionIdFromClientConversation(clientConversation)
+      : conversationId
+        ? deriveSessionIdFromConversation(conversationId)
+        : options.sessionId
     // A supplied `originalTool` is a real application tool by this name (it
     // comes from the host's own list, which never holds the virtual tool), so
     // the real tool wins — the stateless twin of instrument()'s listing-derived
@@ -419,7 +444,7 @@ export class PostHogMCP extends PostHog {
       // value through workers or clone it before preparing the result.
       [PREPARED_CONVERSATION_STATE_KEY]: {
         minted: conversation.minted,
-        outputInstructions: this.#enableConversationId && ownership?.outputInstructions === true,
+        outputInstructions: this.#enableConversationId && !client?.handleFree && ownership?.outputInstructions === true,
       },
     }
     return preparedCall
@@ -554,6 +579,27 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
     event.identifyActorData = common.setProperties
   }
   return event
+}
+
+const NO_CONVERSATION = { minted: false, conversationId: undefined } as const
+
+function readMetaClientName(meta: JsonRecord | undefined): string | undefined {
+  return meta ? resolveClientIdentity({ request: { params: { _meta: meta } } })?.clientName : undefined
+}
+
+/** A client conversation id replaces the caller's session and any handle. */
+function applyClientConversation(
+  event: McpEvent,
+  client: ClientConversationRow | undefined,
+  meta: JsonRecord | undefined
+): void {
+  const clientConversation = readClientConversation(client, meta)
+  if (!clientConversation) {
+    return
+  }
+  event.sessionId = deriveSessionIdFromClientConversation(clientConversation)
+  event.sessionSource = 'client_metadata'
+  event.conversationId = undefined
 }
 
 function collectAnalyticsParameterOwnership<TTool extends ContextInjectableTool>(

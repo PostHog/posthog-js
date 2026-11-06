@@ -73,6 +73,7 @@ export const PostHogMCPAnalyticsProperty = {
   ServerName: '$mcp_server_name',
   ServerVersion: '$mcp_server_version',
   SessionId: '$session_id',
+  SessionSource: '$mcp_session_source',
   Source: '$mcp_source',
   ToolCategory: '$mcp_tool_category',
   ToolDescription: '$mcp_tool_description',

@@ -3,7 +3,7 @@ import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
 import { getServerTrackingData } from '../extensions/internal'
-import { deriveSessionIdFromConversation, getSessionId } from '../extensions/session'
+import { deriveSessionIdFromConversation, resolveSession } from '../extensions/session'
 import type { HighLevelMCPServerLike, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
@@ -61,23 +61,23 @@ describe('conversation_id as the session anchor', () => {
       .map((e) => e.sessionId)
   }
 
-  describe('getSessionId', () => {
+  describe('resolveSession', () => {
     it('derives the session id from the conversation id when one is supplied', () => {
       instrument(server, fakePostHog())
       const lowLevel = server.server as MCPServerLike
 
-      const derived = getSessionId(lowLevel, undefined, 'conversation-abc')
+      const derived = resolveSession(lowLevel, undefined, 'conversation-abc').sessionId
 
       expect(derived).toMatch(/^ses_/)
-      expect(derived).not.toBe(getSessionId(lowLevel, undefined))
+      expect(derived).not.toBe(resolveSession(lowLevel, undefined).sessionId)
     })
 
     it('is deterministic — the same handle always yields the same session id', () => {
       instrument(server, fakePostHog())
       const lowLevel = server.server as MCPServerLike
 
-      expect(getSessionId(lowLevel, undefined, 'conversation-abc')).toBe(
-        getSessionId(lowLevel, undefined, 'conversation-abc')
+      expect(resolveSession(lowLevel, undefined, 'conversation-abc').sessionId).toBe(
+        resolveSession(lowLevel, undefined, 'conversation-abc').sessionId
       )
     })
 
@@ -85,8 +85,8 @@ describe('conversation_id as the session anchor', () => {
       instrument(server, fakePostHog())
       const lowLevel = server.server as MCPServerLike
 
-      expect(getSessionId(lowLevel, undefined, 'conversation-a')).not.toBe(
-        getSessionId(lowLevel, undefined, 'conversation-b')
+      expect(resolveSession(lowLevel, undefined, 'conversation-a').sessionId).not.toBe(
+        resolveSession(lowLevel, undefined, 'conversation-b').sessionId
       )
     })
 
@@ -96,11 +96,11 @@ describe('conversation_id as the session anchor', () => {
       const data = getServerTrackingData(lowLevel)!
       const before = data.sessionId
 
-      getSessionId(lowLevel, undefined, 'conversation-abc')
+      resolveSession(lowLevel, undefined, 'conversation-abc').sessionId
 
       // A concurrent request with no handle must still see the original session.
       expect(data.sessionId).toBe(before)
-      expect(getSessionId(lowLevel, undefined)).toBe(before)
+      expect(resolveSession(lowLevel, undefined).sessionId).toBe(before)
     })
 
     it('falls back to the existing resolution when no handle is supplied', () => {
@@ -108,7 +108,7 @@ describe('conversation_id as the session anchor', () => {
       const lowLevel = server.server as MCPServerLike
       const data = getServerTrackingData(lowLevel)!
 
-      expect(getSessionId(lowLevel, undefined, undefined)).toBe(data.sessionId)
+      expect(resolveSession(lowLevel, undefined, undefined).sessionId).toBe(data.sessionId)
     })
   })
 
@@ -139,7 +139,7 @@ describe('conversation_id as the session anchor', () => {
         },
       } as never
 
-      const derived = getSessionId(lowLevel, extra, CONVERSATION_HANDLE)
+      const derived = resolveSession(lowLevel, extra, CONVERSATION_HANDLE).sessionId
 
       expect(derived).toBe(deriveSessionIdFromConversation(CONVERSATION_HANDLE))
       expect(data.sessionInfo.clientName).toBe('acme-client')
@@ -158,8 +158,8 @@ describe('conversation_id as the session anchor', () => {
       instrument(other.server, fakePostHog())
 
       try {
-        const fromA = getSessionId(server.server as MCPServerLike, undefined, 'shared-conversation')
-        const fromB = getSessionId(other.server.server as MCPServerLike, undefined, 'shared-conversation')
+        const fromA = resolveSession(server.server as MCPServerLike, undefined, 'shared-conversation').sessionId
+        const fromB = resolveSession(other.server.server as MCPServerLike, undefined, 'shared-conversation').sessionId
 
         // The cross-pod property: two processes that never met agree on the session.
         expect(fromA).toBe(fromB)
