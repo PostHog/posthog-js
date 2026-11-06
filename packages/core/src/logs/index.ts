@@ -83,6 +83,11 @@ export class PostHogLogs {
     this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [])
   }
 
+  /** True while the endpoint's `Retry-After` window is open, so a host's automatic flush can skip logs. */
+  get throttled(): boolean {
+    return this._retryAfter.isOpen()
+  }
+
   /**
    * Clears the flush timer and rate-cap state. The host owns the record queue
    * and clears it separately (the browser empties its in-memory store).

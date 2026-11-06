@@ -1,4 +1,9 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
+import {
+  DEFAULT_MAX_BATCH_RECORDS_PER_POST,
+  DEFAULT_MAX_LOGS_PER_INTERVAL,
+  resolveNodeLogsConfig,
+} from '../logs-config'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
@@ -121,5 +126,69 @@ describe('PostHog Node.js logs', () => {
     posthog.logger.info('last words')
     await posthog.shutdown()
     expect(records()).toHaveLength(1)
+  })
+
+  it('holds a serverless invocation open for a handler that only logs', async () => {
+    const waitUntil = vi.fn()
+    create({
+      waitUntil,
+      waitUntilDebounceMs: 50,
+      flushAt: 100,
+      flushInterval: 60_000,
+      logs: { flushIntervalMs: 60_000 },
+    })
+    posthog.logger.info('only a log')
+
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(waitUntil).toHaveBeenCalled()
+    expect(records()).toHaveLength(1)
+  })
+
+  it('leaves throttled logs alone on automatic flushes', async () => {
+    mockedFetch.mockImplementation(async (url: any) =>
+      String(url).includes('/i/v1/logs')
+        ? ({
+            status: 429,
+            headers: { get: (name: string) => (name.toLowerCase() === 'retry-after' ? '300' : null) },
+            text: async () => '',
+          } as any)
+        : ({ status: 200, headers: { get: () => null }, text: async () => '' } as any)
+    )
+    create({ flushAt: 1, flushInterval: 1000, logs: { flushIntervalMs: 60_000 } })
+    posthog.logger.info('refused')
+    await posthog.flush()
+    const refusals = logsCalls().length
+    expect(refusals).toBeGreaterThan(0)
+
+    // Events keep the events timer firing; logs must not ride along while the window is open.
+    posthog.logger.info('queued during window')
+    for (let i = 0; i < 5; i++) {
+      posthog.capture({ distinctId: 'u', event: 'tick' })
+      await vi.advanceTimersByTimeAsync(1000)
+    }
+
+    expect(logsCalls()).toHaveLength(refusals)
+  })
+
+  describe('config', () => {
+    it.each([0, -1, 0.5, NaN, Infinity])('falls back to the default batch size for %s', (value) => {
+      expect(resolveNodeLogsConfig({ maxBatchRecordsPerPost: value }).maxBatchRecordsPerPost).toBe(
+        DEFAULT_MAX_BATCH_RECORDS_PER_POST
+      )
+    })
+
+    it.each([[{ maxLogs: 0 }], [{ maxLogs: -5 }], [{ maxLogs: undefined }], [{ maxLogs: 10, windowMs: 0 }]])(
+      'disables the rate cap for %j',
+      (rateCap) => {
+        const resolved = resolveNodeLogsConfig({ rateCap })
+        expect(resolved.maxLogsPerInterval).toBeUndefined()
+        expect(resolved.maxQueueSize).toBe(DEFAULT_MAX_LOGS_PER_INTERVAL)
+      }
+    )
+
+    it('keeps a positive rate cap', () => {
+      expect(resolveNodeLogsConfig({ rateCap: { maxLogs: 50 } }).maxLogsPerInterval).toBe(50)
+    })
   })
 })

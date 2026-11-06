@@ -351,7 +351,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (this._traces && !(skipThrottledSpans && this._traces.throttled)) {
       others.push(this._traces.flush().catch(() => {}))
     }
-    if (this._logs) {
+    // Same as spans: an automatic flush leaves logs alone while the endpoint's Retry-After window is open.
+    if (this._logs && !(skipThrottledSpans && this._logs.throttled)) {
       others.push(this._logs.flush().catch(() => {}))
     }
     if (others.length === 0) {
@@ -757,6 +758,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
     this._logsPipeline.captureLog(record)
+    // A handler that only logs still has to hold the invocation open.
+    this.scheduleDebouncedFlush()
   }
 
   /**
@@ -3136,6 +3139,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         Math.max(0, shutdownDeadlineMs - Date.now())
       )
       this._logs.reset()
+      // Retire a flush that lost the race: otherwise, when it settles with records
+      // left, its background retry re-arms the timer and keeps sending after shutdown.
+      this._logs.clearQueue()
     }
     if (this._traces) {
       // Same treatment as metrics: send what's queued, raced against the shared
