@@ -80,7 +80,11 @@ export async function instrumentRequest(
   const pathname = safePathname(request)
   const properties: Record<string, any> = {}
   addProperty(properties, '$request_method', request.method)
-  addProperty(properties, '$request_path', pathname ? normalizeRequestPath(pathname, disableCaptureUrlHashes) : undefined)
+  addProperty(
+    properties,
+    '$request_path',
+    pathname ? normalizeRequestPath(pathname, disableCaptureUrlHashes) : undefined
+  )
   addProperty(properties, '$user_agent', request.headers.get('user-agent') ?? undefined)
 
   const sessionId = existing?.sessionId ?? headers.sessionId

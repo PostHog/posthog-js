@@ -69,12 +69,18 @@ describe('fetch request instrumentation', () => {
   })
 
   it('marks 5xx responses as errors', async () => {
-    await instrumentRequest(posthog, new Request('http://localhost/x', { method: 'POST' }), () => new Response('no', { status: 503 }))
+    await instrumentRequest(
+      posthog,
+      new Request('http://localhost/x', { method: 'POST' }),
+      () => new Response('no', { status: 503 })
+    )
     expect(spans[0].status?.code).toBe('error')
     expect(count).toHaveBeenCalledWith(
       'http.server.request.count',
       1,
-      expect.objectContaining({ attributes: expect.objectContaining({ 'http.response.status_code': 503, 'http.request.method': 'POST' }) })
+      expect.objectContaining({
+        attributes: expect.objectContaining({ 'http.response.status_code': 503, 'http.request.method': 'POST' }),
+      })
     )
   })
 
@@ -112,9 +118,14 @@ describe('fetch request instrumentation', () => {
   })
 
   it('skips ignored requests', async () => {
-    const response = await instrumentRequest(posthog, new Request('http://localhost/health'), () => new Response('ok'), {
-      ignore: (r) => new URL(r.url).pathname === '/health',
-    })
+    const response = await instrumentRequest(
+      posthog,
+      new Request('http://localhost/health'),
+      () => new Response('ok'),
+      {
+        ignore: (r) => new URL(r.url).pathname === '/health',
+      }
+    )
     expect(response.status).toBe(200)
     expect(spans).toHaveLength(0)
     expect(histogram).not.toHaveBeenCalled()

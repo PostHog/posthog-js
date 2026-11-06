@@ -2807,6 +2807,21 @@
       "path": "src/types.ts"
     },
     {
+      "id": "HonoContextLike",
+      "name": "HonoContextLike",
+      "properties": [
+        {
+          "type": "{\n        raw: Request;\n        routePath: string;\n    }",
+          "name": "req"
+        },
+        {
+          "type": "Response",
+          "name": "res"
+        }
+      ],
+      "path": "src/extensions/fetch-request.ts"
+    },
+    {
       "id": "IdentifyMessage",
       "name": "IdentifyMessage",
       "properties": [
@@ -2824,6 +2839,23 @@
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "InstrumentRequestOptions",
+      "name": "InstrumentRequestOptions",
+      "properties": [
+        {
+          "description": "The matched route pattern (`/users/:id`), once the handler has run. Used to name the span and as the `http.route` metric attribute. Without it the span is named after the method only, so raw paths never become high-cardinality span names or metric series.",
+          "type": "(request: Request, response: Response | undefined) => string | undefined",
+          "name": "getRoute"
+        },
+        {
+          "description": "Skip instrumentation (health checks, for example). The handler still runs, with no span or metrics.",
+          "type": "(request: Request) => boolean",
+          "name": "ignore"
+        }
+      ],
+      "path": "src/extensions/fetch-request.ts"
     },
     {
       "id": "IPostHog",
@@ -3731,6 +3763,42 @@
         }
       ],
       "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PostHogForRequests",
+      "name": "PostHogForRequests",
+      "properties": [
+        {
+          "description": "Run a function with specific context that will be applied to all events captured within that context.\nIt propagates the context to all subsequent calls down the call stack.\nContext properties like tags and sessionId will be automatically attached to all events.\nBy default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.",
+          "type": "<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions) => T",
+          "name": "withContext"
+        },
+        {
+          "description": "Runs a callback with a span active for its duration and ends the span for\nyou — at return for a sync callback, at settle for an async one. Takes an\noptional `StartSpanOptions` between the name and the callback:\n`withSpan(name, fn)` or `withSpan(name, options, fn)`.\n\nSpans started inside the callback nest under it automatically. If the\ncallback throws or rejects, the span records the exception and the original\nerror is rethrown unchanged. A callback that ends the span itself gets the\nrethrow but not the recording, since the span is already exported by then.\n\nSpans nest across `await` only on the Node runtime, which tracks the active\nspan with `AsyncLocalStorage`. The edge build restores the active span when\nthe callback returns its promise, so spans started after an `await` there\nbegin a new trace.\n\n{@label Traces}",
+          "type": "{ <T>(name: string, fn: (span: Span) => T): T; <T>(name: string, options: StartSpanOptions, fn: (span: Span) => T): T; }",
+          "name": "withSpan"
+        },
+        {
+          "description": "Get the current context data.",
+          "type": "() => ContextData | undefined",
+          "name": "getContext"
+        },
+        {
+          "description": "The `posthog.metrics` API: a statsd-style pre-aggregating metrics client — alpha.\nSamples are folded into per-series aggregates in memory and flushed\nperiodically as one OTLP data point per series per window, so recording\nfrom hot paths is cheap. Configure via the `metrics` client option.",
+          "type": "Metrics",
+          "name": "metrics"
+        },
+        {
+          "description": "The project token the client was created with. Same value as `projectToken`.",
+          "type": "string",
+          "name": "apiKey"
+        },
+        {
+          "type": "PostHogOptions",
+          "name": "options"
+        }
+      ],
+      "path": "src/extensions/fetch-request.ts"
     },
     {
       "id": "PostHogOptions",
