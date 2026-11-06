@@ -485,6 +485,7 @@ export class PostHog implements PostHogInterface {
     __loaded: boolean
     config: PostHogConfig
     _originalUserConfig?: Partial<PostHogConfig>
+    private _botFilterWarned: boolean = false
 
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
