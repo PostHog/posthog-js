@@ -110,6 +110,7 @@ export function initMutationObserver(
       mutationObserverInit.attributeFilter = options.attributeFilter;
     }
     observer.observe(rootEl, mutationObserverInit);
+    mutationBuffer.readPendingRecordsFrom(observer);
     mutationBuffers.push(mutationBuffer);
     return { observer, buffer: mutationBuffer };
   } catch (error) {

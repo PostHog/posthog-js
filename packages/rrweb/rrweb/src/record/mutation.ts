@@ -14,6 +14,7 @@ import {
   nowMs,
   getSuspensionGeneration,
   recordMutationCost,
+  isStylesheetLink,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -25,6 +26,7 @@ import type {
 } from '@posthog/rrweb-types';
 import {
   isBlocked,
+  isBlockedIncludingShadowHosts,
   isAncestorRemoved,
   isIgnored,
   isSerialized,
@@ -67,6 +69,7 @@ function getSerializedAttributeName(
 export default class MutationBuffer {
   private frozen = false;
   private locked = false;
+  private takePendingRecords: (() => mutationRecord[]) | undefined;
 
   private texts: textCursor[] = [];
   private attributes: attributeCursor[] = [];
@@ -190,6 +193,10 @@ export default class MutationBuffer {
     this.emit();
   }
 
+  public readPendingRecordsFrom(observer: MutationObserver): void {
+    this.takePendingRecords = () => observer.takeRecords();
+  }
+
   public reset(): void {
     // Don't reset the shared shadowDomManager here — that would disconnect every shadow-root observer on the page when any single buffer is torn down.
     this.releaseCanvasManager();
@@ -246,26 +253,11 @@ export default class MutationBuffer {
   // Queued nodes can become blocked before emission. Check the current tree,
   // including each shadow host: closest()/parentElement do not cross that boundary.
   private isBlockedAtEmission(node: Node | null): boolean {
-    const blockClass = this.blockClass;
-    // Match stateful patterns from zero without writing to the configured
-    // regexp, whose lastIndex may be non-writable. Keep all flags, including y.
-    const stateful =
-      blockClass &&
-      typeof blockClass !== 'string' &&
-      (blockClass.global || blockClass.sticky)
-        ? new RegExp(blockClass)
-        : null;
-    while (node) {
-      if (stateful) stateful.lastIndex = 0;
-      if (isBlocked(node, stateful || blockClass, this.blockSelector, true))
-        return true;
-      const root = 'getRootNode' in node ? dom.getRootNode(node) : null;
-      node =
-        root?.nodeType === Node.DOCUMENT_FRAGMENT_NODE
-          ? dom.host(root as ShadowRoot)
-          : null;
-    }
-    return false;
+    return isBlockedIncludingShadowHosts(
+      node,
+      this.blockClass,
+      this.blockSelector,
+    );
   }
 
   private processBufferedMutations = () => {
@@ -310,64 +302,7 @@ export default class MutationBuffer {
       if (parentId === -1 || nextId === -1) {
         return false;
       }
-      serializationOptions ??= {
-        doc: this.doc,
-        mirror: this.mirror,
-        blockClass: this.blockClass,
-        blockSelector: this.blockSelector,
-        maskTextClass: this.maskTextClass,
-        maskTextSelector: this.maskTextSelector,
-        skipChild: true,
-        newlyAddedElement: true,
-        inlineStylesheet: this.inlineStylesheet,
-        maskInputOptions: this.maskInputOptions,
-        maskTextFn: this.maskTextFn,
-        maskInputFn: this.maskInputFn,
-        maskAllElementAttributes: this.maskAllElementAttributes,
-        maskAttributeFn: this.maskAttributeFn,
-        slimDOMOptions: this.slimDOMOptions,
-        dataURLOptions: this.dataURLOptions,
-        recordCanvas: this.recordCanvas,
-        canvasMaskingConfigured: this.canvasMaskingConfigured,
-        inlineImages: this.inlineImages,
-        onSerialize: (currentN) => {
-          if (isSerializedIframe(currentN, this.mirror)) {
-            this.iframeManager.addIframe(currentN as HTMLIFrameElement);
-          }
-          if (isSerializedStylesheet(currentN, this.mirror)) {
-            this.stylesheetManager.trackLinkElement(
-              currentN as HTMLLinkElement,
-            );
-          }
-          if (
-            hasShadowRoot(currentN) &&
-            !isBlocked(
-              currentN,
-              this.blockClass,
-              this.blockSelector,
-              true,
-            )
-          ) {
-            this.shadowDomManager.addShadowRoot(
-              dom.shadowRoot(currentN)!,
-              this.doc,
-            );
-          }
-        },
-        onIframeLoad: (iframe, childSn) => {
-          this.iframeManager.attachIframe(iframe, childSn);
-          this.shadowDomManager.observeAttachShadow(iframe);
-        },
-        onIframeListenerRegistered: (
-          iframe: HTMLIFrameElement,
-          disposer: () => void,
-        ) => {
-          this.iframeManager.registerLoadListenerDisposer(iframe, disposer);
-        },
-        onStylesheetLoad: (link, childSn) => {
-          this.stylesheetManager.attachLinkElement(link, childSn);
-        },
-      };
+      serializationOptions ??= this.buildSerializationOptions();
       const sn = serializeNodeWithId(n, serializationOptions);
       if (sn) {
         adds.push({
@@ -616,6 +551,23 @@ export default class MutationBuffer {
       adds,
     };
 
+    const stylesheetLinksWithNewSource: HTMLLinkElement[] = [];
+    if (this.inlineStylesheet) {
+      for (const { id, attributes } of payload.attributes) {
+        if (!('rel' in attributes) && !('href' in attributes)) continue;
+        const node = this.mirror.getNode(id) as HTMLLinkElement | null;
+        if (
+          node &&
+          toLowerCase(node.nodeName) === 'link' &&
+          isStylesheetLink(node.getAttribute('rel')) &&
+          node.getAttribute('href') &&
+          !node.disabled
+        ) {
+          stylesheetLinksWithNewSource.push(node);
+        }
+      }
+    }
+
     // Reset before the empty-payload return: these collections strongly
     // reference DOM nodes, and payload holds its own references.
     this.texts = [];
@@ -640,7 +592,108 @@ export default class MutationBuffer {
     }
 
     this.mutationCb(payload);
+
+    // after the payload, so replay applies the new rel/href before the CSS that replaces the link
+    for (const link of stylesheetLinksWithNewSource) {
+      this.stylesheetManager.inlineLinkStylesheetAfterChange(link, {
+        currentId: () => this.mirror.getId(link),
+        reserializeWithoutCss: () => ({
+          previous: this.mirror.getMeta(link),
+          current: serializeNodeWithId(link, {
+            ...this.buildSerializationOptions(),
+            inlineStylesheet: false,
+          }),
+        }),
+        lastSerialization: () => this.mirror.getMeta(link),
+        readdAsMove: () => this.recordReinsertion(link),
+      });
+    }
   };
+
+  // Goes through the same path as a node taken out and put back in place, so a
+  // frozen or locked buffer holds it with the mutations recorded before it.
+  private recordReinsertion(node: Node): void {
+    const parent = dom.parentNode(node);
+    if (!parent) return;
+    // the add needs the node's next sibling recorded, and the page can insert
+    // it in the same task, before the observer delivers its record
+    this.takePendingRecords?.().forEach(this.processMutation);
+    const childListRecord = (removedNodes: Node[], addedNodes: Node[]) =>
+      ({
+        type: 'childList',
+        target: parent,
+        removedNodes,
+        addedNodes,
+        oldValue: null,
+        attributeName: null,
+      }) as unknown as mutationRecord;
+    this.processMutation(childListRecord([node], []));
+    this.processMutation(childListRecord([], [node]));
+    this.emit();
+  }
+
+  private buildSerializationOptions(): Parameters<
+    typeof serializeNodeWithId
+  >[1] {
+    return {
+      doc: this.doc,
+      mirror: this.mirror,
+      blockClass: this.blockClass,
+      blockSelector: this.blockSelector,
+      maskTextClass: this.maskTextClass,
+      maskTextSelector: this.maskTextSelector,
+      skipChild: true,
+      newlyAddedElement: true,
+      inlineStylesheet: this.inlineStylesheet,
+      maskInputOptions: this.maskInputOptions,
+      maskTextFn: this.maskTextFn,
+      maskInputFn: this.maskInputFn,
+      maskAllElementAttributes: this.maskAllElementAttributes,
+      maskAttributeFn: this.maskAttributeFn,
+      slimDOMOptions: this.slimDOMOptions,
+      dataURLOptions: this.dataURLOptions,
+      recordCanvas: this.recordCanvas,
+      canvasMaskingConfigured: this.canvasMaskingConfigured,
+      inlineImages: this.inlineImages,
+      onSerialize: (currentN) => {
+        if (isSerializedIframe(currentN, this.mirror)) {
+          this.iframeManager.addIframe(currentN as HTMLIFrameElement);
+        }
+        if (isSerializedStylesheet(currentN, this.mirror)) {
+          this.stylesheetManager.trackLinkElement(
+            currentN as HTMLLinkElement,
+          );
+        }
+        if (
+          hasShadowRoot(currentN) &&
+          !isBlocked(
+            currentN,
+            this.blockClass,
+            this.blockSelector,
+            true,
+          )
+        ) {
+          this.shadowDomManager.addShadowRoot(
+            dom.shadowRoot(currentN)!,
+            this.doc,
+          );
+        }
+      },
+      onIframeLoad: (iframe, childSn) => {
+        this.iframeManager.attachIframe(iframe, childSn);
+        this.shadowDomManager.observeAttachShadow(iframe);
+      },
+      onIframeListenerRegistered: (
+        iframe: HTMLIFrameElement,
+        disposer: () => void,
+      ) => {
+        this.iframeManager.registerLoadListenerDisposer(iframe, disposer);
+      },
+      onStylesheetLoad: (link, childSn, previousSn) => {
+        this.stylesheetManager.attachLinkElement(link, childSn, previousSn);
+      },
+    };
+  }
 
   public bufferBelongsToIframe = (iframeEl: HTMLIFrameElement): boolean => {
     return this.doc === iframeEl.contentDocument;

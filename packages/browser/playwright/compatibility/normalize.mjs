@@ -71,6 +71,14 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
         'loadEventStart',
         'loadEventEnd',
     ])
+    const initialNavigationClocks = new Set([
+        'fetchStart',
+        'domainLookupStart',
+        'domainLookupEnd',
+        'connectStart',
+        'connectEnd',
+        'requestStart',
+    ])
     const metadataVersion = (value, expected, role, path) => {
         if (value !== expected)
             throw new Error(`Unexpected ${role} metadata at ${path}: ${value}; expected ${expected}`)
@@ -230,11 +238,11 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                 (['timeOrigin', 'timestamp'].includes(child)
                     ? item > 0
                     : item >= 0 ||
-                      // Firefox may expose initial navigation fetchStart up to 1 ms before the time origin.
-                      (child === 'fetchStart' &&
+                      // Firefox can report initial navigation phases up to 2 ms before the time origin.
+                      (initialNavigationClocks.has(child) &&
                           value.entryType === 'navigation' &&
                           value.isInitial === true &&
-                          item >= -1))
+                          item >= -2))
             )
                 item = '<network-clock-ms>'
             const debugProperties = sdkProperties.test(path) || storageRoot.test(path)

@@ -78,7 +78,7 @@ describe('emails', () => {
   })
 
   it.each([
-    ['with a distinct ID', { distinctId: 'user_123' }, { identifiers: { distinct_id: 'user_123' } }],
+    ['with a distinct ID', { distinctId: 'user_123' }, { distinct_id: 'user_123' }],
     ['without a distinct ID', {}, {}],
   ])('posts the template to the app host %s', async (_name, overrides, extraBody) => {
     replies = [accepted()]
@@ -103,7 +103,7 @@ describe('emails', () => {
       'User-Agent': 'posthog-node/1.2.3',
     })
     expect(JSON.parse(options.body)).toEqual({
-      template: { id: TEMPLATE_ID },
+      template_id: TEMPLATE_ID,
       to: 'user@example.com',
       message_data: { name: 'Ada', expiresAt: '2026-11-20T00:00:00.000Z' },
       ...extraBody,
@@ -116,7 +116,7 @@ describe('emails', () => {
     await posthog.withContext({ distinctId: 'context_user' }, () => send())
 
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
-      template: { id: TEMPLATE_ID },
+      template_id: TEMPLATE_ID,
       to: 'user@example.com',
       message_data: {},
     })
