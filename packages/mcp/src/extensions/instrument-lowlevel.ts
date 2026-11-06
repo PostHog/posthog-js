@@ -147,7 +147,7 @@ async function handleToolCallRequest(
         ? getAnalyticsParameterOwnership(originalTool.inputSchema)
         : undefined,
     inputSchema: originalTool?.inputSchema,
-    isToolRegistered: async () => (hasDispatcher || !toolName ? lookup.registered : false),
+    isUnknownTool: !!toolName && (!hasDispatcher || lookup.registered === false),
   })
 }
 

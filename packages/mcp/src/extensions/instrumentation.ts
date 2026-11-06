@@ -129,11 +129,10 @@ interface TraceToolCallParams {
    */
   takeCapturedError?: () => unknown
   /**
-   * Asked only once the call is rejected: `false` when the server has no tool
-   * by this name, `undefined` when the SDK cannot tell. A rejected call to an
-   * unregistered tool is recorded as `$mcp_unknown_tool`, not as a tool call.
+   * The SDK knows the server has no tool by this name, so a rejected call is
+   * recorded as `$mcp_unknown_tool`, not as a tool call.
    */
-  isToolRegistered?: () => Promise<boolean | undefined>
+  isUnknownTool?: boolean
 }
 
 /**
@@ -158,7 +157,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     extraEventProperties,
     omitCapturedParameters,
     takeCapturedError,
-    isToolRegistered,
+    isUnknownTool,
   } = params
   const resolvedEventType = eventType ?? MCPAnalyticsEventType.mcpToolsCall
   // The SDK's own virtual tools carry their intent in their own arguments, so
@@ -221,7 +220,6 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     preparedEvent.event.parameters = undefined
   }
 
-  const publishUnknownTool = () => publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
   let result: unknown
   try {
     result = await execute(downstreamRequest)
@@ -229,54 +227,23 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     if (preparedEvent && conversation.minted) {
       preparedEvent.event.conversationId = undefined
     }
-    const durationMs = Date.now() - startTime.getTime()
-    publishRejectedCall(data, isToolRegistered, publishUnknownTool, () =>
-      publishFailedToolEvent(server, preparedEvent, error, durationMs, data.logger)
-    )
+    if (isUnknownTool) {
+      publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
+    } else {
+      publishFailedToolEvent(server, preparedEvent, error, startTime, data.logger)
+    }
     throw error
   }
 
   const finalResult = applyConversationInstructions(preparedEvent?.event ?? null, result, conversation, ownership)
-  const durationMs = Date.now() - startTime.getTime()
-  // `result`, not `finalResult`: the error is read from what the tool produced,
-  // before the conversation handle was written into it. See below.
-  const publishToolCall = () =>
-    publishSuccessfulToolEvent(server, preparedEvent, finalResult, durationMs, data.logger, takeCapturedError, result)
-  if (isToolResultError(result)) {
-    publishRejectedCall(data, isToolRegistered, publishUnknownTool, publishToolCall)
+  if (isUnknownTool && isToolResultError(result)) {
+    publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
   } else {
-    publishToolCall()
+    // `result`, not `finalResult`: the error is read from what the tool produced,
+    // before the conversation handle was written into it. See below.
+    publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
   }
   return finalResult
-}
-
-type Publish = () => Promise<void> | undefined
-
-/**
- * Publishes a rejected call as `$mcp_unknown_tool` or as a failed tool call.
- * Telling them apart can run the host's `tools/list`, so it happens after the
- * caller has its response, and the client's flush and shutdown wait for it.
- */
-function publishRejectedCall(
-  data: MCPAnalyticsData,
-  isToolRegistered: TraceToolCallParams['isToolRegistered'],
-  publishUnknownTool: Publish,
-  publishToolCall: Publish
-): void {
-  if (!isToolRegistered) {
-    publishToolCall()
-    return
-  }
-  const published = Promise.resolve()
-    .then(isToolRegistered)
-    .then(
-      (registered) => (registered === false ? publishUnknownTool() : publishToolCall()),
-      (error) => {
-        data.logger(`Warning: PostHog MCP analytics could not tell whether the called tool exists - ${error}`)
-        return publishToolCall()
-      }
-    )
-  data.sink?.track(published)
 }
 
 function resolveToolConversation(
@@ -490,11 +457,11 @@ function publishSuccessfulToolEvent(
   server: MCPServerLike,
   preparedEvent: PreparedToolEvent | null,
   result: unknown,
-  durationMs: number,
+  startTime: Date,
   logger: LoggerFn,
   takeCapturedError?: () => unknown,
   resultBeforeInstructions?: unknown
-): Promise<void> | undefined {
+): void {
   if (!preparedEvent) {
     return
   }
@@ -508,8 +475,8 @@ function publishSuccessfulToolEvent(
       event.isError = false
     }
     event.response = result
-    event.duration = durationMs
-    return captureEvent(server, event, logger, requestAttribution)
+    event.duration = Date.now() - startTime.getTime()
+    captureEvent(server, event, logger, requestAttribution)
   } catch (error) {
     logger(`Warning: PostHog MCP analytics failed to publish tool event - ${error}`)
   }
@@ -519,9 +486,9 @@ function publishFailedToolEvent(
   server: MCPServerLike,
   preparedEvent: PreparedToolEvent | null,
   error: unknown,
-  durationMs: number,
+  startTime: Date,
   logger: LoggerFn
-): Promise<void> | undefined {
+): void {
   if (!preparedEvent) {
     return
   }
@@ -529,8 +496,8 @@ function publishFailedToolEvent(
   try {
     event.isError = true
     event.error = captureException(error)
-    event.duration = durationMs
-    return captureEvent(server, event, logger, requestAttribution)
+    event.duration = Date.now() - startTime.getTime()
+    captureEvent(server, event, logger, requestAttribution)
   } catch (publishError) {
     logger(`Warning: PostHog MCP analytics failed to publish failed tool event - ${publishError}`)
   }
@@ -545,13 +512,13 @@ function publishUnknownToolEvent(
   preparedEvent: PreparedToolEvent | null,
   properties: McpEvent['properties'],
   logger: LoggerFn
-): Promise<void> | undefined {
+): void {
   if (!preparedEvent) {
     return
   }
   const { event, requestAttribution } = preparedEvent
   try {
-    return captureEvent(
+    captureEvent(
       server,
       {
         eventType: MCPAnalyticsEventType.mcpUnknownTool,
@@ -803,62 +770,24 @@ export async function isToolAdvertised(
   extra: CompatibleRequestHandlerExtra | undefined,
   logger: LoggerFn
 ): Promise<boolean | undefined> {
-  // Match the page the current list instrumentation can expose. Pagination
-  // passthrough is handled separately from missing-capability ownership.
-  const page = await readFirstToolsPage(server, toolName, extra, logger)
-  return page && page.tools.some((tool) => tool?.name === toolName)
-}
-
-/**
- * Whether the server's whole listing names the tool: `undefined` when the
- * listing can't be read or has more pages than the one read, so a tool listed
- * on a later page is never mistaken for an unknown one.
- */
-export async function isToolListed(
-  server: MCPServerLike,
-  toolName: string,
-  extra: CompatibleRequestHandlerExtra | undefined,
-  logger: LoggerFn
-): Promise<boolean | undefined> {
-  const page = await readFirstToolsPage(server, toolName, extra, logger)
-  if (!page) {
-    return undefined
-  }
-  if (page.tools.some((tool) => tool?.name === toolName)) {
-    return true
-  }
-  return page.nextCursor ? undefined : false
-}
-
-/** A host listing slower than this can't tell an unknown tool from a failing one. */
-const LISTING_PROBE_DEADLINE_MS = 1000
-
-async function readFirstToolsPage(
-  server: MCPServerLike,
-  toolName: string,
-  extra: CompatibleRequestHandlerExtra | undefined,
-  logger: LoggerFn
-): Promise<CompatibleToolsListLike | undefined> {
   const listHandler = originalRequestHandlers.get(server)?.get('tools/list')
   if (!listHandler || !server._requestHandlers.has('tools/list')) {
     return undefined
   }
 
-  let deadline: ReturnType<typeof setTimeout> | undefined
-  const missedDeadline = new Promise<undefined>((resolve) => {
-    deadline = setTimeout(() => resolve(undefined), LISTING_PROBE_DEADLINE_MS)
-  })
   try {
-    const listing = listHandler({ method: 'tools/list', params: {} }, extra)
-    const response = (await Promise.race([listing, missedDeadline])) as CompatibleToolsListLike | undefined
-    return response && Array.isArray(response.tools) ? response : undefined
+    const response = (await listHandler({ method: 'tools/list', params: {} }, extra)) as CompatibleToolsListLike
+    if (!response || !Array.isArray(response.tools)) {
+      return undefined
+    }
+    // Match the page the current list instrumentation can expose. Pagination
+    // passthrough is handled separately from missing-capability ownership.
+    return response.tools.some((tool) => tool?.name === toolName)
   } catch (error) {
     logger(
       `Warning: PostHog MCP analytics could not determine whether "${toolName}" is advertised; delegating to the server - ${error}`
     )
     return undefined
-  } finally {
-    clearTimeout(deadline)
   }
 }
 

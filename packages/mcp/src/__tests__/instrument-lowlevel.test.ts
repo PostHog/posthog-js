@@ -402,6 +402,30 @@ describe('Low-level Server virtual tool ownership (e2e)', () => {
     }
   })
 
+  it('waits for a slow tools/list before routing get_more_tools to the virtual tool', async () => {
+    const { server, receivedCalls } = await setupLowLevelServer()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      server.setRequestHandler(
+        ListToolsRequestSchema,
+        () => new Promise((resolve) => setTimeout(() => resolve({ tools: TOOLS }), 5000))
+      )
+      instrument(server, fakePostHog(), { reportMissing: true })
+      const callTool = (server as unknown as MCPServerLike)._requestHandlers.get('tools/call')
+      const call = callTool?.(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { context: 'Need a database tool' } } },
+        {} as never
+      ) as Promise<{ content: { text: string }[] }>
+
+      await vi.advanceTimersByTimeAsync(5000)
+      const result = await call
+      expect(result.content[0].text).toContain('Unfortunately')
+      expect(receivedCalls).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('fails open after the server removes its tools/list handler', async () => {
     const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
     try {

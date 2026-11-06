@@ -495,6 +495,8 @@ export interface ServerClientInfoLike {
 
 export interface HighLevelMCPServerLike {
   _registeredTools: { [name: string]: RegisteredTool }
+  /** Set once the MCP SDK has installed its own `tools/list` and `tools/call` handlers. */
+  _toolHandlersInitialized?: boolean
   registerTool?(name: string, config: { description?: string; inputSchema?: unknown }, handler: ToolCallback): void
   server: MCPServerLike
   tool?(name: string, cb: ToolCallback): void
