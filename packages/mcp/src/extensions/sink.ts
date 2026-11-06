@@ -105,6 +105,12 @@ export class McpEventSink {
     private readonly logger: LoggerFn = log
   ) {}
 
+  /** Holds the client's `flush()` and `shutdown()` until `work` settles. */
+  track(work: Promise<unknown>): void {
+    // Optional because hosts may pass a stand-in client without it, and analytics must never fail a tool call.
+    void this.posthog.addPendingPromise?.(work)
+  }
+
   /**
    * Errors at any stage are logged and the event is dropped, never re-thrown
    * into tool code.

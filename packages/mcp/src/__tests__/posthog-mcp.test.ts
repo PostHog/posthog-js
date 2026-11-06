@@ -884,6 +884,15 @@ describe('PostHogMCP', () => {
         [PostHogMCPAnalyticsProperty.SessionId]: 'ses_123',
       })
     })
+    it.each([
+      ['empty', ''],
+      ['missing', undefined as unknown as string],
+    ])('emits nothing when the name is %s', async (_, toolName) => {
+      posthog.captureUnknownTool({ toolName, sessionId: 'ses_123' })
+      await tick()
+
+      expect(capture.getCaptures()).toHaveLength(0)
+    })
   })
 
   describe('getMoreToolsResult', () => {

@@ -221,6 +221,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     preparedEvent.event.parameters = undefined
   }
 
+  const publishUnknownTool = () => publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
   let result: unknown
   try {
     result = await execute(downstreamRequest)
@@ -228,23 +229,54 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     if (preparedEvent && conversation.minted) {
       preparedEvent.event.conversationId = undefined
     }
-    if ((await isToolRegistered?.()) === false) {
-      publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
-    } else {
-      publishFailedToolEvent(server, preparedEvent, error, startTime, data.logger)
-    }
+    const durationMs = Date.now() - startTime.getTime()
+    publishRejectedCall(data, isToolRegistered, publishUnknownTool, () =>
+      publishFailedToolEvent(server, preparedEvent, error, durationMs, data.logger)
+    )
     throw error
   }
 
   const finalResult = applyConversationInstructions(preparedEvent?.event ?? null, result, conversation, ownership)
-  if (isToolResultError(result) && (await isToolRegistered?.()) === false) {
-    publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
-    return finalResult
-  }
+  const durationMs = Date.now() - startTime.getTime()
   // `result`, not `finalResult`: the error is read from what the tool produced,
   // before the conversation handle was written into it. See below.
-  publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
+  const publishToolCall = () =>
+    publishSuccessfulToolEvent(server, preparedEvent, finalResult, durationMs, data.logger, takeCapturedError, result)
+  if (isToolResultError(result)) {
+    publishRejectedCall(data, isToolRegistered, publishUnknownTool, publishToolCall)
+  } else {
+    publishToolCall()
+  }
   return finalResult
+}
+
+type Publish = () => Promise<void> | undefined
+
+/**
+ * Publishes a rejected call as `$mcp_unknown_tool` or as a failed tool call.
+ * Telling them apart can run the host's `tools/list`, so it happens after the
+ * caller has its response, and the client's flush and shutdown wait for it.
+ */
+function publishRejectedCall(
+  data: MCPAnalyticsData,
+  isToolRegistered: TraceToolCallParams['isToolRegistered'],
+  publishUnknownTool: Publish,
+  publishToolCall: Publish
+): void {
+  if (!isToolRegistered) {
+    publishToolCall()
+    return
+  }
+  const published = Promise.resolve()
+    .then(isToolRegistered)
+    .then(
+      (registered) => (registered === false ? publishUnknownTool() : publishToolCall()),
+      (error) => {
+        data.logger(`Warning: PostHog MCP analytics could not tell whether the called tool exists - ${error}`)
+        return publishToolCall()
+      }
+    )
+  data.sink?.track(published)
 }
 
 function resolveToolConversation(
@@ -458,11 +490,11 @@ function publishSuccessfulToolEvent(
   server: MCPServerLike,
   preparedEvent: PreparedToolEvent | null,
   result: unknown,
-  startTime: Date,
+  durationMs: number,
   logger: LoggerFn,
   takeCapturedError?: () => unknown,
   resultBeforeInstructions?: unknown
-): void {
+): Promise<void> | undefined {
   if (!preparedEvent) {
     return
   }
@@ -476,8 +508,8 @@ function publishSuccessfulToolEvent(
       event.isError = false
     }
     event.response = result
-    event.duration = Date.now() - startTime.getTime()
-    captureEvent(server, event, logger, requestAttribution)
+    event.duration = durationMs
+    return captureEvent(server, event, logger, requestAttribution)
   } catch (error) {
     logger(`Warning: PostHog MCP analytics failed to publish tool event - ${error}`)
   }
@@ -487,9 +519,9 @@ function publishFailedToolEvent(
   server: MCPServerLike,
   preparedEvent: PreparedToolEvent | null,
   error: unknown,
-  startTime: Date,
+  durationMs: number,
   logger: LoggerFn
-): void {
+): Promise<void> | undefined {
   if (!preparedEvent) {
     return
   }
@@ -497,8 +529,8 @@ function publishFailedToolEvent(
   try {
     event.isError = true
     event.error = captureException(error)
-    event.duration = Date.now() - startTime.getTime()
-    captureEvent(server, event, logger, requestAttribution)
+    event.duration = durationMs
+    return captureEvent(server, event, logger, requestAttribution)
   } catch (publishError) {
     logger(`Warning: PostHog MCP analytics failed to publish failed tool event - ${publishError}`)
   }
@@ -513,13 +545,13 @@ function publishUnknownToolEvent(
   preparedEvent: PreparedToolEvent | null,
   properties: McpEvent['properties'],
   logger: LoggerFn
-): void {
+): Promise<void> | undefined {
   if (!preparedEvent) {
     return
   }
   const { event, requestAttribution } = preparedEvent
   try {
-    captureEvent(
+    return captureEvent(
       server,
       {
         eventType: MCPAnalyticsEventType.mcpUnknownTool,

@@ -2,6 +2,7 @@ import { McpServer as V1McpServer } from '@modelcontextprotocol/sdk/server/mcp.j
 import { Server as V1Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { McpServer as V2McpServer } from '@modelcontextprotocol/server'
+import { PostHog } from 'posthog-node'
 import { instrument } from '../index'
 import type { MCPAnalyticsOptions, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
@@ -38,7 +39,11 @@ function v2HighLevel(disabled: boolean): Setup {
 }
 
 /** @rekog/mcp-nest binds its own dispatcher to a McpServer and never fills its tool registry. */
-function highLevelWithOwnDispatcher({ paginated = false } = {}): Setup {
+function highLevelWithOwnDispatcher({
+  paginated = false,
+  listing = Promise.resolve(),
+  fails = 'throw',
+}: { paginated?: boolean; listing?: Promise<void>; fails?: 'throw' | 'result' } = {}): Setup {
   const server = new V1McpServer({ name: 'mcp-nest shape', version: '1.0.0' })
   const dispatcher = server.server as unknown as MCPServerLike
   return {
@@ -46,14 +51,18 @@ function highLevelWithOwnDispatcher({ paginated = false } = {}): Setup {
     dispatcher,
     afterInstrument: () => {
       server.server.registerCapabilities({ tools: {} })
-      server.server.setRequestHandler(ListToolsRequestSchema, async (request) =>
-        !paginated
+      server.server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+        await listing
+        return !paginated
           ? { tools: [SEARCH_DOCS] }
           : request.params?.cursor
             ? { tools: [{ ...SEARCH_DOCS, name: 'page2_tool' }] }
             : { tools: [SEARCH_DOCS], nextCursor: 'page2' }
-      )
+      })
       server.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        if (fails === 'result') {
+          return { isError: true, content: [{ type: 'text' as const, text: `${request.params.name} failed` }] }
+        }
         throw new Error(`${request.params.name} failed`)
       })
     },
@@ -78,8 +87,12 @@ function lowLevel({ dispatcher, registry }: { dispatcher: boolean; registry: boo
   }
 }
 
-async function callTool({ server, dispatcher, options, afterInstrument }: Setup, name: string): Promise<string> {
-  instrument(server as MCPServerLike, fakePostHog(), options)
+async function callTool(
+  { server, dispatcher, options, afterInstrument }: Setup,
+  name: string,
+  posthog = fakePostHog()
+): Promise<string> {
+  instrument(server as MCPServerLike, posthog, options)
   afterInstrument?.()
   const handler = dispatcher._requestHandlers.get('tools/call')
   try {
@@ -179,5 +192,48 @@ describe('a tools/call for a tool the server does not have', () => {
 
     const [unknown] = eventCapture.findCapturesByEvent('$mcp_unknown_tool')
     expect(unknown.properties.$mcp_tool_name).not.toContain('jane@example.com')
+  })
+
+  describe('while the listing that classifies a failed call is slow', () => {
+    let releaseListing: () => void
+    let listing: Promise<void>
+    let posthog: PostHog
+
+    beforeEach(() => {
+      listing = new Promise((resolve) => (releaseListing = resolve))
+      posthog = new PostHog('phc_test', { host: 'http://localhost', fetchRetryCount: 0 })
+    })
+
+    afterEach(async () => {
+      releaseListing()
+      await posthog.shutdown()
+    })
+
+    const stalled = () => new Promise<string>((resolve) => setTimeout(() => resolve('stalled'), 50))
+
+    it.each([
+      ['thrown error', 'search_docs', ['$mcp_tool_call', '$exception'], 'throw', /^thrown: search_docs failed/],
+      ['thrown error', 'no_such_tool', ['$mcp_unknown_tool'], 'throw', /^thrown: no_such_tool failed/],
+      ['error result', 'search_docs', ['$mcp_tool_call', '$exception'], 'result', /^result: search_docs failed/],
+      ['error result', 'no_such_tool', ['$mcp_unknown_tool'], 'result', /^result: no_such_tool failed/],
+    ] as const)(
+      'delivers the %s for %s at once, then flush waits to publish %j',
+      async (_, name, published, fails, clientSees) => {
+        const setup = highLevelWithOwnDispatcher({ listing, fails })
+
+        const outcome = await Promise.race([callTool(setup, name, posthog), stalled()])
+        expect(outcome).toMatch(clientSees)
+
+        let flushed = false
+        const flush = posthog.flush().then(() => (flushed = true))
+        await settle()
+        expect(flushed).toBe(false)
+        expect(eventCapture.getCaptures()).toHaveLength(0)
+
+        releaseListing()
+        await flush
+        expect(eventCapture.getCaptures().map((c) => c.event)).toEqual(published)
+      }
+    )
   })
 })

@@ -483,9 +483,13 @@ export class PostHogMCP extends PostHog {
   /**
    * Capture a call to a tool your server does not have. Emits
    * `$mcp_unknown_tool`. Use it instead of {@link captureToolCall} when your
-   * dispatcher rejects the name, so the call is not counted as a tool call.
+   * dispatcher rejects the name, so the call is not counted as a tool call. A
+   * call that names no tool emits nothing.
    */
   captureUnknownTool(data: UnknownToolCaptureData): void {
+    if (!data.toolName) {
+      return
+    }
     const event = baseEvent(MCPAnalyticsEventType.mcpUnknownTool, data)
     event.resourceName = data.toolName
     this.#emit(event)
