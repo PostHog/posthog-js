@@ -39,6 +39,7 @@ import {
   patchRequestHandlers,
   captureToolCall,
   isToolAdvertised,
+  isToolListed,
   readToolMetaCategory,
   type HandlerPatch,
 } from './instrumentation'
@@ -284,7 +285,10 @@ async function handleToolCallRequest(
     })
   }
 
-  const registeredTool = toolName ? highLevelServer._registeredTools[toolName] : undefined
+  const registeredTool =
+    toolName && Object.prototype.hasOwnProperty.call(highLevelServer._registeredTools, toolName)
+      ? highLevelServer._registeredTools[toolName]
+      : undefined
 
   // Strip SDK-owned arguments before the MCP SDK validates the registered Zod
   // schema. The callback wrapper repeats the ownership-aware cleanup as a
@@ -302,7 +306,7 @@ async function handleToolCallRequest(
     // Adapters such as @rekog/mcp-nest dispatch tools the registry never holds,
     // so a registry miss counts only if the server's own listing agrees.
     isToolRegistered: async () =>
-      toolName ? registeredTool !== undefined || isToolAdvertised(server, toolName, extra, data.logger) : undefined,
+      toolName ? registeredTool !== undefined || isToolListed(server, toolName, extra, data.logger) : undefined,
     takeCapturedError: () => {
       const captured = extra?.__mcp_analytics_error
       if (extra) {

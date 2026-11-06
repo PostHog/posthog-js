@@ -771,6 +771,39 @@ export async function isToolAdvertised(
   extra: CompatibleRequestHandlerExtra | undefined,
   logger: LoggerFn
 ): Promise<boolean | undefined> {
+  // Match the page the current list instrumentation can expose. Pagination
+  // passthrough is handled separately from missing-capability ownership.
+  const page = await readFirstToolsPage(server, toolName, extra, logger)
+  return page && page.tools.some((tool) => tool?.name === toolName)
+}
+
+/**
+ * Whether the server's whole listing names the tool: `undefined` when the
+ * listing can't be read or has more pages than the one read, so a tool listed
+ * on a later page is never mistaken for an unknown one.
+ */
+export async function isToolListed(
+  server: MCPServerLike,
+  toolName: string,
+  extra: CompatibleRequestHandlerExtra | undefined,
+  logger: LoggerFn
+): Promise<boolean | undefined> {
+  const page = await readFirstToolsPage(server, toolName, extra, logger)
+  if (!page) {
+    return undefined
+  }
+  if (page.tools.some((tool) => tool?.name === toolName)) {
+    return true
+  }
+  return page.nextCursor ? undefined : false
+}
+
+async function readFirstToolsPage(
+  server: MCPServerLike,
+  toolName: string,
+  extra: CompatibleRequestHandlerExtra | undefined,
+  logger: LoggerFn
+): Promise<CompatibleToolsListLike | undefined> {
   const listHandler = originalRequestHandlers.get(server)?.get('tools/list')
   if (!listHandler || !server._requestHandlers.has('tools/list')) {
     return undefined
@@ -778,12 +811,7 @@ export async function isToolAdvertised(
 
   try {
     const response = (await listHandler({ method: 'tools/list', params: {} }, extra)) as CompatibleToolsListLike
-    if (!response || !Array.isArray(response.tools)) {
-      return undefined
-    }
-    // Match the page the current list instrumentation can expose. Pagination
-    // passthrough is handled separately from missing-capability ownership.
-    return response.tools.some((tool) => tool?.name === toolName)
+    return response && Array.isArray(response.tools) ? response : undefined
   } catch (error) {
     logger(
       `Warning: PostHog MCP analytics could not determine whether "${toolName}" is advertised; delegating to the server - ${error}`

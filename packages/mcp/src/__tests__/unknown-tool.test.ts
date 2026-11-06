@@ -38,7 +38,7 @@ function v2HighLevel(disabled: boolean): Setup {
 }
 
 /** @rekog/mcp-nest binds its own dispatcher to a McpServer and never fills its tool registry. */
-function highLevelWithOwnDispatcher(): Setup {
+function highLevelWithOwnDispatcher({ paginated = false } = {}): Setup {
   const server = new V1McpServer({ name: 'mcp-nest shape', version: '1.0.0' })
   const dispatcher = server.server as unknown as MCPServerLike
   return {
@@ -46,7 +46,13 @@ function highLevelWithOwnDispatcher(): Setup {
     dispatcher,
     afterInstrument: () => {
       server.server.registerCapabilities({ tools: {} })
-      server.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [SEARCH_DOCS] }))
+      server.server.setRequestHandler(ListToolsRequestSchema, async (request) =>
+        !paginated
+          ? { tools: [SEARCH_DOCS] }
+          : request.params?.cursor
+            ? { tools: [{ ...SEARCH_DOCS, name: 'page2_tool' }] }
+            : { tools: [SEARCH_DOCS], nextCursor: 'page2' }
+      )
       server.server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error(`${request.params.name} failed`)
       })
@@ -102,7 +108,7 @@ describe('a tools/call for a tool the server does not have', () => {
   it.each([
     ['MCP SDK v1 McpServer', () => v1HighLevel(false), /^result: .*Tool no_such_tool not found/],
     ['MCP SDK v2 McpServer', () => v2HighLevel(false), /^thrown: Tool no_such_tool not found/],
-    ['McpServer with its own dispatcher', highLevelWithOwnDispatcher, /^thrown: no_such_tool failed/],
+    ['McpServer with its own dispatcher', () => highLevelWithOwnDispatcher(), /^thrown: no_such_tool failed/],
     [
       'low-level Server with no tools/call handler',
       () => lowLevel({ dispatcher: false, registry: false }),
@@ -132,7 +138,12 @@ describe('a tools/call for a tool the server does not have', () => {
   it.each([
     ['a disabled tool on MCP SDK v1 McpServer', () => v1HighLevel(true), 'search_docs'],
     ['a disabled tool on MCP SDK v2 McpServer', () => v2HighLevel(true), 'search_docs'],
-    ['a listed tool served by its own dispatcher on McpServer', highLevelWithOwnDispatcher, 'search_docs'],
+    ['a listed tool served by its own dispatcher on McpServer', () => highLevelWithOwnDispatcher(), 'search_docs'],
+    [
+      'a tool on a later listing page served by its own dispatcher on McpServer',
+      () => highLevelWithOwnDispatcher({ paginated: true }),
+      'page2_tool',
+    ],
     [
       'an unknown name on a low-level Server with no registry',
       () => lowLevel({ dispatcher: true, registry: false }),
@@ -146,6 +157,20 @@ describe('a tools/call for a tool the server does not have', () => {
     const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
     expect(toolCalls).toHaveLength(1)
     expect(toolCalls[0].properties).toMatchObject({ $mcp_tool_name: name, $mcp_is_error: true })
+  })
+
+  it.each([
+    ['constructor', 'v1', () => v1HighLevel(false)],
+    ['toString', 'v1', () => v1HighLevel(false)],
+    ['__proto__', 'v1', () => v1HighLevel(false)],
+    ['constructor', 'v2', () => v2HighLevel(false)],
+    ['hasOwnProperty', 'v2', () => v2HighLevel(false)],
+  ])('treats %s, inherited by every object, as unknown on MCP SDK %s McpServer', async (name, _, setup) => {
+    await callTool(setup(), name)
+    await settle()
+
+    expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(0)
+    expect(eventCapture.findCapturesByEvent('$mcp_unknown_tool')).toHaveLength(1)
   })
 
   it('redacts personal data from the requested name, which is free text', async () => {
