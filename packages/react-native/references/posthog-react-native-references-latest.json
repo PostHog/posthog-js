@@ -1141,9 +1141,9 @@
           "title": "setAppLanguage",
           "examples": [
             {
-              "id": "",
-              "name": "",
-              "code": "\n\nposthog.setAppLanguage('de')\n// after the user switches language\nposthog.setAppLanguage(i18n.language)\n\n\n\n"
+              "id": "with_i18next_or_react-i18next",
+              "name": "With i18next or react-i18next",
+              "code": "\n\n// With i18next or react-i18next\nposthog.setAppLanguage(i18n.resolvedLanguage)\ni18n.on('languageChanged', (language) => posthog.setAppLanguage(language))\n\n// Your own language setting\nposthog.setAppLanguage(settings.language) // at startup\nposthog.setAppLanguage('de') // when the user picks German\n\n\n\n"
             }
           ],
           "releaseTag": "public",

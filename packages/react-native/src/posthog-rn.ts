@@ -1100,9 +1100,13 @@ export class PostHog extends PostHogCore {
    *
    * @example
    * ```js
-   * posthog.setAppLanguage('de')
-   * // after the user switches language
-   * posthog.setAppLanguage(i18n.language)
+   * // With i18next or react-i18next
+   * posthog.setAppLanguage(i18n.resolvedLanguage)
+   * i18n.on('languageChanged', (language) => posthog.setAppLanguage(language))
+   *
+   * // Your own language setting
+   * posthog.setAppLanguage(settings.language) // at startup
+   * posthog.setAppLanguage('de') // when the user picks German
    * ```
    *
    * @public
