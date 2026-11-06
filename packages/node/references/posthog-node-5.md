@@ -62,6 +62,9 @@ tableOfContents:
   - value: "Is feature enabled"
     url: is-feature-enabled
     depth: 0
+  - value: "Is opt out"
+    url: is-opt-out
+    depth: 0
   - value: "Opt in"
     url: opt-in
     depth: 0
@@ -79,6 +82,12 @@ tableOfContents:
     depth: 0
   - value: "Unregister"
     url: unregister
+    depth: 0
+  - value: "Flag definition loader"
+    url: flag-definition-loader
+    depth: 0
+  - value: "Remote config"
+    url: remote-config
     depth: 0
   - value: "SDK utils"
     url: sdk-utils
@@ -709,6 +718,16 @@ try {
 
 ## Debug
 
+### `PostHog.isDebug`
+
+> **get** **isDebug**(): `boolean`
+
+##### Returns
+
+`boolean`
+
+
+
 ### `PostHog.debug`
 
 > **debug**(`enabled?`): `void`
@@ -790,6 +809,48 @@ const status = await client.emails.get(data.id) // later, for example from a job
 #### Returns
 
 `Promise`\<`void`\>
+
+
+
+### `PostHog.flushWithPendingPromises`
+
+> **flushWithPendingPromises**(): `Promise`\<`void`\>
+
+Flushes the queue of pending events.
+
+This function will return a promise that will resolve when the flush is complete,
+or reject if there was an error (for example if the server or network is down).
+
+If there is already a flush in progress, this function will wait for that flush to complete.
+
+It's recommended to do error handling in the callback of the promise.
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Example
+
+```js
+// flush with error handling
+posthog.flush().then(() => {
+  console.log('Flush complete')
+}).catch((err) => {
+  console.error('Flush failed', err)
+})
+```
+
+#### Throws
+
+PostHogFetchHttpError
+
+#### Throws
+
+PostHogFetchNetworkError
+
+#### Throws
+
+Error
 
 
 
@@ -1388,11 +1449,87 @@ Use evaluateFlags and call `flags.isEnabled(key)` on the returned snapshot.
 
 
 
+## Is opt out
+
+### `PostHog.isDisabled`
+
+> **get** **isDisabled**(): `boolean`
+
+##### Returns
+
+`boolean`
+
+
+
+### `PostHog.optedOut`
+
+> **get** **optedOut**(): `boolean`
+
+##### Returns
+
+`boolean`
+
+
+
 ## Opt in
+
+### `PostHog.disable`
+
+> **disable**(): `Promise`\<`void`\>
+
+Disable the PostHog client (opt-out).
+
+#### Returns
+
+`Promise`\<`void`\>
+
+Promise that resolves when the client is disabled
+
+#### Example
+
+```ts
+// Disable client
+await client.disable()
+// Client is now disabled and will not capture events
+```
+
+
+
+### `PostHog.enable`
+
+> **enable**(): `Promise`\<`void`\>
+
+Enable the PostHog client (opt-in).
+
+#### Returns
+
+`Promise`\<`void`\>
+
+Promise that resolves when the client is enabled
+
+#### Example
+
+```ts
+// Enable client
+await client.enable()
+// Client is now enabled and will capture events
+```
+
+
 
 ### `PostHog.optIn`
 
 > **optIn**(): `Promise`\<`void`\>
+
+#### Returns
+
+`Promise`\<`void`\>
+
+
+
+### `PostHog.optOut`
+
+> **optOut**(): `Promise`\<`void`\>
 
 #### Returns
 
@@ -1478,6 +1615,33 @@ client.setPersonProperties({
 
 
 
+### `PostHog.unsetPersonProperties`
+
+> **unsetPersonProperties**(`data`): `void`
+
+Remove properties from a person profile.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `data` | `UnsetPersonPropertiesMessage` | The data containing distinctId and property names to unset |
+
+#### Returns
+
+`void`
+
+#### Example
+
+```ts
+client.unsetPersonProperties({
+  distinctId: 'user_123',
+  properties: ['plan', 'email']
+})
+```
+
+
+
 ## Shutdown
 
 ### `PostHog.shutdown`
@@ -1532,55 +1696,109 @@ process.on('SIGINT', async () => {
 
 
 
+## Flag definition loader
+
+### `PostHog.isLocalEvaluationReady`
+
+> **isLocalEvaluationReady**(): `boolean`
+
+Check if local evaluation of feature flags is ready.
+
+#### Returns
+
+`boolean`
+
+true if local evaluation is ready, false otherwise
+
+#### Example
+
+```ts
+// Check if ready
+if (client.isLocalEvaluationReady()) {
+  // Local evaluation is ready, can evaluate flags locally
+  const flag = await client.getFeatureFlag('flag-key', 'user_123')
+} else {
+  // Local evaluation not ready, will use remote evaluation
+  const flag = await client.getFeatureFlag('flag-key', 'user_123')
+}
+```
+
+
+
+### `PostHog.waitForLocalEvaluationReady`
+
+> **waitForLocalEvaluationReady**(`timeoutMs?`): `Promise`\<`boolean`\>
+
+Wait for local evaluation of feature flags to be ready.
+
+#### Parameters
+
+| Parameter | Type | Default value | Description |
+| ------ | ------ | ------ | ------ |
+| `timeoutMs?` | `number` | `THIRTY_SECONDS` | Timeout in milliseconds (default: 30000) |
+
+#### Returns
+
+`Promise`\<`boolean`\>
+
+Promise that resolves to true if ready, false if timed out
+
+#### Examples
+
+```ts
+// Wait for local evaluation
+const isReady = await client.waitForLocalEvaluationReady()
+if (isReady) {
+  console.log('Local evaluation is ready')
+} else {
+  console.log('Local evaluation timed out')
+}
+```
+
+```ts
+// Wait with custom timeout
+const isReady = await client.waitForLocalEvaluationReady(10000) // 10 seconds
+```
+
+
+
+## Remote config
+
+### `PostHog.getRemoteConfigPayload`
+
+> **getRemoteConfigPayload**(`flagKey`): `Promise`\<`JsonType` \| `undefined`\>
+
+Get the remote config payload for a feature flag.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `flagKey` | `string` | The feature flag key |
+
+#### Returns
+
+`Promise`\<`JsonType` \| `undefined`\>
+
+Promise that resolves to the remote config payload or undefined
+
+#### Example
+
+```ts
+// Get remote config payload
+const payload = await client.getRemoteConfigPayload('flag-key')
+if (payload) {
+  console.log('Remote config payload:', payload)
+}
+```
+
+#### Throws
+
+Error if personal API key is not provided
+
+
+
 ## SDK utils
-
-### `PostHog.enableFullAiCapture`
-
-> `readonly` **enableFullAiCapture**: `boolean`
-
-Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`.
-
-
-
-### `PostHog.privacyMode`
-
-> `readonly` **privacyMode**: `boolean`
-
-Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`.
-
-
-
-### `PostHog.apiKey`
-
-> **get** **apiKey**(): `string`
-
-The project token the client was created with. Same value as `projectToken`.
-
-##### Returns
-
-`string`
-
-
-
-### `PostHog.isDebug`
-
-> **get** **isDebug**(): `boolean`
-
-##### Returns
-
-`boolean`
-
-
-
-### `PostHog.isDisabled`
-
-> **get** **isDisabled**(): `boolean`
-
-##### Returns
-
-`boolean`
-
-
 
 ### `PostHog.metrics`
 
@@ -1602,60 +1820,6 @@ client.metrics.histogram('job.duration', 187, { unit: 'ms' })
 ##### Returns
 
 `Metrics`
-
-
-
-### `PostHog.optedOut`
-
-> **get** **optedOut**(): `boolean`
-
-##### Returns
-
-`boolean`
-
-
-
-### `PostHog.disable`
-
-> **disable**(): `Promise`\<`void`\>
-
-Disable the PostHog client (opt-out).
-
-#### Returns
-
-`Promise`\<`void`\>
-
-Promise that resolves when the client is disabled
-
-#### Example
-
-```ts
-// Disable client
-await client.disable()
-// Client is now disabled and will not capture events
-```
-
-
-
-### `PostHog.enable`
-
-> **enable**(): `Promise`\<`void`\>
-
-Enable the PostHog client (opt-in).
-
-#### Returns
-
-`Promise`\<`void`\>
-
-Promise that resolves when the client is enabled
-
-#### Example
-
-```ts
-// Enable client
-await client.enable()
-// Client is now enabled and will capture events
-```
 
 
 
@@ -1686,48 +1850,6 @@ in a callback — it creates an isolated scope that cleans up automatically.
 
 
 
-### `PostHog.flushWithPendingPromises`
-
-> **flushWithPendingPromises**(): `Promise`\<`void`\>
-
-Flushes the queue of pending events.
-
-This function will return a promise that will resolve when the flush is complete,
-or reject if there was an error (for example if the server or network is down).
-
-If there is already a flush in progress, this function will wait for that flush to complete.
-
-It's recommended to do error handling in the callback of the promise.
-
-#### Returns
-
-`Promise`\<`void`\>
-
-#### Example
-
-```js
-// flush with error handling
-posthog.flush().then(() => {
-  console.log('Flush complete')
-}).catch((err) => {
-  console.error('Flush failed', err)
-})
-```
-
-#### Throws
-
-PostHogFetchHttpError
-
-#### Throws
-
-PostHogFetchNetworkError
-
-#### Throws
-
-Error
-
-
-
 ### `PostHog.getContext`
 
 > **getContext**(): `ContextData` \| `undefined`
@@ -1748,28 +1870,6 @@ posthog.withContext({ distinctId: 'user_123' }, () => {
   const context = posthog.getContext()
   console.log(context?.distinctId) // 'user_123'
 })
-```
-
-
-
-### `PostHog.getCustomUserAgent`
-
-> **getCustomUserAgent**(): `string`
-
-Get the custom user agent string for this client.
-
-#### Returns
-
-`string`
-
-The formatted user agent string
-
-#### Example
-
-```ts
-// Get user agent
-const userAgent = client.getCustomUserAgent()
-// Returns: "posthog-node/5.7.0"
 ```
 
 
@@ -1841,144 +1941,6 @@ const clientKeys = client.getFeatureFlagKeysByEvaluationRuntime('client')
 
 
 
-### `PostHog.getLibraryId`
-
-> **getLibraryId**(): `string`
-
-#### Returns
-
-`string`
-
-
-
-### `PostHog.getLibraryVersion`
-
-> **getLibraryVersion**(): `string`
-
-Get the library version from package.json.
-
-#### Returns
-
-`string`
-
-The current library version string
-
-#### Example
-
-```ts
-// Get version
-const version = client.getLibraryVersion()
-console.log(`Using PostHog SDK version: ${version}`)
-```
-
-
-
-### `PostHog.getPersistedProperty`
-
-> **getPersistedProperty**(`key`): `any`
-
-Get a persisted property value from memory storage.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `key` | `PostHogPersistedProperty` | The property key to retrieve |
-
-#### Returns
-
-`any`
-
-The stored property value or undefined if not found
-
-#### Examples
-
-```ts
-// Get user ID
-const userId = client.getPersistedProperty('userId')
-```
-
-```ts
-// Get session ID
-const sessionId = client.getPersistedProperty('sessionId')
-```
-
-
-
-### `PostHog.getRemoteConfigPayload`
-
-> **getRemoteConfigPayload**(`flagKey`): `Promise`\<`JsonType` \| `undefined`\>
-
-Get the remote config payload for a feature flag.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `flagKey` | `string` | The feature flag key |
-
-#### Returns
-
-`Promise`\<`JsonType` \| `undefined`\>
-
-Promise that resolves to the remote config payload or undefined
-
-#### Example
-
-```ts
-// Get remote config payload
-const payload = await client.getRemoteConfigPayload('flag-key')
-if (payload) {
-  console.log('Remote config payload:', payload)
-}
-```
-
-#### Throws
-
-Error if personal API key is not provided
-
-
-
-### `PostHog.getSurveysStateless`
-
-> **getSurveysStateless**(): `Promise`\<`Survey`[]\>
-
-** SURVEYS
-*
-
-#### Returns
-
-`Promise`\<`Survey`[]\>
-
-
-
-### `PostHog.isLocalEvaluationReady`
-
-> **isLocalEvaluationReady**(): `boolean`
-
-Check if local evaluation of feature flags is ready.
-
-#### Returns
-
-`boolean`
-
-true if local evaluation is ready, false otherwise
-
-#### Example
-
-```ts
-// Check if ready
-if (client.isLocalEvaluationReady()) {
-  // Local evaluation is ready, can evaluate flags locally
-  const flag = await client.getFeatureFlag('flag-key', 'user_123')
-} else {
-  // Local evaluation not ready, will use remote evaluation
-  const flag = await client.getFeatureFlag('flag-key', 'user_123')
-}
-```
-
-
-
 ### `PostHog.on`
 
 > **on**(`event`, `cb`): () => `void`
@@ -1993,16 +1955,6 @@ if (client.isLocalEvaluationReady()) {
 #### Returns
 
 () => `void`
-
-
-
-### `PostHog.optOut`
-
-> **optOut**(): `Promise`\<`void`\>
-
-#### Returns
-
-`Promise`\<`void`\>
 
 
 
@@ -2040,117 +1992,6 @@ client.overrideFeatureFlags({
   flags: { 'my-flag': 'variant-a' },
   payloads: { 'my-flag': { discount: 20 } }
 })
-```
-
-
-
-### `PostHog.prepareEventMessage`
-
-> **prepareEventMessage**(`props`): `Promise`\<\{ `distinctId`: `string`; `event`: `string`; `options`: `PostHogCaptureOptions`; `properties`: `PostHogEventProperties`; \}\>
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `props` | `EventMessage` |
-
-#### Returns
-
-`Promise`\<\{ `distinctId`: `string`; `event`: `string`; `options`: `PostHogCaptureOptions`; `properties`: `PostHogEventProperties`; \}\>
-
-
-
-### `PostHog.setPersistedProperty`
-
-> **setPersistedProperty**(`key`, `value`): `void`
-
-Set a persisted property value in memory storage.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `key` | `PostHogPersistedProperty` | The property key to set |
-| `value` | `any` | The value to store (null to remove) |
-
-#### Returns
-
-`void`
-
-#### Examples
-
-```ts
-// Set user ID
-client.setPersistedProperty('userId', 'user_123')
-```
-
-```ts
-// Set session ID
-client.setPersistedProperty('sessionId', 'session_456')
-```
-
-
-
-### `PostHog.unsetPersonProperties`
-
-> **unsetPersonProperties**(`data`): `void`
-
-Remove properties from a person profile.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `data` | `UnsetPersonPropertiesMessage` | The data containing distinctId and property names to unset |
-
-#### Returns
-
-`void`
-
-#### Example
-
-```ts
-client.unsetPersonProperties({
-  distinctId: 'user_123',
-  properties: ['plan', 'email']
-})
-```
-
-
-
-### `PostHog.waitForLocalEvaluationReady`
-
-> **waitForLocalEvaluationReady**(`timeoutMs?`): `Promise`\<`boolean`\>
-
-Wait for local evaluation of feature flags to be ready.
-
-#### Parameters
-
-| Parameter | Type | Default value | Description |
-| ------ | ------ | ------ | ------ |
-| `timeoutMs?` | `number` | `THIRTY_SECONDS` | Timeout in milliseconds (default: 30000) |
-
-#### Returns
-
-`Promise`\<`boolean`\>
-
-Promise that resolves to true if ready, false if timed out
-
-#### Examples
-
-```ts
-// Wait for local evaluation
-const isReady = await client.waitForLocalEvaluationReady()
-if (isReady) {
-  console.log('Local evaluation is ready')
-} else {
-  console.log('Local evaluation timed out')
-}
-```
-
-```ts
-// Wait with custom timeout
-const isReady = await client.waitForLocalEvaluationReady(10000) // 10 seconds
 ```
 
 

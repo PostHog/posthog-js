@@ -23,6 +23,9 @@ tableOfContents:
   - value: "Alias"
     url: alias
     depth: 0
+  - value: "Capture AI"
+    url: capture-ai
+    depth: 0
   - value: "Capture exception"
     url: capture-exception
     depth: 0
@@ -107,6 +110,9 @@ tableOfContents:
   - value: "Unregister"
     url: unregister
     depth: 0
+  - value: "Consent gating"
+    url: consent-gating
+    depth: 0
   - value: "Surveys"
     url: surveys
     depth: 0
@@ -149,6 +155,28 @@ posthog.identify('user_123', { email: 'user@example.com' })
 
 ## Setup
 
+### `new PostHog(...)`
+
+> **new PostHog**(): `PostHog`
+
+Creates an uninitialized PostHog instance.
+
+#### Returns
+
+`PostHog`
+
+#### Remarks
+
+Most browser applications should use the default exported singleton and call `posthog.init()`.
+Construct a new instance only when you need to manage a separate SDK instance manually.
+
+#### Example
+
+```js
+const instance = new PostHog()
+instance.init('<ph_project_api_key>', { api_host: 'https://us.i.posthog.com' })
+```
+
 ### `PostHog.init`
 
 > **init**(`token`, `config?`, `name?`): `PostHog`
@@ -189,6 +217,24 @@ posthog.init('<ph_project_api_key>', {}, 'project1')
 posthog.init('<ph_project_api_key>', {}, 'project2')
 ```
 
+### `PostHog.set_config`
+
+> **set\_config**(`config`): `void`
+
+Updates the configuration of the PostHog instance.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `config` | `Partial`\<`PostHogConfig`\> | A dictionary of new configuration values to update |
+
+#### Returns
+
+`void`
+
+
+
 ## Capture
 
 ### `PostHog.capture`
@@ -228,6 +274,24 @@ posthog.capture('cta-button-clicked', {
 
 
 ## Identify
+
+### `PostHog.clearIdentity`
+
+> **clearIdentity**(): `void`
+
+Clear HMAC-based identity verification, reverting to anonymous mode.
+
+#### Returns
+
+`void`
+
+#### Example
+
+```js
+posthog.clearIdentity()
+```
+
+
 
 ### `PostHog.identify`
 
@@ -274,6 +338,41 @@ posthog.identify('user_12345',
     { last_login: new Date() },  // updates every time
     { signup_date: new Date() }  // sets only once
 )
+```
+
+
+
+### `PostHog.setIdentity`
+
+> **setIdentity**(`distinctId`, `hash`): `void`
+
+Set HMAC-based identity verification.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `distinctId` | `string` | The verified user distinct_id |
+| `hash` | `string` | HMAC-SHA256 of distinctId, signed with the Secret API key from Support settings |
+
+#### Returns
+
+`void`
+
+#### Remarks
+
+When set, products like conversations use server-verified identity
+(distinct_id + HMAC hash) instead of anonymous session identifiers.
+The hash should be computed server-side as HMAC-SHA256 of the
+distinct_id, signed with the Secret API key from Support settings.
+Project secret API keys (project settings) and personal API keys are rejected.
+Any additional signed identity claims are cleared because they are
+bound to the previously configured distinct_id.
+
+#### Example
+
+```js
+posthog.setIdentity('user_123', 'a1b2c3d4e5f6...')
 ```
 
 
@@ -367,6 +466,47 @@ posthog.alias('user_12345', 'anonymous_abc123')
 
 
 
+## Capture AI
+
+### `PostHog.captureTraceFeedback`
+
+> **captureTraceFeedback**(`traceId`, `userFeedback`): `void`
+
+Capture written user feedback for a LLM trace. Numeric values are converted to strings.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `traceId` | `string` \| `number` | The trace ID to capture feedback for. |
+| `userFeedback` | `string` | The feedback to capture. |
+
+#### Returns
+
+`void`
+
+
+
+### `PostHog.captureTraceMetric`
+
+> **captureTraceMetric**(`traceId`, `metricName`, `metricValue`): `void`
+
+Capture a metric for a LLM trace. Numeric values are converted to strings.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `traceId` | `string` \| `number` | The trace ID to capture the metric for. |
+| `metricName` | `string` | The name of the metric to capture. |
+| `metricValue` | `string` \| `number` \| `boolean` | The value of the metric to capture. |
+
+#### Returns
+
+`void`
+
+
+
 ## Capture exception
 
 ### `PostHog.captureException`
@@ -406,6 +546,60 @@ posthog.captureException(error, {
   anotherProperty: ['I', 'can be a list'],
   ...
 })
+```
+
+
+
+### `PostHog.startExceptionAutocapture`
+
+> **startExceptionAutocapture**(`config?`): `void`
+
+turns exception autocapture on, and updates the config option `capture_exceptions` to the provided config (or `true`)
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `config?` | `ExceptionAutoCaptureConfig` | optional configuration option to control the exception autocapture behavior |
+
+#### Returns
+
+`void`
+
+#### Examples
+
+```js
+// Start with default exception autocapture rules. No-op if already enabled
+posthog.startExceptionAutocapture()
+```
+
+```js
+// Start and override controls
+posthog.startExceptionAutocapture({
+  // you don't have to send all of these (unincluded values will use the default)
+  capture_unhandled_errors: true || false,
+  capture_unhandled_rejections: true || false,
+  capture_console_errors: true || false
+})
+```
+
+
+
+### `PostHog.stopExceptionAutocapture`
+
+> **stopExceptionAutocapture**(): `void`
+
+turns exception autocapture off by updating the config option `capture_exceptions` to `false`
+
+#### Returns
+
+`void`
+
+#### Example
+
+```js
+// Stop capturing exceptions automatically
+posthog.stopExceptionAutocapture()
 ```
 
 
@@ -706,7 +900,50 @@ Any actual internal use case for the session_id should be handled by the session
 
 
 
+### `PostHog.onSessionId`
+
+> **onSessionId**(`callback?`): () => `void`
+
+Register an event listener that runs whenever the session id or window id change.
+If there is already a session id, the listener is called immediately in addition to being called on future changes.
+
+Can be used, for example, to sync the PostHog session id with a backend session.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `callback?` | `SessionIdChangedCallback` | The callback function will be called once a session id is present or when it or the window id are updated. |
+
+#### Returns
+
+A function that can be called to unsubscribe the listener. E.g. Used by `useEffect` when the component unmounts.
+
+() => `void`
+
+#### Example
+
+```js
+posthog.onSessionId(function(sessionId, windowId) { // do something })
+```
+
+
+
 ## Group
+
+### `PostHog.getGroups`
+
+> **getGroups**(): `Record`\<`string`, `any`\>
+
+Returns the current groups.
+
+#### Returns
+
+`Record`\<`string`, `any`\>
+
+The current groups
+
+
 
 ### `PostHog.group`
 
@@ -746,6 +983,25 @@ posthog.group('organization', 'org_12345', {
 // associate with multiple group types
 posthog.group('organization', 'org_12345')
 posthog.group('team', 'team_67890')
+```
+
+
+
+### `PostHog.resetGroups`
+
+> **resetGroups**(): `void`
+
+Resets only the group properties of the user currently logged in.
+Learn more about [groups](/docs/product-analytics/group-analytics)
+
+#### Returns
+
+`void`
+
+#### Example
+
+```js
+posthog.resetGroups()
 ```
 
 
@@ -842,6 +1098,32 @@ if (posthog.isFeatureEnabled('feature', { send_event: false })) {
 
 ## Is opt out
 
+### `PostHog.has_opted_in_capturing`
+
+> **has\_opted\_in\_capturing**(): `boolean`
+
+Checks if the user has opted into data capturing.
+
+#### Returns
+
+`boolean`
+
+current opt-in status
+
+#### Remarks
+
+Returns the current consent status for event tracking and data persistence.
+
+#### Example
+
+```js
+if (posthog.has_opted_in_capturing()) {
+    // show analytics features
+}
+```
+
+
+
 ### `PostHog.has_opted_out_capturing`
 
 > **has\_opted\_out\_capturing**(): `boolean`
@@ -870,6 +1152,30 @@ if (posthog.has_opted_out_capturing()) {
 ```
 
 
+
+### `PostHog.is_capturing`
+
+> **is\_capturing**(): `boolean`
+
+Checks whether the PostHog library is currently capturing events.
+
+Usually this means that the user has not opted out of capturing, but the exact behaviour can be controlled by
+some config options.
+
+Additionally, if the cookieless_mode is set to `'on_reject'`, we will capture events in cookieless mode if the
+user has opted out or been defaulted to opt-out.
+
+#### Returns
+
+`boolean`
+
+whether the posthog library is capturing events
+
+#### See
+
+ - 
+ - 
+ -
 
 ## Is session replay active
 
@@ -934,6 +1240,18 @@ posthog.onFeatureFlags(function(featureFlags, featureFlagsVariants, { errorsLoad
 
 ## Opt in
 
+### `PostHog.clear_opt_in_out_capturing`
+
+> **clear\_opt\_in\_out\_capturing**(): `void`
+
+Clear the user's opt in/out status of data capturing and cookies/localstorage for this PostHog instance
+
+#### Returns
+
+`void`
+
+
+
 ### `PostHog.opt_in_capturing`
 
 > **opt\_in\_capturing**(`options?`): `void`
@@ -983,7 +1301,105 @@ posthog.opt_in_capturing({
 
 
 
+### `PostHog.opt_out_capturing`
+
+> **opt\_out\_capturing**(): `void`
+
+Opts the user out of data capturing and persistence.
+
+#### Returns
+
+`void`
+
+#### Remarks
+
+Disables event tracking and data persistence (cookies/localStorage) for this PostHog instance.
+If `opt_out_persistence_by_default` is true, SDK persistence will also be disabled.
+
+#### Example
+
+```js
+// opt user out (e.g., on privacy settings page)
+posthog.opt_out_capturing()
+```
+
+
+
 ## Register
+
+### `PostHog.get_property`
+
+> **get\_property**(`property_name`): `any`
+
+Returns the value of a super property. Returns undefined if the property doesn't exist.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `property_name` | `string` | The name of the super property you want to retrieve |
+
+#### Returns
+
+`any`
+
+The stored property value, or undefined if it is not set.
+
+#### Remarks
+
+get_property() can only be called after the PostHog library has finished loading.
+init() has a loaded function available to handle this automatically.
+
+#### Example
+
+```js
+// grab value for '$user_id' after the posthog library has loaded
+posthog.init('<YOUR PROJECT TOKEN>', {
+    loaded: function(posthog) {
+        user_id = posthog.get_property('$user_id');
+    }
+});
+```
+
+
+
+### `PostHog.getSessionProperty`
+
+> **getSessionProperty**(`property_name`): `any`
+
+Returns the value of the session super property named property_name. If no such
+property is set, getSessionProperty() will return the undefined value.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `property_name` | `string` | The name of the session super property you want to retrieve |
+
+#### Returns
+
+`any`
+
+The stored session property value, or undefined if it is not set.
+
+#### Remarks
+
+This is based on browser-level `sessionStorage`, NOT the PostHog session.
+getSessionProperty() can only be called after the PostHog library has finished loading.
+init() has a loaded function available to handle this automatically.
+
+#### Example
+
+```js
+// grab value for 'user_id' after the posthog library has loaded
+posthog.init('YOUR PROJECT TOKEN', {
+    loaded: function(posthog) {
+        user_id = posthog.getSessionProperty('user_id');
+    }
+});
+```
+
+
 
 ### `PostHog.register`
 
@@ -1294,6 +1710,36 @@ posthog.setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '1
 
 ## Set person properties
 
+### `PostHog.setInternalOrTestUser`
+
+> **setInternalOrTestUser**(): `void`
+
+Marks the current user as a test user by setting the `$internal_or_test_user` person property to `true`.
+This also enables person processing for the current user.
+
+This is useful for using in a cohort your internal/test filters for your posthog org.
+
+#### Returns
+
+`void`
+
+#### See
+
+https://posthog.com/tutorials/filter-internal-users
+Create a cohort with `$internal_or_test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
+
+#### Example
+
+```js
+// Manually mark as test user
+posthog.setInternalOrTestUser()
+
+// Or use internal_or_test_user_hostname config for automatic detection
+posthog.init('token', { internal_or_test_user_hostname: 'localhost' })
+```
+
+
+
 ### `PostHog.setPersonProperties`
 
 > **setPersonProperties**(`userPropertiesToSet?`, `userPropertiesToSetOnce?`): `void`
@@ -1333,6 +1779,46 @@ posthog.setPersonProperties(
     { name: 'Max Hedgehog' },  // $set properties
     { initial_url: '/blog' }   // $set_once properties
 )
+```
+
+
+
+### `PostHog.unsetPersonProperties`
+
+> **unsetPersonProperties**(`propertyNames`): `void`
+
+Removes properties from the person profile associated with the current `distinct_id`.
+Learn more about [identifying users](/docs/product-analytics/identify)
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `propertyNames` | `string` \| `string`[] | The name (or names) of the person properties to remove. |
+
+#### Returns
+
+`void`
+
+#### Remarks
+
+Deletes the given person properties from the person profile in PostHog. This is the
+counterpart to setPersonProperties — instead of hand-passing `$unset` inside a
+`capture()` call, you can remove properties with a dedicated method.
+If `person_profiles` is set to `never`, this call is ignored.
+
+`$fbc` and `$fbp` read by the SDK are unset for this call only. `save_campaign_params: false` stops the reads.
+
+#### Examples
+
+```js
+// remove a single property
+posthog.unsetPersonProperties('plan')
+```
+
+```js
+// remove multiple properties
+posthog.unsetPersonProperties(['plan', 'email'])
 ```
 
 
@@ -1530,6 +2016,41 @@ The property is removed from sessionStorage.
 ```js
 // remove a session property
 posthog.unregister_for_session('current_flow')
+```
+
+
+
+## Consent gating
+
+### `PostHog.get_explicit_consent_status`
+
+> **get\_explicit\_consent\_status**(): `"pending"` \| `"granted"` \| `"denied"`
+
+Returns the explicit consent status of the user.
+
+#### Returns
+
+`"pending"` \| `"granted"` \| `"denied"`
+
+The current explicit consent status.
+
+#### Remarks
+
+This can be used to check if the user has explicitly opted in or out of data capturing, or neither. This does not
+take the default config options into account, only whether the user has made an explicit choice, so this can be
+used to determine whether to show an initial cookie banner or not.
+
+#### Example
+
+```js
+const consentStatus = posthog.get_explicit_consent_status()
+if (consentStatus === "granted") {
+    // user has explicitly opted in
+} else if (consentStatus === "denied") {
+    // user has explicitly opted out
+} else if (consentStatus === "pending"){
+    // user has not made a choice, show consent banner
+}
 ```
 
 
@@ -1817,28 +2338,6 @@ Use displaySurvey instead - it's more complete and also supports popover surveys
 
 ## SDK utils
 
-### `new PostHog(...)`
-
-> **new PostHog**(): `PostHog`
-
-Creates an uninitialized PostHog instance.
-
-#### Returns
-
-`PostHog`
-
-#### Remarks
-
-Most browser applications should use the default exported singleton and call `posthog.init()`.
-Construct a new instance only when you need to manage a separate SDK instance manually.
-
-#### Example
-
-```js
-const instance = new PostHog()
-instance.init('<ph_project_api_key>', { api_host: 'https://us.i.posthog.com' })
-```
-
 ### `PostHog.featureFlags`
 
 > **featureFlags**: `TreeShakeable`\<`PostHogFeatureFlags`\>
@@ -1847,83 +2346,11 @@ The feature flags instance. Provides access to feature flag override methods.
 
 
 
-### `PostHog.people`
-
-> **people**: `object`
-
-DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties
-
-#### Type Declaration
-
-##### set
-
-> **set**: (`prop`, `to?`, `callback?`) => `void`
-
-###### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `prop` | `string` \| `Properties` |
-| `to?` | `string` |
-| `callback?` | `RequestCallback` |
-
-###### Returns
-
-`void`
-
-##### set\_once
-
-> **set\_once**: (`prop`, `to?`, `callback?`) => `void`
-
-###### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `prop` | `string` \| `Properties` |
-| `to?` | `string` |
-| `callback?` | `RequestCallback` |
-
-###### Returns
-
-`void`
-
-
-
-### `PostHog.sessionManager`
-
-> `optional` **sessionManager?**: `SessionIdManager`
-
-The session manager instance. May be undefined in cookieless mode.
-
-
-
-### `PostHog.sessionRecording`
-
-> `optional` **sessionRecording?**: `SessionRecording`
-
-The session recording instance. May be undefined if session recording is not initialized.
-
-
-
 ### `PostHog.version`
 
 > **version**: `string` = `Config.LIB_VERSION`
 
 The library version.
-
-
-
-### `PostHog.decideEndpointWasHit`
-
-> **get** **decideEndpointWasHit**(): `boolean`
-
-##### Deprecated
-
-Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate
-
-##### Returns
-
-`boolean`
 
 
 
@@ -1943,144 +2370,6 @@ bootstrapped flags before a network request completes.
 `boolean`
 
 True once the SDK has processed feature flag values.
-
-
-
-### `PostHog.captureTraceFeedback`
-
-> **captureTraceFeedback**(`traceId`, `userFeedback`): `void`
-
-Capture written user feedback for a LLM trace. Numeric values are converted to strings.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `traceId` | `string` \| `number` | The trace ID to capture feedback for. |
-| `userFeedback` | `string` | The feedback to capture. |
-
-#### Returns
-
-`void`
-
-
-
-### `PostHog.captureTraceMetric`
-
-> **captureTraceMetric**(`traceId`, `metricName`, `metricValue`): `void`
-
-Capture a metric for a LLM trace. Numeric values are converted to strings.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `traceId` | `string` \| `number` | The trace ID to capture the metric for. |
-| `metricName` | `string` | The name of the metric to capture. |
-| `metricValue` | `string` \| `number` \| `boolean` | The value of the metric to capture. |
-
-#### Returns
-
-`void`
-
-
-
-### `PostHog.clear_opt_in_out_capturing`
-
-> **clear\_opt\_in\_out\_capturing**(): `void`
-
-Clear the user's opt in/out status of data capturing and cookies/localstorage for this PostHog instance
-
-#### Returns
-
-`void`
-
-
-
-### `PostHog.clearIdentity`
-
-> **clearIdentity**(): `void`
-
-Clear HMAC-based identity verification, reverting to anonymous mode.
-
-#### Returns
-
-`void`
-
-#### Example
-
-```js
-posthog.clearIdentity()
-```
-
-
-
-### `PostHog.get_explicit_consent_status`
-
-> **get\_explicit\_consent\_status**(): `"pending"` \| `"granted"` \| `"denied"`
-
-Returns the explicit consent status of the user.
-
-#### Returns
-
-`"pending"` \| `"granted"` \| `"denied"`
-
-The current explicit consent status.
-
-#### Remarks
-
-This can be used to check if the user has explicitly opted in or out of data capturing, or neither. This does not
-take the default config options into account, only whether the user has made an explicit choice, so this can be
-used to determine whether to show an initial cookie banner or not.
-
-#### Example
-
-```js
-const consentStatus = posthog.get_explicit_consent_status()
-if (consentStatus === "granted") {
-    // user has explicitly opted in
-} else if (consentStatus === "denied") {
-    // user has explicitly opted out
-} else if (consentStatus === "pending"){
-    // user has not made a choice, show consent banner
-}
-```
-
-
-
-### `PostHog.get_property`
-
-> **get\_property**(`property_name`): `any`
-
-Returns the value of a super property. Returns undefined if the property doesn't exist.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `property_name` | `string` | The name of the super property you want to retrieve |
-
-#### Returns
-
-`any`
-
-The stored property value, or undefined if it is not set.
-
-#### Remarks
-
-get_property() can only be called after the PostHog library has finished loading.
-init() has a loaded function available to handle this automatically.
-
-#### Example
-
-```js
-// grab value for '$user_id' after the posthog library has loaded
-posthog.init('<YOUR PROJECT TOKEN>', {
-    loaded: function(posthog) {
-        user_id = posthog.get_property('$user_id');
-    }
-});
-```
 
 
 
@@ -2181,20 +2470,6 @@ useEffect(() => {
 
 
 
-### `PostHog.getGroups`
-
-> **getGroups**(): `Record`\<`string`, `any`\>
-
-Returns the current groups.
-
-#### Returns
-
-`Record`\<`string`, `any`\>
-
-The current groups
-
-
-
 ### `PostHog.getPageViewId`
 
 > **getPageViewId**(): `string` \| `undefined`
@@ -2208,94 +2483,6 @@ Returns the current page view ID.
 The current page view ID, or undefined if no page view has been captured.
 
 
-
-### `PostHog.getSessionProperty`
-
-> **getSessionProperty**(`property_name`): `any`
-
-Returns the value of the session super property named property_name. If no such
-property is set, getSessionProperty() will return the undefined value.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `property_name` | `string` | The name of the session super property you want to retrieve |
-
-#### Returns
-
-`any`
-
-The stored session property value, or undefined if it is not set.
-
-#### Remarks
-
-This is based on browser-level `sessionStorage`, NOT the PostHog session.
-getSessionProperty() can only be called after the PostHog library has finished loading.
-init() has a loaded function available to handle this automatically.
-
-#### Example
-
-```js
-// grab value for 'user_id' after the posthog library has loaded
-posthog.init('YOUR PROJECT TOKEN', {
-    loaded: function(posthog) {
-        user_id = posthog.getSessionProperty('user_id');
-    }
-});
-```
-
-
-
-### `PostHog.has_opted_in_capturing`
-
-> **has\_opted\_in\_capturing**(): `boolean`
-
-Checks if the user has opted into data capturing.
-
-#### Returns
-
-`boolean`
-
-current opt-in status
-
-#### Remarks
-
-Returns the current consent status for event tracking and data persistence.
-
-#### Example
-
-```js
-if (posthog.has_opted_in_capturing()) {
-    // show analytics features
-}
-```
-
-
-
-### `PostHog.is_capturing`
-
-> **is\_capturing**(): `boolean`
-
-Checks whether the PostHog library is currently capturing events.
-
-Usually this means that the user has not opted out of capturing, but the exact behaviour can be controlled by
-some config options.
-
-Additionally, if the cookieless_mode is set to `'on_reject'`, we will capture events in cookieless mode if the
-user has opted out or been defaulted to opt-out.
-
-#### Returns
-
-`boolean`
-
-whether the posthog library is capturing events
-
-#### See
-
- - 
- - 
- -
 
 ### `PostHog.loadToolbar`
 
@@ -2358,281 +2545,6 @@ posthog.on('eventCaptured', (event) => {
 posthog.on('featureFlagsReloading', () => {
   console.log('Feature flags are being reloaded...')
 })
-```
-
-
-
-### `PostHog.onSessionId`
-
-> **onSessionId**(`callback?`): () => `void`
-
-Register an event listener that runs whenever the session id or window id change.
-If there is already a session id, the listener is called immediately in addition to being called on future changes.
-
-Can be used, for example, to sync the PostHog session id with a backend session.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `callback?` | `SessionIdChangedCallback` | The callback function will be called once a session id is present or when it or the window id are updated. |
-
-#### Returns
-
-A function that can be called to unsubscribe the listener. E.g. Used by `useEffect` when the component unmounts.
-
-() => `void`
-
-#### Example
-
-```js
-posthog.onSessionId(function(sessionId, windowId) { // do something })
-```
-
-
-
-### `PostHog.opt_out_capturing`
-
-> **opt\_out\_capturing**(): `void`
-
-Opts the user out of data capturing and persistence.
-
-#### Returns
-
-`void`
-
-#### Remarks
-
-Disables event tracking and data persistence (cookies/localStorage) for this PostHog instance.
-If `opt_out_persistence_by_default` is true, SDK persistence will also be disabled.
-
-#### Example
-
-```js
-// opt user out (e.g., on privacy settings page)
-posthog.opt_out_capturing()
-```
-
-
-
-### `PostHog.push`
-
-> **push**(`item`): `void`
-
-push() keeps the standard async-array-push
-behavior around after the lib is loaded.
-This is only useful for external integrations that
-do not wish to rely on our convenience methods
-(created in the snippet).
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `item` | `SnippetArrayItem` | A `[function_name, ...args]` array to be executed. |
-
-#### Returns
-
-`void`
-
-#### Example
-
-```js
-posthog.push(['register', { a: 'b' }]);
-```
-
-### `PostHog.resetGroups`
-
-> **resetGroups**(): `void`
-
-Resets only the group properties of the user currently logged in.
-Learn more about [groups](/docs/product-analytics/group-analytics)
-
-#### Returns
-
-`void`
-
-#### Example
-
-```js
-posthog.resetGroups()
-```
-
-
-
-### `PostHog.set_config`
-
-> **set\_config**(`config`): `void`
-
-Updates the configuration of the PostHog instance.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `config` | `Partial`\<`PostHogConfig`\> | A dictionary of new configuration values to update |
-
-#### Returns
-
-`void`
-
-
-
-### `PostHog.setIdentity`
-
-> **setIdentity**(`distinctId`, `hash`): `void`
-
-Set HMAC-based identity verification.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `distinctId` | `string` | The verified user distinct_id |
-| `hash` | `string` | HMAC-SHA256 of distinctId, signed with the Secret API key from Support settings |
-
-#### Returns
-
-`void`
-
-#### Remarks
-
-When set, products like conversations use server-verified identity
-(distinct_id + HMAC hash) instead of anonymous session identifiers.
-The hash should be computed server-side as HMAC-SHA256 of the
-distinct_id, signed with the Secret API key from Support settings.
-Project secret API keys (project settings) and personal API keys are rejected.
-Any additional signed identity claims are cleared because they are
-bound to the previously configured distinct_id.
-
-#### Example
-
-```js
-posthog.setIdentity('user_123', 'a1b2c3d4e5f6...')
-```
-
-
-
-### `PostHog.setInternalOrTestUser`
-
-> **setInternalOrTestUser**(): `void`
-
-Marks the current user as a test user by setting the `$internal_or_test_user` person property to `true`.
-This also enables person processing for the current user.
-
-This is useful for using in a cohort your internal/test filters for your posthog org.
-
-#### Returns
-
-`void`
-
-#### See
-
-https://posthog.com/tutorials/filter-internal-users
-Create a cohort with `$internal_or_test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
-
-#### Example
-
-```js
-// Manually mark as test user
-posthog.setInternalOrTestUser()
-
-// Or use internal_or_test_user_hostname config for automatic detection
-posthog.init('token', { internal_or_test_user_hostname: 'localhost' })
-```
-
-
-
-### `PostHog.startExceptionAutocapture`
-
-> **startExceptionAutocapture**(`config?`): `void`
-
-turns exception autocapture on, and updates the config option `capture_exceptions` to the provided config (or `true`)
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `config?` | `ExceptionAutoCaptureConfig` | optional configuration option to control the exception autocapture behavior |
-
-#### Returns
-
-`void`
-
-#### Examples
-
-```js
-// Start with default exception autocapture rules. No-op if already enabled
-posthog.startExceptionAutocapture()
-```
-
-```js
-// Start and override controls
-posthog.startExceptionAutocapture({
-  // you don't have to send all of these (unincluded values will use the default)
-  capture_unhandled_errors: true || false,
-  capture_unhandled_rejections: true || false,
-  capture_console_errors: true || false
-})
-```
-
-
-
-### `PostHog.stopExceptionAutocapture`
-
-> **stopExceptionAutocapture**(): `void`
-
-turns exception autocapture off by updating the config option `capture_exceptions` to `false`
-
-#### Returns
-
-`void`
-
-#### Example
-
-```js
-// Stop capturing exceptions automatically
-posthog.stopExceptionAutocapture()
-```
-
-
-
-### `PostHog.unsetPersonProperties`
-
-> **unsetPersonProperties**(`propertyNames`): `void`
-
-Removes properties from the person profile associated with the current `distinct_id`.
-Learn more about [identifying users](/docs/product-analytics/identify)
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `propertyNames` | `string` \| `string`[] | The name (or names) of the person properties to remove. |
-
-#### Returns
-
-`void`
-
-#### Remarks
-
-Deletes the given person properties from the person profile in PostHog. This is the
-counterpart to setPersonProperties — instead of hand-passing `$unset` inside a
-`capture()` call, you can remove properties with a dedicated method.
-If `person_profiles` is set to `never`, this call is ignored.
-
-`$fbc` and `$fbp` read by the SDK are unset for this call only. `save_campaign_params: false` stops the reads.
-
-#### Examples
-
-```js
-// remove a single property
-posthog.unsetPersonProperties('plan')
-```
-
-```js
-// remove multiple properties
-posthog.unsetPersonProperties(['plan', 'email'])
 ```
 
 
@@ -3252,29 +3164,6 @@ Common types shared across PostHog SDKs
 | <a id="property-upperboundlabel-1"></a> `upperBoundLabel` | `string` | - |
 | <a id="property-validation-3"></a> `validation?` | `SurveyValidationRule`[] | `SurveyQuestionBase.validation` |
 
-### `RequestCallback`
-
-> **RequestCallback** = (`response`) => `void`
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `response` | `RequestResponse` |
-
-#### Returns
-
-`void`
-
-### `RequestResponse`
-
-| Property | Type |
-| ------ | ------ |
-| <a id="property-error"></a> `error?` | `unknown` |
-| <a id="property-json"></a> `json?` | `any` |
-| <a id="property-statuscode"></a> `statusCode` | `number` |
-| <a id="property-text-7"></a> `text?` | `string` |
-
 ### `ResetOptions`
 
 | Property | Type | Description |
@@ -3301,10 +3190,6 @@ Common types shared across PostHog SDKs
 #### Returns
 
 `void`
-
-### `SnippetArrayItem`
-
-> **SnippetArrayItem** = \[`method`: `string`, `args`: `any`[]\]
 
 ### `Survey`
 
