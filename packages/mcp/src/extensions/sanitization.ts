@@ -6,7 +6,7 @@
 import type { ErrorProperties, Event, McpEvent } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { sanitizeCapturedValue, sanitizeFreeText } from './mcp-payloads'
-import { MAX_ERROR_MESSAGE_LENGTH } from './truncation'
+import { limitPayloadEntries, MAX_ERROR_MESSAGE_LENGTH } from './truncation'
 
 type SanitizedRecord = Record<string, unknown>
 type Sanitize = (value: unknown) => unknown
@@ -32,7 +32,7 @@ export function sanitizeEvent<T extends Event | McpEvent>(
   event: T,
   { redactPayloadPersonalData }: PayloadSanitizationOptions = { redactPayloadPersonalData: true }
 ): T {
-  const result = { ...event }
+  const result = limitPayloadEntries(event)
   const sanitizePayload: Sanitize = (value) => sanitizeCapturedValue(value, { redactPayloadPersonalData })
 
   if (result.response != null) {

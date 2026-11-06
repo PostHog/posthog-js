@@ -509,6 +509,31 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await capture.stop()
     })
 
+    it.each([
+      ['a card', { 'card\n4111111111111111': 1 }, '4111111111111111'],
+      ['an SSN', { 'ssn\n078-05-1120': 1 }, '078-05-1120'],
+      ['a public IPv4', { 'ip\n203.0.113.77': 1 }, '203.0.113.77'],
+      ['a phone', { 'tel\n+1 415 555 0177': 1 }, '555 0177'],
+      ['an IPv6', { nested: { 'x\t2001:db8::7334': 1 } }, '2001:db8::7334'],
+      ['a card-number integer', { n: 4111111111111111 }, '4111111111111111'],
+    ])(
+      'redacts %s in a stringified extra after a JSON escape, keeping valid JSON',
+      async (_label, meta, identifier) => {
+        const capture = new EventCapture()
+        await capture.start()
+        instrument(server, fakePostHog(), { collectFeedback: { extraProperties: { meta: { type: 'object' } } } })
+
+        await callTool(client, SEND_FEEDBACK, { feedback_type: 'issue', summary: 'A tool failed.', meta })
+
+        await new Promise((r) => setTimeout(r, 50))
+        const captured = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties.$mcp_feedback_meta
+        expect(captured).not.toContain(identifier)
+        expect(() => JSON.parse(captured as string)).not.toThrow()
+
+        await capture.stop()
+      }
+    )
+
     it('does not log the agent-supplied summary', async () => {
       const logger = vi.fn()
       instrument(server, fakePostHog(), { collectFeedback: true, logger })

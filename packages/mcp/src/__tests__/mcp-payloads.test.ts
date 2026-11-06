@@ -489,6 +489,8 @@ describe('redactPii', () => {
       'Moving funds 4111 1111 1111 1111 5555 5555 5555 4444 now.',
       'Moving funds [redacted] [redacted] now.',
     ],
+    ['a card followed by an SSN', 'Card 4111111111111111 078-05-1120 on file.', 'Card [redacted] [redacted] on file.'],
+    ['a card grouped 4-6-5', 'Charging card 3782 822463 10005 today.', 'Charging card [redacted] today.'],
     ['an SSN with dashes', 'Verifying SSN 123-45-6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
     ['an SSN with spaces', 'Verifying SSN 123 45 6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
     ['an SSN with dots', 'Verifying SSN 123.45.6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
@@ -546,6 +548,7 @@ describe('redactPayloadPii', () => {
     ['a phone with +1 and a parenthesized area code', 'call +1 (415) 555-0142 today', 'call [redacted] today'],
     ['a Luhn-valid card', 'card 4111 1111 1111 1111 on file', 'card [redacted] on file'],
     ['a US SSN', 'SSN 123-45-6789', 'SSN [redacted]'],
+    ['a card followed by an SSN', 'card 4111111111111111 078-05-1120', 'card [redacted] [redacted]'],
     [
       'a card written as a JSON number, quoted',
       '{"card":4111111111111111,"count":3}',
@@ -571,6 +574,14 @@ describe('redactPayloadPii', () => {
     ['the unspecified address', 'bind 0.0.0.0'],
     ['a Luhn-invalid long digit run', 'order 1234567890123456'],
     ['a date and time', 'at 2024-01-15 12:30 UTC'],
+    ['a float whose fraction passes the card checksum', '{"v":710.4032039642334}'],
+    ['a fraction of 16 digits', '[0.4111111111111111]'],
+    ['a negative card-shaped number', '[-4111111111111111]'],
+    ['a card-shaped number with a fraction', '[4111111111111111.5]'],
+    ['a card-shaped number with an exponent', '[4111111111111111e0]'],
+    ['a card grouped with dots', 'ref 4111.1111.1111.1111'],
+    ['a fraction starting 011', '[620.0119256973267]'],
+    ['a fraction starting 00', '[0.0012345678901]'],
   ])('keeps %s', (_label, input) => {
     expect(redactPayloadPii(input)).toBe(input)
   })
@@ -580,6 +591,73 @@ describe('redactPayloadPii', () => {
     ['a loopback address', 'db at 127.0.0.1'],
   ])('leaves the intent pass redacting %s', (_label, input) => {
     expect(redactPii(input)).not.toBe(input)
+  })
+})
+
+describe('payload JSON text copies', () => {
+  const sanitize = (value: unknown): unknown => sanitizeCapturedValue(value, { redactPayloadPersonalData: true })
+  const identifiers = [
+    ['an email', 'ada@example.com'],
+    ['a card', '4111111111111111'],
+    ['an SSN', '078-05-1120'],
+    ['a public IPv4', '203.0.113.7'],
+    ['an IPv6', '2001:db8::7334'],
+    ['a phone', '+1 415 555 0142'],
+  ]
+  const escapes = ['\\n', '\\t', '\\r', '\\b', '\\f', '\\u00e9', '\\\\', '\\"', '\\/']
+  const cases = identifiers.flatMap(([label, identifier]) =>
+    escapes.map((escape) => [label, escape, identifier] as const)
+  )
+
+  it.each(cases)('redacts %s after %s in a value and a key, keeping valid JSON', (_label, escape, identifier) => {
+    const text = `{"note":"x${escape}${identifier}","x${escape}${identifier}":1}`
+
+    const redacted = sanitize(text) as string
+
+    expect(redacted).not.toContain(identifier)
+    expect(JSON.parse(redacted)).toEqual(sanitize(JSON.parse(text)))
+  })
+
+  it.each([
+    ['a float whose fraction passes the card checksum', '{"v":710.4032039642334}'],
+    ['a fraction of 16 digits', '[0.4111111111111111]'],
+    ['a negative card-shaped number', '[-4111111111111111]'],
+    ['a card-shaped number with a fraction', '[4111111111111111.5]'],
+    ['a card-shaped number scaled to a fraction', '[4111111111111111e-3]'],
+    ['pretty-printed JSON with nothing to redact', JSON.stringify({ id: 'ord_1', total: 12.5 }, null, 2)],
+  ])('keeps %s byte for byte', (_label, text) => {
+    expect(sanitize(text)).toBe(text)
+  })
+
+  describe('random floats', () => {
+    let seed = 42
+    const random = (): number => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31
+    const floats = Array.from({ length: 10_000 }, () => random() * 1000)
+
+    it('keeps them in short JSON text copies', () => {
+      const texts = floats.slice(0, 1000).map((v) => JSON.stringify({ v }))
+
+      expect(texts.filter((text) => sanitize(text) !== text)).toEqual([])
+    })
+
+    it('keeps them in a JSON text copy longer than the passes parse', () => {
+      const text = JSON.stringify(floats)
+
+      expect(sanitize(text)).toBe(text)
+    })
+  })
+
+  it('falls back to the text pass on JSON nested too deep to walk', () => {
+    const depth = 50_000
+    const text = `${'['.repeat(depth)}"ada@example.com"${']'.repeat(depth)}`
+
+    expect(sanitize(text)).toBe(`${'['.repeat(depth)}"[redacted]"${']'.repeat(depth)}`)
+  })
+
+  it('redacts a card-number integer and re-serializes the redacted structure', () => {
+    const text = JSON.stringify({ card: 4111111111111111, note: 'x\nada@example.com', count: 3 }, null, 2)
+
+    expect(sanitize(text)).toBe('{"card":"[redacted]","note":"x\\n[redacted]","count":3}')
   })
 })
 

@@ -113,6 +113,13 @@ const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
 const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,}\b/g
 // Matches each separator-delimited digit group inside a card candidate.
 const DIGIT_GROUP_PATTERN = /\d+/g
+// How cards are written when grouped, longest first. An ungrouped card is one run of 13–19 digits.
+const CARD_GROUPINGS = [
+  [4, 4, 4, 4, 3],
+  [4, 4, 4, 4],
+  [4, 6, 5],
+  [4, 6, 4],
+]
 // Phone matching is structural rather than "any 10–15 digits", so dates
 // (`2024-01-15 12:30`) and dotted versions are not mistaken for numbers. Two
 // forms: a North-American 3-3-4 grouping, and an international number that must
@@ -136,10 +143,16 @@ const NON_PUBLIC_IPV4_RANGES = [
   '169.254.0.0/16',
   '0.0.0.0/32',
 ]
+// Digits grouped only by single spaces or dashes: a `.` makes a fraction or a
+// version, not a card. A leading `-` or `.` and a trailing `.` and digit or
+// exponent belong to a number the run is only part of.
+const PAYLOAD_CARD_CANDIDATE_PATTERN = /(^|[^\w.-])(\d(?:[ -]?\d){12,})(?!\w|\.\d)/g
 const PHONE_PARENTHESIZED_PATTERN = /(^|[^\w+])((?:\+?1[ ./-]?)?\(\d{3}\)[ ./-]?\d{3}[ ./-]\d{4})(?![\w])/g
-const PAYLOAD_PHONE_INTL_PATTERN = /(^|[^\w])((?:\+|00|011)[ .-]?[1-9]\d{0,2}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
+// Not after a `.`, where `00` or `011` starts a fraction's digits.
+const PAYLOAD_PHONE_INTL_PATTERN = /(^|[^\w.])((?:\+|00|011)[ .-]?[1-9]\d{0,2}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
 const JSON_VALUE_START_PATTERN = /[:,[]\s*$/
 const JSON_VALUE_END_PATTERN = /^\s*[,}\]]/
+const JSON_CONTAINER_START_PATTERN = /^\s*[[{]/
 
 type JsonRecord = Record<string, unknown>
 
@@ -554,7 +567,7 @@ function redactCapturedHead(
   redact: (value: string) => string,
   options: TextSanitizationOptions
 ): string {
-  const scannedHeadLength = 4 * options.maxStringLength
+  const scannedHeadLength = scannedLength(options)
   if (value.length > scannedHeadLength) {
     const head = redact(value.slice(0, headLength(value, scannedHeadLength)))
     // Twice what truncation keeps, so a match split where the head was cut sits
@@ -564,6 +577,33 @@ function redactCapturedHead(
     }
   }
   return redact(value)
+}
+
+/** How much of a captured string the passes read. */
+function scannedLength(options: TextSanitizationOptions): number {
+  return 4 * options.maxStringLength
+}
+
+/**
+ * A JSON object or array written as text, sanitized as the structure it encodes
+ * and written back with `JSON.stringify`, or undefined when `value` is not one or
+ * is longer than the passes read. Read as text, a JSON escape hides what follows
+ * it: in `"x\nada@example.com"` the `n` is a word character, so an address or
+ * number glued to it is missed or cut in half. Text with nothing to redact comes
+ * back as received, formatting included. JSON nested too deep to walk is left to
+ * the text pass rather than dropping the event.
+ */
+function sanitizeJsonText(value: string, passes: ValuePasses, options: TextSanitizationOptions): string | undefined {
+  if (value.length > scannedLength(options) || !JSON_CONTAINER_START_PATTERN.test(value)) {
+    return undefined
+  }
+  try {
+    const parsed: unknown = JSON.parse(value)
+    const sanitized = JSON.stringify(sanitizeValueWith(parsed, passes))
+    return sanitized === JSON.stringify(parsed) ? value : sanitized
+  } catch {
+    return undefined
+  }
 }
 
 /** The scanned head, shortened to end just after the last character that ends a URL. */
@@ -576,10 +616,16 @@ function headLength(value: string, scannedHeadLength: number): number {
 }
 
 function sanitizeString(value: string, options: TextSanitizationOptions): string {
-  const redactPersonalData = options.redactPayloadPersonalData ? redactPayloadPii : (head: string) => head
-  return isBinaryBlob(value)
-    ? BINARY_REDACTED_VALUE
-    : redactCapturedHead(value, (head) => redactUrls(redactPersonalData(redactCredentials(head))), options)
+  if (isBinaryBlob(value)) {
+    return BINARY_REDACTED_VALUE
+  }
+  if (!options.redactPayloadPersonalData) {
+    return redactCapturedHead(value, (head) => redactUrls(redactCredentials(head)), options)
+  }
+  return (
+    sanitizeJsonText(value, payloadPasses(options), options) ??
+    redactCapturedHead(value, (head) => redactUrls(redactPayloadPii(redactCredentials(head))), options)
+  )
 }
 
 /**
@@ -598,7 +644,10 @@ export function sanitizeFreeText(value: string, options: TextSanitizationOptions
   if (isBinaryBlob(value)) {
     return BINARY_REDACTED_VALUE
   }
-  return redactCapturedHead(value, (head) => redactUrls(redactPii(redactCredentials(head))), options)
+  return (
+    sanitizeJsonText(value, freeTextPasses(options), options) ??
+    redactCapturedHead(value, (head) => redactUrls(redactPii(redactCredentials(head))), options)
+  )
 }
 
 function passesLuhn(digits: string): boolean {
@@ -621,16 +670,42 @@ function passesLuhn(digits: string): boolean {
   return sum % 10 === 0
 }
 
+type DigitGroup = { digits: string; start: number; end: number }
+
+/**
+ * The index of the last group of the card that starts at `groups[first]`, or -1.
+ * A card is one group of 13–19 digits or a run in one of {@link CARD_GROUPINGS},
+ * passing Luhn. Requiring a card's own grouping keeps a card from absorbing the
+ * start of a field after it (`4111111111111111 078-05-1120`).
+ */
+function cardEnd(groups: DigitGroup[], first: number): number {
+  const single = groups[first].digits
+  if (single.length >= 13) {
+    return single.length <= 19 && passesLuhn(single) ? first : -1
+  }
+  for (const grouping of CARD_GROUPINGS) {
+    const run = groups.slice(first, first + grouping.length)
+    if (
+      run.length === grouping.length &&
+      run.every((group, index) => group.digits.length === grouping[index]) &&
+      passesLuhn(run.map((group) => group.digits).join(''))
+    ) {
+      return first + grouping.length - 1
+    }
+  }
+  return -1
+}
+
 // A card candidate can span more than one card plus adjacent fields (e.g. an
 // expiry, or a second card). This redacts every card in it: scanning
 // left-to-right over the whole separator-delimited digit groups, at each start it
-// takes the longest run whose joined digits are 13–19 long and pass Luhn, redacts
+// takes the longest run in a card's grouping that passes Luhn (see `cardEnd`), redacts
 // just that span, and resumes after it; a group that begins no valid run is kept
 // and skipped. Checking group-aligned runs rather than arbitrary digit windows
 // keeps the false-positive rate at Luhn's own ~1-in-10, instead of letting a
 // chance-valid sub-window of an ordinary long ID trigger redaction.
 function redactCardInMatch(match: string): string {
-  const groups: { digits: string; start: number; end: number }[] = []
+  const groups: DigitGroup[] = []
   for (let m = DIGIT_GROUP_PATTERN.exec(match); m !== null; m = DIGIT_GROUP_PATTERN.exec(match)) {
     groups.push({ digits: m[0], start: m.index, end: m.index + m[0].length })
   }
@@ -638,17 +713,7 @@ function redactCardInMatch(match: string): string {
   let cursor = 0
   let first = 0
   while (first < groups.length) {
-    let digits = ''
-    let matchedLast = -1
-    for (let last = first; last < groups.length; last++) {
-      digits += groups[last].digits
-      if (digits.length > 19) {
-        break
-      }
-      if (digits.length >= 13 && passesLuhn(digits)) {
-        matchedLast = last
-      }
-    }
+    const matchedLast = cardEnd(groups, first)
     if (matchedLast >= 0) {
       output += match.slice(cursor, groups[first].start) + REDACTED_VALUE
       cursor = groups[matchedLast].end
@@ -698,14 +763,24 @@ function isPublicIpv4(address: string): boolean {
  * {@link redactCardInMatch}, writing a card that stands as a bare JSON number as
  * the string `"[redacted]"`, so a tool result's JSON text copy stays valid JSON.
  */
-function redactCardKeepingJson(match: string, offset: number, text: string): string {
-  const redacted = redactCardInMatch(match)
-  const end = offset + match.length
-  return redacted === REDACTED_VALUE &&
-    JSON_VALUE_START_PATTERN.test(text.slice(Math.max(0, offset - 64), offset)) &&
+function redactCardKeepingJson(
+  _match: string,
+  prefix: string,
+  candidate: string,
+  offset: number,
+  text: string
+): string {
+  const redacted = redactCardInMatch(candidate)
+  const start = offset + prefix.length
+  const end = start + candidate.length
+  return (
+    prefix +
+    (redacted === REDACTED_VALUE &&
+    JSON_VALUE_START_PATTERN.test(text.slice(Math.max(0, start - 64), start)) &&
     JSON_VALUE_END_PATTERN.test(text.slice(end, end + 64))
-    ? `"${REDACTED_VALUE}"`
-    : redacted
+      ? `"${REDACTED_VALUE}"`
+      : redacted)
+  )
 }
 
 function isCardNumber(value: number): boolean {
@@ -726,7 +801,7 @@ export function redactPayloadPii(value: string): string {
     isPublicIpv4(address) ? prefix + REDACTED_VALUE : match
   )
   result = result.replace(IPV6_PATTERN, `$1${REDACTED_VALUE}`)
-  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, redactCardKeepingJson)
+  result = result.replace(PAYLOAD_CARD_CANDIDATE_PATTERN, redactCardKeepingJson)
   result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
   result = result.replace(PHONE_PARENTHESIZED_PATTERN, `$1${REDACTED_VALUE}`)
   result = result.replace(PAYLOAD_PHONE_INTL_PATTERN, `$1${REDACTED_VALUE}`)
@@ -734,15 +809,34 @@ export function redactPayloadPii(value: string): string {
 }
 
 export function sanitizeCapturedValue(value: unknown, options: TextSanitizationOptions): unknown {
-  const string = (stringValue: string): string => sanitizeString(stringValue, options)
-  if (!options.redactPayloadPersonalData) {
-    return sanitizeValueWith(value, { string })
-  }
-  return sanitizeValueWith(value, {
-    string,
+  return sanitizeValueWith(
+    value,
+    options.redactPayloadPersonalData
+      ? payloadPasses(options)
+      : { string: (stringValue) => sanitizeString(stringValue, options) }
+  )
+}
+
+function redactCardNumber(value: number): unknown {
+  return isCardNumber(value) ? REDACTED_VALUE : value
+}
+
+/** What the payload personal data pass rewrites in a structure. */
+function payloadPasses(options: TextSanitizationOptions): ValuePasses {
+  return {
+    string: (value) => sanitizeString(value, options),
     key: (key) => redactCapturedHead(key, redactPayloadPii, options),
-    number: (number) => (isCardNumber(number) ? REDACTED_VALUE : number),
-  })
+    number: redactCardNumber,
+  }
+}
+
+/** What the free-text pass rewrites in JSON written as free text. */
+function freeTextPasses(options: TextSanitizationOptions): ValuePasses {
+  return {
+    string: (value) => sanitizeFreeText(value, options),
+    key: (key) => redactCapturedHead(key, redactPii, options),
+    number: redactCardNumber,
+  }
 }
 
 /**

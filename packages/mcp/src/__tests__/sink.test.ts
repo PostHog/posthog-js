@@ -1,6 +1,6 @@
 import type { EventMessage, PostHog } from 'posthog-node'
 
-import { McpEventSink } from '../extensions/sink'
+import { McpEventSink, processMcpEvent } from '../extensions/sink'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import type { McpEvent } from '../types'
 
@@ -61,5 +61,42 @@ describe('McpEventSink groups forwarding', () => {
 
     expect(calls).toHaveLength(1)
     expect('groups' in calls[0]).toBe(false)
+  })
+})
+
+describe('processMcpEvent cost', () => {
+  const rowsEvent = (rows: number): McpEvent => ({
+    eventType: MCPAnalyticsEventType.mcpToolsCall,
+    sessionId: 'session-1',
+    timestamp: new Date(),
+    parameters: {},
+    response: {
+      content: [{ type: 'text', text: 'ok' }],
+      structuredContent: {
+        rows: Array.from(
+          { length: rows },
+          (_, i) => `customer ${i} order ORD-${i} status shipped 2026-11-06T12:00:00Z`
+        ),
+      },
+    },
+  })
+
+  async function medianMs(event: McpEvent): Promise<number> {
+    const options = { enableExceptionAutocapture: true, redactPayloadPersonalData: true }
+    await processMcpEvent(event, options, () => {})
+    const runs: number[] = []
+    for (let run = 0; run < 5; run++) {
+      const start = performance.now()
+      await processMcpEvent(event, options, () => {})
+      runs.push(performance.now() - start)
+    }
+    return runs.sort((left, right) => left - right)[2]
+  }
+
+  it('applies the entry limit before sanitizing, so entries past it cost nothing', async () => {
+    const atLimit = await medianMs(rowsEvent(100))
+    const farPastLimit = await medianMs(rowsEvent(100_000))
+
+    expect(farPastLimit).toBeLessThan(10 * atLimit + 5)
   })
 })

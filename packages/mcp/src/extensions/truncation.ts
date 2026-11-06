@@ -426,6 +426,21 @@ function normalizeReducibleFields(event: MutableEvent, depth: number): MutableEv
 }
 
 /**
+ * Applies the entry and nesting limits to the payloads the sanitizer reads, so
+ * its work is bounded by those limits rather than by the payload. Strings are
+ * cut later, by {@link truncateEvent}, after the sanitizer has read past the cut.
+ */
+export function limitPayloadEntries<T extends Event | McpEvent>(event: T): T {
+  const result: MutableEvent = { ...event }
+  for (const field of ['parameters', 'response'] as const) {
+    if (result[field] != null) {
+      result[field] = normalize(result[field], MAX_DEPTH, MAX_BREADTH, Infinity)
+    }
+  }
+  return result as T
+}
+
+/**
  * Applies layered truncation to an event:
  * 1. Field-level string limits (userIntent, resourceName, metadata fields, error.message)
  * 2. Error frame limiting (first 25 + last 25 if > 50)
