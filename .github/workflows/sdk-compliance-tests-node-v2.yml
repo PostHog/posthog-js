@@ -217,9 +217,9 @@ jobs:
                                   if (attributed?.step_text) detail.push(`<pre>${escape(attributed.step_text, 1200)}</pre>`, '');
                                   // Only assertion-specific fields are published, never complete diagnostics or wire requests.
                                   const values = attributed?.details;
-                                  if (values && ['/get_feature_flag', '/flags', '/flags/'].includes(values.operation)) {
+                                  if (values && ['/get_feature_flag', '/get_feature_flag_payload', '/flags', '/flags/'].includes(values.operation)) {
                                       detail.push(`Operation: <code>${escape(values.operation)}</code>`, '');
-                                      if (values.operation === '/get_feature_flag' && values.arguments && typeof values.arguments === 'object') {
+                                      if (['/get_feature_flag', '/get_feature_flag_payload'].includes(values.operation) && values.arguments && typeof values.arguments === 'object') {
                                           const args = Object.fromEntries(['key', 'distinct_id', 'person_properties', 'groups', 'group_properties',
                                               'only_evaluate_locally', 'send_event', 'disable_geoip'].filter(key => Object.hasOwn(values.arguments, key))
                                               .map(key => [key, values.arguments[key]]));

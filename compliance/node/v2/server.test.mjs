@@ -595,6 +595,30 @@ test('UTF-8 split across HTTP chunks reaches the public method unchanged', async
     assert.deepEqual(result.completion.outcome, { kind: 'value', value })
 })
 
+test('the flags_response_v4 capability follows the installed client /flags version', async (t) => {
+    const capabilities = async (options) =>
+        (await (await harness(t, options)).post('negotiate', { protocol })).profiles[0].sdk_capabilities
+    // posthog-node requests /flags?v=4.
+    assert.ok((await capabilities({})).includes('flags_response_v4'))
+    for (const [source, expected] of [
+        ['exports.PostHog = class { getFlagsResponseVersion() { return 4 } }', true],
+        ['exports.PostHog = class { getFlagsResponseVersion() { return 2 } }', false],
+        ['exports.PostHog = class {}', false],
+    ]) {
+        const root = await controlledConsumer(t, source)
+        assert.equal((await capabilities({ consumer: root })).includes('flags_response_v4'), expected, source)
+    }
+    assert.ok(
+        !(await capabilities({ consumer: '/nonexistent/node-compliance-consumer' })).includes('flags_response_v4')
+    )
+})
+
+test('the adapter declares the legacy payload getter', async (t) => {
+    const negotiation = await (await harness(t, {})).post('negotiate', { protocol })
+    assert.ok(negotiation.supported_routes.includes('/get_feature_flag_payload'))
+    assert.ok(negotiation.profiles[0].sdk_capabilities.includes('feature_flag_payloads'))
+})
+
 test('an invalid consumer directory fails allocation within its deadline', async (t) => {
     const { post } = await harness(t, { consumer: '/nonexistent/node-compliance-consumer' })
     await post(

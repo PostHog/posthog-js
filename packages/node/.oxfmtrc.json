@@ -6,5 +6,9 @@
   "quoteProps": "preserve",
   "printWidth": 120,
   "sortPackageJson": false,
-  "ignorePatterns": ["references/*.json"]
+  "ignorePatterns": [
+    "references/*.json",
+    "src/__tests__/fixtures/feature_flag_rules_v2/*.json",
+    "src/__tests__/fixtures/released-flags-*.json"
+  ]
 }
