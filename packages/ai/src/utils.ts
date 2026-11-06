@@ -260,6 +260,8 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
               content.push({ type: 'text', text: contentItem.text })
             } else if (contentItem.text) {
               content.push({ type: 'text', text: contentItem.text })
+            } else if (contentItem.type === 'refusal' && contentItem.refusal) {
+              content.push({ type: 'refusal', refusal: contentItem.refusal })
             } else if (contentItem.type === 'input_image' && contentItem.image_url) {
               content.push({
                 type: 'image',

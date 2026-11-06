@@ -1,6 +1,6 @@
 import Config from './config'
 import { PostHog } from './posthog-core'
-import type { CaptureMetricOptions, OtlpMetricsPayload } from './types'
+import type { CaptureMetricOptions, HistogramOptions, OtlpMetricsPayload } from './types'
 import { PostHogMetrics as CorePostHogMetrics, resolveMetricsConfig } from '@posthog/core'
 import type { SendMetricsBatchOutcome } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
@@ -84,7 +84,7 @@ export class PostHogMetrics implements Extension {
     }
 
     /** Record one observation of a distribution (latency, payload size). */
-    histogram(name: string, value: number, options?: CaptureMetricOptions): void {
+    histogram(name: string, value: number, options?: HistogramOptions): void {
         this._getCore()?.histogram(name, value, options)
     }
 

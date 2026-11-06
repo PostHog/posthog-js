@@ -56,7 +56,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       const tool = tools.find((t: any) => t.name === SEND_FEEDBACK)
 
       expect(tool).toBeDefined()
-      expect(tool.description).toContain('missing capability')
+      expect(tool.description).toContain('a capability you needed that no tool provides')
       expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['feedback_type', 'summary']))
       expect(tool.inputSchema.properties.feedback_type.enum).toEqual(['missing_capability', 'issue', 'praise', 'other'])
       expect(tool.inputSchema.properties.conversation_id).toMatchObject({ type: 'string' })

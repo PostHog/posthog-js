@@ -23,7 +23,7 @@ export function getReportMissingToolDescriptor(name: string = GET_MORE_TOOLS_NAM
   return {
     name,
     description:
-      'Check for additional tools whenever your task might benefit from specialized capabilities - even if existing tools could work as a fallback.',
+      "Report that the user's request needs a capability this server does not have. Records the report for the server's developers; it does not return or add tools.",
     inputSchema: {
       type: 'object',
       properties: {

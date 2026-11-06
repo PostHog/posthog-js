@@ -1,5 +1,39 @@
 # posthog-js
 
+## 1.447.1
+
+### Patch Changes
+
+- [#5576](https://github.com/PostHog/posthog-js/pull/5576) [`9ee327d`](https://github.com/PostHog/posthog-js/commit/9ee327d090bffbb564627404b9819994c1327dda) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Reworded the description of the `llm_model` argument that `capture_webmcp` adds to WebMCP tools, so it no longer points the model at its system prompt.
+  (2026-11-05)
+
+## 1.447.0
+
+### Minor Changes
+
+- [#5580](https://github.com/PostHog/posthog-js/pull/5580) [`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f) Thanks [@haacked](https://github.com/haacked)! - `metrics.histogram()` accepts a `bounds` option that sets the histogram's bucket boundaries, and `beforeSend` sees and can change them. The first sample of a histogram (name and unit) fixes its bounds until the client resets. A later sample with different bounds is recorded in the fixed buckets and logs a warning, and a sample with invalid bounds is dropped. The experimental `posthog.flags.request.duration` histogram now uses the bounds `[50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]` ms, so its p50 and p95 resolve between 50ms and 5s. This changes the metric's buckets, which its experimental status allows.
+  (2026-11-05)
+
+### Patch Changes
+
+- Updated dependencies [[`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f)]:
+  - @posthog/core@1.64.0
+  - @posthog/types@1.421.0
+
+## 1.446.3
+
+### Patch Changes
+
+- [#5560](https://github.com/PostHog/posthog-js/pull/5560) [`e22dedb`](https://github.com/PostHog/posthog-js/commit/e22dedbd6f7393e2bcebee84bae6b5185d9fe67a) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Use native sibling accessors when recording insertion positions so patched DOM getters do not reorder replayed nodes.
+  (2026-11-05)
+
+## 1.446.2
+
+### Patch Changes
+
+- [#5542](https://github.com/PostHog/posthog-js/pull/5542) [`7be658c`](https://github.com/PostHog/posthog-js/commit/7be658c34060839750a54bb9d65c5ce1ef89048e) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Avoid duplicate same-origin iframe observers after full snapshots during session recording.
+  (2026-11-05)
+
 ## 1.446.1
 
 ### Patch Changes
