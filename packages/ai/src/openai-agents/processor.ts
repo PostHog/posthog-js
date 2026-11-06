@@ -624,6 +624,11 @@ export class PostHogTracingProcessor implements TracingProcessor {
       properties.$ai_cache_creation_input_tokens = extractCacheWriteTokens(inputTokenDetails)
     }
 
+    const outputTokenDetails = usage.output_tokens_details
+    if (outputTokenDetails?.reasoning_tokens) {
+      properties.$ai_reasoning_tokens = outputTokenDetails.reasoning_tokens
+    }
+
     // Extract output from response
     if (response?.output) {
       properties.$ai_output_choices = this._prepareCapturedValue(response.output)
