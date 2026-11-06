@@ -1,5 +1,21 @@
 # posthog-react-native
 
+## 4.85.3
+
+### Patch Changes
+
+- [#5481](https://github.com/PostHog/posthog-js/pull/5481) [`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` when the user opts in, without being read again. This fixes missing exposures from the React and React Native hooks, which read a flag once on mount.
+  (2026-11-04)
+- Updated dependencies [[`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6)]:
+  - @posthog/core@1.63.1
+
+## 4.85.2
+
+### Patch Changes
+
+- [#5525](https://github.com/PostHog/posthog-js/pull/5525) [`f3fe629`](https://github.com/PostHog/posthog-js/commit/f3fe629b0788325a1ebd5610a6b1a410bff2b4ef) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Fix `posthog-xcode.sh` uploading from `DERIVED_FILE_DIR` when `SOURCEMAP_FILE` is preset elsewhere (e.g. EAS builds), so the composed source map is found.
+  (2026-11-03)
+
 ## 4.85.1
 
 ### Patch Changes

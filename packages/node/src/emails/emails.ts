@@ -162,7 +162,7 @@ export class EmailSender implements Emails {
       const prepared = prepareSend(options, this.config.maxRetries)
       const { appHost, secretKey } = this.connect(
         'no email was sent',
-        'Sending email needs secretKey, a project secret API key with the hog_flow:write scope.'
+        'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.'
       )
       const headers = this.headers(secretKey, {
         'Content-Type': 'application/json',
@@ -187,7 +187,7 @@ export class EmailSender implements Emails {
       }
       const { appHost, secretKey } = this.connect(
         'no email status was read',
-        'Reading an email status needs secretKey, a project secret API key with the hog_flow:read or hog_flow:write scope.'
+        'Reading an email status needs secretKey, a project secret API key with the transactional_email:read or transactional_email:write scope.'
       )
       const url = appHost + STATUS_PATH.replace('{messageId}', id.toLowerCase())
       const headers = this.headers(secretKey, {})

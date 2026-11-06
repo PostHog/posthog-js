@@ -1,5 +1,45 @@
 # @posthog/core
 
+## 1.64.0
+
+### Minor Changes
+
+- [#5580](https://github.com/PostHog/posthog-js/pull/5580) [`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f) Thanks [@haacked](https://github.com/haacked)! - `metrics.histogram()` accepts a `bounds` option that sets the histogram's bucket boundaries, and `beforeSend` sees and can change them. The first sample of a histogram (name and unit) fixes its bounds until the client resets. A later sample with different bounds is recorded in the fixed buckets and logs a warning, and a sample with invalid bounds is dropped. The experimental `posthog.flags.request.duration` histogram now uses the bounds `[50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]` ms, so its p50 and p95 resolve between 50ms and 5s. This changes the metric's buckets, which its experimental status allows.
+  (2026-11-05)
+
+### Patch Changes
+
+- Updated dependencies [[`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f)]:
+  - @posthog/types@1.421.0
+
+## 1.63.2
+
+### Patch Changes
+
+- [#5544](https://github.com/PostHog/posthog-js/pull/5544) [`8ddb57f`](https://github.com/PostHog/posthog-js/commit/8ddb57fc895a04f92797d8f574a660659dff096b) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix tree shaking of unselected extensions and shared utilities when using the slim SDK.
+  (2026-11-05)
+
+## 1.63.1
+
+### Patch Changes
+
+- [#5481](https://github.com/PostHog/posthog-js/pull/5481) [`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` when the user opts in, without being read again. This fixes missing exposures from the React and React Native hooks, which read a flag once on mount.
+  (2026-11-04)
+
+## 1.63.0
+
+### Minor Changes
+
+- [#5473](https://github.com/PostHog/posthog-js/pull/5473) [`5c8f314`](https://github.com/PostHog/posthog-js/commit/5c8f3140d68c0bd3b437958afd1e4ced33f4f83a) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: `parsePostHogCookie` and `readPostHogCookie` return the session's last activity and start timestamps
+  (2026-11-03)
+
+## 1.62.1
+
+### Patch Changes
+
+- [#5505](https://github.com/PostHog/posthog-js/pull/5505) [`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85) Thanks [@majicmaj](https://github.com/majicmaj)! - Recognize self-declared Lightpanda headless browsers in bot detection.
+  (2026-11-02)
+
 ## 1.62.0
 
 ### Minor Changes

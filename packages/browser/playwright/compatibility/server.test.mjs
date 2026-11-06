@@ -109,6 +109,55 @@ test('Replay network fixture preserves application headers and bodies on the wir
     assert.deepEqual(server.inspect().errors, [])
 })
 
+test('XHR recovery holds the first real flags response until client cancellation, then returns fresh flags', async (t) => {
+    const { server, origin } = await fixture(t, 'xhr-timeout-recovery')
+    server.releaseBarrier('flags')
+    const request = { method: 'POST', body: '{}' }
+    const initial = await (await fetch(origin + '/flags/', request)).json()
+    assert.equal(initial.featureFlags['compat-timeout'], 'cached')
+    await fetch(origin + '/__compat/xhr-timeout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'recover' }),
+    })
+    await assert.rejects(fetch(origin + '/flags/', { ...request, signal: AbortSignal.timeout(100) }))
+    const recovered = await (await fetch(origin + '/flags/', request)).json()
+    assert.equal(recovered.featureFlags['compat-timeout'], 'fresh')
+    assert.equal(recovered.featureFlags['compat-enabled'], true)
+    while (server.inspect().blockedRequests.length) await new Promise((resolve) => setImmediate(resolve))
+    const flags = server.inspect().requests.filter(({ path }) => path === '/flags/')
+    assert.deepEqual(
+        flags.map(({ status }) => status),
+        [200, null, 200]
+    )
+    assert.equal(flags[1].responseFinished, false)
+    assert.deepEqual(server.inspect().errors, [])
+})
+
+test('XHR exhaustion holds every flags attempt and leaves unrelated delivery available', async (t) => {
+    const { server, origin } = await fixture(t, 'xhr-timeout-exhausted')
+    server.releaseBarrier('flags')
+    await fetch(origin + '/__compat/xhr-timeout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'exhaust' }),
+    })
+    for (let attempt = 0; attempt < 2; attempt++)
+        await assert.rejects(
+            fetch(origin + '/flags/', { method: 'POST', body: '{}', signal: AbortSignal.timeout(100) })
+        )
+    while (server.inspect().blockedRequests.length) await new Promise((resolve) => setImmediate(resolve))
+    assert.deepEqual(
+        server
+            .inspect()
+            .requests.filter(({ path }) => path === '/flags/')
+            .map(({ status }) => status),
+        [null, null]
+    )
+    assert.equal((await fetch(origin + '/e/', { method: 'POST', body: '[]' })).status, 200)
+    assert.deepEqual(server.inspect().errors, [])
+})
+
 test('compatibility behavioral projection retains original ordered ingestion batches separately from raw bytes', async (t) => {
     const { server, origin } = await fixture(t)
     const batch = [{ event: 'first', properties: { retained: null } }, { event: 'second' }]

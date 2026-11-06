@@ -301,10 +301,9 @@ the previous custom-dispatcher behavior.
 ### Collecting agent feedback (`send_feedback`)
 
 `collectFeedback` is **off** by default. Turn it on and the SDK advertises a `send_feedback` virtual
-tool: an honest, general feedback channel from the agent to your team. The tool description makes
-missing capabilities the priority category ("report a missing capability whenever no available tool
-fits your task, even if you can work around it") and also invites reports about a tool that failed
-or confused the agent, and praise. Every call emits one `$mcp_feedback` event — never a
+tool: an honest, general feedback channel from the agent to your team. The tool description lists
+a capability the agent needed that no tool provides first, and also invites reports about a tool
+that failed or misled the agent, and praise. Every call emits one `$mcp_feedback` event — never a
 `$mcp_tool_call` — with `$mcp_feedback_type`, `$mcp_feedback_summary`, and the other
 `$mcp_feedback_*` properties; the summary and details double as `$mcp_intent`. The agent receives an
 acknowledgement that says exactly what happened: the report was recorded, no tools were added.

@@ -45,7 +45,7 @@ import {
 import type { Extension } from '../types'
 
 const LOGGER_PREFIX = '[SessionRecording]'
-const logger = createLogger(LOGGER_PREFIX)
+const logger = /* @__PURE__ */ createLogger(LOGGER_PREFIX)
 
 // Read these outside super properties so optional diagnostics can be throttled.
 const SESSION_DEBUG_PROPERTY_KEYS = [
