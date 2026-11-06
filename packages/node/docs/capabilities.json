@@ -1,4 +1,7 @@
 {
+  "CaptureError": "capture",
+  "EmailError": "emails",
+  "FeatureFlagEvaluations": "evaluate-flags",
   "PostHog.alias": "alias",
   "PostHog.aliasImmediate": "alias",
   "PostHog.capture": "capture",
@@ -41,8 +44,13 @@
   "PostHog.unsetPersonProperties": "set-person-properties",
   "PostHog.waitForLocalEvaluationReady": "flag-definition-loader",
   "PostHog.withSpan": "traces",
+  "PostHogSentryIntegration": "capture-exception",
+  "enrichCurrentSpan": "traces",
   "new PostHog(...)": "setup",
+  "sentryIntegration": "capture-exception",
+  "setupExpressErrorHandler": "capture-exception",
   "utils": [
+    "FeatureFlagError",
     "PostHog.enterContext",
     "PostHog.getContext",
     "PostHog.getFeatureFlagEvaluationRuntime",
@@ -52,18 +60,35 @@
     "PostHog.overrideFeatureFlags",
     "PostHog.registerOptions",
     "PostHog.unregisterOptions",
-    "PostHog.withContext"
+    "PostHog.withContext",
+    "cookieStateToProperties",
+    "cookieStoreFromHeader",
+    "createEventProcessor",
+    "getPostHogCookieName",
+    "parsePostHogCookie",
+    "readPostHogCookie",
+    "serializePostHogCookie",
+    "setupExpressRequestContext",
+    "uuidv7"
   ],
   "hidden": [
     "PostHog.apiKey",
+    "PostHog.disableSurveys",
+    "PostHog.distinctIdHasSentFlagCalls",
     "PostHog.enableFullAiCapture",
+    "PostHog.flushAt",
     "PostHog.getCustomUserAgent",
     "PostHog.getLibraryId",
     "PostHog.getLibraryVersion",
     "PostHog.getPersistedProperty",
     "PostHog.getSurveysStateless",
+    "PostHog.host",
+    "PostHog.options",
+    "PostHog.preloadFeatureFlags",
     "PostHog.prepareEventMessage",
     "PostHog.privacyMode",
+    "PostHog.projectToken",
     "PostHog.setPersistedProperty"
-  ]
+  ],
+  "next": ["CaptureError", "PostHog.registerOptions", "PostHog.unregisterOptions"]
 }
