@@ -10,6 +10,11 @@ export interface TextSanitizationOptions {
   redactPayloadPersonalData?: boolean
 }
 
+export interface CapturedValueOptions extends TextSanitizationOptions {
+  /** Object keys are cut to this many characters after redaction, so a match the scan window split never ships. */
+  maxKeyLength: number
+}
+
 const REDACTED_VALUE = '[redacted]'
 const BINARY_REDACTED_VALUE = '[binary data redacted - not supported by PostHog MCP analytics]'
 const BASE64_PATTERN = /^[A-Za-z0-9+/\n\r]+=*$/
@@ -142,6 +147,7 @@ const PHONE_PARENTHESIZED_PATTERN = /(^|[^\w+])((?:\+?1[ ./-]?)?\(\d{3}\)[ ./-]?
 const PAYLOAD_PHONE_INTL_PATTERN = /(^|[^\w.-])((?:\+|00|011)[ .-]?[1-9]\d{0,2}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
 // A number in JSON value position: after `:`, `,` or `[`, and before `,`, `}` or `]`.
 const JSON_NUMBER_PATTERN = /([:,[]\s*)(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)(?=\s*[,}\]])/g
+const LEADING_BOM_PATTERN = /^\uFEFF/
 const JSON_NUMBER_PARTS_PATTERN = /^-?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/
 const WORD_CHARACTER_PATTERN = /\w/
 // A JSON or JavaScript string escape. Read as text, its letter or hex digits glue
@@ -850,7 +856,7 @@ export function redactPii(value: string): string {
     [matching(EMAIL_PATTERN), redactWhole],
     [matching(IPV4_PATTERN), redactWhole],
     [matching(IPV6_PATTERN), redactWhole],
-    [matching(JSON_NUMBER_PATTERN), jsonNumberRedaction((token) => isIntegerCard(token) || holdsIntentCard(token))],
+    jsonNumberRule(value, (token) => isIntegerCard(token) || holdsIntentCard(token)),
     cardRule(INTENT_CARDS),
     [matching(US_SSN_PATTERN), redactWhole],
     [matching(PHONE_NANP_PATTERN), redactWhole],
@@ -993,19 +999,38 @@ function isPublicIpv4(address: string): boolean {
 
 /**
  * Writes a JSON number for which `isCard` holds as the string `"[redacted]"`,
- * whole, so JSON text stays valid JSON. A number stands outside every JSON
- * string when an even number of quotes precede it; escaped quotes are masked, so
- * they are not counted. The count carries over from one number to the next, so a
- * text full of numbers is read once, not once per number.
+ * whole, so JSON text stays valid JSON. Only when `text` is JSON: in other text
+ * the quote would end a URL match early and hide the credentials after it, so the
+ * card is left for the card pass. A number stands outside every JSON string when
+ * an even number of quotes precede it; escaped quotes are masked, so they are not
+ * counted. The count carries over from one number to the next, so a text full of
+ * numbers is read once, not once per number, and `text` is parsed at most once.
  */
-function jsonNumberRedaction(isCard: (token: string) => boolean): Redaction {
+function jsonNumberRule(text: string, isCard: (token: string) => boolean): Rule {
   let quotes = 0
   let counted = 0
-  return (token, start, read) => {
-    for (; counted < start; counted++) {
-      quotes += read[counted] === '"' ? 1 : 0
-    }
-    return quotes % 2 === 0 && isCard(token) ? `"${REDACTED_VALUE}"` : token
+  let json: boolean | undefined
+  return [
+    matching(JSON_NUMBER_PATTERN),
+    (token, start, read) => {
+      for (; counted < start; counted++) {
+        quotes += read[counted] === '"' ? 1 : 0
+      }
+      if (quotes % 2 !== 0 || !isCard(token)) {
+        return token
+      }
+      json ??= isJsonText(text)
+      return json ? `"${REDACTED_VALUE}"` : token
+    },
+  ]
+}
+
+function isJsonText(text: string): boolean {
+  try {
+    JSON.parse(text.replace(LEADING_BOM_PATTERN, ''))
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -1049,7 +1074,7 @@ export function redactPayloadPii(value: string): string {
     [matching(EMAIL_PATTERN), redactWhole],
     [matching(PAYLOAD_IPV4_PATTERN), (address) => (isPublicIpv4(address) ? REDACTED_VALUE : address)],
     [matching(IPV6_PATTERN), redactWhole],
-    [matching(JSON_NUMBER_PATTERN), jsonNumberRedaction((token) => token[0] !== '-' && isIntegerCard(token))],
+    jsonNumberRule(value, (token) => token[0] !== '-' && isIntegerCard(token)),
     cardRule(PAYLOAD_CARDS),
     [matching(US_SSN_PATTERN), redactWhole],
     [matching(PHONE_PARENTHESIZED_PATTERN), redactWhole],
@@ -1057,13 +1082,17 @@ export function redactPayloadPii(value: string): string {
   ])
 }
 
-export function sanitizeCapturedValue(value: unknown, options: TextSanitizationOptions): unknown {
+export function sanitizeCapturedValue(value: unknown, options: CapturedValueOptions): unknown {
   return sanitizeValueWith(
     value,
     options.redactPayloadPersonalData
       ? payloadPasses(options)
-      : { string: (stringValue) => sanitizeString(stringValue, options) }
+      : { string: (stringValue) => sanitizeString(stringValue, options), key: (key) => cutKey(key, options) }
   )
+}
+
+function cutKey(key: string, options: CapturedValueOptions): string {
+  return key.length > options.maxKeyLength ? key.slice(0, options.maxKeyLength) + options.truncationSuffix : key
 }
 
 function redactCardNumber(value: number): unknown {
@@ -1071,10 +1100,10 @@ function redactCardNumber(value: number): unknown {
 }
 
 /** What the payload personal data pass rewrites in a structure. */
-function payloadPasses(options: TextSanitizationOptions): ValuePasses {
+function payloadPasses(options: CapturedValueOptions): ValuePasses {
   return {
     string: (value) => sanitizeString(value, options),
-    key: (key) => redactCapturedHead(key, redactPayloadPii, options),
+    key: (key) => cutKey(redactCapturedHead(key, redactPayloadPii, options), options),
     number: redactCardNumber,
   }
 }

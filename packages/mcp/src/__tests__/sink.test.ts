@@ -1,5 +1,6 @@
 import type { EventMessage, PostHog } from 'posthog-node'
 
+import { buildCapturedMcpParameters } from '../extensions/mcp-payloads'
 import { McpEventSink, processMcpEvent } from '../extensions/sink'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import type { McpEvent } from '../types'
@@ -128,4 +129,61 @@ describe('processMcpEvent __proto__ members', () => {
     expect(JSON.stringify(response.structuredContent)).toBe(expected)
     expect(response.content[0].text).toBe(expected)
   })
+})
+
+describe('processMcpEvent identifiers at the scan window edge', () => {
+  const window = 131_072
+  const filler = (length: number): string => {
+    const unit = `${'x'.repeat(50)}@ex.com `
+    return unit.repeat(Math.ceil(length / unit.length)).slice(0, length - 1) + ' '
+  }
+  const process = (event: Partial<McpEvent>, redactPayloadPersonalData = true): ReturnType<typeof processMcpEvent> =>
+    processMcpEvent(
+      { eventType: MCPAnalyticsEventType.mcpToolsCall, sessionId: 'session-1', timestamp: new Date(), ...event },
+      { enableExceptionAutocapture: false, redactPayloadPersonalData }
+    )
+  const around = (text: string, needle: string): string | null => {
+    const index = text.indexOf(needle)
+    return index < 0 ? null : text.slice(Math.max(0, index - 20), index + needle.length + 20)
+  }
+
+  it.each([
+    ['ada.lovelace@example.com', 12],
+    ['078-05-1120', 8],
+    ['4111 1111 1111 1111', 14],
+    ['+44 20 7946 0958', 8],
+    ['203.0.113.77', 8],
+  ])('redacts %s in an argument that the window cuts after %i characters', async (identifier, kept) => {
+    const argument = `${filler(window - kept)}${identifier} tail`
+    const parameters = buildCapturedMcpParameters({
+      method: 'tools/call',
+      params: { name: 'echo', arguments: { text: argument } },
+    })
+
+    const processed = await process({ parameters })
+
+    expect(around(JSON.stringify(processed!.event.parameters), identifier.slice(0, kept))).toBeNull()
+  })
+
+  it.each([
+    ['response', true],
+    ['parameters', true],
+    ['response', false],
+    ['parameters', false],
+  ] as const)(
+    'cuts an object key in the %s to the key limit, past an address the window splits, with personal data %s',
+    async (field, redactPayloadPersonalData) => {
+      const key = `${'k'.repeat(window - 13)} ada.lovelace@example.com`
+      const payload = { content: [{ type: 'text', text: 'ok' }], [key]: 1 }
+
+      const processed = await process({ [field]: payload }, redactPayloadPersonalData)
+
+      expect(
+        around(JSON.stringify(processed!.captures.map((capture) => capture.properties)), 'ada.lovelace')
+      ).toBeNull()
+      expect(
+        Math.max(...Object.keys(processed!.event[field] as object).map((name) => name.length))
+      ).toBeLessThanOrEqual(256 + 3)
+    }
+  )
 })

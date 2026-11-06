@@ -6,10 +6,15 @@ import {
   sanitizeFreeText,
   sanitizeFreeTextValue,
 } from '../extensions/mcp-payloads'
+import { sanitizeEvent } from '../extensions/sanitization'
+import type { McpEvent } from '../types'
 
 describe('buildCapturedMcpParameters', () => {
+  const captured = (request: unknown): unknown =>
+    sanitizeEvent({ parameters: buildCapturedMcpParameters(request) } as McpEvent).parameters
+
   it('captures useful tool-call inputs without transport internals or duplicated intent', () => {
-    const parameters = buildCapturedMcpParameters({
+    const parameters = captured({
       id: 102,
       jsonrpc: '2.0',
       method: 'tools/call',
@@ -103,7 +108,7 @@ describe('buildCapturedMcpParameters', () => {
   })
 
   it('redacts PostHog tokens from captured string values', () => {
-    const parameters = buildCapturedMcpParameters({
+    const parameters = captured({
       method: 'tools/call',
       params: {
         name: 'projects-get',
@@ -478,6 +483,35 @@ describe('URL credential redaction', () => {
   })
 })
 
+describe('URLs carrying a card-like number', () => {
+  const passes = [
+    ['intent', (value: string): unknown => sanitizeFreeText(value)],
+    ['payload', (value: string): unknown => sanitizeCapturedValue(value, { redactPayloadPersonalData: true })],
+    ['payload with personal data off', (value: string): unknown => sanitizeCapturedValue(value)],
+  ] as const
+  const texts = [
+    ['in brackets', 'GET https://api.example.com/v1/orders?ids=[4111111111111111]&access_token=s3cr3t-value -> 200'],
+    ['between commas', 'fetch https://svc.example.com/cb?a=,4111111111111111,&access_token=s3cr3t-value done'],
+    ['after a colon', 'fetch https://svc.example.com/cb?a=:4111111111111111,&access_token=s3cr3t-value done'],
+    [
+      'in a log line opening with a bracket',
+      '[INFO] https://svc.example.com/cb?ids=[4111111111111111]&token=s3cr3t-value',
+    ],
+    ['in the userinfo', 'open https://s3cr3t-value:4111111111111111,x@example.com/a please'],
+  ] as const
+
+  it.each(passes.flatMap(([pass, sanitize]) => texts.map(([label, text]) => [pass, label, text, sanitize] as const)))(
+    'redacts the credentials through the %s pass, card %s',
+    (_pass, _label, text, sanitize) => {
+      expect(sanitize(text)).not.toContain('s3cr3t-value')
+    }
+  )
+
+  it.each(passes.slice(0, 2))('redacts the card unquoted through the %s pass', (_pass, sanitize) => {
+    expect(sanitize('ids [4111111111111111] ok')).toBe('ids [[redacted]] ok')
+  })
+})
+
 describe('redactPii', () => {
   const NBSP = String.fromCharCode(0x00a0)
   const NNBSP = String.fromCharCode(0x202f)
@@ -836,6 +870,7 @@ describe('JSON text', () => {
       ['duplicate keys', '{"email":"ada@example.com","email":null}', '{"email":"[redacted]","email":null}'],
       ['a 17-digit card integer', '{"pan":62123456789012347}', '{"pan":"[redacted]"}'],
       ['a 19-digit card integer', '[6212345678901234569, 1]', '["[redacted]", 1]'],
+      ['a card after a BOM', '\uFEFF{"n":4111111111111111}', '\uFEFF{"n":"[redacted]"}'],
       [
         'a __proto__ member',
         '{"__proto__":{"email":"ada@example.com"},"y":2}',

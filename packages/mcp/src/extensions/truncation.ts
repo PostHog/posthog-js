@@ -9,6 +9,7 @@ import type { ErrorProperties, Event, StackFrame, McpEvent } from '../types'
 export const MAX_DEPTH = 10
 export const MAX_BREADTH = 100
 export const MAX_STRING_LENGTH = 32_768 // 32KB
+export const MAX_KEY_LENGTH = 256
 export const MAX_EVENT_BYTES = 102_400 // 100KB
 
 // --- Field-level limit constants ---

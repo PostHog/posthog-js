@@ -9,14 +9,15 @@ import {
   sanitizeCapturedValue as sanitizeCoreCapturedValue,
   sanitizeFreeText as sanitizeCoreFreeText,
   sanitizeFreeTextValue as sanitizeCoreFreeTextValue,
-  type TextSanitizationOptions,
+  type CapturedValueOptions,
 } from '@posthog/core'
-import { limitEntries, MAX_BREADTH, MAX_STRING_LENGTH, TRUNCATION_SUFFIX } from './truncation'
+import { limitEntries, MAX_BREADTH, MAX_KEY_LENGTH, MAX_STRING_LENGTH, TRUNCATION_SUFFIX } from './truncation'
 
 const CONTEXT_ARGUMENT_NAME = 'context'
 const CAPTURED_REQUEST_FIELDS = ['id', 'jsonrpc', 'method', 'params']
-const SANITIZATION_OPTIONS: TextSanitizationOptions = {
+const SANITIZATION_OPTIONS: CapturedValueOptions = {
   maxStringLength: MAX_STRING_LENGTH,
+  maxKeyLength: MAX_KEY_LENGTH,
   truncationSuffix: TRUNCATION_SUFFIX,
 }
 
@@ -32,7 +33,7 @@ export function sanitizeFreeText(value: string): string {
   return sanitizeCoreFreeText(value, SANITIZATION_OPTIONS)
 }
 
-export function sanitizeCapturedValue(value: unknown, options?: Partial<TextSanitizationOptions>): unknown {
+export function sanitizeCapturedValue(value: unknown, options?: Partial<CapturedValueOptions>): unknown {
   return sanitizeCoreCapturedValue(value, { ...SANITIZATION_OPTIONS, ...options })
 }
 
@@ -43,11 +44,12 @@ export function sanitizeFreeTextValue(value: unknown): unknown {
 /**
  * The request as captured: its id, JSON-RPC version, method, and params, without
  * the injected `context` argument, which `$mcp_intent` carries. The entry and
- * nesting limits apply before the sanitizer reads anything, so a call with a huge
- * argument object costs what a call at those limits costs.
+ * nesting limits apply here, so a call with a huge argument object costs what a
+ * call at those limits costs. It is not sanitized here: `sanitizeEvent` does that
+ * once, with the payload personal data option.
  */
 export function buildCapturedMcpParameters(request: unknown): JsonRecord {
-  return sanitizeCapturedValue(limitEntries({ request: pickCapturedFields(request) })) as JsonRecord
+  return limitEntries({ request: pickCapturedFields(request) }) as JsonRecord
 }
 
 function pickCapturedFields(request: unknown): unknown {
