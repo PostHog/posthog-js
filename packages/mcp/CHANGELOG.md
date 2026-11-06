@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 1.0.0
+
+### Major Changes
+
+- [#5584](https://github.com/PostHog/posthog-js/pull/5584) [`650e968`](https://github.com/PostHog/posthog-js/commit/650e968dbc6d7f62af3eaa17299d0e0d1096799a) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Release 1.0.0. The API and the `$mcp_*` events are now stable: a minor or patch release no longer renames or removes an event or property, changes its type, or changes which requests send an event, so your saved insights keep working across upgrades. New events and properties can still arrive in minor releases. Upgrading from 0.x needs no code change.
+  (2026-11-06)
+
 ## 0.26.0
 
 ### Minor Changes
