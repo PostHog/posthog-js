@@ -41,12 +41,22 @@ jobs:
           BRANCH: ${{ matrix.branch }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          if git ls-remote --exit-code --heads "https://github.com/$REPOSITORY.git" "$BRANCH" > /dev/null; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::$BRANCH does not exist yet, so there is nothing to check."
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Exit 2 means no matching branch; any other failure (such as a network error) must fail the job, not skip it.
+          status=0
+          git ls-remote --exit-code --heads "https://github.com/$REPOSITORY.git" "$BRANCH" > /dev/null || status=$?
+          case "$status" in
+            0)
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              ;;
+            2)
+              echo "::notice::$BRANCH does not exist yet, so there is nothing to check."
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Could not look up $BRANCH (git ls-remote exited with $status)."
+              exit 1
+              ;;
+          esac
 
       - name: Checkout ${{ matrix.branch }}
         if: steps.branch.outputs.exists == 'true'
