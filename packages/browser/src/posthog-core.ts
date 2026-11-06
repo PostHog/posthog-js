@@ -463,6 +463,7 @@ class DeprecatedWebPerformanceObserver {
     }
 
     private __forceAllowLocalhost: boolean = false
+    private _botFilterWarned: boolean = false
 }
 
 /**
@@ -484,6 +485,7 @@ export class PostHog implements PostHogInterface {
     __loaded: boolean
     config: PostHogConfig
     _originalUserConfig?: Partial<PostHogConfig>
+    private _botFilterWarned: boolean = false
 
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
@@ -1816,6 +1818,16 @@ export class PostHog implements PostHogInterface {
         // We drop bot events unless the preview flag to send bot pageviews is enabled
         // or the user has explicitly opted out of useragent filtering
         if (shouldDropBotEvent) {
+            if (!this._botFilterWarned) {
+                this._botFilterWarned = true
+                // Always visible (not debug-only): otherwise a bot-flagged session silently sends no events
+                // oxlint-disable-next-line no-console
+                console.warn(
+                    '[PostHog.js] Events are being dropped because the user agent looks like a bot (first dropped event: "' +
+                        event_name +
+                        '"). Set `opt_out_useragent_filter: true` to capture them, e.g. in end-to-end tests. Note that logs from `captureLog` are not subject to this filter.'
+                )
+            }
             logger.info(
                 `Event "${event_name}" was not captured because the user agent looks like a bot. Set \`opt_out_useragent_filter: true\` to capture it.`
             )
@@ -4563,6 +4575,9 @@ export class PostHog implements PostHogInterface {
 
     /**
      * Capture a log entry and send it to the PostHog logs endpoint.
+     *
+     * Note: logs are not subject to the user agent (bot) filter that drops events,
+     * so they are still sent from sessions whose events are dropped.
      *
      * {@label Logs}
      *
