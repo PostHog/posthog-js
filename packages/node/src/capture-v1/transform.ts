@@ -93,8 +93,7 @@ function relocateInto(properties: PostHogEventProperties, key: string, value: Js
  * sent unchanged; capture reads them. Each legacy option property is removed from
  * `properties` and fills its option when the caller left that option missing or
  * `null`. `$session_id`/`$window_id` move to the top-level `session_id`/`window_id`
- * fields; `$lib`/`$lib_version` are stripped (the server injects them from
- * `PostHog-Sdk-Info`); top-level `$set`/`$set_once` are relocated into `properties`.
+ * fields; top-level `$set`/`$set_once` are relocated into `properties`.
  */
 export function buildV1Event(message: PostHogEventProperties): V1Event {
   const sourceProperties = isRecord(message.properties) ? message.properties : {}
@@ -127,9 +126,6 @@ export function buildV1Event(message: PostHogEventProperties): V1Event {
       console.warn(`[PostHog] dropping ${property}: a ${jsonTypeName(value)} value is not a string`)
     }
   }
-
-  delete properties.$lib
-  delete properties.$lib_version
 
   relocateInto(properties, '$set', message.$set)
   relocateInto(properties, '$set_once', message.$set_once)

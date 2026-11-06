@@ -1,4 +1,5 @@
 import { PostHog } from '../entrypoints/index.node'
+import { version } from '../version'
 
 describe('PostHog.prepareEventMessage', () => {
   let posthog: PostHog
@@ -31,7 +32,7 @@ describe('PostHog.prepareEventMessage', () => {
     expect(message).toStrictEqual({
       distinctId: 'user_1',
       event: 'test_event',
-      properties: { plan: 'pro', $geoip_disable: false, $is_server: true },
+      properties: { plan: 'pro', $lib: 'posthog-node', $lib_version: version, $geoip_disable: false, $is_server: true },
       options: { product_tour_id: 'tour', cookieless_mode: true },
       uuid,
       timestamp,

@@ -47,6 +47,8 @@ exports[`server wire snapshots > snapshots a deterministic complete captureExcep
           ],
           "$geoip_disable": true,
           "$is_server": true,
+          "$lib": "posthog-node",
+          "$lib_version": "<sdk-version>",
           "endpoint": "/v1/orders",
           "request": {
             "method": "POST",
@@ -139,6 +141,8 @@ exports[`server wire snapshots > snapshots the canonical Capture V1 transform an
           "product_tour_id": "tour-7",
         },
         "properties": {
+          "$lib": "posthog-node",
+          "$lib_version": "<sdk-version>",
           "$set": {
             "plan": "pro",
           },
