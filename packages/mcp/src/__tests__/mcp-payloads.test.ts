@@ -46,6 +46,29 @@ describe('buildCapturedMcpParameters', () => {
     })
   })
 
+  it('keeps a parsed __proto__ argument', () => {
+    const request = JSON.parse('{"method":"tools/call","params":{"name":"t","arguments":{"__proto__":{"x":1}}}}')
+
+    expect(JSON.stringify(buildCapturedMcpParameters(request))).toBe(
+      '{"request":{"method":"tools/call","params":{"name":"t","arguments":{"__proto__":{"x":1}}}}}'
+    )
+  })
+
+  it.each([100, 100_000])('reads no more than the entry limit of %i arguments', (count) => {
+    let reads = 0
+    const args: Record<string, unknown> = {}
+    for (let index = 0; index < count; index++) {
+      Object.defineProperty(args, `k${index}`, {
+        enumerable: true,
+        get: () => (reads++, `customer ${index} order ORD-${index}`),
+      })
+    }
+
+    buildCapturedMcpParameters({ method: 'tools/call', params: { name: 't', arguments: args } })
+
+    expect(reads).toBeLessThanOrEqual(200)
+  })
+
   it('redacts PostHog tokens from captured string values', () => {
     const parameters = buildCapturedMcpParameters({
       method: 'tools/call',
@@ -580,6 +603,7 @@ describe('redactPayloadPii', () => {
     ['a card-shaped number with a fraction', '[4111111111111111.5]'],
     ['a card-shaped number with an exponent', '[4111111111111111e0]'],
     ['a card grouped with dots', 'ref 4111.1111.1111.1111'],
+    ['a negative card-shaped JSON member', '{"n":-4111111111111111}'],
     ['a fraction starting 011', '[620.0119256973267]'],
     ['a fraction starting 00', '[0.0012345678901]'],
   ])('keeps %s', (_label, input) => {
@@ -594,8 +618,51 @@ describe('redactPayloadPii', () => {
   })
 })
 
-describe('payload JSON text copies', () => {
-  const sanitize = (value: unknown): unknown => sanitizeCapturedValue(value, { redactPayloadPersonalData: true })
+describe('card numbers', () => {
+  it.each([
+    ['grouped 4-4-4-3', 'amex 3782 8224 6310 005', 'amex [redacted]', 'amex [redacted]'],
+    ['grouped 4-4-5', 'visa 4222 2222 22222', 'visa [redacted]', 'visa [redacted]'],
+    ['grouped 4-4-4-1', 'visa 4222 2222 2222 2', 'visa [redacted]', 'visa [redacted]'],
+    ['grouped 5-5-5-1', 'pan 41111 11111 11111 1', 'pan [redacted]', 'pan [redacted]'],
+    ['grouped in pairs', 'pan 41 11 11 11 11 11 11 11', 'pan [redacted]', 'pan [redacted]'],
+    ['grouped 4-4-4-4-3', 'pan 6212 3456 7890 1234 569', 'pan [redacted]', 'pan [redacted]'],
+    ['glued to a word by a dash', 'card-4111111111111111', 'card-[redacted]', 'card-[redacted]'],
+    ['glued to a word by a dot', 'No.4111111111111111', 'No.[redacted]', 'No.[redacted]'],
+    ['grouped by dashes and glued by one', 'ref-4111-1111-1111-1111', 'ref-[redacted]', 'ref-[redacted]'],
+    [
+      'followed by an SSN',
+      'card 4111111111111111 078-05-1120',
+      'card [redacted] [redacted]',
+      'card [redacted] [redacted]',
+    ],
+    [
+      'grouped by mixed separators with a dot',
+      'card 4111-1111 1111.1111 ok',
+      'card [redacted] ok',
+      'card 4111-1111 1111.1111 ok',
+    ],
+    ['grouped by slashes', 'card 4111/1111/1111/1111', 'card [redacted]', 'card 4111/1111/1111/1111'],
+    ['with a fraction', 'cards 4111111111111111.1 x', 'cards [redacted].1 x', 'cards 4111111111111111.1 x'],
+  ])('%s: %s', (_label, input, intent, payload) => {
+    expect(redactPii(input)).toBe(intent)
+    expect(redactPayloadPii(input)).toBe(payload)
+  })
+
+  it.each([
+    ['escaped line breaks', '{"pan":"4111\\n1111\\n1111\\n1111"}'],
+    ['line breaks', '4111\n1111\n1111\n1111'],
+    ['an escaped line break inside a phone number', '{"phone":"+44\\n20 7946 0958"}'],
+  ])('does not join digit groups across %s', (_label, input) => {
+    expect(redactPii(input)).toBe(input)
+    expect(redactPayloadPii(input)).toBe(input)
+  })
+})
+
+describe('JSON text', () => {
+  const passes = [
+    ['payload', (value: unknown): unknown => sanitizeCapturedValue(value, { redactPayloadPersonalData: true })],
+    ['intent', sanitizeFreeTextValue],
+  ] as const
   const identifiers = [
     ['an email', 'ada@example.com'],
     ['a card', '4111111111111111'],
@@ -603,33 +670,87 @@ describe('payload JSON text copies', () => {
     ['a public IPv4', '203.0.113.7'],
     ['an IPv6', '2001:db8::7334'],
     ['a phone', '+1 415 555 0142'],
-  ]
-  const escapes = ['\\n', '\\t', '\\r', '\\b', '\\f', '\\u00e9', '\\\\', '\\"', '\\/']
-  const cases = identifiers.flatMap(([label, identifier]) =>
-    escapes.map((escape) => [label, escape, identifier] as const)
-  )
+    ['a PostHog token', 'phc_123456789012345678901234567890'],
+  ] as const
+  const escapes = ['\\n', '\\t', '\\r', '\\b', '\\f', '\\/', '\\\\', '\\"', '\\u00e9']
+  const containers = [
+    ['plain', (json: string) => json],
+    ['embedded in prose', (json: string) => `Result: ${json}`],
+    ['NDJSON', (json: string) => `{"a":1}\n${json}`],
+    ['after a BOM', (json: string) => `\uFEFF${json}`],
+  ] as const
+  const member = (escape: string, value: string): string => `{"note":"x${escape}${value}","x${escape}${value}":1}`
 
-  it.each(cases)('redacts %s after %s in a value and a key, keeping valid JSON', (_label, escape, identifier) => {
-    const text = `{"note":"x${escape}${identifier}","x${escape}${identifier}":1}`
+  describe.each(passes)('through the %s pass', (_pass, sanitize) => {
+    it.each(
+      identifiers.flatMap(([label, identifier]) =>
+        escapes.flatMap((escape) => containers.map(([name, wrap]) => [label, escape, name, identifier, wrap] as const))
+      )
+    )('redacts %s after %s, %s, in place', (_label, escape, _container, identifier, wrap) => {
+      expect(sanitize(wrap(member(escape, identifier)))).toBe(wrap(member(escape, '[redacted]')))
+    })
 
-    const redacted = sanitize(text) as string
+    it.each(escapes.flatMap((escape) => containers.map(([name, wrap]) => [escape, name, wrap] as const)))(
+      'keeps text with %s and nothing to redact byte for byte, %s',
+      (escape, _container, wrap) => {
+        const text = wrap(`{"note":"x${escape}y 12.5${escape}4111","x${escape}":[-1.5e3]}`)
 
-    expect(redacted).not.toContain(identifier)
-    expect(JSON.parse(redacted)).toEqual(sanitize(JSON.parse(text)))
+        expect(sanitize(text)).toBe(text)
+      }
+    )
+
+    it.each([
+      ['duplicate keys', '{"email":"ada@example.com","email":null}', '{"email":"[redacted]","email":null}'],
+      ['a 17-digit card integer', '{"pan":62123456789012347}', '{"pan":"[redacted]"}'],
+      ['a 19-digit card integer', '[6212345678901234569, 1]', '["[redacted]", 1]'],
+      [
+        'a __proto__ member',
+        '{"__proto__":{"email":"ada@example.com"},"y":2}',
+        '{"__proto__":{"email":"[redacted]"},"y":2}',
+      ],
+      ['a card between commas inside a string', '{"note":"a, 4111111111111111, b"}', '{"note":"a, [redacted], b"}'],
+      [
+        'pretty-printed JSON, keeping its formatting',
+        JSON.stringify({ card: 4111111111111111, note: 'x\nada@example.com', count: 3 }, null, 2),
+        JSON.stringify({ card: '[redacted]', note: 'x\n[redacted]', count: 3 }, null, 2),
+      ],
+      [
+        'JSON nested deeper than any walk',
+        `${'['.repeat(50_000)}"ada@example.com"${']'.repeat(50_000)}`,
+        `${'['.repeat(50_000)}"[redacted]"${']'.repeat(50_000)}`,
+      ],
+    ])('redacts %s in place', (_label, text, expected) => {
+      expect(sanitize(text)).toBe(expected)
+    })
+
+    it.each([
+      ['a __proto__ member', '{"__proto__":{"x":1},"y":2}'],
+      ['an integer above 2^53', '{"id":9007199254740993,"n":-0}'],
+      ['pretty-printed JSON with nothing to redact', JSON.stringify({ id: 'ord_1', total: 12.5 }, null, 2)],
+    ])('keeps %s byte for byte', (_label, text) => {
+      expect(sanitize(text)).toBe(text)
+    })
   })
 
   it.each([
     ['a float whose fraction passes the card checksum', '{"v":710.4032039642334}'],
     ['a fraction of 16 digits', '[0.4111111111111111]'],
     ['a negative card-shaped number', '[-4111111111111111]'],
+    ['a negative card-shaped member', '{"n":-4111111111111111}'],
     ['a card-shaped number with a fraction', '[4111111111111111.5]'],
     ['a card-shaped number scaled to a fraction', '[4111111111111111e-3]'],
-    ['pretty-printed JSON with nothing to redact', JSON.stringify({ id: 'ord_1', total: 12.5 }, null, 2)],
-  ])('keeps %s byte for byte', (_label, text) => {
-    expect(sanitize(text)).toBe(text)
+  ])('keeps %s byte for byte through the payload pass', (_label, text) => {
+    expect(sanitizeCapturedValue(text, { redactPayloadPersonalData: true })).toBe(text)
+  })
+
+  it.each(escapes)('redacts a PostHog token after %s with the payload option off', (escape) => {
+    const text = member(escape, 'phc_123456789012345678901234567890')
+
+    expect(sanitizeCapturedValue(text)).toBe(member(escape, '[redacted]'))
   })
 
   describe('random floats', () => {
+    const sanitize = (value: unknown): unknown => sanitizeCapturedValue(value, { redactPayloadPersonalData: true })
     let seed = 42
     const random = (): number => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31
     const floats = Array.from({ length: 10_000 }, () => random() * 1000)
@@ -640,24 +761,11 @@ describe('payload JSON text copies', () => {
       expect(texts.filter((text) => sanitize(text) !== text)).toEqual([])
     })
 
-    it('keeps them in a JSON text copy longer than the passes parse', () => {
+    it('keeps them in a JSON text copy longer than the scanned window', () => {
       const text = JSON.stringify(floats)
 
       expect(sanitize(text)).toBe(text)
     })
-  })
-
-  it('falls back to the text pass on JSON nested too deep to walk', () => {
-    const depth = 50_000
-    const text = `${'['.repeat(depth)}"ada@example.com"${']'.repeat(depth)}`
-
-    expect(sanitize(text)).toBe(`${'['.repeat(depth)}"[redacted]"${']'.repeat(depth)}`)
-  })
-
-  it('redacts a card-number integer and re-serializes the redacted structure', () => {
-    const text = JSON.stringify({ card: 4111111111111111, note: 'x\nada@example.com', count: 3 }, null, 2)
-
-    expect(sanitize(text)).toBe('{"card":"[redacted]","note":"x\\n[redacted]","count":3}')
   })
 })
 

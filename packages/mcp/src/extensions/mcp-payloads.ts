@@ -11,9 +11,10 @@ import {
   sanitizeFreeTextValue as sanitizeCoreFreeTextValue,
   type TextSanitizationOptions,
 } from '@posthog/core'
-import { MAX_STRING_LENGTH, TRUNCATION_SUFFIX } from './truncation'
+import { limitEntries, MAX_STRING_LENGTH, TRUNCATION_SUFFIX } from './truncation'
 
 const CONTEXT_ARGUMENT_NAME = 'context'
+const CAPTURED_REQUEST_FIELDS = ['id', 'jsonrpc', 'method', 'params']
 const SANITIZATION_OPTIONS: TextSanitizationOptions = {
   maxStringLength: MAX_STRING_LENGTH,
   truncationSuffix: TRUNCATION_SUFFIX,
@@ -39,48 +40,27 @@ export function sanitizeFreeTextValue(value: unknown): unknown {
   return sanitizeCoreFreeTextValue(value, SANITIZATION_OPTIONS)
 }
 
-function buildCapturedMcpArguments(argumentsValue: unknown): unknown {
-  if (!isRecord(argumentsValue)) {
-    return sanitizeCapturedValue(argumentsValue)
-  }
-
-  const capturedArguments: JsonRecord = {}
-  for (const [key, value] of Object.entries(argumentsValue)) {
-    if (key === CONTEXT_ARGUMENT_NAME) {
-      continue
-    }
-    capturedArguments[key] = sanitizeCapturedValue(value)
-  }
-  return capturedArguments
-}
-
-function buildCapturedMcpParams(params: unknown): unknown {
-  if (!isRecord(params)) {
-    return sanitizeCapturedValue(params)
-  }
-
-  const capturedParams: JsonRecord = {}
-  for (const [key, value] of Object.entries(params)) {
-    capturedParams[key] = key === 'arguments' ? buildCapturedMcpArguments(value) : sanitizeCapturedValue(value)
-  }
-  return capturedParams
-}
-
+/**
+ * The request as captured: its id, JSON-RPC version, method, and params, without
+ * the injected `context` argument, which `$mcp_intent` carries. The entry and
+ * nesting limits apply before the sanitizer reads anything, so a call with a huge
+ * argument object costs what a call at those limits costs.
+ */
 export function buildCapturedMcpParameters(request: unknown): JsonRecord {
+  const captured = limitEntries({ request: pickCapturedFields(request) }) as { request: unknown }
+  omitContextArgument(captured.request)
+  return sanitizeCapturedValue(captured) as JsonRecord
+}
+
+function pickCapturedFields(request: unknown): unknown {
   if (!isRecord(request)) {
-    return { request: sanitizeCapturedValue(request) }
+    return request
   }
+  return Object.fromEntries(CAPTURED_REQUEST_FIELDS.filter((key) => key in request).map((key) => [key, request[key]]))
+}
 
-  const capturedRequest: JsonRecord = {}
-  for (const key of ['id', 'jsonrpc', 'method'] as const) {
-    if (key in request) {
-      capturedRequest[key] = sanitizeCapturedValue(request[key])
-    }
+function omitContextArgument(request: unknown): void {
+  if (isRecord(request) && isRecord(request.params) && isRecord(request.params.arguments)) {
+    delete request.params.arguments[CONTEXT_ARGUMENT_NAME]
   }
-
-  if ('params' in request) {
-    capturedRequest.params = buildCapturedMcpParams(request.params)
-  }
-
-  return { request: capturedRequest }
 }

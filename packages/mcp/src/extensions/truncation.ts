@@ -161,24 +161,25 @@ function visitObject(
   maxStringLength: number,
   memo: WeakSet<object>
 ): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
+  const entries: [string, unknown][] = []
   const keys = Object.keys(obj)
   let count = 0
 
   for (const key of keys) {
     if (count >= maxBreadth) {
-      result['...'] = '[MaxProperties ~]'
+      entries.push(['...', '[MaxProperties ~]'])
       break
     }
     // Skip undefined values — matches JSON.stringify behavior (omits undefined properties)
     if (obj[key] === undefined) {
       continue
     }
-    result[key] = visit(obj[key], remainingDepth, maxBreadth, maxStringLength, memo)
+    entries.push([key, visit(obj[key], remainingDepth, maxBreadth, maxStringLength, memo)])
     count++
   }
 
-  return result
+  // Defined rather than assigned, so a parsed `__proto__` member stays a member instead of setting the prototype.
+  return Object.fromEntries(entries)
 }
 
 // --- Field-level truncation helpers ---
@@ -434,10 +435,15 @@ export function limitPayloadEntries<T extends Event | McpEvent>(event: T): T {
   const result: MutableEvent = { ...event }
   for (const field of ['parameters', 'response'] as const) {
     if (result[field] != null) {
-      result[field] = normalize(result[field], MAX_DEPTH, MAX_BREADTH, Infinity)
+      result[field] = limitEntries(result[field])
     }
   }
   return result as T
+}
+
+/** {@link limitPayloadEntries} for one payload, such as the parameters as they are captured. */
+export function limitEntries(payload: unknown): unknown {
+  return normalize(payload, MAX_DEPTH, MAX_BREADTH, Infinity)
 }
 
 /**

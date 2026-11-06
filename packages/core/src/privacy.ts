@@ -113,13 +113,6 @@ const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
 const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,}\b/g
 // Matches each separator-delimited digit group inside a card candidate.
 const DIGIT_GROUP_PATTERN = /\d+/g
-// How cards are written when grouped, longest first. An ungrouped card is one run of 13–19 digits.
-const CARD_GROUPINGS = [
-  [4, 4, 4, 4, 3],
-  [4, 4, 4, 4],
-  [4, 6, 5],
-  [4, 6, 4],
-]
 // Phone matching is structural rather than "any 10–15 digits", so dates
 // (`2024-01-15 12:30`) and dotted versions are not mistaken for numbers. Two
 // forms: a North-American 3-3-4 grouping, and an international number that must
@@ -144,21 +137,23 @@ const NON_PUBLIC_IPV4_RANGES = [
   '0.0.0.0/32',
 ]
 // Digits grouped only by single spaces or dashes: a `.` makes a fraction or a
-// version, not a card. A leading `-` or `.` and a trailing `.` and digit or
-// exponent belong to a number the run is only part of.
-const PAYLOAD_CARD_CANDIDATE_PATTERN = /(^|[^\w.-])(\d(?:[ -]?\d){12,})(?!\w|\.\d)/g
+// version, not a card. A leading `-` or `.` belongs to a negative number or a
+// fraction unless a letter comes before it (`card-4111…`, `No.4111…`), and a
+// trailing `.` and digit or exponent to a number the run is only part of.
+const PAYLOAD_CARD_CANDIDATE_PATTERN = /(^|[^\w.-]|[A-Za-z_][.-])(\d(?:[ -]?\d){12,})(?!\w|\.\d)/g
 const PHONE_PARENTHESIZED_PATTERN = /(^|[^\w+])((?:\+?1[ ./-]?)?\(\d{3}\)[ ./-]?\d{3}[ ./-]\d{4})(?![\w])/g
 // Not after a `.`, where `00` or `011` starts a fraction's digits.
 const PAYLOAD_PHONE_INTL_PATTERN = /(^|[^\w.])((?:\+|00|011)[ .-]?[1-9]\d{0,2}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
 const JSON_VALUE_START_PATTERN = /[:,[]\s*$/
 const JSON_VALUE_END_PATTERN = /^\s*[,}\]]/
-const JSON_CONTAINER_START_PATTERN = /^\s*[[{]/
-
-type JsonRecord = Record<string, unknown>
-
-function isRecord(value: unknown): value is JsonRecord {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
+// A JSON or JavaScript string escape. Read as text, its letter or hex digits glue
+// to what follows: `"x\nada@example.com"` holds the address `nada@example.com`,
+// and `"x\n4111…"` has no boundary before the card.
+const ESCAPE_PATTERN = /\\(?:["\\/bfnrt]|u[0-9A-Fa-f]{4})/g
+// What the identifier patterns read in place of each escape character: neither a
+// word character nor any pattern's separator, so a masked escape ends an
+// identifier without joining the digit groups on either side of it into one.
+const ESCAPE_MASK = '\u0000'
 
 function shouldRedactKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERN.test(key)
@@ -546,7 +541,7 @@ function isBinaryBlob(value: string): boolean {
 
 /** Replaces PostHog API keys wherever they appear in a string. */
 function redactCredentials(value: string): string {
-  return value.replace(POSTHOG_TOKEN_PATTERN, REDACTED_VALUE)
+  return redactIdentifiers(value, [[POSTHOG_TOKEN_PATTERN, redactWhole]])
 }
 
 /** Replaces every URL-shaped match, credentials and all. */
@@ -567,7 +562,7 @@ function redactCapturedHead(
   redact: (value: string) => string,
   options: TextSanitizationOptions
 ): string {
-  const scannedHeadLength = scannedLength(options)
+  const scannedHeadLength = 4 * options.maxStringLength
   if (value.length > scannedHeadLength) {
     const head = redact(value.slice(0, headLength(value, scannedHeadLength)))
     // Twice what truncation keeps, so a match split where the head was cut sits
@@ -577,33 +572,6 @@ function redactCapturedHead(
     }
   }
   return redact(value)
-}
-
-/** How much of a captured string the passes read. */
-function scannedLength(options: TextSanitizationOptions): number {
-  return 4 * options.maxStringLength
-}
-
-/**
- * A JSON object or array written as text, sanitized as the structure it encodes
- * and written back with `JSON.stringify`, or undefined when `value` is not one or
- * is longer than the passes read. Read as text, a JSON escape hides what follows
- * it: in `"x\nada@example.com"` the `n` is a word character, so an address or
- * number glued to it is missed or cut in half. Text with nothing to redact comes
- * back as received, formatting included. JSON nested too deep to walk is left to
- * the text pass rather than dropping the event.
- */
-function sanitizeJsonText(value: string, passes: ValuePasses, options: TextSanitizationOptions): string | undefined {
-  if (value.length > scannedLength(options) || !JSON_CONTAINER_START_PATTERN.test(value)) {
-    return undefined
-  }
-  try {
-    const parsed: unknown = JSON.parse(value)
-    const sanitized = JSON.stringify(sanitizeValueWith(parsed, passes))
-    return sanitized === JSON.stringify(parsed) ? value : sanitized
-  } catch {
-    return undefined
-  }
 }
 
 /** The scanned head, shortened to end just after the last character that ends a URL. */
@@ -619,13 +587,8 @@ function sanitizeString(value: string, options: TextSanitizationOptions): string
   if (isBinaryBlob(value)) {
     return BINARY_REDACTED_VALUE
   }
-  if (!options.redactPayloadPersonalData) {
-    return redactCapturedHead(value, (head) => redactUrls(redactCredentials(head)), options)
-  }
-  return (
-    sanitizeJsonText(value, payloadPasses(options), options) ??
-    redactCapturedHead(value, (head) => redactUrls(redactPayloadPii(redactCredentials(head))), options)
-  )
+  const redactPersonalData = options.redactPayloadPersonalData ? redactPayloadPii : (head: string) => head
+  return redactCapturedHead(value, (head) => redactUrls(redactPersonalData(redactCredentials(head))), options)
 }
 
 /**
@@ -644,10 +607,7 @@ export function sanitizeFreeText(value: string, options: TextSanitizationOptions
   if (isBinaryBlob(value)) {
     return BINARY_REDACTED_VALUE
   }
-  return (
-    sanitizeJsonText(value, freeTextPasses(options), options) ??
-    redactCapturedHead(value, (head) => redactUrls(redactPii(redactCredentials(head))), options)
-  )
+  return redactCapturedHead(value, (head) => redactUrls(redactPii(redactCredentials(head))), options)
 }
 
 function passesLuhn(digits: string): boolean {
@@ -670,42 +630,18 @@ function passesLuhn(digits: string): boolean {
   return sum % 10 === 0
 }
 
-type DigitGroup = { digits: string; start: number; end: number }
-
-/**
- * The index of the last group of the card that starts at `groups[first]`, or -1.
- * A card is one group of 13–19 digits or a run in one of {@link CARD_GROUPINGS},
- * passing Luhn. Requiring a card's own grouping keeps a card from absorbing the
- * start of a field after it (`4111111111111111 078-05-1120`).
- */
-function cardEnd(groups: DigitGroup[], first: number): number {
-  const single = groups[first].digits
-  if (single.length >= 13) {
-    return single.length <= 19 && passesLuhn(single) ? first : -1
-  }
-  for (const grouping of CARD_GROUPINGS) {
-    const run = groups.slice(first, first + grouping.length)
-    if (
-      run.length === grouping.length &&
-      run.every((group, index) => group.digits.length === grouping[index]) &&
-      passesLuhn(run.map((group) => group.digits).join(''))
-    ) {
-      return first + grouping.length - 1
-    }
-  }
-  return -1
-}
-
 // A card candidate can span more than one card plus adjacent fields (e.g. an
 // expiry, or a second card). This redacts every card in it: scanning
 // left-to-right over the whole separator-delimited digit groups, at each start it
-// takes the longest run in a card's grouping that passes Luhn (see `cardEnd`), redacts
+// takes the shortest run whose joined digits are 13–19 long and pass Luhn, redacts
 // just that span, and resumes after it; a group that begins no valid run is kept
-// and skipped. Checking group-aligned runs rather than arbitrary digit windows
-// keeps the false-positive rate at Luhn's own ~1-in-10, instead of letting a
-// chance-valid sub-window of an ordinary long ID trigger redaction.
+// and skipped. The shortest run leaves a field after the card, such as the SSN in
+// `4111111111111111 078-05-1120`, for its own pattern. Checking group-aligned
+// runs rather than arbitrary digit windows keeps the false-positive rate at
+// Luhn's own ~1-in-10, instead of letting a chance-valid sub-window of an
+// ordinary long ID trigger redaction.
 function redactCardInMatch(match: string): string {
-  const groups: DigitGroup[] = []
+  const groups: { digits: string; start: number; end: number }[] = []
   for (let m = DIGIT_GROUP_PATTERN.exec(match); m !== null; m = DIGIT_GROUP_PATTERN.exec(match)) {
     groups.push({ digits: m[0], start: m.index, end: m.index + m[0].length })
   }
@@ -713,7 +649,18 @@ function redactCardInMatch(match: string): string {
   let cursor = 0
   let first = 0
   while (first < groups.length) {
-    const matchedLast = cardEnd(groups, first)
+    let digits = ''
+    let matchedLast = -1
+    for (let last = first; last < groups.length; last++) {
+      digits += groups[last].digits
+      if (digits.length > 19) {
+        break
+      }
+      if (digits.length >= 13 && passesLuhn(digits)) {
+        matchedLast = last
+        break
+      }
+    }
     if (matchedLast >= 0) {
       output += match.slice(cursor, groups[first].start) + REDACTED_VALUE
       cursor = groups[matchedLast].end
@@ -735,15 +682,56 @@ function redactCardInMatch(match: string): string {
  * nothing matches.
  */
 export function redactPii(value: string): string {
-  let result = value.replace(UNICODE_SPACE_PATTERN, ' ')
-  result = result.replace(EMAIL_PATTERN, REDACTED_VALUE)
-  result = result.replace(IPV4_PATTERN, REDACTED_VALUE)
-  result = result.replace(IPV6_PATTERN, `$1${REDACTED_VALUE}`)
-  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, redactCardInMatch)
-  result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
-  result = result.replace(PHONE_NANP_PATTERN, `$1${REDACTED_VALUE}`)
-  result = result.replace(PHONE_INTL_PATTERN, `$1${REDACTED_VALUE}`)
-  return result
+  return redactIdentifiers(value, [
+    [EMAIL_PATTERN, redactWhole],
+    [IPV4_PATTERN, redactWhole],
+    [IPV6_PATTERN, redactWhole],
+    [CREDIT_CARD_CANDIDATE_PATTERN, cardRedaction()],
+    [US_SSN_PATTERN, redactWhole],
+    [PHONE_NANP_PATTERN, redactWhole],
+    [PHONE_INTL_PATTERN, redactWhole],
+  ])
+}
+
+/** What one identifier is replaced with, given where it starts in the text the patterns read. */
+type Redaction = (identifier: string, start: number, masked: string) => string
+
+const redactWhole: Redaction = () => REDACTED_VALUE
+
+/**
+ * Applies each pattern in turn, matching it against a copy of `value` that has
+ * the same length: horizontal Unicode spaces read as an ASCII space and every
+ * escape character as {@link ESCAPE_MASK}. A match never contains a masked
+ * character, so each replacement lands at the same offsets in `value`, no escape
+ * is ever cut in half, and text outside a match comes back byte for byte.
+ *
+ * A pattern matches its identifier whole, or captures the boundary before it in
+ * group 1 and the identifier in group 2.
+ */
+function redactIdentifiers(value: string, rules: [RegExp, Redaction][]): string {
+  let text = value
+  let masked = value
+    .replace(UNICODE_SPACE_PATTERN, ' ')
+    .replace(ESCAPE_PATTERN, (escape) => ESCAPE_MASK.repeat(escape.length))
+  for (const [pattern, redact] of rules) {
+    let redactedText = ''
+    let redactedMasked = ''
+    let cursor = 0
+    pattern.lastIndex = 0
+    for (let match = pattern.exec(masked); match !== null; match = pattern.exec(masked)) {
+      const identifier = match[2] ?? match[0]
+      const start = match.index + match[0].length - identifier.length
+      const replacement = redact(identifier, start, masked)
+      if (replacement !== identifier) {
+        redactedText += text.slice(cursor, start) + replacement
+        redactedMasked += masked.slice(cursor, start) + replacement
+        cursor = start + identifier.length
+      }
+    }
+    text = redactedText + text.slice(cursor)
+    masked = redactedMasked + masked.slice(cursor)
+  }
+  return text
 }
 
 function ipv4ToNumber(address: string): number {
@@ -760,27 +748,30 @@ function isPublicIpv4(address: string): boolean {
 }
 
 /**
- * {@link redactCardInMatch}, writing a card that stands as a bare JSON number as
- * the string `"[redacted]"`, so a tool result's JSON text copy stays valid JSON.
+ * {@link redactCardInMatch} for one text, writing a card that stands as a bare
+ * JSON number as the string `"[redacted]"`, so JSON text stays valid JSON. A card
+ * stands outside every JSON string when an even number of quotes precede it;
+ * escaped quotes are masked, so they are not counted. The count carries over from
+ * one card to the next, so a text full of cards is read once, not once per card.
  */
-function redactCardKeepingJson(
-  _match: string,
-  prefix: string,
-  candidate: string,
-  offset: number,
-  text: string
-): string {
-  const redacted = redactCardInMatch(candidate)
-  const start = offset + prefix.length
-  const end = start + candidate.length
-  return (
-    prefix +
-    (redacted === REDACTED_VALUE &&
-    JSON_VALUE_START_PATTERN.test(text.slice(Math.max(0, start - 64), start)) &&
-    JSON_VALUE_END_PATTERN.test(text.slice(end, end + 64))
+function cardRedaction(): Redaction {
+  let quotes = 0
+  let counted = 0
+  return (candidate, start, masked) => {
+    const redacted = redactCardInMatch(candidate)
+    if (redacted !== REDACTED_VALUE) {
+      return redacted
+    }
+    for (; counted < start; counted++) {
+      quotes += masked[counted] === '"' ? 1 : 0
+    }
+    const end = start + candidate.length
+    return quotes % 2 === 0 &&
+      JSON_VALUE_START_PATTERN.test(masked.slice(Math.max(0, start - 64), start)) &&
+      JSON_VALUE_END_PATTERN.test(masked.slice(end, end + 64))
       ? `"${REDACTED_VALUE}"`
-      : redacted)
-  )
+      : REDACTED_VALUE
+  }
 }
 
 function isCardNumber(value: number): boolean {
@@ -795,17 +786,15 @@ function isCardNumber(value: number): boolean {
  * nothing to redact comes back as received, Unicode spaces included.
  */
 export function redactPayloadPii(value: string): string {
-  const normalized = value.replace(UNICODE_SPACE_PATTERN, ' ')
-  let result = normalized.replace(EMAIL_PATTERN, REDACTED_VALUE)
-  result = result.replace(PAYLOAD_IPV4_PATTERN, (match, prefix: string, address: string) =>
-    isPublicIpv4(address) ? prefix + REDACTED_VALUE : match
-  )
-  result = result.replace(IPV6_PATTERN, `$1${REDACTED_VALUE}`)
-  result = result.replace(PAYLOAD_CARD_CANDIDATE_PATTERN, redactCardKeepingJson)
-  result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
-  result = result.replace(PHONE_PARENTHESIZED_PATTERN, `$1${REDACTED_VALUE}`)
-  result = result.replace(PAYLOAD_PHONE_INTL_PATTERN, `$1${REDACTED_VALUE}`)
-  return result === normalized ? value : result
+  return redactIdentifiers(value, [
+    [EMAIL_PATTERN, redactWhole],
+    [PAYLOAD_IPV4_PATTERN, (address) => (isPublicIpv4(address) ? REDACTED_VALUE : address)],
+    [IPV6_PATTERN, redactWhole],
+    [PAYLOAD_CARD_CANDIDATE_PATTERN, cardRedaction()],
+    [US_SSN_PATTERN, redactWhole],
+    [PHONE_PARENTHESIZED_PATTERN, redactWhole],
+    [PAYLOAD_PHONE_INTL_PATTERN, redactWhole],
+  ])
 }
 
 export function sanitizeCapturedValue(value: unknown, options: TextSanitizationOptions): unknown {
@@ -826,15 +815,6 @@ function payloadPasses(options: TextSanitizationOptions): ValuePasses {
   return {
     string: (value) => sanitizeString(value, options),
     key: (key) => redactCapturedHead(key, redactPayloadPii, options),
-    number: redactCardNumber,
-  }
-}
-
-/** What the free-text pass rewrites in JSON written as free text. */
-function freeTextPasses(options: TextSanitizationOptions): ValuePasses {
-  return {
-    string: (value) => sanitizeFreeText(value, options),
-    key: (key) => redactCapturedHead(key, redactPii, options),
     number: redactCardNumber,
   }
 }
@@ -893,7 +873,7 @@ function sanitizeValueWith(value: unknown, passes: ValuePasses): unknown {
     return value
   }
 
-  const result: JsonRecord = {}
+  const result = new Map<string, unknown>()
   const receivedKeys = new Map<string, string>()
   for (const [key, nestedValue] of Object.entries(value)) {
     const sanitizedKey = passes.key ? passes.key(key) : key
@@ -902,7 +882,8 @@ function sanitizeValueWith(value: unknown, passes: ValuePasses): unknown {
       continue
     }
     receivedKeys.set(sanitizedKey, key)
-    result[sanitizedKey] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, passes)
+    result.set(sanitizedKey, shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, passes))
   }
-  return result
+  // Defined rather than assigned, so a parsed `__proto__` member stays a member instead of setting the prototype.
+  return Object.fromEntries(result)
 }

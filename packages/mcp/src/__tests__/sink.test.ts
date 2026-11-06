@@ -100,3 +100,32 @@ describe('processMcpEvent cost', () => {
     expect(farPastLimit).toBeLessThan(10 * atLimit + 5)
   })
 })
+
+describe('processMcpEvent __proto__ members', () => {
+  it.each([
+    [
+      'with personal data',
+      '{"__proto__":{"email":"ada@example.com"},"y":2}',
+      '{"__proto__":{"email":"[redacted]"},"y":2}',
+    ],
+    ['with nothing to redact', '{"__proto__":{"x":1},"y":2}', '{"__proto__":{"x":1},"y":2}'],
+  ])('keeps a parsed one %s in parameters, structuredContent, and its text copy', async (_label, json, expected) => {
+    const event: McpEvent = {
+      eventType: MCPAnalyticsEventType.mcpToolsCall,
+      sessionId: 'session-1',
+      timestamp: new Date(),
+      parameters: JSON.parse(json),
+      response: { content: [{ type: 'text', text: json }], structuredContent: JSON.parse(json) },
+    }
+
+    const processed = await processMcpEvent(event, {
+      enableExceptionAutocapture: false,
+      redactPayloadPersonalData: true,
+    })
+    const response = processed!.event.response as { content: { text: string }[]; structuredContent: unknown }
+
+    expect(JSON.stringify(processed!.event.parameters)).toBe(expected)
+    expect(JSON.stringify(response.structuredContent)).toBe(expected)
+    expect(response.content[0].text).toBe(expected)
+  })
+})
