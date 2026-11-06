@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.421.1
+
+### Patch Changes
+
+- [#5561](https://github.com/PostHog/posthog-js/pull/5561) [`ab49034`](https://github.com/PostHog/posthog-js/commit/ab49034bb69cdf840318c6ab824492e76a72751d) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Mask hidden input values in session replay when `maskAllInputs` is enabled, and accept `hidden` in `maskInputOptions`.
+  (2026-11-06)
+
 ## 1.421.0
 
 ### Minor Changes
