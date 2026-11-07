@@ -3807,7 +3807,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const contextOptions = snapshotLayer(contextData?.options)
     const globalProperties = snapshotLayer(this.props)
     const globalOptions = this._globalOptions
-    // A relabel after capture(), such as `@posthog/mcp`'s `instrument()`, must not reach this event.
+    // A relabel after capture(), such as `@posthog/mcp`'s `instrument()`, does not reach this event.
+    // captureException() gets here only after building its event, so a relabel in between does.
     const libraryId = this.getLibraryId()
     const libraryVersion = this.getLibraryVersion()
 

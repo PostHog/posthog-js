@@ -226,7 +226,7 @@ Capture v1 sends processing options in an `options` object, next to `properties`
 
 ## Layer order
 
-Each event is built in this order. Each step fills only the properties and options the steps before it left unset:
+Each event is built in this order. Each step fills only the properties and options the steps before it left unset, except for `$lib` and `$lib_version` (see [SDK identity](#sdk-identity)):
 
 1. the call's own `properties` and `options`, then its `groups` (merged into `$groups`) and `disableGeoip` (fills `$geoip_disable`)
 2. context `properties` and `options`, from `withContext()`, `enterContext()` or the Express and NestJS integrations
@@ -236,13 +236,14 @@ Each event is built in this order. Each step fills only the properties and optio
 6. legacy option properties, which fill unset options and are then removed
 
 A property set to `undefined` counts as unset.
+A `$lib` or `$lib_version` counts as unset unless it is a non-empty string.
 `$set`, `$set_once`, `$groups` and `$group_set` fill one level deep.
 When the call and a later step both set one of them to an object, the later step adds only the keys the call left out.
 For example, `register({ $set: { plan: 'free', source: 'web' } })` and a call with `properties: { $set: { plan: 'pro' } }` send `{ plan: 'pro', source: 'web' }`.
 
 These changes follow from this order:
 
-- A `$lib`, `$lib_version`, `$is_server`, `$geoip_disable` or feature flag property set on the event, in context or with `register()` now wins over the SDK's value. In 5.x the SDK overwrote some of them.
+- A `$lib`, `$is_server`, `$geoip_disable` or feature flag property set on the event, in context or with `register()` now wins over the SDK's value. In 5.x the SDK overwrote some of them. For `$lib_version`, see [SDK identity](#sdk-identity).
 - `before_send` now sees `$lib`, `$lib_version`, `$is_server`, `$geoip_disable`, feature flag properties, trace ids and `options`. In 5.x it ran before the SDK added them. To change an option in `before_send`, edit `options`, which is always an object.
 - Review your `before_send` hooks for the new event shape. A legacy property such as `$process_person_profile` that the hook sets does not replace an option that is already set. A hook that returns a new message must copy `options`, or the event is sent without them. That includes the `process_person_profile: false` the SDK sets for an event without a distinct id, so PostHog would create a person for its generated id.
 - `before_send` gets its own copy of the event's plain objects and arrays. Changing a nested value no longer changes your objects or the `register()` and context values, as it could in 5.x. Class instances, such as `Date`, are not copied.
@@ -291,11 +292,13 @@ To stop all request linking, set `captureTracingHeaders: false` and leave `readP
 Each event's `$lib` and `$lib_version` properties name the library that sent it.
 The SDK sends them in the event's properties, and PostHog stores the values the event sends.
 
-The SDK fills them after the event, context and `register()` values, and only counts a `$lib` that is a non-empty string:
+The SDK fills them after the event, context and `register()` values, and only counts a `$lib` or `$lib_version` that is a non-empty string:
 
 - If nothing sets `$lib`, the SDK sets both to the client's library name and version: `posthog-node`, `posthog-edge`, or the name a wrapper package such as `@posthog/mcp` sets. This replaces a `$lib_version` set without `$lib`.
 - If `$lib` is the client's own library name and `$lib_version` is missing, the SDK fills in `$lib_version`.
 - If `$lib` names another library, the SDK sends both as set, even without `$lib_version`. Set both when you override them.
+
+An app that relays events from another PostHog SDK, such as posthog-js events with `$lib: 'web'`, now keeps their `$lib` and `$lib_version`. 5.x replaced them with `posthog-node` and its version.
 
 `before_send` sees the result and can change or remove either property. In 5.x the SDK overwrote them after `before_send`.
 
