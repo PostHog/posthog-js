@@ -403,6 +403,22 @@ describe(`SessionRecording utility functions`, () => {
             expect(result[1].size).toEqual(expectedHalfSize)
         })
 
+        it('should keep a custom size limit when it splits recursively', () => {
+            const sizes = new Array(16).fill(10)
+            const buffer = {
+                size: 160,
+                data: new Array(16).fill('a'),
+                sizes,
+                sessionId: 'session1',
+                windowId: 'window1',
+            }
+
+            const result = splitBuffer(buffer, 45)
+
+            expect(result).toHaveLength(4)
+            result.forEach((part) => expect(part.size).toBeLessThan(45))
+        })
+
         it('should recursively split the buffer until each part is smaller than SEVEN_MEGABYTES', () => {
             const largeDataArray = new Array(100).fill('a'.repeat(1024 * 1024))
             const perEventSize = estimateSize('a'.repeat(1024 * 1024))
