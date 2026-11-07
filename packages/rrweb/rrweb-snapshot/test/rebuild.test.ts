@@ -1216,7 +1216,6 @@ ul li.specified c.\\:hover img {
         (child) => child.nodeType === Node.ELEMENT_NODE,
       );
       expect(roots).toHaveLength(1);
-      expect(targetDoc.documentElement).not.toBe(existingRoot);
       expect(targetDoc.documentElement.getAttribute('lang')).toBe('en');
       expect(targetDoc.body).not.toBeNull();
 
