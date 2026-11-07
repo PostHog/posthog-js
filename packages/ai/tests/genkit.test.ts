@@ -389,6 +389,7 @@ describe('PostHogGenkitSpanProcessor', () => {
       expect(event.distinctId).toBe(event.properties.$ai_trace_id)
       expect(event.groups).toEqual({ company: 'acme' })
       expect(event.properties).toMatchObject({ env: 'test', $process_person_profile: false })
+      expect(event.options).toEqual({ process_person_profile: false })
     }
   })
 

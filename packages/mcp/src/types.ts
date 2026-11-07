@@ -605,7 +605,9 @@ export interface McpCaptureCommon {
   /**
    * Resolved person distinct id (becomes `distinct_id`). Supplying it enables
    * person processing so `$set` lands on a real person; omitting it falls back
-   * to an anonymous capture with `$process_person_profile: false`.
+   * to an anonymous capture with person processing off. On posthog-node 6 the
+   * event carries the `process_person_profile: false` option, which a registered
+   * or context option cannot override.
    */
   distinctId?: string
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */

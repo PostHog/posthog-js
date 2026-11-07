@@ -3,7 +3,7 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { PostHog } from 'posthog-node'
+import type { EventMessage, PostHog } from 'posthog-node'
 import { uuidv7 } from '@posthog/core'
 
 import type { BeforeSendFn, Event, McpEvent } from '../types'
@@ -92,6 +92,23 @@ async function applyBeforeSend(
 }
 
 /**
+ * Marks a personless payload for the client it goes to. posthog-node 6 needs the per-event
+ * `process_person_profile` option, because a registered or context option beats the property;
+ * posthog-node 5 reads only the property. `registerOptions` first shipped in posthog-node 6.
+ * The payload's property decides, so `beforeSend` can still turn person processing back on.
+ */
+function personProcessingFields(
+  posthog: PostHog,
+  properties: Record<string, unknown>
+): Pick<EventMessage, 'properties' | 'options'> {
+  if (typeof posthog.registerOptions !== 'function' || properties.$process_person_profile !== false) {
+    return { properties }
+  }
+  const { $process_person_profile: _personless, ...rest } = properties
+  return { properties: rest, options: { process_person_profile: false } }
+}
+
+/**
  * Wraps a user-supplied `posthog-node` client: runs every MCP event through
  * {@link processMcpEvent} and hands each surviving payload to `posthog.capture()`.
  *
@@ -125,7 +142,7 @@ export class McpEventSink {
         this.posthog.capture({
           distinctId: captureEvent.distinct_id,
           event: captureEvent.event,
-          properties: captureEvent.properties,
+          ...personProcessingFields(this.posthog, captureEvent.properties),
           ...(groups ? { groups } : {}),
           timestamp: new Date(captureEvent.timestamp),
           uuid: uuidv7(),

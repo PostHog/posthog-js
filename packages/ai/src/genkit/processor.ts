@@ -1,6 +1,6 @@
 import type { PostHog } from 'posthog-node'
 import { version } from '../../package.json'
-import { captureAiEvent } from '../captureAiEvent'
+import { captureAiEvent, personlessOptions, userDistinctId } from '../captureAiEvent'
 import { captureAiGeneration } from '../captureAiGeneration'
 import { formatAiError } from '../serializeError'
 import { formatToolResult } from '../toolResult'
@@ -142,7 +142,7 @@ export class PostHogGenkitSpanProcessor {
 
   constructor(options: PostHogGenkitSpanProcessorOptions) {
     this._client = options.client
-    this._distinctId = options.distinctId
+    this._distinctId = userDistinctId(options.distinctId)
     this._privacyMode = options.privacyMode ?? false
     this._groups = options.groups
     this._properties = options.properties ?? {}
@@ -151,7 +151,7 @@ export class PostHogGenkitSpanProcessor {
 
   onStart(span: Pick<GenkitSpan, 'spanContext'>): void {
     try {
-      const distinctId = this._distinctId ?? this._client.getContext?.()?.distinctId
+      const distinctId = this._distinctId ?? userDistinctId(this._client.getContext?.()?.distinctId)
       if (distinctId !== undefined) {
         this._spanDistinctIds.set(span, distinctId)
       }
@@ -293,6 +293,7 @@ export class PostHogGenkitSpanProcessor {
         ...(distinctId ? {} : { $process_person_profile: false }),
       },
       groups: this._groups,
+      ...personlessOptions(!distinctId),
     })
   }
 

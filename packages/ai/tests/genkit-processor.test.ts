@@ -74,6 +74,33 @@ describe('PostHogGenkitSpanProcessor with a custom OpenTelemetry provider', () =
     )
   })
 
+  it.each(
+    spanKinds.flatMap((kind) =>
+      [
+        { source: 'no distinct ID', distinctId: undefined, contextDistinctId: undefined },
+        { source: 'an empty distinct ID', distinctId: '', contextDistinctId: undefined },
+        { source: 'a whitespace distinct ID', distinctId: '  ', contextDistinctId: undefined },
+        { source: 'a whitespace context distinct ID', distinctId: undefined, contextDistinctId: '  ' },
+      ].map((identity) => ({ ...kind, ...identity }))
+    )
+  )(
+    'keeps $event personless over a registered option with $source',
+    async ({ name, attributes, distinctId, contextDistinctId }) => {
+      await client.registerOptions({ process_person_profile: true })
+      const otel = tracer({ distinctId })
+      const start = () => otel.startSpan(name, { attributes: { 'genkit:type': 'action', ...attributes } })
+      const span =
+        contextDistinctId === undefined ? start() : client.withContext({ distinctId: contextDistinctId }, start)
+
+      span.end()
+
+      const [event] = capture.mock.calls[0]
+      expect(event.distinctId).toBe(span.spanContext().traceId)
+      expect(event.options).toEqual({ process_person_profile: false })
+      expect((await client.prepareEventMessage(event)).options).toEqual({ process_person_profile: false })
+    }
+  )
+
   it('prefers an explicit distinct ID over the starting context', () => {
     const otel = tracer({ distinctId: 'explicit-user' })
     const span = client.withContext({ distinctId: 'starting-user' }, () =>
