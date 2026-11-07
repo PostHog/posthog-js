@@ -18,13 +18,15 @@ The startup JSON line reports the actual bound address and port (`PORT=0` is sup
 
 ## Public operations and isolation
 
-`binding.mjs` implements setup, capture, AI capture, identify, alias, group identify, capture exception, flush, feature-flag lookup and reload. It renames explicit parameters without changing SDK defaults, preserves absence/null/false/zero, and distinguishes native void, undefined, JSON values and thrown exceptions. Unsupported translations and values without a lossless JSON representation are harness failures, not fabricated SDK results. Timestamps map to `Date` only when lossless. Numeric tokens that round during parsing, exceed the safe-integer range, or lose negative zero through JSON transport produce attributed fixture failures before any SDK call. Invalid representable field values still reach the SDK.
+`binding.mjs` implements setup, capture, AI capture, identify, alias, group identify, capture exception, opt out, flush, feature-flag lookup and reload. It renames explicit parameters without changing SDK defaults, preserves absence/null/false/zero, and distinguishes native void, undefined, JSON values and thrown exceptions. Unsupported translations and values without a lossless JSON representation are harness failures, not fabricated SDK results. Timestamps map to `Date` only when lossless. Numeric tokens that round during parsing, exceed the safe-integer range, or lose negative zero through JSON transport produce attributed fixture failures before any SDK call. Invalid representable field values still reach the SDK.
 
 `/identify` maps `distinct_id` to `distinctId` and an explicitly supplied `set` to `properties.$set`, preserving literal user-property keys. `/alias` maps `distinct_id` to `distinctId` and passes `alias` unchanged. Both accept optional `disable_geoip` as `disableGeoip`, call only the corresponding public method, and classify its native undefined return as void. Other fields are unsupported. Delivery is observed after an explicit `/flush`.
 
 `/group_identify` maps `group_type`, `group_key`, `distinct_id` and `disable_geoip` to the corresponding camel-case fields of public `groupIdentify`, passing supplied `properties` unchanged. It preserves omitted fields and classifies the native undefined return as void. The SDK owns event construction and `$group_set` nesting. The server acceptance cases inspect event delivery, group identity and exact supplied group properties after flush.
 
-`/capture_exception` accepts an `error` fixture descriptor with `type: "TypeError"` and a string `message`, plus optional `distinct_id` and `properties`. It constructs a native `TypeError` with its runtime stack and calls public `captureException(error, distinctId?, additionalProperties?)`, preserving omitted positional arguments and classifying the native undefined return as void. Unsupported descriptors are fixture failures; unknown arguments are unsupported bindings. The SDK owns the structured `$exception_list` payload, handled metadata and stack normalization. Explicit `/flush` observes delivery after the SDK's pending normalization completes.
+`/capture_exception` accepts an `error` fixture descriptor with `type` (`Error`, `TypeError`, `RangeError` or `AggregateError`) and a string `message`. Optional `stack` supplies an existing stack string, `cause` describes a native cause, and an aggregate's `errors` describes its native members. `{ "value": ... }` instead passes a raw JSON input unchanged, including null, primitives and error-like objects. These are input fixtures, not exception event payloads. Optional `distinct_id`, `properties`, `uuid` and `flags` map to public `captureException(error, distinctId?, additionalProperties?, uuid?, flags?)`, preserving omitted positional arguments and classifying the native undefined return as void. Unsupported descriptors are fixture failures; unknown arguments are unsupported bindings. The SDK owns the structured `$exception_list` payload, handled metadata and stack normalization. Explicit `/flush` observes delivery after the SDK's pending normalization completes. The JSON route cannot construct a native `FeatureFlagEvaluations` snapshot: `flags` tests establish positional forwarding and null handling, not valid snapshot enrichment.
+
+`/opt_out` calls public `optOut()` with no arguments or implicit flush. Setup accepts the SDK's `disabled` option. Packaged guard tests observe non-delivery through explicit flush and cleanup.
 
 `/evaluate_flags/read` calls public `evaluateFlags` once, then executes an ordered `reads` list on the request-local native snapshot. Methods are `is_enabled`, `get_flag`, `get_flag_payload`, `keys`, `only`, and `only_accessed`. Filters take nested `reads`; `only` also takes `keys`. Each getter returns its native outcome in `{results: [...]}`; filters contain a nested results collection. Empty read lists still invoke evaluation or filtering. Subsequent sibling reads use the original parent. Later requests evaluate independently.
 
@@ -80,7 +82,10 @@ Local script tests use Docker stand-ins to check prerequisite failures, build fa
 
 ```sh
 POSTHOG_NODE_CONSUMER=/absolute/path/to/consumer \
-  node --test compliance/node/v2/*.test.mjs
+  node --test --test-concurrency=1 compliance/node/v2/*.test.mjs
+# Exception-focused installed-package checks (both public formats and capture modes):
+POSTHOG_NODE_CONSUMER=/absolute/path/to/consumer \
+  node --test --test-concurrency=1 compliance/node/v2/{binding,server,exception-lifecycle}.test.mjs
 pnpm exec oxlint --report-unused-disable-directives-severity error compliance/node/v2
 pnpm exec oxfmt --check compliance/node/v2 .oxlintrc.json
 bash -n compliance/node/v2/prepare-ci.sh compliance/node/v2/run-compliance.sh
@@ -90,4 +95,4 @@ shellcheck --exclude=SC2329 compliance/node/v2/{prepare-ci,run-compliance}.sh
 node --test compliance/node/v2/{prepare-ci,run-compliance}.test.mjs
 ```
 
-Binding tests use public-method spies for exact translations; HTTP tests also exercise real installed packages in both formats/modes. Controlled SDK stand-ins test deadline, cleanup and process failures, not SDK conformance. Caller tests check raw failure exits and private-network lifecycle. Full acceptance profiles and current-base comparisons are separate integration gates owned by the harness run.
+Binding tests use public-method spies for exact translations; HTTP tests also exercise real installed packages in both formats/modes. `exception-lifecycle.test.mjs` starts installed-package subprocesses, triggers a real unhandled TypeError, and checks pre-exit traffic, exit semantics, bounded failed/stalled delivery and lack of restart replay. These subprocesses run outside the RPC fixture lifecycle, which treats unexpected worker death as an infrastructure failure. Controlled SDK stand-ins test deadline, cleanup and process failures, not SDK conformance. Caller tests check raw failure exits and private-network lifecycle. Full acceptance profiles and current-base comparisons are separate integration gates owned by the harness run.

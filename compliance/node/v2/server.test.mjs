@@ -199,6 +199,12 @@ for (const mode of ['v0', 'v1'])
                     error: { type: 'TypeError', message: 'boom without properties' },
                     distinct_id: 'exception-user-no-properties',
                 },
+                { error: { type: 'TypeError', message: 'anonymous exception' } },
+                {
+                    error: { type: 'RangeError', message: 'caller UUID' },
+                    uuid: '019a38c0-1234-7000-8000-0123456789ab',
+                    flags: null,
+                },
             ]) {
                 const count = traffic.length
                 assert.deepEqual(await invoke('/capture_exception', args), { kind: 'sdk', outcome: { kind: 'void' } })
@@ -210,11 +216,18 @@ for (const mode of ['v0', 'v1'])
                 assert.equal(request.body.batch.length, 1)
                 const event = request.body.batch[0]
                 assert.equal(event.event, '$exception')
-                assert.equal(event.distinct_id, args.distinct_id)
+                if (Object.hasOwn(args, 'distinct_id')) assert.equal(event.distinct_id, args.distinct_id)
+                else
+                    assert.match(
+                        event.distinct_id,
+                        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+                    )
+                if (Object.hasOwn(args, 'uuid')) assert.equal(event.uuid, args.uuid)
                 const exception = event.properties.$exception_list[0]
-                assert.equal(exception.type, 'TypeError')
+                assert.equal(exception.type, args.error.type)
                 assert.equal(exception.value, args.error.message)
                 assert.equal(exception.mechanism.handled, true)
+                assert.equal(exception.mechanism.synthetic, false)
                 assert.ok(Array.isArray(exception.stacktrace.frames) && exception.stacktrace.frames.length > 0)
                 if (Object.hasOwn(args, 'properties')) {
                     for (const [key, value] of Object.entries(properties))
@@ -222,8 +235,143 @@ for (const mode of ['v0', 'v1'])
                 }
             }
             await close()
-            assert.equal(traffic.length, 2)
+            assert.equal(traffic.length, 4)
         })
+
+        test(`public ${format}/${mode}: exception source context follows file order and existing stacks survive`, async (t) => {
+            const directory = await mkdtemp(join(tmpdir(), 'node-exception-context-'))
+            t.after(() => rm(directory, { recursive: true, force: true }))
+            const filename = join(directory, 'context.js')
+            const lines = Array.from({ length: 60 }, (_, index) => `// source line ${index + 1}`)
+            await writeFile(filename, lines.join('\n') + '\n')
+            const events = []
+            const mock = createServer(async (request, response) => {
+                let body = ''
+                for await (const chunk of request) body += chunk
+                events.push(...JSON.parse(body).batch)
+                response.end('{"status":1}')
+            })
+            mock.listen(0, '127.0.0.1')
+            await once(mock, 'listening')
+            t.after(async () => {
+                mock.closeAllConnections()
+                await new Promise((done) => mock.close(done))
+            })
+            const { allocate, invoke, close } = await harness(t, { mode, format })
+            await allocate()
+            await invoke('/setup', {
+                project_token: 'test-token',
+                config: { host: `http://127.0.0.1:${mock.address().port}`, compression: 'none', flush_interval_ms: 0 },
+            })
+            const stack = `TypeError: source context\n    at original (${filename}:40:2)`
+            assert.equal(
+                (
+                    await invoke('/capture_exception', {
+                        error: { type: 'TypeError', message: 'source context', stack },
+                        distinct_id: 'context-user',
+                    })
+                ).kind,
+                'sdk'
+            )
+            await invoke('/flush')
+            assert.equal(events.length, 1)
+            const frame = events[0].properties.$exception_list[0].stacktrace.frames[0]
+            assert.equal(frame.function, 'original')
+            assert.equal(frame.lineno, 40)
+            assert.equal(frame.context_line, lines[39])
+            assert.ok(frame.pre_context.length > 0)
+            assert.ok(frame.post_context.length > 0)
+            assert.deepEqual(frame.pre_context, lines.slice(39 - frame.pre_context.length, 39))
+            assert.deepEqual(frame.post_context, lines.slice(40, 40 + frame.post_context.length))
+
+            const missingFile = join(directory, 'not-present.js')
+            const existingStack = `Error: existing stack\n    at originalCrash (${missingFile}:40:2)\n    at originalEntry (${missingFile}:10:2)`
+            await invoke('/capture_exception', {
+                error: { value: { message: 'existing stack', stack: existingStack, filename: 'wrong.js', lineno: 1 } },
+                distinct_id: 'existing-user',
+            })
+            await invoke('/flush')
+            const converted = events[1].properties.$exception_list[0]
+            assert.equal(converted.mechanism.synthetic, true)
+            const frames = converted.stacktrace.frames
+            assert.deepEqual(
+                frames.map((item) => item.function),
+                ['originalEntry', 'originalCrash']
+            )
+            assert.deepEqual(
+                frames.map((item) => item.lineno),
+                [10, 40]
+            )
+            for (const item of frames) {
+                for (const key of ['pre_context', 'context_line', 'post_context'])
+                    assert.equal(Object.hasOwn(item, key), false)
+            }
+            await invoke('/capture_exception', {
+                error: { type: 'Error', message: 'existing stack', stack: existingStack },
+                distinct_id: 'native-existing-user',
+            })
+            await invoke('/flush')
+            const native = events[2].properties.$exception_list[0]
+            assert.equal(native.mechanism.synthetic, false)
+            assert.deepEqual(native.stacktrace.frames, frames)
+            await invoke('/capture_exception', {
+                error: { type: 'TypeError', message: 'missing stack', stack: '' },
+                distinct_id: 'synthetic-user',
+            })
+            await invoke('/flush')
+            const synthetic = events[3].properties.$exception_list[0]
+            assert.equal(synthetic.mechanism.synthetic, true)
+            assert.ok(synthetic.stacktrace.frames.length > 0)
+            await close()
+            assert.equal(events.length, 4)
+        })
+
+        for (const guard of ['disabled', 'opted-out', 'previously-captured']) {
+            test(`public ${format}/${mode}: ${guard} exceptions do not deliver after flush`, async (t) => {
+                const requests = []
+                const mock = createServer(async (request, response) => {
+                    let body = ''
+                    for await (const chunk of request) body += chunk
+                    requests.push(body)
+                    response.end('{"status":1}')
+                })
+                mock.listen(0, '127.0.0.1')
+                await once(mock, 'listening')
+                t.after(async () => {
+                    mock.closeAllConnections()
+                    await new Promise((done) => mock.close(done))
+                })
+                const { post, allocate, invoke, close } = await harness(t, { mode, format })
+                const negotiation = await post('negotiate', { protocol })
+                assert.ok(negotiation.supported_routes.includes('/opt_out'))
+                await allocate()
+                assert.deepEqual(
+                    await invoke('/setup', {
+                        project_token: 'test-token',
+                        config: {
+                            host: `http://127.0.0.1:${mock.address().port}`,
+                            compression: 'none',
+                            flush_interval_ms: 0,
+                            disabled: guard === 'disabled',
+                        },
+                    }),
+                    { kind: 'sdk', outcome: { kind: 'void' } }
+                )
+                if (guard === 'opted-out')
+                    assert.deepEqual(await invoke('/opt_out'), { kind: 'sdk', outcome: { kind: 'void' } })
+                const error =
+                    guard === 'previously-captured'
+                        ? { value: { __posthog_previously_captured_error: true } }
+                        : { type: 'TypeError', message: 'suppressed' }
+                assert.deepEqual(await invoke('/capture_exception', { error, distinct_id: 'guard-user' }), {
+                    kind: 'sdk',
+                    outcome: { kind: 'void' },
+                })
+                assert.deepEqual(await invoke('/flush'), { kind: 'sdk', outcome: { kind: 'void' } })
+                await close()
+                assert.equal(requests.length, 0)
+            })
+        }
 
         test(`public ${format}/${mode}: capture, flush, local results and reload through HTTP`, async (t) => {
             const traffic = []
