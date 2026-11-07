@@ -78,7 +78,7 @@ const SENSITIVE_QUERY_KEY_EXACT_PATTERN = /^(code|AWSAccessKeyId|GoogleAccessId|
 // precision. Person names and postal addresses are deliberately out of scope:
 // they need an NER model that a client SDK cannot ship, and naive patterns would
 // over-redact ordinary prose. Patterns are ordered so an earlier pass never eats
-// digits a later pass needs (email before phone, IPs before phone, cards before
+// digits a later pass needs (email before phone, IPs before phone, SSNs before cards, cards before
 // the generic phone pass). See `redactPii`.
 // Horizontal Unicode spaces (NBSP, narrow NBSP, ideographic space, ...) are what
 // appear when text is copied from web pages or PDFs. `redactPii` normalizes them
@@ -114,7 +114,8 @@ const CARD_SEPARATORS = ' ./-'
 const PHONE_NANP_PATTERN = /(^|[^\w+])((?:\+?1[ ./-]?)?(?:\(\d{3}\)[ ./-]?|\d{3}[ ./-])\d{3}[ ./-]\d{4})(?![\w])/g
 const PHONE_INTL_PATTERN = /(^|[^\w])(\+\d{1,3}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
 
-function shouldRedactKey(key: string): boolean {
+/** Whether a key names a credential, so its value is captured as `[redacted]` whatever it holds. */
+export function shouldRedactKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERN.test(key)
 }
 
@@ -642,17 +643,15 @@ function findCardCandidate(text: string, from: number): [start: number, end: num
 }
 
 /**
- * Where the card that starts at the digit group at `first` ends, or -1. It is
- * the run's own end when every group left passes Luhn as one card, so a 19-digit
- * card is not cut at a 16-digit prefix that happens to pass too. Otherwise it is
- * the shortest run of whole groups whose 13–19 digits pass Luhn, which leaves a
- * field after the card, such as the SSN in `4111111111111111 078-05-1120`, for
- * its own pattern. Checking group-aligned runs rather than arbitrary digit
- * windows keeps the false-positive rate at Luhn's own ~1-in-10.
+ * Where the card that starts at the digit group at `first` ends, or -1: the
+ * longest run of whole groups whose 13–19 digits pass Luhn, so a 19-digit card
+ * is not cut at a 16-digit prefix that happens to pass too. Checking
+ * group-aligned runs rather than arbitrary digit windows keeps the
+ * false-positive rate at Luhn's own ~1-in-10.
  */
 function cardEnd(run: string, first: number): number {
   let digits = ''
-  let shortest = -1
+  let end = -1
   for (let groupStart = first; groupStart < run.length;) {
     const groupEnd = digitsEnd(run, groupStart)
     digits += run.slice(groupStart, groupEnd)
@@ -660,16 +659,11 @@ function cardEnd(run: string, first: number): number {
       break
     }
     if (digits.length >= 13 && passesLuhn(digits)) {
-      if (groupEnd === run.length) {
-        return groupEnd
-      }
-      if (shortest < 0) {
-        shortest = groupEnd
-      }
+      end = groupEnd
     }
     groupStart = groupEnd + 1
   }
-  return shortest
+  return end
 }
 
 /**
@@ -718,8 +712,10 @@ export function redactPii(value: string): string {
   result = result.replace(EMAIL_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV4_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV6_PATTERN, `$1${REDACTED_VALUE}`)
-  result = redactCards(result)
+  // SSNs before cards: the card pass would otherwise take an SSN's first groups
+  // into a Luhn-valid run with the number before it and leave the rest.
   result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
+  result = redactCards(result)
   result = result.replace(PHONE_NANP_PATTERN, `$1${REDACTED_VALUE}`)
   result = result.replace(PHONE_INTL_PATTERN, `$1${REDACTED_VALUE}`)
   return result

@@ -123,6 +123,29 @@ describe('buildCapturedMcpParameters', () => {
   })
 })
 
+describe('a sensitive argument', () => {
+  it.each([
+    ['at the top level', (subtree: unknown) => ({ secret: subtree, a: 1 })],
+    ['nested', (subtree: unknown) => ({ config: { password: subtree }, a: 1 })],
+  ])('is redacted without reading its subtree %s', (_label, build) => {
+    let reads = 0
+    const subtree = Array.from({ length: 100 }, () => ({
+      get leaf() {
+        reads++
+        return 'x'
+      },
+    }))
+
+    const parameters = buildCapturedMcpParameters({
+      method: 'tools/call',
+      params: { name: 't', arguments: build(subtree) },
+    })
+
+    expect(reads).toBe(0)
+    expect(JSON.stringify(parameters)).toContain('[redacted]')
+  })
+})
+
 describe('a parsed __proto__ member', () => {
   const parsed = (): unknown => JSON.parse('{"__proto__":{"note":"x"},"y":2}')
 
@@ -571,6 +594,16 @@ describe('redactPii', () => {
       'a grouped card followed by an SSN',
       'Card 4111 1111 1111 1111 078-05-1120 on file.',
       'Card [redacted] [redacted] on file.',
+    ],
+    [
+      'a 19-digit card followed by an expiry',
+      'Card 6759 0000 0000 0000 005 12/30 on file.',
+      'Card [redacted] 12/30 on file.',
+    ],
+    [
+      'an SSN after a number that joins it into a Luhn-valid run',
+      'Ref 4111111115 078-12-3455 12/30 on file.',
+      'Ref 4111111115 [redacted] 12/30 on file.',
     ],
     ['an SSN with dashes', 'Verifying SSN 123-45-6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
     ['an SSN with spaces', 'Verifying SSN 123 45 6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
