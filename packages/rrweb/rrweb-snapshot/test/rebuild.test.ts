@@ -1174,8 +1174,7 @@ ul li.specified c.\\:hover img {
       const iframe = document.createElement('iframe');
       document.body.appendChild(iframe);
       const targetDoc = iframe.contentDocument!;
-      // Browsers can ignore `document.open()` (e.g. while a navigation is
-      // pending), which leaves the existing root element in place.
+      // Simulates the unexplained production case where the old root survives `document.open()`.
       vi.spyOn(targetDoc, 'open').mockReturnValue(targetDoc);
       const existingRoot = targetDoc.documentElement;
       expect(existingRoot).not.toBeNull();

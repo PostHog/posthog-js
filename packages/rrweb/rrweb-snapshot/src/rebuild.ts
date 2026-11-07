@@ -582,9 +582,7 @@ export function buildNodeWithSN(
         n.type === NodeType.Document &&
         childN.type == NodeType.Element
       ) {
-        // A document is only allowed one root element. If the target document
-        // still has one (e.g. `doc.open()` was ignored by the browser), remove it
-        // first to avoid a HierarchyRequestError, as we do for the doctype below.
+        // Defensive: a root left over after `doc.open()` throws HierarchyRequestError on append, cause unknown.
         const existingRoot = (node as Document).documentElement;
         if (existingRoot) {
           node.removeChild(existingRoot);
