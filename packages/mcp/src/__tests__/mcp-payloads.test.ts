@@ -2,8 +2,10 @@ import {
   buildCapturedMcpParameters,
   redactPii,
   sanitizeCapturedValue,
+  sanitizeFreeText,
   sanitizeFreeTextValue,
 } from '../extensions/mcp-payloads'
+import { normalize } from '../extensions/truncation'
 
 describe('buildCapturedMcpParameters', () => {
   it('captures useful tool-call inputs without transport internals or duplicated intent', () => {
@@ -68,6 +70,100 @@ describe('buildCapturedMcpParameters', () => {
         },
       },
     })
+  })
+
+  it('reads no more than the entry limit of 100,000 arguments', () => {
+    let reads = 0
+    const args: Record<string, unknown> = {}
+    for (let index = 0; index < 100_000; index++) {
+      Object.defineProperty(args, `k${index}`, {
+        enumerable: true,
+        get: () => (reads++, `customer ${index}`),
+      })
+    }
+
+    buildCapturedMcpParameters({ method: 'tools/call', params: { name: 't', arguments: args } })
+
+    expect(reads).toBeLessThanOrEqual(200)
+  })
+
+  it('does not count undefined arguments toward the entry limit', () => {
+    const entries = [
+      ...Array.from({ length: 60 }, (_, i) => [`u${i}`, undefined]),
+      ...Array.from({ length: 90 }, (_, i) => [`k${i}`, i]),
+    ]
+
+    const parameters = buildCapturedMcpParameters({
+      method: 'tools/call',
+      params: { name: 't', arguments: Object.fromEntries(entries) },
+    }) as { request: { params: { arguments: Record<string, unknown> } } }
+
+    expect(Object.keys(parameters.request.params.arguments)).toHaveLength(90)
+  })
+
+  it.each([
+    ['first', 100],
+    ['last', 101],
+  ])('keeps the first 100 arguments when context is %s among %i others', (position, count) => {
+    const entries: [string, unknown][] = Array.from({ length: count }, (_, i) => [`k${i}`, i])
+    if (position === 'first') {
+      entries.unshift(['context', 'why'])
+    } else if (position === 'last') {
+      entries.push(['context', 'why'])
+    }
+
+    const parameters = buildCapturedMcpParameters({
+      method: 'tools/call',
+      params: { name: 't', arguments: Object.fromEntries(entries) },
+    }) as { request: { params: { arguments: Record<string, unknown> } } }
+
+    const captured = parameters.request.params.arguments
+    expect(captured).not.toHaveProperty('context')
+    expect(Object.keys(captured).filter((key) => key.startsWith('k'))).toHaveLength(100)
+  })
+})
+
+describe('a sensitive argument', () => {
+  it.each([
+    ['at the top level', (subtree: unknown) => ({ secret: subtree, a: 1 })],
+    ['nested', (subtree: unknown) => ({ config: { password: subtree }, a: 1 })],
+  ])('is redacted without reading its subtree %s', (_label, build) => {
+    let reads = 0
+    const subtree = Array.from({ length: 100 }, () => ({
+      get leaf() {
+        reads++
+        return 'x'
+      },
+    }))
+
+    const parameters = buildCapturedMcpParameters({
+      method: 'tools/call',
+      params: { name: 't', arguments: build(subtree) },
+    })
+
+    expect(reads).toBe(0)
+    expect(JSON.stringify(parameters)).toContain('[redacted]')
+  })
+})
+
+describe('a parsed __proto__ member', () => {
+  const parsed = (): unknown => JSON.parse('{"__proto__":{"note":"x"},"y":2}')
+
+  it.each([
+    ['normalize', (value: unknown) => normalize(value)],
+    ['sanitizeCapturedValue', sanitizeCapturedValue],
+    ['sanitizeFreeTextValue', sanitizeFreeTextValue],
+    [
+      'buildCapturedMcpParameters',
+      (value: unknown) =>
+        (
+          buildCapturedMcpParameters({ method: 'tools/call', params: { name: 't', arguments: value } }) as {
+            request: { params: { arguments: unknown } }
+          }
+        ).request.params.arguments,
+    ],
+  ])('stays a member through %s', (_name, walk) => {
+    expect(JSON.stringify(walk(parsed()))).toBe('{"__proto__":{"note":"x"},"y":2}')
   })
 })
 
@@ -488,6 +584,16 @@ describe('redactPii', () => {
       'Moving funds 4111 1111 1111 1111 5555 5555 5555 4444 now.',
       'Moving funds [redacted] [redacted] now.',
     ],
+    [
+      'a 19-digit card whose 16-digit prefix passes Luhn',
+      'Card 6759 0000 0000 0000 005 on file.',
+      'Card [redacted] on file.',
+    ],
+    [
+      'a 19-digit card followed by an expiry',
+      'Card 6759 0000 0000 0000 005 12/30 on file.',
+      'Card [redacted] 12/30 on file.',
+    ],
     ['an SSN with dashes', 'Verifying SSN 123-45-6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
     ['an SSN with spaces', 'Verifying SSN 123 45 6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
     ['an SSN with dots', 'Verifying SSN 123.45.6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
@@ -511,6 +617,26 @@ describe('redactPii', () => {
     expect(redactPii(input)).toBe(input)
   })
 
+  // Every pattern reads the same text, so one identifier's match cannot hide
+  // another's digits. Where two matches overlap, the union of both goes.
+  it.each([
+    ['a card before an SSN, overlapping', 'Card 4111111111111111 078-05-1120 on file.', 'Card [redacted] on file.'],
+    ['a card before an SSN, apart', 'Card 4111111111111111, SSN 078-05-1120.', 'Card [redacted], SSN [redacted].'],
+    ['an SSN before a card', 'SSN 078-05-1120 4111111111111111 on file.', 'SSN [redacted] [redacted] on file.'],
+    ['an SSN that is the head of a card', '411 11 1111 1111111', '[redacted]'],
+    ['an SSN that is the tail of a card', 'Card 4000 0000 0000 0000 006 12-2030', 'Card [redacted]'],
+    [
+      'an SSN inside a number that makes a 19-digit card',
+      'Ref 4111111115 078-12-3455 12/30 on file.',
+      'Ref [redacted] 12/30 on file.',
+    ],
+    ['a card and an SSN adjacent with no space', 'x 4111111111111111-078-05-1120 y', 'x [redacted] y'],
+    ['an email whose local part is a phone number', 'Mail 415-555-0142@example.com now', 'Mail [redacted] now'],
+    ['a phone glued to the end of an email', 'Mail a2640@example.com602 62 6246 now', 'Mail [redacted][redacted] now'],
+  ])('redacts every identifier when %s', (_label, input, expected) => {
+    expect(redactPii(input)).toBe(expected)
+  })
+
   it('redacts multiple identifiers in one string', () => {
     expect(redactPii('Emailing bob@example.com and calling +1-202-555-0170 about the issue.')).toBe(
       'Emailing [redacted] and calling [redacted] about the issue.'
@@ -525,6 +651,13 @@ describe('redactPii', () => {
     const start = Date.now()
     expect(redactPii(pathological)).toBe(pathological)
     expect(Date.now() - start).toBeLessThan(1000)
+  })
+
+  it.each([
+    ['redactPii', redactPii],
+    ['the intent pass', sanitizeFreeText],
+  ] as const)('%s does not overflow the stack on 12MB of digits joined by - and .', (_name, redact) => {
+    expect(() => redact('1-1.'.repeat(3_000_000))).not.toThrow()
   })
 })
 

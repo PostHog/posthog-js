@@ -3,6 +3,8 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
+import { shouldRedactKey } from '@posthog/core'
+
 import type { ErrorProperties, Event, StackFrame, McpEvent } from '../types'
 
 // --- Constants ---
@@ -21,6 +23,7 @@ const MAX_CONTENT_TEXT_LENGTH = 32_768
 
 // --- Truncation markers ---
 export const TRUNCATION_SUFFIX = '...'
+const REDACTED_VALUE = '[redacted]'
 
 type MutableEvent = Partial<Event | McpEvent> & Record<string, unknown>
 type MutableRecord = Record<string, unknown>
@@ -38,10 +41,16 @@ export function normalize(
   input: unknown,
   depth: number = MAX_DEPTH,
   maxBreadth: number = MAX_BREADTH,
-  maxStringLength: number = MAX_STRING_LENGTH
+  maxStringLength: number = MAX_STRING_LENGTH,
+  redactsKey: (key: string) => boolean = () => false
 ): unknown {
-  const memo = new WeakSet<object>()
-  return visit(input, depth, maxBreadth, maxStringLength, memo)
+  return visit(input, depth, maxBreadth, maxStringLength, { memo: new WeakSet<object>(), redactsKey })
+}
+
+/** State shared by one walk: the objects on the current path, and which keys to redact without visiting. */
+interface Walk {
+  memo: WeakSet<object>
+  redactsKey: (key: string) => boolean
 }
 
 function visit(
@@ -49,7 +58,7 @@ function visit(
   remainingDepth: number,
   maxBreadth: number,
   maxStringLength: number,
-  memo: WeakSet<object>
+  walk: Walk
 ): unknown {
   // null
   if (value === null) {
@@ -110,7 +119,7 @@ function visit(
   // Objects and arrays from here — need depth/breadth/circular checks
   if (typeof value === 'object') {
     // Circular reference detection
-    if (memo.has(value)) {
+    if (walk.memo.has(value)) {
       return '[Circular ~]'
     }
 
@@ -119,16 +128,16 @@ function visit(
       return Array.isArray(value) ? '[Array]' : '[Object]'
     }
 
-    memo.add(value)
+    walk.memo.add(value)
 
     let result: unknown
     if (Array.isArray(value)) {
-      result = visitArray(value, remainingDepth - 1, maxBreadth, maxStringLength, memo)
+      result = visitArray(value, remainingDepth - 1, maxBreadth, maxStringLength, walk)
     } else {
-      result = visitObject(value as Record<string, unknown>, remainingDepth - 1, maxBreadth, maxStringLength, memo)
+      result = visitObject(value as Record<string, unknown>, remainingDepth - 1, maxBreadth, maxStringLength, walk)
     }
 
-    memo.delete(value)
+    walk.memo.delete(value)
     return result
   }
 
@@ -141,7 +150,7 @@ function visitArray(
   remainingDepth: number,
   maxBreadth: number,
   maxStringLength: number,
-  memo: WeakSet<object>
+  walk: Walk
 ): unknown[] {
   const result: unknown[] = []
   for (let i = 0; i < arr.length; i++) {
@@ -149,7 +158,7 @@ function visitArray(
       result.push('[MaxProperties ~]')
       break
     }
-    result.push(visit(arr[i], remainingDepth, maxBreadth, maxStringLength, memo))
+    result.push(visit(arr[i], remainingDepth, maxBreadth, maxStringLength, walk))
   }
   return result
 }
@@ -159,26 +168,37 @@ function visitObject(
   remainingDepth: number,
   maxBreadth: number,
   maxStringLength: number,
-  memo: WeakSet<object>
+  walk: Walk
 ): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
-  const keys = Object.keys(obj)
-  let count = 0
-
-  for (const key of keys) {
-    if (count >= maxBreadth) {
-      result['...'] = '[MaxProperties ~]'
+  const entries: [string, unknown][] = []
+  for (const key of Object.keys(obj)) {
+    if (entries.length >= maxBreadth) {
+      entries.push(['...', '[MaxProperties ~]'])
       break
+    }
+    if (walk.redactsKey(key)) {
+      entries.push([key, REDACTED_VALUE])
+      continue
     }
     // Skip undefined values — matches JSON.stringify behavior (omits undefined properties)
     if (obj[key] === undefined) {
       continue
     }
-    result[key] = visit(obj[key], remainingDepth, maxBreadth, maxStringLength, memo)
-    count++
+    entries.push([key, visit(obj[key], remainingDepth, maxBreadth, maxStringLength, walk)])
   }
 
-  return result
+  // Not assigned: assigning a parsed `__proto__` key sets the prototype and drops the member.
+  return Object.fromEntries(entries)
+}
+
+/**
+ * Applies the entry and nesting limits to a payload but leaves its strings
+ * whole, so the sanitizer reads at most what the event can keep and still sees
+ * past a string's cut. A credential key's value is replaced unread, as the
+ * sanitizer would replace it.
+ */
+export function limitEntries(payload: unknown): unknown {
+  return normalize(payload, MAX_DEPTH, MAX_BREADTH, Infinity, shouldRedactKey)
 }
 
 // --- Field-level truncation helpers ---

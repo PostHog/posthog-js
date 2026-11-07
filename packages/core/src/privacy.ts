@@ -77,9 +77,9 @@ const SENSITIVE_QUERY_KEY_EXACT_PATTERN = /^(code|AWSAccessKeyId|GoogleAccessId|
 // well-defined *structured identifiers* — the kind regex can match with high
 // precision. Person names and postal addresses are deliberately out of scope:
 // they need an NER model that a client SDK cannot ship, and naive patterns would
-// over-redact ordinary prose. Patterns are ordered so an earlier pass never eats
-// digits a later pass needs (email before phone, IPs before phone, cards before
-// the generic phone pass). See `redactPii`.
+// over-redact ordinary prose. Every pattern reads the same text and the union of
+// their matches is redacted, so no pattern can hide another's identifier. See
+// `redactPii`.
 // Horizontal Unicode spaces (NBSP, narrow NBSP, ideographic space, ...) are what
 // appear when text is copied from web pages or PDFs. `redactPii` normalizes them
 // to an ASCII space first so the separator-based card/phone/SSN candidates match
@@ -103,14 +103,7 @@ const IPV6_PATTERN =
 // A separator (space, dot, or dash) is required between the 3-2-4 groups so bare
 // 9-digit IDs are never mistaken for an SSN.
 const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
-// A run of >=13 digits optionally grouped by a single space, dot, dash, or
-// slash. This only marks the numeric region; `redactCardInMatch` then looks for
-// the actual card as a run of whole separator-delimited groups that passes Luhn,
-// so an adjacent field such as an expiry (`4111 1111 1111 1111 12/30`) is not
-// absorbed into a failing check that would leak the card.
-const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,}\b/g
-// Matches each separator-delimited digit group inside a card candidate.
-const DIGIT_GROUP_PATTERN = /\d+/g
+const CARD_SEPARATORS = ' ./-'
 // Phone matching is structural rather than "any 10–15 digits", so dates
 // (`2024-01-15 12:30`) and dotted versions are not mistaken for numbers. Two
 // forms: a North-American 3-3-4 grouping, and an international number that must
@@ -121,13 +114,8 @@ const DIGIT_GROUP_PATTERN = /\d+/g
 const PHONE_NANP_PATTERN = /(^|[^\w+])((?:\+?1[ ./-]?)?(?:\(\d{3}\)[ ./-]?|\d{3}[ ./-])\d{3}[ ./-]\d{4})(?![\w])/g
 const PHONE_INTL_PATTERN = /(^|[^\w])(\+\d{1,3}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
 
-type JsonRecord = Record<string, unknown>
-
-function isRecord(value: unknown): value is JsonRecord {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function shouldRedactKey(key: string): boolean {
+/** Whether a key names a credential, so its value is captured as `[redacted]` whatever it holds. */
+export function shouldRedactKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERN.test(key)
 }
 
@@ -600,43 +588,143 @@ function passesLuhn(digits: string): boolean {
   return sum % 10 === 0
 }
 
-// A card candidate can span more than one card plus adjacent fields (e.g. an
-// expiry, or a second card). This redacts every card in it: scanning
-// left-to-right over the whole separator-delimited digit groups, at each start it
-// takes the longest run whose joined digits are 13–19 long and pass Luhn, redacts
-// just that span, and resumes after it; a group that begins no valid run is kept
-// and skipped. Checking group-aligned runs rather than arbitrary digit windows
-// keeps the false-positive rate at Luhn's own ~1-in-10, instead of letting a
-// chance-valid sub-window of an ordinary long ID trigger redaction.
-function redactCardInMatch(match: string): string {
-  const groups: { digits: string; start: number; end: number }[] = []
-  for (let m = DIGIT_GROUP_PATTERN.exec(match); m !== null; m = DIGIT_GROUP_PATTERN.exec(match)) {
-    groups.push({ digits: m[0], start: m.index, end: m.index + m[0].length })
+function isDigitAt(text: string, index: number): boolean {
+  const code = text.charCodeAt(index)
+  return code >= 48 && code <= 57
+}
+
+function isWordAt(text: string, index: number): boolean {
+  const code = text.charCodeAt(index)
+  return isDigitAt(text, index) || code === 95 || (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
+}
+
+function digitsEnd(text: string, index: number): number {
+  let end = index
+  while (isDigitAt(text, end)) {
+    end++
   }
-  let output = ''
-  let cursor = 0
-  let first = 0
-  while (first < groups.length) {
-    let digits = ''
-    let matchedLast = -1
-    for (let last = first; last < groups.length; last++) {
-      digits += groups[last].digits
-      if (digits.length > 19) {
+  return end
+}
+
+/**
+ * Where the next card candidate at or after `from` starts and ends: a run of 13
+ * or more digits in whole groups joined by one space, dot, dash, or slash, with
+ * no word character on either side. The run only marks the numeric region;
+ * {@link cardSpans} finds the cards in it.
+ *
+ * A loop rather than a pattern: a backtracking pattern over a megabyte-long run
+ * of digit groups overflows the stack, and the throw drops the event.
+ */
+function findCardCandidate(text: string, from: number): [start: number, end: number] | null {
+  for (let start = from; start < text.length; start++) {
+    if (!isDigitAt(text, start) || isWordAt(text, start - 1)) {
+      continue
+    }
+    let digits = 0
+    let end = -1
+    let groupStart = start
+    for (;;) {
+      const groupEnd = digitsEnd(text, groupStart)
+      digits += groupEnd - groupStart
+      if (digits >= 13 && !isWordAt(text, groupEnd)) {
+        end = groupEnd
+      }
+      groupStart = groupEnd + 1
+      if (!CARD_SEPARATORS.includes(text.charAt(groupEnd)) || !isDigitAt(text, groupStart)) {
         break
       }
-      if (digits.length >= 13 && passesLuhn(digits)) {
-        matchedLast = last
+    }
+    if (end >= 0) {
+      return [start, end]
+    }
+    start = groupStart - 1
+  }
+  return null
+}
+
+/** Where an identifier starts and ends in the text every pattern reads. */
+type Span = [start: number, end: number]
+
+/**
+ * Where the card that starts at the digit group at `first` ends, or -1: the
+ * longest run of whole groups, up to `runEnd`, whose 13–19 digits pass Luhn, so
+ * a 19-digit card is not cut at a 16-digit prefix that happens to pass too.
+ * Checking group-aligned runs rather than arbitrary digit windows keeps the
+ * false-positive rate at Luhn's own ~1-in-10.
+ */
+function cardEnd(text: string, first: number, runEnd: number): number {
+  let digits = ''
+  let end = -1
+  for (let groupStart = first; groupStart < runEnd;) {
+    const groupEnd = digitsEnd(text, groupStart)
+    digits += text.slice(groupStart, groupEnd)
+    if (digits.length > 19) {
+      break
+    }
+    if (digits.length >= 13 && passesLuhn(digits)) {
+      end = groupEnd
+    }
+    groupStart = groupEnd + 1
+  }
+  return end
+}
+
+/**
+ * Every card in `text`. A candidate run can hold more than one card plus
+ * adjacent fields, such as an expiry or a second card, so its groups are scanned
+ * left to right: a card is taken and the scan resumes after it, and a group that
+ * starts no card is skipped.
+ */
+function cardSpans(text: string): Span[] {
+  const spans: Span[] = []
+  for (let run = findCardCandidate(text, 0); run !== null; run = findCardCandidate(text, run[1])) {
+    for (let first = run[0]; first < run[1];) {
+      const end = cardEnd(text, first, run[1])
+      if (end >= 0) {
+        spans.push([first, end])
+        first = end + 1
+      } else {
+        first = digitsEnd(text, first) + 1
       }
     }
-    if (matchedLast >= 0) {
-      output += match.slice(cursor, groups[first].start) + REDACTED_VALUE
-      cursor = groups[matchedLast].end
-      first = matchedLast + 1
-    } else {
-      first++
-    }
   }
-  return output + match.slice(cursor)
+  return spans
+}
+
+/**
+ * Every match of `pattern` in `text`. A pattern that needs a left boundary
+ * captures it as group 1, which is not part of the identifier.
+ */
+function matchSpans(text: string, pattern: RegExp): Span[] {
+  return [...text.matchAll(pattern)].map((match) => {
+    const start = match.index + (match.length > 1 ? match[1].length : 0)
+    return [start, match.index + match[0].length]
+  })
+}
+
+/** Replaces each run of overlapping or touching spans with one `[redacted]`. */
+function redactSpans(text: string, spans: Span[]): string {
+  spans.sort((left, right) => left[0] - right[0])
+  let output = ''
+  let cursor = 0
+  let mergedEnd = -1
+  for (const [start, end] of spans) {
+    if (mergedEnd >= 0 && start <= mergedEnd) {
+      mergedEnd = Math.max(mergedEnd, end)
+      continue
+    }
+    if (mergedEnd >= 0) {
+      output += REDACTED_VALUE
+      cursor = mergedEnd
+    }
+    output += text.slice(cursor, start)
+    mergedEnd = end
+  }
+  if (mergedEnd >= 0) {
+    output += REDACTED_VALUE
+    cursor = mergedEnd
+  }
+  return output + text.slice(cursor)
 }
 
 /**
@@ -649,41 +737,78 @@ function redactCardInMatch(match: string): string {
  * nothing matches.
  */
 export function redactPii(value: string): string {
-  let result = value.replace(UNICODE_SPACE_PATTERN, ' ')
-  result = result.replace(EMAIL_PATTERN, REDACTED_VALUE)
-  result = result.replace(IPV4_PATTERN, REDACTED_VALUE)
-  result = result.replace(IPV6_PATTERN, `$1${REDACTED_VALUE}`)
-  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, redactCardInMatch)
-  result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
-  result = result.replace(PHONE_NANP_PATTERN, `$1${REDACTED_VALUE}`)
-  result = result.replace(PHONE_INTL_PATTERN, `$1${REDACTED_VALUE}`)
-  return result
+  let text = value.replace(UNICODE_SPACE_PATTERN, ' ')
+  // A redaction ends a word, so it can expose an identifier glued to the one it
+  // replaced (`a@example.com602 62 6246`). Go again until nothing changes.
+  for (;;) {
+    const redacted = redactSpans(text, identifierSpans(text))
+    if (redacted === text) {
+      return text
+    }
+    text = redacted
+  }
+}
+
+/**
+ * Every identifier in `text`. Every pattern reads the same text, so no pattern's
+ * match can hide another's identifier, and overlapping matches are redacted as
+ * their union.
+ */
+function identifierSpans(text: string): Span[] {
+  return [
+    ...matchSpans(text, EMAIL_PATTERN),
+    ...matchSpans(text, IPV4_PATTERN),
+    ...matchSpans(text, IPV6_PATTERN),
+    ...cardSpans(text),
+    ...matchSpans(text, US_SSN_PATTERN),
+    ...matchSpans(text, PHONE_NANP_PATTERN),
+    ...matchSpans(text, PHONE_INTL_PATTERN),
+  ]
 }
 
 export function sanitizeCapturedValue(value: unknown, options: TextSanitizationOptions): unknown {
-  return sanitizeValueWith(value, (stringValue) => sanitizeString(stringValue, options))
+  return sanitizeValueWith(value, {
+    text: (stringValue) => sanitizeString(stringValue, options),
+    readsKeysAndNumbers: false,
+  })
 }
 
 /**
  * {@link sanitizeCapturedValue} with the intent-grade string pass
  * ({@link sanitizeFreeText}) on every string leaf, so nested agent-narrated
- * values get structured-PII redaction in the load-bearing order too.
+ * values get structured-PII redaction in the load-bearing order too. Keys and
+ * numbers are read as free text as well, since a value sent as JSON text carries
+ * them: a number that holds an identifier becomes `[redacted]`, so the text
+ * stays valid JSON.
  */
 export function sanitizeFreeTextValue(value: unknown, options: TextSanitizationOptions): unknown {
-  return sanitizeValueWith(value, (stringValue) => sanitizeFreeText(stringValue, options))
+  return sanitizeValueWith(value, {
+    text: (stringValue) => sanitizeFreeText(stringValue, options),
+    readsKeysAndNumbers: true,
+  })
 }
 
-function sanitizeValueWith(value: unknown, sanitizeStringFn: (value: string) => string): unknown {
+interface ValueSanitizer {
+  text: (value: string) => string
+  readsKeysAndNumbers: boolean
+}
+
+function sanitizeValueWith(value: unknown, sanitizer: ValueSanitizer): unknown {
   if (value == null) {
     return value
   }
 
   if (typeof value === 'string') {
-    return sanitizeStringFn(value)
+    return sanitizer.text(value)
+  }
+
+  if (typeof value === 'number' && sanitizer.readsKeysAndNumbers) {
+    const text = String(value)
+    return sanitizer.text(text) === text ? value : REDACTED_VALUE
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => sanitizeValueWith(item, sanitizeStringFn))
+    return value.map((item) => sanitizeValueWith(item, sanitizer))
   }
 
   if (value instanceof Date) {
@@ -694,9 +819,11 @@ function sanitizeValueWith(value: unknown, sanitizeStringFn: (value: string) => 
     return value
   }
 
-  const result: JsonRecord = {}
-  for (const [key, nestedValue] of Object.entries(value)) {
-    result[key] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, sanitizeStringFn)
-  }
-  return result
+  // Not assigned: assigning a parsed `__proto__` key sets the prototype and drops the member.
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [
+      sanitizer.readsKeysAndNumbers ? sanitizer.text(key) : key,
+      shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, sanitizer),
+    ])
+  )
 }
