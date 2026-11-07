@@ -1169,6 +1169,57 @@ ul li.specified c.\\:hover img {
 
       document.body.removeChild(iframe);
     });
+
+    it('should not throw HierarchyRequestError when target document already has a root element', function () {
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+      const targetDoc = iframe.contentDocument!;
+      // Simulates the unexplained production case where the old root survives `document.open()`.
+      vi.spyOn(targetDoc, 'open').mockReturnValue(targetDoc);
+      const existingRoot = targetDoc.documentElement;
+      expect(existingRoot).not.toBeNull();
+
+      expect(() =>
+        buildNodeWithSN(
+          {
+            id: 1,
+            type: NodeType.Document,
+            childNodes: [
+              {
+                id: 2,
+                tagName: 'html',
+                type: NodeType.Element,
+                attributes: { lang: 'en' },
+                childNodes: [
+                  {
+                    id: 3,
+                    tagName: 'body',
+                    type: NodeType.Element,
+                    attributes: {},
+                    childNodes: [],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            doc: targetDoc,
+            mirror,
+            hackCss: false,
+            cache,
+          },
+        ),
+      ).not.toThrow();
+
+      const roots = Array.from(targetDoc.childNodes).filter(
+        (child) => child.nodeType === Node.ELEMENT_NODE,
+      );
+      expect(roots).toHaveLength(1);
+      expect(targetDoc.documentElement.getAttribute('lang')).toBe('en');
+      expect(targetDoc.body).not.toBeNull();
+
+      document.body.removeChild(iframe);
+    });
   });
 
   describe('custom element registration', function () {
