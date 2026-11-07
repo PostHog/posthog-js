@@ -19,10 +19,9 @@ const {
 // property the plugin writes, or that half of the build ignores the option: 1.4.0 is the first
 // version that reads posthog.dotenvFile. 1.6.0 is the first version that ignores
 // posthog.releaseMode with a deprecation warning, so the R8 mapping always binds to the release.
-const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.6.0'
-// 1.5.0 is the first version with the `posthog { uploadNativeSymbols }` extension. A project
-// prebuilt by an older posthog-react-native keeps its older classpath, so it gets bumped.
-const POSTHOG_ANDROID_GRADLE_PLUGIN_NATIVE_SYMBOLS_VERSION = [1, 5]
+const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.8.0'
+// 1.8.0 adds the native-symbol conflict options written into the extension below.
+const POSTHOG_ANDROID_GRADLE_PLUGIN_NATIVE_SYMBOLS_VERSION = [1, 8]
 
 const resolvePostHogGradleScript = (execute: string): string =>
   `["node", "--print", "require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')"].${execute}.text.trim()`
@@ -269,8 +268,13 @@ export function removePostHogAndroidNativeSymbolsExtension(appBuildGradle: strin
 }
 
 // Enables the com.posthog.android `.so` debug-symbol upload for NDK crashes, right after the
-// plugin's apply line. Replaces its own managed block, so a changed includeSource is picked up.
-export function setPostHogAndroidNativeSymbolsExtension(appBuildGradle: string, includeSource: boolean): string {
+// plugin's apply line. Replaces its own managed block so changed upload options are picked up.
+export function setPostHogAndroidNativeSymbolsExtension(
+  appBuildGradle: string,
+  includeSource: boolean,
+  skipOnConflict = false,
+  force = false
+): string {
   const contents = removePostHogAndroidNativeSymbolsExtension(appBuildGradle)
   const applyPattern = /^([ \t]*apply plugin: ["']com\.posthog\.android["'].*)$/m
   if (!applyPattern.test(contents)) {
@@ -281,13 +285,20 @@ export function setPostHogAndroidNativeSymbolsExtension(appBuildGradle: string, 
     'posthog {',
     '    uploadNativeSymbols = true',
     `    includeNativeSymbolSources = ${includeSource}`,
+    ...(skipOnConflict ? ['    skipOnConflict = true'] : []),
+    ...(force ? ['    force = true'] : []),
     '}',
     POSTHOG_NATIVE_SYMBOLS_END,
   ].join('\n')
   return contents.replace(applyPattern, `$1\n${block}`)
 }
 
-function configureKotlinNativeSymbols(appBuildGradle: string, includeSource: boolean): string {
+function configureKotlinNativeSymbols(
+  appBuildGradle: string,
+  includeSource: boolean,
+  skipOnConflict: boolean,
+  force: boolean
+): string {
   const contents = removePostHogAndroidNativeSymbolsExtension(appBuildGradle)
   const applyPattern = /^([ \t]*apply\(plugin\s*=\s*"com\.posthog\.android"\).*)$/m
   const androidPattern = /^android\s*\{/m
@@ -297,6 +308,8 @@ function configureKotlinNativeSymbols(appBuildGradle: string, includeSource: boo
     'extensions.getByName("posthog").withGroovyBuilder {',
     '    setProperty("uploadNativeSymbols", true)',
     `    setProperty("includeNativeSymbolSources", ${includeSource})`,
+    ...(skipOnConflict ? ['    setProperty("skipOnConflict", true)'] : []),
+    ...(force ? ['    setProperty("force", true)'] : []),
     '}',
     POSTHOG_NATIVE_SYMBOLS_END,
   ].join('\n')
@@ -331,7 +344,12 @@ const withFinalizedProjectBuildGradle = (config: any, action: (config: any) => a
   })
 }
 
-const withAndroidNativeSymbolsPlugin = (config: any, includeSource: boolean) => {
+const withAndroidNativeSymbolsPlugin = (
+  config: any,
+  includeSource: boolean,
+  skipOnConflict: boolean,
+  force: boolean
+) => {
   return withFinalizedProjectBuildGradle(config, async (config: any) => {
     if (!['groovy', 'kt'].includes(config.modResults.language)) {
       console.warn(
@@ -360,10 +378,12 @@ const withAndroidNativeSymbolsPlugin = (config: any, includeSource: boolean) => 
 
     const contents =
       appBuildGradle.language === 'kt'
-        ? configureKotlinNativeSymbols(appBuildGradle.contents, includeSource)
+        ? configureKotlinNativeSymbols(appBuildGradle.contents, includeSource, skipOnConflict, force)
         : setPostHogAndroidNativeSymbolsExtension(
             applyPostHogAndroidGradlePlugin(appBuildGradle.contents),
-            includeSource
+            includeSource,
+            skipOnConflict,
+            force
           )
     if (contents !== appBuildGradle.contents) {
       await fs.promises.writeFile(appBuildGradle.path, contents)
@@ -1183,7 +1203,9 @@ type PostHogPluginProps = {
    * `uploadNativeSymbols` is enabled, also sets `POSTHOG_SKIP_ON_CONFLICT=1` in the iOS dSYM
    * upload build phase; posthog-ios's `upload-symbols.sh` forwards it as `--skip-on-conflict`
    * to `posthog-cli dsym upload` on posthog-ios >= 3.64.7 (with posthog-cli >= 0.7.12) and
-   * ignores it on older versions, where dSYM conflicts keep failing the build.
+   * ignores it on older versions, where dSYM conflicts keep failing the build. On Android,
+   * also sets the Gradle plugin's shared default for native symbol and ProGuard mapping uploads
+   * (>= 1.8.0). Explicit upload task settings can override it.
    *
    * Mutually exclusive with `force`: posthog-cli rejects the two flags together, so enabling
    * both stops the prebuild.
@@ -1200,7 +1222,10 @@ type PostHogPluginProps = {
    * `uploadNativeSymbols` is enabled, also sets `POSTHOG_FORCE=1` in the iOS dSYM upload build
    * phase; posthog-ios's `upload-symbols.sh` forwards it as `--force` to `posthog-cli dsym upload`
    * on versions that read the variable and ignores it on older ones, where dSYM conflicts keep
-   * failing the build. `uploadNativeSymbols: { includeSource: true }` already overwrites dSYMs.
+   * failing the build. On Android, also sets the Gradle plugin's shared default for native
+   * symbol and ProGuard mapping uploads (>= 1.8.0). Explicit upload task settings can override it.
+   * `uploadNativeSymbols: { includeSource: true }` already overwrites native symbols unless
+   * `skipOnConflict` is enabled.
    *
    * Mutually exclusive with `skipOnConflict`: posthog-cli rejects the two flags together, so
    * enabling both stops the prebuild.
@@ -1380,7 +1405,12 @@ const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
   }
   const nativeSymbols = resolveNativeSymbolUpload(props.uploadNativeSymbols)
   config = nativeSymbols.enabled
-    ? withAndroidNativeSymbolsPlugin(config, nativeSymbols.includeSource)
+    ? withAndroidNativeSymbolsPlugin(
+        config,
+        nativeSymbols.includeSource,
+        props.skipOnConflict === true,
+        props.force === true
+      )
     : withoutAndroidNativeSymbolsExtension(config)
   config = withAndroidPlugin(config, props.skipOnConflict === true, props.force === true)
   // Runs unconditionally so removing the prop also removes the managed entry.
