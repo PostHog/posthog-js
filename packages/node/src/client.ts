@@ -3260,8 +3260,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * `options`, then context options, then these, then the options the SDK adds (such as
    * `process_person_profile: false` for an event with no distinct id). `before_send` sees the
    * result and can change it. Values are sent to capture unchanged. Capture drops an event whose
-   * option value it cannot read, so a bad value registered here drops every event. An option beats
-   * its legacy property, such as `$process_person_profile`, wherever either one was set.
+   * option value it cannot read, so a bad value registered here drops every event.
    *
    * @example
    * ```ts

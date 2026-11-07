@@ -26,11 +26,10 @@ export type IdentifyMessage = {
   properties?: Record<string | number, any>
   disableGeoip?: boolean
   /**
-   * Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,
-   * `cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;
-   * unknown keys pass through. A legacy property such as `$process_person_profile` fills an option
-   * left unset. Capture drops an event whose option value it cannot read (`invalid_options`), and
-   * the SDK reports the drop through the `'error'` event.
+   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
+   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
+   * reports the drop through the `'error'` event.
    */
   options?: Record<string, JsonType>
 }
@@ -40,11 +39,10 @@ export type SetPersonPropertiesMessage = {
   properties?: Record<string | number, any>
   propertiesOnce?: Record<string | number, any>
   /**
-   * Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,
-   * `cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;
-   * unknown keys pass through. A legacy property such as `$process_person_profile` fills an option
-   * left unset. Capture drops an event whose option value it cannot read (`invalid_options`), and
-   * the SDK reports the drop through the `'error'` event.
+   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
+   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
+   * reports the drop through the `'error'` event.
    */
   options?: Record<string, JsonType>
 }
@@ -53,11 +51,10 @@ export type UnsetPersonPropertiesMessage = {
   distinctId: string
   properties: string | string[]
   /**
-   * Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,
-   * `cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;
-   * unknown keys pass through. A legacy property such as `$process_person_profile` fills an option
-   * left unset. Capture drops an event whose option value it cannot read (`invalid_options`), and
-   * the SDK reports the drop through the `'error'` event.
+   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
+   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
+   * reports the drop through the `'error'` event.
    */
   options?: Record<string, JsonType>
 }
@@ -150,11 +147,10 @@ export type GroupIdentifyMessage = {
   distinctId?: string
   disableGeoip?: boolean
   /**
-   * Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,
-   * `cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;
-   * unknown keys pass through. A legacy property such as `$process_person_profile` fills an option
-   * left unset. Capture drops an event whose option value it cannot read (`invalid_options`), and
-   * the SDK reports the drop through the `'error'` event.
+   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
+   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
+   * reports the drop through the `'error'` event.
    */
   options?: Record<string, JsonType>
 }
