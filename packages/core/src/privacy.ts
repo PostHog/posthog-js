@@ -77,9 +77,9 @@ const SENSITIVE_QUERY_KEY_EXACT_PATTERN = /^(code|AWSAccessKeyId|GoogleAccessId|
 // well-defined *structured identifiers* — the kind regex can match with high
 // precision. Person names and postal addresses are deliberately out of scope:
 // they need an NER model that a client SDK cannot ship, and naive patterns would
-// over-redact ordinary prose. Patterns are ordered so an earlier pass never eats
-// digits a later pass needs (email before phone, IPs before phone, SSNs before cards, cards before
-// the generic phone pass). See `redactPii`.
+// over-redact ordinary prose. Every pattern reads the same text and the union of
+// their matches is redacted, so no pattern can hide another's identifier. See
+// `redactPii`.
 // Horizontal Unicode spaces (NBSP, narrow NBSP, ideographic space, ...) are what
 // appear when text is copied from web pages or PDFs. `redactPii` normalizes them
 // to an ASCII space first so the separator-based card/phone/SSN candidates match
@@ -610,7 +610,7 @@ function digitsEnd(text: string, index: number): number {
  * Where the next card candidate at or after `from` starts and ends: a run of 13
  * or more digits in whole groups joined by one space, dot, dash, or slash, with
  * no word character on either side. The run only marks the numeric region;
- * {@link redactCardsInRun} finds the cards in it.
+ * {@link cardSpans} finds the cards in it.
  *
  * A loop rather than a pattern: a backtracking pattern over a megabyte-long run
  * of digit groups overflows the stack, and the throw drops the event.
@@ -642,19 +642,22 @@ function findCardCandidate(text: string, from: number): [start: number, end: num
   return null
 }
 
+/** Where an identifier starts and ends in the text every pattern reads. */
+type Span = [start: number, end: number]
+
 /**
  * Where the card that starts at the digit group at `first` ends, or -1: the
- * longest run of whole groups whose 13–19 digits pass Luhn, so a 19-digit card
- * is not cut at a 16-digit prefix that happens to pass too. Checking
- * group-aligned runs rather than arbitrary digit windows keeps the
+ * longest run of whole groups, up to `runEnd`, whose 13–19 digits pass Luhn, so
+ * a 19-digit card is not cut at a 16-digit prefix that happens to pass too.
+ * Checking group-aligned runs rather than arbitrary digit windows keeps the
  * false-positive rate at Luhn's own ~1-in-10.
  */
-function cardEnd(run: string, first: number): number {
+function cardEnd(text: string, first: number, runEnd: number): number {
   let digits = ''
   let end = -1
-  for (let groupStart = first; groupStart < run.length;) {
-    const groupEnd = digitsEnd(run, groupStart)
-    digits += run.slice(groupStart, groupEnd)
+  for (let groupStart = first; groupStart < runEnd;) {
+    const groupEnd = digitsEnd(text, groupStart)
+    digits += text.slice(groupStart, groupEnd)
     if (digits.length > 19) {
       break
     }
@@ -667,33 +670,59 @@ function cardEnd(run: string, first: number): number {
 }
 
 /**
- * Redacts every card in a candidate run. A run can hold more than one card plus
- * adjacent fields, such as an expiry or a second card, so the groups are scanned
- * left to right: a card is redacted and the scan resumes after it, and a group
- * that starts no card is kept.
+ * Every card in `text`. A candidate run can hold more than one card plus
+ * adjacent fields, such as an expiry or a second card, so its groups are scanned
+ * left to right: a card is taken and the scan resumes after it, and a group that
+ * starts no card is skipped.
  */
-function redactCardsInRun(run: string): string {
-  let output = ''
-  let cursor = 0
-  for (let first = 0; first < run.length;) {
-    const end = cardEnd(run, first)
-    if (end >= 0) {
-      output += run.slice(cursor, first) + REDACTED_VALUE
-      cursor = end
-      first = end + 1
-    } else {
-      first = digitsEnd(run, first) + 1
+function cardSpans(text: string): Span[] {
+  const spans: Span[] = []
+  for (let run = findCardCandidate(text, 0); run !== null; run = findCardCandidate(text, run[1])) {
+    for (let first = run[0]; first < run[1];) {
+      const end = cardEnd(text, first, run[1])
+      if (end >= 0) {
+        spans.push([first, end])
+        first = end + 1
+      } else {
+        first = digitsEnd(text, first) + 1
+      }
     }
   }
-  return output + run.slice(cursor)
+  return spans
 }
 
-function redactCards(text: string): string {
+/**
+ * Every match of `pattern` in `text`. A pattern that needs a left boundary
+ * captures it as group 1, which is not part of the identifier.
+ */
+function matchSpans(text: string, pattern: RegExp): Span[] {
+  return [...text.matchAll(pattern)].map((match) => {
+    const start = match.index + (match.length > 1 ? match[1].length : 0)
+    return [start, match.index + match[0].length]
+  })
+}
+
+/** Replaces each run of overlapping or touching spans with one `[redacted]`. */
+function redactSpans(text: string, spans: Span[]): string {
+  spans.sort((left, right) => left[0] - right[0])
   let output = ''
   let cursor = 0
-  for (let run = findCardCandidate(text, 0); run !== null; run = findCardCandidate(text, run[1])) {
-    output += text.slice(cursor, run[0]) + redactCardsInRun(text.slice(run[0], run[1]))
-    cursor = run[1]
+  let mergedEnd = -1
+  for (const [start, end] of spans) {
+    if (mergedEnd >= 0 && start <= mergedEnd) {
+      mergedEnd = Math.max(mergedEnd, end)
+      continue
+    }
+    if (mergedEnd >= 0) {
+      output += REDACTED_VALUE
+      cursor = mergedEnd
+    }
+    output += text.slice(cursor, start)
+    mergedEnd = end
+  }
+  if (mergedEnd >= 0) {
+    output += REDACTED_VALUE
+    cursor = mergedEnd
   }
   return output + text.slice(cursor)
 }
@@ -708,17 +737,33 @@ function redactCards(text: string): string {
  * nothing matches.
  */
 export function redactPii(value: string): string {
-  let result = value.replace(UNICODE_SPACE_PATTERN, ' ')
-  result = result.replace(EMAIL_PATTERN, REDACTED_VALUE)
-  result = result.replace(IPV4_PATTERN, REDACTED_VALUE)
-  result = result.replace(IPV6_PATTERN, `$1${REDACTED_VALUE}`)
-  // SSNs before cards: the card pass would otherwise take an SSN's first groups
-  // into a Luhn-valid run with the number before it and leave the rest.
-  result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
-  result = redactCards(result)
-  result = result.replace(PHONE_NANP_PATTERN, `$1${REDACTED_VALUE}`)
-  result = result.replace(PHONE_INTL_PATTERN, `$1${REDACTED_VALUE}`)
-  return result
+  let text = value.replace(UNICODE_SPACE_PATTERN, ' ')
+  // A redaction ends a word, so it can expose an identifier glued to the one it
+  // replaced (`a@example.com602 62 6246`). Go again until nothing changes.
+  for (;;) {
+    const redacted = redactSpans(text, identifierSpans(text))
+    if (redacted === text) {
+      return text
+    }
+    text = redacted
+  }
+}
+
+/**
+ * Every identifier in `text`. Every pattern reads the same text, so no pattern's
+ * match can hide another's identifier, and overlapping matches are redacted as
+ * their union.
+ */
+function identifierSpans(text: string): Span[] {
+  return [
+    ...matchSpans(text, EMAIL_PATTERN),
+    ...matchSpans(text, IPV4_PATTERN),
+    ...matchSpans(text, IPV6_PATTERN),
+    ...cardSpans(text),
+    ...matchSpans(text, US_SSN_PATTERN),
+    ...matchSpans(text, PHONE_NANP_PATTERN),
+    ...matchSpans(text, PHONE_INTL_PATTERN),
+  ]
 }
 
 export function sanitizeCapturedValue(value: unknown, options: TextSanitizationOptions): unknown {

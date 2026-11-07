@@ -584,26 +584,15 @@ describe('redactPii', () => {
       'Moving funds 4111 1111 1111 1111 5555 5555 5555 4444 now.',
       'Moving funds [redacted] [redacted] now.',
     ],
-    ['a card followed by an SSN', 'Card 4111111111111111 078-05-1120 on file.', 'Card [redacted] [redacted] on file.'],
     [
       'a 19-digit card whose 16-digit prefix passes Luhn',
       'Card 6759 0000 0000 0000 005 on file.',
       'Card [redacted] on file.',
     ],
     [
-      'a grouped card followed by an SSN',
-      'Card 4111 1111 1111 1111 078-05-1120 on file.',
-      'Card [redacted] [redacted] on file.',
-    ],
-    [
       'a 19-digit card followed by an expiry',
       'Card 6759 0000 0000 0000 005 12/30 on file.',
       'Card [redacted] 12/30 on file.',
-    ],
-    [
-      'an SSN after a number that joins it into a Luhn-valid run',
-      'Ref 4111111115 078-12-3455 12/30 on file.',
-      'Ref 4111111115 [redacted] 12/30 on file.',
     ],
     ['an SSN with dashes', 'Verifying SSN 123-45-6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
     ['an SSN with spaces', 'Verifying SSN 123 45 6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
@@ -626,6 +615,26 @@ describe('redactPii', () => {
     ['prose with no personal data', 'Searching the organization repositories to prioritize open performance issues.'],
   ])('leaves %s untouched', (_label, input) => {
     expect(redactPii(input)).toBe(input)
+  })
+
+  // Every pattern reads the same text, so one identifier's match cannot hide
+  // another's digits. Where two matches overlap, the union of both goes.
+  it.each([
+    ['a card before an SSN, overlapping', 'Card 4111111111111111 078-05-1120 on file.', 'Card [redacted] on file.'],
+    ['a card before an SSN, apart', 'Card 4111111111111111, SSN 078-05-1120.', 'Card [redacted], SSN [redacted].'],
+    ['an SSN before a card', 'SSN 078-05-1120 4111111111111111 on file.', 'SSN [redacted] [redacted] on file.'],
+    ['an SSN that is the head of a card', '411 11 1111 1111111', '[redacted]'],
+    ['an SSN that is the tail of a card', 'Card 4000 0000 0000 0000 006 12-2030', 'Card [redacted]'],
+    [
+      'an SSN inside a number that makes a 19-digit card',
+      'Ref 4111111115 078-12-3455 12/30 on file.',
+      'Ref [redacted] 12/30 on file.',
+    ],
+    ['a card and an SSN adjacent with no space', 'x 4111111111111111-078-05-1120 y', 'x [redacted] y'],
+    ['an email whose local part is a phone number', 'Mail 415-555-0142@example.com now', 'Mail [redacted] now'],
+    ['a phone glued to the end of an email', 'Mail a2640@example.com602 62 6246 now', 'Mail [redacted][redacted] now'],
+  ])('redacts every identifier when %s', (_label, input, expected) => {
+    expect(redactPii(input)).toBe(expected)
   })
 
   it('redacts multiple identifiers in one string', () => {
