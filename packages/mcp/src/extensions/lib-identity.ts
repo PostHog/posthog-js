@@ -13,7 +13,7 @@ import { POSTHOG_MCP_LIB_NAME } from './constants'
  * fills them as its lowest-precedence values, so a `$lib` set on the event,
  * in context or with `register()` wins, and `before_send` sees and can change them.
  * posthog-node 6 also sends them in the `PostHog-Sdk-Info` header, fixed when each
- * capture lane first sends. Shared by {@link PostHogMCP} (which calls this in its constructor) and
+ * capture lane is created, on its first capture. Shared by {@link PostHogMCP} (which calls this in its constructor) and
  * `instrument()` (which applies it to the host-supplied client) so both emit
  * paths report identical lib metadata.
  *
