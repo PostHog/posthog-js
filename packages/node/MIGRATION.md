@@ -32,7 +32,7 @@ You need to change code or configuration if your app does any of these:
 - sends distinct ids over 200 UTF-8 bytes (see [Identity and request context](#identity-and-request-context))
 - sends event names over 200 UTF-8 bytes (see [Invalid events](#invalid-events))
 - uses `@posthog/convex`, `@posthog/next` or `@posthog/nuxt` (stay on posthog-node 5 for now)
-- uses `@posthog/ai` or `@posthog/mcp` and does not list `posthog-node` in its own dependencies (see [Wrapper packages](#wrapper-packages))
+- uses `@posthog/ai`, `@posthog/mcp` or `@posthog/openfeature-node-provider` and does not list `posthog-node` in its own dependencies (see [Wrapper packages](#wrapper-packages))
 
 ## Reverse proxies and self-hosted PostHog
 
@@ -378,7 +378,7 @@ The SDK's own logs no longer print whole events or `before_send` error messages.
 
 Upgrade `@posthog/ai` and `@posthog/mcp` to a version that accepts posthog-node 6 before or together with posthog-node.
 
-These versions accept both posthog-node 5 and 6. If your app does not list `posthog-node` in its own dependencies, upgrading `@posthog/ai` or `@posthog/mcp` can install posthog-node 6. List `posthog-node` in your dependencies so you choose when to move to 6.
+These versions accept both posthog-node 5 and 6. If your app does not list `posthog-node` in its own dependencies, upgrading `@posthog/ai` or `@posthog/mcp` can install posthog-node 6. `@posthog/openfeature-node-provider` accepts any posthog-node from 5.21.2, so installing it fresh can install posthog-node 6 too. List `posthog-node` in your dependencies so you choose when to move to 6.
 
 `@posthog/mcp` labels the whole client, as in 5.x: every event that the client you pass to `instrument()` or `PostHogMCP` captures afterwards reports `$lib` `posthog-node-mcp` and the `@posthog/mcp` version. In 6.0 a `$lib` set on the event, in context or with `register()` wins over the label. If your app also captures its own events, give MCP analytics its own client. To find MCP traffic, filter on `$mcp_*` events rather than `$lib`.
 
