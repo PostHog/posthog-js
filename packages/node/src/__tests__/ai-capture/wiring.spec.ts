@@ -71,7 +71,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
         properties: expect.objectContaining({ $ai_model: 'gpt-4o-mini', $ai_trace_id: 'trace-1' }),
       },
     ])
-    expect(body.batch[0].properties).not.toHaveProperty('$lib')
+    expect(body.batch[0].properties).toMatchObject({ $lib: 'posthog-node', $lib_version: '1.2.3' })
     expect(harness.callsTo(ANALYTICS_CAPTURE_PATH)).toHaveLength(0)
   })
 

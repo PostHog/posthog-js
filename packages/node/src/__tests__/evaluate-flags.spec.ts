@@ -718,6 +718,8 @@ describe('evaluateFlags', () => {
           'locally_evaluated',
           '$is_server',
           '$geoip_disable',
+          '$lib',
+          '$lib_version',
         ].sort()
       )
       expect(byKey['boolean-flag'].$is_server).toBe(true)

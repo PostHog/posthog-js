@@ -21,7 +21,7 @@ You need to change code or configuration if your app does any of these:
 - passes strings such as `"true"` for `$process_person_profile`, `$cookieless_mode` or `$ignore_sent_at`
 - sets `$is_server`, `$geoip_disable` or feature flag properties on events, in context or with `register()`, and expects the SDK's value to win
 - turns person processing off with `register()`, `registerOptions()` or a context, and calls `identify`, `alias` or `groupIdentify` (see [Layer order](#layer-order))
-- sets `$lib` or `$lib_version`
+- sets `$lib` or `$lib_version` (see [SDK identity](#sdk-identity))
 - sends a `$session_id` or `$window_id` that is not a string
 - passes a personal API key (`phx_...`) as the project API key
 - reads event content from the SDK's debug log, or alerts on SDK log text
@@ -167,7 +167,7 @@ Each lane has its own queue, batches and requests, so a slow or failing lane nev
 - `maxQueueSize` (default 10000) now applies to analytics events only. When a queue is full, the oldest event is dropped and reported through `'error'`.
 - `flush()` and `shutdown()` send both lanes at the same time. `shutdown(shutdownTimeoutMs)` uses one deadline for both. Events still queued at the deadline are reported through `'error'`.
 - The `'flush'` event fires once per lane.
-- The `'capture'` and `'flush'` events carry each message as it was queued, before the SDK builds the capture v1 event. Its properties can still hold `$lib`, `$lib_version`, legacy option properties such as `$process_person_profile`, and `$session_id` or `$window_id`, although the SDK removes or moves them before sending.
+- The `'capture'` and `'flush'` events carry each message as it was queued, before the SDK builds the capture v1 event. Its properties can still hold legacy option properties such as `$process_person_profile`, and `$session_id` or `$window_id`, although the SDK removes or moves them before sending.
 - `captureCompression` (new) sets how analytics requests are compressed: `'none'`, `'gzip'`, `'deflate'` or `'zstd'`. The default is `'gzip'`. `disableCompression: true` still turns compression off when `captureCompression` is not set. `'zstd'` needs Node 22.15 or later and falls back to `'gzip'` elsewhere, including the edge build.
 - `requestTimeout` (default 10000 ms) still sets the timeout of analytics requests.
 
@@ -226,24 +226,25 @@ Capture v1 sends processing options in an `options` object, next to `properties`
 
 ## Layer order
 
-Each event is built in this order. Each step fills only the properties and options the steps before it left unset:
+Each event is built in this order. Each step fills only the properties and options the steps before it left unset, except for `$lib` and `$lib_version` (see [SDK identity](#sdk-identity)):
 
 1. the call's own `properties` and `options`, then its `groups` (merged into `$groups`) and `disableGeoip` (fills `$geoip_disable`)
 2. context `properties` and `options`, from `withContext()`, `enterContext()` or the Express and NestJS integrations
 3. `register()` properties and `registerOptions()` options
-4. values the SDK adds: `$is_server` (from `isServer`), `$geoip_disable` (from `disableGeoip`), the `$feature/<key>` and `$active_feature_flags` properties (from `flags` or `sendFeatureFlags`), `$trace_id` and `$span_id` from the active OpenTelemetry span on `$exception` events, and `options.process_person_profile = false` for an event without a distinct id
+4. values the SDK adds: `$lib` and `$lib_version` (the client's library name and version, see [SDK identity](#sdk-identity)), `$is_server` (from `isServer`), `$geoip_disable` (from `disableGeoip`), the `$feature/<key>` and `$active_feature_flags` properties (from `flags` or `sendFeatureFlags`), `$trace_id` and `$span_id` from the active OpenTelemetry span on `$exception` events, and `options.process_person_profile = false` for an event without a distinct id
 5. `before_send`, which sees the result of steps 1 to 4 and can change or remove any of it. Nothing is added after it.
 6. legacy option properties, which fill unset options and are then removed
 
 A property set to `undefined` counts as unset.
+A `$lib` or `$lib_version` counts as unset unless it is a non-empty string.
 `$set`, `$set_once`, `$groups` and `$group_set` fill one level deep.
 When the call and a later step both set one of them to an object, the later step adds only the keys the call left out.
 For example, `register({ $set: { plan: 'free', source: 'web' } })` and a call with `properties: { $set: { plan: 'pro' } }` send `{ plan: 'pro', source: 'web' }`.
 
 These changes follow from this order:
 
-- A `$is_server`, `$geoip_disable` or feature flag property set on the event, in context or with `register()` now wins over the SDK's value. In 5.x the SDK overwrote some of them.
-- `before_send` now sees `$is_server`, `$geoip_disable`, feature flag properties, trace ids and `options`. In 5.x it ran before the SDK added them. To change an option in `before_send`, edit `options`, which is always an object.
+- A `$lib`, `$is_server`, `$geoip_disable` or feature flag property set on the event, in context or with `register()` now wins over the SDK's value. In 5.x the SDK overwrote some of them. For `$lib_version`, see [SDK identity](#sdk-identity).
+- `before_send` now sees `$lib`, `$lib_version`, `$is_server`, `$geoip_disable`, feature flag properties, trace ids and `options`. In 5.x it ran before the SDK added them. To change an option in `before_send`, edit `options`, which is always an object.
 - Review your `before_send` hooks for the new event shape. A legacy property such as `$process_person_profile` that the hook sets does not replace an option that is already set. A hook that returns a new message must copy `options`, or the event is sent without them. That includes the `process_person_profile: false` the SDK sets for an event without a distinct id, so PostHog would create a person for its generated id.
 - `before_send` gets its own copy of the event's plain objects and arrays. Changing a nested value no longer changes your objects or the `register()` and context values, as it could in 5.x. Class instances, such as `Date`, are not copied.
 - `$geoip_disable` and `$groups` are set before `before_send`, so to change them, edit the properties. Changing the message's `disableGeoip` or `groups` field has no effect.
@@ -288,9 +289,22 @@ To stop all request linking, set `captureTracingHeaders: false` and leave `readP
 
 ## SDK identity
 
-PostHog sets `$lib` and `$lib_version` on every event from the `PostHog-Sdk-Info` request header, which the client sets.
-The SDK removes `$lib` and `$lib_version` from the properties it sends.
-A value you set on an event, in context, with `register()` or in `before_send` does not reach PostHog.
+Each event's `$lib` and `$lib_version` properties name the library that sent it.
+The SDK sends them in the event's properties, and PostHog stores the values the event sends.
+
+The SDK fills them after the event, context and `register()` values, and only counts a `$lib` or `$lib_version` that is a non-empty string:
+
+- If nothing sets `$lib`, the SDK sets both to the client's library name and version: `posthog-node`, `posthog-edge`, or the name a wrapper package such as `@posthog/mcp` sets. This replaces a `$lib_version` set without `$lib`.
+- If `$lib` is the client's own library name and `$lib_version` is missing, the SDK fills in `$lib_version`.
+- If `$lib` names another library, the SDK sends both as set, even without `$lib_version`. Set both when you override them.
+
+An app that relays events from another PostHog SDK, such as posthog-js events with `$lib: 'web'`, now keeps their `$lib` and `$lib_version`. 5.x replaced them with `posthog-node` and its version.
+
+`before_send` sees the result and can change or remove either property. In 5.x the SDK overwrote them after `before_send`.
+
+The client also sends its library name and version in the `PostHog-Sdk-Info` request header.
+PostHog uses the header only for an event whose `$lib` is missing, empty or not a string, such as one whose `before_send` removed it.
+If an event's `$lib` matches the header's library and `$lib_version` is missing, PostHog fills in `$lib_version` from the header.
 
 ## Session and window ids
 
@@ -354,6 +368,8 @@ The SDK's own logs no longer print whole events or `before_send` error messages.
 Upgrade `@posthog/ai` and `@posthog/mcp` to a version that accepts posthog-node 6 before or together with posthog-node.
 
 These versions accept both posthog-node 5 and 6. If your app does not list `posthog-node` in its own dependencies, upgrading `@posthog/ai` or `@posthog/mcp` can install posthog-node 6. List `posthog-node` in your dependencies so you choose when to move to 6.
+
+`@posthog/mcp` labels the whole client, as in 5.x: every event that the client you pass to `instrument()` or `PostHogMCP` captures afterwards reports `$lib` `posthog-node-mcp` and the `@posthog/mcp` version. In 6.0 a `$lib` set on the event, in context or with `register()` wins over the label. If your app also captures its own events, give MCP analytics its own client. To find MCP traffic, filter on `$mcp_*` events rather than `$lib`.
 
 ## posthog-node 5.x support
 

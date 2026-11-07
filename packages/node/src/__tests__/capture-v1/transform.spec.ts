@@ -215,15 +215,18 @@ describe('capture v1 transform', () => {
     })
   })
 
-  describe('buildV1Event - $lib stripping and $set relocation', () => {
-    it('strips $lib and $lib_version from properties', () => {
-      const event = buildV1Event(
-        baseMessage({ properties: { $lib: 'posthog-node', $lib_version: '1.2.3', keep: 'me' } })
-      )
+  describe('buildV1Event - $lib passthrough and $set relocation', () => {
+    it.each<[string, Record<string, JsonType>]>([
+      ['the SDK pair', { $lib: 'posthog-node', $lib_version: '1.2.3' }],
+      ['another pair', { $lib: 'my-wrapper', $lib_version: '2.0.0' }],
+      ['$lib alone', { $lib: 'my-wrapper' }],
+      ['$lib_version alone', { $lib_version: '2.0.0' }],
+      ['odd values', { $lib: null, $lib_version: '' }],
+      ['a non-string $lib', { $lib: 5, $lib_version: true }],
+    ])('sends %s in properties unchanged', (_label, lib) => {
+      const event = buildV1Event(baseMessage({ properties: { ...lib, keep: 'me' } }))
 
-      expect(event.properties).not.toHaveProperty('$lib')
-      expect(event.properties).not.toHaveProperty('$lib_version')
-      expect(event.properties.keep).toBe('me')
+      expect(event.properties).toStrictEqual({ ...lib, keep: 'me' })
     })
 
     it('relocates top-level $set/$set_once into properties', () => {

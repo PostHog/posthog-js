@@ -400,6 +400,15 @@ skips the high-level tool registry, so tool descriptions and callback-level wrap
 what is advertised over `tools/list`. If your framework never calls `registerTool()` — `@rekog/mcp-nest`
 does not — the registry is empty and the two calls behave the same.
 
+## Library identity (`$lib`)
+
+`instrument()` and `PostHogMCP` label the whole posthog-node client: every event it captures afterwards reports `$lib` `posthog-node-mcp` and `$lib_version` set to the `@posthog/mcp` version, not only the `$mcp_*` events. So:
+
+- Give MCP analytics its own `PostHog` client if your app also captures other events.
+- With posthog-node 6, events the client captured before `instrument()` keep `posthog-node`, except an exception it was still building. With posthog-node 5, an event captured just before `instrument()` can get the MCP label too.
+- With posthog-node 6, a `$lib` you set on an event, in a context or with `register()` wins over the label. Set `$lib_version` too, or the event is sent without one.
+- To find MCP traffic, filter on `$mcp_*` events or `$mcp_source = 'posthog_mcp_analytics'` rather than `$lib`.
+
 ## Developing locally
 
 To test local changes in a consumer app (e.g. a dummy MCP server), symlink **both**

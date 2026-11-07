@@ -80,7 +80,7 @@ import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/set
 import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
 import { canonicalizeUuid, eventUuidv7 } from './capture-v1/uuid'
 import { readEventOptions } from './capture-v1/transform'
-import { fillOptions, fillProperties, isUnsetProperty, snapshotLayer } from './event-defaults'
+import { fillLibraryProperties, fillOptions, fillProperties, isUnsetProperty, snapshotLayer } from './event-defaults'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 import { notifyContextListeners } from './extensions/context/listeners'
 import { getEventContext } from './extensions/context/event-context'
@@ -3780,8 +3780,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   /**
    * Build an event in the canonical order: identity, the call's own values, then the values it left
-   * unset from context, then `register()` / `registerOptions()`, then the SDK, then the minimal
-   * `$feature_flag_called` allowlist, then `before_send`, which has the final say.
+   * unset from context, then `register()` / `registerOptions()`, then the SDK, then the SDK's own
+   * `$lib` / `$lib_version`, then the minimal `$feature_flag_called` allowlist, then `before_send`,
+   * which has the final say.
    */
   private async _prepareEventMessage(
     props: EventMessage,
@@ -3806,6 +3807,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const contextOptions = snapshotLayer(contextData?.options)
     const globalProperties = snapshotLayer(this.props)
     const globalOptions = this._globalOptions
+    // A relabel after capture(), such as `@posthog/mcp`'s `instrument()`, does not reach this event.
+    // captureException() gets here only after building its event, so a relabel in between does.
+    const libraryId = this.getLibraryId()
+    const libraryVersion = this.getLibraryVersion()
 
     const resolvedDistinctId =
       presentDistinctId(distinctId) ?? presentDistinctId(contextData?.distinctId) ?? prepareOptions.fallbackDistinctId
@@ -3839,6 +3844,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         disableGeoip,
       }),
     ])
+    fillLibraryProperties(eventProperties, libraryId, libraryVersion)
 
     const filledOptions: Record<string, JsonType> = { ...callOptions }
     fillOptions(filledOptions, [

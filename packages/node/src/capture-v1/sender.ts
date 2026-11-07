@@ -78,7 +78,7 @@ export interface V1CaptureSenderConfig {
   /** The capture lane this sender posts to. */
   path: CaptureEndpoint
   apiKey: string
-  /** Canonical `$lib` identity, materialized by the server from `PostHog-Sdk-Info`. */
+  /** The `PostHog-Sdk-Info` library name. PostHog fills `$lib` from it only for an event that has no `$lib`. */
   libraryId: string
   libraryVersion: string
   /** Value for the `User-Agent` header, if the runtime allows setting it. */

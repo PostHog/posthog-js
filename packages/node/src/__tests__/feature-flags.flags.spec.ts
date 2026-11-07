@@ -1372,6 +1372,8 @@ describe('minimal $feature_flag_called events', () => {
           '$groups',
           '$is_server',
           '$geoip_disable',
+          '$lib',
+          '$lib_version',
         ].sort()
       )
       expect(message.properties).toMatchObject({
@@ -1557,6 +1559,8 @@ describe('minimal $feature_flag_called events', () => {
           'locally_evaluated',
           '$is_server',
           '$geoip_disable',
+          '$lib',
+          '$lib_version',
         ].sort()
       )
       expect(message.properties).toMatchObject({

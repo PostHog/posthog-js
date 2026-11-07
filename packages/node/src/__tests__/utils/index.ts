@@ -70,13 +70,8 @@ const V1_OPTION_PROPERTIES: Record<string, string> = {
   product_tour_id: '$product_tour_id',
 }
 
-function legacyPropertiesOf(v1Event: any, sdkInfo: string): Record<string, any> {
-  const versionAt = sdkInfo.lastIndexOf('/')
-  const properties: Record<string, any> = {
-    ...v1Event.properties,
-    $lib: sdkInfo.slice(0, versionAt),
-    $lib_version: sdkInfo.slice(versionAt + 1),
-  }
+function legacyPropertiesOf(v1Event: any): Record<string, any> {
+  const properties: Record<string, any> = { ...v1Event.properties }
   for (const [option, value] of Object.entries(v1Event.options ?? {})) {
     properties[V1_OPTION_PROPERTIES[option] ?? option] = value
   }
@@ -91,8 +86,8 @@ function legacyPropertiesOf(v1Event: any, sdkInfo: string): Record<string, any> 
 
 /**
  * The events of one analytics capture request, in the legacy `/batch/` event shape whichever wire
- * format carried them. A Capture V1 event's `options`, `session_id`, `window_id` and SDK info
- * header go back into the properties they replace, so one assertion holds for both formats.
+ * format carried them. A Capture V1 event's `options`, `session_id` and `window_id` go back into
+ * the properties they replace, so one assertion holds for both formats.
  */
 export function sentEventsOf([url, options]: FetchCall): any[] {
   const { batch } = JSON.parse(options.body)
@@ -100,7 +95,7 @@ export function sentEventsOf([url, options]: FetchCall): any[] {
     return batch
   }
   return batch.map((v1Event: any) => {
-    const event = { ...v1Event, properties: legacyPropertiesOf(v1Event, options.headers['PostHog-Sdk-Info']) }
+    const event = { ...v1Event, properties: legacyPropertiesOf(v1Event) }
     delete event.options
     delete event.session_id
     delete event.window_id

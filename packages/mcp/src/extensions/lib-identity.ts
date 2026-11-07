@@ -7,11 +7,13 @@ import { POSTHOG_MCP_LIB_NAME } from './constants'
  * Make `client` report `@posthog/mcp`'s identity as the standard PostHog `$lib`
  * / `$lib_version` on every event it sends.
  *
- * posthog-node stamps `$lib` / `$lib_version` from `getLibraryId()` /
- * `getLibraryVersion()` and spreads them *last* when building the payload, so
- * they can't be overridden per-event via the captured properties (nor via
- * `before_send`, which runs earlier). Overriding the two methods is the only
- * lever. Shared by {@link PostHogMCP} (which calls this in its constructor) and
+ * posthog-node reads `getLibraryId()` / `getLibraryVersion()` for each event it
+ * captures, so overriding the two methods relabels every later event. posthog-node 5
+ * stamps them after `before_send`, so nothing else can change them. posthog-node 6
+ * fills them as its lowest-precedence values, so a `$lib` set on the event,
+ * in context or with `register()` wins, and `before_send` sees and can change them.
+ * posthog-node 6 also sends them in the `PostHog-Sdk-Info` header, fixed when each
+ * capture lane is created, when its first event is queued or sent. Shared by {@link PostHogMCP} (which calls this in its constructor) and
  * `instrument()` (which applies it to the host-supplied client) so both emit
  * paths report identical lib metadata.
  *
