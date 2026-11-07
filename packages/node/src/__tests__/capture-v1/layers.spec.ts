@@ -238,9 +238,25 @@ describe('layered event values', () => {
             { event: { $lib: 'posthog-node', $lib_version: '' } },
             SDK_PAIR,
           ],
-          ['a lone $lib_version is replaced', { event: { $lib_version: '9.9.9' } }, SDK_PAIR],
+          [
+            "the SDK's own $lib replaces a null $lib_version",
+            { event: { $lib: 'posthog-node', $lib_version: null } },
+            SDK_PAIR,
+          ],
+          [
+            "the SDK's own $lib replaces a number $lib_version",
+            { event: { $lib: 'posthog-node', $lib_version: 6 } },
+            SDK_PAIR,
+          ],
+          ...SOURCES.map((source): [string, Layers, Record<string, JsonType>] => [
+            `a lone $lib_version from the ${source} layer is replaced`,
+            { [source]: { $lib_version: '9.9.9' } },
+            SDK_PAIR,
+          ]),
+          ['undefined $lib gets both', { event: { $lib: undefined as any } }, SDK_PAIR],
           ['null $lib gets both', { event: { $lib: null, $lib_version: '9.9.9' } }, SDK_PAIR],
           ["'' $lib gets both", { event: { $lib: '' } }, SDK_PAIR],
+          ['a whitespace $lib is a $lib, so it gets no SDK $lib_version', { event: { $lib: ' ' } }, { $lib: ' ' }],
           ['a number $lib gets both', { event: { $lib: 5 } }, SDK_PAIR],
           ['a boolean $lib gets both', { event: { $lib: true } }, SDK_PAIR],
           ['an object $lib gets both', { event: { $lib: {} } }, SDK_PAIR],
@@ -335,6 +351,7 @@ describe('layered event values', () => {
 
       it.each<[string, (properties: Record<string, any>) => void, Record<string, JsonType>]>([
         ['removing only $lib_version', (p) => delete p.$lib_version, { $lib: 'posthog-node' }],
+        ['removing only $lib', (p) => delete p.$lib, { $lib_version: version }],
         ['setting $lib to null', (p) => (p.$lib = null), { $lib: null, $lib_version: version }],
         ['setting $lib alone', (p) => (p.$lib = 'hook-lib'), { $lib: 'hook-lib', $lib_version: version }],
       ])('the SDK never refills after before_send, so %s is sent as is', async (_label, edit, expected) => {
@@ -833,6 +850,12 @@ describe('layered event values', () => {
       ['alias', (c) => c.alias({ distinctId: 'u', alias: 'anon' }), ANALYTICS_CAPTURE_PATH],
       ['aliasImmediate', (c) => c.aliasImmediate({ distinctId: 'u', alias: 'anon' }), ANALYTICS_CAPTURE_PATH],
       ['groupIdentify', (c) => c.groupIdentify({ groupType: 'company', groupKey: 'acme' }), ANALYTICS_CAPTURE_PATH],
+      [
+        'groupIdentifyImmediate',
+        (c) => c.groupIdentifyImmediate({ groupType: 'company', groupKey: 'acme' }),
+        ANALYTICS_CAPTURE_PATH,
+      ],
+      ['captureAiImmediate', (c) => c.captureAiImmediate({ distinctId: 'u', event: '$ai_span' }), AI_CAPTURE_PATH],
       [
         'setPersonProperties',
         (c) => c.setPersonProperties({ distinctId: 'u', properties: { a: 1 } }),

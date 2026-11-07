@@ -81,6 +81,34 @@ describe('lib identity', () => {
     }
   })
 
+  it.each(['PostHogMCP', 'instrument()'])(
+    '%s sends the label in the PostHog-Sdk-Info header when it labels the client before its first capture',
+    async (path) => {
+      const fetch = vi.fn(async (_url: string, _init: any) => ({
+        status: 200,
+        text: async () => JSON.stringify({ results: {} }),
+        json: async () => ({ results: {} }),
+        headers: { get: () => null },
+      }))
+      const clientOptions = { ...options, captureCompression: 'none', fetch: fetch as any } as const
+      const posthog =
+        path === 'PostHogMCP' ? new PostHogMCP('phc_test', clientOptions) : new PostHog('phc_test', clientOptions)
+      try {
+        if (path === 'instrument()') {
+          instrument(new McpServer({ name: 'my-mcp', version: '1.0.0' }, { capabilities: { tools: {} } }), posthog)
+        }
+        posthog.capture({ distinctId: 'u', event: 'e' })
+        await posthog.flush()
+
+        const captureCalls = fetch.mock.calls.filter(([url]) => String(url).endsWith('/i/v1/analytics/events'))
+        expect(captureCalls).toHaveLength(1)
+        expect(captureCalls[0][1].headers['PostHog-Sdk-Info']).toBe(`posthog-node-mcp/${version}`)
+      } finally {
+        await posthog.shutdown()
+      }
+    }
+  )
+
   it.each(['PostHogMCP', 'instrument()'])('%s keeps shared properties on tool calls and exceptions', async (path) => {
     const beforeSend = vi.fn(() => null)
     const posthog = new PostHogMCP('phc_test', { ...options, before_send: beforeSend })

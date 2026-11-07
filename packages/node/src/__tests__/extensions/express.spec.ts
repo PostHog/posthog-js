@@ -548,6 +548,7 @@ describe('Express extension', () => {
       expect(event.properties.$user_agent).toBe('TestAgent/1.0')
       expect(event.properties.$response_status_code).toBe(503)
       expect(event.properties.$ip).toBe('192.168.1.1')
+      expect(event.properties).toMatchObject({ $lib: 'posthog-node', $lib_version: '1.2.3' })
       expect(event.properties.$exception_list).toBeDefined()
     })
   })
