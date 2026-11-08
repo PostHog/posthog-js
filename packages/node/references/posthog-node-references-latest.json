@@ -1261,7 +1261,7 @@
         {
           "category": "Capture",
           "description": "Register options that every event sent by this client carries.",
-          "details": "Each event fills the options it left unset (missing or `null`) in this order: the event's own `options`, then context options, then these, then the options the SDK adds (such as `process_person_profile: false` for an event with no distinct id). `before_send` sees the result and can change it. Values are sent to capture unchanged. Capture drops an event whose option value it cannot read, so a bad value registered here drops every event. An option beats its legacy property, such as `$process_person_profile`, wherever either one was set.",
+          "details": "Each event fills the options it left unset (missing or `null`) in this order: the event's own `options`, then context options, then these, then the options the SDK adds (such as `process_person_profile: false` for an event with no distinct id). `before_send` sees the result and can change it. Values are sent to capture unchanged. Capture drops an event whose option value it cannot read, so a bad value registered here drops every event.",
           "id": "registerOptions",
           "showDocs": true,
           "title": "registerOptions",
@@ -2461,7 +2461,7 @@
           "name": "disableGeoip"
         },
         {
-          "description": "Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;\nunknown keys pass through. A legacy property such as `$process_person_profile` fills an option\nleft unset. Capture drops an event whose option value it cannot read (`invalid_options`), and\nthe SDK reports the drop through the `'error'` event.",
+          "description": "Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.\nCapture drops an event whose option value it cannot read (`invalid_options`), and the SDK\nreports the drop through the `'error'` event.",
           "type": "Record<string, JsonType>",
           "name": "options"
         },
@@ -2922,7 +2922,7 @@
           "name": "disableGeoip"
         },
         {
-          "description": "Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;\nunknown keys pass through. A legacy property such as `$process_person_profile` fills an option\nleft unset. Capture drops an event whose option value it cannot read (`invalid_options`), and\nthe SDK reports the drop through the `'error'` event.",
+          "description": "Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.\nCapture drops an event whose option value it cannot read (`invalid_options`), and the SDK\nreports the drop through the `'error'` event.",
           "type": "Record<string, JsonType>",
           "name": "options"
         }
@@ -2946,7 +2946,7 @@
           "name": "disableGeoip"
         },
         {
-          "description": "Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;\nunknown keys pass through. A legacy property such as `$process_person_profile` fills an option\nleft unset. Capture drops an event whose option value it cannot read (`invalid_options`), and\nthe SDK reports the drop through the `'error'` event.",
+          "description": "Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.\nCapture drops an event whose option value it cannot read (`invalid_options`), and the SDK\nreports the drop through the `'error'` event.",
           "type": "Record<string, JsonType>",
           "name": "options"
         }
@@ -4733,7 +4733,7 @@
           "name": "propertiesOnce"
         },
         {
-          "description": "Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;\nunknown keys pass through. A legacy property such as `$process_person_profile` fills an option\nleft unset. Capture drops an event whose option value it cannot read (`invalid_options`), and\nthe SDK reports the drop through the `'error'` event.",
+          "description": "Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.\nCapture drops an event whose option value it cannot read (`invalid_options`), and the SDK\nreports the drop through the `'error'` event.",
           "type": "Record<string, JsonType>",
           "name": "options"
         }
@@ -5352,7 +5352,7 @@
           "name": "properties"
         },
         {
-          "description": "Per-event options, sent to capture unchanged. Known keys today are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` (legacy `$ignore_sent_at`) and `product_tour_id`;\nunknown keys pass through. A legacy property such as `$process_person_profile` fills an option\nleft unset. Capture drops an event whose option value it cannot read (`invalid_options`), and\nthe SDK reports the drop through the `'error'` event.",
+          "description": "Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.\nCapture drops an event whose option value it cannot read (`invalid_options`), and the SDK\nreports the drop through the `'error'` event.",
           "type": "Record<string, JsonType>",
           "name": "options"
         }
