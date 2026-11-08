@@ -85,7 +85,7 @@ The plugin is still a CocoaPod, but it no longer depends on the `PostHog` pod. R
 - `install! 'cocoapods', :deduplicate_targets => false`
 - Several targets that use the plugin with different `platform` or `use_frameworks!` settings
 
-**Remove `posthog-react-native-session-replay`.** Its pod still installs `posthog-ios` 3.x from CocoaPods, which would clash with the plugin's Swift package and fail the Xcode build with `error: Redefinition of module 'PostHog'`. `pod install` now stops with an error that names the package. Uninstall it and run `pod install` again. A `pod 'PostHog'` line in your Podfile stops `pod install` the same way: remove it, and add `posthog-ios` as a Swift package to any target whose own code imports it. The plugin replaces it, and `posthog-react-native` already prefers the plugin when both are installed.
+**Remove `posthog-react-native-session-replay`.** Its pod still installs `posthog-ios` 3.x from CocoaPods, which would clash with the plugin's Swift package and fail the Xcode build with `error: Redefinition of module 'PostHog'`. `pod install` now stops with an error that names the package. Uninstall it and run `pod install` again. A `pod 'PostHog'` line in your Podfile stops `pod install` the same way: remove it, and add `posthog-ios` as a Swift package to any target whose own code imports it. The plugin replaces it, and `posthog-react-native` already prefers the plugin when both are installed. The check only sees pods your Podfile adds directly, including autolinked packages. Another pod that depends on `PostHog` still installs, and the Xcode build then fails with `Redefinition of module 'PostHog'`.
 
 **Changes with no install error:**
 
@@ -181,7 +181,7 @@ Apps on React Native's full Swift Package Manager integration no longer bundle t
 - [ ] Your Podfile doesn't use `generate_multiple_pod_projects`, `deduplicate_targets => false`, or plugin targets with mixed platform or linkage settings.
 - [ ] Build machines can reach `github.com/PostHog/posthog-ios`.
 - [ ] Native `import PostHog` code still compiles, and custom dSYM upload scripts are updated.
-- [ ] `posthog-react-native-session-replay` and any `pod 'PostHog'` line are removed. If they aren't, `pod install` stops with an error.
+- [ ] `posthog-react-native-session-replay`, any `pod 'PostHog'` line, and any other pod that depends on `PostHog` are removed. `pod install` stops with an error for the first two, and the Xcode build fails with `Redefinition of module 'PostHog'` for the rest.
 - [ ] Direct `start()` calls now use `setup()`, and direct `setup()` calls pass `throttleDelayMs`.
 - [ ] `screenshotModeBackgroundCapture` is removed.
 - [ ] Reverse proxies and self-hosted instances serve `/i/v1/*`, proxies pass `Authorization` and `Content-Encoding` through and don't authenticate with `Authorization`, and they don't redirect capture requests to another origin.
