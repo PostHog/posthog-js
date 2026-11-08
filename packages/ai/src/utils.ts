@@ -272,13 +272,13 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
         } else if (item.content) {
           content.push({ type: 'text', text: String(item.content) })
         }
-      } else if (item.type === 'function_call') {
+      } else if (item.type === 'function_call' || item.type === 'custom_tool_call') {
         content.push({
           type: 'function',
           id: item.call_id || item.id || '',
           function: {
             name: item.name,
-            arguments: item.arguments || {},
+            arguments: item.type === 'custom_tool_call' ? item.input : item.arguments || {},
           },
         })
       } else if (item.type === 'image_generation_call' && item.result) {
