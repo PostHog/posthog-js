@@ -4,6 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { Event } from '../types'
+import { buildPayloadOptions, type EventOptions } from './event-options'
 import { POSTHOG_MCP_ANALYTICS_SOURCE, PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from './constants'
 import { MCPAnalyticsEventType } from './event-types'
 
@@ -32,6 +33,11 @@ export interface PostHogCaptureEvent {
   distinct_id: string
   event: string
   properties: Record<string, unknown>
+  /**
+   * posthog-node per-event options, such as `process_person_profile`. An event with no resolved
+   * identity carries `process_person_profile: false` unless the caller chose a value.
+   */
+  options?: EventOptions
   timestamp: string
   type: 'capture'
 }
@@ -64,7 +70,6 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
   }
   addSessionIdProperty(event, properties)
   addConversationIdProperty(event, properties)
-  addPersonProcessingProperty(event, properties)
   addGroupsProperty(event, properties)
 
   addCommonEventProperties(event, properties)
@@ -75,6 +80,7 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
     event: event.eventName ?? BUILT_IN_EVENT_NAME_BY_TYPE[event.eventType],
     distinct_id: distinctId,
     properties,
+    ...withOptions(buildPayloadOptions(event, properties)),
     timestamp,
     type: 'capture',
   }
@@ -105,17 +111,9 @@ function addGroupsProperty(event: Event, properties: Record<string, unknown>): v
   }
 }
 
-/**
- * Without a resolved identity the distinct id is just the session id, so
- * processing a person profile would mint one anonymous person per session and
- * inflate person counts. Opt out of person processing in that case (matching
- * `@posthog/ai` / posthog-node). When an identity is present we keep person
- * processing so `$set` lands on a real person.
- */
-function addPersonProcessingProperty(event: Event, properties: Record<string, unknown>): void {
-  if (!event.identifyActorGivenId) {
-    properties.$process_person_profile = false
-  }
+/** Leaves `options` off a payload that has none, so `beforeSend` sees no empty object. */
+function withOptions(options: EventOptions | undefined): Pick<PostHogCaptureEvent, 'options'> {
+  return options ? { options } : {}
 }
 
 function addCommonEventProperties(event: Event, properties: Record<string, unknown>): void {
@@ -235,7 +233,6 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   }
   addSessionIdProperty(event, properties)
   addConversationIdProperty(event, properties)
-  addPersonProcessingProperty(event, properties)
   addGroupsProperty(event, properties)
 
   if (event.error) {
@@ -285,6 +282,7 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
     event: PostHogMCPAnalyticsEvent.Exception,
     distinct_id: distinctId,
     properties,
+    ...withOptions(buildPayloadOptions(event, properties)),
     timestamp,
     type: 'capture',
   }

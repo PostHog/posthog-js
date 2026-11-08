@@ -5,7 +5,9 @@
 
 import type {
   CompatibleRequestHandlerExtra,
+  JsonRecord,
   MCPAnalyticsData,
+  MCPAnalyticsOptions,
   MCPRequestLike,
   MCPServerLike,
   SessionInfo,
@@ -130,23 +132,44 @@ export function withIdentity(sessionInfo: SessionInfo, identity: UserIdentity | 
   }
 }
 
+type RequestMetadataCallback = MCPAnalyticsOptions['eventProperties']
+
 /**
- * Resolves the `eventProperties` callback. Returns null when no callback is
- * configured, or when it returns nullish or throws — a throw never propagates
- * into the tool path.
+ * Runs one per-request metadata callback. Returns null when it is not configured,
+ * or when it returns nullish or throws. A throw never propagates into the tool path.
  */
-export async function resolveEventProperties(
+async function resolveRequestMetadata(
   data: MCPAnalyticsData,
+  name: string,
+  callback: RequestMetadataCallback,
   request: MCPRequestLike,
   extra?: CompatibleRequestHandlerExtra
-): Promise<Record<string, unknown> | null> {
-  if (!data.options.eventProperties) {
+): Promise<JsonRecord | null> {
+  if (!callback) {
     return null
   }
   try {
-    return (await data.options.eventProperties(request, extra)) ?? null
+    return (await callback(request, extra)) ?? null
   } catch (e) {
-    data.logger(`eventProperties callback error: ${e}`)
+    data.logger(`${name} callback error: ${e}`)
     return null
   }
+}
+
+/** Resolves the `eventProperties` callback. See {@link resolveRequestMetadata}. */
+export function resolveEventProperties(
+  data: MCPAnalyticsData,
+  request: MCPRequestLike,
+  extra?: CompatibleRequestHandlerExtra
+): Promise<JsonRecord | null> {
+  return resolveRequestMetadata(data, 'eventProperties', data.options.eventProperties, request, extra)
+}
+
+/** Resolves the `eventOptions` callback. See {@link resolveRequestMetadata}. */
+export function resolveEventOptions(
+  data: MCPAnalyticsData,
+  request: MCPRequestLike,
+  extra?: CompatibleRequestHandlerExtra
+): Promise<JsonRecord | null> {
+  return resolveRequestMetadata(data, 'eventOptions', data.options.eventOptions, request, extra)
 }

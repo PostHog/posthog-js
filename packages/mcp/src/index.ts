@@ -207,6 +207,7 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
     eventName: eventData.event,
     timestamp: new Date(),
     properties: eventData.properties,
+    eventOptions: eventData.eventOptions,
   }
 
   // Re-use the same per-server publish path so the event picks up session info,

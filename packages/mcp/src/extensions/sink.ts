@@ -3,10 +3,11 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { EventMessage, PostHog } from 'posthog-node'
+import type { PostHog } from 'posthog-node'
 import { uuidv7 } from '@posthog/core'
 
 import type { BeforeSendFn, Event, McpEvent } from '../types'
+import { clientOptionFields, hasPersonlessDefault, settlePersonProcessing } from './event-options'
 import { log, type LoggerFn } from './logger'
 import { type PostHogCaptureEvent, buildPostHogCaptureEvents } from './posthog-events'
 import { newPrefixedId } from './ids'
@@ -22,7 +23,8 @@ export interface McpCaptureOptions {
 
 /**
  * Runs an MCP event through the full transform: sanitize → truncate → fan out
- * into the `$mcp_*` / `$exception` capture payloads → `beforeSend`. Returns
+ * into the `$mcp_*` / `$exception` capture payloads → `beforeSend` → settle
+ * person processing into the `process_person_profile` option. Returns
  * `null` (and logs) if a transform stage throws, so the event is dropped rather
  * than partially sent. Individual payloads dropped by `beforeSend` are filtered
  * out of the returned `captures`.
@@ -59,7 +61,9 @@ export async function processMcpEvent(
     enableExceptionAutocapture: options.enableExceptionAutocapture,
   })
 
-  const captures = await applyBeforeSend(built, options.beforeSend, logger)
+  const personlessDefault = hasPersonlessDefault(fullEvent)
+  const kept = await applyBeforeSend(built, options.beforeSend, logger)
+  const captures = kept.map((capture) => settlePersonProcessing(capture, personlessDefault))
 
   return { event: fullEvent, captures }
 }
@@ -89,23 +93,6 @@ async function applyBeforeSend(
     }
   }
   return kept
-}
-
-/**
- * Marks a personless payload for the client it goes to. posthog-node 6 needs the per-event
- * `process_person_profile` option, because a registered or context option beats the property;
- * posthog-node 5 reads only the property. `registerOptions` first shipped in posthog-node 6.
- * The payload's property decides, so `beforeSend` can still turn person processing back on.
- */
-function personProcessingFields(
-  posthog: PostHog,
-  properties: Record<string, unknown>
-): Pick<EventMessage, 'properties' | 'options'> {
-  if (typeof posthog.registerOptions !== 'function' || properties.$process_person_profile !== false) {
-    return { properties }
-  }
-  const { $process_person_profile: _personless, ...rest } = properties
-  return { properties: rest, options: { process_person_profile: false } }
 }
 
 /**
@@ -142,7 +129,7 @@ export class McpEventSink {
         this.posthog.capture({
           distinctId: captureEvent.distinct_id,
           event: captureEvent.event,
-          ...personProcessingFields(this.posthog, captureEvent.properties),
+          ...clientOptionFields(this.posthog, captureEvent.properties, captureEvent.options),
           ...(groups ? { groups } : {}),
           timestamp: new Date(captureEvent.timestamp),
           uuid: uuidv7(),

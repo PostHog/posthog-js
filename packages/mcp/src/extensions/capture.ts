@@ -97,6 +97,7 @@ export function captureEvent(
     errorType: eventInput.errorType,
     conversationId: eventInput.conversationId,
     properties: eventInput.properties,
+    eventOptions: eventInput.eventOptions,
   }
 
   return sink.capture(fullEvent, {

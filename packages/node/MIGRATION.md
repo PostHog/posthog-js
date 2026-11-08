@@ -381,6 +381,8 @@ These versions accept both posthog-node 5 and 6. If your app does not list `post
 
 `@posthog/mcp` labels the whole client, as in 5.x: every event that the client you pass to `instrument()` or `PostHogMCP` captures afterwards reports `$lib` `posthog-node-mcp` and the `@posthog/mcp` version. In 6.0 a `$lib` set on the event, in context or with `register()` wins over the label. If your app also captures its own events, give MCP analytics its own client. To find MCP traffic, filter on `$mcp_*` events rather than `$lib`.
 
+`@posthog/mcp` takes per-event options as `eventOptions`, per call or from an `instrument()` callback, and passes them as the event's `options`. On 6, an MCP event from a session with no resolved identity carries the `process_person_profile: false` option, so a client `before_send` sees the anonymous default there. As a per-event option it wins over a `registerOptions()` or context `process_person_profile`. A `process_person_profile` you set in `eventOptions` wins over the default.
+
 ## posthog-node 5.x support
 
 posthog-node 5.x keeps receiving security fixes for at least one year after the 6.0 release.
