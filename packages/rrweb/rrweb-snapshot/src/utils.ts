@@ -837,18 +837,13 @@ export function restoreSelectState(node: Node | null, mirror: Mirror): void {
   if (node?.nodeName !== 'SELECT') return;
   const select = node as HTMLSelectElement;
   const meta = mirror.getMeta(node);
-  if (!select.options || meta?.type !== NodeType.Element) return;
-  const masked = meta.attributes.rr_maskedSelect === true;
-  // Older snapshots have no marker, but retain a starred value and omit all
-  // selected flags. Never match that masked value against a real option.
-  const legacyMasked =
-    meta.attributes.rr_maskedSelect === undefined &&
-    typeof meta.attributes.value === 'string' &&
-    /^\*+$/.test(meta.attributes.value) &&
-    !Array.from(select.options).some((option) =>
-      option.hasAttribute('selected'),
-    );
-  if (masked || legacyMasked) select.selectedIndex = -1;
+  if (
+    select.options &&
+    meta?.type === NodeType.Element &&
+    meta.attributes.rr_maskedSelect === true
+  ) {
+    select.selectedIndex = -1;
+  }
 }
 
 export function maskInputValue({

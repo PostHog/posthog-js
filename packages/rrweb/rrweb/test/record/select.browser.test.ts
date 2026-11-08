@@ -126,6 +126,74 @@ describe('select recording and replay', () => {
   );
 
   for (const added of [false, true]) {
+    it.each(['play', 'seek', 'seek without virtual DOM'])(
+      `preserves an unmasked asterisk value after options change (${added ? 'mutation' : 'snapshot'}, %s)`,
+      async (mode) => {
+        const result = await page.evaluate(
+          async ({ added, mode }) => {
+            const { record, Replayer } = (
+              window as unknown as { rrweb: typeof import('../../src') }
+            ).rrweb;
+            const fixture = document.querySelector('#fixture')!;
+            const mount = () => {
+              fixture.innerHTML =
+                '<select id="privacy"><option value="*">All</option>' +
+                '<option value="private">Private</option></select>';
+            };
+            if (!added) mount();
+            const events: eventWithTime[] = [];
+            const stop = record({
+              maskAllInputs: false,
+              emit: (event) => events.push(event),
+            })!;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            if (added) {
+              mount();
+              await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            const select = fixture.querySelector('select')!;
+            select.options[0].remove();
+            select.add(new Option('Public', 'public'));
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            record.addCustomEvent('end', null);
+            stop();
+            const replayer = new Replayer(events, {
+              useVirtualDom: mode !== 'seek without virtual DOM',
+            });
+            if (mode === 'play') {
+              await new Promise<void>((resolve) => {
+                replayer.on('finish', () => resolve());
+                replayer.play();
+              });
+            } else {
+              replayer.pause(
+                events[events.length - 1].timestamp - events[0].timestamp + 1,
+              );
+            }
+            await new Promise((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(resolve)),
+            );
+            const replayed = replayer.iframe.contentDocument!.querySelector(
+              '#privacy',
+            ) as HTMLSelectElement;
+            const result = {
+              live: select.value,
+              replayed: replayed.value,
+              selectedIndex: replayed.selectedIndex,
+            };
+            replayer.destroy();
+            return result;
+          },
+          { added, mode },
+        );
+        expect(result.live).toBe('private');
+        expect(result.replayed).toBe('private');
+        expect(result.selectedIndex).toBe(0);
+      },
+    );
+  }
+
+  for (const added of [false, true]) {
     for (const masked of [false, true]) {
       it.each(['play', 'seek', 'seek without virtual DOM'])(
         `replays a ${masked ? 'masked' : 'visible'} select ${added ? 'added by a mutation' : 'in the full snapshot'} (%s)`,

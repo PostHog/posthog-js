@@ -109,20 +109,22 @@ describe('rebuild', function () {
       },
     );
 
-    it('clears masked selections in recordings without the masking marker', () => {
+    it('does not infer masking from a literal asterisk in a legacy snapshot', () => {
       const source = document.implementation.createHTMLDocument();
       source.body.innerHTML =
-        '<select><option value="public">Public</option>' +
+        '<select><option value="*">All</option>' +
         '<option value="private">Private</option></select>';
-      source.querySelector('select')!.value = 'private';
-      const serialized = snapshot(source, { maskAllInputs: true })!;
+      const serialized = snapshot(source)!;
       visitSnapshot(serialized, (node) => {
-        if (node.type === NodeType.Element)
-          delete node.attributes.rr_maskedSelect;
+        if (node.type === NodeType.Element && node.tagName === 'option') {
+          delete node.attributes.selected;
+        }
       });
       const doc = document.implementation.createHTMLDocument();
       rebuild(serialized, { doc, mirror, cache });
-      expect(doc.querySelector('select')!.selectedIndex).toBe(-1);
+      const select = doc.querySelector('select')!;
+      expect(select.value).toBe('*');
+      expect(select.selectedIndex).toBe(0);
     });
 
     it('preserves multiple unmasked selections', () => {
