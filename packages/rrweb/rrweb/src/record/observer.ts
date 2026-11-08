@@ -12,6 +12,7 @@ import {
   on,
   callAllSafely,
   hookSetter,
+  getDeferral,
   getWindowScroll,
   getWindowHeight,
   getWindowWidth,
@@ -442,24 +443,37 @@ function initInputObserver({
   sampling,
   userTriggeredOnInput,
 }: observerParam): listenerHandler {
-  function eventHandler(event: Event) {
-    let target = getEventTarget(event) as HTMLElement | null;
-    const userTriggered = event.isTrusted;
+  let active = true;
+  const pendingSelects = new Set<HTMLElement>();
+  let selectFlushScheduled = false;
+
+  function getInputTarget(target: HTMLElement | null): HTMLElement | null {
     // Reading a native accessor (tagName/value/checked/type) on a non-native
     // `this` — e.g. a proxy, custom element, or cross-realm object reaching us
-    // through the hooked setter's mock event — throws 'Illegal invocation'.
+    // through a hooked setter — throws 'Illegal invocation'.
     // Bail out unless the target is a genuine element in this document's realm.
     const view = doc.defaultView;
     if (target && view && !(target instanceof view.HTMLElement)) {
-      return;
+      return null;
     }
     if (target && target.tagName === 'OPTION') {
-      if (isBlocked(target, blockClass, blockSelector, true)) return;
+      if (isBlocked(target, blockClass, blockSelector, true)) return null;
       target = dom.parentElement(target);
       if (target && target.tagName === 'OPTGROUP') {
         target = dom.parentElement(target);
       }
     }
+    return target;
+  }
+
+  function eventHandler(event: Event) {
+    processInput(
+      getInputTarget(getEventTarget(event) as HTMLElement | null),
+      event.isTrusted,
+    );
+  }
+
+  function processInput(target: HTMLElement | null, userTriggered: boolean) {
     const tagName = target && target.tagName;
     if (
       !target ||
@@ -476,7 +490,17 @@ function initInputObserver({
     ) {
       return;
     }
-    let text = (target as HTMLInputElement).value;
+    const selectedOptions =
+      tagName === 'SELECT'
+        ? Array.from((target as HTMLSelectElement).selectedOptions).filter(
+            (option) =>
+              !isBlocked(option, blockClass, blockSelector, true) &&
+              mirror.getId(option) > 0,
+          )
+        : undefined;
+    let text = selectedOptions
+      ? selectedOptions[0]?.value || ''
+      : (target as HTMLInputElement).value;
     let isChecked = false;
     let selectedOptionIds: number[] | undefined;
     const type: Lowercase<string> = getInputType(target) || '';
@@ -495,16 +519,8 @@ function initInputObserver({
         value: text,
         maskInputFn,
       });
-    } else if (tagName === 'SELECT' && (target as HTMLSelectElement).multiple) {
-      const selectedOptions = Array.from(
-        (target as HTMLSelectElement).selectedOptions,
-      ).filter(
-        (option) =>
-          !isBlocked(option, blockClass, blockSelector, true) &&
-          mirror.getId(option) > 0,
-      );
+    } else if (selectedOptions && (target as HTMLSelectElement).multiple) {
       selectedOptionIds = selectedOptions.map((option) => mirror.getId(option));
-      text = selectedOptions[0]?.value || '';
     }
     const value: inputValue = { text, isChecked };
     if (selectedOptionIds) value.selectedOptionIds = selectedOptionIds;
@@ -529,6 +545,17 @@ function initInputObserver({
         });
     }
   }
+  function flushPendingSelects() {
+    selectFlushScheduled = false;
+    const selects = Array.from(pendingSelects);
+    pendingSelects.clear();
+    callAllSafely(
+      selects.map((select) => () => {
+        if (active) callbackWrapper(processInput)(select, false);
+      }),
+    );
+  }
+
   function cbWithDedup(target: EventTarget, v: inputValue) {
     const lastInputValue = lastInputValueMap.get(target);
     if (
@@ -558,6 +585,7 @@ function initInputObserver({
       handlers.forEach((h) => h());
     };
   }
+  const defer = getDeferral(currentWindow);
   const propertyDescriptor = currentWindow.Object.getOwnPropertyDescriptor(
     currentWindow.HTMLInputElement.prototype,
     'value',
@@ -579,11 +607,19 @@ function initInputObserver({
           p[1],
           {
             set() {
-              // mock to a normal event
-              callbackWrapper(eventHandler)({
-                target: this as EventTarget,
-                isTrusted: false, // userTriggered to false as this could well be programmatic
-              } as Event);
+              if (!active) return;
+              const target = callbackWrapper(getInputTarget)(this);
+              if (!target) return;
+              if (target.tagName === 'SELECT') {
+                pendingSelects.add(target);
+                if (!selectFlushScheduled) {
+                  selectFlushScheduled = true;
+                  // Let the already-deferred setter callbacks join the same batch.
+                  defer(flushPendingSelects);
+                }
+              } else {
+                callbackWrapper(processInput)(target, false);
+              }
             },
           },
           false,
@@ -593,6 +629,10 @@ function initInputObserver({
     );
   }
   return callbackWrapper(() => {
+    // Flush while the select and option IDs are still in the mirror.
+    callAllSafely([flushPendingSelects]);
+    active = false;
+    pendingSelects.clear();
     // the hook resetters below restore shared DOM prototype accessors through a
     // bare `Object.defineProperty`, which throws if the page made one of them
     // non-configurable after we hooked it. Run them all: a leaked hook keeps

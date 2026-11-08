@@ -182,7 +182,7 @@ assignment, before it has been forwarded to the original setter. Both are
 contained here; losing one recorded write beats breaking the write.
 see: https://github.com/angular/angular/issues/26948
 */
-function getDeferral(
+export function getDeferral(
   win: Window & typeof globalThis,
 ): (callback: () => void) => void {
   let scheduleTimeout: typeof setTimeout | undefined =
