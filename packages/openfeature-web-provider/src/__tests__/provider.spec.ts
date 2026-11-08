@@ -142,6 +142,18 @@ describe('PostHogWebProvider', () => {
         ErrorCode.TYPE_MISMATCH,
       ],
       [
+        'number from an empty variant',
+        { key: 'flag', enabled: true, variant: '' },
+        (p) => p.resolveNumberEvaluation('flag', 42),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
+        'number from a whitespace-only variant',
+        { key: 'flag', enabled: true, variant: '   ' },
+        (p) => p.resolveNumberEvaluation('flag', 42),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
         'object from an enabled flag with no payload',
         { key: 'flag', enabled: true, variant: 'x' },
         (p) => p.resolveObjectEvaluation('flag', {}),
@@ -284,6 +296,26 @@ describe('PostHogWebProvider', () => {
       expect(details.value).toBe('fallback')
       expect(details.errorCode).toBe(ErrorCode.TYPE_MISMATCH)
       expect(details.reason).toBe(StandardResolutionReasons.ERROR)
+    })
+
+    it.each(['', '   ', '\t\n'])('returns the numeric default for a blank variant %j', async (variant) => {
+      const { client } = makeClient({ key: 'flag', enabled: Boolean(variant), variant })
+      await OpenFeature.setProviderAndWait(new PostHogWebProvider(client))
+
+      const details = OpenFeature.getClient().getNumberDetails('flag', 42)
+      expect(details.value).toBe(42)
+      expect(details.errorCode).toBe(ErrorCode.TYPE_MISMATCH)
+      expect(details.reason).toBe(StandardResolutionReasons.ERROR)
+    })
+
+    it.each(['0', '7'])('preserves a numeric variant %j', async (variant) => {
+      const { client } = makeClient({ key: 'flag', enabled: true, variant })
+      await OpenFeature.setProviderAndWait(new PostHogWebProvider(client))
+
+      const details = OpenFeature.getClient().getNumberDetails('flag', 42)
+      expect(details.value).toBe(Number(variant))
+      expect(details.errorCode).toBeUndefined()
+      expect(details.reason).toBe(StandardResolutionReasons.TARGETING_MATCH)
     })
   })
 })
