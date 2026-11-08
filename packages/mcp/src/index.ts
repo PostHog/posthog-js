@@ -271,6 +271,7 @@ export type {
   ToolCallCaptureData,
   ToolInputOptions,
   ToolsListCaptureData,
+  UnknownToolCaptureData,
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']

@@ -190,7 +190,7 @@ function truncateString(str: string | undefined, maxLength: number): string | un
   if (str.length <= maxLength) {
     return str
   }
-  return str.slice(0, maxLength) + TRUNCATION_SUFFIX
+  return str.slice(0, maxLength - TRUNCATION_SUFFIX.length) + TRUNCATION_SUFFIX
 }
 
 function truncateStackFrames(frames: StackFrame[] | undefined): StackFrame[] | undefined {

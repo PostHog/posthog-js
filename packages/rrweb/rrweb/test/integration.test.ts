@@ -407,6 +407,64 @@ describe('record integration tests', function (this: ISuite) {
     await assertSnapshot(snapshots);
   });
 
+  it.each([true, false])(
+    'records hidden values with maskAllInputs=%s',
+    async (maskAllInputs) => {
+      const page = await browser.newPage();
+      try {
+        await page.setContent('<input type="hidden" value="initial">');
+        await page.evaluate(code);
+        const events = await page.evaluate(async (maskAllInputs) => {
+          const events: eventWithTime[] = [];
+          const { record } = (
+            window as unknown as { rrweb: typeof import('../src') }
+          ).rrweb;
+          const stop = record({
+            maskAllInputs,
+            emit: (event) => events.push(event),
+          })!;
+          document.querySelector('input')!.value = 'updated value';
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          stop();
+          return events;
+        }, maskAllInputs);
+        const full = events.find(
+          (event) => event.type === EventType.FullSnapshot,
+        )!;
+        if (full.type !== EventType.FullSnapshot)
+          throw new Error('missing snapshot');
+        let initial: unknown;
+        let id: number;
+        visitSnapshot(full.data.node, (node) => {
+          if (
+            node.type === NodeType.Element &&
+            node.attributes.type === 'hidden'
+          ) {
+            initial = node.attributes.value;
+            id = node.id;
+          }
+        });
+        expect(initial).toBe(maskAllInputs ? '*******' : 'initial');
+        const updates = events.flatMap((event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.Mutation
+            ? event.data.attributes
+            : [],
+        );
+        expect(updates).toContainEqual({
+          id: id!,
+          attributes: {
+            value: maskAllInputs ? '*'.repeat(13) : 'updated value',
+          },
+        });
+        if (maskAllInputs)
+          expect(JSON.stringify(events)).not.toContain('updated value');
+      } finally {
+        await page.close();
+      }
+    },
+  );
+
   it('should not record input events on ignored elements', async () => {
     const page: puppeteer.Page = await browser.newPage();
     await page.goto('about:blank');
