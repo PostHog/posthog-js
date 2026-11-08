@@ -1,4 +1,9 @@
-import type { JsonType } from '@posthog/core'
+import {
+  acceptsEventOptions,
+  EVENT_OPTION_LEGACY_PROPERTIES,
+  eventOptionsAsLegacyProperties,
+  type JsonType,
+} from '@posthog/core'
 import type { EventMessage, PostHog } from 'posthog-node'
 
 import type { Event } from '../types'
@@ -7,15 +12,7 @@ import type { PostHogCaptureEvent } from './posthog-events'
 export type EventOptions = Record<string, JsonType>
 
 /** The event property that carried person processing before posthog-node had per-event options. */
-export const PERSON_PROCESSING_PROPERTY = '$process_person_profile'
-
-/** Each posthog-node per-event option, mapped to the event property posthog-node 5 reads instead. */
-const NODE_5_OPTION_PROPERTIES: ReadonlyMap<string, string> = new Map([
-  ['process_person_profile', PERSON_PROCESSING_PROPERTY],
-  ['cookieless_mode', '$cookieless_mode'],
-  ['disable_skew_correction', '$ignore_sent_at'],
-  ['product_tour_id', '$product_tour_id'],
-])
+export const PERSON_PROCESSING_PROPERTY = EVENT_OPTION_LEGACY_PROPERTIES.process_person_profile
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -117,15 +114,8 @@ export function clientOptionFields(
   if (!options) {
     return { properties }
   }
-  if (typeof posthog.registerOptions === 'function') {
+  if (acceptsEventOptions(posthog)) {
     return { properties, options }
   }
-  const withOptionProperties = { ...properties }
-  for (const [key, value] of Object.entries(options)) {
-    const property = NODE_5_OPTION_PROPERTIES.get(key)
-    if (property !== undefined && !isUnsetOption(value)) {
-      withOptionProperties[property] = value
-    }
-  }
-  return { properties: withOptionProperties }
+  return { properties: { ...properties, ...eventOptionsAsLegacyProperties(options) } }
 }

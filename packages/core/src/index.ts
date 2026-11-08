@@ -110,6 +110,7 @@ export type {
 } from './traces/types'
 export { uuidv7, V7Generator } from './vendor/uuidv7'
 export * from './cookie'
+export * from './event-options'
 export * from './posthog-core'
 export * from './posthog-core-stateless'
 export * from './privacy'

@@ -1,4 +1,4 @@
-import type { JsonType } from '@posthog/core'
+import { acceptsEventOptions, eventOptionsAsLegacyProperties, type JsonType } from '@posthog/core'
 import type { EventMessage } from 'posthog-node'
 
 /** @internal */
@@ -35,14 +35,6 @@ export function userDistinctId(value: unknown): string | undefined {
 
 /** Per-event options, as posthog-node 6 takes them on `capture()`. */
 export type AiEventOptions = Record<string, JsonType>
-
-/** Each posthog-node per-event option, mapped to the event property posthog-node 5 reads instead. */
-const NODE_5_OPTION_PROPERTIES: ReadonlyMap<string, string> = new Map([
-  ['process_person_profile', '$process_person_profile'],
-  ['cookieless_mode', '$cookieless_mode'],
-  ['disable_skew_correction', '$ignore_sent_at'],
-  ['product_tour_id', '$product_tour_id'],
-])
 
 /**
  * The caller's per-event options when they are an object. A missing or `null` value means no
@@ -88,13 +80,9 @@ export function eventOptionFields(
     return Object.keys(eventOptions).length > 0 ? { properties, options: eventOptions } : { properties }
   }
 
-  const withOptionProperties: Record<string, unknown> = { ...properties }
-  for (const [key, value] of Object.entries(userOptions ?? {})) {
-    const property = NODE_5_OPTION_PROPERTIES.get(key)
-    // posthog-node 6 treats a missing or `null` option as unset, so neither becomes a property.
-    if (property !== undefined && value !== undefined && value !== null) {
-      withOptionProperties[property] = value
-    }
+  const withOptionProperties: Record<string, unknown> = {
+    ...properties,
+    ...eventOptionsAsLegacyProperties(userOptions),
   }
   if (personless) {
     withOptionProperties.$process_person_profile = false
@@ -103,13 +91,12 @@ export function eventOptionFields(
 }
 
 /**
- * Whether the client is posthog-node 6 or later. `registerOptions` first shipped in 6.0. The
- * version is not read, because `getLibraryVersion()` can be overridden by a subclass or wrapper.
+ * Whether the client is posthog-node 6 or later, the first major with per-event options.
  *
  * @internal
  */
 export function isPostHogNode6(client: Pick<AiLaneCapableClient, 'registerOptions'>): boolean {
-  return typeof client.registerOptions === 'function'
+  return acceptsEventOptions(client)
 }
 
 /**
