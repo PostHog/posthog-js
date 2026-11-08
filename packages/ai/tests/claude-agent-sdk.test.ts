@@ -9,6 +9,13 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 }))
 
 import { instrument, PostHogClaudeAgentProcessor, query } from '../src/claude-agent-sdk'
+import {
+  EVENT_OPTION_CASES,
+  USER_EVENT_OPTIONS,
+  asPostHogNodeMajor,
+  capturedEvents as allCapturedEvents,
+  expectUserEventOptions,
+} from './test-utils'
 
 function createMockClient() {
   return {
@@ -776,8 +783,79 @@ describe('Claude Agent SDK integration', () => {
     for (const event of [capturedEvents(client, '$ai_trace')[0], capturedEvents(client, '$ai_generation')[0]]) {
       expect(event.distinctId).toBe(event.properties.$ai_trace_id)
       expect(event.properties.$process_person_profile).toBe(false)
-      expect(event.options).toEqual({ process_person_profile: false })
+      expect(event.options).toBeUndefined()
     }
+  })
+
+  describe('posthog-node event options', () => {
+    const toolTurn = (): any =>
+      scriptedQuery([
+        messageStart(),
+        assistantMessage([{ type: 'tool_use', id: 'toolu_1', name: 'Read', input: { file_path: '/tmp/a.ts' } }]),
+        messageStop(),
+        toolResultMessage([{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'contents' }]),
+        resultMessage(),
+      ])
+
+    it.each(EVENT_OPTION_CASES)(
+      'sends the processor options on posthog-node $major (personless: $personless)',
+      async ({ major, personless }) => {
+        const client = asPostHogNodeMajor(createMockClient(), major)
+        queryMock.mockReturnValue(toolTurn())
+
+        await drain(
+          instrument({ client, distinctId: personless ? undefined : 'user-1', options: USER_EVENT_OPTIONS }).query({
+            prompt: 'Hello',
+          })
+        )
+
+        const events = allCapturedEvents(client)
+        expect(events.map((event) => event.event).sort()).toEqual(['$ai_generation', '$ai_span', '$ai_trace'])
+        for (const event of events) {
+          expectUserEventOptions(event, major, personless)
+        }
+      }
+    )
+
+    it('merges per-query options over the processor options key by key', async () => {
+      const client = asPostHogNodeMajor(createMockClient(), 6)
+      queryMock.mockReturnValue(toolTurn())
+
+      await drain(
+        instrument({
+          client,
+          distinctId: 'user-1',
+          options: { process_person_profile: true, cookieless_mode: true },
+        }).query({ prompt: 'Hello', posthog: { options: { process_person_profile: false } } })
+      )
+
+      const events = allCapturedEvents(client)
+      expect(events).toHaveLength(3)
+      for (const event of events) {
+        expect(event.options).toEqual({ process_person_profile: false, cookieless_mode: true })
+      }
+    })
+
+    it('ignores per-query options that are not an object and keeps the processor options', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const client = asPostHogNodeMajor(createMockClient(), 6)
+      queryMock.mockReturnValue(toolTurn())
+
+      await drain(
+        instrument({ client, distinctId: 'user-1', options: { cookieless_mode: true } }).query({
+          prompt: 'Hello',
+          posthog: { options: 'cookieless' as any },
+        })
+      )
+      expect(warn).toHaveBeenCalledWith('[PostHog AI] options must be an object, got string; ignoring them')
+      warn.mockRestore()
+
+      const events = allCapturedEvents(client)
+      expect(events).toHaveLength(3)
+      for (const event of events) {
+        expect(event.options).toEqual({ cookieless_mode: true })
+      }
+    })
   })
 
   it('rotates turn state when result processing fails before trace capture', async () => {

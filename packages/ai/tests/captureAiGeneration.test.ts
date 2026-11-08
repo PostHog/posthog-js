@@ -2,6 +2,13 @@ import { PostHog } from 'posthog-node'
 import { captureAiGeneration } from '../src/captureAiGeneration'
 import { AIEvent } from '../src/utils'
 import { version } from '../package.json'
+import {
+  EVENT_OPTION_CASES,
+  USER_EVENT_OPTIONS,
+  asPostHogNodeMajor,
+  capturedEvents,
+  expectUserEventOptions,
+} from './test-utils'
 
 vi.mock('posthog-node')
 
@@ -109,21 +116,55 @@ describe('captureAiGeneration', () => {
       expect(event.properties).not.toHaveProperty('$ai_latency')
       expect(event.distinctId).toBe(event.properties.$ai_trace_id)
       expect(event.properties.$process_person_profile).toBe(false)
-      expect(event.options).toEqual({ process_person_profile: false })
+      expect(event.options).toBeUndefined()
     }
   )
 
-  it('stays personless on posthog-node 6 when a process_person_profile option is registered', async () => {
+  it.each(EVENT_OPTION_CASES)(
+    'sends the caller options on posthog-node $major (personless: $personless)',
+    async ({ major, personless }) => {
+      const client = asPostHogNodeMajor(buildClient(), major)
+
+      await captureAiGeneration(client, {
+        ...baseRequiredOptions,
+        distinctId: personless ? undefined : 'user-1',
+        options: USER_EVENT_OPTIONS,
+      })
+
+      const events = capturedEvents(client)
+      expect(events).toHaveLength(1)
+      expectUserEventOptions(events[0], major, personless)
+    }
+  )
+
+  it.each([
+    {
+      name: 'per-call options beat registered options',
+      registered: { process_person_profile: false, cookieless_mode: false },
+      distinctId: 'user-1',
+      options: { process_person_profile: true, cookieless_mode: true },
+      expected: { process_person_profile: true, cookieless_mode: true },
+    },
+    {
+      name: 'a personless event stays personless over registered and per-call options',
+      registered: { process_person_profile: true },
+      distinctId: undefined,
+      options: { process_person_profile: true },
+      expected: { process_person_profile: false },
+    },
+  ])('on a real posthog-node 6 client, $name', async ({ registered, distinctId, options, expected }) => {
     const { PostHog: RealPostHog } = await vi.importActual<typeof import('posthog-node')>('posthog-node')
     const posthog = new RealPostHog('TEST_API_KEY', { host: 'http://example.com' })
-    await posthog.registerOptions({ process_person_profile: true })
-    const client = buildClient()
+    await posthog.registerOptions(registered)
+    const client = asPostHogNodeMajor(buildClient(), 6)
 
-    await captureAiGeneration(client, baseRequiredOptions)
-    const message = await posthog.prepareEventMessage((client.capture as vi.Mock).mock.calls[0][0])
+    await captureAiGeneration(client, { ...baseRequiredOptions, distinctId, options })
+    const event = (client.capture as vi.Mock).mock.calls[0][0]
+    const message = await posthog.prepareEventMessage(event)
     await posthog.shutdown()
 
-    expect(message.options).toEqual({ process_person_profile: false })
+    expect(event.properties).not.toHaveProperty('$process_person_profile')
+    expect(message.options).toEqual(expected)
   })
 
   it('honours captureImmediate by awaiting captureImmediate instead of capture', async () => {

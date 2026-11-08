@@ -3,6 +3,13 @@ import { PostHog } from 'posthog-node'
 import { AIMessage } from '@langchain/core/messages'
 import type { ChatGeneration } from '@langchain/core/outputs'
 import { version } from '../package.json'
+import {
+  EVENT_OPTION_CASES,
+  USER_EVENT_OPTIONS,
+  asPostHogNodeMajor,
+  capturedEvents,
+  expectUserEventOptions,
+} from './test-utils'
 
 const mockPostHogClient = {
   capture: vi.fn(),
@@ -102,9 +109,34 @@ describe('LangChainCallbackHandler', () => {
     )
     for (const event of events) {
       expect(event.properties.$process_person_profile).toBe(personless ? false : undefined)
-      expect(event.options).toEqual(personless ? { process_person_profile: false } : undefined)
+      expect(event.options).toBeUndefined()
     }
   })
+
+  it.each(EVENT_OPTION_CASES)(
+    'sends the constructor options on posthog-node $major (personless: $personless)',
+    ({ major, personless }) => {
+      const client = asPostHogNodeMajor({ capture: vi.fn() }, major) as unknown as PostHog
+      const optionsHandler = new LangChainCallbackHandler({
+        client,
+        distinctId: personless ? undefined : 'user-1',
+        options: USER_EVENT_OPTIONS,
+      })
+      const llm = { lc: 1, type: 'constructor', id: ['langchain', 'llms', 'openai', 'OpenAI'], kwargs: {} } as const
+      const chain = { lc: 1, type: 'constructor', id: ['langchain', 'chains', 'TestChain'], kwargs: {} } as const
+
+      optionsHandler.handleChainStart(chain, {}, 'run_chain')
+      optionsHandler.handleLLMStart(llm, ['Hello'], 'run_llm', 'run_chain', { invocation_params: {} })
+      optionsHandler.handleLLMEnd({ generations: [[{ text: 'Hi' }]], llmOutput: {} }, 'run_llm')
+      optionsHandler.handleChainEnd({}, 'run_chain')
+
+      const events = capturedEvents(client)
+      expect(events.map((event) => event.event)).toEqual(['$ai_generation', '$ai_trace'])
+      for (const event of events) {
+        expectUserEventOptions(event, major, personless)
+      }
+    }
+  )
 
   it('does not throw when generation capture fails', () => {
     const capture = mockPostHogClient.capture as vi.Mock

@@ -29,7 +29,8 @@ import {
 import { summarizeErrorForPrivacy } from '../serializeError'
 import { version } from '../../package.json'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
-import { captureAiEvent, isFullAiCaptureEnabled, personlessOptions, userDistinctId } from '../captureAiEvent'
+import type { JsonType } from '@posthog/core'
+import { captureAiEvent, eventOptionFields, isFullAiCaptureEnabled, userDistinctId } from '../captureAiEvent'
 import { extractCacheWriteTokens } from '../openai/utils'
 
 /**
@@ -111,6 +112,12 @@ interface TraceMetadata {
   startTime: number
 }
 
+/** The distinct id an event is sent with, and whether it is personless (no user distinct id). */
+interface CaptureIdentity {
+  distinctId: string
+  personless: boolean
+}
+
 export type DistinctIdResolver = string | ((trace: Trace) => string | null | undefined)
 export type TracingProcessorErrorContext =
   | 'capture'
@@ -128,6 +135,11 @@ export interface PostHogTracingProcessorOptions {
   privacyMode?: boolean
   groups?: Record<string, any>
   properties?: Record<string, any>
+  /**
+   * Per-event options for posthog-node, such as `{ process_person_profile: false }`, sent with
+   * every event. An event with no distinct id always has person processing turned off.
+   */
+  options?: Record<string, JsonType>
   onError?: TracingProcessorErrorHandler
 }
 
@@ -155,6 +167,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
   private _privacyMode: boolean
   private _groups: Record<string, any>
   private _properties: Record<string, any>
+  private _eventOptions: Record<string, JsonType> | undefined
   private _onError: TracingProcessorErrorHandler | undefined
 
   private _spanStartTimes: Map<string, number> = new Map()
@@ -167,6 +180,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     this._privacyMode = options.privacyMode ?? false
     this._groups = options.groups ?? {}
     this._properties = options.properties ?? {}
+    this._eventOptions = options.options
     this._onError = options.onError
   }
 
@@ -218,7 +232,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     }
   }
 
-  private _captureEvent(event: string, properties: Record<string, any>, distinctId?: string): void {
+  private _captureEvent(event: string, properties: Record<string, any>, identity: CaptureIdentity): void {
     try {
       if (!this._client?.capture) {
         return
@@ -230,12 +244,10 @@ export class PostHogTracingProcessor implements TracingProcessor {
       }
 
       const eventMessage: EventMessage = {
-        distinctId: distinctId || 'unknown',
+        distinctId: identity.distinctId || 'unknown',
         event,
-        properties: finalProperties,
+        ...eventOptionFields(this._client, finalProperties, this._eventOptions, identity.personless),
         groups: Object.keys(this._groups).length > 0 ? this._groups : undefined,
-        // `properties` holds only values this processor built, so the flag here is its own personless marker.
-        ...personlessOptions(properties.$process_person_profile === false),
       }
 
       captureAiEvent(this._client, eventMessage)
@@ -362,11 +374,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
         properties.$ai_trace_metadata = this._prepareCapturedValue(metadata)
       }
 
-      if (distinctId == null) {
-        properties.$process_person_profile = false
-      }
-
-      this._captureEvent('$ai_trace', properties, distinctId ?? traceId)
+      this._captureEvent('$ai_trace', properties, { distinctId: distinctId ?? traceId, personless: distinctId == null })
     } catch (error) {
       this._handleError(error, 'onTraceEnd')
     }
@@ -411,44 +419,41 @@ export class PostHogTracingProcessor implements TracingProcessor {
       const errorProperties = this._getErrorProperties(span.error)
 
       // Personless mode: no user-provided distinct_id, fallback to trace_id
-      if (userDistinctId == null) {
-        errorProperties.$process_person_profile = false
-      }
-      const distinctId: string = userDistinctId ?? traceId
+      const identity: CaptureIdentity = { distinctId: userDistinctId ?? traceId, personless: userDistinctId == null }
 
       // Dispatch based on span data type
       switch (spanData.type) {
         case 'generation':
-          this._handleGenerationSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
+          this._handleGenerationSpan(spanData, traceId, spanId, parentId, latency, identity, groupId, errorProperties)
           break
         case 'response':
-          this._handleResponseSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
+          this._handleResponseSpan(spanData, traceId, spanId, parentId, latency, identity, groupId, errorProperties)
           break
         case 'function':
-          this._handleFunctionSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
+          this._handleFunctionSpan(spanData, traceId, spanId, parentId, latency, identity, groupId, errorProperties)
           break
         case 'agent':
-          this._handleAgentSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
+          this._handleAgentSpan(spanData, traceId, spanId, parentId, latency, identity, groupId, errorProperties)
           break
         case 'handoff':
-          this._handleHandoffSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
+          this._handleHandoffSpan(spanData, traceId, spanId, parentId, latency, identity, groupId, errorProperties)
           break
         case 'guardrail':
-          this._handleGuardrailSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
+          this._handleGuardrailSpan(spanData, traceId, spanId, parentId, latency, identity, groupId, errorProperties)
           break
         case 'custom':
-          this._handleCustomSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
+          this._handleCustomSpan(spanData, traceId, spanId, parentId, latency, identity, groupId, errorProperties)
           break
         case 'transcription':
         case 'speech':
         case 'speech_group':
-          this._handleAudioSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
+          this._handleAudioSpan(spanData, traceId, spanId, parentId, latency, identity, groupId, errorProperties)
           break
         case 'mcp_tools':
-          this._handleMcpSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
+          this._handleMcpSpan(spanData, traceId, spanId, parentId, latency, identity, groupId, errorProperties)
           break
         default:
-          this._handleGenericSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
+          this._handleGenericSpan(spanData, traceId, spanId, parentId, latency, identity, groupId, errorProperties)
           break
       }
     } catch (error) {
@@ -487,7 +492,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     spanId: string,
     parentId: string | null,
     latency: number,
-    distinctId: string,
+    identity: CaptureIdentity,
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
@@ -570,7 +575,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       properties.$ai_cache_creation_input_tokens = (usage as any).cache_creation_input_tokens
     }
 
-    this._captureEvent('$ai_generation', properties, distinctId)
+    this._captureEvent('$ai_generation', properties, identity)
   }
 
   private _handleResponseSpan(
@@ -579,7 +584,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     spanId: string,
     parentId: string | null,
     latency: number,
-    distinctId: string,
+    identity: CaptureIdentity,
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
@@ -623,7 +628,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       properties.$ai_output_choices = this._prepareCapturedValue(response.output)
     }
 
-    this._captureEvent('$ai_generation', properties, distinctId)
+    this._captureEvent('$ai_generation', properties, identity)
   }
 
   private _handleFunctionSpan(
@@ -632,7 +637,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     spanId: string,
     parentId: string | null,
     latency: number,
-    distinctId: string,
+    identity: CaptureIdentity,
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
@@ -648,7 +653,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       properties.$ai_mcp_data = this._prepareCapturedValue(spanData.mcp_data)
     }
 
-    this._captureEvent('$ai_span', properties, distinctId)
+    this._captureEvent('$ai_span', properties, identity)
   }
 
   private _handleAgentSpan(
@@ -657,7 +662,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     spanId: string,
     parentId: string | null,
     latency: number,
-    distinctId: string,
+    identity: CaptureIdentity,
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
@@ -677,7 +682,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       properties.$ai_agent_output_type = spanData.output_type
     }
 
-    this._captureEvent('$ai_span', properties, distinctId)
+    this._captureEvent('$ai_span', properties, identity)
   }
 
   private _handleHandoffSpan(
@@ -686,7 +691,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     spanId: string,
     parentId: string | null,
     latency: number,
-    distinctId: string,
+    identity: CaptureIdentity,
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
@@ -698,7 +703,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       $ai_handoff_to_agent: spanData.to_agent,
     }
 
-    this._captureEvent('$ai_span', properties, distinctId)
+    this._captureEvent('$ai_span', properties, identity)
   }
 
   private _handleGuardrailSpan(
@@ -707,7 +712,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     spanId: string,
     parentId: string | null,
     latency: number,
-    distinctId: string,
+    identity: CaptureIdentity,
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
@@ -718,7 +723,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       $ai_guardrail_triggered: spanData.triggered,
     }
 
-    this._captureEvent('$ai_span', properties, distinctId)
+    this._captureEvent('$ai_span', properties, identity)
   }
 
   private _handleCustomSpan(
@@ -727,7 +732,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     spanId: string,
     parentId: string | null,
     latency: number,
-    distinctId: string,
+    identity: CaptureIdentity,
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
@@ -738,7 +743,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       $ai_custom_data: this._prepareCapturedValue(spanData.data),
     }
 
-    this._captureEvent('$ai_span', properties, distinctId)
+    this._captureEvent('$ai_span', properties, identity)
   }
 
   private _handleAudioSpan(
@@ -747,7 +752,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     spanId: string,
     parentId: string | null,
     latency: number,
-    distinctId: string,
+    identity: CaptureIdentity,
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
@@ -795,7 +800,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       }
     }
 
-    this._captureEvent('$ai_span', properties, distinctId)
+    this._captureEvent('$ai_span', properties, identity)
   }
 
   private _handleMcpSpan(
@@ -804,7 +809,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     spanId: string,
     parentId: string | null,
     latency: number,
-    distinctId: string,
+    identity: CaptureIdentity,
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
@@ -816,7 +821,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       $ai_mcp_tools: this._prepareCapturedValue(spanData.result),
     }
 
-    this._captureEvent('$ai_span', properties, distinctId)
+    this._captureEvent('$ai_span', properties, identity)
   }
 
   private _handleGenericSpan(
@@ -825,7 +830,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     spanId: string,
     parentId: string | null,
     latency: number,
-    distinctId: string,
+    identity: CaptureIdentity,
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
@@ -837,6 +842,6 @@ export class PostHogTracingProcessor implements TracingProcessor {
       $ai_span_type: spanType,
     }
 
-    this._captureEvent('$ai_span', properties, distinctId)
+    this._captureEvent('$ai_span', properties, identity)
   }
 }

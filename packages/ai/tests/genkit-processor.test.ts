@@ -67,11 +67,26 @@ describe('PostHogGenkitSpanProcessor with a custom OpenTelemetry provider', () =
     client.withContext({ distinctId: 'ending-user' }, () => span.end())
 
     expect(capture).toHaveBeenCalledWith(
-      expect.objectContaining({
-        distinctId: span.spanContext().traceId,
-        properties: expect.objectContaining({ $process_person_profile: false }),
-      })
+      expect.objectContaining({ distinctId: span.spanContext().traceId, options: { process_person_profile: false } })
     )
+    expect(capture.mock.calls[0][0].properties).not.toHaveProperty('$process_person_profile')
+  })
+
+  it.each(spanKinds)('sends processor options over registered options for $event', async ({ name, attributes }) => {
+    await client.registerOptions({ process_person_profile: false, cookieless_mode: false })
+    const span = tracer({
+      distinctId: 'user-1',
+      options: { process_person_profile: true, cookieless_mode: true },
+    }).startSpan(name, { attributes: { 'genkit:type': 'action', ...attributes } })
+
+    span.end()
+
+    const [event] = capture.mock.calls[0]
+    expect(event.properties).not.toHaveProperty('$process_person_profile')
+    expect((await client.prepareEventMessage(event)).options).toEqual({
+      process_person_profile: true,
+      cookieless_mode: true,
+    })
   })
 
   it.each(

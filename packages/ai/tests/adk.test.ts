@@ -12,6 +12,13 @@ vi.mock('@google/adk', () => ({
 }))
 
 import { PostHogADKPlugin } from '../src/adk'
+import {
+  EVENT_OPTION_CASES,
+  USER_EVENT_OPTIONS,
+  asPostHogNodeMajor,
+  capturedEvents,
+  expectUserEventOptions,
+} from './test-utils'
 
 // Minimal mocks of the @google/adk callback payloads. The plugin only reads a
 // handful of fields off each, so plain objects cast to the callback shapes are
@@ -499,10 +506,35 @@ describe('PostHogADKPlugin', () => {
         const event = capturedEvent(client)
         expect(event.distinctId).toBe('inv_123')
         expect(event.properties.$process_person_profile).toBe(false)
-        expect(event.options).toEqual({ process_person_profile: false })
+        expect(event.options).toBeUndefined()
       }
     )
   })
+
+  it.each(EVENT_OPTION_CASES)(
+    'sends the plugin options on posthog-node $major (personless: $personless)',
+    async ({ major, personless }) => {
+      client = asPostHogNodeMajor(createMockClient(), major)
+      plugin = new PostHogADKPlugin({ client, options: USER_EVENT_OPTIONS })
+      const userId = personless ? '' : 'user_123'
+      const invocationContext = createInvocationContext({ userId })
+      const callbackContext = createContext({ userId, functionCallId: 'call_1' })
+      const tool = { name: 'get_weather' } as any
+
+      await plugin.beforeRunCallback({ invocationContext })
+      await plugin.beforeModelCallback({ callbackContext, llmRequest: createRequest() })
+      await plugin.afterModelCallback({ callbackContext, llmResponse: createResponse() })
+      await plugin.beforeToolCallback({ tool, toolArgs: { city: 'SF' }, toolContext: callbackContext })
+      await plugin.afterToolCallback({ tool, toolArgs: { city: 'SF' }, toolContext: callbackContext, result: {} })
+      await plugin.afterRunCallback({ invocationContext })
+
+      const events = capturedEvents(client)
+      expect(events.map((event) => event.event)).toEqual(['$ai_generation', '$ai_span', '$ai_trace'])
+      for (const event of events) {
+        expectUserEventOptions(event, major, personless)
+      }
+    }
+  )
 
   it('redacts input and output content in privacy mode', async () => {
     plugin = new PostHogADKPlugin({ client, distinctId: 'user@example.com', privacyMode: true })

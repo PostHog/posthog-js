@@ -1,3 +1,4 @@
+import type { JsonType } from '@posthog/core'
 import type { EventMessage } from 'posthog-node'
 
 /** @internal */
@@ -32,15 +33,73 @@ export function userDistinctId(value: unknown): string | undefined {
   return id.trim() === '' ? undefined : id
 }
 
+/** Per-event options, as posthog-node 6 takes them on `capture()`. */
+export type AiEventOptions = Record<string, JsonType>
+
+/** Each posthog-node per-event option, mapped to the event property posthog-node 5 reads instead. */
+const NODE_5_OPTION_PROPERTIES: ReadonlyMap<string, string> = new Map([
+  ['process_person_profile', '$process_person_profile'],
+  ['cookieless_mode', '$cookieless_mode'],
+  ['disable_skew_correction', '$ignore_sent_at'],
+  ['product_tour_id', '$product_tour_id'],
+])
+
 /**
- * Turns person processing off for an AI event with no user distinct id. On posthog-node 6 the
- * option beats context and global options, which the legacy `$process_person_profile` property
- * cannot do. posthog-node 5 ignores options and reads the property, so callers set both.
+ * The caller's per-event options when they are an object. A missing or `null` value means no
+ * options. An array or any other value is reported and ignored, so it is never spread.
  *
  * @internal
  */
-export function personlessOptions(personless: boolean): Pick<EventMessage, 'options'> {
-  return personless ? { options: { process_person_profile: false } } : {}
+export function readAiEventOptions(value: unknown): AiEventOptions | undefined {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as AiEventOptions
+  }
+  console.warn(
+    `[PostHog AI] options must be an object, got ${Array.isArray(value) ? 'array' : typeof value}; ignoring them`
+  )
+  return undefined
+}
+
+/**
+ * The `properties` and `options` for an AI event. `personless` (no user distinct id) turns person
+ * processing off and beats the caller's `process_person_profile`.
+ *
+ * posthog-node 6 takes the options as they are, so no option is written as a property.
+ * posthog-node 5 has no per-event options: each known option is sent as the property that version
+ * reads, and an unknown key is dropped.
+ *
+ * @internal
+ */
+export function eventOptionFields(
+  client: Pick<AiLaneCapableClient, 'registerOptions'>,
+  properties: Record<string, unknown>,
+  options: unknown,
+  personless: boolean
+): Pick<EventMessage, 'properties' | 'options'> {
+  const userOptions = readAiEventOptions(options)
+  if (isPostHogNode6(client)) {
+    const eventOptions: AiEventOptions = {
+      ...userOptions,
+      ...(personless ? { process_person_profile: false } : {}),
+    }
+    return Object.keys(eventOptions).length > 0 ? { properties, options: eventOptions } : { properties }
+  }
+
+  const withOptionProperties: Record<string, unknown> = { ...properties }
+  for (const [key, value] of Object.entries(userOptions ?? {})) {
+    const property = NODE_5_OPTION_PROPERTIES.get(key)
+    // posthog-node 6 treats a missing or `null` option as unset, so neither becomes a property.
+    if (property !== undefined && value !== undefined && value !== null) {
+      withOptionProperties[property] = value
+    }
+  }
+  if (personless) {
+    withOptionProperties.$process_person_profile = false
+  }
+  return { properties: withOptionProperties }
 }
 
 /**

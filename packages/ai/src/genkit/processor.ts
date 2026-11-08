@@ -1,6 +1,7 @@
 import type { PostHog } from 'posthog-node'
+import type { JsonType } from '@posthog/core'
 import { version } from '../../package.json'
-import { captureAiEvent, personlessOptions, userDistinctId } from '../captureAiEvent'
+import { captureAiEvent, eventOptionFields, userDistinctId } from '../captureAiEvent'
 import { captureAiGeneration } from '../captureAiGeneration'
 import { formatAiError } from '../serializeError'
 import { formatToolResult } from '../toolResult'
@@ -101,6 +102,11 @@ export interface PostHogGenkitSpanProcessorOptions {
   groups?: Record<string, string | number>
   /** Extra properties merged into every captured event. */
   properties?: Record<string, unknown>
+  /**
+   * Per-event options for posthog-node, such as `{ process_person_profile: false }`, sent with
+   * every event. An event with no distinct id always has person processing turned off.
+   */
+  options?: Record<string, JsonType>
   /** Invoked when the processor fails to capture an event. Never throws into the Genkit flow. */
   onError?: (error: unknown) => void
 }
@@ -137,6 +143,7 @@ export class PostHogGenkitSpanProcessor {
   private readonly _privacyMode: boolean
   private readonly _groups?: Record<string, string | number>
   private readonly _properties: Record<string, unknown>
+  private readonly _eventOptions?: Record<string, JsonType>
   private readonly _onError?: (error: unknown) => void
   private readonly _spanDistinctIds = new WeakMap<object, string>()
 
@@ -146,6 +153,7 @@ export class PostHogGenkitSpanProcessor {
     this._privacyMode = options.privacyMode ?? false
     this._groups = options.groups
     this._properties = options.properties ?? {}
+    this._eventOptions = options.options
     this._onError = options.onError
   }
 
@@ -220,6 +228,7 @@ export class PostHogGenkitSpanProcessor {
       },
       stopReason: finishReason,
       groups: this._groups,
+      options: this._eventOptions,
       privacyMode: this._privacyMode,
       onError: this._onError,
       error: spanError(span),
@@ -250,6 +259,7 @@ export class PostHogGenkitSpanProcessor {
       output: null,
       latency: latencySeconds(span),
       groups: this._groups,
+      options: this._eventOptions,
       privacyMode: this._privacyMode,
       onError: this._onError,
       error: spanError(span),
@@ -268,32 +278,31 @@ export class PostHogGenkitSpanProcessor {
     const { traceId, spanId, parentId } = spanIds(span)
     const error = spanError(span)
 
+    const properties = {
+      $ai_lib: 'posthog-ai',
+      $ai_lib_version: version,
+      $ai_framework: 'genkit',
+      $ai_trace_id: traceId,
+      $ai_span_id: spanId,
+      ...(!isRoot && parentId ? { $ai_parent_id: parentId } : {}),
+      $ai_span_name: span.name,
+      $ai_span_type: span.attributes['genkit:metadata:subtype'] ?? span.attributes['genkit:type'],
+      $ai_input_state: this._formatState(span, 'genkit:input'),
+      $ai_output_state: this._formatState(span, 'genkit:output'),
+      $ai_latency: latencySeconds(span),
+      ...(error
+        ? {
+            $ai_is_error: true,
+            $ai_error: formatAiError(error, isPrivacyModeEnabled(this._client, this._privacyMode)),
+          }
+        : {}),
+      ...this._properties,
+    }
     captureAiEvent(this._client, {
       distinctId: distinctId ?? traceId,
       event: isRoot ? '$ai_trace' : '$ai_span',
-      properties: {
-        $ai_lib: 'posthog-ai',
-        $ai_lib_version: version,
-        $ai_framework: 'genkit',
-        $ai_trace_id: traceId,
-        $ai_span_id: spanId,
-        ...(!isRoot && parentId ? { $ai_parent_id: parentId } : {}),
-        $ai_span_name: span.name,
-        $ai_span_type: span.attributes['genkit:metadata:subtype'] ?? span.attributes['genkit:type'],
-        $ai_input_state: this._formatState(span, 'genkit:input'),
-        $ai_output_state: this._formatState(span, 'genkit:output'),
-        $ai_latency: latencySeconds(span),
-        ...(error
-          ? {
-              $ai_is_error: true,
-              $ai_error: formatAiError(error, isPrivacyModeEnabled(this._client, this._privacyMode)),
-            }
-          : {}),
-        ...this._properties,
-        ...(distinctId ? {} : { $process_person_profile: false }),
-      },
+      ...eventOptionFields(this._client, properties, this._eventOptions, !distinctId),
       groups: this._groups,
-      ...personlessOptions(!distinctId),
     })
   }
 

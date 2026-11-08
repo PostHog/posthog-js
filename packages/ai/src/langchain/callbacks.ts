@@ -15,7 +15,8 @@ import { formatAiError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 import { isObject } from '../typeGuards'
 import { responsesStopReason } from '../openai/utils'
-import { captureAiEvent, personlessOptions, userDistinctId } from '../captureAiEvent'
+import { captureAiEvent, eventOptionFields, userDistinctId } from '../captureAiEvent'
+import type { JsonType } from '@posthog/core'
 
 // Mirror LangGraph's isGraphBubbleUp guard without adding LangGraph as a dependency. Every
 // LangGraph control-flow exception (GraphInterrupt, NodeInterrupt, ParentCommand, GraphDrained,
@@ -60,6 +61,11 @@ export interface LangChainCallbackHandlerOptions {
   distinctId?: string | number
   traceId?: string | number
   properties?: Record<string, any>
+  /**
+   * Per-event options for posthog-node, such as `{ process_person_profile: false }`, sent with
+   * every event. An event with no `distinctId` always has person processing turned off.
+   */
+  options?: Record<string, JsonType>
   privacyMode?: boolean
   groups?: Record<string, any>
   debug?: boolean
@@ -71,6 +77,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   private distinctId?: string | number
   private traceId?: string | number
   private properties: Record<string, any>
+  private eventOptions?: Record<string, JsonType>
   private privacyMode: boolean
   private groups: Record<string, any>
   private debug: boolean
@@ -87,6 +94,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     this.distinctId = userDistinctId(options.distinctId)
     this.traceId = options.traceId
     this.properties = options.properties || {}
+    this.eventOptions = options.options
     this.privacyMode = options.privacyMode || false
     this.groups = options.groups || {}
     this.debug = options.debug || false
@@ -452,9 +460,6 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     Object.assign(eventProperties, this.properties)
-    if (!this.distinctId) {
-      eventProperties['$process_person_profile'] = false
-    }
     if (outputs instanceof Error) {
       if (isLangGraphControlFlow(outputs)) {
         // GraphInterrupt carries the pending interrupts (e.g. the question posed to a human).
@@ -482,9 +487,8 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     this._safeCapture({
       distinctId: this.distinctId ? this.distinctId.toString() : runId,
       event: eventName,
-      properties: eventProperties,
+      ...eventOptionFields(this.client, eventProperties, this.eventOptions, !this.distinctId),
       groups: this.groups,
-      ...personlessOptions(!this.distinctId),
     })
   }
 
@@ -609,16 +613,12 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     Object.assign(eventProperties, this.properties)
-    if (!this.distinctId) {
-      eventProperties['$process_person_profile'] = false
-    }
 
     this._safeCapture({
       distinctId: this.distinctId ? this.distinctId.toString() : traceId,
       event: '$ai_generation',
-      properties: eventProperties,
+      ...eventOptionFields(this.client, eventProperties, this.eventOptions, !this.distinctId),
       groups: this.groups,
-      ...personlessOptions(!this.distinctId),
     })
   }
 

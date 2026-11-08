@@ -1,4 +1,11 @@
 import { PostHogTracingProcessor } from '../src/openai-agents/processor'
+import {
+  EVENT_OPTION_CASES,
+  USER_EVENT_OPTIONS,
+  asPostHogNodeMajor,
+  capturedEvents,
+  expectUserEventOptions,
+} from './test-utils'
 
 // Mock types matching @openai/agents interfaces
 interface MockTrace {
@@ -187,7 +194,7 @@ describe('PostHogTracingProcessor', () => {
 
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$process_person_profile).toBe(false)
-      expect(call.options).toEqual({ process_person_profile: false })
+      expect(call.options).toBeUndefined()
       expect(call.distinctId).toBe(trace.traceId)
     })
 
@@ -206,7 +213,7 @@ describe('PostHogTracingProcessor', () => {
 
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$process_person_profile).toBe(false)
-      expect(call.options).toEqual({ process_person_profile: false })
+      expect(call.options).toBeUndefined()
       expect(call.distinctId).toBe(trace.traceId)
     })
 
@@ -228,9 +235,38 @@ describe('PostHogTracingProcessor', () => {
 
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$process_person_profile).toBe(false)
-      expect(call.options).toEqual({ process_person_profile: false })
+      expect(call.options).toBeUndefined()
       expect(call.distinctId).toBe(trace.traceId)
     })
+
+    it.each(EVENT_OPTION_CASES)(
+      'sends the constructor options on posthog-node $major (personless: $personless)',
+      async ({ major, personless }) => {
+        const client = asPostHogNodeMajor(createMockClient(), major)
+        const proc = new PostHogTracingProcessor({
+          client,
+          distinctId: personless ? undefined : 'test-user',
+          options: USER_EVENT_OPTIONS,
+        })
+        const trace = createMockTrace()
+        const generation = createMockSpan({ spanId: 'span_generation' })
+        const tool = createMockSpan({ spanId: 'span_tool', spanData: { type: 'function', name: 'lookup' } })
+
+        await proc.onTraceStart(trace as any)
+        for (const span of [generation, tool]) {
+          await proc.onSpanStart(span as any)
+          await proc.onSpanEnd(span as any)
+        }
+        await proc.onTraceEnd(trace as any)
+
+        const events = capturedEvents(client)
+        expect(events.map((event) => event.event)).toEqual(['$ai_generation', '$ai_span', '$ai_trace'])
+        for (const event of events) {
+          expect(event.distinctId).toBe(personless ? trace.traceId : 'test-user')
+          expectUserEventOptions(event, major, personless)
+        }
+      }
+    )
 
     it('does not set $process_person_profile when distinct_id is provided', async () => {
       const trace = createMockTrace()

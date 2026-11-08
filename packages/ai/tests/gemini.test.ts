@@ -1,6 +1,13 @@
 import { PostHog } from 'posthog-node'
 import PostHogGemini from '../src/gemini'
 import { version } from '../package.json'
+import {
+  EVENT_OPTION_CASES,
+  USER_EVENT_OPTIONS,
+  asPostHogNodeMajor,
+  capturedEvents,
+  expectUserEventOptions,
+} from './test-utils'
 
 let mockGeminiResponse: any = {}
 let mockGeminiStreamResponse: any = {}
@@ -1113,6 +1120,28 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(distinctId).toBe('user-456')
     expect(properties['$process_person_profile']).toBeUndefined()
   })
+
+  test.each(EVENT_OPTION_CASES)(
+    'sends posthogOptions on posthog-node $major without handing them to Gemini (personless: $personless)',
+    async ({ major, personless }) => {
+      asPostHogNodeMajor(mockPostHogClient, major)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Hello',
+        posthogDistinctId: personless ? undefined : 'user-456',
+        posthogOptions: USER_EVENT_OPTIONS,
+      })
+
+      expect((client as any).client.models.generateContent).toHaveBeenCalledWith({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Hello',
+      })
+      const events = capturedEvents(mockPostHogClient)
+      expect(events).toHaveLength(1)
+      expectUserEventOptions(events[0], major, personless)
+    }
+  )
 
   test('systemInstruction parameter as string', async () => {
     await client.models.generateContent({
