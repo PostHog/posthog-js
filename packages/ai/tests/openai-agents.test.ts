@@ -1410,4 +1410,14 @@ describe('instrument()', () => {
     expect((processor as any)._groups).toEqual({ company: 'acme' })
     expect((processor as any)._properties).toEqual({ env: 'test' })
   })
+
+  it('passes onError to processor', async () => {
+    const { instrument } = await import('../src/openai-agents')
+    const mockClient = createMockClient()
+    const onError = vi.fn()
+
+    const processor = await instrument({ client: mockClient, onError })
+
+    expect((processor as any)._onError).toBe(onError)
+  })
 })
