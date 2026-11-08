@@ -6258,7 +6258,8 @@ exports[`record integration tests > should mask inputs via function call 1`] = `
                             \\"attributes\\": {
                               \\"name\\": \\"\\",
                               \\"id\\": \\"\\",
-                              \\"value\\": \\"*\\"
+                              \\"value\\": \\"*\\",
+                              \\"rr_maskedSelect\\": true
                             },
                             \\"childNodes\\": [
                               {
@@ -10095,7 +10096,8 @@ exports[`record integration tests > should not record input values if maskAllInp
                             \\"attributes\\": {
                               \\"name\\": \\"\\",
                               \\"id\\": \\"\\",
-                              \\"value\\": \\"*\\"
+                              \\"value\\": \\"*\\",
+                              \\"rr_maskedSelect\\": true
                             },
                             \\"childNodes\\": [
                               {

@@ -1001,6 +1001,10 @@ function serializeElementNode(
       attributes.checked = checked;
     }
   }
+  if (tagName === 'select' && maskInputOptions['select']) {
+    attributes.rr_maskedSelect = true;
+    generatedAttributeNames.add('rr_maskedSelect');
+  }
   if (tagName === 'option') {
     if ((n as HTMLOptionElement).selected && !maskInputOptions['select']) {
       attributes.selected = true;

@@ -11,7 +11,7 @@ import rebuild, {
 } from '../src/rebuild';
 import { NodeType } from '@posthog/rrweb-types';
 import { createMirror, Mirror, normalizeCssString } from '../src/utils';
-import snapshot from '../src/snapshot';
+import snapshot, { visitSnapshot } from '../src/snapshot';
 
 const expect = _expect as unknown as {
   <T = unknown>(actual: T): {
@@ -87,6 +87,58 @@ describe('rebuild', function () {
     );
     expect(doc.querySelector('#literal')?.childElementCount).toBe(0);
     expect(doc.querySelector('#after')?.textContent).toBe('after');
+  });
+
+  describe('selects', () => {
+    it.each(['private', ''])(
+      'clears a masked selection with value %j',
+      (value) => {
+        const source = document.implementation.createHTMLDocument();
+        source.body.innerHTML =
+          '<select><option value="" disabled>Choose</option>' +
+          '<option value="public">Public</option>' +
+          '<option value="*******">Stars</option>' +
+          '<option value="private">Private</option></select>';
+        source.querySelector('select')!.value = value;
+        const serialized = snapshot(source, { maskAllInputs: true })!;
+        const doc = document.implementation.createHTMLDocument();
+        rebuild(serialized, { doc, mirror, cache });
+        const select = doc.querySelector('select')!;
+        expect(select.selectedIndex).toBe(-1);
+        expect(select.value).toBe('');
+      },
+    );
+
+    it('clears masked selections in recordings without the masking marker', () => {
+      const source = document.implementation.createHTMLDocument();
+      source.body.innerHTML =
+        '<select><option value="public">Public</option>' +
+        '<option value="private">Private</option></select>';
+      source.querySelector('select')!.value = 'private';
+      const serialized = snapshot(source, { maskAllInputs: true })!;
+      visitSnapshot(serialized, (node) => {
+        if (node.type === NodeType.Element)
+          delete node.attributes.rr_maskedSelect;
+      });
+      const doc = document.implementation.createHTMLDocument();
+      rebuild(serialized, { doc, mirror, cache });
+      expect(doc.querySelector('select')!.selectedIndex).toBe(-1);
+    });
+
+    it('preserves multiple unmasked selections', () => {
+      const source = document.implementation.createHTMLDocument();
+      source.body.innerHTML =
+        '<select multiple><option value="a" selected>A</option>' +
+        '<option value="b">B</option><option value="c" selected>C</option></select>';
+      const doc = document.implementation.createHTMLDocument();
+      rebuild(snapshot(source)!, { doc, mirror, cache });
+      expect(
+        Array.from(
+          doc.querySelector('select')!.selectedOptions,
+          (option) => option.value,
+        ),
+      ).toEqual(['a', 'c']);
+    });
   });
 
   describe('rr_dataURL', function () {

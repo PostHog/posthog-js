@@ -14,6 +14,7 @@ import {
   extractFileExtension,
   attachShadowRootSafely,
   SCRIPT_PLACEHOLDER,
+  restoreSelectState,
 } from './utils';
 import postcss, { type Parser } from 'postcss';
 
@@ -632,6 +633,7 @@ export function buildNodeWithSN(
     }
   }
 
+  if (!skipChild) restoreSelectState(node, mirror);
   return node;
 }
 

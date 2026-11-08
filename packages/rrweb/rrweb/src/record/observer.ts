@@ -453,15 +453,13 @@ function initInputObserver({
     if (target && view && !(target instanceof view.HTMLElement)) {
       return;
     }
-    const tagName = target && target.tagName;
-
-    /**
-     * If a site changes the value 'selected' of an option element, the value of its parent element, usually a select element, will be changed as well.
-     * We can treat this change as a value change of the select element the current target belongs to.
-     */
-    if (target && tagName === 'OPTION') {
+    if (target && target.tagName === 'OPTION') {
       target = dom.parentElement(target);
+      if (target && target.tagName === 'OPTGROUP') {
+        target = dom.parentElement(target);
+      }
     }
+    const tagName = target && target.tagName;
     if (
       !target ||
       !tagName ||

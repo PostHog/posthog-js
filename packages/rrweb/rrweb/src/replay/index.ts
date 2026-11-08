@@ -7,6 +7,7 @@ import {
   createMirror,
   toLowerCase,
   attachShadowRootSafely,
+  restoreSelectState,
 } from '@posthog/rrweb-snapshot';
 import {
   RRDocument,
@@ -2133,6 +2134,14 @@ export class Replayer {
        * target was added, execute plugin hooks
        */
       afterAppend(target, mutation.node.id);
+      if (!this.usingVirtualDom) {
+        restoreSelectState(
+          (parent.nodeName === 'OPTGROUP'
+            ? parent.parentNode
+            : parent) as Node | null,
+          this.mirror,
+        );
+      }
 
       /**
        * https://github.com/rrweb-io/rrweb/pull/887
@@ -2470,6 +2479,7 @@ export class Replayer {
     try {
       (target as HTMLInputElement).checked = d.isChecked;
       (target as HTMLInputElement).value = d.text;
+      restoreSelectState(target, this.mirror);
     } catch (error) {
       // for safe
     }
