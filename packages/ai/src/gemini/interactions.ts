@@ -37,6 +37,8 @@ function usageFromInteraction(value: unknown, model?: string): TokenUsage {
   if (!usage) return {}
 
   const cached = number(usage.total_cached_tokens)
+  const toolUse = number(usage.total_tool_use_tokens)
+
   const searches = Array.isArray(usage.grounding_tool_count)
     ? usage.grounding_tool_count.reduce((total, entry) => {
         const grounding = record(entry)
@@ -46,7 +48,9 @@ function usageFromInteraction(value: unknown, model?: string): TokenUsage {
   const modelMajor = /^(?:models\/)?gemini-(\d+)/.exec(model ?? '')?.[1]
   const webSearchCount = modelMajor === undefined ? undefined : Number(modelMajor) >= 3 ? searches : searches ? 1 : 0
   return {
-    inputTokens: number(usage.total_input_tokens),
+    // Tool-use tokens are billed as input but reported outside total_input_tokens.
+    inputTokens:
+      toolUse === undefined ? number(usage.total_input_tokens) : (number(usage.total_input_tokens) ?? 0) + toolUse,
     outputTokens: number(usage.total_output_tokens),
     reasoningTokens: number(usage.total_thought_tokens),
     cacheReadInputTokens: cached,

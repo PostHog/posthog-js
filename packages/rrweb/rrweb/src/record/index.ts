@@ -425,6 +425,7 @@ function record<T = eventWithTime>(
           textarea: true,
           select: true,
           password: true,
+          hidden: true,
         }
       : _maskInputOptions !== undefined
       ? _maskInputOptions
@@ -1031,11 +1032,54 @@ function record<T = eventWithTime>(
       );
     };
 
+    const observedIframeDocuments = new WeakMap<Document, () => boolean>();
+    const pendingIframeCleanups = new WeakMap<
+      HTMLIFrameElement,
+      listenerHandler
+    >();
     const loadListener = (iframeEl: HTMLIFrameElement) => {
       try {
+        const doc = iframeEl.contentDocument;
         const iframeId = mirror.getId(iframeEl);
-        const cleanup = observe(iframeEl.contentDocument!);
-        if (typeof cleanup === 'function') {
+        if (!doc) return;
+        // Replace observers installed before the iframe had a cleanup id.
+        const pendingCleanup = pendingIframeCleanups.get(iframeEl);
+        if (pendingCleanup) {
+          pendingIframeCleanups.delete(iframeEl);
+          callSafely(pendingCleanup);
+          const idx = handlers.indexOf(pendingCleanup);
+          if (idx !== -1) handlers.splice(idx, 1);
+        }
+        const isObserved = observedIframeDocuments.get(doc);
+        if (iframeId !== -1 && isObserved) {
+          if (isObserved()) return;
+          runAndDetachIframeCleanup?.(iframeId);
+        }
+        const stopObserving = observe(doc);
+        if (typeof stopObserving === 'function') {
+          // document.open() keeps the Document but clears its event listeners.
+          let listening = false;
+          const stopChecking = on(
+            'rrweb-check-iframe-observers',
+            () => {
+              listening = true;
+            },
+            doc,
+          );
+          if (iframeId !== -1) {
+            observedIframeDocuments.set(doc, () => {
+              listening = false;
+              const event = doc.createEvent('Event');
+              event.initEvent('rrweb-check-iframe-observers', false, false);
+              doc.dispatchEvent(event);
+              return listening;
+            });
+          }
+          const cleanup = () => {
+            observedIframeDocuments.delete(doc);
+            stopChecking();
+            stopObserving();
+          };
           handlers.push(cleanup);
           // Accumulate cleanups across iframe navigations.
           if (iframeId !== -1) {
@@ -1045,6 +1089,8 @@ function record<T = eventWithTime>(
               iframeObserverCleanups.set(iframeId, bucket);
             }
             bucket.add(cleanup);
+          } else {
+            pendingIframeCleanups.set(iframeEl, cleanup);
           }
         }
       } catch (error) {

@@ -30,7 +30,7 @@ import { isCaptureModelEnabled } from './model-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'
-import { createWrappedTool, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
+import { createWrappedTool, getToolFunction, hasToolFunction, readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getReportMissingToolDescriptor, handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
@@ -236,7 +236,8 @@ async function handleToolCallRequest(
   originalCallToolHandler: MCPRequestHandler,
   request: MCPRequest,
   extra: MCPRequestExtra,
-  logger: LoggerFn
+  logger: LoggerFn,
+  registryDispatches: () => boolean
 ): Promise<unknown> {
   const data = getServerTrackingData(server)
   if (!data) {
@@ -284,7 +285,10 @@ async function handleToolCallRequest(
     })
   }
 
-  const registeredTool = toolName ? highLevelServer._registeredTools[toolName] : undefined
+  const registeredTool =
+    toolName && Object.prototype.hasOwnProperty.call(highLevelServer._registeredTools, toolName)
+      ? highLevelServer._registeredTools[toolName]
+      : undefined
 
   // Strip SDK-owned arguments before the MCP SDK validates the registered Zod
   // schema. The callback wrapper repeats the ownership-aware cleanup as a
@@ -299,6 +303,7 @@ async function handleToolCallRequest(
       ? getAnalyticsParameterOwnership(registeredTool.inputSchema, registeredTool.outputSchema)
       : undefined,
     inputSchema: registeredTool?.inputSchema,
+    isUnknownTool: !!toolName && !registeredTool && registryDispatches(),
     takeCapturedError: () => {
       const captured = extra?.__mcp_analytics_error
       if (extra) {
@@ -313,6 +318,7 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike, logger
   try {
     const lowLevelServer = server.server
     const mcpAnalyticsData = getServerTrackingData(lowLevelServer)
+    const registryDispatches = trackRegistryDispatch(server)
 
     const handlers: Record<string, HandlerPatch> = {
       initialize: (trackedServer, originalHandler, request, extra) =>
@@ -320,7 +326,7 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike, logger
       'tools/list': (trackedServer, originalHandler, request, extra) =>
         handleListToolsRequest(trackedServer, originalHandler, request, extra, logger),
       'tools/call': (trackedServer, originalHandler, request, extra) =>
-        handleToolCallRequest(server, trackedServer, originalHandler, request, extra, logger),
+        handleToolCallRequest(server, trackedServer, originalHandler, request, extra, logger, registryDispatches),
       'resources/list': traceResourceRequest(MCPAnalyticsEventType.mcpResourcesList, logger),
       // Both listings publish `$mcp_resources_list`; the captured
       // `request.method` is what tells a static listing from a templated one.
@@ -340,6 +346,25 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike, logger
   } catch (error) {
     logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
   }
+}
+
+/**
+ * Whether the MCP SDK's own `tools/call` dispatcher, which reads `_registeredTools`,
+ * is the one serving calls. Adapters such as @rekog/mcp-nest bind their own
+ * dispatcher instead, and keep tools the registry never holds; on SDK v2 they
+ * replace the dispatcher the McpServer constructor installed.
+ */
+function trackRegistryDispatch(server: HighLevelMCPServerLike): () => boolean {
+  const lowLevelServer = server.server
+  let replaced = false
+  const setRequestHandler = lowLevelServer.setRequestHandler.bind(lowLevelServer) as (...args: unknown[]) => unknown
+  lowLevelServer.setRequestHandler = ((...args: unknown[]) => {
+    if (server._toolHandlersInitialized && readRequestHandlerMethod(args[0]) === 'tools/call') {
+      replaced = true
+    }
+    return setRequestHandler(...args)
+  }) as MCPServerLike['setRequestHandler']
+  return () => server._toolHandlersInitialized === true && !replaced
 }
 
 function seedToolDescriptionsFromRegistry(cache: Map<string, string>, tools: Record<string, RegisteredTool>): void {

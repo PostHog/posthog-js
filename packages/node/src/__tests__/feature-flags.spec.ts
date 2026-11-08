@@ -7920,6 +7920,139 @@ describe('unresolvable flag warning', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('incompatible with local evaluation'))
   })
 
+  describe.each(['api', 'cache'] as const)('%s definitions', (source) => {
+    it.each(['client', 'server', 'all', null, undefined] as const)(
+      'scopes eager warnings to server-applicable flags with runtime %s',
+      async (runtime) => {
+        const flags = {
+          flags: [
+            {
+              id: 1,
+              name: 'Continuity flag',
+              key: 'continuity-flag',
+              active: true,
+              deleted: false,
+              rollout_percentage: null,
+              experiment_set: [],
+              evaluation_runtime: runtime,
+              ensure_experience_continuity: true,
+              filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+            },
+            {
+              id: 2,
+              name: 'Unsupported flag',
+              key: 'unsupported-flag',
+              active: true,
+              deleted: false,
+              rollout_percentage: null,
+              experiment_set: [],
+              evaluation_runtime: runtime,
+              ensure_experience_continuity: false,
+              filters: { groups: [{ properties: [{ key: 'id', type: 'cohort' as const, value: 999 }] }] },
+            },
+            {
+              id: 3,
+              name: 'Normal client flag',
+              key: 'normal-client-flag',
+              active: true,
+              deleted: false,
+              rollout_percentage: null,
+              experiment_set: [],
+              evaluation_runtime: 'client' as const,
+              ensure_experience_continuity: false,
+              filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+            },
+            {
+              id: 4,
+              name: 'Client-only continuity flag',
+              key: 'client-only-continuity-flag',
+              active: true,
+              deleted: false,
+              rollout_percentage: null,
+              experiment_set: [],
+              evaluation_runtime: 'client' as const,
+              ensure_experience_continuity: true,
+              filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+            },
+          ],
+          group_type_mapping: {},
+          cohorts: {},
+        }
+        mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+        posthog = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          personalApiKey: 'TEST_PERSONAL_API_KEY',
+          ...(source === 'cache'
+            ? {
+                flagDefinitionCacheProvider: {
+                  shouldFetchFlagDefinitions: () => false,
+                  getFlagDefinitions: () => flags,
+                  onFlagDefinitionsReceived: () => {},
+                },
+              }
+            : {}),
+          ...posthogImmediateResolveOptions,
+        })
+
+        await posthog.reloadFeatureFlags()
+        await posthog.reloadFeatureFlags()
+
+        if (runtime === 'client') {
+          expect(warnSpy).not.toHaveBeenCalled()
+        } else {
+          expect(warnSpy).toHaveBeenCalledTimes(2)
+          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reason: experience_continuity'))
+          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reason: unsupported_definition'))
+          for (const [message] of warnSpy.mock.calls) {
+            expect(message).toContain('1 flag(s)')
+            expect(message).not.toContain('client-only-continuity-flag')
+          }
+        }
+        expect(posthog.getFeatureFlagEvaluationRuntime('continuity-flag')).toBe(runtime ?? 'all')
+        expect(posthog.getFeatureFlagEvaluationRuntime('unsupported-flag')).toBe(runtime ?? 'all')
+        const snapshot = await posthog.evaluateFlags('user', {
+          flagKeys: ['normal-client-flag'],
+          onlyEvaluateLocally: true,
+        })
+        expect(snapshot.getFlag('normal-client-flag', { sendFeatureFlagEvents: false })).toBe(true)
+        expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+        if (source === 'cache') {
+          expect(mockedFetch).not.toHaveBeenCalledWith(...anyLocalEvalCall)
+        } else {
+          expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+        }
+      }
+    )
+  })
+
+  it('warns again when a continuity flag returns to a server runtime', async () => {
+    const flag = {
+      id: 1,
+      key: 'continuity-flag',
+      active: true,
+      evaluation_runtime: 'server' as 'client' | 'server',
+      ensure_experience_continuity: true,
+      filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: { flags: [flag] } }))
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await posthog.reloadFeatureFlags()
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+
+    flag.evaluation_runtime = 'client'
+    await posthog.reloadFeatureFlags()
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+
+    flag.evaluation_runtime = 'server'
+    await posthog.reloadFeatureFlags()
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+  })
+
   it('does not emit warning when no experience continuity flags exist', async () => {
     const flags = {
       flags: [

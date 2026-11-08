@@ -16,6 +16,7 @@ interface MockAnthropicResponseOptions {
   usage?: {
     input_tokens: number
     output_tokens: number
+    output_tokens_details?: { thinking_tokens: number } | null
     cache_creation_input_tokens?: number
     cache_read_input_tokens?: number
     cache_creation?: {
@@ -223,7 +224,10 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
         stop_reason: options.stopReason || 'end_turn',
         type: 'stop_reason',
       },
-      usage: { output_tokens: options.usage?.output_tokens || 10 },
+      usage: {
+        output_tokens: options.usage?.output_tokens || 10,
+        ...(options.usage?.output_tokens_details ? { output_tokens_details: options.usage.output_tokens_details } : {}),
+      },
     },
     { type: 'message_stop' }
   )
@@ -927,6 +931,64 @@ describe('PostHogAnthropic', () => {
         inputTokens: 50,
         outputTokens: 25,
       })
+    })
+
+    it('should track thinking tokens as reasoning tokens', async () => {
+      mockResponse = createMockResponse({
+        content: 'Response',
+        usage: { input_tokens: 20, output_tokens: 600, output_tokens_details: { thinking_tokens: 512 } },
+      })
+
+      await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 1000,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as any).mock.calls
+      expect(captureArgs[0].properties['$ai_output_tokens']).toBe(600)
+      expect(captureArgs[0].properties['$ai_reasoning_tokens']).toBe(512)
+    })
+
+    it('should track thinking tokens in streaming mode', async () => {
+      mockStreamChunks = createMockStreamChunks({
+        content: 'Streaming response',
+        usage: { input_tokens: 20, output_tokens: 600, output_tokens_details: { thinking_tokens: 512 } },
+      })
+
+      const stream = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 1000,
+        stream: true,
+        posthogDistinctId: 'test-user-123',
+      })
+      for await (const _chunk of stream) {
+        // consume
+      }
+      await waitForAsyncCapture()
+
+      const [captureArgs] = (mockPostHogClient.capture as any).mock.calls
+      expect(captureArgs[0].properties['$ai_output_tokens']).toBe(600)
+      expect(captureArgs[0].properties['$ai_reasoning_tokens']).toBe(512)
+    })
+
+    it('should omit reasoning tokens when output_tokens_details is null', async () => {
+      mockResponse = createMockResponse({
+        content: 'Response',
+        usage: { input_tokens: 20, output_tokens: 30, output_tokens_details: null },
+      })
+
+      await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 100,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as any).mock.calls
+      expect(captureArgs[0].properties).not.toHaveProperty('$ai_reasoning_tokens')
     })
 
     conditionalTest('should track cache tokens', async () => {

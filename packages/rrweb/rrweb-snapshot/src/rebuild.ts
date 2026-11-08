@@ -458,7 +458,9 @@ function buildNode(
         return null;
       }
 
-      return doc.createCDATASection(n.textContent);
+      return doc.createTextNode(
+        n.textContent === SCRIPT_PLACEHOLDER ? '' : n.textContent,
+      );
     case NodeType.Comment:
       return doc.createComment(n.textContent);
     default:

@@ -12,6 +12,7 @@ import type {
 import { PostHogMCPAnalyticsProperty } from './constants'
 import { log, type LoggerFn } from './logger'
 import { sanitizeFreeText, sanitizeFreeTextValue } from './mcp-payloads'
+import { VIRTUAL_TOOL_ANNOTATIONS } from './tools'
 import { TRUNCATION_SUFFIX } from './truncation'
 
 export const SEND_FEEDBACK_TOOL_NAME = 'send_feedback' as const
@@ -24,10 +25,9 @@ const MAX_FEEDBACK_TEXT_LENGTH = 2048
 const MAX_FEEDBACK_TOOL_NAME_LENGTH = 256
 
 const DEFAULT_FEEDBACK_DESCRIPTION =
-  'Send feedback about this server to its developers. Most important: report a missing capability whenever no ' +
-  'available tool fits your task, even if you can work around it (feedback_type "missing_capability"). Also ' +
-  'welcome: a tool that failed or confused you, an unhelpful error, or something that worked well. This records ' +
-  'the feedback; it does not add or change tools. Do not include user PII or sensitive content.'
+  'Send feedback about this server to its developers: a capability you needed that no tool provides, a tool that ' +
+  'failed or misled you, or something that worked well. Records the feedback; it does not add or change tools. ' +
+  'Leave out personal or sensitive details.'
 
 const CORE_FEEDBACK_SCHEMA_PROPERTIES = {
   feedback_type: {
@@ -35,8 +35,8 @@ const CORE_FEEDBACK_SCHEMA_PROPERTIES = {
     enum: [...FEEDBACK_TYPES],
     description:
       "What kind of feedback this is. Use 'missing_capability' when the tool you needed does not exist in the " +
-      'tool list - nothing failed, the capability is absent (this is the most valuable report; send it even if ' +
-      "you found a workaround). Use 'issue' when an existing tool behaved badly: it failed, returned a confusing " +
+      'tool list - nothing failed, the capability is absent. ' +
+      "Use 'issue' when an existing tool behaved badly: it failed, returned a confusing " +
       "error, or its description or schema misled you. Use 'praise' when something worked notably well. Use " +
       "'other' for anything else.",
   },
@@ -151,16 +151,7 @@ export function getFeedbackToolDescriptor(options: CollectFeedbackOptions = {}):
       },
       required: ['feedback_type', 'summary', ...extraRequired],
     },
-    annotations: {
-      title: 'Send feedback',
-      readOnlyHint: true,
-      // Interacts with an external entity: the report lands in analytics.
-      openWorldHint: true,
-      // Only records the feedback, so repeat calls are harmless — and advertising
-      // it as idempotent makes agents more willing to call it proactively.
-      idempotentHint: true,
-      destructiveHint: false,
-    },
+    annotations: { ...VIRTUAL_TOOL_ANNOTATIONS },
   }
 }
 

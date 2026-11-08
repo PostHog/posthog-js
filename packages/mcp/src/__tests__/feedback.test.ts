@@ -9,6 +9,7 @@ import {
 } from '../extensions/constants'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
+import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import { deriveSessionIdFromConversation } from '../extensions/session'
 import type { FeedbackReport } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
@@ -56,11 +57,22 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       const tool = tools.find((t: any) => t.name === SEND_FEEDBACK)
 
       expect(tool).toBeDefined()
-      expect(tool.description).toContain('missing capability')
+      expect(tool.description).toContain('a capability you needed that no tool provides')
       expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['feedback_type', 'summary']))
       expect(tool.inputSchema.properties.feedback_type.enum).toEqual(['missing_capability', 'issue', 'praise', 'other'])
       expect(tool.inputSchema.properties.conversation_id).toMatchObject({ type: 'string' })
-      expect(tool.annotations.readOnlyHint).toBe(true)
+    })
+
+    it.each([GET_MORE_TOOLS_NAME, SEND_FEEDBACK])('advertises %s as a tool that records data', async (name) => {
+      instrument(server, fakePostHog(), { reportMissing: true, collectFeedback: true })
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect(tools.find((t: any) => t.name === name).annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      })
     })
 
     it('omits send_feedback when collectFeedback is off', async () => {

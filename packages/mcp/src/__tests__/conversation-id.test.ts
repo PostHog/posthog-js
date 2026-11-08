@@ -33,9 +33,7 @@ describe('conversation-id', () => {
       expect(schema.properties.conversation_id.type).toBe('string')
       expect(schema.properties.conversation_id.description).toBe(DEFAULT_CONVERSATION_ID_DESCRIPTION)
       // Without this clause, ChatGPT drops the handle on each new user message and every message becomes its own session.
-      expect(schema.properties.conversation_id.description).toMatch(
-        /rest of the conversation, including after later user messages/
-      )
+      expect(schema.properties.conversation_id.description).toMatch(/including after later user messages/)
       expect(schema.required ?? []).not.toContain('conversation_id')
     })
 

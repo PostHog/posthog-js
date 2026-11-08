@@ -691,9 +691,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * The `posthog.emails` API: sends transactional email from PostHog email templates, and reads
    * the status of each email it sent.
    *
-   * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope. A key with only
-   * `hog_flow:read` can read statuses but not send. Requests go to `appHost`, or to the PostHog
-   * Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and do not reject.
+   * Needs `secretKey`, a project secret API key with the `transactional_email:write` scope (the
+   * "Send transactional email" preset). A key with only `transactional_email:read` can read
+   * statuses but not send. Keys made with `hog_flow:write` still work. Requests go to `appHost`,
+   * or to the PostHog Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and
+   * do not reject.
    * `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
    * and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
    * returns the error `client_closed`.
@@ -726,6 +728,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           appHost: this.options.appHost,
           requestTimeoutMs: positiveNumberOr(this.options.emailRequestTimeoutMs, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS),
           maxRetries: nonNegativeIntegerOr(this.options.emailRequestMaxRetries, DEFAULT_EMAIL_REQUEST_MAX_RETRIES),
+          migratedFrom: this.options.migratedFrom,
         },
         {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),

@@ -50,7 +50,7 @@ export type textNode = {
 
 export type cdataNode = {
   type: NodeType.CDATA;
-  textContent: '';
+  textContent: string;
 };
 
 export type commentNode = {
@@ -125,6 +125,7 @@ export type MaskInputOptions = Partial<{
   textarea: boolean;
   select: boolean;
   password: boolean;
+  hidden: boolean;
 }>;
 
 export type SlimDOMOptions = Partial<{

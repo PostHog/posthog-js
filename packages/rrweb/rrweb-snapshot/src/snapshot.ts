@@ -743,18 +743,13 @@ function serializeNode(
         rootId,
       });
     case n.TEXT_NODE:
+    case n.CDATA_SECTION_NODE:
       return serializeTextNode(n as Text, {
         doc,
         needsMask,
         maskTextFn,
         rootId,
       });
-    case n.CDATA_SECTION_NODE:
-      return {
-        type: NodeType.CDATA,
-        textContent: '',
-        rootId,
-      };
     case n.COMMENT_NODE:
       return {
         type: NodeType.Comment,
@@ -788,7 +783,9 @@ function serializeTextNode(
   const parentTagName = parent && (parent as HTMLElement).tagName;
   let text = dom.textContent(n);
   const isStyle = parentTagName === 'STYLE' ? true : undefined;
-  const isScript = parentTagName === 'SCRIPT' ? true : undefined;
+  const isScript =
+    typeof parentTagName === 'string' &&
+    parentTagName.toUpperCase() === 'SCRIPT';
   if (isStyle && text) {
     try {
       // try to read style sheet
@@ -1834,6 +1831,7 @@ function snapshot(
           textarea: true,
           select: true,
           password: true,
+          hidden: true,
         }
       : maskAllInputs === false
       ? {
