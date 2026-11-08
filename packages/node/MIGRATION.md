@@ -202,6 +202,20 @@ Send `$ai_` events with these methods, not `capture()`. PostHog accepts `$ai_` e
 With posthog-node 5, nothing changes: AI events use `capture()` unless `enableFullAiCapture` is set.
 When an `@posthog/ai` integration has no user distinct id, it sends the event under the trace or run id with the option `process_person_profile: false`, so a `registerOptions()` or context `process_person_profile: true` doesn't create a person for each trace. An empty or whitespace-only distinct id counts as missing.
 
+`@posthog/ai` takes per-event options too: `posthogOptions` on each wrapped provider call and on `withTracing()`, and `options` on the LangChain callback handler and the OpenAI Agents, Claude Agent SDK, Google ADK and Genkit integrations.
+An event with no distinct id still has person processing turned off, whatever its options say.
+
+```ts
+await openai.responses.create({
+  model: 'gpt-5-mini',
+  input: 'Hello',
+  posthogDistinctId: 'user_123',
+  posthogOptions: { process_person_profile: false },
+})
+
+const handler = new LangChainCallbackHandler({ client: posthog, options: { process_person_profile: false } })
+```
+
 ## Event options
 
 Capture v1 sends processing options in an `options` object, next to `properties`.
