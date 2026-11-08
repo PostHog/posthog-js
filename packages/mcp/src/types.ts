@@ -224,8 +224,9 @@ export interface MCPAnalyticsOptions {
    * fresh instance per request strips them before the handler runs. Ownership
    * follows the same rule as a served listing: a Zod schema is read the way the
    * MCP SDK advertises it, and a host that lists its own JSON Schema returns that.
-   * Ownership learned from a listing on the instance wins. Ignored on a
-   * high-level `McpServer`, which reads its tool registry.
+   * Ownership learned from a listing on the instance wins. A rejected call to a
+   * tool this returns `undefined` for is recorded as `$mcp_unknown_tool`, not as
+   * a tool call. Ignored on a high-level `McpServer`, which reads its tool registry.
    */
   resolveOriginalTool?: (toolName: string) => { inputSchema?: unknown } | undefined
   /**
@@ -494,6 +495,8 @@ export interface ServerClientInfoLike {
 
 export interface HighLevelMCPServerLike {
   _registeredTools: { [name: string]: RegisteredTool }
+  /** Set once the MCP SDK has installed its own `tools/list` and `tools/call` handlers. */
+  _toolHandlersInitialized?: boolean
   registerTool?(name: string, config: { description?: string; inputSchema?: unknown }, handler: ToolCallback): void
   server: MCPServerLike
   tool?(name: string, cb: ToolCallback): void
@@ -846,6 +849,12 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
   llmModelSource?: MCPAnalyticsModelSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
+}
+
+/** Payload for {@link PostHogMCP.captureUnknownTool}. Emits `$mcp_unknown_tool`. */
+export interface UnknownToolCaptureData extends McpCaptureCommon {
+  /** The tool name the agent asked for → `$mcp_tool_name`, sanitized as free text. */
+  toolName: string
 }
 
 /** Payload for {@link PostHogMCP.captureFeedback}. Emits `$mcp_feedback`. */

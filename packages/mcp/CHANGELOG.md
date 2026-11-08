@@ -1,5 +1,36 @@
 # @posthog/mcp
 
+## 1.0.0
+
+### Major Changes
+
+- [#5584](https://github.com/PostHog/posthog-js/pull/5584) [`650e968`](https://github.com/PostHog/posthog-js/commit/650e968dbc6d7f62af3eaa17299d0e0d1096799a) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Release 1.0.0. The API and the `$mcp_*` events are now stable: a minor or patch release no longer renames or removes an event or property, changes its type, or changes which requests send an event, so your saved insights keep working across upgrades. New events and properties can still arrive in minor releases. Upgrading from 0.x needs no code change.
+  (2026-11-06)
+
+## 0.26.0
+
+### Minor Changes
+
+- [#5583](https://github.com/PostHog/posthog-js/pull/5583) [`2a08e91`](https://github.com/PostHog/posthog-js/commit/2a08e91a69b0c1d9e24ccf177505e63f94f139d3) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Aligned with the MCP analytics spec: a call to a tool the server never registered now emits `$mcp_unknown_tool` instead of a failed `$mcp_tool_call`, `llm_model` is advertised as optional, the `get_more_tools` and `send_feedback` annotations now declare that they record data, and the injected `context` argument has a shorter description. A server whose own dispatcher bypasses the MCP SDK's tool registry (such as `@rekog/mcp-nest`) keeps recording calls to unknown names as failed tool calls, since the SDK cannot tell whether such a tool exists. On a low-level server, `resolveOriginalTool` returning `undefined` now marks a failing call as an unknown tool, so return a tool for every name your server serves. Strings cut to a property limit (such as 256 characters for names and 2,048 for intent and error text) now stop exactly at the limit, `...` included, instead of 3 characters past it. `PostHogMCP` capture methods called without a `sessionId` now send a fresh `$session_id` per call, and anonymous calls use it as their distinct id instead of the shared `"anonymous"`. This changes your published tool definitions; if your server is listed in the ChatGPT or Claude directories, those platforms may re-review the updated tools.
+  (2026-11-06)
+
+## 0.25.2
+
+### Patch Changes
+
+- [#5545](https://github.com/PostHog/posthog-js/pull/5545) [`28fe8c0`](https://github.com/PostHog/posthog-js/commit/28fe8c0aa0577db27affcc7445ab72d2a1f6ebb2) Thanks [@onmax](https://github.com/onmax)! - Parse Node stack frames for functions named `async` without a leading parenthesis in the filename.
+  (2026-11-06)
+- Updated dependencies [[`28fe8c0`](https://github.com/PostHog/posthog-js/commit/28fe8c0aa0577db27affcc7445ab72d2a1f6ebb2)]:
+  - @posthog/core@1.64.1
+  - posthog-node@5.63.1
+
+## 0.25.1
+
+### Patch Changes
+
+- [#5573](https://github.com/PostHog/posthog-js/pull/5573) [`88dbf08`](https://github.com/PostHog/posthog-js/commit/88dbf08e319a60ec1f5c4eeaca25a55a3fa54fe6) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Reworded the descriptions of the injected `conversation_id` and `llm_model` arguments and the `get_more_tools` and `send_feedback` virtual tools so they describe the field instead of instructing the model. This changes your published tool definitions; if your server is listed in the ChatGPT or Claude directories, those platforms may re-review the updated tools.
+  (2026-11-05)
+
 ## 0.25.0
 
 ### Minor Changes

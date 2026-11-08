@@ -11,6 +11,7 @@ import { replayLifecycleScenarios, exerciseReplayLifecycle } from './replay-case
 import { trackReplayCompression } from './replay-compression.mjs'
 import { exerciseReplayNetwork, assertReplayNetworkCapture, freezeReplayDate } from './replay-network.mjs'
 import { compatibilityServer } from './server.mjs'
+import { xhrScenarios, assertXHRTransport, exerciseXHRTimeout } from './xhr-cases.mjs'
 import {
     legacyRecordingConfig,
     expectedReplayStyles,
@@ -110,12 +111,15 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
     const pageErrors = []
     const unexpectedNetwork = []
     const consoleErrors = []
+    const xhrRequests = []
     page.on('pageerror', (error) => pageErrors.push({ name: error.name, message: error.message }))
     page.on('console', (message) => {
         if (message.type() === 'error') consoleErrors.push(message.text())
     })
     context.on('request', (request) => {
         const url = new URL(request.url())
+        if (xhrScenarios.includes(scenario) && url.origin === server.origin && request.method() === 'POST')
+            xhrRequests.push({ path: url.pathname, resourceType: request.resourceType() })
         if (['http:', 'https:'].includes(url.protocol) && url.origin !== server.origin)
             unexpectedNetwork.push(request.url())
     })
@@ -154,6 +158,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
         ui = {},
         replay = {}
     const loading = {}
+    let transport
     try {
         if (scenario === 'replay-persisted-config')
             await page.addInitScript(
@@ -292,7 +297,13 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             await page.waitForFunction(() => window.__compat.surveyNotifications >= 3)
         }
         await page.evaluate(() => window.__compat.readyProbe())
-        if (scenario === 'core') {
+        if (scenario.startsWith('xhr-timeout')) {
+            await waitFor(() => window.__compat.promises.every((promise) => promise.state !== 'pending'))
+            transport = {
+                timeout: await exerciseXHRTimeout({ scenario, comparison, page, server, remote, received, expect }),
+            }
+        }
+        if (['core', 'xhr'].includes(scenario)) {
             let notifications = await page.evaluate(() => window.__compat.flagNotifications)
             await page.evaluate(() => window.__compat.identity())
             await page.waitForFunction((count) => window.__compat.flagNotifications > count, notifications)
@@ -490,13 +501,14 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                             e.event ===
                             (scenario === 'unload'
                                 ? 'compat-unload-marker'
-                                : scenario === 'core'
+                                : ['core', 'xhr'].includes(scenario)
                                   ? 'compat-after-opt-in'
                                   : 'compat-ready')
                     ).length
             )
             .toBe(1)
         const network = await received()
+        if (xhrScenarios.includes(scenario)) transport = { ...transport, ...assertXHRTransport(xhrRequests) }
         if (mode === 'loader') {
             const bootstrap = network.requests.filter((request) => request.path === '/static/loader.js')
             const coreRequests = network.requests.filter((request) => request.path.endsWith('/array.js'))
@@ -560,6 +572,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             replay,
             loading,
             loaderCoverage,
+            ...(transport ? { transport } : {}),
             pageErrors,
             unexpectedNetwork,
             consoleErrors,
@@ -573,6 +586,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 replay,
                 loading,
                 ...(loaderCoverage ? { loaderCoverage } : {}),
+                ...(transport ? { transport } : {}),
                 pageErrors,
                 unexpectedNetwork,
             },

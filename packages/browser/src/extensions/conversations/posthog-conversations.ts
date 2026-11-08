@@ -23,7 +23,7 @@ import type { ConversationsUnavailableReason } from '../../posthog-conversations
 export type { ConversationsUnavailableReason }
 import { Extension } from '../types'
 
-const logger = createLogger('[Conversations]')
+const logger = /* @__PURE__ */ createLogger('[Conversations]')
 const NOT_AVAILABLE = 'Conversations not available yet.'
 
 export type ConversationsManager = LazyLoadedConversationsInterface

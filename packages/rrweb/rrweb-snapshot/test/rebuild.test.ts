@@ -4,13 +4,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { beforeEach, describe, expect as _expect, it, vi } from 'vitest';
-import {
+import rebuild, {
   adaptCssForReplay,
   buildNodeWithSN,
   createCache,
 } from '../src/rebuild';
 import { NodeType } from '@posthog/rrweb-types';
 import { createMirror, Mirror, normalizeCssString } from '../src/utils';
+import snapshot from '../src/snapshot';
 
 const expect = _expect as unknown as {
   <T = unknown>(actual: T): {
@@ -52,6 +53,40 @@ describe('rebuild', function () {
   beforeEach(() => {
     mirror = createMirror();
     cache = createCache();
+  });
+
+  it.each(['HTML', 'XML'])(
+    'rebuilds non-empty CDATA as text in an %s document',
+    (type) => {
+      const doc =
+        type === 'HTML'
+          ? document
+          : document.implementation.createDocument(null, 'root');
+      const node = buildNodeWithSN(
+        { id: 1, type: NodeType.CDATA, textContent: 'text <with> content' },
+        { doc, mirror, hackCss: false, cache },
+      );
+      expect(node?.nodeType).toBe(Node.TEXT_NODE);
+      expect(node?.textContent).toBe('text <with> content');
+    },
+  );
+
+  it('rebuilds a full document with literal SVG CDATA and a later sibling', () => {
+    const source = document.implementation.createHTMLDocument();
+    const svg = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg"><text id="literal">' +
+        '<![CDATA[</svg>& this is not markup<svg/>]]></text>' +
+        '<text id="after">after</text></svg>',
+      'image/svg+xml',
+    ).documentElement;
+    source.body.appendChild(svg);
+    const doc = document.implementation.createHTMLDocument();
+    rebuild(snapshot(source)!, { doc });
+    expect(doc.querySelector('#literal')?.textContent).toBe(
+      '</svg>& this is not markup<svg/>',
+    );
+    expect(doc.querySelector('#literal')?.childElementCount).toBe(0);
+    expect(doc.querySelector('#after')?.textContent).toBe('after');
   });
 
   describe('rr_dataURL', function () {
@@ -141,6 +176,34 @@ describe('rebuild', function () {
   });
 
   describe('script placeholder', function () {
+    it('suppresses script placeholders in stored CDATA records', () => {
+      const node = buildNodeWithSN(
+        { id: 1, type: NodeType.CDATA, textContent: 'SCRIPT_PLACEHOLDER' },
+        { doc: document, mirror, hackCss: false, cache },
+      );
+      expect(node?.textContent).toBe('');
+    });
+
+    it('suppresses script CDATA when rebuilding a shadow root', function () {
+      const xml = document.implementation.createDocument(null, 'root');
+      const host = document.createElement('div');
+      const shadow = host.attachShadow({ mode: 'open' });
+      const script = document.createElement('script');
+      script.appendChild(xml.createCDATASection('window.recorded = true;'));
+      shadow.appendChild(script);
+
+      const serialized = snapshot(host)!;
+      const node = buildNodeWithSN(serialized, {
+        doc: document,
+        mirror,
+        hackCss: false,
+        cache,
+      }) as HTMLElement;
+
+      expect(node.shadowRoot?.querySelector('noscript')).not.toBeNull();
+      expect(node.shadowRoot?.textContent).toBe('');
+    });
+
     it('rebuilds a <script> as an empty <noscript> so the placeholder never renders', function () {
       const node = buildNodeWithSN(
         {
