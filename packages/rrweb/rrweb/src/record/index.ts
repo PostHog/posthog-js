@@ -10,6 +10,7 @@ import {
   endSnapshotCostTracking,
   noteVisibilityChange,
   resetStylesheetLoadTracking,
+  resetStyleRuleSources,
 } from '@posthog/rrweb-snapshot';
 import {
   initObservers,
@@ -363,6 +364,7 @@ function record<T = eventWithTime>(
     errorHandler,
   } = options;
 
+  resetStyleRuleSources();
   registerErrorHandler(errorHandler);
 
   const dataURLOptions = {
@@ -1222,6 +1224,7 @@ function record<T = eventWithTime>(
       mirror.reset();
       recording = false;
       unregisterErrorHandler();
+      resetStyleRuleSources();
     };
   } catch (error) {
     // TODO: handle internal error

@@ -18,10 +18,23 @@ import type {
 } from '@posthog/rrweb-types';
 import dom from '@posthog/rrweb-utils';
 import {
+  getStyleRuleSource,
+  hasStyleRuleSourceChildren,
+} from './stylesheet-source';
+import {
   countStylesheetRules,
   nowMs,
   recordStylesheetCost,
 } from './snapshot-cost';
+export {
+  hasEmptyShorthandLonghand,
+  rememberStyleRuleSource,
+  rememberStylesheetSource,
+  invalidateStyleRuleSource,
+  exposeStyleRuleSource,
+  disableStyleRuleSources,
+  resetStyleRuleSources,
+} from './stylesheet-source';
 
 /**
  * Sentinel that replaces the text content of every `<script>` node during
@@ -136,26 +149,6 @@ export function escapeImportStatement(rule: CSSImportRule): string {
   return statement.join(' ') + ';';
 }
 
-/**
- * Detects empty property values produced by browser CSSOM serialization of
- * shorthands that contain `var()`. When a stylesheet has e.g.
- *
- *     .card { padding: var(--p); padding-bottom: var(--pb); }
- *
- * browsers store the shorthand's longhands with empty token lists per the
- * CSS Custom Properties spec, and `CSSStyleRule.cssText` re-emits them as
- * `padding-top: ; padding-right: ; padding-left: ;`. That output silently
- * strips the layout from the rule on replay. Same class of bug as
- * rrweb-io/rrweb#1667. Custom properties (`--foo: ;`) are intentionally
- * allowed to be empty and are excluded.
- */
-export function hasEmptyShorthandLonghand(css: string): boolean {
-  // The optional leading `-` admits vendor-prefixed longhands
-  // (e.g. `-webkit-mask-image: ;`) while still excluding custom
-  // properties (`--foo: ;`), since the second char must be a letter.
-  return /(?:^|[\s;{}])-?[a-zA-Z][\w-]*\s*:\s*;/.test(css);
-}
-
 // `stringifyStylesheet` recurses into `@import`ed sheets, so only the outermost
 // call owns the wall-clock measurement - otherwise nested sheets get counted twice.
 let stringifyStylesheetDepth = 0;
@@ -216,7 +209,18 @@ export function stringifyRule(rule: CSSRule, sheetHref: string | null): string {
     }
     return importStringified;
   } else {
-    let ruleStringified = rule.cssText;
+    let ruleStringified = getStyleRuleSource(rule);
+    if (ruleStringified === undefined && hasStyleRuleSourceChildren(rule)) {
+      const prelude = getGroupingRulePrelude(rule);
+      if (prelude !== null) {
+        const children = (rule as CSSGroupingRule).cssRules;
+        ruleStringified =
+          prelude +
+          Array.from(children, (child) => stringifyRule(child, null)).join('') +
+          '}';
+      }
+    }
+    ruleStringified ??= rule.cssText;
     if (isCSSStyleRule(rule) && rule.selectorText.includes(':')) {
       // Safari does not escape selectors with : properly
       // see https://bugs.webkit.org/show_bug.cgi?id=184604
@@ -532,6 +536,7 @@ export function createStylesheetTextCursor(
   // when the rule keeps the one-shot `cssText` read instead. Never throws.
   function tryOpenGroupFrame(rule: CSSRule, parent: StringifyFrame): boolean {
     try {
+      if (getStyleRuleSource(rule) !== undefined) return false;
       const prelude = getGroupingRulePrelude(rule);
       if (prelude === null) {
         return false;
@@ -665,7 +670,7 @@ export function createStylesheetTextCursor(
       // descend; frame.index advances when the group frame completes
       return;
     }
-    let ruleStringified = rule.cssText;
+    let ruleStringified = getStyleRuleSource(rule) ?? rule.cssText;
     if (
       frame.kind === 'sheet' &&
       isCSSStyleRule(rule) &&

@@ -2,6 +2,7 @@ import {
   countStylesheetRules,
   createStylesheetTextCursor,
   getSuspensionGeneration,
+  hasEmptyShorthandLonghand,
   maskAttributeValue,
   nowMs,
   onceLinkStylesheetUpToDate,
@@ -105,6 +106,8 @@ const CHANGED_LINK_RESTARTS_AFTER_SHEET_MUTATION = 3;
 export class StylesheetManager {
   private trackedLinkElements: WeakSet<HTMLLinkElement> = new WeakSet();
   private pendingDeferredSheets: Set<PendingDeferredSheet> = new Set();
+  // A fulfilled replace must not overwrite source from a newer CSSOM write.
+  private cssomRevisions = new WeakMap<CSSStyleSheet, number>();
   // a restarted recorder refills the shared mirror, so mirror membership
   // cannot tell a stopped recorder's pending work from the new recorder's
   private stopped = false;
@@ -283,8 +286,8 @@ export class StylesheetManager {
             recordDeferredStylesheetFailure();
             return true;
           }
-          if (!cssText) {
-            // stringification produced nothing: the link keeps its href and replay
+          if (!cssText || hasEmptyShorthandLonghand(cssText)) {
+            // stringification produced nothing usable: the link keeps its href and replay
             // must load the CSS remotely - a fidelity risk worth counting, not hiding
             recordDeferredStylesheetFailure();
             options.onUninlinable?.();
@@ -323,16 +326,26 @@ export class StylesheetManager {
    * defer-time text could overwrite, and that text is exactly what a
    * synchronous pass at defer time would have recorded.
    */
-  public onCssomSheetMutation(sheet: CSSStyleSheet | null | undefined): void {
-    if (!sheet || this.pendingDeferredSheets.size === 0) {
-      return;
-    }
+  public onCssomSheetMutation(
+    sheet: CSSStyleSheet | null | undefined,
+  ): number | undefined {
+    if (!sheet) return;
+    const revision = (this.cssomRevisions.get(sheet) ?? 0) + 1;
+    this.cssomRevisions.set(sheet, revision);
     for (const pending of this.pendingDeferredSheets) {
       if (pending.sheet === sheet) {
         this.pendingDeferredSheets.delete(pending);
         pending.invalidate();
       }
     }
+    return revision;
+  }
+
+  public isCurrentCssomMutation(
+    sheet: CSSStyleSheet,
+    revision: number | undefined,
+  ): boolean {
+    return !this.stopped && this.cssomRevisions.get(sheet) === revision;
   }
 
   /**

@@ -355,9 +355,10 @@ describe('memory leak prevention', () => {
       //   attachedDocuments, attachedWindows)
       // + 4 from CrossOriginIframeMirror.reset() (2 mirrors × 2 WeakMaps each)
       // + 1 from other cleanup
+      // + 1 from clearing retained stylesheet source
       const newWeakMapsCreated =
         weakMapConstructorCalls - weakMapCallsAfterRecord;
-      expect(newWeakMapsCreated).toBe(12);
+      expect(newWeakMapsCreated).toBe(13);
 
       // Restore original WeakMap
       global.WeakMap = originalWeakMap;

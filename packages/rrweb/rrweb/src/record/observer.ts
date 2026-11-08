@@ -4,6 +4,11 @@ import {
   Mirror,
   getInputType,
   stringifyStylesheet,
+  rememberStyleRuleSource,
+  rememberStylesheetSource,
+  invalidateStyleRuleSource,
+  exposeStyleRuleSource,
+  disableStyleRuleSources,
   toLowerCase,
 } from '@posthog/rrweb-snapshot';
 import type { FontFaceSet } from 'css-font-loading-module';
@@ -785,6 +790,7 @@ function initStyleSheetObserver(
         const [rule] = argumentsList;
 
         const insertedIndex = target.apply(thisArg, argumentsList);
+        rememberStyleRuleSource(thisArg.cssRules[insertedIndex], rule);
 
         // A pending budget-deferred inlining of this sheet must not emit its
         // defer-time text over the successful mutation.
@@ -889,46 +895,52 @@ function initStyleSheetObserver(
               return result;
             }
 
-            stylesheetManager.onCssomSheetMutation(thisArg);
+            const revision = stylesheetManager.onCssomSheetMutation(thisArg);
             const { id, styleId } = getIdAndStyleId(
               thisArg,
               mirror,
               stylesheetManager.styleMirror,
             );
-            if (!((id && id !== -1) || (styleId && styleId !== -1))) {
-              return result;
-            }
-
-            const completeMutation = mutationQueue.queuePendingMutation(
-              thisArg,
-              () =>
-                styleSheetRuleCb({
-                  id,
-                  styleId,
-                  replace: text,
-                }),
-              () => {
-                const lateStyleSheetText = stringifyStylesheet(thisArg);
-                if (lateStyleSheetText !== null) {
-                  styleSheetRuleCb({
-                    id,
-                    styleId,
-                    replace: lateStyleSheetText,
-                  });
-                }
-              },
-            );
+            const tracked = (id && id !== -1) || (styleId && styleId !== -1);
+            const completeMutation = tracked
+              ? mutationQueue.queuePendingMutation(
+                  thisArg,
+                  () =>
+                    styleSheetRuleCb({
+                      id,
+                      styleId,
+                      replace: text,
+                    }),
+                  () => {
+                    const lateStyleSheetText = stringifyStylesheet(thisArg);
+                    if (lateStyleSheetText !== null) {
+                      styleSheetRuleCb({
+                        id,
+                        styleId,
+                        replace: lateStyleSheetText,
+                      });
+                    }
+                  },
+                )
+              : undefined;
             try {
               // Observing fulfillment requires a rejection handler; omitting it
               // creates a second unhandled rejection even when the caller handles
               // the original promise. Prefer not to introduce a new host error.
               void then.call(
                 result,
-                () => completeMutation(true),
-                () => completeMutation(false),
+                () => {
+                  if (
+                    stylesheetManager.isCurrentCssomMutation(thisArg, revision)
+                  ) {
+                    rememberStylesheetSource(thisArg, text);
+                  }
+                  completeMutation?.(true);
+                },
+                () => completeMutation?.(false),
               );
             } catch {
-              completeMutation(false);
+              completeMutation?.(false);
             }
           } catch {
             // Recorder errors must not affect the native promise result.
@@ -952,6 +964,7 @@ function initStyleSheetObserver(
         ) => {
           const [text] = argumentsList;
           const result = target.apply(thisArg, argumentsList);
+          rememberStylesheetSource(thisArg, text);
 
           stylesheetManager.onCssomSheetMutation(thisArg);
           const { id, styleId } = getIdAndStyleId(
@@ -1022,6 +1035,10 @@ function initStyleSheetObserver(
             const [rule] = argumentsList;
 
             const insertedIndex = target.apply(thisArg, argumentsList);
+            rememberStyleRuleSource(
+              (thisArg as CSSGroupingRule).cssRules[insertedIndex],
+              rule,
+            );
 
             stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
@@ -1066,6 +1083,7 @@ function initStyleSheetObserver(
             const [index] = argumentsList;
 
             const result = target.apply(thisArg, argumentsList);
+            invalidateStyleRuleSource(thisArg);
 
             stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
@@ -1228,6 +1246,7 @@ function initStyleDeclarationObserver(
         const [property, value, priority] = argumentsList;
 
         const result = target.apply(thisArg, argumentsList);
+        invalidateStyleRuleSource(thisArg.parentRule);
 
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {
@@ -1272,6 +1291,7 @@ function initStyleDeclarationObserver(
         const [property] = argumentsList;
 
         const result = target.apply(thisArg, argumentsList);
+        invalidateStyleRuleSource(thisArg.parentRule);
 
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {
@@ -1303,9 +1323,96 @@ function initStyleDeclarationObserver(
     ),
   });
 
+  const restoreDeclarations: (() => void)[] = [];
+  // Named declaration assignments cannot be intercepted without proxying native
+  // style objects. Once an application obtains a mutable handle, its source is
+  // no longer safe to reuse: a different var() can have identical cssText.
+  const observeDeclaration = (prototype: object, name: string) => {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+    if (!descriptor) {
+      if (name === 'style') disableStyleRuleSources();
+      return;
+    }
+    const mutableHandle =
+      name === 'style' || name === 'styleMap' || name === 'media';
+    if (!descriptor.configurable || (mutableHandle && !descriptor.get)) {
+      disableStyleRuleSources();
+      return;
+    }
+    const replacement = { ...descriptor };
+    if (descriptor.get && mutableHandle) {
+      const originalGet = descriptor.get;
+      replacement.get = function (this: CSSRule) {
+        const result = originalGet.call(this);
+        exposeStyleRuleSource(this);
+        return result;
+      };
+    }
+    if (descriptor.set) {
+      const originalSet = descriptor.set;
+      replacement.set = function (this: CSSRule, value: unknown) {
+        const result = originalSet.call(this, value);
+        exposeStyleRuleSource(this);
+        return result;
+      };
+    }
+    try {
+      Object.defineProperty(prototype, name, replacement);
+      restoreDeclarations.push(() => {
+        const current = Object.getOwnPropertyDescriptor(prototype, name);
+        if (
+          current?.get === replacement.get &&
+          current?.set === replacement.set
+        ) {
+          Object.defineProperty(prototype, name, descriptor);
+        }
+      });
+    } catch {
+      disableStyleRuleSources();
+    }
+  };
+  const newerRuleTypes = win as IWindow & {
+    CSSNestedDeclarations?: { prototype: object };
+    CSSMarginRule?: { prototype: object };
+    CSSPositionTryRule?: { prototype: object };
+  };
+  for (const ruleType of [
+    win.CSSStyleRule,
+    win.CSSKeyframeRule,
+    win.CSSPageRule,
+    win.CSSFontFaceRule,
+    newerRuleTypes.CSSNestedDeclarations,
+    newerRuleTypes.CSSMarginRule,
+    newerRuleTypes.CSSPositionTryRule,
+  ]) {
+    if (!ruleType) continue;
+    observeDeclaration(ruleType.prototype, 'style');
+    observeDeclaration(ruleType.prototype, 'styleMap');
+  }
+  for (const ruleType of [win.CSSMediaRule, win.CSSImportRule]) {
+    if (ruleType) observeDeclaration(ruleType.prototype, 'media');
+  }
+  if (win.CSSStyleRule) {
+    observeDeclaration(win.CSSStyleRule.prototype, 'selectorText');
+  }
+  if (win.CSSKeyframeRule) {
+    observeDeclaration(win.CSSKeyframeRule.prototype, 'keyText');
+  }
+  if (win.CSSKeyframesRule) {
+    observeDeclaration(win.CSSKeyframesRule.prototype, 'name');
+  }
+  const rulePrototype = win.CSSRule?.prototype;
+  if (
+    rulePrototype &&
+    Object.getOwnPropertyDescriptor(rulePrototype, 'cssText')?.set
+  ) {
+    observeDeclaration(rulePrototype, 'cssText');
+  }
+
   return callbackWrapper(() => {
     win.CSSStyleDeclaration.prototype.setProperty = setProperty;
     win.CSSStyleDeclaration.prototype.removeProperty = removeProperty;
+    callAllSafely(restoreDeclarations);
   });
 }
 
