@@ -6,6 +6,7 @@ export type {
   MetricType,
   MetricsConfig,
   CaptureMetricOptions,
+  HistogramOptions,
   MetricSample,
   BeforeSendMetricFn,
   Metrics,

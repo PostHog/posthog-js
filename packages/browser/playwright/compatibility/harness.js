@@ -91,7 +91,8 @@
         lab.call('isFeatureEnabled', ['compat-enabled', { send_event: false }])
         lab.call('onFeatureFlags', [lab.callback('feature-flags')])
         // Keep stateful pre-init probes in the lifecycle scenario; product scenarios use clean initialization.
-        if (lab.scenario === 'core' || phase !== 'before-init') lab.call('getSurveys', [lab.callback('surveys')])
+        if (['core', 'xhr'].includes(lab.scenario) || phase !== 'before-init')
+            lab.call('getSurveys', [lab.callback('surveys')])
         lab.call('canRenderSurveyAsync', ['compat-survey'])
         lab.call('register', [{ compatibility_property: 'retained' }])
         lab.call('capture', [
@@ -109,6 +110,7 @@
     lab.options = () => ({
         api_host: location.origin,
         ui_host: location.origin,
+        ...(lab.scenario.startsWith('xhr') ? { api_transport: 'XHR' } : {}),
         persistence: 'localStorage',
         capture_pageview: false,
         capture_pageleave: false,

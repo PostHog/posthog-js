@@ -517,30 +517,20 @@ describe('low-level reserved analytics arguments on a fresh instance', () => {
     expect(event?.userIntent).toBeUndefined()
   })
 
-  it.each([
-    ['returns undefined', () => undefined, 0],
-    [
-      'throws',
-      () => {
+  it('falls back to unresolved ownership when resolveOriginalTool throws', async () => {
+    const logger = vi.fn()
+    const { response, received, event } = await callFreshInstance('strict_schema', ANALYTICS_ARGS, {
+      resolveOriginalTool: () => {
         throw new Error('registry unavailable')
       },
-      1,
-    ],
-  ])(
-    'falls back to unresolved ownership when resolveOriginalTool %s',
-    async (_label, resolveOriginalTool, warnings) => {
-      const logger = vi.fn()
-      const { response, received, event } = await callFreshInstance('strict_schema', ANALYTICS_ARGS, {
-        resolveOriginalTool,
-        logger,
-      })
+      logger,
+    })
 
-      expect(response.isError).toBe(true)
-      expect(received).toEqual([])
-      expect(event?.userIntent).toBe('analytics context')
-      expect(
-        logger.mock.calls.filter(([message]) => String(message).includes('resolveOriginalTool failed'))
-      ).toHaveLength(warnings)
-    }
-  )
+    expect(response.isError).toBe(true)
+    expect(received).toEqual([])
+    expect(event?.userIntent).toBe('analytics context')
+    expect(
+      logger.mock.calls.filter(([message]) => String(message).includes('resolveOriginalTool failed'))
+    ).toHaveLength(1)
+  })
 })

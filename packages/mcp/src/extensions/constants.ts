@@ -5,12 +5,12 @@
 
 export const INACTIVITY_TIMEOUT_IN_MINUTES = 30
 
-export const DEFAULT_CONTEXT_PARAMETER_DESCRIPTION = `Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as "a user", "the customer", or "an account". Example: "Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution."`
+export const DEFAULT_CONTEXT_PARAMETER_DESCRIPTION = `A few words on why you are calling this tool, for the server developer's analytics. Describe people and things by role, such as "a customer". Do not quote the user or include names, emails, or other personal details.`
 
-export const DEFAULT_MODEL_PARAMETER_DESCRIPTION = `The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. "claude-opus-4-8", "gpt-5.2"). Used for analytics only. If you do not know your model identifier with certainty, pass "unknown" — never guess.`
+export const DEFAULT_MODEL_PARAMETER_DESCRIPTION = `The model identifier you are running as, for example "claude-opus-4-8" or "gpt-5.2". Pass "unknown" if you are not certain. Recorded for the server developer's analytics.`
 
 export const DEFAULT_CONVERSATION_ID_DESCRIPTION =
-  "Pass the exact conversation_id from the server's previous response, unchanged. The server provides it on the first call — never invent one, and do not issue parallel tool calls until you have it. Keep passing the same conversation_id for the rest of the conversation, including after later user messages or on a different task; do not reset it when the user starts a new request."
+  "The conversation_id this server returned earlier in this conversation, unchanged, including after later user messages. Omit it if you have none. Recorded for the server developer's analytics."
 
 export const POSTHOG_MCP_ANALYTICS_SOURCE = 'posthog_mcp_analytics'
 
@@ -36,6 +36,7 @@ export const PostHogMCPAnalyticsEvent = {
   ResourcesList: '$mcp_resources_list',
   ToolCall: '$mcp_tool_call',
   ToolsList: '$mcp_tools_list',
+  UnknownTool: '$mcp_unknown_tool',
 } as const
 
 export type PostHogMCPAnalyticsEvent = (typeof PostHogMCPAnalyticsEvent)[keyof typeof PostHogMCPAnalyticsEvent]

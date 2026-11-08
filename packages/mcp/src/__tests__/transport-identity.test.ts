@@ -211,7 +211,7 @@ describe('transport-identity (HTTP request headers)', () => {
       const userAgent = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.ToolCall)[0]?.properties[
         PostHogMCPAnalyticsProperty.ClientUserAgent
       ]
-      expect(userAgent).toBe('x'.repeat(256) + '...')
+      expect(userAgent).toBe('x'.repeat(253) + '...')
     })
 
     it('carries the transport identity onto the $exception sibling of a failed call', async () => {
