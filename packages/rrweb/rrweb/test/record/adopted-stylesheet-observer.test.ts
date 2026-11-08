@@ -39,6 +39,7 @@ describe('initAdoptedStyleSheetObserver()', () => {
   afterEach(() => {
     cleanup?.();
     cleanup = undefined;
+    document.body.innerHTML = '';
     if (originalDescriptor) {
       Object.defineProperty(
         Document.prototype,
@@ -50,16 +51,150 @@ describe('initAdoptedStyleSheetObserver()', () => {
     }
   });
 
-  function observe() {
+  function observe(host: Document | ShadowRoot = document) {
     const mirror = { getId: () => HOST_ID } as unknown as Mirror;
     const stylesheetManager = {
       adoptStyleSheets,
     } as unknown as StylesheetManager;
     cleanup = initAdoptedStyleSheetObserver(
       { mirror, stylesheetManager },
-      document,
+      host,
     );
   }
+
+  function createHost(kind: 'document' | 'shadow root') {
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const win = iframe.contentWindow!;
+    const prototype =
+      kind === 'document' ? win.Document.prototype : win.ShadowRoot.prototype;
+    Object.defineProperty(
+      prototype,
+      'adoptedStyleSheets',
+      Object.getOwnPropertyDescriptor(
+        Document.prototype,
+        'adoptedStyleSheets',
+      )!,
+    );
+    return kind === 'document'
+      ? win.document
+      : win.document.createElement('div').attachShadow({ mode: 'open' });
+  }
+
+  it.each(['document', 'shadow root'] as const)(
+    'leaves a non-configurable own property on a %s untouched',
+    (kind) => {
+      const host = createHost(kind);
+      const setter = vi.fn();
+      const descriptor = { configurable: false, get: () => [], set: setter };
+      Object.defineProperty(host, 'adoptedStyleSheets', descriptor);
+      const before = Object.getOwnPropertyDescriptor(
+        host,
+        'adoptedStyleSheets',
+      );
+
+      expect(() => observe(host)).not.toThrow();
+      const sheets = [{} as CSSStyleSheet];
+      host.adoptedStyleSheets = sheets;
+      expect(setter).toHaveBeenCalledWith(sheets);
+      expect(adoptStyleSheets).not.toHaveBeenCalled();
+      expect(() => cleanup?.()).not.toThrow();
+      expect(
+        Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets'),
+      ).toEqual(before);
+    },
+  );
+
+  it('skips a host that cannot be extended', () => {
+    const host = Object.preventExtensions(createHost('document'));
+    expect(() => observe(host)).not.toThrow();
+    expect(() => cleanup?.()).not.toThrow();
+    expect(
+      Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets'),
+    ).toBeUndefined();
+  });
+
+  it('preserves a configurable own accessor while observing and on cleanup', () => {
+    const host = createHost('shadow root');
+    const sheets = [{} as CSSStyleSheet];
+    const setter = vi.fn();
+    Object.defineProperty(host, 'adoptedStyleSheets', {
+      configurable: true,
+      get: () => sheets,
+      set: setter,
+    });
+    const before = Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets');
+
+    observe(host);
+    expect(host.adoptedStyleSheets).toBe(sheets);
+    host.adoptedStyleSheets = sheets;
+    expect(setter).toHaveBeenCalledWith(sheets);
+    expect(adoptStyleSheets).toHaveBeenCalledWith(sheets, HOST_ID);
+    expect(nativeSet).not.toHaveBeenCalled();
+    cleanup?.();
+    expect(Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets')).toEqual(
+      before,
+    );
+  });
+
+  it('does not replace an own data property', () => {
+    const host = createHost('document');
+    const sheets = [{} as CSSStyleSheet];
+    Object.defineProperty(host, 'adoptedStyleSheets', {
+      configurable: true,
+      value: sheets,
+    });
+    const before = Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets');
+    observe(host);
+    cleanup?.();
+    expect(Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets')).toEqual(
+      before,
+    );
+  });
+
+  it('keeps its hook removable across restarts with a non-configurable prototype property', () => {
+    const host = createHost('document') as Document;
+    Object.defineProperty(
+      host.defaultView!.Document.prototype,
+      'adoptedStyleSheets',
+      {
+        configurable: false,
+      },
+    );
+    for (let i = 0; i < 2; i++) {
+      observe(host);
+      host.adoptedStyleSheets = [];
+      cleanup?.();
+      expect(
+        Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets'),
+      ).toBeUndefined();
+    }
+    expect(adoptStyleSheets).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not overwrite a later hook during cleanup', () => {
+    const host = createHost('document');
+    observe(host);
+    Object.defineProperty(host, 'adoptedStyleSheets', {
+      configurable: true,
+      get: () => [],
+    });
+    const replacement = Object.getOwnPropertyDescriptor(
+      host,
+      'adoptedStyleSheets',
+    );
+    cleanup?.();
+    expect(Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets')).toEqual(
+      replacement,
+    );
+  });
+
+  it('can clean up even if its hook becomes non-configurable', () => {
+    const host = createHost('shadow root');
+    observe(host);
+    Object.defineProperty(host, 'adoptedStyleSheets', { configurable: false });
+    expect(() => cleanup?.()).not.toThrow();
+  });
 
   it('records adopted stylesheets on a successful assignment', () => {
     observe();

@@ -702,6 +702,73 @@ describe('record', function (this: ISuite) {
     expect(threw).toBe(false);
   });
 
+  it.each(['document', 'shadow root'] as const)(
+    'keeps recording when a %s has a non-configurable adoptedStyleSheets property',
+    async (kind) => {
+      const pageErrors: string[] = [];
+      ctx.page.on('pageerror', (error) => pageErrors.push(error.message));
+      const result = await ctx.page.evaluate(async (kind) => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const target =
+          kind === 'document' ? document : host.attachShadow({ mode: 'open' });
+        const prototype =
+          kind === 'document' ? Document.prototype : ShadowRoot.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(
+          prototype,
+          'adoptedStyleSheets',
+        )!;
+        Object.defineProperty(target, 'adoptedStyleSheets', {
+          ...descriptor,
+          configurable: false,
+        });
+        const errors: string[] = [];
+        const stop = (window as unknown as IWindow).rrweb.record({
+          emit: (window as unknown as IWindow).emit,
+          errorHandler: (error) => {
+            errors.push(String(error));
+            return true;
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync('body { color: green; }');
+        target.adoptedStyleSheets = [sheet];
+        document.querySelector('input')!.click();
+        stop?.();
+        const after = Object.getOwnPropertyDescriptor(
+          target,
+          'adoptedStyleSheets',
+        )!;
+        return {
+          started: typeof stop === 'function',
+          errors,
+          preserved:
+            after.get === descriptor.get &&
+            after.set === descriptor.set &&
+            !after.configurable,
+          adopted: target.adoptedStyleSheets[0] === sheet,
+        };
+      }, kind);
+      await waitForRAF(ctx.page);
+
+      expect(result).toEqual({
+        started: true,
+        errors: [],
+        preserved: true,
+        adopted: true,
+      });
+      expect(pageErrors).toEqual([]);
+      expect(
+        ctx.events.some(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.MouseInteraction,
+        ),
+      ).toBe(true);
+    },
+  );
+
   it('captures consecutive stylesheet replacements', async () => {
     await ctx.page.evaluate(async () => {
       const sheet = new CSSStyleSheet();

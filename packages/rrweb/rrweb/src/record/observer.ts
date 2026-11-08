@@ -1128,25 +1128,32 @@ export function initAdoptedStyleSheetObserver(
     host.nodeName === '#document'
       ? (host as Document).defaultView?.Document
       : host.ownerDocument?.defaultView?.ShadowRoot;
-  const originalPropertyDescriptor = patchTarget?.prototype
-    ? Object.getOwnPropertyDescriptor(
-        patchTarget?.prototype,
-        'adoptedStyleSheets',
-      )
-    : undefined;
+  const ownPropertyDescriptor = Object.getOwnPropertyDescriptor(
+    host,
+    'adoptedStyleSheets',
+  );
+  const originalPropertyDescriptor =
+    ownPropertyDescriptor ??
+    (patchTarget?.prototype
+      ? Object.getOwnPropertyDescriptor(
+          patchTarget.prototype,
+          'adoptedStyleSheets',
+        )
+      : undefined);
   if (
     hostId === null ||
     hostId === -1 ||
     !patchTarget ||
-    !originalPropertyDescriptor
+    ownPropertyDescriptor?.configurable === false ||
+    !originalPropertyDescriptor?.get ||
+    !originalPropertyDescriptor?.set
   )
     return () => {
       //
     };
 
-  // Patch adoptedStyleSheets by overriding the original one.
-  Object.defineProperty(host, 'adoptedStyleSheets', {
-    configurable: originalPropertyDescriptor.configurable,
+  const patchedPropertyDescriptor: PropertyDescriptor = {
+    configurable: true,
     enumerable: originalPropertyDescriptor.enumerable,
     get(): CSSStyleSheet[] {
       return originalPropertyDescriptor.get?.call(this) as CSSStyleSheet[];
@@ -1193,15 +1200,32 @@ export function initAdoptedStyleSheetObserver(
       }
       return result;
     },
-  });
+  };
+  try {
+    Object.defineProperty(
+      host,
+      'adoptedStyleSheets',
+      patchedPropertyDescriptor,
+    );
+  } catch {
+    return () => {};
+  }
 
   return callbackWrapper(() => {
-    Object.defineProperty(host, 'adoptedStyleSheets', {
-      configurable: originalPropertyDescriptor.configurable,
-      enumerable: originalPropertyDescriptor.enumerable,
-      get: originalPropertyDescriptor.get,
-      set: originalPropertyDescriptor.set,
-    });
+    const current = Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets');
+    // A later recorder or polyfill may have replaced or locked our hook.
+    if (
+      !current?.configurable ||
+      current.get !== patchedPropertyDescriptor.get ||
+      current.set !== patchedPropertyDescriptor.set
+    )
+      return;
+    if (ownPropertyDescriptor) {
+      Object.defineProperty(host, 'adoptedStyleSheets', ownPropertyDescriptor);
+    } else {
+      delete (host as { adoptedStyleSheets?: CSSStyleSheet[] })
+        .adoptedStyleSheets;
+    }
   });
 }
 
