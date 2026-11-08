@@ -1931,6 +1931,7 @@ export class Replayer {
      * node. Hold such dialogs here and apply them after the reattach.
      */
     const pendingDialogs: Node[] = [];
+    const selectsToRestore = new Set<Node>();
 
     const appendNode = (mutation: addedNodeMutation) => {
       if (!this.iframe.contentDocument) {
@@ -2135,12 +2136,9 @@ export class Replayer {
        */
       afterAppend(target, mutation.node.id);
       if (!this.usingVirtualDom) {
-        restoreSelectState(
-          (parent.nodeName === 'OPTGROUP'
-            ? parent.parentNode
-            : parent) as Node | null,
-          this.mirror,
-        );
+        const select =
+          parent.nodeName === 'OPTGROUP' ? parent.parentNode : parent;
+        if (select?.nodeName === 'SELECT') selectsToRestore.add(select as Node);
       }
 
       /**
@@ -2239,6 +2237,9 @@ export class Replayer {
         );
         restoreStyleRules(detachedRoot.styleRules);
       }
+      selectsToRestore.forEach((select) =>
+        restoreSelectState(select, this.mirror),
+      );
       pendingDialogs.forEach((dialog) => {
         applyDialogToTopLevel(dialog);
       });
@@ -2478,7 +2479,14 @@ export class Replayer {
     }
     try {
       (target as HTMLInputElement).checked = d.isChecked;
-      (target as HTMLInputElement).value = d.text;
+      if (target.nodeName === 'SELECT' && d.selectedOptionIds) {
+        const selectedOptionIds = new Set(d.selectedOptionIds);
+        Array.from((target as HTMLSelectElement).options).forEach((option) => {
+          option.selected = selectedOptionIds.has(this.mirror.getId(option));
+        });
+      } else {
+        (target as HTMLInputElement).value = d.text;
+      }
       restoreSelectState(target, this.mirror);
     } catch (error) {
       // for safe

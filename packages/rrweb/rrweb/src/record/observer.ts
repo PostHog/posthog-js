@@ -454,6 +454,7 @@ function initInputObserver({
       return;
     }
     if (target && target.tagName === 'OPTION') {
+      if (isBlocked(target, blockClass, blockSelector, true)) return;
       target = dom.parentElement(target);
       if (target && target.tagName === 'OPTGROUP') {
         target = dom.parentElement(target);
@@ -477,6 +478,7 @@ function initInputObserver({
     }
     let text = (target as HTMLInputElement).value;
     let isChecked = false;
+    let selectedOptionIds: number[] | undefined;
     const type: Lowercase<string> = getInputType(target) || '';
 
     if (type === 'radio' || type === 'checkbox') {
@@ -493,13 +495,21 @@ function initInputObserver({
         value: text,
         maskInputFn,
       });
+    } else if (tagName === 'SELECT' && (target as HTMLSelectElement).multiple) {
+      const selectedOptions = Array.from(
+        (target as HTMLSelectElement).selectedOptions,
+      ).filter(
+        (option) =>
+          !isBlocked(option, blockClass, blockSelector, true) &&
+          mirror.getId(option) > 0,
+      );
+      selectedOptionIds = selectedOptions.map((option) => mirror.getId(option));
+      text = selectedOptions[0]?.value || '';
     }
-    cbWithDedup(
-      target,
-      userTriggeredOnInput
-        ? { text, isChecked, userTriggered }
-        : { text, isChecked },
-    );
+    const value: inputValue = { text, isChecked };
+    if (selectedOptionIds) value.selectedOptionIds = selectedOptionIds;
+    if (userTriggeredOnInput) value.userTriggered = userTriggered;
+    cbWithDedup(target, value);
     // if a radio was checked
     // the other radios with the same name attribute will be unchecked.
     const name: string | undefined = (target as HTMLInputElement).name;
@@ -524,7 +534,11 @@ function initInputObserver({
     if (
       !lastInputValue ||
       lastInputValue.text !== v.text ||
-      lastInputValue.isChecked !== v.isChecked
+      lastInputValue.isChecked !== v.isChecked ||
+      lastInputValue.selectedOptionIds?.length !== v.selectedOptionIds?.length ||
+      v.selectedOptionIds?.some(
+        (id, index) => id !== lastInputValue.selectedOptionIds?.[index],
+      )
     ) {
       lastInputValueMap.set(target, v);
       const id = mirror.getId(target as Node);
