@@ -68,7 +68,7 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.2.0",
-    "@react-email/render": ">=1.2.0",
+    "@react-email/render": ">=1.2.3",
     "rxjs": "^7.0.0"
   },
   "peerDependenciesMeta": {

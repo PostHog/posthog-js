@@ -1,4 +1,4 @@
-import { createElement, type ReactElement } from 'react'
+import { createElement, type ReactElement, use } from 'react'
 
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
 
@@ -345,6 +345,28 @@ describe('emails', () => {
         code: 'react_render_failed',
         message: 'Rendering the react element failed, so no email was sent.',
         cause: expect.objectContaining({ message: 'firstName is missing' }),
+      })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('gives up on an element that never finishes rendering, after the request timeout', async () => {
+      makeClient({ emailRequestTimeoutMs: 1000 })
+      const Waits = (): ReactElement => use(new Promise<ReactElement>(() => {}))
+
+      let settled = false
+      const pending = sendReact({ react: createElement(Waits) }).finally(() => {
+        settled = true
+      })
+      // The deadline starts once @react-email/render has loaded, so keep the clock moving until the send settles.
+      while (!settled) {
+        await vi.advanceTimersByTimeAsync(100)
+      }
+      const { data, error } = await pending
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        cause: expect.objectContaining({ message: 'Rendering the react element took longer than 1000ms.' }),
       })
       expect(fetch).not.toHaveBeenCalled()
     })

@@ -164,7 +164,10 @@ export class EmailSender implements Emails {
         'no email was sent',
         'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.'
       )
-      const body = prepared.react === undefined ? prepared.body : await withRenderedReact(prepared.body, prepared.react)
+      const body =
+        prepared.react === undefined
+          ? prepared.body
+          : await withRenderedReact(prepared.body, prepared.react, this.config.requestTimeoutMs)
       const headers = this.headers(secretKey, {
         'Content-Type': 'application/json',
         'Idempotency-Key': prepared.idempotencyKey,
@@ -469,12 +472,22 @@ function isReactElement(value: unknown): value is EmailReactElement {
   )
 }
 
-/** Adds the rendered html, and text when the send has none, to a body serialized before the render. */
-async function withRenderedReact(body: string, react: EmailReactElement): Promise<string> {
+/**
+ * Adds the rendered html, and text when the send has none, to a body serialized before the render.
+ * The render gets the request timeout, so a component that waits on a promise that never settles can't hold the send.
+ */
+async function withRenderedReact(body: string, react: EmailReactElement, timeoutMs: number): Promise<string> {
   const { render, toPlainText } = await loadReactRenderer()
   const fields: Record<string, unknown> = JSON.parse(body)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Rendering the react element took longer than ${timeoutMs}ms.`)),
+      timeoutMs
+    )
+  })
   try {
-    const html = await render(react)
+    const html = await Promise.race([render(react), deadline])
     return safeJsonStringify({ ...fields, html, ...(fields.text === undefined && { text: toPlainText(html) }) })
   } catch (cause) {
     throw new EmailError({
@@ -482,6 +495,8 @@ async function withRenderedReact(body: string, react: EmailReactElement): Promis
       message: 'Rendering the react element failed, so no email was sent.',
       cause,
     })
+  } finally {
+    clearTimeout(timer)
   }
 }
 
