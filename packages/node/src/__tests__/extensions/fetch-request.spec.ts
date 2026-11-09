@@ -68,6 +68,23 @@ describe('fetch request instrumentation', () => {
     expect(spans[0].name).toBe('GET')
   })
 
+  it('maps unknown methods to _OTHER so they cannot mint span names or metric series', async () => {
+    await instrumentRequest(
+      posthog,
+      new Request('http://localhost/x', { method: 'FOOBAR' }),
+      () => new Response('ok'),
+      {
+        getRoute: () => '/x',
+      }
+    )
+    expect(spans[0].name).toBe('HTTP /x')
+    expect(spans[0].attributes).toMatchObject({
+      'http.request.method': '_OTHER',
+      'http.request.method_original': 'FOOBAR',
+    })
+    expect(count.mock.calls[0][2]).toMatchObject({ attributes: { 'http.request.method': '_OTHER' } })
+  })
+
   it('marks 5xx responses as errors', async () => {
     await instrumentRequest(
       posthog,

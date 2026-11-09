@@ -12,6 +12,21 @@ export const HTTP_SERVER_REQUEST_COUNT_METRIC = 'http.server.request.count'
 // Seconds, the boundaries the OpenTelemetry HTTP semantic conventions recommend for this histogram.
 const DURATION_BOUNDS_SECONDS = [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10]
 
+// Any other method token becomes `_OTHER`, as the OpenTelemetry HTTP conventions say, so clients sending
+// made-up methods cannot mint span names or metric series.
+const KNOWN_HTTP_METHODS = new Set([
+  'CONNECT',
+  'DELETE',
+  'GET',
+  'HEAD',
+  'OPTIONS',
+  'PATCH',
+  'POST',
+  'PUT',
+  'QUERY',
+  'TRACE',
+])
+
 export interface InstrumentRequestOptions {
   /**
    * The matched route pattern (`/users/:id`), once the handler has run. Used to name the span
@@ -110,7 +125,9 @@ async function instrument(
     properties,
   }
 
-  const method = request.method.toUpperCase()
+  const requestedMethod = request.method.toUpperCase()
+  const method = KNOWN_HTTP_METHODS.has(requestedMethod) ? requestedMethod : '_OTHER'
+  const spanMethod = method === '_OTHER' ? 'HTTP' : method
   const startedAt = performance.now()
   // Ends the request context once the response settles, so detached work started by the handler
   // does not keep attributing later events and spans to this request.
@@ -122,13 +139,14 @@ async function instrument(
       () => {
         notifyContextListeners(posthog as unknown as PostHogBackendClient, true)
         return posthog.withSpan(
-          method,
+          spanMethod,
           {
             kind: 'server',
             parent: request.headers.get('traceparent') ?? undefined,
             tracestate: request.headers.get('tracestate') ?? undefined,
             attributes: {
               'http.request.method': method,
+              ...(method === '_OTHER' ? { 'http.request.method_original': request.method } : {}),
               ...(pathname ? { 'url.path': pathname } : {}),
             },
           },
@@ -151,7 +169,7 @@ async function instrument(
             }
             const statusCode = failed ? 500 : (response?.status ?? 500)
             if (route) {
-              span.updateName(`${method} ${route}`)
+              span.updateName(`${spanMethod} ${route}`)
               span.setAttribute('http.route', route)
             }
             span.setAttribute('http.response.status_code', statusCode)
