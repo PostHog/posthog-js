@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.18.6
+
+### Patch Changes
+
+- [#5609](https://github.com/PostHog/posthog-js/pull/5609) [`eb11f00`](https://github.com/PostHog/posthog-js/commit/eb11f00d30c734d2de3a5f71aa7d814343588a9f) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Report `$ai_reasoning_tokens` for Anthropic calls from `usage.output_tokens_details.thinking_tokens`, in the wrapper (streaming and non-streaming) and in the Claude Agent SDK processor.
+  (2026-11-09)
+
 ## 8.18.5
 
 ### Patch Changes
