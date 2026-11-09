@@ -426,6 +426,9 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         // JS owns flags; it tells us when the native preload would be a duplicate. posthog-ios
         // has no remoteConfig switch to mirror — it deprecated the option and always loads.
         config.preloadFeatureFlags = sdkOptions["preloadFeatureFlags"] as? Bool ?? true
+        // React Native apps usually translate in JS, so the bundle's localization is often just the
+        // development region. JS reports the language it displays through setAppLanguage instead.
+        config.detectAppLanguage = false
 
         // Forward custom headers (e.g. Authorization for a reverse proxy) so the native SDK
         // attaches them to the requests it sends directly (session replay, crash uploads).
@@ -480,6 +483,9 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             }
         }
 
+        // Set before setup so the push open setup captures on a cold launch carries it. The shared
+        // instance keeps it across setup, and nil clears a value an earlier JS client left.
+        PostHogSDK.shared.setAppLanguage(sdkOptions["appLanguage"] as? String)
         PostHogSDK.shared.setup(config)
 
         self.config = config
@@ -686,6 +692,14 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         } catch {
             reject(fatalCaptureErrorCode, "markFatalExceptionHandled: \(error.localizedDescription)", error)
         }
+    }
+
+    @objc(setAppLanguage:withResolver:withRejecter:)
+    func setAppLanguage(
+        language: String?, resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
+    ) {
+        PostHogSDK.shared.setAppLanguage(language)
+        resolve(nil)
     }
 
     @objc(registerPushNotificationToken:withAppId:withResolver:withRejecter:)
