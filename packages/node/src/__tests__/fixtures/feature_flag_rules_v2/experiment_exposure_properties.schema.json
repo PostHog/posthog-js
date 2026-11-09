@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://posthog.com/contracts/feature_flag_rules_v2/experiment_exposure_properties.schema.json",
+  "title": "SDK-sent $experiment_exposure properties",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$feature_flag",
+    "$feature_flag_response",
+    "$feature_flag_variant",
+    "$feature_flag_rule_id",
+    "locally_evaluated"
+  ],
+  "properties": {
+    "$feature_flag": {
+      "type": "string",
+      "minLength": 1
+    },
+    "$feature_flag_response": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "$feature_flag_variant": {
+      "type": "string"
+    },
+    "$feature_flag_rule_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "locally_evaluated": {
+      "type": "boolean"
+    },
+    "$feature_flag_forced_variant": {
+      "const": true
+    }
+  },
+  "description": "Closed projection of the properties of an SDK-sent exposure. The SDK sends it only for a config version 2 experiment split, so it carries no config version, rule type, reason code or source marker; the rule ID marks it as SDK-sent. Experiment ID and forced-variant context are forbidden. Capture identity and existing optional transport properties are outside this projection. Scan the entire event recursively for assignment seeds.",
+  "not": {
+    "required": [
+      "$feature_flag_forced_variant"
+    ]
+  }
+}
