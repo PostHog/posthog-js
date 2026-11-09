@@ -639,6 +639,67 @@ describe('select review regressions', () => {
     },
   );
 
+  for (const multiple of [false, true]) {
+    for (const removal of ['option', 'grouped option', 'optgroup']) {
+      it.each<ReplayMode>(['play', 'seek', 'seek-real'])(
+        `keeps a masked select blank after ${removal} removal (multiple: ${multiple}, %s)`,
+        async (mode) => {
+          await page.evaluate(
+            async ({ multiple, removal }) => {
+              const win = window as unknown as TestWindow;
+              const first = '<option value="*">All</option>';
+              document.querySelector('#fixture')!.innerHTML =
+                `<select id="privacy" ${multiple ? 'multiple' : ''}>` +
+                (removal === 'option'
+                  ? first
+                  : `<optgroup label="First">${first}</optgroup>`) +
+                '<option value="private">Private</option></select>';
+              const select = document.querySelector('select')!;
+              select.options[0].selected = true;
+              win.events = [];
+              win.stop = win.rrweb.record({
+                maskAllInputs: true,
+                emit: (event) => win.events.push(event),
+              })!;
+              await new Promise((resolve) => setTimeout(resolve, 20));
+              if (removal === 'optgroup')
+                select.querySelector('optgroup')!.remove();
+              else select.options[0].remove();
+            },
+            { multiple, removal },
+          );
+          const result = await finishReplay(page, mode);
+          expect(result.liveIndices).toEqual(multiple ? [] : [0]);
+          expect(result.replayIndices).toEqual([]);
+          expect(result.inputs).toEqual([]);
+        },
+      );
+    }
+  }
+
+  it('restores a masked select once after a batch of option removals', async () => {
+    await page.evaluate(async () => {
+      const win = window as unknown as TestWindow;
+      document.querySelector('#fixture')!.innerHTML =
+        '<select id="privacy"></select>';
+      const select = document.querySelector('select')!;
+      for (let i = 0; i < 101; i++)
+        select.add(new Option(String(i), String(i)));
+      win.events = [];
+      win.stop = win.rrweb.record({
+        maskAllInputs: true,
+        emit: (event) => win.events.push(event),
+      })!;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      for (const option of Array.from(select.options).slice(0, 100))
+        option.remove();
+    });
+    const result = await finishReplay(page, 'play', true);
+    expect(result.liveIndices).toEqual([0]);
+    expect(result.replayIndices).toEqual([]);
+    expect(result.restores).toBeLessThanOrEqual(2);
+  });
+
   for (const grouped of [false, true]) {
     it.each<ReplayMode>(['play', 'seek-real'])(
       `restores a masked select once per option mutation batch (grouped: ${grouped}, %s)`,
