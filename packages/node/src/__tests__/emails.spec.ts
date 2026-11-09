@@ -521,19 +521,33 @@ describe('emails', () => {
       expect(requests()).toEqual(Array(asks).fill(`POST ${UPLOADS_URL}`))
     })
 
-    it('answers field_not_accepted when PostHog has no upload route yet', async () => {
-      replies = [
+    it.each([
+      [
+        "Django's answer",
         {
           status: 404,
           body: { type: 'invalid_request', code: 'not_found', detail: 'Endpoint not found.', attr: null },
         },
-      ]
+        'Endpoint not found.',
+      ],
+      ['a page that is not JSON', { status: 404, text: '<html>Not Found</html>' }, 'PostHog answered HTTP 404.'],
+    ])(
+      'reports not_found on attachments when the upload route answers 404 with %s, and sends nothing',
+      async (_name, reply, message) => {
+        replies = [reply]
 
-      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+        const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
 
-      expect(error).toMatchObject({ code: 'field_not_accepted', name: 'validation_error', field: 'attachments' })
-      expect(requests()).toEqual([`POST ${UPLOADS_URL}`])
-    })
+        expect(error).toMatchObject({
+          code: 'not_found',
+          name: 'not_found',
+          statusCode: 404,
+          field: 'attachments',
+          message,
+        })
+        expect(requests()).toEqual([`POST ${UPLOADS_URL}`])
+      }
+    )
 
     it('hashes bytes and decodes Base64 without Buffer, as on the edge runtime', async () => {
       replies = [filesAnswer(uploadSlot(LOGO_SHA256, 3), uploadSlot(INVITE_SHA256, 15)), stored, stored, accepted()]

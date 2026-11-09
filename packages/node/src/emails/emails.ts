@@ -660,14 +660,7 @@ function parseUploadsReply(
 ): Map<string, UploadTarget> {
   const fields = replyFields(parseJson(body))
   if (status === 404) {
-    throw new EmailError({
-      code: 'field_not_accepted',
-      message: "This PostHog doesn't take attachments yet, so no email was sent.",
-      statusCode: status,
-      why: 'Attachments need a PostHog version with the attachment upload route.',
-      fix: 'Send the email without attachments, or upgrade PostHog.',
-      field: 'attachments',
-    })
+    throw replyError({ code: 'not_found', ...fields, attr: text(fields.attr) ?? 'attachments' }, status, retryAfterMs)
   }
   if (status < 200 || status >= 300) {
     throw replyError({ ...fields, attr: callerField(text(fields.attr), requested) }, status, retryAfterMs)
