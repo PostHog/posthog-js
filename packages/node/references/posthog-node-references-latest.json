@@ -2811,6 +2811,11 @@
       "name": "HonoContextLike",
       "properties": [
         {
+          "description": "Set by Hono when a handler threw and its error handler produced the response.",
+          "type": "unknown",
+          "name": "error"
+        },
+        {
           "type": "{\n        raw: Request;\n        routePath: string;\n    }",
           "name": "req"
         },

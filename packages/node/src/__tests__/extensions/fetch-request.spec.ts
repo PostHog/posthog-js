@@ -113,8 +113,47 @@ describe('fetch request instrumentation', () => {
       })
     ).rejects.toBe(boom)
     expect(spans[0].status?.code).toBe('error')
-    expect(spans[0].events.some((e) => e.name === 'exception')).toBe(true)
+    expect(spans[0].events.filter((e) => e.name === 'exception')).toHaveLength(1)
     expect(histogram.mock.calls[0][2]).toMatchObject({ attributes: { 'http.response.status_code': 500 } })
+  })
+
+  it('forwards an inbound tracestate with the traceparent', async () => {
+    let tracestate: string | null | undefined
+    await instrumentRequest(
+      posthog,
+      new Request('http://localhost/x', { headers: { traceparent: TRACEPARENT, tracestate: 'vendor=abc' } }),
+      () => {
+        tracestate = posthog.getActiveSpan()?.tracestate()
+        return new Response('ok')
+      }
+    )
+    expect(tracestate).toBe('vendor=abc')
+  })
+
+  it('ends the request context when the response settles', async () => {
+    let release!: () => void
+    const released = new Promise<void>((resolve) => (release = resolve))
+    let detached: Promise<unknown> | undefined
+    await instrumentRequest(
+      posthog,
+      new Request('http://localhost/x', { headers: { 'x-posthog-session-id': 'sess-1' } }),
+      () => {
+        // Detached work started inside the request, still running after the response.
+        detached = released.then(() => posthog.getContext())
+        return new Response('ok')
+      }
+    )
+    release()
+    expect(await detached).toBeUndefined()
+  })
+
+  it('hands the metrics flush to waitUntil', async () => {
+    const waitUntil = vi.fn()
+    posthog.options.waitUntil = waitUntil
+    const flush = vi.spyOn(posthog.metrics, 'flush').mockResolvedValue()
+    await instrumentRequest(posthog, new Request('http://localhost/x'), () => new Response('ok'))
+    expect(flush).toHaveBeenCalled()
+    expect(waitUntil).toHaveBeenCalled()
   })
 
   it('skips ignored requests', async () => {
@@ -159,6 +198,30 @@ describe('fetch request instrumentation', () => {
       expect(sessionId).toBe('s2')
       expect(spans[0].name).toBe('GET /api/dashboards/:uid')
       expect(spans[0].status?.code).toBe('error')
+    })
+
+    it('records the error Hono caught and keeps its response', async () => {
+      const boom = new Error('boom')
+      const c: any = { req: { raw: new Request('http://localhost/x'), routePath: '/x' }, res: undefined }
+      await posthogHonoMiddleware(posthog)(c, async () => {
+        c.error = boom
+        c.res = new Response('Internal Server Error', { status: 500 })
+      })
+      expect(c.res.status).toBe(500)
+      const exceptions = spans[0].events.filter((e) => e.name === 'exception')
+      expect(exceptions).toHaveLength(1)
+      expect(exceptions[0].attributes).toMatchObject({ 'exception.message': 'boom' })
+      expect(spans[0].status?.code).toBe('error')
+    })
+
+    it('does not record an error Hono turned into a 4xx', async () => {
+      const c: any = { req: { raw: new Request('http://localhost/x'), routePath: '/x' }, res: undefined }
+      await posthogHonoMiddleware(posthog)(c, async () => {
+        c.error = new Error('unauthorized')
+        c.res = new Response('no', { status: 401 })
+      })
+      expect(spans[0].events.some((e) => e.name === 'exception')).toBe(false)
+      expect(spans[0].status?.code).not.toBe('error')
     })
   })
 })

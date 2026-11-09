@@ -53,7 +53,11 @@ function safePathname(request: Request): string | undefined {
  * - opens a `server` span continuing an inbound `traceparent`, named `METHOD route` once the route is known
  * - marks 5xx responses and thrown errors as span errors (the error is rethrown)
  * - records `http.server.request.duration` (seconds histogram) and `http.server.request.count`,
- *   by method, route and status code
+ *   by method, route and status code, and hands their flush to the `waitUntil` client option when set
+ *
+ * The request context (session and distinct ID on events and spans) needs `withContext`, which the edge
+ * entrypoint (Cloudflare Workers, Vercel Edge) does not support: there the span and metrics are still recorded,
+ * but captures inside the handler do not pick up the request's IDs. Pass them explicitly on that runtime.
  *
  * @experimental Subject to change in a minor release.
  *
@@ -64,11 +68,22 @@ function safePathname(request: Request): string | undefined {
  * }
  * ```
  */
-export async function instrumentRequest(
+export function instrumentRequest(
   posthog: PostHogForRequests,
   request: Request,
   handler: () => Response | Promise<Response>,
   options: InstrumentRequestOptions = {}
+): Promise<Response> {
+  return instrument(posthog, request, handler, options)
+}
+
+async function instrument(
+  posthog: PostHogForRequests,
+  request: Request,
+  handler: () => Response | Promise<Response>,
+  options: InstrumentRequestOptions,
+  // An error the framework caught and turned into a response, so it never reaches us as a rejection.
+  getHandledError?: () => unknown
 ): Promise<Response> {
   if (options.ignore?.(request)) {
     return handler()
@@ -97,70 +112,107 @@ export async function instrumentRequest(
 
   const method = request.method.toUpperCase()
   const startedAt = performance.now()
+  // Ends the request context once the response settles, so detached work started by the handler
+  // does not keep attributing later events and spans to this request.
+  const lifetime = new AbortController()
 
-  return posthog.withContext(contextData, () => {
-    notifyContextListeners(posthog as unknown as PostHogBackendClient, true)
-    return posthog.withSpan(
-      method,
-      {
-        kind: 'server',
-        parent: request.headers.get('traceparent') ?? undefined,
-        attributes: { 'http.request.method': method, ...(pathname ? { 'url.path': pathname } : {}) },
+  try {
+    return await posthog.withContext(
+      contextData,
+      () => {
+        notifyContextListeners(posthog as unknown as PostHogBackendClient, true)
+        return posthog.withSpan(
+          method,
+          {
+            kind: 'server',
+            parent: request.headers.get('traceparent') ?? undefined,
+            tracestate: request.headers.get('tracestate') ?? undefined,
+            attributes: {
+              'http.request.method': method,
+              ...(pathname ? { 'url.path': pathname } : {}),
+            },
+          },
+          async (span) => {
+            let response: Response | undefined
+            let thrown: unknown
+            let failed = false
+            try {
+              response = await handler()
+            } catch (error) {
+              failed = true
+              thrown = error
+            }
+
+            let route: string | undefined
+            try {
+              route = options.getRoute?.(request, response)
+            } catch {
+              // A broken route resolver must not break the request.
+            }
+            const statusCode = failed ? 500 : (response?.status ?? 500)
+            if (route) {
+              span.updateName(`${method} ${route}`)
+              span.setAttribute('http.route', route)
+            }
+            span.setAttribute('http.response.status_code', statusCode)
+            // A thrown error is recorded by `withSpan` when it is rethrown below.
+            if (!failed && statusCode >= 500) {
+              let handledError: unknown
+              try {
+                handledError = getHandledError?.()
+              } catch {
+                // Reading the framework's error must not break the request.
+              }
+              if (handledError !== undefined && handledError !== null) {
+                span.recordException(handledError)
+              } else {
+                span.setStatus('error')
+              }
+            }
+
+            const attributes: Record<string, string | number> = {
+              'http.request.method': method,
+              'http.response.status_code': statusCode,
+              ...(route ? { 'http.route': route } : {}),
+            }
+            posthog.metrics.histogram(HTTP_SERVER_REQUEST_DURATION_METRIC, (performance.now() - startedAt) / 1000, {
+              unit: 's',
+              attributes,
+              bounds: DURATION_BOUNDS_SECONDS,
+            })
+            posthog.metrics.count(HTTP_SERVER_REQUEST_COUNT_METRIC, 1, {
+              attributes,
+            })
+            // Serverless hosts can end the invocation before the metrics flush timer fires.
+            const waitUntil = posthog.options.waitUntil
+            if (waitUntil) {
+              try {
+                waitUntil(posthog.metrics.flush().catch(() => {}))
+              } catch {
+                // waitUntil may throw outside a request context.
+              }
+            }
+
+            if (failed) {
+              throw thrown
+            }
+            return response as Response
+          }
+        )
       },
-      async (span) => {
-        let response: Response | undefined
-        let thrown: unknown
-        let failed = false
-        try {
-          response = await handler()
-        } catch (error) {
-          failed = true
-          thrown = error
-        }
-
-        let route: string | undefined
-        try {
-          route = options.getRoute?.(request, response)
-        } catch {
-          // A broken route resolver must not break the request.
-        }
-        const statusCode = failed ? 500 : (response?.status ?? 500)
-        if (route) {
-          span.updateName(`${method} ${route}`)
-          span.setAttribute('http.route', route)
-        }
-        span.setAttribute('http.response.status_code', statusCode)
-        if (failed) {
-          span.recordException(thrown)
-        } else if (statusCode >= 500) {
-          span.setStatus('error')
-        }
-
-        const attributes: Record<string, string | number> = {
-          'http.request.method': method,
-          'http.response.status_code': statusCode,
-          ...(route ? { 'http.route': route } : {}),
-        }
-        posthog.metrics.histogram(HTTP_SERVER_REQUEST_DURATION_METRIC, (performance.now() - startedAt) / 1000, {
-          unit: 's',
-          attributes,
-          bounds: DURATION_BOUNDS_SECONDS,
-        })
-        posthog.metrics.count(HTTP_SERVER_REQUEST_COUNT_METRIC, 1, { attributes })
-
-        if (failed) {
-          throw thrown
-        }
-        return response as Response
-      }
+      { signal: lifetime.signal }
     )
-  })
+  } finally {
+    lifetime.abort()
+  }
 }
 
 /** The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency. */
 interface HonoContextLike {
   req: { raw: Request; routePath: string }
   res: Response
+  /** Set by Hono when a handler threw and its error handler produced the response. */
+  error?: unknown
 }
 
 /**
@@ -180,7 +232,7 @@ export function posthogHonoMiddleware(
 ): (c: HonoContextLike, next: () => Promise<void>) => Promise<void> {
   return async (c, next) => {
     // Hono's `next()` resolves with the response on `c.res` (error handlers set it too), so wrap that.
-    await instrumentRequest(
+    await instrument(
       posthog,
       c.req.raw,
       async () => {
@@ -191,7 +243,8 @@ export function posthogHonoMiddleware(
         ...options,
         // routePath is the last matched route; the catch-all `/*` means nothing matched.
         getRoute: () => (c.req.routePath && c.req.routePath !== '/*' ? c.req.routePath : undefined),
-      }
+      },
+      () => c.error
     )
   }
 }
