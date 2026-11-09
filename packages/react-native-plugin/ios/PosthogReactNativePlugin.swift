@@ -348,12 +348,11 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             // as the thread-local keeps anything else posthog-ios emits on this thread during
             // the call from having this event's properties written over it.
             if event.event == "$exception", let jsProperties = jsFatalCaptureProperties {
-                // `buildProperties` keeps its own value on a key clash (`{ current, _ in
-                // current }`), so native's enrichment silently wins over what JS decided —
+                // posthog-ios 4.0 lets caller properties win over its own values, so this
+                // re-applies what JS already sent. It keeps what JS decided final —
                 // `$process_person_profile` from `personProfiles: 'never'`, or any value the
-                // app's `before_send` rewrote. Put the JS-approved values back. On Android,
-                // caller properties already win apart from SDK debug properties, so the
-                // module there only restores `$process_person_profile` and `$is_identified`.
+                // app's `before_send` rewrote.
+                // On Android, the module restores only `$process_person_profile` and `$is_identified`.
                 for (key, value) in jsProperties {
                     event.properties[key] = value
                 }

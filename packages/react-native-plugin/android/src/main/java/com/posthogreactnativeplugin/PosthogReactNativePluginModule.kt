@@ -733,9 +733,9 @@ class PosthogReactNativePluginModule(
 }
 
 // posthog-android computes these from its own state, which JS never syncs (the app's
-// `personProfiles` mode, identify, person processing started by `group()` and friends), and
-// newer versions no longer let caller properties override them. JS decided them for its fatal
-// crash, so its values stand.
+// `personProfiles` mode, identify, person processing started by `group()` and friends). 4.0 lets
+// caller properties override them, so this re-applies what JS sent. JS decided them for its
+// fatal crash, so its values stand.
 private val JS_OWNED_FATAL_CAPTURE_KEYS = listOf("\$process_person_profile", "\$is_identified")
 
 // Set only while the JS layer's own fatal capture runs; posthog-android runs `beforeSend`
