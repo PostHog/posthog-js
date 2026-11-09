@@ -18,6 +18,7 @@ function splitRules(text: string): string[] {
   let brackets = 0;
   let quote = '';
   let comment = false;
+  let ruleStarted = false;
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
     if (comment) {
@@ -28,6 +29,7 @@ function splitRules(text: string): string[] {
       continue;
     }
     if (char === '\\') {
+      ruleStarted = true;
       i++;
       continue;
     }
@@ -40,6 +42,20 @@ function splitRules(text: string): string[] {
       i++;
       continue;
     }
+    // CDO/CDC tokens are ignored by stylesheet parsing, but not insertRule.
+    if (!ruleStarted) {
+      const length = text.startsWith('<!--', i)
+        ? 4
+        : text.startsWith('-->', i)
+          ? 3
+          : 0;
+      if (length) {
+        i += length - 1;
+        start = i + 1;
+        continue;
+      }
+    }
+    if (' \t\n\r\f'.indexOf(char) === -1) ruleStarted = true;
     if (char === '"' || char === "'") {
       quote = char;
       continue;
@@ -54,6 +70,7 @@ function splitRules(text: string): string[] {
     if ((char === '}' && braces === 0) || (char === ';' && braces === 0)) {
       rules.push(text.slice(start, i + 1).trim());
       start = i + 1;
+      ruleStarted = false;
     }
   }
   return braces || parentheses || brackets || quote || comment ? [] : rules;
@@ -82,12 +99,11 @@ export function rememberStyleRuleSource(rule: CSSRule, text: string): void {
       return;
     // Deferred link inlining must remain sliceable, rather than validating a
     // retained grouping rule with a synchronous read of its entire cssText.
-    if (
-      'cssRules' in rule &&
-      (rule as CSSGroupingRule).cssRules.length > 0 &&
-      rule.parentStyleSheet?.ownerNode?.nodeName === 'LINK'
-    )
-      return;
+    if ('cssRules' in rule && (rule as CSSGroupingRule).cssRules.length > 0) {
+      let sheet = rule.parentStyleSheet;
+      while (sheet?.ownerRule) sheet = sheet.ownerRule.parentStyleSheet;
+      if (sheet?.ownerNode?.nodeName === 'LINK') return;
+    }
     const cssText = rule.cssText;
     if (hasEmptyShorthandLonghand(cssText)) {
       sources.set(rule, { text, cssText });

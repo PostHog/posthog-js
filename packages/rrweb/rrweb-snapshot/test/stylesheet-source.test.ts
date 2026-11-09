@@ -8,7 +8,7 @@ import {
   rememberStylesheetSource,
   resetStyleRuleSources,
 } from '../src/stylesheet-source';
-import { stringifyRule } from '../src/utils';
+import { createStylesheetTextCursor, stringifyRule } from '../src/utils';
 
 const corrupted =
   '.card { padding-top: ; padding-right: ; padding-bottom: ; padding-left: 12px; }';
@@ -29,6 +29,8 @@ describe('stylesheet source retention', () => {
     '.card { padding: var(--p); padding-left: 12px; --tokens: { a: b; }; }',
     '.\\{card\\} { padding: var(--p); padding-left: 12px; }',
     '@media (min-width: 0px) { ' + authored + ' }',
+    '.card { padding: var(--p); padding-left: 12px; content: "<!-- -->"; --tokens: <!-- -->; }',
+    '.parent--> .card { padding: var(--p); padding-left: 12px; }',
   ])(
     'retains a complete rule without splitting its strings or nested blocks: %s',
     (text) => {
@@ -41,6 +43,15 @@ describe('stylesheet source retention', () => {
       expect(getStyleRuleSource(first)).toBe(text);
       expect(getStyleRuleSource(second)).toBeUndefined();
       expect(stringifyRule(first, null)).toBe(text);
+    },
+  );
+
+  it.each(['<!--', '-->', '/* prefix */ <!-- -->'])(
+    'discards stylesheet-only tokens before a retained rule: %s',
+    (prefix) => {
+      const style = rule();
+      rememberStylesheetSource(sheet(style), prefix + authored + '-->');
+      expect(getStyleRuleSource(style)).toBe(authored);
     },
   );
 
@@ -125,6 +136,69 @@ describe('stylesheet source retention', () => {
     expect(cssText).not.toHaveBeenCalled();
     expect(getStyleRuleSource(group)).toBeUndefined();
   });
+
+  it.each([1, 2])(
+    'keeps grouping-rule serialization bounded through %s linked imports',
+    (depth) => {
+      let childReads = 0;
+      const children = Array.from({ length: 50 }, (_, index) => ({
+        get cssText() {
+          childReads++;
+          return index === 0 ? corrupted : `.item-${index} { color: red; }`;
+        },
+      }));
+      const group = {
+        cssRules: children,
+        media: { mediaText: 'all' },
+        parentRule: null,
+        get cssText() {
+          return (
+            '@media all {' +
+            children.map((child) => child.cssText).join('') +
+            '}'
+          );
+        },
+      } as unknown as CSSRule;
+      let current = sheet(group);
+      Object.defineProperty(group, 'parentStyleSheet', { value: current });
+      for (let index = 0; index < depth; index++) {
+        const parent = sheet();
+        const imported = {
+          styleSheet: current,
+          parentStyleSheet: parent,
+          media: { mediaText: '' },
+        } as CSSImportRule;
+        Object.defineProperty(parent, 'cssRules', { value: [imported] });
+        Object.defineProperty(current, 'ownerRule', { value: imported });
+        current = parent;
+      }
+      Object.defineProperty(current, 'ownerNode', {
+        value: { nodeName: 'LINK' },
+      });
+      rememberStyleRuleSource(
+        group,
+        '@media all {' +
+          children
+            .map((_, index) =>
+              index === 0 ? authored : `.item-${index} { color: red; }`,
+            )
+            .join('') +
+          '}',
+      );
+      childReads = 0;
+      const cursor = createStylesheetTextCursor(current);
+      let maxReads = 0;
+      for (;;) {
+        const before = childReads;
+        const done = cursor.advance(1);
+        maxReads = Math.max(maxReads, childReads - before);
+        if (done) break;
+      }
+      expect(maxReads).toBeLessThanOrEqual(1);
+      expect(childReads).toBe(50);
+      expect(cursor.text()).toContain('.item-49 { color: red; }');
+    },
+  );
 
   it('does not coerce native CSSOM arguments a second time', () => {
     const toString = vi.fn(() => authored);

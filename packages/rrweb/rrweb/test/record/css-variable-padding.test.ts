@@ -273,6 +273,123 @@ describe('CSS variable shorthand sources', () => {
     },
   );
 
+  it.each(['appendRule', 'deleteRule'] as const)(
+    'does not reuse stale keyframes after an intercepted %s',
+    async (method) => {
+      const result = await page.evaluate(async (method) => {
+        const api = (window as unknown as { rrweb: { record: typeof record } })
+          .rrweb;
+        const originalAppend = CSSKeyframesRule.prototype.appendRule;
+        const originalDelete = CSSKeyframesRule.prototype.deleteRule;
+        const events: eventWithTime[] = [];
+        const stop = api.record({ emit: (event) => events.push(event) });
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(
+          ':root { --p: 8px; --q: 16px; }' +
+            '#card { animation: padding-test 1s -1s both paused; }' +
+            '@keyframes padding-test { 100% { padding: var(--p); padding-left: 12px; } }',
+        );
+        document.adoptedStyleSheets = [sheet];
+        const frames = sheet.cssRules[2] as CSSKeyframesRule;
+        const before = frames.cssText;
+        // Bypass the other hook to verify each mutation method independently.
+        if (method === 'appendRule') originalDelete.call(frames, '100%');
+        else frames.deleteRule('100%');
+        const replacement = '100% { padding: var(--q); padding-left: 12px; }';
+        if (method === 'deleteRule') originalAppend.call(frames, replacement);
+        else frames.appendRule(replacement);
+        const checkpoint = events.length;
+        api.record.takeFullSnapshot();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        stop?.();
+        return {
+          sameCssText: frames.cssText === before,
+          live: getComputedStyle(document.querySelector('#card')!).paddingTop,
+          staleSource: JSON.stringify(events.slice(checkpoint)).includes(
+            'padding: var(--p)',
+          ),
+          restoredAppend:
+            CSSKeyframesRule.prototype.appendRule === originalAppend,
+          restoredDelete:
+            CSSKeyframesRule.prototype.deleteRule === originalDelete,
+        };
+      }, method);
+      expect(result).toEqual({
+        sameCssText: true,
+        live: '16px',
+        staleSource: false,
+        restoredAppend: true,
+        restoredDelete: true,
+      });
+    },
+  );
+
+  it('does not overwrite a later keyframe method wrapper on stop', async () => {
+    const preserved = await page.evaluate(() => {
+      const api = (window as unknown as { rrweb: { record: typeof record } })
+        .rrweb;
+      const original = CSSKeyframesRule.prototype.appendRule;
+      const stop = api.record({ emit: () => {} });
+      const observed = CSSKeyframesRule.prototype.appendRule;
+      const later = function (this: CSSKeyframesRule, text: string) {
+        return observed.call(this, text);
+      };
+      CSSKeyframesRule.prototype.appendRule = later;
+      stop?.();
+      const preserved = CSSKeyframesRule.prototype.appendRule === later;
+      CSSKeyframesRule.prototype.appendRule = original;
+      return preserved;
+    });
+    expect(preserved).toBe(true);
+  });
+
+  it('replays rules wrapped in stylesheet-only comment tokens', async () => {
+    const result = await page.evaluate(async () => {
+      const api = (
+        window as unknown as {
+          rrweb: { record: typeof record; Replayer: typeof Replayer };
+        }
+      ).rrweb;
+      document.documentElement.style.setProperty('--p', '8px');
+      const events: eventWithTime[] = [];
+      const stop = api.record({ emit: (event) => events.push(event) });
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(
+        '<!-- #card { padding: var(--p); padding-left: 12px; background: rgb(1, 2, 3); } -->',
+      );
+      document.adoptedStyleSheets = [sheet];
+      api.record.takeFullSnapshot();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      stop?.();
+      const root = document.createElement('div');
+      document.body.append(root);
+      const replayer = new api.Replayer(events, { root, mouseTail: false });
+      replayer.pause(
+        events[events.length - 1].timestamp - events[0].timestamp + 100,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const doc = replayer.iframe.contentDocument!;
+      const live = getComputedStyle(document.querySelector('#card')!);
+      const replay = doc.defaultView!.getComputedStyle(
+        doc.querySelector('#card')!,
+      );
+      const result = {
+        live: { padding: live.paddingTop, background: live.backgroundColor },
+        replay: {
+          padding: replay.paddingTop,
+          background: replay.backgroundColor,
+        },
+      };
+      replayer.destroy();
+      root.remove();
+      return result;
+    });
+    expect(result).toEqual({
+      live: { padding: '8px', background: 'rgb(1, 2, 3)' },
+      replay: { padding: '8px', background: 'rgb(1, 2, 3)' },
+    });
+  });
+
   it.each(['initial', 'late', 'changed'] as const)(
     'keeps a %s link when inlining its CSS would lose variable shorthand values',
     async (mode) => {

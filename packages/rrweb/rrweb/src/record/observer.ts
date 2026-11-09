@@ -1328,18 +1328,32 @@ function initStyleDeclarationObserver(
   // style objects. Once an application obtains a mutable handle, its source is
   // no longer safe to reuse: a different var() can have identical cssText.
   const observeDeclaration = (prototype: object, name: string) => {
+    const mutationMethod = name === 'appendRule' || name === 'deleteRule';
     const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
     if (!descriptor) {
-      if (name === 'style') disableStyleRuleSources();
+      if (name === 'style' || mutationMethod) disableStyleRuleSources();
       return;
     }
     const mutableHandle =
       name === 'style' || name === 'styleMap' || name === 'media';
-    if (!descriptor.configurable || (mutableHandle && !descriptor.get)) {
+    if (
+      !descriptor.configurable ||
+      (mutableHandle && !descriptor.get) ||
+      (mutationMethod && typeof descriptor.value !== 'function')
+    ) {
       disableStyleRuleSources();
       return;
     }
     const replacement = { ...descriptor };
+    if (mutationMethod) {
+      replacement.value = new Proxy(descriptor.value, {
+        apply(target, thisArg: CSSRule, argumentsList: unknown[]) {
+          const result = target.apply(thisArg, argumentsList);
+          exposeStyleRuleSource(thisArg);
+          return result;
+        },
+      });
+    }
     if (descriptor.get && mutableHandle) {
       const originalGet = descriptor.get;
       replacement.get = function (this: CSSRule) {
@@ -1362,7 +1376,8 @@ function initStyleDeclarationObserver(
         const current = Object.getOwnPropertyDescriptor(prototype, name);
         if (
           current?.get === replacement.get &&
-          current?.set === replacement.set
+          current?.set === replacement.set &&
+          current?.value === replacement.value
         ) {
           Object.defineProperty(prototype, name, descriptor);
         }
@@ -1400,6 +1415,8 @@ function initStyleDeclarationObserver(
   }
   if (win.CSSKeyframesRule) {
     observeDeclaration(win.CSSKeyframesRule.prototype, 'name');
+    observeDeclaration(win.CSSKeyframesRule.prototype, 'appendRule');
+    observeDeclaration(win.CSSKeyframesRule.prototype, 'deleteRule');
   }
   const rulePrototype = win.CSSRule?.prototype;
   if (
