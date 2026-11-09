@@ -259,6 +259,12 @@ describe('feature flag local evaluation primitives', () => {
       expect(relativeDateParseForFeatureFlagMatching(value)).toEqual(new Date(expected))
     })
 
+    test('compares against the clamped date for a month lookback at the end of a month', () => {
+      vi.setSystemTime(new Date('2025-03-31T12:00:00.000Z'))
+      expect(matchFeatureFlagProperty(property('is_date_after', '1m'), { key: '2025-03-01T00:00:00Z' })).toBe(true)
+      expect(matchFeatureFlagProperty(property('is_date_after', '1m'), { key: '2025-02-27T00:00:00Z' })).toBe(false)
+    })
+
     test('makes strict and legacy-permissive SemVer parsing an explicit policy', () => {
       expect(() => parseFeatureFlagSemver('01.02.03')).toThrow(InconclusiveMatchError)
       expect(parseFeatureFlagSemver('01.02.03', 'legacy-permissive')).toEqual([1, 2, 3])
