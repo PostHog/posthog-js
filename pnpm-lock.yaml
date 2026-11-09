@@ -131,6 +131,9 @@ importers:
       '@changesets/cli':
         specifier: ^2.29.8
         version: 2.29.8(@types/node@22.19.1)
+      '@changesets/read':
+        specifier: ^0.6.6
+        version: 0.6.6
       '@j178/prek':
         specifier: ^0.4.14
         version: 0.4.14

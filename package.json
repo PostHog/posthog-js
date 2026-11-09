@@ -47,6 +47,7 @@
     "devDependencies": {
         "@changesets/changelog-github": "^0.5.2",
         "@changesets/cli": "^2.29.8",
+        "@changesets/read": "^0.6.6",
         "@j178/prek": "^0.4.14",
         "@posthog/coherence": "^1.10.1",
         "@types/node": "^22.19.1",
