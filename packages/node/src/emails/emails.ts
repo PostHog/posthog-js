@@ -61,6 +61,7 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   from: true,
   replyTo: true,
   captureEngagement: true,
+  trackOpensAndClicks: true,
   html: true,
   text: true,
 }
@@ -398,7 +399,7 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
 }
 
 function codeContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
-  const { templateKey, subject, html, text, from, replyTo, captureEngagement } = send
+  const { templateKey, subject, html, text, from, replyTo, captureEngagement, trackOpensAndClicks } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -428,6 +429,8 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
     ...(from !== undefined && { from }),
     ...(sendsReplyTo && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
     capture_engagement: captureEngagement ?? true,
+    // Left out unless set, so a default send still works against an API that predates the field.
+    ...(trackOpensAndClicks !== undefined && { track_opens_and_clicks: trackOpensAndClicks }),
     ...(distinctId !== undefined && { distinct_id: distinctId }),
   }
 }

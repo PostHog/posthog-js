@@ -2061,6 +2061,11 @@
           "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog. Letters, digits, hyphens and underscores, at most 400.",
           "type": "string",
           "name": "templateKey"
+        },
+        {
+          "description": "Whether the email carries open and click tracking: PostHog's open pixel and links rewritten to count clicks. Defaults to `true`. With `false`, the email goes out without either, so PostHog can't count its opens and clicks. Independent of `captureEngagement`, which decides whether engagement events are captured on the recipient's person.",
+          "type": "boolean",
+          "name": "trackOpensAndClicks"
         }
       ],
       "path": "src/emails/types.ts"
@@ -4549,6 +4554,11 @@
           "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.",
           "type": "never",
           "name": "captureEngagement"
+        },
+        {
+          "description": "Whether the email carries open and click tracking: PostHog's open pixel and links rewritten\nto count clicks. Defaults to `true`. With `false`, the email goes out without either, so\nPostHog can't count its opens and clicks. Independent of `captureEngagement`, which decides\nwhether engagement events are captured on the recipient's person.",
+          "type": "never",
+          "name": "trackOpensAndClicks"
         },
         {
           "type": "never",

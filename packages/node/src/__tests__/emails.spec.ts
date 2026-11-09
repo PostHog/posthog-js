@@ -124,7 +124,7 @@ describe('emails', () => {
 
   it.each([
     [
-      'html',
+      'html and no tracking choice, which leaves track_opens_and_clicks out',
       { templateKey: 'password-reset', subject: 'Reset your password', html: '<p>Reset</p>' },
       {
         template_key: 'password-reset',
@@ -183,6 +183,28 @@ describe('emails', () => {
         subject: 'Reset',
         html: '<p>Reset</p>',
         capture_engagement: true,
+      },
+    ],
+    [
+      'open and click tracking turned off',
+      { templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', trackOpensAndClicks: false },
+      {
+        template_key: 'welcome',
+        subject: 'Welcome',
+        html: '<p>Hi</p>',
+        capture_engagement: true,
+        track_opens_and_clicks: false,
+      },
+    ],
+    [
+      'open and click tracking turned on',
+      { templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', trackOpensAndClicks: true },
+      {
+        template_key: 'welcome',
+        subject: 'Welcome',
+        html: '<p>Hi</p>',
+        capture_engagement: true,
+        track_opens_and_clicks: true,
       },
     ],
   ])('posts content from code with %s to the same send URL', async (_name, content, body) => {
@@ -521,6 +543,11 @@ describe('emails', () => {
         'captureEngagement on the template form',
         { templateId: TEMPLATE_ID, captureEngagement: false },
         'captureEngagement',
+      ],
+      [
+        'trackOpensAndClicks on the template form',
+        { templateId: TEMPLATE_ID, trackOpensAndClicks: false },
+        'trackOpensAndClicks',
       ],
       ['a code send without a subject', { templateKey: 'welcome', html: '<p>Hi</p>' }, 'subject'],
       ['a code send without html or text', { templateKey: 'welcome', subject: 'Hi' }, 'html'],

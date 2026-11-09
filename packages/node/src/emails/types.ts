@@ -46,6 +46,13 @@ interface CodeEmailFields {
    * follows the project's setting.
    */
   captureEngagement?: boolean
+  /**
+   * Whether the email carries open and click tracking: PostHog's open pixel and links rewritten
+   * to count clicks. Defaults to `true`. With `false`, the email goes out without either, so
+   * PostHog can't count its opens and clicks. Independent of `captureEngagement`, which decides
+   * whether engagement events are captured on the recipient's person.
+   */
+  trackOpensAndClicks?: boolean
 }
 
 /**
