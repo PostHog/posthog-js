@@ -3,7 +3,14 @@ import PostHogAnthropic, { WrappedMessages } from '../src/anthropic'
 import AnthropicOriginal from '@anthropic-ai/sdk'
 import { Stream as AnthropicStream } from '@anthropic-ai/sdk/streaming'
 import { version } from '../package.json'
-import { collectUnhandledRejections } from './test-utils'
+import {
+  EVENT_OPTION_CASES,
+  USER_EVENT_OPTIONS,
+  asPostHogNodeMajor,
+  capturedEvents,
+  collectUnhandledRejections,
+  expectUserEventOptions,
+} from './test-utils'
 
 // Type definitions
 interface MockAnthropicResponseOptions {
@@ -1252,6 +1259,29 @@ describe('PostHogAnthropic', () => {
       expect(distinctId).toBe('user-456')
       expect(properties['$process_person_profile']).toBeUndefined()
     })
+
+    test.each(EVENT_OPTION_CASES)(
+      'sends posthogOptions on posthog-node $major without handing them to Anthropic (personless: $personless)',
+      async ({ major, personless }) => {
+        asPostHogNodeMajor(mockPostHogClient, major)
+
+        await client.messages.create({
+          model: 'claude-3-opus-20240229',
+          messages: [{ role: 'user', content: 'Hello' }],
+          max_tokens: 100,
+          posthogDistinctId: personless ? undefined : 'user-456',
+          posthogOptions: USER_EVENT_OPTIONS,
+        })
+
+        expect(AnthropicOriginal.Messages.prototype.create).toHaveBeenCalledWith(
+          { model: 'claude-3-opus-20240229', messages: [{ role: 'user', content: 'Hello' }], max_tokens: 100 },
+          undefined
+        )
+        const events = capturedEvents(mockPostHogClient)
+        expect(events).toHaveLength(1)
+        expectUserEventOptions(events[0], major, personless)
+      }
+    )
   })
 
   describe('Web Search Tracking', () => {
