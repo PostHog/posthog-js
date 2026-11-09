@@ -40,7 +40,10 @@ const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 
 type EveryField<Form> = Record<keyof Form, true>
-type RenderReact = (element: EmailReactElement, options?: { plainText?: boolean }) => Promise<string>
+interface ReactRenderer {
+  render(element: EmailReactElement): Promise<string>
+  toPlainText(html: string): string
+}
 type UncheckedSend = { [Field in keyof SendTemplateEmailOptions]?: unknown }
 
 interface SendForm {
@@ -460,13 +463,10 @@ async function renderReactContent({ content, react }: PreparedSend): Promise<{ h
   if (react === undefined) {
     return {}
   }
-  const render = await loadReactRenderer()
+  const { render, toPlainText } = await loadReactRenderer()
   try {
-    const [html, text] = await Promise.all([
-      render(react),
-      content.text === undefined ? render(react, { plainText: true }) : undefined,
-    ])
-    return { html, ...(text !== undefined && { text }) }
+    const html = await render(react)
+    return { html, ...(content.text === undefined && { text: toPlainText(html) }) }
   } catch (cause) {
     throw new EmailError({
       code: 'react_render_failed',
@@ -476,10 +476,9 @@ async function renderReactContent({ content, react }: PreparedSend): Promise<{ h
   }
 }
 
-async function loadReactRenderer(): Promise<RenderReact> {
+async function loadReactRenderer(): Promise<ReactRenderer> {
   try {
-    const { render } = await import('@react-email/render')
-    return render as RenderReact
+    return await import('@react-email/render')
   } catch (cause) {
     throw new EmailError({
       code: 'missing_react_renderer',
