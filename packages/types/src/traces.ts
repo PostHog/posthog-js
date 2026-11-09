@@ -168,6 +168,18 @@ export interface Span {
      */
     traceparent(): string | null
 
+    /**
+     * This span's 32-hex-char trace id, for correlating logs from other
+     * loggers (pino, winston) with the trace. `null` when there is no id to
+     * report: the same cases where `traceparent()` returns `null`.
+     */
+    readonly traceId: string | null
+
+    /**
+     * This span's 16-hex-char span id. `null` when `traceparent()` is `null`.
+     */
+    readonly spanId: string | null
+
     /** This span's W3C `tracestate` value, or `null` when it has none. */
     tracestate(): string | null
 
