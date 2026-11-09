@@ -105,7 +105,7 @@ Apps on React Native's full Swift Package Manager integration, with no CocoaPods
 
 #### `posthog-android` 4.0
 
-If native code in your app, or a native library it uses, calls `posthog-android` directly, update it for 4.0. Code compiled against 3.x fails at runtime with errors such as `NoSuchMethodError`. See the [posthog-android migration guide](https://github.com/PostHog/posthog-android/blob/main/docs/migration-3.x-to-4.0.md).
+If native code in your app, or a native library it uses, calls `posthog-android` directly, update it for 4.0. Code compiled against 3.x fails at runtime with errors such as `NoSuchMethodError`. See the [posthog-android migration guide](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md).
 
 ### API changes
 
@@ -173,7 +173,7 @@ Native uploads, such as session replay and native crash reports, pause while cel
 - On iOS, a native event leaves out a property whose value is `null` instead of sending it as `null`. On Android, a `null` element in a list is sent at its position instead of being removed. `$set` and `$set_once` still send `null` values.
 - These events report `$locale` as a full language tag with region, such as `de-CH` or `zh-Hant-TW` instead of `de` or `zh-TW`, and can carry `$app_language` (see below).
 
-See [Capture v1](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#capture-v1) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#locale-and-app_language) in the `posthog-ios` migration guide, and [Endpoints](https://github.com/PostHog/posthog-android/blob/main/docs/migration-3.x-to-4.0.md#endpoints) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-android/blob/main/docs/migration-3.x-to-4.0.md#locale-and-app_language) in the `posthog-android` one.
+See [Capture v1](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#capture-v1) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#locale-and-app_language) in the `posthog-ios` migration guide, and [Endpoints](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md#endpoints) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md#locale-and-app_language) in the `posthog-android` one.
 
 **If ignored:** a proxy that answers `404` gets a retry about every 30 seconds from each running app, and the native events stay queued on the device only until a full queue evicts them (1000 events by default), oldest first. Other errors, such as `401`, `403` or `405`, drop them.
 
