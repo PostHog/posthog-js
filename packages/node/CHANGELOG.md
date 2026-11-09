@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.64.0
+
+### Minor Changes
+
+- [#5594](https://github.com/PostHog/posthog-js/pull/5594) [`bfbaff7`](https://github.com/PostHog/posthog-js/commit/bfbaff7e597428cdd6f683c78e60e651f6d2c590) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): expose `traceId` and `spanId` getters on the `Span` handle, for correlating logs from other loggers with a trace without parsing `traceparent()`
+  (2026-11-09)
+
+### Patch Changes
+
+- Updated dependencies [[`fac34e4`](https://github.com/PostHog/posthog-js/commit/fac34e4b57b8fd0bdc5acb11451891adbe53f36f), [`bfbaff7`](https://github.com/PostHog/posthog-js/commit/bfbaff7e597428cdd6f683c78e60e651f6d2c590)]:
+  - @posthog/core@1.65.0
+
 ## 5.63.2
 
 ### Patch Changes
