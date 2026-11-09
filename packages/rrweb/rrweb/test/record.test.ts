@@ -739,6 +739,228 @@ describe('record', function (this: ISuite) {
     expect(threw).toBe(false);
   });
 
+  it.each(['document', 'shadow root'] as const)(
+    'keeps recording when a %s has a non-configurable adoptedStyleSheets property',
+    async (kind) => {
+      const pageErrors: string[] = [];
+      ctx.page.on('pageerror', (error) => pageErrors.push(error.message));
+      const result = await ctx.page.evaluate(async (kind) => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const target =
+          kind === 'document' ? document : host.attachShadow({ mode: 'open' });
+        const prototype =
+          kind === 'document' ? Document.prototype : ShadowRoot.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(
+          prototype,
+          'adoptedStyleSheets',
+        )!;
+        Object.defineProperty(target, 'adoptedStyleSheets', {
+          ...descriptor,
+          configurable: false,
+        });
+        const initial = new CSSStyleSheet();
+        initial.replaceSync(
+          '.initial-adopted-stylesheet-marker { color: green; }',
+        );
+        target.adoptedStyleSheets = [initial];
+        const errors: string[] = [];
+        const stop = (window as unknown as IWindow).rrweb.record({
+          emit: (window as unknown as IWindow).emit,
+          errorHandler: (error) => {
+            errors.push(String(error));
+            return true;
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync('body { color: green; }');
+        target.adoptedStyleSheets = [sheet];
+        document.querySelector('input')!.click();
+        stop?.();
+        const after = Object.getOwnPropertyDescriptor(
+          target,
+          'adoptedStyleSheets',
+        )!;
+        return {
+          started: typeof stop === 'function',
+          errors,
+          preserved:
+            after.get === descriptor.get &&
+            after.set === descriptor.set &&
+            !after.configurable,
+          adopted: target.adoptedStyleSheets[0] === sheet,
+        };
+      }, kind);
+      await waitForRAF(ctx.page);
+
+      expect(result).toEqual({
+        started: true,
+        errors: [],
+        preserved: true,
+        adopted: true,
+      });
+      expect(pageErrors).toEqual([]);
+      expect(
+        ctx.events.some((event) => event.type === EventType.FullSnapshot),
+      ).toBe(true);
+      expect(
+        ctx.events.flatMap((event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.AdoptedStyleSheet
+            ? event.data.styles?.flatMap((style) =>
+                style.rules.map(({ rule }) => rule),
+              ) ?? []
+            : [],
+        ),
+      ).toEqual(['.initial-adopted-stylesheet-marker { color: green; }']);
+      expect(
+        ctx.events.some(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.MouseInteraction,
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each(['document', 'shadow root'] as const)(
+    'does not record a rejected stylesheet through overlapping %s observers from separate bundles',
+    async (kind) => {
+      const firstRecord = await ctx.page.evaluateHandle(
+        () => (window as unknown as IWindow).rrweb.record,
+      );
+      await ctx.page.evaluate(ctx.code);
+      const result = await ctx.page.evaluate(async (kind, firstRecord) => {
+        const element = document.createElement('div');
+        document.body.appendChild(element);
+        const target =
+          kind === 'document'
+            ? document
+            : element.attachShadow({ mode: 'open' });
+        const span = document.createElement('span');
+        (target === document ? document.body : target).appendChild(span);
+        const initial = new CSSStyleSheet();
+        initial.replaceSync('span { color: rgb(1, 2, 3); }');
+        target.adoptedStyleSheets = [initial];
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const foreignSheet = new (
+          iframe.contentWindow as IWindow & typeof globalThis
+        ).CSSStyleSheet();
+        foreignSheet.replaceSync('.rejected-stylesheet-marker { color: red; }');
+        let nativeError: string | undefined;
+        try {
+          target.adoptedStyleSheets = [foreignSheet];
+        } catch (error) {
+          nativeError = (error as DOMException).name;
+        }
+        const nativeLength = target.adoptedStyleSheets.length;
+        const nativeColor = getComputedStyle(span).color;
+        target.adoptedStyleSheets = [initial];
+        const records = [
+          firstRecord,
+          (window as unknown as IWindow).rrweb.record,
+        ];
+        const events: eventWithTime[][] = [[], []];
+        const stops = events.map(
+          (observerEvents, index) =>
+            records[index]({
+              emit: (event) => observerEvents.push(event),
+            })!,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const counts = events.map((observerEvents) => observerEvents.length);
+        target.adoptedStyleSheets = [foreignSheet];
+        const rejectedEvents = events.map(
+          (observerEvents, index) => observerEvents.length - counts[index],
+        );
+        const recordedRejectedCSS = events.map((observerEvents) =>
+          JSON.stringify(observerEvents).includes('rejected-stylesheet-marker'),
+        );
+        const nativeMatchesControl =
+          target.adoptedStyleSheets.length === nativeLength &&
+          getComputedStyle(span).color === nativeColor;
+        const accepted = new CSSStyleSheet();
+        accepted.replaceSync('.accepted-stylesheet-marker { color: green; }');
+        target.adoptedStyleSheets = [accepted];
+        const recordedAcceptedCSS = events.some((observerEvents) =>
+          JSON.stringify(observerEvents).includes('accepted-stylesheet-marker'),
+        );
+        stops.reverse().forEach((stop) => stop());
+        return {
+          nativeError,
+          nativeMatchesControl,
+          rejectedEvents,
+          recordedRejectedCSS,
+          recordedAcceptedCSS,
+        };
+      }, kind, firstRecord);
+      await firstRecord.dispose();
+      expect(result).toEqual({
+        nativeError: 'NotAllowedError',
+        nativeMatchesControl: true,
+        rejectedEvents: [0, 0],
+        recordedRejectedCSS: [false, false],
+        recordedAcceptedCSS: true,
+      });
+    },
+  );
+
+  it.each(['document', 'shadow root'] as const)(
+    'stops recording adopted stylesheets through a retained %s wrapper',
+    async (kind) => {
+      const result = await ctx.page.evaluate(async (kind) => {
+        const element = document.createElement('div');
+        document.body.appendChild(element);
+        const target =
+          kind === 'document'
+            ? document
+            : element.attachShadow({ mode: 'open' });
+        const span = document.createElement('span');
+        (target === document ? document.body : target).appendChild(span);
+        const events: eventWithTime[] = [];
+        const stop = (window as unknown as IWindow).rrweb.record({
+          emit: (event) => events.push(event),
+        })!;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const hook = Object.getOwnPropertyDescriptor(
+          target,
+          'adoptedStyleSheets',
+        )!;
+        Object.defineProperty(target, 'adoptedStyleSheets', {
+          configurable: true,
+          get: hook.get,
+          set(sheets: CSSStyleSheet[]) {
+            hook.set!.call(this, sheets);
+          },
+        });
+        const activeSheet = new CSSStyleSheet();
+        activeSheet.replaceSync('span { color: rgb(1, 2, 3); }');
+        target.adoptedStyleSheets = [activeSheet];
+        const activeColor = getComputedStyle(span).color;
+        const captured = JSON.stringify(events).includes('rgb(1, 2, 3)');
+        stop();
+        const countAfterStop = events.length;
+        const stoppedSheet = new CSSStyleSheet();
+        stoppedSheet.replaceSync('span { color: rgb(4, 5, 6); }');
+        target.adoptedStyleSheets = [stoppedSheet];
+        return {
+          activeColor,
+          captured,
+          stoppedColor: getComputedStyle(span).color,
+          eventsAfterStop: events.length - countAfterStop,
+        };
+      }, kind);
+      expect(result).toEqual({
+        activeColor: 'rgb(1, 2, 3)',
+        captured: true,
+        stoppedColor: 'rgb(4, 5, 6)',
+        eventsAfterStop: 0,
+      });
+    },
+  );
+
   it('captures consecutive stylesheet replacements', async () => {
     await ctx.page.evaluate(async () => {
       const sheet = new CSSStyleSheet();

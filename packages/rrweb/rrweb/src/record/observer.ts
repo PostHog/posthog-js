@@ -1111,6 +1111,22 @@ function initStyleSheetObserver(
   });
 }
 
+// Setter results are ignored by assignments but propagate through chained hooks.
+const REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT = Symbol.for(
+  'rrweb.adoptedStyleSheets.rejected',
+);
+
+type AdoptedStyleSheetObserver = {
+  stylesheetManager: observerParam['stylesheetManager'] | undefined;
+  previousDescriptor: PropertyDescriptor | undefined;
+  get: PropertyDescriptor['get'];
+};
+
+const adoptedStyleSheetObservers = new WeakMap<
+  NonNullable<PropertyDescriptor['set']>,
+  AdoptedStyleSheetObserver
+>();
+
 export function initAdoptedStyleSheetObserver(
   {
     mirror,
@@ -1128,25 +1144,37 @@ export function initAdoptedStyleSheetObserver(
     host.nodeName === '#document'
       ? (host as Document).defaultView?.Document
       : host.ownerDocument?.defaultView?.ShadowRoot;
-  const originalPropertyDescriptor = patchTarget?.prototype
-    ? Object.getOwnPropertyDescriptor(
-        patchTarget?.prototype,
-        'adoptedStyleSheets',
-      )
-    : undefined;
+  const ownPropertyDescriptor = Object.getOwnPropertyDescriptor(
+    host,
+    'adoptedStyleSheets',
+  );
+  const originalPropertyDescriptor =
+    ownPropertyDescriptor ??
+    (patchTarget?.prototype
+      ? Object.getOwnPropertyDescriptor(
+          patchTarget.prototype,
+          'adoptedStyleSheets',
+        )
+      : undefined);
   if (
     hostId === null ||
     hostId === -1 ||
     !patchTarget ||
-    !originalPropertyDescriptor
+    ownPropertyDescriptor?.configurable === false ||
+    !originalPropertyDescriptor?.get ||
+    !originalPropertyDescriptor?.set
   )
     return () => {
       //
     };
 
-  // Patch adoptedStyleSheets by overriding the original one.
-  Object.defineProperty(host, 'adoptedStyleSheets', {
-    configurable: originalPropertyDescriptor.configurable,
+  const observer: AdoptedStyleSheetObserver = {
+    stylesheetManager,
+    previousDescriptor: ownPropertyDescriptor,
+    get: undefined,
+  };
+  const patchedPropertyDescriptor: PropertyDescriptor = {
+    configurable: true,
     enumerable: originalPropertyDescriptor.enumerable,
     get(): CSSStyleSheet[] {
       return originalPropertyDescriptor.get?.call(this) as CSSStyleSheet[];
@@ -1163,7 +1191,7 @@ export function initAdoptedStyleSheetObserver(
         // operation, but because our patched setter sits on the call stack
         // the exception would otherwise be attributed to the recorder and
         // churn fingerprints in error tracking. The browser rejects the
-        // assignment atomically, so recording simply degrades (we skip the
+        // stylesheet, so recording simply degrades (we skip the
         // adoption below). Contain only this specific, unactionable case;
         // re-throw everything else so genuine host-page failures are
         // preserved (mirrors `callSafely` in ../utils).
@@ -1180,28 +1208,63 @@ export function initAdoptedStyleSheetObserver(
           typeof e === 'object' &&
           (e as { name?: unknown }).name === 'NotAllowedError'
         ) {
-          return;
+          return REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT;
         }
         throw e;
       }
-      if (hostId !== null && hostId !== -1) {
+      if (result === REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT) return result;
+      if (observer.stylesheetManager && hostId !== null && hostId !== -1) {
         try {
-          stylesheetManager.adoptStyleSheets(sheets, hostId);
+          observer.stylesheetManager.adoptStyleSheets(sheets, hostId);
         } catch (e) {
           // for safety
         }
       }
       return result;
     },
-  });
+  };
+  try {
+    Object.defineProperty(
+      host,
+      'adoptedStyleSheets',
+      patchedPropertyDescriptor,
+    );
+  } catch {
+    return () => {};
+  }
+
+  observer.get = patchedPropertyDescriptor.get;
+  adoptedStyleSheetObservers.set(patchedPropertyDescriptor.set!, observer);
 
   return callbackWrapper(() => {
-    Object.defineProperty(host, 'adoptedStyleSheets', {
-      configurable: originalPropertyDescriptor.configurable,
-      enumerable: originalPropertyDescriptor.enumerable,
-      get: originalPropertyDescriptor.get,
-      set: originalPropertyDescriptor.set,
-    });
+    observer.stylesheetManager = undefined;
+    const current = Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets');
+    // A later recorder or polyfill may have replaced or locked our hook.
+    if (
+      !current?.configurable ||
+      current.get !== patchedPropertyDescriptor.get ||
+      current.set !== patchedPropertyDescriptor.set
+    )
+      return;
+    let previousDescriptor = ownPropertyDescriptor;
+    while (previousDescriptor?.set) {
+      const previousObserver = adoptedStyleSheetObservers.get(
+        previousDescriptor.set,
+      );
+      if (
+        !previousObserver ||
+        previousObserver.stylesheetManager ||
+        previousObserver.get !== previousDescriptor.get
+      )
+        break;
+      previousDescriptor = previousObserver.previousDescriptor;
+    }
+    if (previousDescriptor) {
+      Object.defineProperty(host, 'adoptedStyleSheets', previousDescriptor);
+    } else {
+      delete (host as { adoptedStyleSheets?: CSSStyleSheet[] })
+        .adoptedStyleSheets;
+    }
   });
 }
 
