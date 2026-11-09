@@ -7,10 +7,10 @@ import {
   safeJsonStringify,
 } from '@posthog/core'
 
+import { type AttachmentFile, type HashedFile, attachmentFiles, attachmentReference, hashedFiles } from './attachments'
 import { EmailError } from './errors'
 import type {
   CodeEmailForm,
-  EmailAttachment,
   EmailStatus,
   EmailWarning,
   Emails,
@@ -36,11 +36,6 @@ const CLOUD_APP_HOSTS: Record<string, string> = {
   'https://eu.posthog.com': EU_APP_HOST,
 }
 const MAX_RETRY_DELAY_MS = 30_000
-const MAX_ATTACHMENTS = 10
-const MAX_MESSAGE_BYTES = 40_000_000
-const MESSAGE_HEADERS_BYTES = 64 * 1024
-const MESSAGE_LIMIT = '40 MB after Base64 encoding, about 29 MB of files'
-const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
@@ -108,23 +103,11 @@ export interface EmailSenderHooks {
   userAgent?: string
 }
 
-interface AttachmentFile {
-  filename: string
-  bytes: Uint8Array<ArrayBuffer>
-  contentType?: string
-  contentId?: string
-}
-
 interface PreparedSend {
   content: Record<string, unknown>
   files: AttachmentFile[]
   idempotencyKey: string
   maxRetries: number
-}
-
-interface HashedFile extends AttachmentFile {
-  sha256: string
-  field: string
 }
 
 interface UploadTarget {
@@ -231,22 +214,22 @@ export class EmailSender implements Emails {
     if (files.length === 0) {
       return []
     }
-    const hashed = await Promise.all(files.map(hashedFile))
+    const hashed = await hashedFiles(files)
     const distinct = new Map<string, HashedFile>()
     for (const file of hashed) {
       if (!distinct.has(file.sha256)) {
         distinct.set(file.sha256, file)
       }
     }
-    const requested = Array.from(distinct.values(), ({ sha256, bytes }) => ({ sha256, size: bytes.byteLength }))
+    const requested = [...distinct.values()]
+    const body = safeJsonStringify({
+      files: requested.map(({ sha256, bytes }) => ({ sha256, size: bytes.byteLength })),
+    })
     const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
     const targets = await this.withRetries(maxRetries, async () =>
-      parseUploadsReply(
-        await this.request(appHost + UPLOADS_PATH, 'POST', headers, safeJsonStringify({ files: requested })),
-        requested
-      )
+      parseUploadsReply(await this.request(appHost + UPLOADS_PATH, 'POST', headers, body), requested)
     )
-    for (const file of distinct.values()) {
+    for (const file of requested) {
       const target = targets.get(file.sha256)
       if (target) {
         await this.withRetries(maxRetries, () => this.uploadFile(target, file))
@@ -260,6 +243,15 @@ export class EmailSender implements Emails {
     try {
       reply = await this.request(target.url, 'PUT', target.headers, bytes)
     } catch (cause) {
+      if (cause instanceof Error && cause.name === 'AbortError') {
+        throw new EmailError({
+          code: 'network_error',
+          message: `The upload of ${field} timed out after ${this.config.requestTimeoutMs}ms, so no email was sent.`,
+          fix: 'Raise emailRequestTimeoutMs on the client, or send smaller files.',
+          field,
+          cause,
+        })
+      }
       throw new EmailError({
         code: 'network_error',
         message: `The upload of ${field} didn't reach PostHog's file storage, so no email was sent.`,
@@ -515,8 +507,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
   if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
   }
-  const files = send.attachments === undefined ? [] : attachmentFiles(send.attachments)
-  refuseMessageOverLimit(files, [html ?? '', text ?? ''])
+  const files = send.attachments === undefined ? [] : attachmentFiles(send.attachments, [html ?? '', text ?? ''])
   return {
     content: {
       template_key: templateKey,
@@ -547,156 +538,6 @@ function unlessEmpty(field: string, list: unknown): Record<string, unknown> {
 
 function addressList(addresses: unknown): unknown {
   return typeof addresses === 'string' ? [addresses] : addresses
-}
-
-function attachmentFiles(attachments: unknown): AttachmentFile[] {
-  if (!Array.isArray(attachments)) {
-    throw invalid('invalid_attachment', 'attachments must be a list of files.', 'attachments')
-  }
-  if (attachments.length > MAX_ATTACHMENTS) {
-    throw new EmailError({
-      code: 'too_many_attachments',
-      message: `An email carries at most ${MAX_ATTACHMENTS} files, so no email was sent.`,
-      field: 'attachments',
-      fix: `Attach at most ${MAX_ATTACHMENTS} files, and link to any others from the email body.`,
-    })
-  }
-  return Array.from(attachments, attachmentFile)
-}
-
-function attachmentFile(attachment: unknown, index: number): AttachmentFile {
-  if (
-    typeof attachment !== 'object' ||
-    attachment === null ||
-    Array.isArray(attachment) ||
-    ArrayBuffer.isView(attachment)
-  ) {
-    throw invalid(
-      'invalid_attachment',
-      "An attachment is an object with filename and content. Pass the file's bytes as its content.",
-      `attachments__${index}`
-    )
-  }
-  const { filename, content, contentType, contentId, path, ...unsupported } = attachment as Partial<
-    Record<keyof EmailAttachment, unknown>
-  >
-  if (path !== undefined) {
-    throw invalid(
-      'invalid_attachment',
-      "PostHog can't fetch an attachment from a path or URL. Read the file and pass its content instead.",
-      `attachments__${index}__path`
-    )
-  }
-  const unsupportedKey = Object.entries(unsupported).find(([, value]) => value !== undefined)?.[0]
-  if (unsupportedKey !== undefined) {
-    throw invalid(
-      'invalid_attachment',
-      `An attachment takes filename, content, contentType and contentId, not ${unsupportedKey}.`,
-      `attachments__${index}__${unsupportedKey}`
-    )
-  }
-  if (typeof filename !== 'string' || filename === '') {
-    throw invalid(
-      'invalid_attachment',
-      "An attachment needs a filename, such as 'invoice.pdf'.",
-      `attachments__${index}__filename`
-    )
-  }
-  if (typeof content !== 'string' && !(content instanceof Uint8Array)) {
-    throw invalid(
-      'invalid_attachment',
-      'An attachment needs content: a Buffer, a Uint8Array or a Base64 string.',
-      `attachments__${index}__content`
-    )
-  }
-  if (typeof content === 'string' && !isBase64(content)) {
-    throw invalid(
-      'invalid_attachment',
-      "An attachment's content string must be Base64. Pass text as a Buffer or a Uint8Array.",
-      `attachments__${index}__content`
-    )
-  }
-  if (contentType !== undefined && typeof contentType !== 'string') {
-    throw invalid(
-      'invalid_attachment',
-      "An attachment's contentType must be a string, such as 'application/pdf'.",
-      `attachments__${index}__contentType`
-    )
-  }
-  if (contentId !== undefined && typeof contentId !== 'string') {
-    throw invalid(
-      'invalid_attachment',
-      "An attachment's contentId must be a string.",
-      `attachments__${index}__contentId`
-    )
-  }
-  const bytes = typeof content === 'string' ? bytesOfBase64(content) : copyOf(content)
-  if (bytes.byteLength === 0) {
-    throw invalid('invalid_attachment', 'An attachment needs at least one byte.', `attachments__${index}__content`)
-  }
-  return {
-    filename,
-    bytes,
-    ...(contentType !== undefined && { contentType }),
-    ...(contentId !== undefined && { contentId }),
-  }
-}
-
-function isBase64(text: string): boolean {
-  return text.length % 4 === 0 && BASE64_PATTERN.test(text)
-}
-
-function copyOf(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
-  return new Uint8Array(bytes)
-}
-
-function bytesOfBase64(text: string): Uint8Array<ArrayBuffer> {
-  if (typeof Buffer !== 'undefined') {
-    return new Uint8Array(Buffer.from(text, 'base64'))
-  }
-  return Uint8Array.from(atob(text), (character) => character.charCodeAt(0))
-}
-
-function refuseMessageOverLimit(files: AttachmentFile[], bodies: string[]): void {
-  if (files.length === 0) {
-    return
-  }
-  const encoder = new TextEncoder()
-  const sizes = [
-    ...files.map(({ bytes }) => bytes.byteLength),
-    ...bodies.map((body) => encoder.encode(body).byteLength),
-  ]
-  if (sizes.reduce((total, size) => total + base64LinesBytes(size), MESSAGE_HEADERS_BYTES) > MAX_MESSAGE_BYTES) {
-    throw new EmailError({
-      code: 'message_too_large',
-      message: `These files make the email larger than ${MESSAGE_LIMIT}, so no email was sent.`,
-      field: 'attachments',
-      why: "PostHog's email provider takes emails up to 40 MB, and Base64 encoding makes each file about a third larger.",
-      fix: 'Send fewer or smaller files, or link to large files from the email body.',
-    })
-  }
-}
-
-function base64LinesBytes(size: number): number {
-  return Math.ceil((Math.ceil(size / 3) * 4 * 78) / 76)
-}
-
-async function hashedFile(file: AttachmentFile, index: number): Promise<HashedFile> {
-  return { ...file, sha256: await sha256Hex(file.bytes), field: `attachments__${index}` }
-}
-
-function attachmentReference({ sha256, filename, contentType, contentId }: HashedFile): Record<string, unknown> {
-  return {
-    sha256,
-    filename,
-    ...(contentType !== undefined && { content_type: contentType }),
-    ...(contentId !== undefined && { content_id: contentId }),
-  }
-}
-
-async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes))
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
@@ -815,7 +656,7 @@ function parseStatusReply({ status, text: body, retryAfterMs }: Reply): EmailSta
 
 function parseUploadsReply(
   { status, text: body, retryAfterMs }: Reply,
-  requested: { sha256: string }[]
+  requested: HashedFile[]
 ): Map<string, UploadTarget> {
   const fields = replyFields(parseJson(body))
   if (status === 404) {
@@ -829,7 +670,7 @@ function parseUploadsReply(
     })
   }
   if (status < 200 || status >= 300) {
-    throw replyError(fields, status, retryAfterMs)
+    throw replyError({ ...fields, attr: callerField(text(fields.attr), requested) }, status, retryAfterMs)
   }
   const answers = Array.isArray(fields.files) ? fields.files.map(replyFields) : []
   const targets = new Map<string, UploadTarget>()
@@ -849,6 +690,11 @@ function parseUploadsReply(
     targets.set(sha256, { url, headers: answer.headers })
   }
   return targets
+}
+
+function callerField(attr: string | undefined, requested: HashedFile[]): string | undefined {
+  const file = attr === undefined ? null : /^files__(\d+)(?:__|$)/.exec(attr)
+  return file ? (requested[Number(file[1])]?.field ?? 'attachments') : attr
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {
@@ -888,6 +734,10 @@ function isRetryable(error: EmailError): boolean {
   // A send carries an idempotency key, so a retry can't queue a second email. A status read changes nothing.
   if (error.statusCode === undefined) {
     return error.code === 'network_error'
+  }
+  if (error.code === 'attachment_upload_failed') {
+    // A PUT carries the same bytes and checksum to the same URL, so a retry can't store a different file.
+    return error.statusCode >= 500
   }
   if (error.statusCode === 409) {
     return error.code === 'idempotency_key_in_flight'

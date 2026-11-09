@@ -372,11 +372,71 @@ describe('emails', () => {
       ])
 
       expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'attachment_upload_failed', statusCode: 400, field: 'attachments__1' })
+      expect(error).toMatchObject({
+        code: 'attachment_upload_failed',
+        name: 'application_error',
+        statusCode: 400,
+        field: 'attachments__1',
+      })
       expect(error?.message).toBe(
         "PostHog's file storage refused the upload of attachments__1, so no email was sent. It answered HTTP 400 BadDigest: The SHA256 you specified did not match the calculated checksum."
       )
       expect(requests()).toHaveLength(2)
+    })
+
+    it('retries a file storage that fails on its side, then sends', async () => {
+      replies = [
+        filesAnswer(uploadSlot(HELLO_SHA256, 5)),
+        storageRefused(500, 'InternalError', 'We encountered an internal error. Please try again.'),
+        { status: 502 },
+        stored,
+        accepted(),
+      ]
+
+      const { data } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(data?.id).toBe('msg_1')
+      expect(requests().filter((request) => request.startsWith('PUT'))).toHaveLength(3)
+    })
+
+    it('sends nothing when the file storage keeps failing on its side', async () => {
+      replies = [
+        filesAnswer(uploadSlot(HELLO_SHA256, 5)),
+        ...Array(3).fill(storageRefused(500, 'InternalError', 'Oops.')),
+      ]
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toMatchObject({ code: 'attachment_upload_failed', name: 'service_unavailable', statusCode: 500 })
+      expect(requests()).toHaveLength(4)
+    })
+
+    it('says an upload timed out, and which setting gives it longer', async () => {
+      replies = [filesAnswer(uploadSlot(HELLO_SHA256, 5))]
+      fetch.mockImplementationOnce(fetch.getMockImplementation()!).mockImplementation(() => new Promise(() => {}))
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toMatchObject({
+        code: 'network_error',
+        field: 'attachments__0',
+        message: 'The upload of attachments__0 timed out after 15000ms, so no email was sent.',
+        fix: 'Raise emailRequestTimeoutMs on the client, or send smaller files.',
+      })
+      expect(requests().filter((request) => request.startsWith('PUT'))).toHaveLength(3)
+      expect(requests()).not.toContain(`POST ${SEND_URL}`)
+    })
+
+    it('names the attachment the upload route refuses, as the caller passed it', async () => {
+      replies = [{ status: 400, body: { code: 'message_too_large', detail: 'Too large.', attr: 'files__1__size' } }]
+
+      const { error } = await sendFiles([
+        { filename: 'hello.txt', content: Buffer.from('hello') },
+        { filename: 'copy.txt', content: Buffer.from('hello') },
+        { filename: 'invoice.txt', content: Buffer.from('invoice') },
+      ])
+
+      expect(error).toMatchObject({ code: 'message_too_large', field: 'attachments__2' })
     })
 
     it('sends nothing when an upload never reaches the file storage', async () => {
@@ -500,6 +560,12 @@ describe('emails', () => {
         { code: 'message_too_large', field: 'attachments' },
       ],
       [
+        'Base64 files over 40 MB after Base64 encoding',
+        [{ filename: 'scan.pdf', content: `${'A'.repeat(38_910_500)}AA==` }],
+        { html: '' },
+        { code: 'message_too_large', field: 'attachments' },
+      ],
+      [
         'an empty file',
         [{ filename: 'empty.txt', content: new Uint8Array(0) }],
         {},
@@ -512,12 +578,13 @@ describe('emails', () => {
       expect(fetch).not.toHaveBeenCalled()
     })
 
-    it('asks to upload the largest file that fits an email with empty bodies', async () => {
+    it.each([
+      ['bytes', new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES)],
+      ['Base64', 'A'.repeat(38_910_500)],
+    ])('asks to upload the largest file that fits an email with empty bodies, as %s', async (_name, content) => {
       replies = [rejected(503, 'delivery_unavailable'), rejected(503), rejected(503)]
 
-      await sendFiles([{ filename: 'scan.pdf', content: new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES) }], {
-        html: '',
-      })
+      await sendFiles([{ filename: 'scan.pdf', content }], { html: '' })
 
       expect(bodyOf(0).files[0].size).toBe(LARGEST_FILE_WITH_EMPTY_BODIES)
     })

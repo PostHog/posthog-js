@@ -73,6 +73,9 @@ function emailErrorName(status: number | undefined, code: string): EmailErrorNam
   if (code === 'field_not_accepted') {
     return 'validation_error'
   }
+  if (code === 'attachment_upload_failed') {
+    return status >= 500 ? 'service_unavailable' : 'application_error'
+  }
   switch (status) {
     case 400:
       return 'validation_error'
