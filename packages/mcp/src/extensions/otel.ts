@@ -92,10 +92,10 @@ export class McpOtelRecorder {
       : undefined
 
     const semconv: Record<string, string> = {
-      ...(method && { 'mcp.method.name': method }),
-      ...(tool && { 'gen_ai.tool.name': tool }),
-      ...(errorType && { 'error.type': errorType }),
-      ...(event.protocolVersion && { 'mcp.protocol.version': event.protocolVersion }),
+      ...(method ? { 'mcp.method.name': method } : {}),
+      ...(tool ? { 'gen_ai.tool.name': tool } : {}),
+      ...(errorType ? { 'error.type': errorType } : {}),
+      ...(event.protocolVersion ? { 'mcp.protocol.version': event.protocolVersion } : {}),
     }
 
     if (this.#metrics && method) {
@@ -125,7 +125,7 @@ export class McpOtelRecorder {
           attributes: {
             ...primary.properties,
             ...semconv,
-            ...(event.sessionId && { 'mcp.session.id': event.sessionId }),
+            ...(event.sessionId ? { 'mcp.session.id': event.sessionId } : {}),
           },
         })
       )
