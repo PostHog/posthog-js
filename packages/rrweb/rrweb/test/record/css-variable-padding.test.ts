@@ -276,7 +276,7 @@ describe('CSS variable shorthand sources', () => {
   it.each(['initial', 'late', 'changed'] as const)(
     'keeps a %s link when inlining its CSS would lose variable shorthand values',
     async (mode) => {
-      const result = await page.evaluate(async (mode) => {
+      const context = await page.evaluateHandle((mode) => {
         const api = (
           window as unknown as {
             rrweb: { record: typeof record; Replayer: typeof Replayer };
@@ -292,16 +292,37 @@ describe('CSS variable shorthand sources', () => {
           mode === 'changed'
             ? '/html/css-variable-padding-initial.css'
             : '/html/css-variable-padding.css';
-        const loaded = new Promise((resolve) => (link.onload = resolve));
         document.head.append(link);
-        await loaded;
-        if (mode !== 'late')
-          stop = api.record({ emit: (event) => events.push(event) });
-        if (mode === 'changed') {
-          const changed = new Promise((resolve) => (link.onload = resolve));
-          link.href = '/html/css-variable-padding.css';
-          await changed;
-        }
+        return { api, events, stop, link };
+      }, mode);
+      const waitForStylesheet = () =>
+        page.waitForFunction(
+          ({ link }) => link.sheet?.href === link.href,
+          {},
+          context,
+        );
+      await waitForStylesheet();
+      await page.evaluate(
+        (context, mode) => {
+          if (mode !== 'late')
+            context.stop = context.api.record({
+              emit: (event) => context.events.push(event),
+            });
+          if (mode === 'changed') {
+            // Chrome 131 omits this event on href changes; exercise that path in newer browsers too.
+            context.link.addEventListener(
+              'load',
+              (event) => event.stopImmediatePropagation(),
+              { capture: true },
+            );
+            context.link.href = '/html/css-variable-padding.css';
+          }
+        },
+        context,
+        mode,
+      );
+      if (mode === 'changed') await waitForStylesheet();
+      const result = await page.evaluate(async ({ api, events, stop }) => {
         await new Promise((resolve) => setTimeout(resolve, 200));
         stop?.();
         const root = document.createElement('div');
@@ -321,7 +342,8 @@ describe('CSS variable shorthand sources', () => {
         replayer.destroy();
         root.remove();
         return result;
-      }, mode);
+      }, context);
+      await context.dispose();
       expect(result).toEqual({ live: '8px', replay: '8px', keptLink: true });
     },
   );
