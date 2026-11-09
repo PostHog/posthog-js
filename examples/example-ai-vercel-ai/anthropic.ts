@@ -25,7 +25,7 @@ const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 async function main() {
     const { text } = await generateText({
-        model: anthropic('claude-sonnet-4-5-20250929'),
+        model: anthropic('claude-sonnet-5-5'),
         experimental_telemetry: {
             isEnabled: true,
             functionId: 'anthropic-generate',
@@ -33,6 +33,8 @@ async function main() {
                 posthog_distinct_id: 'example-user',
             },
         },
+        // Claude Sonnet 5.5 rejects non-default sampling; AI SDK v4 sends temperature 0 unless set
+        temperature: 1,
         prompt: 'Explain observability in three sentences.',
     })
 

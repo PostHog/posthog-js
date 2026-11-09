@@ -101,6 +101,43 @@ describe('record', function (this: ISuite) {
     `,
   );
 
+  it('records a text mutation flood once and replays its final value', async () => {
+    const result = await ctx.page.evaluate(async () => {
+      const { record, Replayer, EventType, IncrementalSource } = (
+        window as unknown as {
+          rrweb: typeof import('../src');
+        }
+      ).rrweb;
+      const span = document.createElement('span');
+      span.textContent = 'initial';
+      document.body.appendChild(span);
+      const events: eventWithTime[] = [];
+      const stop = record({ emit: (event) => events.push(event) })!;
+      for (let i = 0; i < 2000; i++) span.firstChild!.textContent = String(i);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      stop();
+      const texts = events.flatMap((event) =>
+        event.type === EventType.IncrementalSnapshot &&
+        event.data.source === IncrementalSource.Mutation
+          ? event.data.texts
+          : [],
+      );
+      const replayer = new Replayer(events);
+      replayer.pause(
+        events[events.length - 1].timestamp - events[0].timestamp + 1,
+      );
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      const replayed =
+        replayer.iframe.contentDocument!.querySelector('span')!.textContent;
+      replayer.destroy();
+      return { texts, replayed };
+    });
+    expect(result.texts).toEqual([{ id: expect.any(Number), value: '1999' }]);
+    expect(result.replayed).toBe('1999');
+  });
+
   // Resting offset from a real silk-sheet recording where the reveal scroll clamped to 0.
   const SILK_SHEET_RESTING_Y = 787;
 
@@ -2456,6 +2493,8 @@ describe('record iframes', function (this: ISuite) {
   );
 
   it('captures iframe content in correct order', async () => {
+    // Let the initial viewport resize finish before counting recorder events.
+    await waitForRAF(ctx.page);
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;
       record({

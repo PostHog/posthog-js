@@ -19,7 +19,6 @@ import {
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
   mutationRecord,
-  textCursor,
   attributeCursor,
   removedNodeMutation,
   addedNodeMutation,
@@ -71,9 +70,8 @@ export default class MutationBuffer {
   private locked = false;
   private takePendingRecords: (() => mutationRecord[]) | undefined;
 
-  private texts: textCursor[] = [];
-  private attributes: attributeCursor[] = [];
-  private attributeMap = new WeakMap<Node, attributeCursor>();
+  private texts = new Map<Node, string | null>();
+  private attributes = new Map<Node, attributeCursor>();
   private generatedAttributes = new WeakMap<Node, Set<string>>();
   private removes: removedNodeMutation[] = [];
   // Repeated moves can queue the same root before any mirror cleanup runs.
@@ -476,7 +474,7 @@ export default class MutationBuffer {
     }
 
     const payload = {
-      texts: this.texts
+      texts: Array.from(this.texts, ([node, value]) => ({ node, value }))
         .filter((text) => !this.isBlockedAtEmission(text.node))
         .map((text) => {
           const n = text.node;
@@ -494,7 +492,7 @@ export default class MutationBuffer {
         .filter((text) => !addedIds.has(text.id))
         // text mutation's id was not in the mirror map means the target node has been removed
         .filter((text) => this.mirror.has(text.id)),
-      attributes: this.attributes
+      attributes: Array.from(this.attributes.values())
         .filter((attribute) => !this.isBlockedAtEmission(attribute.node))
         .map((attribute) => {
           const { attributes } = attribute;
@@ -568,9 +566,8 @@ export default class MutationBuffer {
 
     // Reset before the empty-payload return: these collections strongly
     // reference DOM nodes, and payload holds its own references.
-    this.texts = [];
-    this.attributes = [];
-    this.attributeMap = new WeakMap<Node, attributeCursor>();
+    this.texts.clear();
+    this.attributes.clear();
     this.generatedAttributes = new WeakMap<Node, Set<string>>();
     this.removes = [];
     this.addedSet = new Set<Node>();
@@ -698,7 +695,7 @@ export default class MutationBuffer {
   };
 
   private genTextAreaValueMutation = (textarea: HTMLTextAreaElement) => {
-    let item = this.attributeMap.get(textarea);
+    let item = this.attributes.get(textarea);
     if (!item) {
       item = {
         node: textarea,
@@ -706,8 +703,7 @@ export default class MutationBuffer {
         styleDiff: {},
         _unchangedStyles: {},
       };
-      this.attributes.push(item);
-      this.attributeMap.set(textarea, item);
+      this.attributes.set(textarea, item);
     }
     const value = Array.from(
       dom.childNodes(textarea),
@@ -735,20 +731,19 @@ export default class MutationBuffer {
           !isBlocked(m.target, this.blockClass, this.blockSelector, false) &&
           value !== m.oldValue
         ) {
-          this.texts.push({
-            value:
-              needMaskingText(
-                m.target,
-                this.maskTextClass,
-                this.maskTextSelector,
-                true, // checkAncestors
-              ) && value
-                ? this.maskTextFn
-                  ? this.maskTextFn(value, closestElementOfNode(m.target))
-                  : value.replace(/[\S]/g, '*')
-                : value,
-            node: m.target,
-          });
+          this.texts.set(
+            m.target,
+            needMaskingText(
+              m.target,
+              this.maskTextClass,
+              this.maskTextSelector,
+              true, // checkAncestors
+            ) && value
+              ? this.maskTextFn
+                ? this.maskTextFn(value, closestElementOfNode(m.target))
+                : value.replace(/[\S]/g, '*')
+              : value,
+          );
         }
         break;
       }
@@ -786,7 +781,7 @@ export default class MutationBuffer {
           return;
         }
 
-        let item = this.attributeMap.get(m.target);
+        let item = this.attributes.get(m.target);
         const isIframeSrc =
           tagNameLower === 'iframe' && attributeName === 'src';
         if (
@@ -815,8 +810,7 @@ export default class MutationBuffer {
               styleDiff: {},
               _unchangedStyles: {},
             };
-            this.attributes.push(item);
-            this.attributeMap.set(m.target, item);
+            this.attributes.set(m.target, item);
           }
           // Transform with the source name before representing an inaccessible
           // iframe's source under the final rr_src key.
