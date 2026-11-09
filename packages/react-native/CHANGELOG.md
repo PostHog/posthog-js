@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.85.4
+
+### Patch Changes
+
+- [#5586](https://github.com/PostHog/posthog-js/pull/5586) [`441658f`](https://github.com/PostHog/posthog-js/commit/441658f2519af0b17ec33c2a31eddb6ee9f59f50) Thanks [@marandaneto](https://github.com/marandaneto)! - Forward Expo skipOnConflict and force options to shared Android upload defaults when native symbol uploads are enabled.
+  (2026-11-09)
+
 ## 4.85.3
 
 ### Patch Changes

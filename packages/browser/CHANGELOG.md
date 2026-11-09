@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.447.5
+
+### Patch Changes
+
+- [#5559](https://github.com/PostHog/posthog-js/pull/5559) [`9fe341d`](https://github.com/PostHog/posthog-js/commit/9fe341d374566bc50275ffae8c7d91a0f1f717d0) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Continue replaying mutation batches when a removal has the wrong parent or an addition targets a leaf node.
+  (2026-11-09)
+
+- [#5610](https://github.com/PostHog/posthog-js/pull/5610) [`eaab1fc`](https://github.com/PostHog/posthog-js/commit/eaab1fc9c1f5762903291d61cd5cd8eb96de5021) Thanks [@posthog](https://github.com/apps/posthog)! - Fix session replay failing to rebuild a snapshot when the replay document already has a root element
+  (2026-11-09)
+
+- [#5546](https://github.com/PostHog/posthog-js/pull/5546) [`21bd08e`](https://github.com/PostHog/posthog-js/commit/21bd08ef2d37e1d1d70c6139aa71f789eea2050f) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Collapse buffered text changes to the final value per node and simplify attribute mutation storage.
+  (2026-11-09)
+
 ## 1.447.4
 
 ### Patch Changes
