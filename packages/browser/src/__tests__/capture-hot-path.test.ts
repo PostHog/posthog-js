@@ -79,6 +79,17 @@ const setupMetaCapture = (config: Partial<PostHogConfig>, token: string = uuidv7
     return { posthog, events, lastEvent, pendingResponses, storageKey: `ph_${token}_posthog` }
 }
 
+const captureFromAd = (client: ReturnType<typeof setupMetaCapture>, click: string) => {
+    const originalUrl = window.location.href
+    window.history.replaceState(null, '', `/?fbclid=${click}`)
+    try {
+        client.posthog.capture('landed from an ad')
+    } finally {
+        window.history.replaceState(null, '', originalUrl)
+    }
+    return client.lastEvent().$set?.$fbc
+}
+
 describe('capture() hot path', () => {
     afterEach(() => {
         vi.restoreAllMocks()
@@ -95,6 +106,8 @@ describe('capture() hot path', () => {
         ['localStorage', false, true],
         ['sessionStorage', false, false],
         ['sessionStorage', false, true],
+        ['memory', false, false],
+        ['memory', false, true],
     ])(
         'does not parse the persistence entry (persistence: %s, cookieWinsOnConflict: %s, stored $fbc: %s)',
         (persistence, cookieWinsOnConflict, hasStoredFbc) => {
@@ -386,18 +399,66 @@ describe('capture() hot path', () => {
         expect(second.lastEvent().$set?.$fbc).toBe(fbc.value)
     })
 
+    describe('instances sharing the memory store', () => {
+        const setupPair = () => {
+            const token = uuidv7()
+            const config: Partial<PostHogConfig> = {
+                persistence: 'memory',
+                persistence_save_debounce_ms: 250,
+                bootstrap: { distinctID: 'shared-user' },
+            }
+            const p = setupMetaCapture(config, token, `${token}-p`)
+            const q = setupMetaCapture(config, token, `${token}-q`)
+            p.posthog.persistence!.flush()
+            q.posthog.persistence!.flush()
+            return { p, q }
+        }
+
+        it('sends the newer $fbc a sibling wrote', () => {
+            const { p, q } = setupPair()
+
+            captureFromAd(p, 'click-a')
+            p.posthog.persistence!.flush()
+            const newer = captureFromAd(q, 'click-b')
+            q.posthog.persistence!.flush()
+            p.posthog.capture('conversion')
+
+            expect(newer).toMatch(/\.click-b$/)
+            expect(p.lastEvent().$set?.$fbc).toBe(newer)
+        })
+
+        it('stops sending a $fbc once a sibling confirmed it', () => {
+            const { p, q } = setupPair()
+
+            const sent = captureFromAd(p, 'click-a')
+            p.posthog.persistence!.flush()
+            q.posthog.capture('sibling delivery')
+            expect(q.lastEvent().$set?.$fbc).toBe(sent)
+            q.pendingResponses.forEach((respond) => respond())
+            q.posthog.persistence!.flush()
+            p.posthog.capture('after confirmation')
+
+            expect(p.lastEvent().$set?.$fbc).toBeUndefined()
+        })
+
+        it('keeps a local $fbc that has not been written yet', () => {
+            const { p, q } = setupPair()
+
+            captureFromAd(q, 'click-b')
+            q.posthog.persistence!.flush()
+            const local = captureFromAd(p, 'local-click')
+            p.posthog.capture('conversion')
+
+            expect(local).toMatch(/\.local-click$/)
+            expect(p.lastEvent().$set?.$fbc).toBe(local)
+        })
+    })
+
     it('does not write back a $fbc after a sibling reset removed the entry', () => {
         const token = uuidv7()
         const p = setupMetaCapture({ persistence: 'localStorage' }, token, `${token}-p`)
-        const originalUrl = window.location.href
-        window.history.replaceState(null, '', '/?fbclid=first-click')
-        try {
-            p.posthog.capture('landed from an ad')
-            expect(p.lastEvent().$set?.$fbc).toMatch(/\.first-click$/)
-            p.posthog.persistence!.flush()
-        } finally {
-            window.history.replaceState(null, '', originalUrl)
-        }
+        expect(captureFromAd(p, 'first-click')).toMatch(/\.first-click$/)
+        p.posthog.persistence!.flush()
 
         const q = setupMetaCapture(
             { persistence: 'localStorage', persistence_save_debounce_ms: 250 },
