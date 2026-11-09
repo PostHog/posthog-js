@@ -2300,3 +2300,74 @@ describe('PostHogLogs', () => {
     })
   })
 })
+
+describe('PostHogLogs consent and shared background flush', () => {
+  const create = (instance: any, logger: Logger = createMockLogger(), config = resolveForTest()): PostHogLogs =>
+    new PostHogLogs(instance, config, logger, getContextFor(instance), immediateOnReady)
+
+  it('discards queued records instead of exporting them after opt-out', async () => {
+    const instance = createMockInstance()
+    const logs = create(instance)
+    logs.captureLog({ body: 'before opt-out' })
+
+    instance.optedOut = true
+    await logs.flush()
+
+    expect(instance._sendLogsBatch).not.toHaveBeenCalled()
+    expect(readQueue(instance)).toHaveLength(0)
+
+    // Opting back in does not resurrect what was captured before the withdrawal.
+    instance.optedOut = false
+    await logs.flush()
+    expect(instance._sendLogsBatch).not.toHaveBeenCalled()
+  })
+
+  it('stops a drain under way when the user opts out between batches', async () => {
+    let releaseFirst: () => void = () => {}
+    const instance = createMockInstance({
+      _sendLogsBatch: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            releaseFirst = () => resolve({ kind: 'ok' })
+          })
+      ),
+    })
+    const logs = create(instance, createMockLogger(), resolveForTest({ maxBatchRecordsPerPost: 1 }))
+    logs.captureLog({ body: 'first' })
+    logs.captureLog({ body: 'second' })
+
+    const flushing = logs.flush()
+    await Promise.resolve()
+    instance.optedOut = true
+    releaseFirst()
+    await flushing
+
+    expect(instance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    expect(readQueue(instance)).toHaveLength(0)
+  })
+
+  it('shares one background wrapper across overlapping callers', async () => {
+    let failSend: () => void = () => {}
+    const instance = createMockInstance({
+      _sendLogsBatch: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            failSend = () => resolve({ kind: 'retry-later', error: new Error('down') })
+          })
+      ),
+    })
+    const logger = createMockLogger()
+    const logs = create(instance, logger)
+    logs.captureLog({ body: 'slow' })
+
+    const first = logs.flushInBackground()
+    const second = logs.flushInBackground()
+    expect(second).toBe(first)
+    await Promise.resolve()
+    failSend()
+    await Promise.all([first, second])
+
+    expect(instance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    expect(logger.error).toHaveBeenCalledTimes(1)
+  })
+})

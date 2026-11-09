@@ -29,6 +29,9 @@ export class PostHogLogs {
   // A batch captures this when it is assembled, so it can tell that the records it is
   // holding no longer correspond to anything queued.
   private _queueGeneration = 0
+  // The `flushInBackground()` wrapper for the flush in flight, shared so overlapping
+  // callers count and log one failed POST once rather than once per caller.
+  private _backgroundFlushPromise: Promise<void> | null = null
   // Every path that can start a send checks this, not just the retry timer.
   private _retryAfter = new RetryAfterWindow()
   // Consecutive failed flushes; drives exponential backoff on the retry timer.
@@ -274,6 +277,9 @@ export class PostHogLogs {
   private async _flushInner(): Promise<void> {
     this._flushTimer.clear()
 
+    if (this._discardQueueIfConsentWithdrawn()) {
+      return
+    }
     let queue = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
     if (queue.length === 0) {
       return
@@ -283,6 +289,11 @@ export class PostHogLogs {
     let sentCount = 0
 
     while (queue.length > 0 && sentCount < originalQueueLength) {
+      // Re-checked per batch: a send suspends, so the user can opt out while one
+      // batch is in flight and the batches behind it would still export.
+      if (sentCount > 0 && this._discardQueueIfConsentWithdrawn()) {
+        return
+      }
       // Captured per batch, not per flush: a clear that lands between batches leaves
       // the next one assembled from an already-fresh queue, so that batch advances
       // normally instead of being retired for a purge it never held.
@@ -363,6 +374,21 @@ export class PostHogLogs {
         throw outcome.error
       }
     }
+  }
+
+  /**
+   * Drops the queue once consent is withdrawn. Records carry the distinct id and
+   * session id, so whatever is still queued when the user opts out must not be
+   * exported, by a pending timer or by a drain already under way.
+   */
+  private _discardQueueIfConsentWithdrawn(): boolean {
+    if (!this._instance.optedOut) {
+      return false
+    }
+    if (this._hasQueuedRecords()) {
+      this.clearQueue()
+    }
+    return true
   }
 
   private async _persistQueueAdvance(consumed: number): Promise<void> {
@@ -493,7 +519,10 @@ export class PostHogLogs {
    * leaves nothing to retry the records once traffic stops.
    */
   flushInBackground(): Promise<void> {
-    return this.flush()
+    if (this._backgroundFlushPromise) {
+      return this._backgroundFlushPromise
+    }
+    const promise = this.flush()
       .then(
         () => {
           this._consecutiveFlushFailures = 0
@@ -509,10 +538,15 @@ export class PostHogLogs {
         // Records remaining (transient failure or mid-flush captures) would otherwise
         // sit undelivered on a quiet page; re-arm so the timer retries them, backing
         // off on consecutive failures.
+        if (this._backgroundFlushPromise === promise) {
+          this._backgroundFlushPromise = null
+        }
         if (!this._instance.isDisabled && this._hasQueuedRecords()) {
           this._flushTimer.armNoEarlierThan(this._nextFlushDelay())
         }
       })
+    this._backgroundFlushPromise = promise
+    return promise
   }
 
   private _flushInBackground(): void {

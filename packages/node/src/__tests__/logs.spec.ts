@@ -121,6 +121,14 @@ describe('PostHog Node.js logs', () => {
     expect(logsCalls()).toHaveLength(0)
   })
 
+  it('does not export logs queued before an opt-out', async () => {
+    create()
+    posthog.logger.info('queued before opt-out')
+    await posthog.optOut()
+    await posthog.flush()
+    expect(logsCalls()).toHaveLength(0)
+  })
+
   it('flushes queued logs on shutdown', async () => {
     create()
     posthog.logger.info('last words')
