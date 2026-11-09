@@ -588,6 +588,7 @@ export interface MaskInputOptions {
     textarea?: boolean
     select?: boolean
     password?: boolean
+    hidden?: boolean
 }
 
 /**
@@ -678,7 +679,7 @@ export interface SessionRecordingOptions {
 
     /**
      * Derived from `rrweb.record` options. When `true` (the default) session replay masks the
-     * value of every input, except `hidden` and `file` inputs, whose values are recorded
+     * value of every input, except `file` inputs, whose values are recorded
      * unmasked — block those with `ph-no-capture` or `blockSelector` if they hold sensitive data.
      * Set it to `false` to record input values, which is not recommended
      * for apps that handle sensitive data. A `session_recording` masking option set in

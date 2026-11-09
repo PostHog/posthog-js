@@ -425,6 +425,7 @@ function record<T = eventWithTime>(
           textarea: true,
           select: true,
           password: true,
+          hidden: true,
         }
       : _maskInputOptions !== undefined
       ? _maskInputOptions

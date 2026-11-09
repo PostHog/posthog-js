@@ -1,5 +1,12 @@
 # @posthog/rollup-plugin
 
+## 1.6.3
+
+### Patch Changes
+
+- [#5571](https://github.com/PostHog/posthog-js/pull/5571) [`2eccf01`](https://github.com/PostHog/posthog-js/commit/2eccf019896b2938ca2b98243859a8fd26217451) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep event-mode chunk IDs stable when unrelated lazy chunks are added in Rollup and Vite builds.
+  (2026-11-06)
+
 ## 1.6.2
 
 ### Patch Changes
