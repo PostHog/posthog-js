@@ -1,10 +1,12 @@
-import type { SendEmailOptions } from '../../exports'
+import { TRANSACTIONAL_EMAIL_CATEGORY, type SendEmailOptions } from '../../exports'
 
 const to = 'jane@example.com'
 const templateId = '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b'
 
 export const forms: SendEmailOptions[] = [
   { to, templateId, templateData: { name: 'Jane' } },
+  { to, templateId, category: 'product-updates' },
+  { to, templateKey: 'reset', subject: 'Reset', text: 'Reset', category: TRANSACTIONAL_EMAIL_CATEGORY },
   { to, templateKey: 'reset', subject: 'Reset', html: '<p>Reset</p>', replyTo: ['help@example.com'] },
   { to, templateKey: 'reset', subject: 'Reset', text: 'Reset', from: 'security@example.com', captureEngagement: false },
 ]

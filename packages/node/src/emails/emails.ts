@@ -53,6 +53,7 @@ const SHARED_FIELDS: EveryField<SendEmailBase> = {
   distinctId: true,
   idempotencyKey: true,
   maxRetries: true,
+  category: true,
 }
 const TEMPLATE_FIELDS: EveryField<TemplateEmailForm> = { templateId: true, templateData: true }
 const CODE_FIELDS: EveryField<CodeEmailForm> = {
@@ -76,6 +77,9 @@ const CODE_FORM: SendForm = {
   why: 'A send with templateKey takes its content from your code.',
   howToSend: 'send content from your code with templateKey',
 }
+
+/** The built-in message category of `posthog.emails.send()`. A send without a category is transactional too. */
+export const TRANSACTIONAL_EMAIL_CATEGORY = 'transactional'
 
 export const DEFAULT_EMAIL_REQUEST_TIMEOUT_MS = 15_000
 export const DEFAULT_EMAIL_REQUEST_MAX_RETRIES = 2
@@ -334,7 +338,7 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
   const send: UncheckedSend = options ?? {}
-  const { to, distinctId, idempotencyKey, maxRetries } = send
+  const { to, distinctId, idempotencyKey, maxRetries, category } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
   }
@@ -355,10 +359,13 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   if (maxRetries !== undefined && !isRetryCount(maxRetries)) {
     throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
   }
+  if (category !== undefined && (typeof category !== 'string' || !category)) {
+    throw invalid('invalid_category', 'category must be a nonempty string.', 'category')
+  }
 
   return {
     path: SEND_PATH,
-    body: safeJsonStringify({ ...content, to }),
+    body: safeJsonStringify({ ...content, to, ...(category !== undefined && { category }) }),
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }

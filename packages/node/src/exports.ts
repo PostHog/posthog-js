@@ -5,6 +5,7 @@ export { enrichCurrentSpan } from './extensions/context/listeners'
 
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
 export { EmailError } from './emails/errors'
+export { TRANSACTIONAL_EMAIL_CATEGORY } from './emails/emails'
 export type { EmailErrorName } from './emails/errors'
 export type {
   CodeEmailForm,

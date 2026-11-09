@@ -1,4 +1,10 @@
-import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
+import {
+  EmailError,
+  PostHog,
+  PostHogOptions,
+  SendEmailOptions,
+  TRANSACTIONAL_EMAIL_CATEGORY,
+} from '@/entrypoints/index.node'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
@@ -80,6 +86,7 @@ describe('emails', () => {
   it.each([
     ['with a distinct ID', { distinctId: 'user_123' }, { distinct_id: 'user_123' }],
     ['without a distinct ID', {}, {}],
+    ['in a message category', { category: 'product-updates' }, { category: 'product-updates' }],
   ])('posts the template to the app host %s', async (_name, overrides, extraBody) => {
     replies = [accepted()]
 
@@ -167,6 +174,28 @@ describe('emails', () => {
         html: '<p>Reset</p>',
         text: 'Reset',
         reply_to: ['a@example.com', 'b@example.com'],
+        capture_engagement: true,
+      },
+    ],
+    [
+      'a marketing message category',
+      { templateKey: 'weekly-digest', subject: 'This week', html: '<p>{{ unsubscribe_url }}</p>', category: 'digest' },
+      {
+        template_key: 'weekly-digest',
+        subject: 'This week',
+        html: '<p>{{ unsubscribe_url }}</p>',
+        category: 'digest',
+        capture_engagement: true,
+      },
+    ],
+    [
+      'the transactional category named',
+      { templateKey: 'password-reset', subject: 'Reset', text: 'Reset', category: TRANSACTIONAL_EMAIL_CATEGORY },
+      {
+        template_key: 'password-reset',
+        subject: 'Reset',
+        text: 'Reset',
+        category: 'transactional',
         capture_engagement: true,
       },
     ],
@@ -275,12 +304,15 @@ describe('emails', () => {
   it.each([
     [400, 'invalid_recipient', 'validation_error'],
     [400, 'recipient_suppressed', 'validation_error'],
+    [400, 'unknown_category', 'validation_error'],
+    [400, 'unsubscribe_link_required', 'validation_error'],
     [401, 'authentication_failed', 'missing_api_key'],
     [403, 'permission_denied', 'invalid_permission'],
     [404, 'not_found', 'not_found'],
     [409, 'idempotency_key_in_flight', 'concurrent_idempotent_requests'],
     [422, 'idempotency_key_reused', 'invalid_idempotent_request'],
     [422, 'recipient_suppressed', 'validation_error'],
+    [422, 'recipient_opted_out', 'validation_error'],
     [429, 'throttled', 'rate_limit_exceeded'],
     [429, 'quota_limited', 'monthly_quota_exceeded'],
     [503, 'delivery_unavailable', 'service_unavailable'],
@@ -494,6 +526,8 @@ describe('emails', () => {
     ['a key with a space', { idempotencyKey: 'welcome user' }, 'invalid_idempotency_key'],
     ['a key that is too long', { idempotencyKey: 'k'.repeat(256) }, 'invalid_idempotency_key'],
     ['negative retries', { maxRetries: -1 }, 'invalid_max_retries'],
+    ['an empty category', { category: '' }, 'invalid_category'],
+    ['a category that is not a string', { category: null }, 'invalid_category'],
     ['neither templateId nor templateKey', { templateId: undefined }, 'invalid_form'],
     ['both templateId and templateKey', { templateKey: 'welcome', subject: 'Hi', html: '<p>Hi</p>' }, 'invalid_form'],
     ['a template key with a space', { templateId: undefined, templateKey: 'pass reset' }, 'invalid_template_key'],

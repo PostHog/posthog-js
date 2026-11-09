@@ -19,6 +19,17 @@ export interface SendEmailBase {
   idempotencyKey?: string
   /** Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. */
   maxRetries?: number
+  /**
+   * The email's message category. Without it, or with `TRANSACTIONAL_EMAIL_CATEGORY`, PostHog sends
+   * transactional email. Any other value is the key of one of the project's marketing message
+   * categories, such as `'product-updates'`. A marketing email honors the recipient's opt-outs, so a
+   * send to a recipient who opted out returns an error with code `recipient_opted_out`. Its `html`, or
+   * its `text` when it has no `html`, needs the `{{ unsubscribe_url }}` placeholder, or the send returns
+   * `unsubscribe_link_required`. A key that names no marketing category returns `unknown_category`. A
+   * template made in PostHog sends in its own category, so a template send that names another one
+   * returns `category_mismatch`.
+   */
+  category?: 'transactional' | (string & {})
 }
 
 /** A template made transactional in PostHog, sent by its ID. */
