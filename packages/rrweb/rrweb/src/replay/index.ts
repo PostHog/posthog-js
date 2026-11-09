@@ -2112,13 +2112,17 @@ export class Replayer {
         )
           parentDoc.removeChild(parentDoc.childNodes[0] as Node & RRNode);
         /**
-         * To detect the exist of the old HTML element before adding a new HTML element.
-         * The reason is similar to the above. One document only allows exactly one DocType and one HTML Element.
+         * To detect the exist of the old root element before adding a new root element.
+         * The reason is similar to the above. One document only allows exactly one DocType and one root Element.
          */
-        if (target.nodeName === 'HTML' && parentDoc.documentElement)
-          parentDoc.removeChild(
-            parentDoc.documentElement as HTMLElement & RRNode,
-          );
+        if (target.nodeType === Node.ELEMENT_NODE) {
+          // RRDocument.documentElement only matches an HTML root, so look up any element child.
+          const existingRoot = Array.from(
+            parentDoc.childNodes as ArrayLike<Node | RRNode>,
+          ).find((child) => child.nodeType === Node.ELEMENT_NODE);
+          if (existingRoot)
+            parentDoc.removeChild(existingRoot as Node & RRNode);
+        }
       }
 
       if (previous && previous.nextSibling && previous.nextSibling.parentNode) {
