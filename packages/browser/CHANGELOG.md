@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.447.6
+
+### Patch Changes
+
+- [#5617](https://github.com/PostHog/posthog-js/pull/5617) [`b20c48d`](https://github.com/PostHog/posthog-js/commit/b20c48d3d157b2384a3258e7406d921440154989) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix session recording errors when adopted stylesheets are locked by another script.
+  (2026-11-09)
+
 ## 1.447.5
 
 ### Patch Changes
