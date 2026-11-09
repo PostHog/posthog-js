@@ -593,6 +593,27 @@ describe('emails', () => {
     })
 
     it.each([
+      ['57 ASCII bytes, counted as 78', 'a'.repeat(57), 29_182_818, true],
+      ['57 ASCII bytes, counted as 78', 'a'.repeat(57), 29_182_819, false],
+      ['57 two-byte characters, counted as 156', 'é'.repeat(57), 29_182_761, true],
+      ['57 two-byte characters, counted as 156', 'é'.repeat(57), 29_182_762, false],
+    ])(
+      'counts an html body of %s like a file, beside a file of %i bytes (fits: %s)',
+      async (_name, html, size, fits) => {
+        replies = [rejected(503, 'delivery_unavailable'), rejected(503), rejected(503)]
+
+        const { error } = await sendFiles([{ filename: 'scan.pdf', content: new Uint8Array(size) }], { html })
+
+        if (fits) {
+          expect(bodyOf(0).files[0].size).toBe(size)
+        } else {
+          expect(error).toMatchObject({ code: 'message_too_large', field: 'attachments' })
+          expect(fetch).not.toHaveBeenCalled()
+        }
+      }
+    )
+
+    it.each([
       ['bytes', new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES)],
       ['Base64', 'A'.repeat(38_910_500)],
     ])('asks to upload the largest file that fits an email with empty bodies, as %s', async (_name, content) => {
