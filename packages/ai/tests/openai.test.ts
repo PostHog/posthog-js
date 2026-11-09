@@ -39,11 +39,16 @@ vi.mock('posthog-node', () => {
   }
 })
 
-vi.mock('@posthog/core', () => ({
-  uuidv7: vi.fn(() => 'uuid-v7'),
-  ErrorTracking: {},
-  toJsonSafeValue: vi.fn((value) => value),
-}))
+vi.mock('@posthog/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@posthog/core')>()
+  return {
+    uuidv7: vi.fn(() => 'uuid-v7'),
+    ErrorTracking: {},
+    toJsonSafeValue: vi.fn((value) => value),
+    acceptsEventOptions: actual.acceptsEventOptions,
+    eventOptionsAsLegacyProperties: actual.eventOptionsAsLegacyProperties,
+  }
+})
 
 vi.mock('openai', () => {
   // Mock Completions class – `create` is declared on the prototype so that
