@@ -1112,7 +1112,9 @@ function initStyleSheetObserver(
 }
 
 // Setter results are ignored by assignments but propagate through chained hooks.
-const REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT = Symbol();
+const REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT = Symbol.for(
+  'rrweb.adoptedStyleSheets.rejected',
+);
 
 type AdoptedStyleSheetObserver = {
   stylesheetManager: observerParam['stylesheetManager'] | undefined;

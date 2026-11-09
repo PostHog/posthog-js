@@ -722,6 +722,11 @@ describe('record', function (this: ISuite) {
           ...descriptor,
           configurable: false,
         });
+        const initial = new CSSStyleSheet();
+        initial.replaceSync(
+          '.initial-adopted-stylesheet-marker { color: green; }',
+        );
+        target.adoptedStyleSheets = [initial];
         const errors: string[] = [];
         const stop = (window as unknown as IWindow).rrweb.record({
           emit: (window as unknown as IWindow).emit,
@@ -760,6 +765,19 @@ describe('record', function (this: ISuite) {
       });
       expect(pageErrors).toEqual([]);
       expect(
+        ctx.events.some((event) => event.type === EventType.FullSnapshot),
+      ).toBe(true);
+      expect(
+        ctx.events.flatMap((event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.AdoptedStyleSheet
+            ? event.data.styles?.flatMap((style) =>
+                style.rules.map(({ rule }) => rule),
+              ) ?? []
+            : [],
+        ),
+      ).toEqual(['.initial-adopted-stylesheet-marker { color: green; }']);
+      expect(
         ctx.events.some(
           (event) =>
             event.type === EventType.IncrementalSnapshot &&
@@ -770,9 +788,13 @@ describe('record', function (this: ISuite) {
   );
 
   it.each(['document', 'shadow root'] as const)(
-    'does not record a rejected stylesheet through overlapping %s observers',
+    'does not record a rejected stylesheet through overlapping %s observers from separate bundles',
     async (kind) => {
-      const result = await ctx.page.evaluate(async (kind) => {
+      const firstRecord = await ctx.page.evaluateHandle(
+        () => (window as unknown as IWindow).rrweb.record,
+      );
+      await ctx.page.evaluate(ctx.code);
+      const result = await ctx.page.evaluate(async (kind, firstRecord) => {
         const element = document.createElement('div');
         document.body.appendChild(element);
         const target =
@@ -799,11 +821,14 @@ describe('record', function (this: ISuite) {
         const nativeLength = target.adoptedStyleSheets.length;
         const nativeColor = getComputedStyle(span).color;
         target.adoptedStyleSheets = [initial];
-        const { record } = (window as unknown as IWindow).rrweb;
+        const records = [
+          firstRecord,
+          (window as unknown as IWindow).rrweb.record,
+        ];
         const events: eventWithTime[][] = [[], []];
         const stops = events.map(
-          (observerEvents) =>
-            record({
+          (observerEvents, index) =>
+            records[index]({
               emit: (event) => observerEvents.push(event),
             })!,
         );
@@ -833,7 +858,8 @@ describe('record', function (this: ISuite) {
           recordedRejectedCSS,
           recordedAcceptedCSS,
         };
-      }, kind);
+      }, kind, firstRecord);
+      await firstRecord.dispose();
       expect(result).toEqual({
         nativeError: 'NotAllowedError',
         nativeMatchesControl: true,
