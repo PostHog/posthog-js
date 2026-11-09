@@ -372,12 +372,13 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         // Surveys and session replay are iOS-only in posthog-ios, so the APIs below
         // don't exist on macOS. macOS gets error tracking only.
         #if os(iOS)
-            // Surveys render in JS. Full SwiftPM builds leave out posthog-ios's `Surveys` trait (see
-            // Package.swift), so `config.surveys` only exists in CocoaPods builds. Remove this once every
-            // install path can leave the trait out.
-            #if !POSTHOG_IOS_NO_SURVEYS
-                config.surveys = false
-            #endif
+            // Surveys render in JS, so turn off native surveys whenever posthog-ios was built with them.
+            // `config.surveys` exists only when posthog-ios's `Surveys` trait is on. SwiftPM turns the
+            // trait on if any package in the app asks for posthog-ios's default traits, even though
+            // Package.swift leaves it out, so check for the setter at runtime.
+            if config.responds(to: NSSelectorFromString("setSurveys:")) {
+                config.setValue(false, forKey: "surveys")
+            }
 
             // Always apply the session replay configuration so that recording started later
             // (e.g. startRecording or a linked feature flag) uses the right masking;
