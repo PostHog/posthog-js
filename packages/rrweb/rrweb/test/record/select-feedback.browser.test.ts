@@ -126,6 +126,52 @@ describe('select review regressions', () => {
   });
 
   for (const blocked of ['option', 'optgroup']) {
+    for (const flags of ['g', 'y']) {
+      it.each(['native event', 'sibling setter'])(
+        `filters consecutive blocked selections (${blocked}, ${flags}, %s)`,
+        async (update) => {
+          await page.evaluate(
+            ({ blocked, flags, update }) => {
+              const win = window as unknown as TestWindow;
+              const hidden = [1, 2].map((index) => {
+                const option = `<option ${blocked === 'option' ? 'class="rr-block"' : ''} value="regex-secret-${index}">Hidden</option>`;
+                return blocked === 'option'
+                  ? option
+                  : `<optgroup class="rr-block">${option}</optgroup>`;
+              });
+              document.querySelector('#fixture')!.innerHTML =
+                '<select id="privacy" multiple><option value="public" selected>Public</option>' +
+                hidden.join('') +
+                '</select>';
+              const select = document.querySelector('select')!;
+              win.events = [];
+              win.stop = win.rrweb.record({
+                maskAllInputs: false,
+                blockClass: new RegExp('^rr-block$', flags),
+                emit: (event) => win.events.push(event),
+              })!;
+              select.options[1].selected = true;
+              select.options[2].selected = true;
+              select.options[0].selected = false;
+              if (update === 'native event')
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            },
+            { blocked, flags, update },
+          );
+          const result = await finishReplay(page, 'seek');
+          expect(result.liveIndices).toEqual([1, 2]);
+          expect(result.inputs.length).toBeGreaterThan(0);
+          for (const input of result.inputs) {
+            expect(input.text).toBe('');
+            expect(input.selectedOptionIds).toEqual([]);
+          }
+          expect(result.payload).not.toContain('regex-secret-');
+        },
+      );
+    }
+  }
+
+  for (const blocked of ['option', 'optgroup']) {
     for (const rule of ['class', 'class regex', 'class regex global', 'selector']) {
       it.each(['single', 'multiple blocked only', 'multiple mixed'])(
         `excludes an initially selected blocked ${blocked} (${rule}, %s)`,

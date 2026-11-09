@@ -312,13 +312,8 @@ export function _isBlockedElement(
       if (element.classList.contains(blockClass)) {
         return true;
       }
-    } else {
-      for (let eIndex = element.classList.length; eIndex--; ) {
-        const className = element.classList[eIndex];
-        if (blockClass.test(className)) {
-          return true;
-        }
-      }
+    } else if (classMatchesRegex(element, blockClass, false)) {
+      return true;
     }
     if (blockSelector) {
       return element.matches(blockSelector);
@@ -335,15 +330,17 @@ export function classMatchesRegex(
   regex: RegExp,
   checkAncestors: boolean,
 ): boolean {
-  if (!node) return false;
+  if (!node || !regex) return false;
   if (node.nodeType !== node.ELEMENT_NODE) {
     if (!checkAncestors) return false;
     return classMatchesRegex(dom.parentNode(node), regex, checkAncestors);
   }
 
+  // Stateful matchers must start at zero without writing to a possibly frozen config.
+  const matcher = regex.global || regex.sticky ? new RegExp(regex) : regex;
   for (let eIndex = (node as HTMLElement).classList.length; eIndex--; ) {
     const className = (node as HTMLElement).classList[eIndex];
-    if (regex.test(className)) {
+    if (matcher.test(className)) {
       return true;
     }
   }
@@ -988,16 +985,7 @@ function serializeElementNode(
       ? Array.from(selectedOptions).find((option) => {
           let ancestor: Element | null = option;
           while (ancestor && ancestor !== n) {
-            // Preserve stateful regexes for the later child serialization.
-            if (
-              _isBlockedElement(
-                ancestor,
-                typeof blockClass === 'string'
-                  ? blockClass
-                  : new RegExp(blockClass),
-                blockSelector,
-              )
-            )
+            if (_isBlockedElement(ancestor, blockClass, blockSelector))
               return false;
             ancestor = dom.parentElement(ancestor);
           }

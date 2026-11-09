@@ -398,7 +398,6 @@ export default class MutationBuffer {
         // : getId(parent)`, so if the host is also in addedSet we must
         // serialize the host first — otherwise its shadow children land here
         // with an un-mirrored parent and get dropped.
-        // eslint-disable-next-line no-constant-condition
         while (true) {
           const parentNode = dom.parentNode(n);
           const logicalParent =
@@ -423,7 +422,6 @@ export default class MutationBuffer {
           // rrweb filtered out of the mirror) can still be reached from an
           // earlier new sibling. Matches getNextId's loop, which skips past
           // IGNORED_NODE siblings when computing nextId for the emitted add.
-          // eslint-disable-next-line no-constant-condition
           while (true) {
             let probe: Node | null = dom.nextSibling(n);
             while (probe && this.mirror.getId(probe) === IGNORED_NODE) {
@@ -1009,8 +1007,7 @@ export default class MutationBuffer {
     // if this node is blocked `serializeNode` will turn it into a placeholder element
     // but we have to remove it's children otherwise they will be added as placeholders too
     if (!isBlocked(n, this.blockClass, this.blockSelector, false)) {
-      // Text nodes cannot have children or a shadow root. Keep the blocking
-      // check above: skipping it can change stateful RegExp behavior.
+      // Text nodes cannot have children or a shadow root.
       if (n.nodeType === n.TEXT_NODE) return;
       // Avoid a callback per node on repeated subtree walks. Like forEach,
       // capture the initial length but read each child from the live list.

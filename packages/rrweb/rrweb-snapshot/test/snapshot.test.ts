@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import snapshot, {
   _isBlockedElement,
+  classMatchesRegex,
   DEFAULT_MAX_DEPTH,
   transformAttribute,
   wasMaxDepthReached,
@@ -403,6 +404,36 @@ describe('form', () => {
       },
     });
     expect(sel?.childNodes).toEqual([]); // shouldn't be stored in childNodes while in transit
+  });
+});
+
+describe('stateful class matching', () => {
+  for (const frozen of [false, true]) {
+    it.each(['g', 'y', 'gy'])(
+      `matches every blocked sibling without changing lastIndex (frozen=${frozen}, %s)`,
+      (flags) => {
+        document.body.innerHTML =
+          '<div class="rr-block">First</div><div class="rr-block">Second</div>';
+        const regex = new RegExp('^rr-block$', flags);
+        regex.lastIndex = 3;
+        if (frozen) Object.freeze(regex);
+        for (const element of Array.from(document.body.children)) {
+          expect(_isBlockedElement(element, regex, null)).toBe(true);
+          expect(classMatchesRegex(element.firstChild, regex, true)).toBe(true);
+          expect(regex.lastIndex).toBe(3);
+        }
+      },
+    );
+  }
+
+  it.each(['g', 'y'])('masks text in every matching sibling (%s)', (flags) => {
+    document.body.innerHTML =
+      '<div class="rr-mask">first-text-secret</div>' +
+      '<div class="rr-mask">second-text-secret</div>';
+    const result = snapshot(document, {
+      maskTextClass: new RegExp('^rr-mask$', flags),
+    });
+    expect(JSON.stringify(result)).not.toContain('text-secret');
   });
 });
 
