@@ -42,6 +42,8 @@ buildscript {
 
 Expo SDK 52 uses React Native 0.76. Set `android.kotlinVersion=2.0.21` in `android/gradle.properties` and add the version to the `kotlin-gradle-plugin` classpath in the generated `android/build.gradle`. Setting only `android.kotlinVersion`, for example with `expo-build-properties`, fails with `Could not find org.jetbrains.kotlin:kotlin-compose-compiler-plugin-embeddable:1.9.25`.
 
+Both edits are in generated files, so `npx expo prebuild --clean`, or an EAS build that runs prebuild for you, wipes them. To keep them, set `android.kotlinVersion` with `expo-build-properties` and add the classpath version with a config plugin that uses `withProjectBuildGradle` from `expo/config-plugins`. Or upgrade to Expo SDK 53 or later, which uses React Native 0.79 and needs neither change.
+
 **If ignored:** the Android build fails with `Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.1.0, but the compiler version 1.9.0 can read versions up to 2.0.0.`
 
 ### iOS 15 and macOS 11
@@ -92,6 +94,12 @@ The plugin is still a CocoaPod, but it no longer depends on the `PostHog` pod. R
 - **Builds fetch `posthog-ios` from GitHub.** Xcode resolves it from `https://github.com/PostHog/posthog-ios.git`, so build machines need access to it. `Podfile.lock` no longer records its version.
 - **Your own native code may stop compiling.** React Native's helper adds the package only to the plugin's pod target, not your app target. We haven't tested this case, but if your app target has `import PostHog` and it no longer resolves, add `posthog-ios` to that target as a Swift package with a compatible version.
 - **Custom dSYM upload scripts can stop working.** `${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh` no longer exists. Use `${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh`. The `uploadNativeSymbols` build phase from the Expo config plugin already checks both paths.
+
+### Full Swift Package Manager apps
+
+Apps on React Native's full Swift Package Manager integration, with no CocoaPods, have no Podfile to change. The plugin's `ios/Package.swift` now uses Swift tools 6.2 and requires `posthog-ios` 4.0, so build with Xcode 26 or later and keep the app's deployment target at iOS 15 or later. If `Package.resolved` still pins `posthog-ios` 3.x, resolve packages again so it moves to 4.0. If your app target also adds `posthog-ios` as a package, raise that requirement to 4.0 as well.
+
+**If ignored:** Xcode can't load the plugin's package on older versions, and package resolution fails while another requirement holds `posthog-ios` at 3.x.
 
 ### `posthog-android` 4.0
 
@@ -154,7 +162,7 @@ Native uploads, such as session replay and native crash reports, pause while cel
 `posthog-ios` 4.0 and `posthog-android` 4.0 send the events the plugin captures natively to `/i/v1/analytics/events` instead of `/batch`: native crash reports, fatal JavaScript crashes reported natively, and push notification opens. Events captured in JavaScript still go to `/batch`.
 
 - If you self-host PostHog or send events through a reverse proxy, make sure it serves `/i/v1/*` before you upgrade.
-- The proxy must pass `Authorization` and `Content-Encoding` through unchanged. A proxy set up from PostHog's [proxy guides](https://posthog.com/docs/advanced/proxy) before 29 October 2026 strips `Authorization`, so PostHog answers `401` and drops the native events. Update it from the current guide. PostHog's managed reverse proxy needs no change.
+- The proxy must pass these request headers through unchanged: `Authorization`, `Content-Type`, `Content-Encoding`, `User-Agent`, `PostHog-Sdk-Info`, `PostHog-Attempt`, `PostHog-Request-Id` and `PostHog-Request-Timestamp`. It must also return PostHog's response status, body and `Retry-After` header unchanged, because the SDKs read them to decide which events to retry or drop. A `2xx` response whose body isn't PostHog's per-event `results` drops the events. A proxy set up from PostHog's [proxy guides](https://posthog.com/docs/advanced/proxy) before 29 October 2026 strips `Authorization`, so PostHog answers `401` and drops the native events. Update it from the current guide. PostHog's managed reverse proxy needs no change.
 - These requests send `Authorization: Bearer <projectToken>`, which replaces any `Authorization` header you set in `requestHeaders`. Session replay requests still send yours, so authenticate your proxy with a different header, such as `X-Proxy-Token`.
 - A proxy that redirects these requests, other than with a 307 or 308 to the same origin as `host`, drops them.
 - These events report `$locale` as a full language tag with region, such as `de-CH` or `zh-Hant-TW` instead of `de` or `zh-TW`, and can carry `$app_language` (see below).
@@ -187,8 +195,9 @@ Apps on React Native's full Swift Package Manager integration no longer bundle t
 
 - [ ] Your build machines use Xcode 26 or later.
 - [ ] React Native is 0.75 or later, or Expo SDK is 52 or later.
-- [ ] Android apps on React Native 0.75 or 0.76, including Expo SDK 52, build with Kotlin 2.0 or later.
+- [ ] Android apps on React Native 0.75 or 0.76, including Expo SDK 52, build with Kotlin 2.0 or later, and Expo apps keep that setting through `prebuild --clean`.
 - [ ] The iOS deployment target is 15.0 or later, and macOS is 11.0 or later if you ship it.
+- [ ] Full Swift Package Manager apps resolve `posthog-ios` 4.0.
 - [ ] `posthog.useSpm` is gone from `ios/Podfile.properties.json`.
 - [ ] Your Podfile doesn't use `generate_multiple_pod_projects`, `deduplicate_targets => false`, or plugin targets with mixed platform or linkage settings.
 - [ ] Build machines can reach `github.com/PostHog/posthog-ios`.
@@ -196,6 +205,6 @@ Apps on React Native's full Swift Package Manager integration no longer bundle t
 - [ ] `posthog-react-native-session-replay` is removed. If it isn't, the iOS build fails with `Redefinition of module 'PostHog'`.
 - [ ] Direct `start()` calls now use `setup()`, and direct `setup()` calls pass `throttleDelayMs`.
 - [ ] `screenshotModeBackgroundCapture` is removed.
-- [ ] Reverse proxies and self-hosted instances serve `/i/v1/*`, proxies pass `Authorization` and `Content-Encoding` through and don't authenticate with `Authorization`, and they don't redirect capture requests to another origin.
+- [ ] Reverse proxies and self-hosted instances serve `/i/v1/*`, proxies pass the `Authorization`, `Content-*`, `User-Agent` and `PostHog-*` headers and the response through unchanged and don't authenticate with `Authorization`, and they don't redirect capture requests to another origin.
 - [ ] If you want `$app_language`, your app calls `posthog.setAppLanguage()`.
 - [ ] Native code and native libraries that call `posthog-ios` or `posthog-android` directly are updated for 4.0.
