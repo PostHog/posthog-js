@@ -399,6 +399,20 @@ describe('emails', () => {
       expect(requests().filter((request) => request.startsWith('PUT'))).toHaveLength(3)
     })
 
+    it('retries a file storage that throttles the upload, then sends', async () => {
+      replies = [
+        filesAnswer(uploadSlot(HELLO_SHA256, 5)),
+        storageRefused(429, 'SlowDown', 'Please reduce your request rate.'),
+        stored,
+        accepted(),
+      ]
+
+      const { data } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(data?.id).toBe('msg_1')
+      expect(requests().filter((request) => request.startsWith('PUT'))).toHaveLength(2)
+    })
+
     it('sends nothing when the file storage keeps failing on its side', async () => {
       replies = [
         filesAnswer(uploadSlot(HELLO_SHA256, 5)),

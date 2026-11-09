@@ -737,7 +737,7 @@ function isRetryable(error: EmailError): boolean {
   }
   if (error.code === 'attachment_upload_failed') {
     // A PUT carries the same bytes and checksum to the same URL, so a retry can't store a different file.
-    return error.statusCode >= 500
+    return error.statusCode === 429 || error.statusCode >= 500
   }
   if (error.statusCode === 409) {
     return error.code === 'idempotency_key_in_flight'
