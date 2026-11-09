@@ -365,7 +365,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
 
   return {
     path: SEND_PATH,
-    body: safeJsonStringify({ ...content, to, ...(category !== undefined && { category }) }),
+    body: safeJsonStringify({ ...content, to, category }),
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
