@@ -705,6 +705,7 @@
         "_queueCandidate",
         "_queueGeneration",
         "_queuedCompressionEvents",
+        "_queuedFlush",
         "_queuedRRWebEvents",
         "_random",
         "_rateCapWindowMs",
