@@ -273,6 +273,77 @@ describe('CSS variable shorthand sources', () => {
     },
   );
 
+  it.each(['replaceSync', 'replace', 'insertRule'] as const)(
+    'does not serialize a large clean variable sheet during %s',
+    async (method) => {
+      const result = await page.evaluate(async (method) => {
+        const api = (window as unknown as { rrweb: { record: typeof record } })
+          .rrweb;
+        const stop = api.record({ emit: () => {} });
+        const descriptor = Object.getOwnPropertyDescriptor(
+          CSSRule.prototype,
+          'cssText',
+        )!;
+        let reads = 0;
+        Object.defineProperty(CSSRule.prototype, 'cssText', {
+          ...descriptor,
+          get() {
+            reads++;
+            return descriptor.get!.call(this);
+          },
+        });
+        const text = Array.from(
+          { length: 4001 },
+          (_, index) =>
+            `.utility-${index} { color: var(--c); width: var(--w); background-color: var(--b); }`,
+        ).join('');
+        const sheet = new CSSStyleSheet();
+        if (method === 'replace') await sheet.replace(text);
+        else if (method === 'replaceSync') sheet.replaceSync(text);
+        else sheet.insertRule('@media all {' + text + '}');
+        Object.defineProperty(CSSRule.prototype, 'cssText', descriptor);
+        stop?.();
+        return { reads, rules: sheet.cssRules.length };
+      }, method);
+      expect(result).toEqual({
+        reads: 0,
+        rules: method === 'insertRule' ? 1 : 4001,
+      });
+    },
+  );
+
+  it('does not reuse pre-stop source after an unobserved variable change', async () => {
+    const result = await page.evaluate(async () => {
+      const api = (window as unknown as { rrweb: { record: typeof record } })
+        .rrweb;
+      let stop = api.record({ emit: () => {} });
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(
+        ':root { --p: 8px; --q: 16px; } #card { padding: var(--p); padding-left: 12px; }',
+      );
+      document.adoptedStyleSheets = [sheet];
+      const before = sheet.cssRules[1].cssText;
+      stop?.();
+      const style = (sheet.cssRules[1] as CSSStyleRule).style;
+      style.padding = 'var(--q)';
+      style.paddingLeft = '12px';
+      const events: eventWithTime[] = [];
+      stop = api.record({ emit: (event) => events.push(event) });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      stop?.();
+      return {
+        sameCssText: sheet.cssRules[1].cssText === before,
+        live: getComputedStyle(document.querySelector('#card')!).paddingTop,
+        staleSource: JSON.stringify(events).includes('padding: var(--p)'),
+      };
+    });
+    expect(result).toEqual({
+      sameCssText: true,
+      live: '16px',
+      staleSource: false,
+    });
+  });
+
   it.each(['appendRule', 'deleteRule'] as const)(
     'does not reuse stale keyframes after an intercepted %s',
     async (method) => {
@@ -391,7 +462,7 @@ describe('CSS variable shorthand sources', () => {
   });
 
   it.each(['initial', 'late', 'changed'] as const)(
-    'keeps a %s link when inlining its CSS would lose variable shorthand values',
+    'preserves valid styles from a %s link when its URL is unavailable in replay',
     async (mode) => {
       const context = await page.evaluateHandle((mode) => {
         const api = (
@@ -439,6 +510,14 @@ describe('CSS variable shorthand sources', () => {
         mode,
       );
       if (mode === 'changed') await waitForStylesheet();
+      let stylesheetRequests = 0;
+      await page.setRequestInterception(true);
+      page.on('request', (request) => {
+        if (request.resourceType() === 'stylesheet') {
+          stylesheetRequests++;
+          void request.abort();
+        } else void request.continue();
+      });
       const result = await page.evaluate(async ({ api, events, stop }) => {
         await new Promise((resolve) => setTimeout(resolve, 200));
         stop?.();
@@ -452,16 +531,26 @@ describe('CSS variable shorthand sources', () => {
         const doc = replayer.iframe.contentDocument!;
         const result = {
           live: getComputedStyle(document.querySelector('#card')!).paddingTop,
-          replay: doc.defaultView!.getComputedStyle(doc.querySelector('#card')!)
-            .paddingTop,
-          keptLink: !!doc.querySelector('link[rel="stylesheet"]'),
+          left: doc.defaultView!.getComputedStyle(doc.querySelector('#card')!)
+            .paddingLeft,
+          background: doc.defaultView!.getComputedStyle(
+            doc.querySelector('#card')!,
+          ).backgroundColor,
+          color: doc.defaultView!.getComputedStyle(doc.querySelector('#card')!)
+            .color,
         };
         replayer.destroy();
         root.remove();
         return result;
       }, context);
       await context.dispose();
-      expect(result).toEqual({ live: '8px', replay: '8px', keptLink: true });
+      expect(result).toEqual({
+        live: '8px',
+        left: '12px',
+        background: 'rgb(1, 2, 3)',
+        color: 'rgb(4, 5, 6)',
+      });
+      expect(stylesheetRequests).toBe(0);
     },
   );
 });

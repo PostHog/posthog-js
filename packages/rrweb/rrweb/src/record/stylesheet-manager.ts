@@ -2,7 +2,6 @@ import {
   countStylesheetRules,
   createStylesheetTextCursor,
   getSuspensionGeneration,
-  hasEmptyShorthandLonghand,
   maskAttributeValue,
   nowMs,
   onceLinkStylesheetUpToDate,
@@ -286,8 +285,8 @@ export class StylesheetManager {
             recordDeferredStylesheetFailure();
             return true;
           }
-          if (!cssText || hasEmptyShorthandLonghand(cssText)) {
-            // stringification produced nothing usable: the link keeps its href and replay
+          if (!cssText) {
+            // stringification produced nothing: the link keeps its href and replay
             // must load the CSS remotely - a fidelity risk worth counting, not hiding
             recordDeferredStylesheetFailure();
             options.onUninlinable?.();

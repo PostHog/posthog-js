@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Preserve observed CSS-variable shorthands across session replay snapshots and avoid corrupt stylesheet inlining.
+Preserve observed CSS-variable shorthands across full session replay snapshots.

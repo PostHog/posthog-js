@@ -956,7 +956,7 @@ function serializeElementNode(
         cssText = stringifyStylesheet(stylesheet);
       }
     }
-    if (cssText && !hasEmptyShorthandLonghand(cssText)) {
+    if (cssText) {
       delete attributes.rel;
       delete attributes.href;
       attributes._cssText = cssText;

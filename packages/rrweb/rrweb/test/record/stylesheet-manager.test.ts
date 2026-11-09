@@ -72,6 +72,18 @@ describe('StylesheetManager.inlineDeferredLinkElement()', () => {
     expect(emittedCssText()).toContain('alice@example.com');
   });
 
+  it('inlines partial CSS without counting an empty declaration as a deferred failure', () => {
+    resetSnapshotCostState();
+    Object.defineProperty(styleEl.sheet!.cssRules[0], 'cssText', {
+      value: '.card { padding-top: ; color: red; }',
+    });
+    const task = makeManager().beginDeferredLinkInlining(linkEl, LINK_ID)!;
+    expect(task.advance(10)).toBe(true);
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+    expect(emittedCssText()).toContain('color: red;');
+    expect(getDeferredStylesheetStats().failedCount).toBe(0);
+  });
+
   it('masks the emitted _cssText under maskAllElementAttributes', () => {
     makeManager({ maskAllElementAttributes: true }).inlineDeferredLinkElement(
       linkEl,

@@ -31,6 +31,8 @@ describe('stylesheet source retention', () => {
     '@media (min-width: 0px) { ' + authored + ' }',
     '.card { padding: var(--p); padding-left: 12px; content: "<!-- -->"; --tokens: <!-- -->; }',
     '.parent--> .card { padding: var(--p); padding-left: 12px; }',
+    '.card { padding: /* ; color: */ var(--p); padding-left: 12px; }',
+    '.card { font: var(--font); line-height: 2; }',
   ])(
     'retains a complete rule without splitting its strings or nested blocks: %s',
     (text) => {
@@ -68,6 +70,44 @@ describe('stylesheet source retention', () => {
     rememberStylesheetSource(sheet(style), '@import "ignored.css";' + authored);
     expect(getStyleRuleSource(style)).toBeUndefined();
   });
+
+  it('does not read a large sheet containing only longhand variables', () => {
+    const text = Array.from(
+      { length: 4001 },
+      (_, index) => `.utility-${index} { color: var(--c); width: var(--w); }`,
+    ).join('');
+    const cssRules = vi.fn(() => [rule('.utility { color: var(--c); }')]);
+    rememberStylesheetSource(
+      {
+        get cssRules() {
+          return cssRules();
+        },
+      } as unknown as CSSStyleSheet,
+      text,
+    );
+    expect(cssRules).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '.card { color: var(--c); background-color: var(--b); }',
+    '@media all { .card { padding: var(--p); } }',
+    ':root { --c: var(--theme); }',
+  ])(
+    'does not serialize a rule with no possible shorthand override: %s',
+    (text) => {
+      const cssText = vi.fn(() => text);
+      rememberStyleRuleSource(
+        {
+          get cssText() {
+            return cssText();
+          },
+          parentRule: null,
+        } as CSSRule,
+        text,
+      );
+      expect(cssText).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not reuse source after an observable CSSOM change', () => {
     const style = rule();

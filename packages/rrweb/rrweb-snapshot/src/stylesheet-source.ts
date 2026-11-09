@@ -10,6 +10,19 @@ export function hasEmptyShorthandLonghand(css: string): boolean {
   return /(?:^|[\s;{}])-?[a-zA-Z][\w-]*\s*:\s*;/.test(css);
 }
 
+function mayNeedRuleSource(text: string): boolean {
+  if (!text.includes('var(')) return false;
+  // Ambiguous syntax keeps the full check; unknown properties may be shorthands.
+  if (/["'\\]|\/\*|url\(/i.test(text)) return true;
+  return text
+    .replace(/\{[^{};]*(?:;\s*)?\}/g, '{}')
+    .replace(
+      /(^|[;{])\s*(?:--[\w-]+|color|background-color|width|height|min-width|max-width|min-height|max-height|font-size|font-weight|line-height|opacity|z-index|top|right|bottom|left)\s*:[^;{}]*/gi,
+      '$1',
+    )
+    .includes('var(');
+}
+
 function splitRules(text: string): string[] {
   const rules: string[] = [];
   let start = 0;
@@ -94,7 +107,7 @@ export function rememberStyleRuleSource(rule: CSSRule, text: string): void {
       disabled ||
       exposedRules.has(rule) ||
       typeof text !== 'string' ||
-      !text.includes('var(')
+      !mayNeedRuleSource(text)
     )
       return;
     // Deferred link inlining must remain sliceable, rather than validating a
@@ -123,7 +136,8 @@ export function rememberStylesheetSource(
   text: string,
 ): void {
   try {
-    if (disabled || typeof text !== 'string' || !text.includes('var(')) return;
+    if (disabled || typeof text !== 'string' || !mayNeedRuleSource(text))
+      return;
     const rules = Array.from(sheet.cssRules);
     if (!rules.some((rule) => hasEmptyShorthandLonghand(rule.cssText))) return;
     const authored = splitRules(text);
