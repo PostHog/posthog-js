@@ -2063,7 +2063,7 @@
           "name": "templateKey"
         },
         {
-          "description": "Whether the email carries open and click tracking: PostHog's open pixel and links rewritten to count clicks. Defaults to `true`. With `false`, the email goes out without either, so PostHog can't count its opens and clicks. Independent of `captureEngagement`, which decides whether engagement events are captured on the recipient's person.",
+          "description": "Whether PostHog tracks opens and clicks of the email. Defaults to `true`. With `false`, the email goes out without PostHog's open pixel, so PostHog can't count its opens. PostHog doesn't track clicks on emails sent from code, so their links are never rewritten either way. Independent of `captureEngagement`, which decides whether engagement events are captured on the recipient's person.",
           "type": "boolean",
           "name": "trackOpensAndClicks"
         }
@@ -4556,7 +4556,7 @@
           "name": "captureEngagement"
         },
         {
-          "description": "Whether the email carries open and click tracking: PostHog's open pixel and links rewritten\nto count clicks. Defaults to `true`. With `false`, the email goes out without either, so\nPostHog can't count its opens and clicks. Independent of `captureEngagement`, which decides\nwhether engagement events are captured on the recipient's person.",
+          "description": "Whether PostHog tracks opens and clicks of the email. Defaults to `true`. With `false`, the\nemail goes out without PostHog's open pixel, so PostHog can't count its opens. PostHog doesn't\ntrack clicks on emails sent from code, so their links are never rewritten either way.\nIndependent of `captureEngagement`, which decides whether engagement events are captured on\nthe recipient's person.",
           "type": "never",
           "name": "trackOpensAndClicks"
         },
