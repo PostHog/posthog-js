@@ -9,7 +9,7 @@ const MESSAGE_ID = '01a18356-c56c-0001-e494-7666bc915188'
 const STATUS_URL = `https://us.posthog.com/api/projects/@current/messaging/emails/${MESSAGE_ID}/`
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
-type Reply = Error | { status: number; body?: unknown; headers?: Record<string, string> }
+type Reply = Error | { status: number; body?: unknown; text?: string; headers?: Record<string, string> }
 
 const accepted = (fields: Record<string, unknown> = {}): Reply => ({
   status: 202,
@@ -22,27 +22,36 @@ const rejected = (status: number, code?: string, headers: Record<string, string>
   headers,
 })
 
-const REPORT = Buffer.alloc(40_000, 'report')
-const EXTRAS = {
-  cc: 'finance@example.com',
-  bcc: ['audit@example.com', 'archive@example.com'],
-  attachments: [
-    { filename: 'receipt.txt', content: Buffer.from('hello') },
-    { filename: 'logo.png', content: new Uint8Array([0, 255, 1]), contentType: 'image/png', contentId: 'logo' },
-    { filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS', contentType: 'text/calendar' },
-    { filename: 'report.txt', content: REPORT },
-  ],
-}
-const EXTRAS_ON_THE_WIRE = {
-  cc: ['finance@example.com'],
-  bcc: ['audit@example.com', 'archive@example.com'],
-  attachments: [
-    { filename: 'receipt.txt', content: 'aGVsbG8=' },
-    { filename: 'logo.png', content: 'AP8B', content_type: 'image/png', content_id: 'logo' },
-    { filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS', content_type: 'text/calendar' },
-    { filename: 'report.txt', content: REPORT.toString('base64') },
-  ],
-}
+const COPIES = { cc: 'finance@example.com', bcc: ['audit@example.com', 'archive@example.com'] }
+const COPIES_ON_THE_WIRE = { cc: ['finance@example.com'], bcc: ['audit@example.com', 'archive@example.com'] }
+
+const UPLOADS_URL = 'https://us.posthog.com/api/projects/@current/messaging/attachments/uploads/'
+const STORAGE_URL = 'https://email-files.s3.example.com/team/2/'
+const HELLO_SHA256 = '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
+const LOGO_SHA256 = '47ffa3ea45a70b8a41c2c0825df323c00a8b7a01c1ea06083cc41dddcc001123'
+const INVITE_SHA256 = '9daa8e24f9b759073687839a0aa7de2a2f09abc2a771e77a34e1a05dd4198387'
+const INVOICE_SHA256 = '52d6e3de4fa0dcc29946695f93940c3e7f26f30e1e39f4b1a49ad98839112786'
+const LARGEST_FILE_WITH_EMPTY_BODIES = 29_182_875
+
+const filesAnswer = (...files: Record<string, unknown>[]): Reply => ({ status: 200, body: { files } })
+const present = (sha256: string): Record<string, unknown> => ({
+  sha256,
+  status: 'present',
+  expires_at: '2026-12-16T00:00:00Z',
+})
+const uploadSlot = (sha256: string, size: number): Record<string, unknown> => ({
+  sha256,
+  status: 'upload',
+  url: `${STORAGE_URL}${sha256}?X-Amz-Signature=signed`,
+  method: 'PUT',
+  headers: { 'Content-Length': String(size), 'x-amz-checksum-sha256': `checksum-of-${sha256.slice(0, 8)}` },
+  url_expires_at: '2026-11-09T12:15:00Z',
+})
+const stored: Reply = { status: 200 }
+const storageRefused = (status: number, code: string, message: string): Reply => ({
+  status,
+  text: `<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>${code}</Code><Message>${message}</Message></Error>`,
+})
 
 describe('emails', () => {
   vi.useFakeTimers()
@@ -71,6 +80,8 @@ describe('emails', () => {
   }
 
   const sentHeaders = (): string[] => fetch.mock.calls.map(([, options]) => options.headers['Idempotency-Key'])
+  const requests = (): string[] => fetch.mock.calls.map(([url, options]) => `${options.method} ${url}`)
+  const bodyOf = (request: number): any => JSON.parse(fetch.mock.calls[request][1].body)
 
   beforeEach(() => {
     replies = []
@@ -86,7 +97,7 @@ describe('emails', () => {
       const headers = Object.fromEntries(Object.entries(reply.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v]))
       return {
         status: reply.status,
-        text: async () => (reply.body === undefined ? '' : JSON.stringify(reply.body)),
+        text: async () => reply.text ?? (reply.body === undefined ? '' : JSON.stringify(reply.body)),
         json: async () => reply.body,
         headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
       }
@@ -193,18 +204,18 @@ describe('emails', () => {
       },
     ],
     [
-      'copies and attachments',
-      { templateKey: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>', ...EXTRAS },
+      'copies',
+      { templateKey: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>', ...COPIES },
       {
         template_key: 'receipt',
         subject: 'Your receipt',
         html: '<p>Thanks</p>',
-        ...EXTRAS_ON_THE_WIRE,
+        ...COPIES_ON_THE_WIRE,
         capture_engagement: true,
       },
     ],
     [
-      'empty copies and attachments, which it leaves out',
+      'empty copies and attachments, which it leaves out without uploading',
       { templateKey: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>', cc: [], bcc: [], attachments: [] },
       { template_key: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>', capture_engagement: true },
     ],
@@ -230,6 +241,7 @@ describe('emails', () => {
 
     expect(error).toBeNull()
     expect(data?.id).toBe('msg_1')
+    expect(fetch).toHaveBeenCalledTimes(1)
     const [url, options] = fetch.mock.calls[0]
     expect(url).toBe(SEND_URL)
     expect(JSON.parse(options.body)).toEqual({
@@ -239,46 +251,255 @@ describe('emails', () => {
     })
   })
 
-  it('encodes attachment bytes without Buffer, as on the edge runtime', async () => {
-    replies = [accepted()]
-    const bytes = Uint8Array.from({ length: 70_000 }, (_, index) => (index * 7) % 256)
-    const expected = Buffer.from(bytes).toString('base64')
-    vi.stubGlobal('Buffer', undefined)
-    try {
-      await posthog.emails.send({
-        to: 'user@example.com',
-        templateKey: 'receipt',
-        subject: 'Your receipt',
-        html: '<p>Thanks</p>',
-        attachments: [{ filename: 'scan.bin', content: bytes }],
-      })
-    } finally {
-      vi.unstubAllGlobals()
+  describe('attachments', () => {
+    const RECEIPT = { to: 'user@example.com', templateKey: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>' }
+
+    const settle = async <T>(pending: Promise<T>): Promise<T> => {
+      let done = false
+      void pending.finally(() => (done = true))
+      while (!done) {
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+      return pending
     }
 
-    expect(JSON.parse(fetch.mock.calls[0][1].body).attachments[0].content).toBe(expected)
-  })
+    const sendFiles = (
+      attachments: unknown,
+      content: Record<string, unknown> = {}
+    ): ReturnType<PostHog['emails']['send']> =>
+      settle(posthog.emails.send({ ...RECEIPT, ...content, attachments } as SendEmailOptions))
 
-  it('retries a send with attachments with the bytes and key of the first attempt', async () => {
-    replies = [rejected(503, 'delivery_unavailable'), accepted()]
-    const file = Buffer.from('invoice')
+    it('uploads the files PostHog does not have, then sends every file by its hash', async () => {
+      replies = [
+        filesAnswer(present(HELLO_SHA256), uploadSlot(LOGO_SHA256, 3), uploadSlot(INVITE_SHA256, 15)),
+        stored,
+        stored,
+        accepted(),
+      ]
 
-    const pending = posthog.emails.send({
-      to: 'user@example.com',
-      templateKey: 'receipt',
-      subject: 'Your receipt',
-      html: '<p>Thanks</p>',
-      attachments: [{ filename: 'invoice.txt', content: file }],
+      const { data, error } = await sendFiles([
+        { filename: 'receipt.txt', content: Buffer.from('hello') },
+        { filename: 'logo.png', content: new Uint8Array([0, 255, 1]), contentType: 'image/png', contentId: 'logo' },
+        { filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS', contentType: 'text/calendar' },
+      ])
+
+      expect(error).toBeNull()
+      expect(data?.id).toBe('msg_1')
+      expect(requests()).toEqual([
+        `POST ${UPLOADS_URL}`,
+        `PUT ${STORAGE_URL}${LOGO_SHA256}?X-Amz-Signature=signed`,
+        `PUT ${STORAGE_URL}${INVITE_SHA256}?X-Amz-Signature=signed`,
+        `POST ${SEND_URL}`,
+      ])
+      expect(bodyOf(0)).toEqual({
+        files: [
+          { sha256: HELLO_SHA256, size: 5 },
+          { sha256: LOGO_SHA256, size: 3 },
+          { sha256: INVITE_SHA256, size: 15 },
+        ],
+      })
+      expect(bodyOf(3)).toEqual({
+        to: 'user@example.com',
+        template_key: 'receipt',
+        subject: 'Your receipt',
+        html: '<p>Thanks</p>',
+        capture_engagement: true,
+        attachments: [
+          { sha256: HELLO_SHA256, filename: 'receipt.txt' },
+          { sha256: LOGO_SHA256, filename: 'logo.png', content_type: 'image/png', content_id: 'logo' },
+          { sha256: INVITE_SHA256, filename: 'invite.ics', content_type: 'text/calendar' },
+        ],
+      })
     })
-    await vi.advanceTimersByTimeAsync(0)
-    file.fill(0)
-    await vi.runAllTimersAsync()
 
-    expect((await pending).data?.id).toBe('msg_1')
-    const [first, retry] = fetch.mock.calls.map(([, options]) => options.body)
-    expect(retry).toBe(first)
-    expect(JSON.parse(first).attachments[0].content).toBe(Buffer.from('invoice').toString('base64'))
-    expect(new Set(sentHeaders()).size).toBe(1)
+    it('asks where to upload with the secret key, and puts the bytes with only the headers PostHog gave', async () => {
+      replies = [filesAnswer(uploadSlot(LOGO_SHA256, 3)), stored, accepted()]
+
+      await sendFiles([{ filename: 'logo.png', content: new Uint8Array([0, 255, 1]) }])
+
+      const [[, ask], [, put]] = fetch.mock.calls
+      expect(ask.headers).toMatchObject({ Authorization: `Bearer ${SECRET_KEY}`, 'Content-Type': 'application/json' })
+      expect(put.headers).toEqual({ 'Content-Length': '3', 'x-amz-checksum-sha256': 'checksum-of-47ffa3ea' })
+      expect(Array.from(put.body)).toEqual([0, 255, 1])
+    })
+
+    it('uploads a file attached twice once, and sends it twice', async () => {
+      replies = [filesAnswer(uploadSlot(HELLO_SHA256, 5)), stored, accepted()]
+
+      await sendFiles([
+        { filename: 'hello.txt', content: Buffer.from('hello') },
+        { filename: 'copy.txt', content: Buffer.from('hello') },
+      ])
+
+      expect(bodyOf(0)).toEqual({ files: [{ sha256: HELLO_SHA256, size: 5 }] })
+      expect(requests().filter((request) => request.startsWith('PUT'))).toHaveLength(1)
+      expect(bodyOf(2).attachments).toEqual([
+        { sha256: HELLO_SHA256, filename: 'hello.txt' },
+        { sha256: HELLO_SHA256, filename: 'copy.txt' },
+      ])
+    })
+
+    it("sends nothing when the file storage refuses an upload, and returns the storage's answer", async () => {
+      replies = [
+        filesAnswer(present(HELLO_SHA256), uploadSlot(LOGO_SHA256, 3)),
+        storageRefused(400, 'BadDigest', 'The SHA256 you specified did not match the calculated checksum.'),
+      ]
+
+      const { data, error } = await sendFiles([
+        { filename: 'hello.txt', content: Buffer.from('hello') },
+        { filename: 'logo.png', content: new Uint8Array([0, 255, 1]) },
+      ])
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'attachment_upload_failed', statusCode: 400, field: 'attachments__1' })
+      expect(error?.message).toContain(
+        'HTTP 400 BadDigest: The SHA256 you specified did not match the calculated checksum.'
+      )
+      expect(requests()).toHaveLength(2)
+    })
+
+    it('sends nothing when an upload never reaches the file storage', async () => {
+      replies = [
+        filesAnswer(uploadSlot(HELLO_SHA256, 5)),
+        new Error('ECONNRESET'),
+        new Error('ECONNRESET'),
+        new Error('ECONNRESET'),
+      ]
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toMatchObject({ code: 'network_error', field: 'attachments__0' })
+      expect(requests()).toEqual([
+        `POST ${UPLOADS_URL}`,
+        ...Array(3).fill(`PUT ${STORAGE_URL}${HELLO_SHA256}?X-Amz-Signature=signed`),
+      ])
+    })
+
+    it('uploads and sends the bytes of the call, through a busy file storage and a retried send with one key', async () => {
+      replies = [
+        filesAnswer(uploadSlot(INVOICE_SHA256, 7)),
+        storageRefused(503, 'SlowDown', 'Please reduce your request rate.'),
+        stored,
+        rejected(503, 'delivery_unavailable'),
+        accepted(),
+      ]
+      const file = Buffer.from('invoice')
+
+      const pending = posthog.emails.send({ ...RECEIPT, attachments: [{ filename: 'invoice.txt', content: file }] })
+      file.fill(0)
+
+      expect((await settle(pending)).data?.id).toBe('msg_1')
+      expect(bodyOf(0).files).toEqual([{ sha256: INVOICE_SHA256, size: 7 }])
+      const puts = fetch.mock.calls.filter(([, options]) => options.method === 'PUT')
+      expect(puts.map(([, options]) => Buffer.from(options.body).toString())).toEqual(['invoice', 'invoice'])
+      const sends = fetch.mock.calls.filter(([url]) => url === SEND_URL)
+      expect(sends).toHaveLength(2)
+      expect(sends[1][1].body).toBe(sends[0][1].body)
+      expect(new Set(sends.map(([, options]) => options.headers['Idempotency-Key'])).size).toBe(1)
+    })
+
+    it.each([
+      [
+        'a message too large',
+        { status: 400, body: { code: 'message_too_large', attr: 'files__0__size' } },
+        'message_too_large',
+        1,
+      ],
+      [
+        'a daily upload quota, without retrying',
+        { status: 429, body: { code: 'upload_quota_exceeded' } },
+        'upload_quota_exceeded',
+        1,
+      ],
+      [
+        'an unavailable file storage, after retrying',
+        { status: 503, body: { code: 'delivery_unavailable' } },
+        'delivery_unavailable',
+        3,
+      ],
+    ])('uploads and sends nothing when PostHog refuses the uploads for %s', async (_name, refusal, code, asks) => {
+      replies = Array(asks).fill(refusal)
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error?.code).toBe(code)
+      expect(requests()).toEqual(Array(asks).fill(`POST ${UPLOADS_URL}`))
+    })
+
+    it('answers field_not_accepted when PostHog has no upload route yet', async () => {
+      replies = [
+        {
+          status: 404,
+          body: { type: 'invalid_request', code: 'not_found', detail: 'Endpoint not found.', attr: null },
+        },
+      ]
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toMatchObject({ code: 'field_not_accepted', name: 'validation_error', field: 'attachments' })
+      expect(requests()).toEqual([`POST ${UPLOADS_URL}`])
+    })
+
+    it('hashes bytes and decodes Base64 without Buffer, as on the edge runtime', async () => {
+      replies = [filesAnswer(uploadSlot(LOGO_SHA256, 3), uploadSlot(INVITE_SHA256, 15)), stored, stored, accepted()]
+      vi.stubGlobal('Buffer', undefined)
+      try {
+        await sendFiles([
+          { filename: 'logo.png', content: new Uint8Array([0, 255, 1]) },
+          { filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS' },
+        ])
+      } finally {
+        vi.unstubAllGlobals()
+      }
+
+      expect(bodyOf(0).files).toEqual([
+        { sha256: LOGO_SHA256, size: 3 },
+        { sha256: INVITE_SHA256, size: 15 },
+      ])
+      expect(Buffer.from(fetch.mock.calls[2][1].body).toString()).toBe('BEGIN:VCALENDAR')
+    })
+
+    it.each([
+      [
+        'more than 10 files',
+        Array.from({ length: 11 }, (_, index) => ({ filename: `${index}.txt`, content: Buffer.from('hello') })),
+        {},
+        { code: 'too_many_attachments', field: 'attachments' },
+      ],
+      [
+        'files over 40 MB after Base64 encoding',
+        [{ filename: 'scan.pdf', content: new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES + 1) }],
+        { html: '' },
+        { code: 'message_too_large', field: 'attachments' },
+      ],
+      [
+        'files that fit only without the html and text',
+        [{ filename: 'scan.pdf', content: new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES) }],
+        { html: '<', text: '' },
+        { code: 'message_too_large', field: 'attachments' },
+      ],
+      [
+        'an empty file',
+        [{ filename: 'empty.txt', content: new Uint8Array(0) }],
+        {},
+        { code: 'invalid_attachment', field: 'attachments__0__content' },
+      ],
+    ])('refuses %s before any request', async (_name, attachments, content, refusal) => {
+      const { error } = await sendFiles(attachments, content)
+
+      expect(error).toMatchObject({ ...refusal, name: 'validation_error' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('asks to upload the largest file that fits an email with empty bodies', async () => {
+      replies = [rejected(503, 'delivery_unavailable'), rejected(503), rejected(503)]
+
+      await sendFiles([{ filename: 'scan.pdf', content: new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES) }], {
+        html: '',
+      })
+
+      expect(bodyOf(0).files[0].size).toBe(LARGEST_FILE_WITH_EMPTY_BODIES)
+    })
   })
 
   it('names the provider the client moved from on every request', async () => {

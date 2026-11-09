@@ -35,7 +35,7 @@ export class EmailError extends Error {
   override name: EmailErrorName
   /** PostHog's error code, such as `quota_limited`, or an SDK code such as `network_error`. */
   readonly code: string
-  /** The HTTP status, when PostHog answered. */
+  /** The HTTP status, when PostHog or its file storage answered. */
   readonly statusCode?: number
   readonly why?: string
   readonly fix?: string
@@ -58,6 +58,8 @@ export class EmailError extends Error {
   }
 }
 
+const ATTACHMENT_LIMIT_CODES: ReadonlySet<string> = new Set(['too_many_attachments', 'message_too_large'])
+
 function emailErrorName(status: number | undefined, code: string): EmailErrorName {
   if (code === 'missing_secret_key' || status === 401) {
     return 'missing_api_key'
@@ -66,7 +68,10 @@ function emailErrorName(status: number | undefined, code: string): EmailErrorNam
     if (code === 'network_error') {
       return 'service_unavailable'
     }
-    return code.startsWith('invalid_') ? 'validation_error' : 'application_error'
+    return code.startsWith('invalid_') || ATTACHMENT_LIMIT_CODES.has(code) ? 'validation_error' : 'application_error'
+  }
+  if (code === 'field_not_accepted') {
+    return 'validation_error'
   }
   switch (status) {
     case 400:

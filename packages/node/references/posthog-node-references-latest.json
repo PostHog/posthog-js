@@ -2040,6 +2040,7 @@
       "name": "CodeEmailFields",
       "properties": [
         {
+          "description": "Files sent with the email: at most 10, and at most 40 MB for the whole email after Base64 encoding, about 29 MB of files. The SDK checks both before any request. It uploads each file PostHog doesn't have yet, then sends the email. When an upload fails, it sends nothing.",
           "type": "EmailAttachment[]",
           "name": "attachments"
         },
@@ -2169,7 +2170,7 @@
       "name": "EmailAttachment",
       "properties": [
         {
-          "description": "The file's bytes, or its content already Base64 encoded.",
+          "description": "The file's bytes, or its content already Base64 encoded. At least one byte.",
           "type": "Uint8Array | string",
           "name": "content"
         },
@@ -3960,7 +3961,7 @@
           "name": "appHost"
         },
         {
-          "description": "Timeout in milliseconds for each `emails.send` request.",
+          "description": "Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request,\nso raise it when large files upload slowly.",
           "type": "number",
           "name": "emailRequestTimeoutMs"
         },
@@ -4602,6 +4603,7 @@
           "name": "bcc"
         },
         {
+          "description": "Files sent with the email: at most 10, and at most 40 MB for the whole email after Base64\nencoding, about 29 MB of files. The SDK checks both before any request. It uploads each file\nPostHog doesn't have yet, then sends the email. When an upload fails, it sends nothing.",
           "type": "never",
           "name": "attachments"
         },

@@ -43,6 +43,11 @@ interface CodeEmailFields {
   cc?: string | string[]
   /** Bare addresses that get a copy the other recipients never see. */
   bcc?: string | string[]
+  /**
+   * Files sent with the email: at most 10, and at most 40 MB for the whole email after Base64
+   * encoding, about 29 MB of files. The SDK checks both before any request. It uploads each file
+   * PostHog doesn't have yet, then sends the email. When an upload fails, it sends nothing.
+   */
   attachments?: EmailAttachment[]
   /**
    * Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,
@@ -57,7 +62,7 @@ interface CodeEmailFields {
 export interface EmailAttachment {
   /** The name the recipient sees, such as `'invoice.pdf'`. */
   filename: string
-  /** The file's bytes, or its content already Base64 encoded. */
+  /** The file's bytes, or its content already Base64 encoded. At least one byte. */
   content: Uint8Array | string
   /** A MIME type, such as `'application/pdf'`. */
   contentType?: string
