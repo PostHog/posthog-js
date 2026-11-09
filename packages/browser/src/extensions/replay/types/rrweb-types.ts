@@ -91,7 +91,7 @@ export type textNode = {
 
 export type cdataNode = {
     type: typeof NodeType.CDATA
-    textContent: ''
+    textContent: string
 }
 
 export type commentNode = {

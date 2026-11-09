@@ -11,6 +11,8 @@ export default defineConfig({
         globals: true,
         clearMocks: true,
         environment: 'node',
+        // Production webpack builds can exceed the default five seconds on shared CI runners.
+        testTimeout: 30_000,
         exclude: [...configDefaults.exclude, 'dist/**'],
     },
 })

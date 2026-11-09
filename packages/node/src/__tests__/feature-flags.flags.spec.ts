@@ -251,6 +251,39 @@ describe('flags v2', () => {
         expectedError: 'flag_missing',
       },
       {
+        case: 'response without flags',
+        status: 200,
+        json: vi.fn().mockResolvedValue({ errorsWhileComputingFlags: false, requestId: 'request-id' }),
+        expectedError: 'flag_missing',
+      },
+      {
+        case: 'response with null flags',
+        status: 200,
+        json: vi.fn().mockResolvedValue({ flags: null, errorsWhileComputingFlags: false, requestId: 'request-id' }),
+        expectedError: 'unknown_error',
+      },
+      {
+        case: 'response with string flags',
+        status: 200,
+        json: vi.fn().mockResolvedValue({ flags: 'not-an-object', errorsWhileComputingFlags: false }),
+        expectedError: 'unknown_error',
+      },
+      {
+        case: 'response with array flags',
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          flags: [{ key: 'error-flag', enabled: true, variant: undefined, reason: undefined, metadata: {} }],
+          errorsWhileComputingFlags: false,
+        }),
+        expectedError: 'unknown_error',
+      },
+      {
+        case: 'response with number flags',
+        status: 200,
+        json: vi.fn().mockResolvedValue({ flags: 5, errorsWhileComputingFlags: false }),
+        expectedError: 'unknown_error',
+      },
+      {
         case: 'network error',
         status: undefined,
         json: vi.fn(),
@@ -292,6 +325,30 @@ describe('flags v2', () => {
         expect(await posthog.getFeatureFlagPayload('error-flag', 'some-distinct-id')).toBe(undefined)
       })
 
+      it('getFeatureFlagResult returns undefined', async () => {
+        expect(await posthog.getFeatureFlagResult('error-flag', 'some-distinct-id')).toBe(undefined)
+      })
+
+      it('evaluateFlags returns an empty snapshot', async () => {
+        const flags = await posthog.evaluateFlags('some-distinct-id')
+        expect(flags.keys).toEqual([])
+        expect(flags.isEnabled('error-flag')).toBe(false)
+        expect(flags.getFlag('error-flag')).toBe(undefined)
+      })
+
+      it('capture with sendFeatureFlags sends the event without flag properties', async () => {
+        let capturedMessage: any
+        posthog.on('capture', (message) => {
+          capturedMessage = message
+        })
+
+        posthog.capture({ distinctId: 'some-distinct-id', event: 'test-event', sendFeatureFlags: true })
+        await waitForPromises()
+        expect(capturedMessage).toBeDefined()
+        expect(capturedMessage.event).toBe('test-event')
+        expect(Object.keys(capturedMessage.properties).filter((key) => key.startsWith('$feature/'))).toEqual([])
+      })
+
       it('getAllFlags returns empty object', async () => {
         expect(await posthog.getAllFlags('some-distinct-id')).toEqual({})
       })
@@ -315,6 +372,31 @@ describe('flags v2', () => {
         expect(capturedMessage.event).toBe('$feature_flag_called')
         expect(capturedMessage.properties.$feature_flag_error).toBe(expectedError)
       })
+    })
+
+    it('reports a response with non-object flags to error listeners when debug is off', async () => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        ...posthogImmediateResolveOptions,
+      })
+      mockedFetch.mockImplementation(
+        apiImplementationV4({
+          status: 200,
+          json: vi.fn().mockResolvedValue({ flags: null, errorsWhileComputingFlags: false }),
+        })
+      )
+      const errorHandler = vi.fn()
+      posthog.on('error', errorHandler)
+
+      expect(await posthog.getAllFlags('some-distinct-id')).toEqual({})
+      expect(errorHandler).toHaveBeenCalledTimes(1)
+      expect(await posthog.getFeatureFlag('error-flag', 'some-distinct-id')).toBe(undefined)
+      expect(errorHandler).toHaveBeenCalledTimes(2)
+      for (const [error] of errorHandler.mock.calls) {
+        expect(error).toBeInstanceOf(Error)
+        expect(error.message).toContain('non-object `flags` field')
+      }
+      await posthog.shutdown()
     })
   })
 })

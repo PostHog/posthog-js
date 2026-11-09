@@ -1,4 +1,4 @@
-import type { OutputOptions } from 'rollup'
+import type { OutputOptions, RenderedChunk } from 'rollup'
 import {
     createChunkIdComment,
     createChunkIdSnippet,
@@ -34,7 +34,12 @@ type TestPlugin = {
     }
     renderChunk: {
         order: 'post'
-        handler: (code: string, chunk: { fileName: string }, outputOptions?: object) => RenderChunkResult
+        handler: (
+            code: string,
+            chunk: { fileName: string },
+            outputOptions?: object,
+            meta?: { chunks: Record<string, RenderedChunk> }
+        ) => RenderChunkResult
     }
     augmentChunkHash: (chunk: { fileName: string }) => string | undefined
     generateBundle: {
@@ -185,6 +190,44 @@ describe('posthogRollupPlugin', () => {
 
                 expect(determineChunkIdFromSource(rebuilt!.code)).toBe(determineChunkIdFromSource(first!.code))
                 expect(determineChunkIdFromSource(other!.code)).not.toBe(determineChunkIdFromSource(first!.code))
+            })
+
+            it('refreshes cached dependency identities on a watch-mode rebuild', async () => {
+                const plugin = testPlugin(eventOptions)
+                const entry: RenderedChunk = {
+                    type: 'chunk',
+                    name: 'entry',
+                    fileName: 'entry.js',
+                    facadeModuleId: '/src/entry.js',
+                    moduleIds: ['/src/entry.js'],
+                    modules: {},
+                    imports: ['chunk-!~{001}~.js'],
+                    dynamicImports: [],
+                    implicitlyLoadedBefore: [],
+                    referencedFiles: [],
+                    importedBindings: {},
+                    exports: [],
+                    isEntry: true,
+                    isDynamicEntry: false,
+                    isImplicitEntry: false,
+                }
+                const dependency = {
+                    ...entry,
+                    fileName: entry.imports[0],
+                    facadeModuleId: null,
+                    moduleIds: ['/src/shared.js'],
+                    imports: [],
+                    isEntry: false,
+                }
+                const meta = { chunks: { [entry.fileName]: entry, [dependency.fileName]: dependency } }
+                const code = `import './${dependency.fileName}'; run();`
+                const first = await plugin.renderChunk.handler(code, entry, undefined, meta)
+
+                dependency.moduleIds = ['/src/replaced.js']
+                plugin.buildStart()
+                const rebuilt = await plugin.renderChunk.handler(code, entry, undefined, meta)
+
+                expect(determineChunkIdFromSource(rebuilt!.code)).not.toBe(determineChunkIdFromSource(first!.code))
             })
 
             it('resolves the release once per build, not once per chunk', async () => {

@@ -345,7 +345,9 @@ class FeatureFlagsPoller {
           } else if (e instanceof Error) {
             this.onError?.(new Error(`Error computing flag locally: ${flag.key}: ${e}`))
           }
-          fallbackToFlags = true
+          if (evaluationRuntimesMatch(normalizeEvaluationRuntime(flag.evaluation_runtime), 'server')) {
+            fallbackToFlags = true
+          }
         }
       })
     )
@@ -925,7 +927,7 @@ class FeatureFlagsPoller {
   }
 
   /**
-   * Warn about flags whose definition local evaluation cannot resolve.
+   * Warn about server-applicable flags whose definition local evaluation cannot resolve.
    * Called after loading flag definitions when local evaluation is enabled. Each flag is
    * warned about once until its definition changes.
    */
@@ -937,6 +939,10 @@ class FeatureFlagsPoller {
     const warnedFlags = new Map<string, string>()
     const definitions = this.currentDefinitions()
     for (const flag of flags) {
+      // Client-only definitions are retained for server-side bootstrapping.
+      if (!evaluationRuntimesMatch(normalizeEvaluationRuntime(flag.evaluation_runtime), 'server')) {
+        continue
+      }
       const reason = getDefinitionUnresolvedReason(flag, definitions)
       if (!reason) {
         continue

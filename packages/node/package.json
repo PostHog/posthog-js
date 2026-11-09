@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.61.2",
+  "version": "5.63.2",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -16,6 +16,7 @@
     "lint": "oxlint --report-unused-disable-directives-severity error src",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "test:unit": "vitest run",
+    "test:benchmarks": "node --expose-gc --test --test-isolation=none benchmarks/controls.mjs",
     "test:edge-compat": "vitest run --config vitest.edge.config.ts",
     "prebuild": "node ../../tooling/write-version.mjs",
     "build": "rslib build",

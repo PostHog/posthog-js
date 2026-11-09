@@ -1,5 +1,70 @@
 # posthog-node
 
+## 5.63.2
+
+### Patch Changes
+
+- [#5540](https://github.com/PostHog/posthog-js/pull/5540) [`f8e4866`](https://github.com/PostHog/posthog-js/commit/f8e48661baa72fd3586c6e00cde5bcf30fe486ea) Thanks [@andehen](https://github.com/andehen)! - Treat a `/flags` response whose `flags` field is not an object as a failed request instead of throwing a `TypeError`, and report it to `error` event listeners.
+  (2026-11-09)
+
+## 5.63.1
+
+### Patch Changes
+
+- [#5545](https://github.com/PostHog/posthog-js/pull/5545) [`28fe8c0`](https://github.com/PostHog/posthog-js/commit/28fe8c0aa0577db27affcc7445ab72d2a1f6ebb2) Thanks [@onmax](https://github.com/onmax)! - Parse Node stack frames for functions named `async` without a leading parenthesis in the filename.
+  (2026-11-06)
+- Updated dependencies [[`28fe8c0`](https://github.com/PostHog/posthog-js/commit/28fe8c0aa0577db27affcc7445ab72d2a1f6ebb2)]:
+  - @posthog/core@1.64.1
+
+## 5.63.0
+
+### Minor Changes
+
+- [#5580](https://github.com/PostHog/posthog-js/pull/5580) [`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f) Thanks [@haacked](https://github.com/haacked)! - `metrics.histogram()` accepts a `bounds` option that sets the histogram's bucket boundaries, and `beforeSend` sees and can change them. The first sample of a histogram (name and unit) fixes its bounds until the client resets. A later sample with different bounds is recorded in the fixed buckets and logs a warning, and a sample with invalid bounds is dropped. The experimental `posthog.flags.request.duration` histogram now uses the bounds `[50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]` ms, so its p50 and p95 resolve between 50ms and 5s. This changes the metric's buckets, which its experimental status allows.
+  (2026-11-05)
+
+### Patch Changes
+
+- Updated dependencies [[`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f)]:
+  - @posthog/core@1.64.0
+
+## 5.62.0
+
+### Minor Changes
+
+- [#5509](https://github.com/PostHog/posthog-js/pull/5509) [`71c2464`](https://github.com/PostHog/posthog-js/commit/71c24646209d686c39b516c000d3e3412447774b) Thanks [@Silthus](https://github.com/Silthus)! - `posthog.emails.send()` can now send email content your code rendered, such as HTML from React Email. Give the email a `templateKey` and a `subject`, and pass `html`, `text` or both.
+
+  ```ts
+  const posthog = new PostHog("phc_...", { secretKey: "phs_..." });
+
+  const { data, error } = await posthog.emails.send({
+    to: "user@example.com",
+    distinctId: "user_123",
+    templateKey: "password-reset",
+    subject: "Reset your password",
+    html: renderedHtml,
+  });
+  if (error) throw error;
+
+  // 'delivered', 'bounced', ...
+  const { data: status } = await posthog.emails.get(data.id);
+  ```
+
+  You need a project secret API key, the kind that starts with `phs_`. Create one under **Project secret API keys** in your project settings. Set its **Transactional email** scope to Write to send emails, or to Read for a key that only reads statuses. Pass it to the client as `secretKey`. Set `appHost` to your PostHog app URL when you self-host PostHog or send through a reverse proxy.
+
+  PostHog records each email's delivery, opens and clicks on the person with that `distinctId`. It groups every email with the same `templateKey`, so you see their metrics and logs in one place. The SDK retries a request that hits a network error, a rate limit or an outage twice by default. Every send carries an idempotency key, so a retry never sends the email twice. Pass your own `idempotencyKey`, such as `welcome:user_123`, and your job runner's retries are safe too.
+
+  A send with your own content also takes `from`, `replyTo` and `captureEngagement: false`. Set `migratedFrom` on the client to tell PostHog which email provider you moved from. A failed call returns an `EmailError` with PostHog's `code` and the HTTP `statusCode`.
+
+  Docs: [Send transactional emails with Node.js](https://posthog.com/docs/workflows/transactional-emails/node) and the [transactional email overview](https://posthog.com/docs/workflows/transactional-emails). (2026-11-05)
+
+## 5.61.3
+
+### Patch Changes
+
+- [#5532](https://github.com/PostHog/posthog-js/pull/5532) [`88744a9`](https://github.com/PostHog/posthog-js/commit/88744a9945691e8b88c0c9ee7f716ec6b93192af) Thanks [@marandaneto](https://github.com/marandaneto)! - Skip client-only flag warnings and unnecessary server fallback during bulk evaluation.
+  (2026-11-05)
+
 ## 5.61.2
 
 ### Patch Changes

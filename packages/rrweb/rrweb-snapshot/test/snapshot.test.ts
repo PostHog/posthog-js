@@ -14,7 +14,7 @@ import snapshot, {
   serializeNodeWithId,
   onceLinkStylesheetUpToDate,
 } from '../src/snapshot';
-import { elementNode, serializedNodeWithId } from '../src/types';
+import { elementNode, serializedNodeWithId, NodeType } from '../src/types';
 import { Mirror, absolutifyURLs } from '../src/utils';
 
 const serializeNode = (node: Node): serializedNodeWithId | null => {
@@ -88,6 +88,38 @@ describe('absolute url to stylesheet', () => {
     expect(absolutifyURLs('url("../a.jpg")', href)).toEqual(
       `url("http://localhost/a.jpg")`,
     );
+  });
+
+  it.each(['', "'", '"'])(
+    'preserves fragment path segments and ignores the base fragment (quote: %s)',
+    (quote) => {
+      expect(
+        absolutifyURLs(
+          `url(${quote}../icons.svg#icons/../check${quote})`,
+          href + '#route/details',
+        ),
+      ).toBe(`url(${quote}http://localhost/icons.svg#icons/../check${quote})`);
+    },
+  );
+
+  it('preserves fragments in inline style URLs', () => {
+    const dom = new JSDOM('', {
+      url: 'https://example.com/app/page#/settings/profile',
+    });
+    try {
+      expect(
+        transformAttribute(
+          dom.window.document,
+          'div',
+          'style',
+          'background-image: url(./icons.svg#icons/../check)',
+        ),
+      ).toBe(
+        'background-image: url(https://example.com/app/icons.svg#icons/../check)',
+      );
+    } finally {
+      dom.window.close();
+    }
   });
 
   it('can handle absolute path', () => {
@@ -263,6 +295,92 @@ describe('scrollTop/scrollLeft', () => {
         rr_scrollLeft: 20,
       },
     });
+  });
+});
+
+describe('CDATA text content', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  const createCDATA = (masked = false) => {
+    const xml = document.implementation.createDocument(null, 'root');
+    const node = xml.createCDATASection('private <value>');
+    const parent = document.createElement('div');
+    if (masked) parent.className = 'maskmask';
+    parent.appendChild(node);
+    document.body.appendChild(parent);
+    return node;
+  };
+
+  it('preserves CDATA content as a text record for older readers', () => {
+    expect(serializeNode(createCDATA())).toMatchObject({
+      type: NodeType.Text,
+      textContent: 'private <value>',
+    });
+  });
+
+  it('applies the existing text masking rules to CDATA', () => {
+    expect(serializeNode(createCDATA(true))).toMatchObject({
+      type: NodeType.Text,
+      textContent: '******* *******',
+    });
+  });
+
+  it('keeps imported SVG CDATA script source out of snapshots', () => {
+    const svg = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg"><script type="application/json">' +
+        '<![CDATA[{"email":"cdata-private@example.invalid"}]]></script></svg>',
+      'image/svg+xml',
+    );
+    const imported = svg.documentElement;
+    document.body.appendChild(imported);
+    expect(imported.querySelector('script')!.firstChild!.nodeType).toBe(
+      Node.CDATA_SECTION_NODE,
+    );
+    expect(
+      JSON.stringify(snapshot(document, { slimDOM: false })),
+    ).not.toContain('cdata-private@example.invalid');
+  });
+
+  it.each(['HTML', 'SVG'])('suppresses %s script text and CDATA', (type) => {
+    const xml = document.implementation.createDocument(null, 'root');
+    const script =
+      type === 'HTML'
+        ? document.createElement('script')
+        : document.createElementNS('http://www.w3.org/2000/svg', 'script');
+    script.setAttribute('type', 'application/json');
+    script.append(
+      document.createTextNode('private text'),
+      xml.createCDATASection('private CDATA'),
+    );
+    document.body.appendChild(script);
+
+    expect(snapshot(script, { slimDOM: false })).toMatchObject({
+      childNodes: [
+        { type: NodeType.Text, textContent: 'SCRIPT_PLACEHOLDER' },
+        { type: NodeType.Text, textContent: 'SCRIPT_PLACEHOLDER' },
+      ],
+    });
+    expect(snapshot(script, { slimDOM: { script: true } })).toBeNull();
+  });
+
+  it('masks and blocks imported SVG CDATA', () => {
+    const svg = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg"><text>' +
+        '<![CDATA[private <value>]]></text></svg>',
+      'image/svg+xml',
+    ).documentElement;
+    document.body.appendChild(svg);
+    svg.setAttribute('class', 'rr-mask');
+    expect(snapshot(svg)).toMatchObject({
+      childNodes: [{ childNodes: [{ textContent: '******* *******' }] }],
+    });
+    expect(snapshot(svg, { maskTextFn: () => 'hidden' })).toMatchObject({
+      childNodes: [{ childNodes: [{ textContent: 'hidden' }] }],
+    });
+    svg.setAttribute('class', 'rr-block');
+    expect(snapshot(svg)).toMatchObject({ childNodes: [] });
   });
 });
 

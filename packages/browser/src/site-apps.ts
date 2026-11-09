@@ -6,7 +6,7 @@ import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 
-const logger = createLogger('[SiteApps]')
+const logger = /* @__PURE__ */ createLogger('[SiteApps]')
 const APP_INIT_ERROR = 'Error while initializing PostHog app with config id '
 
 export class SiteApps implements Extension {

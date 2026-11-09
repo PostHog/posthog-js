@@ -132,7 +132,9 @@ async function handleToolCallRequest(
     })
   }
 
-  const originalTool = resolveOriginalTool(data, toolName)
+  const lookup = lookUpOriginalTool(data, toolName)
+  const originalTool = lookup.registered ? lookup.tool : undefined
+  const hasDispatcher = originalCallToolHandler !== undefined && originalCallToolHandler !== unknownToolHandler
   return await captureToolCall({
     server,
     data,
@@ -145,19 +147,23 @@ async function handleToolCallRequest(
         ? getAnalyticsParameterOwnership(originalTool.inputSchema)
         : undefined,
     inputSchema: originalTool?.inputSchema,
+    isUnknownTool: !!toolName && (!hasDispatcher || lookup.registered === false),
   })
 }
 
-function resolveOriginalTool(
-  data: MCPAnalyticsData,
-  toolName: string | undefined
-): { inputSchema?: unknown } | undefined {
-  if (!toolName || !data.options.resolveOriginalTool) return undefined
+type OriginalToolLookup =
+  | { registered: true; tool: { inputSchema?: unknown } }
+  | { registered: false }
+  | { registered: undefined }
+
+function lookUpOriginalTool(data: MCPAnalyticsData, toolName: string | undefined): OriginalToolLookup {
+  if (!toolName || !data.options.resolveOriginalTool) return { registered: undefined }
   try {
-    return data.options.resolveOriginalTool(toolName) ?? undefined
+    const tool = data.options.resolveOriginalTool(toolName)
+    return tool ? { registered: true, tool } : { registered: false }
   } catch (error) {
     data.logger(`Warning: resolveOriginalTool failed for tool ${toolName} - ${error}`)
-    return undefined
+    return { registered: undefined }
   }
 }
 

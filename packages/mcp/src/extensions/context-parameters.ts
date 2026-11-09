@@ -42,6 +42,7 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
     'context',
     contextDescriptionOverride || DEFAULT_CONTEXT_PARAMETER_DESCRIPTION,
     'context',
+    true,
     logger
   )
 }
