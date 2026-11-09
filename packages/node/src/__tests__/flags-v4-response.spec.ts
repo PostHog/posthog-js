@@ -135,8 +135,8 @@ describe('the /flags?v=4 response', () => {
 
   it('vendors the contract fixtures unchanged from the recorded release', () => {
     const source = load('SOURCE.json')
-    expect(source.release).toBe('1.27.0')
-    expect(source.contract_version).toBe('8.0.0')
+    expect(source.release).toBe('1.29.0')
+    expect(source.contract_version).toBe('9.0.0')
     for (const [name, entry] of Object.entries<any>(source.files)) {
       const digest = createHash('sha256')
         .update(readFileSync(FIXTURES + name))
@@ -222,7 +222,12 @@ describe('the /flags?v=4 response', () => {
 
     it.each(byId(READERS.cases))('reads %s', (_id, testCase) => {
       const response = read(build(READERS, testCase))
-      const { requested_key: key, caller_default: callerDefault, ...expected } = testCase.reader
+      const {
+        requested_key: key,
+        caller_default: callerDefault,
+        legacy_payload: _legacyPayload,
+        ...expected
+      } = testCase.reader
       const detail: FeatureFlagDetail | undefined = response.flags[key]
 
       expect(readerCells(detail && parsedFlagRecordOf(detail), callerDefault)).toEqual(expected)
@@ -231,6 +236,20 @@ describe('the /flags?v=4 response', () => {
         expect(cells).toMatchObject(siblingExpected)
       }
     })
+
+    // `legacy_payload` is the decoded payload the legacy payload getter returns, or `null` for none.
+    it.each(byId(READERS.cases.filter((testCase: any) => 'legacy_payload' in testCase.reader)))(
+      'returns the legacy payload of %s',
+      async (_id, testCase) => {
+        const { requested_key: key, legacy_payload: expected } = testCase.reader
+        const { client } = createClient([build(READERS, testCase)])
+
+        expect((await client.getFeatureFlagPayload(key, 'user-1')) ?? null).toEqual(expected)
+        const snapshot = await client.evaluateFlags('user-1')
+        expect(snapshot.getFlagPayload(key) ?? null).toEqual(expected)
+        await client.shutdown()
+      }
+    )
   })
 
   describe('older records', () => {
@@ -399,6 +418,25 @@ describe('the /flags?v=4 response', () => {
 
       expect(parsedFlagRecordOf(response.flags['garden-layout']).value).toBeNull()
       expect(response.featureFlags['garden-layout']).toBe(false)
+    })
+
+    it.each([
+      ['a payload', { 'metadata.payload': '{"columns":2}' }],
+      ['an object value', { value: { columns: 2 } }],
+    ])('a failed v4 record that carries %s has no payload', async (_carried, overrides) => {
+      const record = v4Record({
+        failed: true,
+        reason: { code: 'missing_dependency', condition_index: null },
+        ...overrides,
+      })
+      const body = { ...envelope({ 'garden-layout': record }), errorsWhileComputingFlags: true }
+      const { client } = createClient([body])
+
+      expect(read(body).featureFlagPayloads).not.toHaveProperty('garden-layout')
+      expect(await client.getFeatureFlagPayload('garden-layout', 'user-1')).toBeNull()
+      const snapshot = await client.evaluateFlags('user-1')
+      expect(snapshot.getFlagPayload('garden-layout')).toBeNull()
+      await client.shutdown()
     })
   })
 

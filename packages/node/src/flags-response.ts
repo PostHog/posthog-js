@@ -218,8 +218,9 @@ function readTypedRecord(key: string, raw: unknown): ReadRecord {
             version: metadata.version,
             description: metadata.description,
             // A number or object value is its own payload; a payload the record also carries
-            // is ignored. Other payloads are kept as sent, like a v2 record's.
-            payload: payload ?? (rawMetadata?.payload as string | undefined),
+            // is ignored. Other payloads are kept as sent, like a v2 record's. A failed record
+            // reads as disabled, so its payload is null, as a failed v2 record's is.
+            payload: (failed ? null : (payload ?? rawMetadata?.payload)) as string | undefined,
             has_experiment: metadata.hasExperiment,
           }
         : undefined,

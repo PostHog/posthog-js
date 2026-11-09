@@ -992,7 +992,10 @@
         "value": "compact",
         "config_version": 1,
         "experiment_exposure": false,
-        "error_code": null
+        "error_code": null,
+        "legacy_payload": {
+          "columns": 2
+        }
       },
       "producer_expected": "valid"
     },
@@ -1018,7 +1021,8 @@
         "value": true,
         "config_version": 1,
         "experiment_exposure": false,
-        "error_code": "GENERAL"
+        "error_code": "GENERAL",
+        "legacy_payload": null
       },
       "producer_expected": "valid"
     },
