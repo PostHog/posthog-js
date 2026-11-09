@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.19.0
+
+### Minor Changes
+
+- [#5625](https://github.com/PostHog/posthog-js/pull/5625) [`a93bee2`](https://github.com/PostHog/posthog-js/commit/a93bee2f32562f0f901c97d89aa8fa7e09b39cf5) Thanks [@tokerson](https://github.com/tokerson)! - Support `openai` 7 alongside 6, and type `embeddings.create` with `encoding_format: 'base64'` as returning base64 strings.
+  (2026-11-09)
+
 ## 8.18.6
 
 ### Patch Changes
