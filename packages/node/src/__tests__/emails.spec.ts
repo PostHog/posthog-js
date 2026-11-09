@@ -124,6 +124,17 @@ describe('emails', () => {
     })
   })
 
+  it('sends the template data each send was called with', async () => {
+    replies = [accepted(), accepted()]
+    const templateData = { name: 'Ada' }
+
+    const toAda = send({ templateData })
+    templateData.name = 'Bob'
+    await Promise.all([toAda, send({ to: 'bob@example.com', templateData })])
+
+    expect(fetch.mock.calls.map(([, options]) => JSON.parse(options.body).message_data.name)).toEqual(['Ada', 'Bob'])
+  })
+
   it.each([
     [
       'html',
@@ -252,9 +263,21 @@ describe('emails', () => {
       expect(sentBody()).toMatchObject({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Hi Ada' })
     })
 
+    it('sends the fields the send was called with, whatever changes while it renders', async () => {
+      replies = [accepted()]
+      const replyTo = ['support@example.com']
+
+      const pending = sendReact({ react: welcome, replyTo })
+      replyTo.push('someone-else@example.com')
+      await pending
+
+      expect(sentBody()).toMatchObject({ reply_to: ['support@example.com'] })
+    })
+
     it.each([
       ['html beside react', { react: welcome, html: '<p>Hi</p>' }, 'html'],
       ['react that is not an element', { react: '<p>Hi</p>' }, 'react'],
+      ['react shaped like an element', { react: { type: 'p', props: { children: 'Hi' } } }, 'react'],
       [
         'react on the template form',
         { templateKey: undefined, subject: undefined, templateId: TEMPLATE_ID, react: welcome },

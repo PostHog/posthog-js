@@ -105,7 +105,7 @@ export interface EmailSenderHooks {
 }
 
 interface PreparedSend {
-  content: Record<string, unknown>
+  body: string
   react?: EmailReactElement
   idempotencyKey: string
   maxRetries: number
@@ -164,7 +164,7 @@ export class EmailSender implements Emails {
         'no email was sent',
         'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.'
       )
-      const body = safeJsonStringify({ ...prepared.content, ...(await renderReactContent(prepared)) })
+      const body = prepared.react === undefined ? prepared.body : await withRenderedReact(prepared.body, prepared.react)
       const headers = this.headers(secretKey, {
         'Content-Type': 'application/json',
         'Idempotency-Key': prepared.idempotencyKey,
@@ -364,7 +364,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 
   return {
-    content: { ...content, to },
+    body: safeJsonStringify({ ...content, to }),
     react: isReactElement(send.react) ? send.react : undefined,
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
@@ -455,18 +455,27 @@ function checkReactContent(react: unknown, html: unknown): void {
   }
 }
 
+// React 18 and React 19 mark every element with one of these, so a plain { type, props } object isn't one.
+const REACT_ELEMENT_MARKERS: unknown[] = [Symbol.for('react.element'), Symbol.for('react.transitional.element')]
+
 function isReactElement(value: unknown): value is EmailReactElement {
-  return typeof value === 'object' && value !== null && 'type' in value && 'props' in value
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '$$typeof' in value &&
+    REACT_ELEMENT_MARKERS.includes(value.$$typeof) &&
+    'type' in value &&
+    'props' in value
+  )
 }
 
-async function renderReactContent({ content, react }: PreparedSend): Promise<{ html?: string; text?: string }> {
-  if (react === undefined) {
-    return {}
-  }
+/** Adds the rendered html, and text when the send has none, to a body serialized before the render. */
+async function withRenderedReact(body: string, react: EmailReactElement): Promise<string> {
   const { render, toPlainText } = await loadReactRenderer()
+  const fields: Record<string, unknown> = JSON.parse(body)
   try {
     const html = await render(react)
-    return { html, ...(content.text === undefined && { text: toPlainText(html) }) }
+    return safeJsonStringify({ ...fields, html, ...(fields.text === undefined && { text: toPlainText(html) }) })
   } catch (cause) {
     throw new EmailError({
       code: 'react_render_failed',
