@@ -1257,10 +1257,11 @@ type PostHogPluginProps = {
    *
    * This steers the Hermes source map upload only. iOS dSYMs and Android R8 mappings always bind to
    * the release their build creates. The R8 half of that needs the `com.posthog.android` gradle
-   * plugin 1.6.0, which ignores the deprecated `posthog.releaseMode` key. A fresh prebuild injects
-   * that version. With `uploadNativeSymbols` on, an existing literal classpath older than 1.5.0 is
-   * bumped to 1.6.0. Any other older line, whether 1.5.x, older with `uploadNativeSymbols` off, or
-   * variable-driven, is kept: bump it by hand or prebuild with `--clean`.
+   * plugin >= 1.6.0, which ignores the deprecated `posthog.releaseMode` key. With
+   * `uploadNativeSymbols` on, a fresh prebuild injects `POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION`, and
+   * an existing literal classpath below `POSTHOG_ANDROID_GRADLE_PLUGIN_NATIVE_SYMBOLS_VERSION` is
+   * bumped to that injected version. Variable-driven classpaths and existing classpaths with
+   * `uploadNativeSymbols` off are kept: bump older versions by hand or prebuild with `--clean`.
    *
    * `event` (the default; still EXPERIMENTAL while the rollout settles) uploads the maps
    * release-independent, and each event resolves its own release from the `$app_namespace` /
