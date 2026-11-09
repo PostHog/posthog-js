@@ -4,6 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { ErrorProperties, Event, McpEvent } from '../types'
+import { MCPAnalyticsEventType } from './event-types'
 import { sanitizeCapturedValue, sanitizeFreeText } from './mcp-payloads'
 
 type SanitizedRecord = Record<string, unknown>
@@ -34,9 +35,13 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
 
   // Every event type, not just `resources/read`: the `$exception` sibling
   // carries the same name, and a tool or prompt name is free text an
-  // application can spell as a URL too.
+  // application can spell as a URL too. An unknown tool's name is whatever the
+  // agent typed, so it also gets the intent's personal-data redaction.
   if (result.resourceName != null) {
-    result.resourceName = sanitizeCapturedValue(result.resourceName) as string
+    result.resourceName =
+      result.eventType === MCPAnalyticsEventType.mcpUnknownTool
+        ? sanitizeFreeText(result.resourceName)
+        : (sanitizeCapturedValue(result.resourceName) as string)
   }
 
   // The intent comes straight from an agent-narrated `context` string, so it can

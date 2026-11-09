@@ -240,6 +240,26 @@ describe('Claude Agent SDK integration', () => {
     }
   })
 
+  it('maps output_tokens_details.thinking_tokens to $ai_reasoning_tokens', async () => {
+    const client = createMockClient()
+    queryMock.mockReturnValue(
+      scriptedQuery([
+        messageStart(),
+        assistantMessage([{ type: 'text', text: 'done' }]),
+        messageDelta({ usage: { output_tokens: 600, output_tokens_details: { thinking_tokens: 512 } } }),
+        messageStop(),
+        resultMessage(),
+      ])
+    )
+
+    const processor = new PostHogClaudeAgentProcessor({ client, distinctId: 'user_123' })
+    await drain(processor.query({ prompt: 'think' }))
+
+    const generation = capturedEvents(client, '$ai_generation')[0].properties
+    expect(generation.$ai_output_tokens).toBe(600)
+    expect(generation.$ai_reasoning_tokens).toBe(512)
+  })
+
   it('captures a generation, a tool span, and a trace for one turn', async () => {
     const client = createMockClient()
     queryMock.mockReturnValue(

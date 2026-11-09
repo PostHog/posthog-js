@@ -81,6 +81,7 @@ import {
   type AppendedIframe,
   getBaseDimension,
   hasShadowRoot,
+  canContainChildren,
   isSerializedIframe,
   getNestedRule,
   getPositionsAndIndex,
@@ -1892,32 +1893,29 @@ export class Replayer {
       }
       // target may be removed with its parents before
       mirror.removeNodeFromMap(target as Node & RRNode);
-      if (parent)
-        try {
-          parent.removeChild(target as Node & RRNode);
-          /**
-           * https://github.com/rrweb-io/rrweb/pull/887
-           * Remove any virtual style rules for stylesheets if a child text node is removed.
-           */
-          if (
-            this.usingVirtualDom &&
-            target.nodeName === '#text' &&
-            parent.nodeName === 'STYLE' &&
-            (parent as RRStyleElement).rules?.length > 0
-          )
-            (parent as RRStyleElement).rules = [];
-        } catch (error) {
-          if (error instanceof DOMException) {
-            this.warn(
-              'parent could not remove child in mutation',
-              parent,
-              target,
-              d,
-            );
-          } else {
-            throw error;
-          }
-        }
+      if (!parent) return;
+      if (parent !== target.parentNode) {
+        return this.warn(
+          canContainChildren(parent)
+            ? 'parent mismatch, cannot be used to remove node in mutation'
+            : 'invalid parent, cannot be used to remove node in mutation',
+          parent,
+          target,
+          d,
+        );
+      }
+      parent.removeChild(target as Node & RRNode);
+      /**
+       * https://github.com/rrweb-io/rrweb/pull/887
+       * Remove any virtual style rules for stylesheets if a child text node is removed.
+       */
+      if (
+        this.usingVirtualDom &&
+        target.nodeName === '#text' &&
+        parent.nodeName === 'STYLE' &&
+        (parent as RRStyleElement).rules?.length > 0
+      )
+        (parent as RRStyleElement).rules = [];
     });
 
     const legacy_missingNodeMap: missingNodeMap = {
@@ -1949,6 +1947,14 @@ export class Replayer {
           (add) => add.node.id === mutation.parentId,
         );
         return parentIdInCurrentBatch ? queue.push(mutation) : undefined;
+      }
+
+      if (!canContainChildren(parent)) {
+        return this.warn(
+          'parent is a leaf node and cannot be used to append new child in mutation',
+          parent,
+          mutation.node,
+        );
       }
 
       if (mutation.node.isShadow) {
@@ -2106,13 +2112,17 @@ export class Replayer {
         )
           parentDoc.removeChild(parentDoc.childNodes[0] as Node & RRNode);
         /**
-         * To detect the exist of the old HTML element before adding a new HTML element.
-         * The reason is similar to the above. One document only allows exactly one DocType and one HTML Element.
+         * To detect the exist of the old root element before adding a new root element.
+         * The reason is similar to the above. One document only allows exactly one DocType and one root Element.
          */
-        if (target.nodeName === 'HTML' && parentDoc.documentElement)
-          parentDoc.removeChild(
-            parentDoc.documentElement as HTMLElement & RRNode,
-          );
+        if (target.nodeType === Node.ELEMENT_NODE) {
+          // RRDocument.documentElement only matches an HTML root, so look up any element child.
+          const existingRoot = Array.from(
+            parentDoc.childNodes as ArrayLike<Node | RRNode>,
+          ).find((child) => child.nodeType === Node.ELEMENT_NODE);
+          if (existingRoot)
+            parentDoc.removeChild(existingRoot as Node & RRNode);
+        }
       }
 
       if (previous && previous.nextSibling && previous.nextSibling.parentNode) {

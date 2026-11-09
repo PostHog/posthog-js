@@ -35,6 +35,7 @@ import {
 } from '@posthog/core'
 import type {
   Metrics,
+  PostHogFeatureFlagDetails,
   Span,
   SpanContextManager,
   StartSpanOptions,
@@ -1640,6 +1641,36 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Treats a `/flags` body whose `flags` field is not an object (for example `null`, a string or
+   * an array) like a failed request. Every remote flag read goes through this method, so callers
+   * get the same fallback, `$feature_flag_error` and `error` event as for a failed request instead of a `TypeError`.
+   */
+  protected override async getFeatureFlagDetailsStateless(
+    distinctId: string,
+    groups: Record<string, string | number> = {},
+    personProperties: Record<string, string> = {},
+    groupProperties: Record<string, Record<string, string>> = {},
+    disableGeoip?: boolean,
+    flagKeysToEvaluate?: string[]
+  ): Promise<PostHogFeatureFlagDetails | undefined> {
+    const details = await super.getFeatureFlagDetailsStateless(
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties,
+      disableGeoip,
+      flagKeysToEvaluate
+    )
+    if (details !== undefined && !isPlainObject(details.flags)) {
+      const message = '/flags response has a non-object `flags` field, treating it as a failed request'
+      this._logger.warn(`[FEATURE FLAGS] ${message}`)
+      this._events.emit('error', new Error(message))
+      return undefined
+    }
+    return details
+  }
+
+  /**
    * Internal method that handles feature flag evaluation with full details.
    * Used by getFeatureFlag, getFeatureFlagPayload, and getFeatureFlagResult.
    *
@@ -1758,7 +1789,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // Fall back to remote evaluation if needed
     if (!flagWasLocallyEvaluated && !onlyEvaluateLocally) {
-      const flagsResponse = await super.getFeatureFlagDetailsStateless(
+      const flagsResponse = await this.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
         personProperties,
@@ -2583,7 +2614,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       Array.from(requestedFlagKeys).some((key) => this.featureFlagsPoller?.featureFlagsByKey[key] === undefined)
     const fallbackToFlags = localResult ? localResult.fallbackToFlags || requestedFlagMissingLocally : true
     if (fallbackToFlags && !onlyEvaluateLocally) {
-      const details = await super.getFeatureFlagDetailsStateless(
+      const details = await this.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
         personProperties,

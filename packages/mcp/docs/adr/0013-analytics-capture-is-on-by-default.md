@@ -1,6 +1,6 @@
 # ADR-0013: Model capture and conversation correlation are on by default
 
-- Status: Accepted. Reverses the opt-in default recorded in ADR-0004's Consequences.
+- Status: Accepted. Reverses the opt-in default recorded in ADR-0004's Consequences. Amended 2026-11-05: `llm_model` is advertised optional, as the sdk-specs MCP spec requires, because an agent that does not know its model would otherwise guess one.
 - Date: 2026-09-15
 
 ## Context
