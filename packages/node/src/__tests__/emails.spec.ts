@@ -272,6 +272,49 @@ describe('emails', () => {
     })
   })
 
+  it.each(['cc', 'bcc'])(
+    "reports a PostHog that doesn't take %s yet as its own refusal, without retrying",
+    async (field) => {
+      const why =
+        "This PostHog version doesn't take the field yet, so it refused the email instead of sending it without it."
+      const fix = 'Send the email without this field, or send it again once PostHog takes the field.'
+      replies = [
+        {
+          status: 400,
+          body: {
+            type: 'validation_error',
+            code: 'field_not_accepted',
+            detail: "PostHog doesn't take this field yet, so it didn't send the email.",
+            attr: field,
+            why,
+            fix,
+          },
+        },
+      ]
+
+      const { data, error } = await posthog.emails.send({
+        to: 'user@example.com',
+        templateKey: 'receipt',
+        subject: 'Your receipt',
+        html: '<p>Thanks</p>',
+        ...COPIES,
+      })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'field_not_accepted',
+        name: 'validation_error',
+        statusCode: 400,
+        field,
+        message: "PostHog doesn't take this field yet, so it didn't send the email.",
+        why,
+        fix,
+      })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(fetch.mock.calls[0][0]).toBe(SEND_URL)
+    }
+  )
+
   describe('attachments', () => {
     const RECEIPT = { to: 'user@example.com', templateKey: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>' }
 
