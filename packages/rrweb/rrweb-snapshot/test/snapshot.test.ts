@@ -406,6 +406,45 @@ describe('form', () => {
   });
 });
 
+describe('select snapshot values', () => {
+  it.each(['blocked', 'empty option', 'no selection'])(
+    'replaces a stale value attribute (%s)',
+    (selection) => {
+      document.body.innerHTML =
+        '<select value="stale-selection-secret">' +
+        '<option value="" selected>Empty</option>' +
+        '<option class="rr-block" value="blocked-selection-secret">Hidden</option></select>';
+      const select = document.querySelector('select')!;
+      select.selectedIndex =
+        selection === 'blocked' ? 1 : selection === 'no selection' ? -1 : 0;
+      const result = snapshot(select, { maskAllInputs: false }) as elementNode;
+      expect(result.attributes.value).toBe('');
+      expect(JSON.stringify(result)).not.toContain('selection-secret');
+    },
+  );
+
+  it('filters blocked selections before calling the input masker', () => {
+    document.body.innerHTML =
+      '<select multiple><option class="rr-block" value="blocked-selection-secret" selected>Hidden</option>' +
+      '<option value="public" selected>Public</option></select>';
+    const select = document.querySelector('select')!;
+    const maskInputFn = vi.fn((value: string) => `masked:${value}`);
+    const result = snapshot(select, {
+      maskAllInputs: { select: true },
+      maskInputFn,
+    }) as elementNode;
+    expect(maskInputFn).toHaveBeenCalledWith('public', select);
+    expect(result.attributes.value).toBe('masked:public');
+    expect(JSON.stringify(result)).not.toContain('blocked-selection-secret');
+  });
+
+  it('preserves non-form SVG elements named select', () => {
+    document.body.innerHTML = '<svg><select value="svg-value" /></svg>';
+    const result = snapshot(document.querySelector('select')!) as elementNode;
+    expect(result.attributes.value).toBe('svg-value');
+  });
+});
+
 describe('attribute masking', () => {
   type AttributeMaskingOptions = {
     maskAllElementAttributes?: boolean;

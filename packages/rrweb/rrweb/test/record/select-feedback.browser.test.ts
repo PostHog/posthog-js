@@ -126,6 +126,62 @@ describe('select review regressions', () => {
   });
 
   for (const blocked of ['option', 'optgroup']) {
+    for (const rule of ['class', 'class regex', 'class regex global', 'selector']) {
+      it.each(['single', 'multiple blocked only', 'multiple mixed'])(
+        `excludes an initially selected blocked ${blocked} (${rule}, %s)`,
+        async (selection) => {
+          const result = await page.evaluate(
+            ({ blocked, rule, selection }) => {
+              const win = window as unknown as TestWindow;
+              document.querySelector('#fixture')!.innerHTML =
+                `<select id="privacy" ${selection === 'single' ? '' : 'multiple'}>` +
+                '<option value="initial-selection-secret" selected>Hidden</option>' +
+                `<option value="public" ${selection === 'multiple mixed' ? 'selected' : ''}>Public</option></select>`;
+              const select = document.querySelector('select')!;
+              const hidden = select.options[0];
+              const target =
+                blocked === 'option'
+                  ? hidden
+                  : document.createElement('optgroup');
+              if (blocked === 'optgroup') {
+                select.prepend(target);
+                target.append(hidden);
+              }
+              if (rule === 'selector') target.setAttribute('data-private', '');
+              else target.className = 'rr-block';
+              hidden.selected = true;
+              win.events = [];
+              win.stop = win.rrweb.record({
+                maskAllInputs: false,
+                blockClass: rule.startsWith('class regex')
+                  ? new RegExp('^rr-block$', rule.endsWith('global') ? 'g' : '')
+                  : 'rr-block',
+                blockSelector: '[data-private]',
+                emit: (event) => win.events.push(event),
+              })!;
+              const meta = win.rrweb.record.mirror.getMeta(select)!;
+              const snapshotValue =
+                meta.type === 2 ? meta.attributes.value : undefined;
+              win.stop();
+              return {
+                value: select.value,
+                payload: JSON.stringify(win.events),
+                snapshotValue,
+              };
+            },
+            { blocked, rule, selection },
+          );
+          expect(result.value).toBe('initial-selection-secret');
+          expect(result.payload).not.toContain('initial-selection-secret');
+          expect(result.snapshotValue).toBe(
+            selection === 'multiple mixed' ? 'public' : '',
+          );
+        },
+      );
+    }
+  }
+
+  for (const blocked of ['option', 'optgroup']) {
     it.each(['class', 'selector'])(
       `does not capture a blocked ${blocked} (%s)`,
       async (rule) => {

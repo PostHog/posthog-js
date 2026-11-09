@@ -980,14 +980,37 @@ function serializeElementNode(
   }
   // form fields
   if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
-    const value = (n as HTMLInputElement | HTMLTextAreaElement).value;
+    const selectedOptions =
+      tagName === 'select'
+        ? (n as HTMLSelectElement).selectedOptions
+        : undefined;
+    const value = selectedOptions
+      ? Array.from(selectedOptions).find((option) => {
+          let ancestor: Element | null = option;
+          while (ancestor && ancestor !== n) {
+            // Preserve stateful regexes for the later child serialization.
+            if (
+              _isBlockedElement(
+                ancestor,
+                typeof blockClass === 'string'
+                  ? blockClass
+                  : new RegExp(blockClass),
+                blockSelector,
+              )
+            )
+              return false;
+            ancestor = dom.parentElement(ancestor);
+          }
+          return true;
+        })?.value || ''
+      : (n as HTMLInputElement | HTMLTextAreaElement).value;
     const checked = (n as HTMLInputElement).checked;
     if (
       attributes.type !== 'radio' &&
       attributes.type !== 'checkbox' &&
       attributes.type !== 'submit' &&
       attributes.type !== 'button' &&
-      value
+      (selectedOptions || value)
     ) {
       attributes.value = maskInputValue({
         element: n as HTMLElement,
