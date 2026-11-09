@@ -3,7 +3,7 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { ErrorTracking } from '@posthog/core'
+import type { ErrorTracking, JsonType } from '@posthog/core'
 import type { AnalyticsInjectableJsonSchema } from './extensions/analytics-parameters'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
 import type { BoundedCache, IdentityCache } from './extensions/internal'
@@ -195,12 +195,14 @@ export interface MCPAnalyticsOptions {
   /**
    * Inspect, modify, or drop each event right before it is sent to PostHog
    * (matching posthog-node's `beforeSend`). Receives the fully-built capture
-   * payload — event name, `distinct_id`, and `properties` — and runs once per
-   * emitted event, including the `$exception` sibling of a failed tool call.
+   * payload (event name, `distinct_id`, `properties`, and `options`) and runs
+   * once per emitted event, including the `$exception` sibling of a failed tool call.
+   * An event with no resolved identity arrives with the `process_person_profile: false`
+   * option unless `eventOptions` chose a value.
    *
    * Return the (possibly mutated) event to send it, or `null`/`undefined` to
-   * drop it. Use this to redact sensitive values, add or remove properties, or
-   * suppress specific events. A throw drops that event.
+   * drop it. Use this to redact sensitive values, add or remove properties or
+   * options, or suppress specific events. A throw drops that event.
    */
   beforeSend?: BeforeSendFn
   /**
@@ -233,6 +235,18 @@ export interface MCPAnalyticsOptions {
    * event properties as-is; values must be JSON-serializable.
    */
   eventProperties?: (
+    request: MCPRequestLike,
+    extra?: CompatibleRequestHandlerExtra
+  ) => JsonRecord | null | Promise<JsonRecord | null>
+  /**
+   * Attach posthog-node per-event options, such as `process_person_profile`, on every
+   * auto-captured event, including the `$exception` sibling. Values must be JSON-serializable.
+   * An explicit `process_person_profile` wins over the personless default for sessions with no
+   * resolved identity. A throw is logged and the event is captured without these options.
+   * posthog-node 5 has no per-event options, so there the known options are sent the way that
+   * version reads them, and other keys are dropped.
+   */
+  eventOptions?: (
     request: MCPRequestLike,
     extra?: CompatibleRequestHandlerExtra
   ) => JsonRecord | null | Promise<JsonRecord | null>
@@ -394,6 +408,8 @@ export interface Event {
    */
   errorType?: string
   eventId?: string
+  /** posthog-node per-event options → the payload's `options`. */
+  eventOptions?: Record<string, JsonType>
   eventType: MCPAnalyticsEventType
   groups?: Record<string, string>
   /**
@@ -594,6 +610,11 @@ export interface CaptureEventData {
   event: string
   /** Event properties, spread onto the PostHog event. Values must be JSON-serializable. */
   properties?: JsonRecord
+  /**
+   * posthog-node per-event options for this event, such as `process_person_profile`. An explicit
+   * `process_person_profile` wins over the personless default for sessions with no resolved identity.
+   */
+  eventOptions?: Record<string, JsonType>
 }
 
 /**
@@ -605,9 +626,10 @@ export interface McpCaptureCommon {
   /**
    * Resolved person distinct id (becomes `distinct_id`). Supplying it enables
    * person processing so `$set` lands on a real person; omitting it falls back
-   * to an anonymous capture with person processing off. On posthog-node 6 the
-   * event carries the `process_person_profile: false` option, which a registered
-   * or context option cannot override.
+   * to an anonymous capture with the `process_person_profile: false` option,
+   * which a registered or context option cannot override. Set
+   * `process_person_profile` in {@link McpCaptureCommon.eventOptions} to choose
+   * otherwise.
    */
   distinctId?: string
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
@@ -648,6 +670,12 @@ export interface McpCaptureCommon {
   groups?: Record<string, string>
   /** Extra event properties, spread onto the PostHog event verbatim. */
   properties?: JsonRecord
+  /**
+   * posthog-node per-event options for this event and its `$exception` sibling, such as
+   * `process_person_profile`. An explicit `process_person_profile` wins over the anonymous
+   * default above. The inherited `capture()` keeps posthog-node's own `options` field.
+   */
+  eventOptions?: Record<string, JsonType>
   /** Event timestamp. Defaults to the capture time. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
 }

@@ -2,6 +2,7 @@ import { genkit, z } from 'genkit'
 import { enableTelemetry, flushTracing } from 'genkit/tracing'
 import { PostHog } from 'posthog-node'
 import { PostHogGenkitSpanProcessor } from '../src/genkit'
+import { EVENT_OPTION_CASES, USER_EVENT_OPTIONS, asPostHogNodeMajor, expectUserEventOptions } from './test-utils'
 
 // Genkit sets up OpenTelemetry once per process, so one forwarding processor is registered
 // and each test swaps in the PostHog processor it needs.
@@ -389,9 +390,29 @@ describe('PostHogGenkitSpanProcessor', () => {
       expect(event.distinctId).toBe(event.properties.$ai_trace_id)
       expect(event.groups).toEqual({ company: 'acme' })
       expect(event.properties).toMatchObject({ env: 'test', $process_person_profile: false })
-      expect(event.options).toEqual({ process_person_profile: false })
+      expect(event.options).toBeUndefined()
     }
   })
+
+  it.each(EVENT_OPTION_CASES)(
+    'sends the processor options on posthog-node $major (personless: $personless)',
+    async ({ major, personless }) => {
+      asPostHogNodeMajor(client, major)
+      processor = new PostHogGenkitSpanProcessor({
+        client,
+        distinctId: personless ? undefined : 'user-1',
+        options: USER_EVENT_OPTIONS,
+      })
+
+      await createWeatherFlow()('Paris')
+
+      const events = capturedEvents(client)
+      expect(new Set(events.map((event) => event.event))).toEqual(new Set(['$ai_trace', '$ai_span', '$ai_generation']))
+      for (const event of events) {
+        expectUserEventOptions(event, major, personless)
+      }
+    }
+  )
 
   it('uses the distinct ID from the PostHog context', async () => {
     const posthog = new PostHog('phc_test', { host: 'http://127.0.0.1:9', flushAt: 1000 })

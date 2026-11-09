@@ -202,6 +202,20 @@ Send `$ai_` events with these methods, not `capture()`. PostHog accepts `$ai_` e
 With posthog-node 5, nothing changes: AI events use `capture()` unless `enableFullAiCapture` is set.
 When an `@posthog/ai` integration has no user distinct id, it sends the event under the trace or run id with the option `process_person_profile: false`, so a `registerOptions()` or context `process_person_profile: true` doesn't create a person for each trace. An empty or whitespace-only distinct id counts as missing.
 
+`@posthog/ai` takes per-event options too: `posthogOptions` on each wrapped provider call and on `withTracing()`, and `options` on the LangChain callback handler and the OpenAI Agents, Claude Agent SDK, Google ADK and Genkit integrations.
+An event with no distinct id still has person processing turned off, whatever its options say.
+
+```ts
+await openai.responses.create({
+  model: 'gpt-5-mini',
+  input: 'Hello',
+  posthogDistinctId: 'user_123',
+  posthogOptions: { process_person_profile: false },
+})
+
+const handler = new LangChainCallbackHandler({ client: posthog, options: { process_person_profile: false } })
+```
+
 ## Event options
 
 Capture v1 sends processing options in an `options` object, next to `properties`.
@@ -380,6 +394,8 @@ Upgrade `@posthog/ai` and `@posthog/mcp` to a version that accepts posthog-node 
 These versions accept both posthog-node 5 and 6. If your app does not list `posthog-node` in its own dependencies, upgrading `@posthog/ai` or `@posthog/mcp` can install posthog-node 6. `@posthog/openfeature-node-provider` accepts any posthog-node from 5.21.2, so installing it fresh can install posthog-node 6 too. List `posthog-node` in your dependencies so you choose when to move to 6.
 
 `@posthog/mcp` labels the whole client, as in 5.x: every event that the client you pass to `instrument()` or `PostHogMCP` captures afterwards reports `$lib` `posthog-node-mcp` and the `@posthog/mcp` version. In 6.0 a `$lib` set on the event, in context or with `register()` wins over the label. If your app also captures its own events, give MCP analytics its own client. To find MCP traffic, filter on `$mcp_*` events rather than `$lib`.
+
+`@posthog/mcp` takes per-event options as `eventOptions`, per call or from an `instrument()` callback, and passes them as the event's `options`. Its `beforeSend` hook gets them as `event.options` and can change them. On 6, an MCP event from a session with no resolved identity carries the `process_person_profile: false` option, so a client `before_send` sees the anonymous default there. As a per-event option it wins over a `registerOptions()` or context `process_person_profile`. A `process_person_profile` you set in `eventOptions` wins over the default.
 
 ## posthog-node 5.x support
 

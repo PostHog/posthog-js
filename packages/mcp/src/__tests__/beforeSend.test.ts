@@ -147,4 +147,120 @@ describe('beforeSend option', () => {
     const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
     expect(toolCall.properties.redacted).toBe(true)
   })
+
+  describe('event options', () => {
+    it('sees the anonymous default and the eventOptions callback as options on every payload', async () => {
+      const seen: PostHogCaptureEvent[] = []
+      instrument(server, fakePostHog(), {
+        eventOptions: () => ({ cookieless_mode: true }),
+        beforeSend: (event) => {
+          seen.push(structuredClone(event))
+          return event
+        },
+      })
+
+      await callMissingTodo(client).catch(() => undefined)
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(seen.map((event) => event.event)).toEqual(['$mcp_tool_call', '$exception'])
+      for (const event of seen) {
+        expect(event.options).toEqual({ cookieless_mode: true, process_person_profile: false })
+      }
+    })
+
+    it('sends the options the hook returns', async () => {
+      instrument(server, fakePostHog(), {
+        beforeSend: (event) => {
+          event.options = { ...event.options, product_tour_id: 'tour-1' }
+          return event
+        },
+      })
+
+      await callAddTodo(client)
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(capture.findCapturesByEvent('$mcp_tool_call')[0].options).toEqual({
+        product_tour_id: 'tour-1',
+        process_person_profile: false,
+      })
+    })
+
+    it.each([
+      {
+        name: 'deleting the property turns person processing on',
+        hook: (event: PostHogCaptureEvent) => {
+          delete event.properties.$process_person_profile
+        },
+        expected: undefined,
+      },
+      {
+        name: 'flipping the property turns person processing on',
+        hook: (event: PostHogCaptureEvent) => {
+          event.properties.$process_person_profile = true
+        },
+        expected: { process_person_profile: true },
+      },
+      {
+        name: 'setting the option turns person processing on',
+        hook: (event: PostHogCaptureEvent) => {
+          event.options = { process_person_profile: true }
+        },
+        expected: { process_person_profile: true },
+      },
+      {
+        name: 'the option wins when the hook sets both',
+        hook: (event: PostHogCaptureEvent) => {
+          event.options = { process_person_profile: true }
+          event.properties.$process_person_profile = false
+        },
+        expected: { process_person_profile: true },
+      },
+    ])('on an anonymous call, $name', async ({ hook, expected }) => {
+      instrument(server, fakePostHog(), {
+        beforeSend: (event) => {
+          hook(event)
+          return event
+        },
+      })
+
+      await callAddTodo(client)
+      await new Promise((r) => setTimeout(r, 50))
+
+      const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
+      expect(toolCall.options).toEqual(expected)
+      expect(toolCall.properties).not.toHaveProperty('$process_person_profile')
+    })
+
+    it('honors a hook that sets the property to make an identified call personless', async () => {
+      instrument(server, fakePostHog(), {
+        identify: async () => ({ distinctId: 'user-1' }),
+        beforeSend: (event) => {
+          event.properties.$process_person_profile = false
+          return event
+        },
+      })
+
+      await callAddTodo(client)
+      await new Promise((r) => setTimeout(r, 50))
+
+      const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
+      expect(toolCall.distinct_id).toBe('user-1')
+      expect(toolCall.options).toEqual({ process_person_profile: false })
+    })
+
+    it('lets an eventOptions process_person_profile beat a hook-set property', async () => {
+      instrument(server, fakePostHog(), {
+        eventOptions: () => ({ process_person_profile: true }),
+        beforeSend: (event) => {
+          event.properties.$process_person_profile = false
+          return event
+        },
+      })
+
+      await callAddTodo(client)
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(capture.findCapturesByEvent('$mcp_tool_call')[0].options).toEqual({ process_person_profile: true })
+    })
+  })
 })

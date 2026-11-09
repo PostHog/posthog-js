@@ -319,8 +319,8 @@ describe('concurrent request attribution', () => {
       $session_id: 'ses_b',
       $mcp_client_name: 'client-b',
       $mcp_client_version: '2.0.0',
-      $process_person_profile: false,
     })
+    expect(listings[0].options).toEqual({ process_person_profile: false })
     expect(listings[0].properties.$set).toBeUndefined()
   })
 

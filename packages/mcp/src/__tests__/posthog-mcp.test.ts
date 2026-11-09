@@ -5,6 +5,7 @@ import { getMoreToolsResult, getToolInputProperties, PostHogMCP } from '../index
 import { PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from '../extensions/constants'
 import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import type { PostHogCaptureEvent } from '../extensions/posthog-events'
+import type { FeedbackReport, McpCaptureCommon } from '../types'
 import { deriveSessionIdFromConversation } from '../extensions/session'
 import { MCP_INSTRUCTIONS_KEY } from '../extensions/output-instructions'
 import { EventCapture } from './test-utils'
@@ -85,7 +86,12 @@ describe('PostHogMCP', () => {
     const captureImmediate = vi.spyOn(PostHog.prototype, 'captureImmediate').mockResolvedValue(undefined)
     const client = newClient({ serverBuild: 'abc123' })
     try {
-      client.capture({ distinctId: 'user-123', event: 'custom event', properties: { existing: true } })
+      client.capture({
+        distinctId: 'user-123',
+        event: 'custom event',
+        properties: { existing: true },
+        options: { process_person_profile: false },
+      })
       client.capture({
         distinctId: 'user-123',
         event: 'undefined build event',
@@ -101,6 +107,7 @@ describe('PostHogMCP', () => {
         distinctId: 'user-123',
         event: 'custom event',
         properties: { existing: true, $mcp_server_build: 'abc123' },
+        options: { process_person_profile: false },
       })
       expect(captureEvent).toHaveBeenCalledWith({
         distinctId: 'user-123',
@@ -959,7 +966,8 @@ describe('PostHogMCP', () => {
 
       const payload = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
       expect(payload.distinct_id).toBe('anonymous')
-      expect(payload.properties.$process_person_profile).toBe(false)
+      expect(payload.options).toEqual({ process_person_profile: false })
+      expect(payload.properties).not.toHaveProperty('$process_person_profile')
     })
 
     it('omits $session_id entirely when no session is supplied', async () => {
@@ -968,6 +976,69 @@ describe('PostHogMCP', () => {
 
       const payload = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
       expect(payload.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.SessionId)
+    })
+  })
+
+  describe('eventOptions', () => {
+    const report: FeedbackReport = { feedbackType: 'praise', summary: 'Clear tool names.', extras: {}, raw: {} }
+
+    it.each([
+      {
+        method: 'captureToolCall',
+        capture: (client: PostHogMCP, common: McpCaptureCommon) =>
+          client.captureToolCall({ ...common, toolName: 'execute-sql', isError: true, error: new Error('boom') }),
+        events: ['$mcp_tool_call', '$exception'],
+      },
+      {
+        method: 'captureInitialize',
+        capture: (client: PostHogMCP, common: McpCaptureCommon) => client.captureInitialize(common),
+        events: ['$mcp_initialize'],
+      },
+      {
+        method: 'captureToolsList',
+        capture: (client: PostHogMCP, common: McpCaptureCommon) =>
+          client.captureToolsList({ ...common, isError: true, error: new Error('list failed') }),
+        events: ['$mcp_tools_list', '$exception'],
+      },
+      {
+        method: 'captureMissingCapability',
+        capture: (client: PostHogMCP, common: McpCaptureCommon) =>
+          client.captureMissingCapability({ ...common, context: 'a bulk export tool' }),
+        events: ['$mcp_missing_capability'],
+      },
+      {
+        method: 'captureFeedback',
+        capture: (client: PostHogMCP, common: McpCaptureCommon) => client.captureFeedback({ ...common, report }),
+        events: ['$mcp_feedback'],
+      },
+    ])('$method sends eventOptions on every payload and an explicit choice beats the default', async (row) => {
+      row.capture(posthog, { eventOptions: { product_tour_id: 'tour-1' } })
+      row.capture(posthog, { eventOptions: { product_tour_id: 'tour-2', process_person_profile: true } })
+      await tick()
+
+      const payloads = capture.getCaptures()
+      expect(payloads.map((payload) => payload.event)).toEqual([...row.events, ...row.events])
+      for (const payload of payloads.slice(0, row.events.length)) {
+        expect(payload.options).toEqual({ product_tour_id: 'tour-1', process_person_profile: false })
+      }
+      for (const payload of payloads.slice(row.events.length)) {
+        expect(payload.options).toEqual({ product_tour_id: 'tour-2', process_person_profile: true })
+      }
+      for (const payload of payloads) {
+        expect(payload.properties).not.toHaveProperty('$process_person_profile')
+      }
+    })
+
+    it('sends eventOptions without the anonymous default for an identified call', async () => {
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        distinctId: 'user-123',
+        isError: false,
+        eventOptions: { cookieless_mode: true },
+      })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).options).toEqual({ cookieless_mode: true })
     })
   })
 })

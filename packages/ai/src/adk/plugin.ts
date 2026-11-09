@@ -1,6 +1,7 @@
 import { BasePlugin } from '@google/adk'
 import type { BaseAgent, BaseTool, Context, InvocationContext, LlmRequest, LlmResponse } from '@google/adk'
 import type { Content } from '@google/genai'
+import type { JsonType } from '@posthog/core'
 import type { EventMessage, PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
 import { version } from '../../package.json'
@@ -13,7 +14,7 @@ import {
 } from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import { captureAiGeneration } from '../captureAiGeneration'
-import { captureAiEvent, captureAiEventImmediate, personlessOptions, userDistinctId } from '../captureAiEvent'
+import { captureAiEvent, captureAiEventImmediate, eventOptionFields, userDistinctId } from '../captureAiEvent'
 import { formatAiError } from '../serializeError'
 import type { FormattedContent, FormattedMessage } from '../types'
 import { mapGeminiUsage } from '../gemini/usage'
@@ -47,6 +48,11 @@ export interface PostHogADKPluginOptions {
   groups?: Record<string, string | number>
   /** Extra properties merged into every captured AI event. */
   properties?: Record<string, unknown>
+  /**
+   * Per-event options for posthog-node, such as `{ process_person_profile: false }`, sent with
+   * every event. An event with no distinct id always has person processing turned off.
+   */
+  options?: Record<string, JsonType>
   /** Awaits event delivery instead of batching. Useful in serverless environments. */
   captureImmediate?: boolean
   /** Invoked when the plugin fails to capture an event. Never throws into the model flow. */
@@ -125,6 +131,7 @@ export class PostHogADKPlugin extends BasePlugin {
   private readonly _privacyMode: boolean
   private readonly _groups?: Record<string, string | number>
   private readonly _properties: Record<string, unknown>
+  private readonly _eventOptions?: Record<string, JsonType>
   private readonly _captureImmediate: boolean
   private readonly _onError?: (error: unknown) => void
 
@@ -142,6 +149,7 @@ export class PostHogADKPlugin extends BasePlugin {
     this._privacyMode = options.privacyMode ?? false
     this._groups = options.groups
     this._properties = options.properties ?? {}
+    this._eventOptions = options.options
     this._captureImmediate = options.captureImmediate ?? false
     this._onError = options.onError
   }
@@ -457,6 +465,7 @@ export class PostHogADKPlugin extends BasePlugin {
       stopReason,
       tools: pending?.tools,
       groups: this._groups,
+      options: this._eventOptions,
       privacyMode: this._privacyMode,
       captureImmediate: this._captureImmediate,
       onError: this._onError,
@@ -504,19 +513,18 @@ export class PostHogADKPlugin extends BasePlugin {
     distinctId: string | undefined,
     properties: Record<string, unknown>
   ): Promise<void> {
+    const eventProperties = {
+      $ai_lib: 'posthog-ai',
+      $ai_lib_version: version,
+      $ai_framework: 'google-adk',
+      ...properties,
+      ...this._properties,
+    }
     const message: EventMessage = {
       distinctId: distinctId ?? String(properties.$ai_trace_id),
       event,
-      properties: {
-        $ai_lib: 'posthog-ai',
-        $ai_lib_version: version,
-        $ai_framework: 'google-adk',
-        ...properties,
-        ...this._properties,
-        ...(distinctId ? {} : { $process_person_profile: false }),
-      },
+      ...eventOptionFields(this._client, eventProperties, this._eventOptions, !distinctId),
       groups: this._groups,
-      ...personlessOptions(!distinctId),
     }
 
     if (this._captureImmediate) {

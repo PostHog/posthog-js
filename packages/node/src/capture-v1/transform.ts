@@ -1,14 +1,6 @@
-import type { JsonType, PostHogEventProperties } from '@posthog/core'
+import { EVENT_OPTION_LEGACY_PROPERTIES, type JsonType, type PostHogEventProperties } from '@posthog/core'
 
 import type { V1Event, V1EventOptions } from './types'
-
-/** Legacy property -> the `options` key it fills when the caller left that option unset. */
-const LEGACY_OPTION_PROPERTIES: ReadonlyArray<{ property: string; optionKey: string }> = [
-  { property: '$process_person_profile', optionKey: 'process_person_profile' },
-  { property: '$cookieless_mode', optionKey: 'cookieless_mode' },
-  { property: '$ignore_sent_at', optionKey: 'disable_skew_correction' },
-  { property: '$product_tour_id', optionKey: 'product_tour_id' },
-]
 
 /** Property -> top-level string field; any value that is not a string is dropped. */
 const TOPLEVEL_SENTINELS: ReadonlyArray<{ property: string; field: 'session_id' | 'window_id' }> = [
@@ -100,7 +92,7 @@ export function buildV1Event(message: PostHogEventProperties): V1Event {
   const properties: PostHogEventProperties = { ...sourceProperties }
 
   const options: V1EventOptions = readEventOptions(message.options) ?? {}
-  for (const { property, optionKey } of LEGACY_OPTION_PROPERTIES) {
+  for (const [optionKey, property] of Object.entries(EVENT_OPTION_LEGACY_PROPERTIES)) {
     if (!(property in properties)) {
       continue
     }

@@ -545,6 +545,7 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
     vendorClient: normalizeHeaderString(common.vendorClient),
     timestamp: common.timestamp ?? new Date(),
     properties: common.properties,
+    eventOptions: common.eventOptions,
     groups: common.groups,
   }
   if (common.distinctId) {

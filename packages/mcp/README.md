@@ -223,6 +223,39 @@ const customDispatcherClient = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN,
 Omit `serverBuild` when the deployment does not provide a reliable value.
 `PostHogMCP` also adds the build to custom events from its inherited `capture()` and `captureImmediate()` methods.
 
+### Per-event options (`eventOptions`)
+
+`eventOptions` sets posthog-node per-event options, such as `process_person_profile`, on MCP events.
+Give `instrument()` a callback for every auto-captured event, or pass `eventOptions` per call to
+`analytics.capture()` and to the `PostHogMCP` capture methods. The callback runs only for
+auto-captured events, since `analytics.capture()` has no request to pass it. A failed call's
+`$exception` event gets the same options.
+
+```ts
+const analytics = instrument(server, posthog, {
+  // Process persons for anonymous sessions too
+  eventOptions: (request, extra) => ({ process_person_profile: true }),
+})
+
+await analytics.capture({ event: 'report_exported', eventOptions: { process_person_profile: false } })
+
+posthogMCP.captureToolCall({
+  toolName: 'search_docs',
+  sessionId,
+  eventOptions: { process_person_profile: true },
+})
+```
+
+Events from a session with no resolved identity are personless by default: they carry the
+`process_person_profile: false` option. An explicit `process_person_profile` in `eventOptions` wins
+over that default.
+
+`beforeSend` receives the options as `event.options` and can change them; the SDK sends what it
+returns. On posthog-node 6, the client's own `before_send` sees them too. posthog-node 5 has no
+per-event options, so the SDK sends the known options the way that version reads them and drops
+other keys. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it takes posthog-node's
+`options` field instead of `eventOptions`.
+
 ### What `$mcp_llm_model` records, and when it stays empty
 
 `captureModel` is **on** by default. The SDK records the best model id visible to the
