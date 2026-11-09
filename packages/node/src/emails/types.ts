@@ -42,9 +42,9 @@ interface CodeEmailFields {
   /**
    * Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,
    * bounced) as events on the recipient's person. Defaults to `true`. Turning it off doesn't change
-   * the email: PostHog still adds its open pixel and rewrites links to count opens and clicks.
-   * A project whose admin turned engagement capture off captures nothing, whatever the send asks.
-   * A template made in PostHog follows the project's setting.
+   * the email: PostHog still adds its open pixel to count opens. It never rewrites the email's
+   * links, so it counts no clicks. A project whose admin turned engagement capture off captures
+   * nothing, whatever the send asks. A template made in PostHog follows the project's setting.
    */
   captureEngagement?: boolean
 }
