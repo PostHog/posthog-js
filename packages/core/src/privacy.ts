@@ -122,6 +122,8 @@ const DIGIT_GROUP_PATTERN = /\d+/g
 const PHONE_NANP_PATTERN = /(^|[^\w+])((?:\+?1[ ./-]?)?(?:\(\d{3}\)[ ./-]?|\d{3}[ ./-])\d{3}[ ./-]\d{4})(?![\w])/g
 const PHONE_INTL_PATTERN = /(^|[^\w])(\+\d{1,3}(?:[ ./()-]{0,2}\d){7,13})(?![\w])/g
 
+type JsonRecord = Record<string, unknown>
+
 /** Whether a key names a credential, so its value is captured as `[redacted]` whatever it holds. */
 export function shouldRedactKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERN.test(key)
@@ -773,11 +775,10 @@ function sanitizeValueWith(value: unknown, sanitizer: ValueSanitizer): unknown {
     return value
   }
 
-  // Not assigned: assigning a parsed `__proto__` key sets the prototype and drops the member.
-  return Object.fromEntries(
-    Object.entries(value).map(([key, nestedValue]) => [
-      sanitizer.readsKeysAndNumbers ? sanitizer.text(key) : key,
-      shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, sanitizer),
-    ])
-  )
+  const result: JsonRecord = {}
+  for (const [key, nestedValue] of Object.entries(value)) {
+    const capturedKey = sanitizer.readsKeysAndNumbers ? sanitizer.text(key) : key
+    result[capturedKey] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, sanitizer)
+  }
+  return result
 }

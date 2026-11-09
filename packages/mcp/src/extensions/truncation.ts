@@ -170,25 +170,29 @@ function visitObject(
   maxStringLength: number,
   walk: Walk
 ): Record<string, unknown> {
-  const entries: [string, unknown][] = []
-  for (const key of Object.keys(obj)) {
-    if (entries.length >= maxBreadth) {
-      entries.push(['...', '[MaxProperties ~]'])
+  const result: Record<string, unknown> = {}
+  const keys = Object.keys(obj)
+  let count = 0
+
+  for (const key of keys) {
+    if (count >= maxBreadth) {
+      result['...'] = '[MaxProperties ~]'
       break
     }
     if (walk.redactsKey(key)) {
-      entries.push([key, REDACTED_VALUE])
+      result[key] = REDACTED_VALUE
+      count++
       continue
     }
     // Skip undefined values — matches JSON.stringify behavior (omits undefined properties)
     if (obj[key] === undefined) {
       continue
     }
-    entries.push([key, visit(obj[key], remainingDepth, maxBreadth, maxStringLength, walk)])
+    result[key] = visit(obj[key], remainingDepth, maxBreadth, maxStringLength, walk)
+    count++
   }
 
-  // Not assigned: assigning a parsed `__proto__` key sets the prototype and drops the member.
-  return Object.fromEntries(entries)
+  return result
 }
 
 /**

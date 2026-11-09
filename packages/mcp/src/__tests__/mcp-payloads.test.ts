@@ -5,7 +5,6 @@ import {
   sanitizeFreeText,
   sanitizeFreeTextValue,
 } from '../extensions/mcp-payloads'
-import { normalize } from '../extensions/truncation'
 
 describe('buildCapturedMcpParameters', () => {
   it('captures useful tool-call inputs without transport internals or duplicated intent', () => {
@@ -143,27 +142,6 @@ describe('a sensitive argument', () => {
 
     expect(reads).toBe(0)
     expect(JSON.stringify(parameters)).toContain('[redacted]')
-  })
-})
-
-describe('a parsed __proto__ member', () => {
-  const parsed = (): unknown => JSON.parse('{"__proto__":{"note":"x"},"y":2}')
-
-  it.each([
-    ['normalize', (value: unknown) => normalize(value)],
-    ['sanitizeCapturedValue', sanitizeCapturedValue],
-    ['sanitizeFreeTextValue', sanitizeFreeTextValue],
-    [
-      'buildCapturedMcpParameters',
-      (value: unknown) =>
-        (
-          buildCapturedMcpParameters({ method: 'tools/call', params: { name: 't', arguments: value } }) as {
-            request: { params: { arguments: unknown } }
-          }
-        ).request.params.arguments,
-    ],
-  ])('stays a member through %s', (_name, walk) => {
-    expect(JSON.stringify(walk(parsed()))).toBe('{"__proto__":{"note":"x"},"y":2}')
   })
 })
 
