@@ -10,6 +10,7 @@ import type { BeforeSendFn, Event, McpEvent } from '../types'
 import { log, type LoggerFn } from './logger'
 import { type PostHogCaptureEvent, buildPostHogCaptureEvents } from './posthog-events'
 import { newPrefixedId } from './ids'
+import { McpOtelRecorder, type McpSignals } from './otel'
 import { sanitizeEvent } from './sanitization'
 import { truncateEvent } from './truncation'
 
@@ -35,7 +36,7 @@ export async function processMcpEvent(
   event: McpEvent,
   options: McpCaptureOptions,
   logger: LoggerFn = log
-): Promise<{ event: Event; captures: PostHogCaptureEvent[] } | null> {
+): Promise<{ event: Event; built: PostHogCaptureEvent[]; captures: PostHogCaptureEvent[] } | null> {
   let processed: McpEvent = event
 
   try {
@@ -61,7 +62,7 @@ export async function processMcpEvent(
 
   const captures = await applyBeforeSend(built, options.beforeSend, logger)
 
-  return { event: fullEvent, captures }
+  return { event: fullEvent, built, captures }
 }
 
 /**
@@ -100,10 +101,17 @@ async function applyBeforeSend(
  * `@posthog/ai`).
  */
 export class McpEventSink {
+  readonly #events: boolean
+  readonly #otel: McpOtelRecorder | undefined
+
   constructor(
     private readonly posthog: PostHog,
-    private readonly logger: LoggerFn = log
-  ) {}
+    private readonly logger: LoggerFn = log,
+    signals: McpSignals = 'events'
+  ) {
+    this.#events = signals !== 'otel'
+    this.#otel = signals === 'otel' || signals === 'both' ? new McpOtelRecorder(posthog, logger) : undefined
+  }
 
   /**
    * Errors at any stage are logged and the event is dropped, never re-thrown
@@ -115,7 +123,18 @@ export class McpEventSink {
       return
     }
 
-    const { event: fullEvent, captures } = result
+    const { event: fullEvent, built, captures } = result
+    if (this.#otel) {
+      try {
+        // From the payloads before `beforeSend`, which filters what is sent as events only.
+        this.#otel.record(fullEvent, built.find((c) => c.event.startsWith('$mcp_')))
+      } catch (err) {
+        this.logger(`Failed to record OpenTelemetry signals for ${fullEvent.id}: ${err}`)
+      }
+    }
+    if (!this.#events) {
+      return
+    }
     try {
       for (const captureEvent of captures) {
         // `$groups` is written into `properties` by `buildPostHogCaptureEvents`,

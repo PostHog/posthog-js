@@ -83,7 +83,7 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
       // inherited `posthog-node`. Relabels every event the client sends.
       applyMcpLibIdentity(posthog)
     }
-    const sink = posthog ? new McpEventSink(posthog, logger) : undefined
+    const sink = posthog ? new McpEventSink(posthog, logger, options.signals) : undefined
     const mcpAnalyticsData = buildTrackingData(lowLevelServer, options, sink, logger)
 
     setServerTrackingData(lowLevelServer, mcpAnalyticsData)
@@ -238,6 +238,7 @@ export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
 export { sendFeedbackResult, SEND_FEEDBACK_TOOL_NAME } from './extensions/feedback'
 export { setLogger } from './extensions/logger'
+export type { McpSignals } from './extensions/otel'
 // Re-export the posthog-node client so a single import works:
 //   import { PostHog, instrument } from "@posthog/mcp"
 // posthog-node stays a peer dependency, so this resolves the host app's installed copy.

@@ -52,6 +52,7 @@ import {
   resolveModel,
   setEventModel,
 } from './model-parameters'
+import type { McpSignals } from './otel'
 import { McpEventSink } from './sink'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { deriveSessionIdFromConversation } from './session'
@@ -63,6 +64,12 @@ import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
  * MCP-specific knobs.
  */
 export interface PostHogMCPOptions extends PostHogOptions {
+  /**
+   * Experimental. Which signals each MCP operation sends: `events` (default) sends `$mcp_*` events; `otel` sends
+   * OpenTelemetry metrics (`mcp.server.operation.duration`, `mcp.client.calls`) and one log record per operation;
+   * `both` sends both. Names follow the OpenTelemetry MCP semantic conventions, which may still change.
+   */
+  signals?: McpSignals
   /**
    * Exact server build identifier → `$mcp_server_build`. Use an immutable
    * deployment value such as a Git commit SHA or container image digest. The
@@ -148,7 +155,7 @@ type PreparedToolCallWithConversationState = PreparedToolCall & {
  * ```
  */
 export class PostHogMCP extends PostHog {
-  readonly #sink = new McpEventSink(this)
+  readonly #sink: McpEventSink
 
   // The virtual-tool config lives here (not on the per-call options) so that
   // prepareToolList (inject) and prepareToolCall (detect) always agree.
@@ -165,6 +172,7 @@ export class PostHogMCP extends PostHog {
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     const serverBuild = validateServerBuild(options.serverBuild)
     super(apiKey, options)
+    this.#sink = new McpEventSink(this, log, options.signals)
     this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
     this.#feedbackOptions = resolveCollectFeedbackOptions(options.collectFeedback)
     // Fail fast on a config error (reserved extra key, undeclared extraRequired)
