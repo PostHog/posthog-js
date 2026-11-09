@@ -13,12 +13,15 @@
  *
  * `--source` reads the code from another checkout of this repo, for a release branch that isn't checked out
  * here. The docs/ folder still comes from this checkout.
+ *
+ * `--major` defaults to the package.json major, plus one when a major changeset for the package is pending.
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import readChangesets from '@changesets/read'
 import { Application, ReflectionKind as Kind, ReflectionType } from 'typedoc'
 import { MarkdownPageEvent, MarkdownRendererEvent } from 'typedoc-plugin-markdown'
 
@@ -217,8 +220,14 @@ if (!config || !specs) {
 const pkgDir = path.join(values.source ?? ROOT, 'packages', positionals[0])
 // The getting-started page and the capability map always come from this checkout.
 const docsDir = path.join(ROOT, 'packages', positionals[0], 'docs')
-const declared = Number(JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8')).version.split('.')[0])
-const major = Number(values.major ?? declared)
+const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'))
+const declared = Number(pkg.version.split('.')[0])
+// A branch for the next major keeps the old version until the release applies its major changeset, so a
+// pending one means the code is the next major. It gets the experimental page, and the current pages stay.
+const nextMajor = (await readChangesets(values.source ?? ROOT)).some((c) =>
+    c.releases.some((r) => r.name === pkg.name && r.type === 'major')
+)
+const major = Number(values.major ?? declared + Number(nextMajor))
 
 const app = await Application.bootstrapWithPlugins({
     entryPoints: [path.join(pkgDir, config.entry)],
