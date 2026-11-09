@@ -720,7 +720,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         config,
         this._logger,
         () => this._logContext(),
-        (fn) => fn()
+        (fn) => fn(),
+        undefined,
+        undefined,
+        () => this.disabled || this.optedOut
       )
     }
     return this._logs

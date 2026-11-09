@@ -423,6 +423,7 @@
         "_isBelowMinimumDuration",
         "_isCacheStale",
         "_isConsentTransition",
+        "_isConsentWithdrawn",
         "_isConsoleLogCaptureEnabled",
         "_isConversationsEnabled",
         "_isCurrentTicketResolved",

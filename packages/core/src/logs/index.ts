@@ -64,7 +64,12 @@ export class PostHogLogs {
     // OTLP instrumentation scope name. Overrides the `getLibraryId()` fallback
     // so a host can label a specific capture stream (e.g. 'console' for browser
     // console auto-capture). Defaults to `getLibraryId()` when omitted.
-    private readonly _scopeName?: string
+    private readonly _scopeName?: string,
+    // True once the user has withdrawn consent. Checked before every flush iteration so
+    // queued records are dropped rather than exported, by a timer or a drain under way.
+    // Opt-in: a browser host's `optedOut` also reads true while it shuts down, when the
+    // final flush must still go out, so only a host that separates the two passes this.
+    private readonly _isConsentWithdrawn: () => boolean = () => false
   ) {
     this._maxBufferSize = _config.maxBufferSize
     // Never below the flush trigger: a smaller eviction cap would stop the
@@ -382,7 +387,7 @@ export class PostHogLogs {
    * exported, by a pending timer or by a drain already under way.
    */
   private _discardQueueIfConsentWithdrawn(): boolean {
-    if (!this._instance.optedOut) {
+    if (!this._isConsentWithdrawn()) {
       return false
     }
     if (this._hasQueuedRecords()) {

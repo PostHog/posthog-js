@@ -2303,21 +2303,30 @@ describe('PostHogLogs', () => {
 
 describe('PostHogLogs consent and shared background flush', () => {
   const create = (instance: any, logger: Logger = createMockLogger(), config = resolveForTest()): PostHogLogs =>
-    new PostHogLogs(instance, config, logger, getContextFor(instance), immediateOnReady)
+    new PostHogLogs(
+      instance,
+      config,
+      logger,
+      getContextFor(instance),
+      immediateOnReady,
+      undefined,
+      undefined,
+      () => instance.consentWithdrawn === true
+    )
 
   it('discards queued records instead of exporting them after opt-out', async () => {
     const instance = createMockInstance()
     const logs = create(instance)
     logs.captureLog({ body: 'before opt-out' })
 
-    instance.optedOut = true
+    instance.consentWithdrawn = true
     await logs.flush()
 
     expect(instance._sendLogsBatch).not.toHaveBeenCalled()
     expect(readQueue(instance)).toHaveLength(0)
 
     // Opting back in does not resurrect what was captured before the withdrawal.
-    instance.optedOut = false
+    instance.consentWithdrawn = false
     await logs.flush()
     expect(instance._sendLogsBatch).not.toHaveBeenCalled()
   })
@@ -2338,7 +2347,7 @@ describe('PostHogLogs consent and shared background flush', () => {
 
     const flushing = logs.flush()
     await Promise.resolve()
-    instance.optedOut = true
+    instance.consentWithdrawn = true
     releaseFirst()
     await flushing
 
@@ -2362,7 +2371,7 @@ describe('PostHogLogs consent and shared background flush', () => {
 
     const flushing = logs.flush()
     await Promise.resolve()
-    instance.optedOut = true
+    instance.consentWithdrawn = true
     rejectFirst()
     await flushing
 
@@ -2393,5 +2402,20 @@ describe('PostHogLogs consent and shared background flush', () => {
 
     expect(instance._sendLogsBatch).toHaveBeenCalledTimes(1)
     expect(logger.error).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps flushing a host whose optedOut is only a shutdown gate when no consent callback is given', async () => {
+    const instance = createMockInstance({ optedOut: false })
+    const logs = new PostHogLogs(
+      instance,
+      resolveForTest(),
+      createMockLogger(),
+      getContextFor(instance),
+      immediateOnReady
+    )
+    logs.captureLog({ body: 'final flush' })
+    instance.optedOut = true
+    await logs.flush()
+    expect(instance._sendLogsBatch).toHaveBeenCalledTimes(1)
   })
 })
