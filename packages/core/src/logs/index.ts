@@ -289,9 +289,9 @@ export class PostHogLogs {
     let sentCount = 0
 
     while (queue.length > 0 && sentCount < originalQueueLength) {
-      // Re-checked per batch: a send suspends, so the user can opt out while one
-      // batch is in flight and the batches behind it would still export.
-      if (sentCount > 0 && this._discardQueueIfConsentWithdrawn()) {
+      // Re-checked on every iteration, including a 413 shrink-and-retry that sends no
+      // progress: a send suspends, so the user can opt out while one is in flight.
+      if (this._discardQueueIfConsentWithdrawn()) {
         return
       }
       // Captured per batch, not per flush: a clear that lands between batches leaves

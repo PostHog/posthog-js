@@ -2346,6 +2346,30 @@ describe('PostHogLogs consent and shared background flush', () => {
     expect(readQueue(instance)).toHaveLength(0)
   })
 
+  it('does not retry a 413-rejected batch after the user opts out', async () => {
+    let rejectFirst: () => void = () => {}
+    const instance = createMockInstance({
+      _sendLogsBatch: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            rejectFirst = () => resolve({ kind: 'too-large' })
+          })
+      ),
+    })
+    const logs = create(instance, createMockLogger(), resolveForTest({ maxBatchRecordsPerPost: 4 }))
+    logs.captureLog({ body: 'a' })
+    logs.captureLog({ body: 'b' })
+
+    const flushing = logs.flush()
+    await Promise.resolve()
+    instance.optedOut = true
+    rejectFirst()
+    await flushing
+
+    expect(instance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    expect(readQueue(instance)).toHaveLength(0)
+  })
+
   it('shares one background wrapper across overlapping callers', async () => {
     let failSend: () => void = () => {}
     const instance = createMockInstance({
