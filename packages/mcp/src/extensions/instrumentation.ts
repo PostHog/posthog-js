@@ -32,7 +32,7 @@ import {
   injectConversationIdPromptBack,
   resolveConversationId,
 } from './conversation-id'
-import { stampClientIdentity } from './client-identity'
+import { readHostClientInfo, stampClientIdentity } from './client-identity'
 import { stampTransportIdentity } from './transport-identity'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { captureEvent } from './capture'
@@ -1182,6 +1182,15 @@ export async function handleInitializeRequest(
   }
   if (initializeClientInfo?.version) {
     event.clientVersion = initializeClientInfo.version
+  }
+  // The host's `clientInfo` callback outranks everything, the handshake body
+  // included, so `$mcp_initialize` names the same client as later requests.
+  const hostClientInfo = readHostClientInfo(server, request, extra)
+  if (hostClientInfo?.name) {
+    event.clientName = hostClientInfo.name
+  }
+  if (hostClientInfo?.version) {
+    event.clientVersion = hostClientInfo.version
   }
   stampTransportIdentity(event, extra)
 

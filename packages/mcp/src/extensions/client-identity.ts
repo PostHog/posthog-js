@@ -200,7 +200,7 @@ export function resolveClientIdentity({ request, extra, server }: ClientIdentity
 }
 
 /** The host's `options.clientInfo` callback, which outranks the whole chain. Never throws. */
-function readHostClientInfo(
+export function readHostClientInfo(
   server: MCPServerLike | undefined,
   request: MCPRequestLike,
   extra?: CompatibleRequestHandlerExtra
