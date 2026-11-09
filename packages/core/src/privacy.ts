@@ -104,11 +104,12 @@ const IPV6_PATTERN =
 // 9-digit IDs are never mistaken for an SSN.
 const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
 // A run of >=13 digits optionally grouped by a single space, dot, dash, or
-// slash. This only marks the numeric region; `redactCardInMatch` then looks for
-// the actual card as a run of whole separator-delimited groups that passes Luhn,
-// so an adjacent field such as an expiry (`4111 1111 1111 1111 12/30`) is not
-// absorbed into a failing check that would leak the card.
-const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,}\b/g
+// slash; see `findCardCandidate`. This only marks the numeric region;
+// `redactCardInMatch` then looks for the actual card as a run of whole
+// separator-delimited groups that passes Luhn, so an adjacent field such as an
+// expiry (`4111 1111 1111 1111 12/30`) is not absorbed into a failing check that
+// would leak the card.
+const CARD_SEPARATORS = ' ./-'
 // Matches each separator-delimited digit group inside a card candidate.
 const DIGIT_GROUP_PATTERN = /\d+/g
 // Phone matching is structural rather than "any 10–15 digits", so dates
@@ -123,11 +124,8 @@ const PHONE_INTL_PATTERN = /(^|[^\w])(\+\d{1,3}(?:[ ./()-]{0,2}\d){7,13})(?![\w]
 
 type JsonRecord = Record<string, unknown>
 
-function isRecord(value: unknown): value is JsonRecord {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function shouldRedactKey(key: string): boolean {
+/** Whether a key names a credential, so its value is captured as `[redacted]` whatever it holds. */
+export function shouldRedactKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERN.test(key)
 }
 
@@ -600,6 +598,60 @@ function passesLuhn(digits: string): boolean {
   return sum % 10 === 0
 }
 
+function isDigitAt(text: string, index: number): boolean {
+  const code = text.charCodeAt(index)
+  return code >= 48 && code <= 57
+}
+
+function isWordAt(text: string, index: number): boolean {
+  const code = text.charCodeAt(index)
+  return isDigitAt(text, index) || code === 95 || (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
+}
+
+function digitsEnd(text: string, index: number): number {
+  let end = index
+  while (isDigitAt(text, end)) {
+    end++
+  }
+  return end
+}
+
+/**
+ * Where the next card candidate at or after `from` starts and ends: a run of 13
+ * or more digits in whole groups joined by one space, dot, dash, or slash, with
+ * no word character on either side. The run only marks the numeric region;
+ * {@link redactCardInMatch} finds the cards in it.
+ *
+ * A loop rather than a pattern: a backtracking pattern over a megabyte-long run
+ * of digit groups overflows the stack, and the throw drops the event.
+ */
+function findCardCandidate(text: string, from: number): [start: number, end: number] | null {
+  for (let start = from; start < text.length; start++) {
+    if (!isDigitAt(text, start) || isWordAt(text, start - 1)) {
+      continue
+    }
+    let digits = 0
+    let end = -1
+    let groupStart = start
+    for (;;) {
+      const groupEnd = digitsEnd(text, groupStart)
+      digits += groupEnd - groupStart
+      if (digits >= 13 && !isWordAt(text, groupEnd)) {
+        end = groupEnd
+      }
+      groupStart = groupEnd + 1
+      if (!CARD_SEPARATORS.includes(text.charAt(groupEnd)) || !isDigitAt(text, groupStart)) {
+        break
+      }
+    }
+    if (end >= 0) {
+      return [start, end]
+    }
+    start = groupStart - 1
+  }
+  return null
+}
+
 // A card candidate can span more than one card plus adjacent fields (e.g. an
 // expiry, or a second card). This redacts every card in it: scanning
 // left-to-right over the whole separator-delimited digit groups, at each start it
@@ -639,6 +691,16 @@ function redactCardInMatch(match: string): string {
   return output + match.slice(cursor)
 }
 
+function redactCards(text: string): string {
+  let output = ''
+  let cursor = 0
+  for (let run = findCardCandidate(text, 0); run !== null; run = findCardCandidate(text, run[1])) {
+    output += text.slice(cursor, run[0]) + redactCardInMatch(text.slice(run[0], run[1]))
+    cursor = run[1]
+  }
+  return output + text.slice(cursor)
+}
+
 /**
  * Redacts structured personal identifiers (emails, IP addresses, credit-card
  * numbers, US SSNs, and phone numbers) from a free-text string. Intended for the
@@ -653,7 +715,7 @@ export function redactPii(value: string): string {
   result = result.replace(EMAIL_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV4_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV6_PATTERN, `$1${REDACTED_VALUE}`)
-  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, redactCardInMatch)
+  result = redactCards(result)
   result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
   result = result.replace(PHONE_NANP_PATTERN, `$1${REDACTED_VALUE}`)
   result = result.replace(PHONE_INTL_PATTERN, `$1${REDACTED_VALUE}`)
@@ -661,29 +723,48 @@ export function redactPii(value: string): string {
 }
 
 export function sanitizeCapturedValue(value: unknown, options: TextSanitizationOptions): unknown {
-  return sanitizeValueWith(value, (stringValue) => sanitizeString(stringValue, options))
+  return sanitizeValueWith(value, {
+    text: (stringValue) => sanitizeString(stringValue, options),
+    readsKeysAndNumbers: false,
+  })
 }
 
 /**
  * {@link sanitizeCapturedValue} with the intent-grade string pass
  * ({@link sanitizeFreeText}) on every string leaf, so nested agent-narrated
- * values get structured-PII redaction in the load-bearing order too.
+ * values get structured-PII redaction in the load-bearing order too. Keys and
+ * numbers are read as free text as well, since a value sent as JSON text carries
+ * them: a number that holds an identifier becomes `[redacted]`, so the text
+ * stays valid JSON.
  */
 export function sanitizeFreeTextValue(value: unknown, options: TextSanitizationOptions): unknown {
-  return sanitizeValueWith(value, (stringValue) => sanitizeFreeText(stringValue, options))
+  return sanitizeValueWith(value, {
+    text: (stringValue) => sanitizeFreeText(stringValue, options),
+    readsKeysAndNumbers: true,
+  })
 }
 
-function sanitizeValueWith(value: unknown, sanitizeStringFn: (value: string) => string): unknown {
+interface ValueSanitizer {
+  text: (value: string) => string
+  readsKeysAndNumbers: boolean
+}
+
+function sanitizeValueWith(value: unknown, sanitizer: ValueSanitizer): unknown {
   if (value == null) {
     return value
   }
 
   if (typeof value === 'string') {
-    return sanitizeStringFn(value)
+    return sanitizer.text(value)
+  }
+
+  if (typeof value === 'number' && sanitizer.readsKeysAndNumbers) {
+    const text = String(value)
+    return sanitizer.text(text) === text ? value : REDACTED_VALUE
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => sanitizeValueWith(item, sanitizeStringFn))
+    return value.map((item) => sanitizeValueWith(item, sanitizer))
   }
 
   if (value instanceof Date) {
@@ -696,7 +777,8 @@ function sanitizeValueWith(value: unknown, sanitizeStringFn: (value: string) => 
 
   const result: JsonRecord = {}
   for (const [key, nestedValue] of Object.entries(value)) {
-    result[key] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, sanitizeStringFn)
+    const capturedKey = sanitizer.readsKeysAndNumbers ? sanitizer.text(key) : key
+    result[capturedKey] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, sanitizer)
   }
   return result
 }
