@@ -143,6 +143,27 @@ describe('emails', () => {
     })
   })
 
+  it('sends the options as they were at the call, whatever the caller changes later', async () => {
+    replies = [accepted(), accepted()]
+    const templateData = { name: 'Ada' }
+    const cc = ['finance@example.com']
+
+    const templateSend = send({ templateData })
+    const codeSend = posthog.emails.send({
+      to: 'user@example.com',
+      templateKey: 'receipt',
+      subject: 'Your receipt',
+      html: '<p>Thanks</p>',
+      cc,
+    })
+    templateData.name = 'Changed'
+    cc.push('changed@example.com')
+    await Promise.all([templateSend, codeSend])
+
+    expect(bodyOf(0).message_data).toEqual({ name: 'Ada' })
+    expect(bodyOf(1).cc).toEqual(['finance@example.com'])
+  })
+
   it('never takes the recipient person from the request context', async () => {
     replies = [accepted()]
 
@@ -352,8 +373,8 @@ describe('emails', () => {
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'attachment_upload_failed', statusCode: 400, field: 'attachments__1' })
-      expect(error?.message).toContain(
-        'HTTP 400 BadDigest: The SHA256 you specified did not match the calculated checksum.'
+      expect(error?.message).toBe(
+        "PostHog's file storage refused the upload of attachments__1, so no email was sent. It answered HTTP 400 BadDigest: The SHA256 you specified did not match the calculated checksum."
       )
       expect(requests()).toHaveLength(2)
     })

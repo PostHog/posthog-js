@@ -122,6 +122,11 @@ interface PreparedSend {
   maxRetries: number
 }
 
+interface HashedFile extends AttachmentFile {
+  sha256: string
+  field: string
+}
+
 interface UploadTarget {
   url: string
   headers: Record<string, string>
@@ -226,10 +231,14 @@ export class EmailSender implements Emails {
     if (files.length === 0) {
       return []
     }
-    const hashes = await Promise.all(files.map(({ bytes }) => sha256Hex(bytes)))
-    const firstIndexOf = new Map<string, number>()
-    hashes.forEach((sha256, index) => firstIndexOf.has(sha256) || firstIndexOf.set(sha256, index))
-    const requested = Array.from(firstIndexOf, ([sha256, index]) => ({ sha256, size: files[index].bytes.byteLength }))
+    const hashed = await Promise.all(files.map(hashedFile))
+    const distinct = new Map<string, HashedFile>()
+    for (const file of hashed) {
+      if (!distinct.has(file.sha256)) {
+        distinct.set(file.sha256, file)
+      }
+    }
+    const requested = Array.from(distinct.values(), ({ sha256, bytes }) => ({ sha256, size: bytes.byteLength }))
     const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
     const targets = await this.withRetries(maxRetries, async () =>
       parseUploadsReply(
@@ -237,21 +246,16 @@ export class EmailSender implements Emails {
         requested
       )
     )
-    for (const [sha256, index] of firstIndexOf) {
-      const target = targets.get(sha256)
+    for (const file of distinct.values()) {
+      const target = targets.get(file.sha256)
       if (target) {
-        await this.withRetries(maxRetries, () => this.uploadFile(target, files[index].bytes, `attachments__${index}`))
+        await this.withRetries(maxRetries, () => this.uploadFile(target, file))
       }
     }
-    return files.map((file, index) => ({
-      sha256: hashes[index],
-      filename: file.filename,
-      ...(file.contentType !== undefined && { content_type: file.contentType }),
-      ...(file.contentId !== undefined && { content_id: file.contentId }),
-    }))
+    return hashed.map(attachmentReference)
   }
 
-  private async uploadFile(target: UploadTarget, bytes: Uint8Array<ArrayBuffer>, field: string): Promise<void> {
+  private async uploadFile(target: UploadTarget, { bytes, field }: HashedFile): Promise<void> {
     let reply: Reply
     try {
       reply = await this.request(target.url, 'PUT', target.headers, bytes)
@@ -266,7 +270,7 @@ export class EmailSender implements Emails {
     if (reply.status < 200 || reply.status >= 300) {
       throw new EmailError({
         code: 'attachment_upload_failed',
-        message: `PostHog's file storage refused the upload of ${field}, so no email was sent. It answered HTTP ${reply.status}${storageErrorSummary(reply.text)}.`,
+        message: `PostHog's file storage refused the upload of ${field}, so no email was sent. ${storageAnswer(reply)}`,
         statusCode: reply.status,
         fix: 'Send the email again. Each send asks for new upload URLs.',
         field,
@@ -438,11 +442,15 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 
   return {
-    content: { ...content, to },
+    content: snapshotOf({ ...content, to }),
     files,
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
+}
+
+function snapshotOf(content: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(safeJsonStringify(content))
 }
 
 function isRetryCount(value: unknown): value is number {
@@ -673,6 +681,19 @@ function base64LinesBytes(size: number): number {
   return Math.ceil((Math.ceil(size / 3) * 4 * 78) / 76)
 }
 
+async function hashedFile(file: AttachmentFile, index: number): Promise<HashedFile> {
+  return { ...file, sha256: await sha256Hex(file.bytes), field: `attachments__${index}` }
+}
+
+function attachmentReference({ sha256, filename, contentType, contentId }: HashedFile): Record<string, unknown> {
+  return {
+    sha256,
+    filename,
+    ...(contentType !== undefined && { content_type: contentType }),
+    ...(contentId !== undefined && { content_id: contentId }),
+  }
+}
+
 async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes))
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -839,10 +860,11 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   )
 }
 
-function storageErrorSummary(body: string): string {
+function storageAnswer({ status, text: body }: Reply): string {
   const code = /<Code>([^<]{1,100})<\/Code>/.exec(body)?.[1]
   const message = /<Message>([^<]{1,300})<\/Message>/.exec(body)?.[1]
-  return [code && ` ${code}`, message && `: ${message}`].filter(Boolean).join('')
+  const answer = `It answered HTTP ${status}${code ? ` ${code}` : ''}${message ? `: ${message}` : ''}`
+  return answer.endsWith('.') ? answer : `${answer}.`
 }
 
 function replyError(fields: Record<string, unknown>, status: number, retryAfterMs: number | undefined): EmailError {
