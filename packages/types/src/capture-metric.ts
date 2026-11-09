@@ -30,9 +30,30 @@ export interface CaptureMetricOptions {
     attributes?: MetricAttributes
 }
 
+/** Options accepted by `posthog.metrics.histogram`. */
+export interface HistogramOptions extends CaptureMetricOptions {
+    /**
+     * Upper bucket boundaries, finite and strictly increasing. A value lands in
+     * the first bucket whose boundary is greater than or equal to it, and values
+     * above the last boundary land in an overflow bucket. Defaults to the
+     * OpenTelemetry defaults `[0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000]`.
+     *
+     * The first sample of a histogram (name and unit) fixes its bounds until the
+     * client resets. A later sample that passes different bounds is recorded in
+     * the fixed buckets and logs a warning, once per flush window. A sample with
+     * invalid bounds is dropped with a warning. The client fixes the bounds of at
+     * most `maxSeriesPerFlush` histograms. Past that limit, the client drops samples
+     * of a new histogram that pass bounds other than the defaults, and logs one
+     * warning. Each client fixes bounds on its own. PostHog stores one set of
+     * bounds per histogram series and reads every client's counts against it.
+     * Every client must therefore pass the same bounds for the same histogram.
+     */
+    bounds?: number[]
+}
+
 /**
  * A captured metric as seen by `beforeSend`, before aggregation. Mutating
- * `name`, `value`, `unit`, or `attributes` changes what gets aggregated;
+ * `name`, `value`, `unit`, `attributes`, or `bounds` changes what gets aggregated;
  * returning `null` drops the sample.
  */
 export interface MetricSample {
@@ -41,6 +62,8 @@ export interface MetricSample {
     value: number
     unit?: string
     attributes?: MetricAttributes
+    /** Histogram bucket boundaries. See {@link HistogramOptions.bounds}. Only histograms use them. */
+    bounds?: number[]
 }
 
 /**
@@ -72,7 +95,7 @@ export interface Metrics {
     /** Record the current value of something that goes up and down (queue depth, connections). */
     gauge(name: string, value: number, options?: CaptureMetricOptions): void
     /** Record one observation of a distribution (latency, payload size). */
-    histogram(name: string, value: number, options?: CaptureMetricOptions): void
+    histogram(name: string, value: number, options?: HistogramOptions): void
     /** Send everything aggregated so far without waiting for the flush interval. */
     flush(): Promise<void>
 }

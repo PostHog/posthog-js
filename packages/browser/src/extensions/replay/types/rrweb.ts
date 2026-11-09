@@ -34,6 +34,7 @@ type MaskInputOptions = Partial<{
     textarea: boolean
     select: boolean
     password: boolean
+    hidden: boolean
 }>
 
 // Replication of `MaskInputFn` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`

@@ -83,6 +83,7 @@ export type {
 // Same barrel convention as logs for the user-facing metric types.
 export type {
   CaptureMetricOptions,
+  HistogramOptions,
   MetricAttributes,
   MetricAttributeValue,
   MetricSample,

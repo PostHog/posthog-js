@@ -458,7 +458,9 @@ function buildNode(
         return null;
       }
 
-      return doc.createCDATASection(n.textContent);
+      return doc.createTextNode(
+        n.textContent === SCRIPT_PLACEHOLDER ? '' : n.textContent,
+      );
     case NodeType.Comment:
       return doc.createComment(n.textContent);
     default:
@@ -580,6 +582,11 @@ export function buildNodeWithSN(
         n.type === NodeType.Document &&
         childN.type == NodeType.Element
       ) {
+        // Defensive: a root left over after `doc.open()` throws HierarchyRequestError on append, cause unknown.
+        const existingRoot = (node as Document).documentElement;
+        if (existingRoot) {
+          node.removeChild(existingRoot);
+        }
         const htmlElement = childNode as HTMLElement;
         let body: HTMLBodyElement | null = null;
         htmlElement.childNodes.forEach((child) => {

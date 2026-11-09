@@ -32,6 +32,7 @@ import {
 } from '@posthog/core'
 import type {
   Metrics,
+  PostHogFeatureFlagDetails,
   Span,
   SpanContextManager,
   StartSpanOptions,
@@ -691,9 +692,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * The `posthog.emails` API: sends transactional email from PostHog email templates, and reads
    * the status of each email it sent.
    *
-   * Needs `secretKey`, a project secret API key with the `hog_flow:write` scope. A key with only
-   * `hog_flow:read` can read statuses but not send. Requests go to `appHost`, or to the PostHog
-   * Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and do not reject.
+   * Needs `secretKey`, a project secret API key with the `transactional_email:write` scope (the
+   * "Send transactional email" preset). A key with only `transactional_email:read` can read
+   * statuses but not send. Keys made with `hog_flow:write` still work. Requests go to `appHost`,
+   * or to the PostHog Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and
+   * do not reject.
    * `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
    * and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
    * returns the error `client_closed`.
@@ -726,6 +729,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           appHost: this.options.appHost,
           requestTimeoutMs: positiveNumberOr(this.options.emailRequestTimeoutMs, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS),
           maxRetries: nonNegativeIntegerOr(this.options.emailRequestMaxRetries, DEFAULT_EMAIL_REQUEST_MAX_RETRIES),
+          migratedFrom: this.options.migratedFrom,
         },
         {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
@@ -1531,6 +1535,36 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Treats a `/flags` body whose `flags` field is not an object (for example `null`, a string or
+   * an array) like a failed request. Every remote flag read goes through this method, so callers
+   * get the same fallback, `$feature_flag_error` and `error` event as for a failed request instead of a `TypeError`.
+   */
+  protected override async getFeatureFlagDetailsStateless(
+    distinctId: string,
+    groups: Record<string, string | number> = {},
+    personProperties: Record<string, string> = {},
+    groupProperties: Record<string, Record<string, string>> = {},
+    disableGeoip?: boolean,
+    flagKeysToEvaluate?: string[]
+  ): Promise<PostHogFeatureFlagDetails | undefined> {
+    const details = await super.getFeatureFlagDetailsStateless(
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties,
+      disableGeoip,
+      flagKeysToEvaluate
+    )
+    if (details !== undefined && !isPlainObject(details.flags)) {
+      const message = '/flags response has a non-object `flags` field, treating it as a failed request'
+      this._logger.warn(`[FEATURE FLAGS] ${message}`)
+      this._events.emit('error', new Error(message))
+      return undefined
+    }
+    return details
+  }
+
+  /**
    * Internal method that handles feature flag evaluation with full details.
    * Used by getFeatureFlag, getFeatureFlagPayload, and getFeatureFlagResult.
    *
@@ -1649,7 +1683,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // Fall back to remote evaluation if needed
     if (!flagWasLocallyEvaluated && !onlyEvaluateLocally) {
-      const flagsResponse = await super.getFeatureFlagDetailsStateless(
+      const flagsResponse = await this.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
         personProperties,
@@ -2474,7 +2508,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       Array.from(requestedFlagKeys).some((key) => this.featureFlagsPoller?.featureFlagsByKey[key] === undefined)
     const fallbackToFlags = localResult ? localResult.fallbackToFlags || requestedFlagMissingLocally : true
     if (fallbackToFlags && !onlyEvaluateLocally) {
-      const details = await super.getFeatureFlagDetailsStateless(
+      const details = await this.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
         personProperties,

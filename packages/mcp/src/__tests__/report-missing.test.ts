@@ -48,7 +48,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       const tool = tools.find((t: any) => t.name === GET_MORE_TOOLS)
 
       expect(tool).toBeDefined()
-      expect(tool.description).toContain('Check for additional tools')
+      expect(tool.description).toContain('needs a capability this server does not have')
       expect(tool.inputSchema.required).toContain('context')
     })
 
@@ -152,7 +152,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       const matchingTools = tools.filter((tool: any) => tool.name === GET_MORE_TOOLS)
       expect(matchingTools).toHaveLength(1)
-      expect(matchingTools[0].description).toContain('Check for additional tools')
+      expect(matchingTools[0].description).toContain('needs a capability this server does not have')
 
       const result = await client.request(
         {
