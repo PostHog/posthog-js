@@ -4180,6 +4180,10 @@
           "name": "getSessionReplayDebugProperties"
         },
         {
+          "type": "(language: string | null) => Promise<void>",
+          "name": "setAppLanguage"
+        },
+        {
           "type": "((deviceToken: string, appId: string | null) => Promise<void>) & ((deviceToken: string, appId: string | null) => Promise<void>)",
           "name": "registerPushNotificationToken"
         },

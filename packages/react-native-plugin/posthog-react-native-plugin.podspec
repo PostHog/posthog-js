@@ -69,6 +69,43 @@ Pod::Spec.new do |s|
     requirement: { kind: 'upToNextMinorVersion', minimumVersion: posthog_ios_version },
     products: ['PostHog']
   )
+  # React Native 0.87 and 0.88 build a static `spm_dependency` pod into the shared
+  # products dir and point the app's `-fmodule-map-file` flags at
+  # `<pod>.modulemap`, but the module map is named after the module
+  # (`posthog_react_native_plugin`), not the pod, so the flags keep the old
+  # `<pod>/<module>.modulemap` path and the build fails with "module map file not
+  # found". Rewrite the path with the module name too. React Native fixed this in
+  # 0.89 (https://github.com/facebook/react-native/pull/59182), where there's
+  # nothing left to rewrite.
+  if defined?(::SPMManager) && ::SPMManager.private_method_defined?(:rewrite_aggregate_modulemap_references) &&
+     !defined?(::PostHogReactNativePluginModuleMapFix)
+    module ::PostHogReactNativePluginModuleMapFix
+      private
+
+      def rewrite_aggregate_modulemap_references(installer, pod_names)
+        super
+        pod = installer.pod_targets.find { |target| target.pod_name == 'posthog-react-native-plugin' }
+        return unless pod && pod_names.include?(pod.label)
+
+        old_path = "${PODS_CONFIGURATION_BUILD_DIR}/#{pod.label}/#{pod.product_module_name}.modulemap"
+        new_path = "${PODS_CONFIGURATION_BUILD_DIR}/#{pod.product_module_name}.modulemap"
+        installer.aggregate_targets.each do |aggregate_target|
+          aggregate_target.xcconfigs.each do |config_name, config_file|
+            changed = false
+            %w[OTHER_CFLAGS OTHER_SWIFT_FLAGS].each do |key|
+              value = config_file.attributes[key]
+              next unless value&.include?(old_path)
+
+              config_file.attributes[key] = value.gsub(old_path, new_path)
+              changed = true
+            end
+            config_file.save_as(aggregate_target.xcconfig_path(config_name)) if changed
+          end
+        end
+      end
+    end
+    ::SPMManager.prepend(::PostHogReactNativePluginModuleMapFix)
+  end
   s.swift_versions = "5.3"
 
   install_modules_dependencies(s)

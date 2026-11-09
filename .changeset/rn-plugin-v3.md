@@ -16,7 +16,7 @@ Release `@posthog/react-native-plugin` 3.0. See the [migration guide](https://gi
 - **Breaking:** ignore the experimental iOS session replay option `screenshotModeBackgroundCapture`
 - **Breaking:** send native iOS and Android events (crash reports, fatal JavaScript errors, push notification opens) to capture v1 (`/i/v1/analytics/events`) with `Authorization: Bearer <projectToken>`, replacing any `Authorization` from `requestHeaders` — serve this path on reverse proxies and self-hosted instances
 - **Breaking:** drop native events when a proxy redirects them, other than with a 307 or 308 to the same origin as `host`
-- **Breaking:** report `$locale` on native events as a full language tag with region, such as `de-CH` instead of `de`, and add `$app_language`
+- **Breaking:** report `$locale` on native events as a full language tag with region, such as `de-CH` instead of `de`
 - Always record session replay as masked screenshots on iOS and Android, the mode the plugin already used
 - Accept `projectToken` as well as `apiKey` in `setup()` options on Android
 - Pause iOS native uploads (session replay, native crash reports) while cellular data is turned off for the app, instead of sending requests that fail

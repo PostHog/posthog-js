@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.63.2
+
+### Patch Changes
+
+- [#5540](https://github.com/PostHog/posthog-js/pull/5540) [`f8e4866`](https://github.com/PostHog/posthog-js/commit/f8e48661baa72fd3586c6e00cde5bcf30fe486ea) Thanks [@andehen](https://github.com/andehen)! - Treat a `/flags` response whose `flags` field is not an object as a failed request instead of throwing a `TypeError`, and report it to `error` event listeners.
+  (2026-11-09)
+
 ## 5.63.1
 
 ### Patch Changes
