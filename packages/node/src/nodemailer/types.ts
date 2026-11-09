@@ -10,7 +10,12 @@ export interface PostHogMailOptions {
   template_key?: string
   /** A key derived from what the email is for, such as `order-981-shipped`, so a queue retry can't send it twice. */
   idempotency_key?: string
-  /** Whether PostHog captures the email's engagement events. Defaults to `true`. */
+  /**
+   * Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events on
+   * the recipient's person. Defaults to `true`. Turning it off doesn't change the email: PostHog still adds its open
+   * pixel to count opens. It never rewrites the email's links, so it counts no clicks. A project whose admin turned
+   * engagement capture off captures nothing, whatever the message asks.
+   */
   capture_engagement?: boolean
 }
 
