@@ -45,19 +45,21 @@ Pod::Spec.new do |s|
     end
     # Targets with different platforms or linkage each get their own scoped pod target.
     # Like CocoaPods' resolver, this counts abstract targets that have a platform.
-    targets = podfile.target_definition_list.select do |target|
-      target.platform && target.dependencies.any? { |dependency| dependency.root_name == s.name }
+    plugin_targets = podfile.target_definition_list.select do |target|
+      target.dependencies.any? { |dependency| dependency.root_name == s.name }
     end
+    targets = plugin_targets.select(&:platform)
     if targets.map { |target| [target.platform, target.build_type.to_hash] }.uniq.length > 1
       raise "#{s.name} doesn't support targets with different platforms or `use_frameworks!` linkage: React Native's `spm_dependency` can't add posthog-ios to a scoped pod target. Give #{targets.map(&:name).join(', ')} the same `platform` and `use_frameworks!` in your Podfile."
     end
     # posthog-ios 3.x from CocoaPods defines the same `PostHog` module as the
-    # posthog-ios Swift package, so `pod install` passes but the Xcode build fails.
+    # posthog-ios Swift package, so `pod install` passes but the Xcode build of a
+    # target that has both fails. Targets without the plugin build separately.
     conflict_fixes = {
       'posthog-react-native-session-replay' => "#{s.name} replaces it: uninstall posthog-react-native-session-replay and run `pod install` again.",
       'PostHog' => "Remove `pod 'PostHog'` from your Podfile. If your own native code imports PostHog, add posthog-ios to that target as a Swift package instead."
     }
-    conflict = podfile.target_definition_list.flat_map(&:dependencies).map(&:root_name).find { |name| conflict_fixes.key?(name) }
+    conflict = plugin_targets.flat_map(&:dependencies).map(&:root_name).find { |name| conflict_fixes.key?(name) }
     if conflict
       raise "#{s.name} can't be installed with the `#{conflict}` pod: it brings posthog-ios 3.x, whose `PostHog` module clashes with the posthog-ios 4.x Swift package that #{s.name} uses, and the Xcode build fails with `Redefinition of module 'PostHog'`. #{conflict_fixes[conflict]}"
     end
