@@ -1111,6 +1111,17 @@ function initStyleSheetObserver(
   });
 }
 
+type AdoptedStyleSheetObserver = {
+  stylesheetManager: observerParam['stylesheetManager'] | undefined;
+  previousDescriptor: PropertyDescriptor | undefined;
+  get: PropertyDescriptor['get'];
+};
+
+const adoptedStyleSheetObservers = new WeakMap<
+  NonNullable<PropertyDescriptor['set']>,
+  AdoptedStyleSheetObserver
+>();
+
 export function initAdoptedStyleSheetObserver(
   {
     mirror,
@@ -1152,6 +1163,11 @@ export function initAdoptedStyleSheetObserver(
       //
     };
 
+  const observer: AdoptedStyleSheetObserver = {
+    stylesheetManager,
+    previousDescriptor: ownPropertyDescriptor,
+    get: undefined,
+  };
   const patchedPropertyDescriptor: PropertyDescriptor = {
     configurable: true,
     enumerable: originalPropertyDescriptor.enumerable,
@@ -1191,9 +1207,9 @@ export function initAdoptedStyleSheetObserver(
         }
         throw e;
       }
-      if (hostId !== null && hostId !== -1) {
+      if (observer.stylesheetManager && hostId !== null && hostId !== -1) {
         try {
-          stylesheetManager.adoptStyleSheets(sheets, hostId);
+          observer.stylesheetManager.adoptStyleSheets(sheets, hostId);
         } catch (e) {
           // for safety
         }
@@ -1211,7 +1227,11 @@ export function initAdoptedStyleSheetObserver(
     return () => {};
   }
 
+  observer.get = patchedPropertyDescriptor.get;
+  adoptedStyleSheetObservers.set(patchedPropertyDescriptor.set!, observer);
+
   return callbackWrapper(() => {
+    observer.stylesheetManager = undefined;
     const current = Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets');
     // A later recorder or polyfill may have replaced or locked our hook.
     if (
@@ -1220,8 +1240,21 @@ export function initAdoptedStyleSheetObserver(
       current.set !== patchedPropertyDescriptor.set
     )
       return;
-    if (ownPropertyDescriptor) {
-      Object.defineProperty(host, 'adoptedStyleSheets', ownPropertyDescriptor);
+    let previousDescriptor = ownPropertyDescriptor;
+    while (previousDescriptor?.set) {
+      const previousObserver = adoptedStyleSheetObservers.get(
+        previousDescriptor.set,
+      );
+      if (
+        !previousObserver ||
+        previousObserver.stylesheetManager ||
+        previousObserver.get !== previousDescriptor.get
+      )
+        break;
+      previousDescriptor = previousObserver.previousDescriptor;
+    }
+    if (previousDescriptor) {
+      Object.defineProperty(host, 'adoptedStyleSheets', previousDescriptor);
     } else {
       delete (host as { adoptedStyleSheets?: CSSStyleSheet[] })
         .adoptedStyleSheets;

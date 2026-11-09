@@ -769,6 +769,60 @@ describe('record', function (this: ISuite) {
     },
   );
 
+  it.each(['document', 'shadow root'] as const)(
+    'stops recording adopted stylesheets through a retained %s wrapper',
+    async (kind) => {
+      const result = await ctx.page.evaluate(async (kind) => {
+        const element = document.createElement('div');
+        document.body.appendChild(element);
+        const target =
+          kind === 'document'
+            ? document
+            : element.attachShadow({ mode: 'open' });
+        const span = document.createElement('span');
+        (target === document ? document.body : target).appendChild(span);
+        const events: eventWithTime[] = [];
+        const stop = (window as unknown as IWindow).rrweb.record({
+          emit: (event) => events.push(event),
+        })!;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const hook = Object.getOwnPropertyDescriptor(
+          target,
+          'adoptedStyleSheets',
+        )!;
+        Object.defineProperty(target, 'adoptedStyleSheets', {
+          configurable: true,
+          get: hook.get,
+          set(sheets: CSSStyleSheet[]) {
+            hook.set!.call(this, sheets);
+          },
+        });
+        const activeSheet = new CSSStyleSheet();
+        activeSheet.replaceSync('span { color: rgb(1, 2, 3); }');
+        target.adoptedStyleSheets = [activeSheet];
+        const activeColor = getComputedStyle(span).color;
+        const captured = JSON.stringify(events).includes('rgb(1, 2, 3)');
+        stop();
+        const countAfterStop = events.length;
+        const stoppedSheet = new CSSStyleSheet();
+        stoppedSheet.replaceSync('span { color: rgb(4, 5, 6); }');
+        target.adoptedStyleSheets = [stoppedSheet];
+        return {
+          activeColor,
+          captured,
+          stoppedColor: getComputedStyle(span).color,
+          eventsAfterStop: events.length - countAfterStop,
+        };
+      }, kind);
+      expect(result).toEqual({
+        activeColor: 'rgb(1, 2, 3)',
+        captured: true,
+        stoppedColor: 'rgb(4, 5, 6)',
+        eventsAfterStop: 0,
+      });
+    },
+  );
+
   it('captures consecutive stylesheet replacements', async () => {
     await ctx.page.evaluate(async () => {
       const sheet = new CSSStyleSheet();

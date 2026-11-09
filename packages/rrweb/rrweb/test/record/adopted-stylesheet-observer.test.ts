@@ -51,15 +51,19 @@ describe('initAdoptedStyleSheetObserver()', () => {
     }
   });
 
-  function observe(host: Document | ShadowRoot = document) {
+  function observe(
+    host: Document | ShadowRoot = document,
+    onAdopt = adoptStyleSheets,
+  ) {
     const mirror = { getId: () => HOST_ID } as unknown as Mirror;
     const stylesheetManager = {
-      adoptStyleSheets,
+      adoptStyleSheets: onAdopt,
     } as unknown as StylesheetManager;
     cleanup = initAdoptedStyleSheetObserver(
       { mirror, stylesheetManager },
       host,
     );
+    return cleanup;
   }
 
   function createHost(kind: 'document' | 'shadow root') {
@@ -189,12 +193,126 @@ describe('initAdoptedStyleSheetObserver()', () => {
     );
   });
 
-  it('can clean up even if its hook becomes non-configurable', () => {
-    const host = createHost('shadow root');
-    observe(host);
-    Object.defineProperty(host, 'adoptedStyleSheets', { configurable: false });
-    expect(() => cleanup?.()).not.toThrow();
-  });
+  it.each(['document', 'shadow root'] as const)(
+    'stops observing a retained wrapper on a %s across restarts',
+    (kind) => {
+      const host = createHost(kind);
+      observe(host);
+      const hook = Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets')!;
+      Object.defineProperty(host, 'adoptedStyleSheets', {
+        configurable: true,
+        get: hook.get,
+        set(sheets: CSSStyleSheet[]) {
+          hook.set!.call(this, sheets);
+        },
+      });
+      const wrapper = Object.getOwnPropertyDescriptor(
+        host,
+        'adoptedStyleSheets',
+      );
+      const sheets = [{} as CSSStyleSheet];
+      host.adoptedStyleSheets = sheets;
+      expect(adoptStyleSheets).toHaveBeenCalledTimes(1);
+      cleanup?.();
+      host.adoptedStyleSheets = sheets;
+      expect(nativeSet).toHaveBeenCalledTimes(2);
+      expect(adoptStyleSheets).toHaveBeenCalledTimes(1);
+      expect(
+        Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets'),
+      ).toEqual(wrapper);
+
+      const restartedAdopt = vi.fn();
+      observe(host, restartedAdopt);
+      host.adoptedStyleSheets = sheets;
+      expect(restartedAdopt).toHaveBeenCalledWith(sheets, HOST_ID);
+      expect(adoptStyleSheets).toHaveBeenCalledTimes(1);
+      cleanup?.();
+      host.adoptedStyleSheets = sheets;
+      expect(nativeSet).toHaveBeenCalledTimes(4);
+      expect(restartedAdopt).toHaveBeenCalledTimes(1);
+      expect(
+        Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets'),
+      ).toEqual(wrapper);
+    },
+  );
+
+  it.each(['document', 'shadow root'] as const)(
+    'stops observing a locked hook on a %s',
+    (kind) => {
+      const host = createHost(kind);
+      observe(host);
+      Object.defineProperty(host, 'adoptedStyleSheets', {
+        configurable: false,
+      });
+      expect(() => cleanup?.()).not.toThrow();
+      host.adoptedStyleSheets = [];
+      expect(nativeSet).toHaveBeenCalledTimes(1);
+      expect(adoptStyleSheets).not.toHaveBeenCalled();
+    },
+  );
+
+  describe.each(['document', 'shadow root'] as const)(
+    '%s with overlapping observers',
+    (kind) => {
+      it.each([
+        { ownAccessor: false, firstToStop: 0 },
+        { ownAccessor: false, firstToStop: 1 },
+        { ownAccessor: true, firstToStop: 0 },
+        { ownAccessor: true, firstToStop: 1 },
+      ])(
+        'restores the original descriptor with $ownAccessor own accessor and observer $firstToStop stopping first',
+        ({ ownAccessor, firstToStop }) => {
+          const host = createHost(kind);
+          if (ownAccessor) {
+            Object.defineProperty(host, 'adoptedStyleSheets', {
+              configurable: true,
+              get: () => [],
+              set: nativeSet,
+            });
+          }
+          const before = Object.getOwnPropertyDescriptor(
+            host,
+            'adoptedStyleSheets',
+          );
+          const adoptions = [vi.fn(), vi.fn()];
+          const stops = adoptions.map((onAdopt) => observe(host, onAdopt));
+          const sheets = [{} as CSSStyleSheet];
+          host.adoptedStyleSheets = sheets;
+          adoptions.forEach((onAdopt) =>
+            expect(onAdopt).toHaveBeenCalledTimes(1),
+          );
+
+          stops[firstToStop]();
+          host.adoptedStyleSheets = sheets;
+          expect(adoptions[firstToStop]).toHaveBeenCalledTimes(1);
+          expect(adoptions[1 - firstToStop]).toHaveBeenCalledTimes(2);
+          stops[1 - firstToStop]();
+          expect(
+            Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets'),
+          ).toEqual(before);
+          host.adoptedStyleSheets = sheets;
+          expect(nativeSet).toHaveBeenCalledTimes(3);
+          expect(adoptions[firstToStop]).toHaveBeenCalledTimes(1);
+          expect(adoptions[1 - firstToStop]).toHaveBeenCalledTimes(2);
+          stops.forEach((stop) => stop());
+          expect(
+            Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets'),
+          ).toEqual(before);
+        },
+      );
+
+      it('skips multiple disposed hooks when the last observer stops', () => {
+        const host = createHost(kind);
+        const stops = [observe(host), observe(host), observe(host)];
+        stops[0]();
+        stops[1]();
+        stops[2]();
+        expect(
+          Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets'),
+        ).toBeUndefined();
+      });
+    },
+  );
 
   it('records adopted stylesheets on a successful assignment', () => {
     observe();
