@@ -54,6 +54,7 @@ describe('select recording and replay', () => {
         select.options[2].selected = true;
         await new Promise((resolve) => setTimeout(resolve, 0));
         const id = record.mirror.getId(select);
+        const optionId = record.mirror.getId(select.options[2]);
         record.addCustomEvent('end', null);
         stop();
         const replayer = new Replayer(events);
@@ -68,6 +69,7 @@ describe('select recording and replay', () => {
         const result = {
           events,
           id,
+          optionId,
           value: select.value,
           replayed: replayed.value,
         };
@@ -83,6 +85,7 @@ describe('select recording and replay', () => {
     );
     expect(result.value).toBe('private');
     expect(result.id).toBeGreaterThan(0);
+    expect(result.optionId).toBeGreaterThan(0);
     expect(result.replayed).toBe(masked ? '' : 'private');
     expect(inputs.map((event) => event.data)).toEqual([
       {
@@ -90,6 +93,7 @@ describe('select recording and replay', () => {
         id: result.id,
         text: masked ? '*******' : 'private',
         isChecked: false,
+        ...(masked ? {} : { selectedOptionIds: [result.optionId] }),
       },
     ]);
   });

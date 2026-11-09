@@ -519,7 +519,7 @@ function initInputObserver({
         value: text,
         maskInputFn,
       });
-    } else if (selectedOptions && (target as HTMLSelectElement).multiple) {
+    } else if (selectedOptions) {
       selectedOptionIds = selectedOptions.map((option) => mirror.getId(option));
     }
     const value: inputValue = { text, isChecked };

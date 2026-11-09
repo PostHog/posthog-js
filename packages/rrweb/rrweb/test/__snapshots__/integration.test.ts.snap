@@ -2623,6 +2623,9 @@ exports[`record integration tests > can record form interactions 1`] = `
       \\"source\\": 5,
       \\"text\\": \\"1\\",
       \\"isChecked\\": false,
+      \\"selectedOptionIds\\": [
+        49
+      ],
       \\"id\\": 47
     }
   }
@@ -4959,6 +4962,9 @@ exports[`record integration tests > can use maskInputOptions to configure which 
       \\"source\\": 5,
       \\"text\\": \\"1\\",
       \\"isChecked\\": false,
+      \\"selectedOptionIds\\": [
+        49
+      ],
       \\"id\\": 47
     }
   }
@@ -13773,6 +13779,9 @@ exports[`record integration tests > should record input userTriggered values if 
       \\"source\\": 5,
       \\"text\\": \\"1\\",
       \\"isChecked\\": false,
+      \\"selectedOptionIds\\": [
+        49
+      ],
       \\"userTriggered\\": false,
       \\"id\\": 47
     }

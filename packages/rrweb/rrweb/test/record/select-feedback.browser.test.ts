@@ -199,6 +199,7 @@ describe('select review regressions', () => {
           expect(result.liveIndices).toEqual([1]);
           expect(result.payload).not.toContain('single-selection-secret');
           expect(result.inputs.map((input) => input.text)).toEqual(['']);
+          expect(result.inputs[0].selectedOptionIds).toEqual([]);
         },
       );
     }
@@ -361,6 +362,141 @@ describe('select review regressions', () => {
     expect(result.inputs[0].userTriggered).toBe(true);
   });
 
+  for (const change of ['redundant', 'replace', 'clear']) {
+    it.each<ReplayMode>(['play', 'seek', 'seek-real'])(
+      `preserves a single selection after ${change} (%s)`,
+      async (mode) => {
+        await page.evaluate((change) => {
+          const win = window as unknown as TestWindow;
+          document.querySelector('#fixture')!.innerHTML =
+            '<select id="privacy"><option value="">Empty</option>' +
+            '<option value="same">First</option><option value="same">Second</option></select>';
+          const select = document.querySelector('select')!;
+          select.selectedIndex = change === 'replace' ? 1 : 2;
+          win.events = [];
+          win.stop = win.rrweb.record({
+            maskAllInputs: false,
+            emit: (event) => win.events.push(event),
+          })!;
+          if (change === 'clear') select.selectedIndex = -1;
+          else select.options[2].selected = true;
+        }, change);
+        const result = await finishReplay(page, mode);
+        const expected = change === 'clear' ? [] : [2];
+        expect(result.liveIndices).toEqual(expected);
+        expect(result.replayIndices).toEqual(expected);
+        expect(result.inputs).toHaveLength(1);
+        expect(result.inputs[0].selectedOptionIds).toEqual(
+          expected.map((index) => result.optionIds[index]),
+        );
+      },
+    );
+  }
+
+  it('deduplicates single selections by option identity, not equal values', async () => {
+    await page.evaluate(async () => {
+      const win = window as unknown as TestWindow;
+      document.querySelector('#fixture')!.innerHTML =
+        '<select id="privacy"><option value="same">First</option>' +
+        '<option value="same" selected>Second</option></select>';
+      const select = document.querySelector('select')!;
+      win.events = [];
+      win.stop = win.rrweb.record({
+        maskAllInputs: false,
+        emit: (event) => win.events.push(event),
+      })!;
+      for (const index of [1, 0, 1, 1]) {
+        select.options[index].selected = true;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    });
+    const result = await finishReplay(page, 'seek');
+    expect(result.liveIndices).toEqual([1]);
+    expect(result.replayIndices).toEqual([1]);
+    expect(result.inputs.map((input) => input.selectedOptionIds)).toEqual(
+      [1, 0, 1].map((index) => [result.optionIds[index]]),
+    );
+  });
+
+  it('restores one selected option without rewriting every option flag', async () => {
+    const result = await page.evaluate(async () => {
+      const win = window as unknown as TestWindow;
+      document.querySelector('#fixture')!.innerHTML =
+        '<select id="privacy"></select>';
+      const source = document.querySelector('select')!;
+      for (let i = 0; i < 100; i++) source.add(new Option(String(i), 'same'));
+      source.selectedIndex = 99;
+      const events: eventWithTime[] = [];
+      const stop = win.rrweb.record({
+        maskAllInputs: false,
+        emit: (event) => events.push(event),
+      })!;
+      source.options[99].selected = true;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      win.rrweb.record.addCustomEvent('end', null);
+      stop();
+      const replayer = new win.rrweb.Replayer(events);
+      const frameWin = replayer.iframe.contentWindow as Window &
+        typeof globalThis;
+      let writes = 0;
+      for (const [prototype, property] of [
+        [frameWin.HTMLOptionElement.prototype, 'selected'],
+        [frameWin.HTMLSelectElement.prototype, 'selectedIndex'],
+      ] as const) {
+        const descriptor = Object.getOwnPropertyDescriptor(
+          prototype,
+          property,
+        )!;
+        Object.defineProperty(prototype, property, {
+          ...descriptor,
+          set(
+            this: HTMLOptionElement | HTMLSelectElement,
+            value: boolean | number,
+          ) {
+            if (this.id === 'privacy' || this.parentElement?.id === 'privacy')
+              writes++;
+            descriptor.set!.call(this, value);
+          },
+        });
+      }
+      replayer.pause(
+        events[events.length - 1].timestamp - events[0].timestamp + 1,
+      );
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      const selectedIndex =
+        replayer.iframe.contentDocument!.querySelector('select')!.selectedIndex;
+      replayer.destroy();
+      return { selectedIndex, writes };
+    });
+    expect(result.selectedIndex).toBe(99);
+    expect(result.writes).toBeLessThanOrEqual(2);
+  });
+
+  it('replays legacy scalar-only single-select input events', async () => {
+    await page.evaluate(() => {
+      const win = window as unknown as TestWindow;
+      document.querySelector('#fixture')!.innerHTML =
+        '<select id="privacy"><option value="a">A</option><option value="b">B</option></select>';
+      win.events = [];
+      win.stop = win.rrweb.record({
+        maskAllInputs: false,
+        emit: (event) => {
+          if (event.type === 3 && event.data.source === 5)
+            delete event.data.selectedOptionIds;
+          win.events.push(event);
+        },
+      })!;
+      document.querySelector('select')!.options[1].selected = true;
+    });
+    const result = await finishReplay(page, 'seek');
+    expect(result.liveIndices).toEqual([1]);
+    expect(result.replayValues).toEqual(['b']);
+    expect(result.inputs).toHaveLength(1);
+    expect(result.inputs[0]).not.toHaveProperty('selectedOptionIds');
+  });
+
   for (const change of ['redundant', 'replace', 'clear', 'duplicate values']) {
     it.each<ReplayMode>(['play', 'seek', 'seek-real'])(
       `preserves a multiple selection after ${change} (%s)`,
@@ -439,31 +575,33 @@ describe('select review regressions', () => {
     expect(result.replayIndices).toEqual([0, 2]);
   });
 
-  it.each<ReplayMode>(['play', 'seek', 'seek-real'])(
-    'does not expose masked multiple selections (%s)',
-    async (mode) => {
-      await page.evaluate(() => {
-        const win = window as unknown as TestWindow;
-        document.querySelector('#fixture')!.innerHTML =
-          '<select id="privacy" multiple><option value="a" selected>A</option>' +
-          '<option value="b">B</option><option value="c" selected>C</option></select>';
-        const select = document.querySelector('select')!;
-        win.events = [];
-        win.stop = win.rrweb.record({
-          maskAllInputs: true,
-          emit: (event) => win.events.push(event),
-        })!;
-        select.options[0].selected = false;
-        select.options[1].selected = true;
-      });
-      const result = await finishReplay(page, mode);
-      expect(result.liveIndices).toEqual([1, 2]);
-      expect(result.replayIndices).toEqual([]);
-      expect(result.inputs).toHaveLength(1);
-      expect(result.inputs[0].text).toBe('*');
-      expect(result.inputs[0]).not.toHaveProperty('selectedOptionIds');
-    },
-  );
+  for (const multiple of [false, true]) {
+    it.each<ReplayMode>(['play', 'seek', 'seek-real'])(
+      `does not expose masked ${multiple ? 'multiple' : 'single'} selections (%s)`,
+      async (mode) => {
+        await page.evaluate((multiple) => {
+          const win = window as unknown as TestWindow;
+          document.querySelector('#fixture')!.innerHTML =
+            `<select id="privacy" ${multiple ? 'multiple' : ''}><option value="a" selected>A</option>` +
+            '<option value="b">B</option><option value="c" selected>C</option></select>';
+          const select = document.querySelector('select')!;
+          win.events = [];
+          win.stop = win.rrweb.record({
+            maskAllInputs: true,
+            emit: (event) => win.events.push(event),
+          })!;
+          select.options[0].selected = false;
+          select.options[1].selected = true;
+        }, multiple);
+        const result = await finishReplay(page, mode);
+        expect(result.liveIndices).toEqual(multiple ? [1, 2] : [1]);
+        expect(result.replayIndices).toEqual([]);
+        expect(result.inputs).toHaveLength(1);
+        expect(result.inputs[0].text).toBe('*');
+        expect(result.inputs[0]).not.toHaveProperty('selectedOptionIds');
+      },
+    );
+  }
 
   it.each(['option', 'optgroup'])(
     'excludes a blocked %s when another option changes',

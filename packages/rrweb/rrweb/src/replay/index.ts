@@ -2480,10 +2480,17 @@ export class Replayer {
     try {
       (target as HTMLInputElement).checked = d.isChecked;
       if (target.nodeName === 'SELECT' && d.selectedOptionIds) {
+        const select = target as HTMLSelectElement;
         const selectedOptionIds = new Set(d.selectedOptionIds);
-        Array.from((target as HTMLSelectElement).options).forEach((option) => {
-          option.selected = selectedOptionIds.has(this.mirror.getId(option));
-        });
+        if (selectedOptionIds.size <= 1) {
+          select.selectedIndex = Array.from(select.options).findIndex((option) =>
+            selectedOptionIds.has(this.mirror.getId(option)),
+          );
+        } else {
+          Array.from(select.options).forEach((option) => {
+            option.selected = selectedOptionIds.has(this.mirror.getId(option));
+          });
+        }
       } else {
         (target as HTMLInputElement).value = d.text;
       }
