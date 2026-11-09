@@ -59,6 +59,51 @@ describe('PostHogMetrics', () => {
     vi.useRealTimers()
   })
 
+  describe('flushCoalesced', () => {
+    it('keeps at most one send in flight and one queued behind it, and sends every sample', async () => {
+      let resolveSend!: (o: SendMetricsBatchOutcome) => void
+      mockInstance._sendMetricsBatch
+        .mockImplementationOnce(() => new Promise<SendMetricsBatchOutcome>((r) => (resolveSend = r)))
+        .mockResolvedValue({ kind: 'ok' })
+      const metrics = createMetrics()
+
+      metrics.count('requests', 1)
+      const first = metrics.flushCoalesced()
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      // Many requests finish while the first send is in flight: they share one queued flush.
+      const queued = [1, 2, 3, 4, 5].map(() => {
+        metrics.count('requests', 1)
+        return metrics.flushCoalesced()
+      })
+      expect(new Set(queued).size).toBe(1)
+
+      resolveSend({ kind: 'ok' })
+      await Promise.all([first, ...queued])
+      expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+      expect(sentMetrics().reduce((sum, m) => sum + m.sum!.dataPoints[0].asDouble!, 0)).toBe(6)
+    })
+
+    it('does not send while a failed send is backing off', async () => {
+      mockInstance._sendMetricsBatch.mockResolvedValueOnce({
+        kind: 'retry-later',
+        error: new Error('429'),
+        retryAfterMs: 300_000,
+      })
+      const metrics = createMetrics()
+      metrics.count('requests', 1)
+      await metrics.flushCoalesced()
+      expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      metrics.count('requests', 1)
+      await metrics.flushCoalesced()
+      await metrics.flushCoalesced()
+      expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('aggregation semantics', () => {
     it('sums count samples for the same series into one delta data point', async () => {
       const metrics = createMetrics()

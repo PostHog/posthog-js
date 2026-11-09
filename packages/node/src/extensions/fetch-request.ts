@@ -25,7 +25,7 @@ export interface InstrumentRequestOptions {
 
 type PostHogForRequests = Pick<
   PostHogBackendClient,
-  'withContext' | 'withSpan' | 'getContext' | 'metrics' | 'apiKey' | 'options'
+  'withContext' | 'withSpan' | 'getContext' | 'metrics' | 'apiKey' | 'options' | '_flushMetricsWithinInvocation'
 >
 
 function headersToRecord(headers: Headers): Record<string, string> {
@@ -184,14 +184,7 @@ async function instrument(
               attributes,
             })
             // Serverless hosts can end the invocation before the metrics flush timer fires.
-            const waitUntil = posthog.options.waitUntil
-            if (waitUntil) {
-              try {
-                waitUntil(posthog.metrics.flush().catch(() => {}))
-              } catch {
-                // waitUntil may throw outside a request context.
-              }
-            }
+            posthog._flushMetricsWithinInvocation()
 
             if (failed) {
               throw thrown

@@ -381,6 +381,23 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return flushPromise
   }
 
+  /**
+   * Hands a metrics flush to `waitUntil` so a serverless invocation does not end before the flush timer fires.
+   * Request-triggered flushes share one queued send and wait out a metrics backoff.
+   * @internal
+   */
+  _flushMetricsWithinInvocation(): void {
+    const waitUntil = this.options.waitUntil
+    if (!waitUntil || !this._metrics) {
+      return
+    }
+    try {
+      waitUntil(this._metrics.flushCoalesced().catch(() => {}))
+    } catch {
+      // waitUntil may throw outside request context
+    }
+  }
+
   private scheduleDebouncedFlush(): void {
     // `waitUntil` is a serverless construct
     // if it doesn't exist, we can skip all the debounce logic and flush as normal

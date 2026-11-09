@@ -150,7 +150,7 @@ describe('fetch request instrumentation', () => {
   it('hands the metrics flush to waitUntil', async () => {
     const waitUntil = vi.fn()
     posthog.options.waitUntil = waitUntil
-    const flush = vi.spyOn(posthog.metrics, 'flush').mockResolvedValue()
+    const flush = vi.spyOn(posthog.metrics as any, 'flushCoalesced').mockResolvedValue(undefined)
     await instrumentRequest(posthog, new Request('http://localhost/x'), () => new Response('ok'))
     expect(flush).toHaveBeenCalled()
     expect(waitUntil).toHaveBeenCalled()
