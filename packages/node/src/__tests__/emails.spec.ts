@@ -1,3 +1,5 @@
+import { createElement, type ReactElement } from 'react'
+
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
@@ -198,6 +200,130 @@ describe('emails', () => {
       ...body,
       to: 'user@example.com',
       distinct_id: 'user_123',
+    })
+  })
+
+  describe('content from a React Email element', () => {
+    const WelcomeMail = ({ firstName }: { firstName: string }): ReactElement =>
+      createElement('html', null, createElement('body', null, createElement('p', null, `Welcome, ${firstName}`)))
+    const welcome = createElement(WelcomeMail, { firstName: 'Ada' })
+
+    const sendReact = (content: Record<string, unknown>): ReturnType<PostHog['emails']['send']> =>
+      posthog.emails.send({
+        to: 'user@example.com',
+        templateKey: 'welcome',
+        subject: 'Welcome',
+        ...content,
+      } as SendEmailOptions)
+
+    const sentBody = (): Record<string, unknown> => JSON.parse(fetch.mock.calls[0][1].body)
+
+    afterEach(() => {
+      vi.doUnmock('@react-email/render')
+    })
+
+    const withoutRenderer = (): void => {
+      vi.doMock('@react-email/render', () => {
+        throw new Error("Cannot find package '@react-email/render'")
+      })
+    }
+
+    it('renders the element into html and text', async () => {
+      replies = [accepted()]
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(sentBody()).toEqual({
+        template_key: 'welcome',
+        subject: 'Welcome',
+        html: expect.stringContaining('<p>Welcome, Ada</p>'),
+        text: 'Welcome, Ada',
+        capture_engagement: true,
+        to: 'user@example.com',
+      })
+    })
+
+    it('keeps the text the caller wrote', async () => {
+      replies = [accepted()]
+
+      await sendReact({ react: welcome, text: 'Hi Ada' })
+
+      expect(sentBody()).toMatchObject({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Hi Ada' })
+    })
+
+    it.each([
+      ['html beside react', { react: welcome, html: '<p>Hi</p>' }, 'html'],
+      ['react that is not an element', { react: '<p>Hi</p>' }, 'react'],
+      [
+        'react on the template form',
+        { templateKey: undefined, subject: undefined, templateId: TEMPLATE_ID, react: welcome },
+        'react',
+      ],
+    ])('refuses %s before rendering or sending', async (_name, content, field) => {
+      const { data, error } = await sendReact(content)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('explains how to send html or react, not both', async () => {
+      const { error } = await sendReact({ react: welcome, html: '<p>Hi</p>' })
+
+      expect({ message: error?.message, fix: error?.fix }).toEqual({
+        message: 'A send with react renders its own html, so it takes no html. No email was sent.',
+        fix: 'Remove html to send the rendered react element, or remove react to send your html.',
+      })
+    })
+
+    it('asks to install @react-email/render when it is missing, and sends nothing', async () => {
+      withoutRenderer()
+
+      const { data, error } = await sendReact({ react: welcome })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'missing_react_renderer',
+        message: "react needs the @react-email/render package, which isn't installed, so no email was sent.",
+        fix: 'Install @react-email/render next to posthog-node, or render the email yourself and send html.',
+      })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('sends html without loading @react-email/render', async () => {
+      withoutRenderer()
+      replies = [accepted()]
+
+      const { error } = await sendReact({ html: '<p>Hi</p>' })
+
+      expect(error).toBeNull()
+      expect(sentBody()).toMatchObject({ html: '<p>Hi</p>' })
+    })
+
+    it('reports a disabled client before it loads @react-email/render', async () => {
+      withoutRenderer()
+      makeClient({ disabled: true })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error?.code).toBe('client_disabled')
+    })
+
+    it('reports an element that fails to render, and sends nothing', async () => {
+      const Broken = (): ReactElement => {
+        throw new Error('firstName is missing')
+      }
+
+      const { data, error } = await sendReact({ react: createElement(Broken) })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        message: 'Rendering the react element failed, so no email was sent.',
+        cause: expect.objectContaining({ message: 'firstName is missing' }),
+      })
+      expect(fetch).not.toHaveBeenCalled()
     })
   })
 

@@ -49,17 +49,39 @@ interface CodeEmailFields {
 }
 
 /**
- * Email content your code rendered, such as React Email output, named by a key. PostHog sends it
- * as is and never stores it. Needs `html`, `text` or both. PostHog derives a missing `text` from
- * the `html`.
+ * A React element, such as `<WelcomeEmail firstName="Ada" />`. Typed by its shape, so
+ * posthog-node needs no React types.
  */
-export type CodeEmailForm = CodeEmailFields & ({ html: string; text?: string } | { html?: string; text: string })
+export interface EmailReactElement {
+  type: unknown
+  props: unknown
+}
+
+/**
+ * Email content from your code, named by a key: `html`, `text` or both, or a `react` element
+ * the client renders. PostHog sends it as is and never stores it. PostHog derives a missing
+ * `text` from the `html`.
+ */
+export type CodeEmailForm = CodeEmailFields &
+  (
+    | { html: string; text?: string; react?: never }
+    | { html?: string; text: string; react?: never }
+    | {
+        /**
+         * A React Email element. The client renders it into `html`, and into `text` when the
+         * send has none. Needs the `@react-email/render` package installed next to posthog-node.
+         */
+        react: EmailReactElement
+        text?: string
+        html?: never
+      }
+  )
 
 type Without<T> = { [K in keyof T]?: never }
 
 export type SendTemplateEmailOptions = SendEmailBase &
   TemplateEmailForm &
-  Without<CodeEmailFields & { html: string; text: string }>
+  Without<CodeEmailFields & { html: string; text: string; react: EmailReactElement }>
 
 export type SendCodeEmailOptions = SendEmailBase & CodeEmailForm & Without<TemplateEmailForm>
 

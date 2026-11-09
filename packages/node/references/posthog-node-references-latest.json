@@ -2070,7 +2070,7 @@
       "name": "CodeEmailForm",
       "properties": [],
       "path": "src/emails/types.ts",
-      "example": "CodeEmailFields & ({\n    html: string;\n    text?: string;\n} | {\n    html?: string;\n    text: string;\n})"
+      "example": "CodeEmailFields & ({\n    html: string;\n    text?: string;\n    react?: never;\n} | {\n    html?: string;\n    text: string;\n    react?: never;\n} | {\n    react: EmailReactElement;\n    text?: string;\n    html?: never;\n})"
     },
     {
       "id": "Coercer",
@@ -2206,6 +2206,21 @@
         }
       ],
       "path": "src/emails/errors.ts"
+    },
+    {
+      "id": "EmailReactElement",
+      "name": "EmailReactElement",
+      "properties": [
+        {
+          "type": "unknown",
+          "name": "props"
+        },
+        {
+          "type": "unknown",
+          "name": "type"
+        }
+      ],
+      "path": "src/emails/types.ts"
     },
     {
       "id": "Emails",
@@ -4557,6 +4572,10 @@
         {
           "type": "never",
           "name": "text"
+        },
+        {
+          "type": "never",
+          "name": "react"
         }
       ],
       "path": "src/emails/types.ts"
