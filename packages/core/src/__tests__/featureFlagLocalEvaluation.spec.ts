@@ -241,6 +241,24 @@ describe('feature flag local evaluation primitives', () => {
       ).toBe(true)
     })
 
+    test.each([
+      ['2025-03-31T12:00:00.000Z', '1m', '2025-02-28T12:00:00.000Z'],
+      ['2024-03-31T12:00:00.000Z', '1m', '2024-02-29T12:00:00.000Z'],
+      ['2025-03-31T12:00:00.000Z', '2m', '2025-01-28T12:00:00.000Z'],
+      ['2025-05-31T12:00:00.000Z', '1m', '2025-04-30T12:00:00.000Z'],
+      ['2025-05-31T12:00:00.000Z', '-4m', '2025-01-28T12:00:00.000Z'],
+      ['2025-01-31T12:00:00.000Z', '1m', '2024-12-31T12:00:00.000Z'],
+      ['2025-03-30T12:00:00.000Z', '13m', '2024-02-28T12:00:00.000Z'],
+      ['2024-02-29T12:00:00.000Z', '1y', '2023-02-28T12:00:00.000Z'],
+      ['2024-02-29T12:00:00.000Z', '4y', '2020-02-28T12:00:00.000Z'],
+      ['2024-03-31T12:00:00.000Z', '4y', '2020-03-31T12:00:00.000Z'],
+      ['2024-02-29T12:00:00.000Z', '0m', '2024-02-29T12:00:00.000Z'],
+      ['2024-02-29T12:00:00.000Z', '0y', '2024-02-29T12:00:00.000Z'],
+    ])('at %s, %s clamps the day after every step', (now, value, expected) => {
+      vi.setSystemTime(new Date(now))
+      expect(relativeDateParseForFeatureFlagMatching(value)).toEqual(new Date(expected))
+    })
+
     test('makes strict and legacy-permissive SemVer parsing an explicit policy', () => {
       expect(() => parseFeatureFlagSemver('01.02.03')).toThrow(InconclusiveMatchError)
       expect(parseFeatureFlagSemver('01.02.03', 'legacy-permissive')).toEqual([1, 2, 3])
