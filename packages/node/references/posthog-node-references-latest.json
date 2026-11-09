@@ -2040,7 +2040,7 @@
       "name": "CodeEmailFields",
       "properties": [
         {
-          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.",
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events on the recipient's person. Defaults to `true`. Turning it off doesn't change the email: PostHog still adds its open pixel to count opens. It never rewrites the email's links, so it counts no clicks. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.",
           "type": "boolean",
           "name": "captureEngagement"
         },
@@ -4546,7 +4546,7 @@
           "name": "replyTo"
         },
         {
-          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.",
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events on the recipient's person. Defaults to `true`. Turning it off doesn't change\nthe email: PostHog still adds its open pixel to count opens. It never rewrites the email's\nlinks, so it counts no clicks. A project whose admin turned engagement capture off captures\nnothing, whatever the send asks. A template made in PostHog follows the project's setting.",
           "type": "never",
           "name": "captureEngagement"
         },
