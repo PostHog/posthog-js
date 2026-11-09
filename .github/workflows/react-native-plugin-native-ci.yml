@@ -128,6 +128,10 @@ jobs:
         with:
           package-name: '@posthog/react-native-plugin'
 
+      - name: Check podspec Podfile guards
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: ruby packages/react-native-plugin/scripts/check-podspec-guards.rb
+
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'
         # --ignore-workspace: the example is excluded from the pnpm workspace,
