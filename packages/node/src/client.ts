@@ -177,6 +177,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _metrics?: PostHogMetrics
   private _traces?: PostHogTraces
   private _logs?: PostHogLogs
+  // One id per client, so processes running the same service write separate metric series.
+  private readonly _instanceId = uuidv7()
   private _captureLogger?: CaptureLogger
   private _spanContext?: SpanContextManager
 
@@ -697,7 +699,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!this._metrics) {
       // Lazy: `this` is the MetricsHost (isDisabled/optedOut/_sendMetricsBatch
       // live on PostHogCoreStateless), so nothing is set up until first use.
-      this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
+      this._metrics = new PostHogMetrics(
+        this,
+        resolveMetricsConfig(this.options.metrics, this.resourceDefaults()),
+        this._logger
+      )
     }
     return this._metrics
   }
@@ -712,7 +718,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           (this.hostResourceAttributes()['service.name'] as string | undefined) ||
           this.options.traces?.serviceName ||
           this.options.metrics?.serviceName,
-        hostResourceAttributes: this.hostResourceAttributes(),
+        hostResourceAttributes: this.resourceDefaults(),
       })
       this._logs = new PostHogLogs(
         this,
@@ -867,6 +873,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * The resource attributes metrics, logs and traces start from: the host's, plus a `service.instance.id` unique to
+   * this client (OpenTelemetry expects one per instance). Without it every process of a service writes into the same
+   * metric series. A `service.instance.id` in a signal's `resourceAttributes` wins.
+   */
+  private resourceDefaults(): Record<string, string> {
+    return { 'service.instance.id': this._instanceId, ...this.hostResourceAttributes() }
+  }
+
+  /**
    * Active-span tracking, built on first use. Lives on the client rather than
    * on the traces pipeline because a client with tracing off still activates a
    * pass-through span, so it needs the same store the pipeline would use.
@@ -889,7 +904,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!this._traces) {
       this._traces = new PostHogTraces(
         this,
-        resolveTracesConfig(this.options.traces, this.hostResourceAttributes(), this._logger),
+        resolveTracesConfig(this.options.traces, this.resourceDefaults(), this._logger),
         this._logger,
         () => this._tracingContext(),
         this._spanContextManager,
