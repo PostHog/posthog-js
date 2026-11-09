@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.447.4
+
+### Patch Changes
+
+- [#5433](https://github.com/PostHog/posthog-js/pull/5433) [`7ceaa14`](https://github.com/PostHog/posthog-js/commit/7ceaa141efb9b5b5d036621eaff537ccef7da915) Thanks [@ioannisj](https://github.com/ioannisj)! - Stop parsing the persistence entry on every capture() to refresh the Meta $fbc and $fbp identifiers; capture() now compares the stored text and only parses it when a sibling tab or subdomain changed it.
+  (2026-11-09)
+
 ## 1.447.3
 
 ### Patch Changes
