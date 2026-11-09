@@ -770,6 +770,81 @@ describe('record', function (this: ISuite) {
   );
 
   it.each(['document', 'shadow root'] as const)(
+    'does not record a rejected stylesheet through overlapping %s observers',
+    async (kind) => {
+      const result = await ctx.page.evaluate(async (kind) => {
+        const element = document.createElement('div');
+        document.body.appendChild(element);
+        const target =
+          kind === 'document'
+            ? document
+            : element.attachShadow({ mode: 'open' });
+        const span = document.createElement('span');
+        (target === document ? document.body : target).appendChild(span);
+        const initial = new CSSStyleSheet();
+        initial.replaceSync('span { color: rgb(1, 2, 3); }');
+        target.adoptedStyleSheets = [initial];
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const foreignSheet = new (
+          iframe.contentWindow as IWindow & typeof globalThis
+        ).CSSStyleSheet();
+        foreignSheet.replaceSync('.rejected-stylesheet-marker { color: red; }');
+        let nativeError: string | undefined;
+        try {
+          target.adoptedStyleSheets = [foreignSheet];
+        } catch (error) {
+          nativeError = (error as DOMException).name;
+        }
+        const nativeLength = target.adoptedStyleSheets.length;
+        const nativeColor = getComputedStyle(span).color;
+        target.adoptedStyleSheets = [initial];
+        const { record } = (window as unknown as IWindow).rrweb;
+        const events: eventWithTime[][] = [[], []];
+        const stops = events.map(
+          (observerEvents) =>
+            record({
+              emit: (event) => observerEvents.push(event),
+            })!,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const counts = events.map((observerEvents) => observerEvents.length);
+        target.adoptedStyleSheets = [foreignSheet];
+        const rejectedEvents = events.map(
+          (observerEvents, index) => observerEvents.length - counts[index],
+        );
+        const recordedRejectedCSS = events.map((observerEvents) =>
+          JSON.stringify(observerEvents).includes('rejected-stylesheet-marker'),
+        );
+        const nativeMatchesControl =
+          target.adoptedStyleSheets.length === nativeLength &&
+          getComputedStyle(span).color === nativeColor;
+        const accepted = new CSSStyleSheet();
+        accepted.replaceSync('.accepted-stylesheet-marker { color: green; }');
+        target.adoptedStyleSheets = [accepted];
+        const recordedAcceptedCSS = events.some((observerEvents) =>
+          JSON.stringify(observerEvents).includes('accepted-stylesheet-marker'),
+        );
+        stops.reverse().forEach((stop) => stop());
+        return {
+          nativeError,
+          nativeMatchesControl,
+          rejectedEvents,
+          recordedRejectedCSS,
+          recordedAcceptedCSS,
+        };
+      }, kind);
+      expect(result).toEqual({
+        nativeError: 'NotAllowedError',
+        nativeMatchesControl: true,
+        rejectedEvents: [0, 0],
+        recordedRejectedCSS: [false, false],
+        recordedAcceptedCSS: true,
+      });
+    },
+  );
+
+  it.each(['document', 'shadow root'] as const)(
     'stops recording adopted stylesheets through a retained %s wrapper',
     async (kind) => {
       const result = await ctx.page.evaluate(async (kind) => {

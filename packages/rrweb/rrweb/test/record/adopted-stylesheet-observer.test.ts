@@ -301,6 +301,39 @@ describe('initAdoptedStyleSheetObserver()', () => {
         },
       );
 
+      it.each([false, true])(
+        'does not record a rejected assignment with the inner observer stopped: %s',
+        (stopInner) => {
+          const host = createHost(kind);
+          const adoptions = [vi.fn(), vi.fn(), vi.fn()];
+          const stops = adoptions.map((onAdopt) => observe(host, onAdopt));
+          if (stopInner) stops[0]();
+          nativeSet.mockImplementationOnce(() => {
+            throw new DOMException(
+              'Cross-document stylesheet',
+              'NotAllowedError',
+            );
+          });
+          const sheets = [{} as CSSStyleSheet];
+
+          expect(() => {
+            host.adoptedStyleSheets = sheets;
+          }).not.toThrow();
+          adoptions.forEach((onAdopt) =>
+            expect(onAdopt).not.toHaveBeenCalled(),
+          );
+
+          host.adoptedStyleSheets = sheets;
+          expect(nativeSet).toHaveBeenCalledTimes(2);
+          adoptions.forEach((onAdopt, index) => {
+            expect(onAdopt).toHaveBeenCalledTimes(
+              stopInner && index === 0 ? 0 : 1,
+            );
+          });
+          stops.reverse().forEach((stop) => stop());
+        },
+      );
+
       it('skips multiple disposed hooks when the last observer stops', () => {
         const host = createHost(kind);
         const stops = [observe(host), observe(host), observe(host)];

@@ -1111,6 +1111,9 @@ function initStyleSheetObserver(
   });
 }
 
+// Setter results are ignored by assignments but propagate through chained hooks.
+const REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT = Symbol();
+
 type AdoptedStyleSheetObserver = {
   stylesheetManager: observerParam['stylesheetManager'] | undefined;
   previousDescriptor: PropertyDescriptor | undefined;
@@ -1186,7 +1189,7 @@ export function initAdoptedStyleSheetObserver(
         // operation, but because our patched setter sits on the call stack
         // the exception would otherwise be attributed to the recorder and
         // churn fingerprints in error tracking. The browser rejects the
-        // assignment atomically, so recording simply degrades (we skip the
+        // stylesheet, so recording simply degrades (we skip the
         // adoption below). Contain only this specific, unactionable case;
         // re-throw everything else so genuine host-page failures are
         // preserved (mirrors `callSafely` in ../utils).
@@ -1203,10 +1206,11 @@ export function initAdoptedStyleSheetObserver(
           typeof e === 'object' &&
           (e as { name?: unknown }).name === 'NotAllowedError'
         ) {
-          return;
+          return REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT;
         }
         throw e;
       }
+      if (result === REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT) return result;
       if (observer.stylesheetManager && hostId !== null && hostId !== -1) {
         try {
           observer.stylesheetManager.adoptStyleSheets(sheets, hostId);
