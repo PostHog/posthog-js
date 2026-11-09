@@ -9,6 +9,7 @@ import type { MCPAnalyticsEventType } from './extensions/event-types'
 import type { BoundedCache, IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
 import type { McpEventSink } from './extensions/sink'
+import type { McpSignals } from './extensions/otel'
 import type { LoggerFn } from './extensions/logger'
 
 export type JsonRecord = Record<string, unknown>
@@ -94,6 +95,14 @@ export interface McpAnalytics {
 }
 
 export interface MCPAnalyticsOptions {
+  /**
+   * Experimental. Which signals each MCP operation sends: `events` (default) sends `$mcp_*` events; `otel` sends
+   * OpenTelemetry metrics (`mcp.server.operation.duration`, `mcp.client.calls`) and one log record per operation
+   * through the posthog-node client's `metrics` and `captureLog`; `both` sends both. Names follow the OpenTelemetry
+   * MCP semantic conventions, which may still change. Both are batched by the client; on serverless, end each
+   * invocation with `await posthog.shutdown()`, which sends them.
+   */
+  signals?: McpSignals
   /**
    * Exact server build identifier → `$mcp_server_build`. Use an immutable
    * deployment value such as a Git commit SHA or container image digest.
