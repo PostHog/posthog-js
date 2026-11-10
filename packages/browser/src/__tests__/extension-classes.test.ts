@@ -4,6 +4,7 @@ import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
 import {
     AllExtensions,
+    AnalyticsExtensions,
     ErrorTrackingExtensions,
     FeatureFlagsExtensions,
     LogsExtensions,
@@ -722,6 +723,106 @@ void exact`
     })
 
     describe('graceful degradation without extensions (slim bundle)', () => {
+        describe('warns when history pageviews are requested without the history extension', () => {
+            let warnSpy: ReturnType<typeof vi.spyOn>
+
+            const historyWarnings = () =>
+                warnSpy.mock.calls.filter((args: unknown[]) =>
+                    String(args[1]).includes('history autocapture extension is not loaded')
+                )
+
+            beforeEach(() => {
+                PostHog.__defaultExtensionClasses = {}
+                warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            })
+
+            afterEach(() => {
+                warnSpy.mockRestore()
+            })
+
+            it.each([
+                ['history_change', 'history_change' as const],
+                ['an object with path', { path: true }],
+                ['an object with search', { search: true }],
+                ['an object with hash', { hash: true }],
+            ])('warns once for capture_pageview set to %s', async (_label, capturePageview) => {
+                const posthog = await createPosthogInstance(undefined, {
+                    __preview_deferred_init_extensions: false,
+                    capture_pageview: capturePageview,
+                })
+
+                expect(posthog.historyAutocapture).toBeUndefined()
+                expect(historyWarnings()).toHaveLength(1)
+            })
+
+            it('warns only once per instance', async () => {
+                const posthog = await createPosthogInstance(undefined, {
+                    __preview_deferred_init_extensions: false,
+                    capture_pageview: 'history_change',
+                })
+                // Re-running extension setup, as the deferred path does, must not repeat it
+                ;(posthog as any)._warnIfHistoryAutocaptureMissing()
+
+                expect(historyWarnings()).toHaveLength(1)
+            })
+
+            it.each([
+                ['true', true],
+                ['false', false],
+                ['a hash-only object when URL hashes are disabled', { hash: true }],
+            ])('does not warn for capture_pageview set to %s', async (_label, capturePageview) => {
+                await createPosthogInstance(undefined, {
+                    __preview_deferred_init_extensions: false,
+                    capture_pageview: capturePageview,
+                    disable_capture_url_hashes: true,
+                })
+
+                expect(historyWarnings()).toHaveLength(0)
+            })
+
+            it('does not warn when historyAutocapture is passed via __extensionClasses', async () => {
+                const posthog = await createPosthogInstance(undefined, {
+                    __preview_deferred_init_extensions: false,
+                    __extensionClasses: { historyAutocapture: AnalyticsExtensions.historyAutocapture },
+                    capture_pageview: 'history_change',
+                })
+
+                expect(posthog.historyAutocapture).toBeDefined()
+                expect(historyWarnings()).toHaveLength(0)
+            })
+
+            it('does not warn when the default extensions include historyAutocapture', async () => {
+                PostHog.__defaultExtensionClasses = savedDefaults
+
+                await createPosthogInstance(undefined, {
+                    __preview_deferred_init_extensions: false,
+                    capture_pageview: 'history_change',
+                })
+
+                expect(historyWarnings()).toHaveLength(0)
+            })
+
+            it('does not warn when history_change only comes from defaults', async () => {
+                const posthog = await createPosthogInstance(undefined, {
+                    __preview_deferred_init_extensions: false,
+                    defaults: '2026-05-30',
+                })
+
+                expect(posthog.config.capture_pageview).toBe('history_change')
+                expect(historyWarnings()).toHaveLength(0)
+            })
+
+            it('warns with deferred extension initialization', async () => {
+                await createPosthogInstance(undefined, {
+                    __preview_deferred_init_extensions: true,
+                    capture_pageview: 'history_change',
+                })
+                await new Promise((resolve) => setTimeout(resolve, 0))
+
+                expect(historyWarnings()).toHaveLength(1)
+            })
+        })
+
         it('onSurveysLoaded calls back with error when extension is not loaded', async () => {
             PostHog.__defaultExtensionClasses = {}
 
