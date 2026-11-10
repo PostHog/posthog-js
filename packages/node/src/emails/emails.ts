@@ -382,7 +382,7 @@ function contentOf(send: UncheckedSend, distinctId: string | undefined): Record<
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
       code: 'invalid_form',
-      message: 'Send either templateId, or templateKey with subject and html or text.',
+      message: 'Send either templateId, or templateKey with subject and html, text or react.',
     })
   }
   return send.templateKey === undefined ? templateContent(send, distinctId) : codeContent(send, distinctId)
@@ -458,36 +458,27 @@ function checkReactContent(react: unknown, html: unknown): void {
   }
 }
 
-// React 18 and React 19 mark every element with one of these, so a plain { type, props } object isn't one.
-const REACT_ELEMENT_MARKERS: unknown[] = [Symbol.for('react.element'), Symbol.for('react.transitional.element')]
+const REACT_18_AND_19_ELEMENT_MARKERS: unknown[] = [
+  Symbol.for('react.element'),
+  Symbol.for('react.transitional.element'),
+]
 
 function isReactElement(value: unknown): value is EmailReactElement {
   return (
     typeof value === 'object' &&
     value !== null &&
     '$$typeof' in value &&
-    REACT_ELEMENT_MARKERS.includes(value.$$typeof) &&
+    REACT_18_AND_19_ELEMENT_MARKERS.includes(value.$$typeof) &&
     'type' in value &&
     'props' in value
   )
 }
 
-/**
- * Adds the rendered html, and text when the send has none, to a body serialized before the render.
- * The render gets the request timeout, so a component that waits on a promise that never settles can't hold the send.
- */
 async function withRenderedReact(body: string, react: EmailReactElement, timeoutMs: number): Promise<string> {
   const { render, toPlainText } = await loadReactRenderer()
   const fields: Record<string, unknown> = JSON.parse(body)
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const deadline = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`Rendering the react element took longer than ${timeoutMs}ms.`)),
-      timeoutMs
-    )
-  })
   try {
-    const html = await Promise.race([render(react), deadline])
+    const html = await settleWithin(render(react), timeoutMs, 'Rendering the react element')
     return safeJsonStringify({ ...fields, html, ...(fields.text === undefined && { text: toPlainText(html) }) })
   } catch (cause) {
     throw new EmailError({
@@ -495,6 +486,16 @@ async function withRenderedReact(body: string, react: EmailReactElement, timeout
       message: 'Rendering the react element failed, so no email was sent.',
       cause,
     })
+  }
+}
+
+async function settleWithin<T>(work: Promise<T>, timeoutMs: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} took longer than ${timeoutMs}ms.`)), timeoutMs)
+  })
+  try {
+    return await Promise.race([work, deadline])
   } finally {
     clearTimeout(timer)
   }
@@ -506,8 +507,9 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
   } catch (cause) {
     throw new EmailError({
       code: 'missing_react_renderer',
-      message: "react needs the @react-email/render package, which isn't installed, so no email was sent.",
-      fix: 'Install @react-email/render next to posthog-node, or render the email yourself and send html.',
+      message:
+        "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
+      fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
       cause,
     })
   }

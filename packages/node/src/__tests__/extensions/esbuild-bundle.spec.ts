@@ -14,7 +14,6 @@ const withoutOpenTelemetry: Plugin = {
   },
 }
 
-// A path that does not exist makes esbuild's own resolver fail, as in an app without the optional peer.
 const withoutReactEmailRender = { '@react-email/render': './not-installed/@react-email/render' }
 
 async function libraryBundledByConvex(platform: Platform): Promise<string> {

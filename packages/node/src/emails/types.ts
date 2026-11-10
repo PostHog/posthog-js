@@ -70,6 +70,8 @@ export type CodeEmailForm = CodeEmailFields &
         /**
          * A React Email element. The client renders it into `html`, and into `text` when the
          * send has none. Needs the `@react-email/render` package installed next to posthog-node.
+         * The client renders the element after `send()` returns, so give each send its own
+         * element and props, and don't change them while the send is pending.
          */
         react: EmailReactElement
         text?: string

@@ -1,4 +1,4 @@
-import { createElement, type ReactElement, use } from 'react'
+import { createElement, type ReactElement, Suspense, use } from 'react'
 
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
 
@@ -22,6 +22,27 @@ const rejected = (status: number, code?: string, headers: Record<string, string>
   status,
   body: code ? { type: 'invalid_request', code, detail: 'Nope.', attr: null } : undefined,
   headers,
+})
+
+const SEND_FIELDS = new Set([
+  'template_id',
+  'message_data',
+  'template_key',
+  'subject',
+  'html',
+  'text',
+  'from',
+  'reply_to',
+  'capture_engagement',
+  'distinct_id',
+  'to',
+])
+
+const fakeReply = (status: number, body: unknown) => ({
+  status,
+  text: async () => JSON.stringify(body),
+  json: async () => body,
+  headers: { get: () => null },
 })
 
 describe('emails', () => {
@@ -51,6 +72,28 @@ describe('emails', () => {
   }
 
   const sentHeaders = (): string[] => fetch.mock.calls.map(([, options]) => options.headers['Idempotency-Key'])
+
+  const deliverToInbox = (): Record<string, unknown>[] => {
+    const inbox: Record<string, unknown>[] = []
+    fetch.mockImplementation(async (url: string, options: { method: string; body?: string }) => {
+      if (url !== SEND_URL || options.method !== 'POST') {
+        return fakeReply(404, { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null })
+      }
+      const email: Record<string, unknown> = JSON.parse(options.body ?? '{}')
+      const unknownField = Object.keys(email).find((field) => !SEND_FIELDS.has(field))
+      if (unknownField !== undefined) {
+        return fakeReply(400, {
+          type: 'validation_error',
+          code: 'invalid_input',
+          detail: 'Unknown field.',
+          attr: unknownField,
+        })
+      }
+      inbox.push(email)
+      return fakeReply(202, { message_id: 'msg_1', replayed: false })
+    })
+    return inbox
+  }
 
   beforeEach(() => {
     replies = []
@@ -125,14 +168,14 @@ describe('emails', () => {
   })
 
   it('sends the template data each send was called with', async () => {
-    replies = [accepted(), accepted()]
+    const inbox = deliverToInbox()
     const templateData = { name: 'Ada' }
 
     const toAda = send({ templateData })
     templateData.name = 'Bob'
     await Promise.all([toAda, send({ to: 'bob@example.com', templateData })])
 
-    expect(fetch.mock.calls.map(([, options]) => JSON.parse(options.body).message_data.name)).toEqual(['Ada', 'Bob'])
+    expect(inbox.map((email) => email.message_data)).toEqual([{ name: 'Ada' }, { name: 'Bob' }])
   })
 
   it.each([
@@ -227,7 +270,11 @@ describe('emails', () => {
         ...content,
       } as SendEmailOptions)
 
-    const sentBody = (): Record<string, unknown> => JSON.parse(fetch.mock.calls[0][1].body)
+    let inbox: Record<string, unknown>[]
+
+    beforeEach(() => {
+      inbox = deliverToInbox()
+    })
 
     afterEach(() => {
       vi.doUnmock('@react-email/render')
@@ -240,38 +287,49 @@ describe('emails', () => {
     }
 
     it('renders the element into html and text', async () => {
-      replies = [accepted()]
-
       const { error } = await sendReact({ react: welcome })
 
       expect(error).toBeNull()
-      expect(sentBody()).toEqual({
-        template_key: 'welcome',
-        subject: 'Welcome',
-        html: expect.stringContaining('<p>Welcome, Ada</p>'),
-        text: 'Welcome, Ada',
-        capture_engagement: true,
-        to: 'user@example.com',
-      })
+      expect(inbox).toEqual([
+        {
+          template_key: 'welcome',
+          subject: 'Welcome',
+          html: expect.stringContaining('<p>Welcome, Ada</p>'),
+          text: 'Welcome, Ada',
+          capture_engagement: true,
+          to: 'user@example.com',
+        },
+      ])
+    })
+
+    it('renders content that waits inside nested Suspense boundaries', async () => {
+      const firstName = new Promise<string>((resolve) => queueMicrotask(() => resolve('Ada')))
+      const Greeting = (): ReactElement => createElement('p', null, `Welcome, ${use(firstName)}`)
+      const fallback = createElement('p', null, 'Loading')
+      const Mail = (): ReactElement =>
+        createElement(Suspense, { fallback }, createElement(Suspense, { fallback }, createElement(Greeting)))
+
+      await sendReact({ react: createElement(Mail) })
+
+      expect(inbox).toEqual([expect.objectContaining({ text: 'Welcome, Ada' })])
     })
 
     it('keeps the text the caller wrote', async () => {
-      replies = [accepted()]
-
       await sendReact({ react: welcome, text: 'Hi Ada' })
 
-      expect(sentBody()).toMatchObject({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Hi Ada' })
+      expect(inbox).toEqual([
+        expect.objectContaining({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Hi Ada' }),
+      ])
     })
 
-    it('sends the fields the send was called with, whatever changes while it renders', async () => {
-      replies = [accepted()]
+    it('sends the other fields as they were when send was called, while the element renders', async () => {
       const replyTo = ['support@example.com']
 
       const pending = sendReact({ react: welcome, replyTo })
       replyTo.push('someone-else@example.com')
       await pending
 
-      expect(sentBody()).toMatchObject({ reply_to: ['support@example.com'] })
+      expect(inbox).toEqual([expect.objectContaining({ reply_to: ['support@example.com'] })])
     })
 
     it.each([
@@ -288,7 +346,7 @@ describe('emails', () => {
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
-      expect(fetch).not.toHaveBeenCalled()
+      expect(inbox).toEqual([])
     })
 
     it('explains how to send html or react, not both', async () => {
@@ -300,7 +358,7 @@ describe('emails', () => {
       })
     })
 
-    it('asks to install @react-email/render when it is missing, and sends nothing', async () => {
+    it('asks to install @react-email/render when it does not load, and sends nothing', async () => {
       withoutRenderer()
 
       const { data, error } = await sendReact({ react: welcome })
@@ -308,20 +366,20 @@ describe('emails', () => {
       expect(data).toBeNull()
       expect(error).toMatchObject({
         code: 'missing_react_renderer',
-        message: "react needs the @react-email/render package, which isn't installed, so no email was sent.",
-        fix: 'Install @react-email/render next to posthog-node, or render the email yourself and send html.',
+        message:
+          "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
+        fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
+        cause: expect.any(Error),
       })
-      expect(fetch).not.toHaveBeenCalled()
+      expect(inbox).toEqual([])
     })
 
     it('sends html without loading @react-email/render', async () => {
       withoutRenderer()
-      replies = [accepted()]
-
       const { error } = await sendReact({ html: '<p>Hi</p>' })
 
       expect(error).toBeNull()
-      expect(sentBody()).toMatchObject({ html: '<p>Hi</p>' })
+      expect(inbox).toEqual([expect.objectContaining({ html: '<p>Hi</p>' })])
     })
 
     it('reports a disabled client before it loads @react-email/render', async () => {
@@ -346,7 +404,7 @@ describe('emails', () => {
         message: 'Rendering the react element failed, so no email was sent.',
         cause: expect.objectContaining({ message: 'firstName is missing' }),
       })
-      expect(fetch).not.toHaveBeenCalled()
+      expect(inbox).toEqual([])
     })
 
     it('gives up on an element that never finishes rendering, after the request timeout', async () => {
@@ -357,7 +415,6 @@ describe('emails', () => {
       const pending = sendReact({ react: createElement(Waits) }).finally(() => {
         settled = true
       })
-      // The deadline starts once @react-email/render has loaded, so keep the clock moving until the send settles.
       while (!settled) {
         await vi.advanceTimersByTimeAsync(100)
       }
@@ -368,7 +425,7 @@ describe('emails', () => {
         code: 'react_render_failed',
         cause: expect.objectContaining({ message: 'Rendering the react element took longer than 1000ms.' }),
       })
-      expect(fetch).not.toHaveBeenCalled()
+      expect(inbox).toEqual([])
     })
   })
 
