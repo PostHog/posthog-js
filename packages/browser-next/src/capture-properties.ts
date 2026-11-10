@@ -20,6 +20,7 @@ const parseMessageProperties = (json: string): Record<string, unknown> => {
 
 /** Invoke caller serialization once, before selecting the authoritative session. */
 export const snapshotCaptureProperties = (
+    registered: Record<string, unknown> | undefined,
     dynamic: Record<string, unknown>,
     properties: Record<string, unknown> | null,
     options: CaptureOptions
@@ -31,7 +32,7 @@ export const snapshotCaptureProperties = (
     const timestamp = options.timestamp
     if (set) supplied['$set'] = set
     if (setOnce) supplied['$set_once'] = setOnce
-    const json = JSON.stringify(supplied)
+    const json = JSON.stringify({ ...registered, ...supplied })
     const message = parseMessageProperties(json)
     const observed: Record<string, unknown> = JSON.parse(json)
     return { message, observed, uuid, timestamp }

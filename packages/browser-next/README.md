@@ -6,7 +6,7 @@ An experimental PostHog client for modern browsers. The API is not yet stable.
 npm install @posthog/browser
 ```
 
-Capture, immediate capture, identity and group controls, reset and dynamic event-property registration live on the analytics extension. Core owns shared identity, sessions, groups, consent, persistence and lifecycle. The npm root acquires the complete analytics API through asynchronous resolution; delivery remains a separate lazy chunk until an admitted capture or an operation needs it. An enabled initial pageview or capture-producing product also acquires it. Feature flags initialize during startup. When their options are omitted, logs, surveys orchestration and autocapture load on existing saved-state or remote-config signals, or explicit asynchronous acquisition. Their collection and display retain their own consent and remote-configuration gates; survey rendering is a further deferred chunk.
+Capture, immediate capture, identity and group controls, reset and event-property registration live on the analytics extension. Core owns shared identity, sessions, groups, consent, persistence and lifecycle. The npm root acquires the complete analytics API through asynchronous resolution; delivery remains a separate lazy chunk until an admitted capture or an operation needs it. An enabled initial pageview or capture-producing product also acquires it. Feature flags initialize during startup. When their options are omitted, logs, surveys orchestration and autocapture load on existing saved-state or remote-config signals, or explicit asynchronous acquisition. Their collection and display retain their own consent and remote-configuration gates; survey rendering is a further deferred chunk.
 
 ```ts
 import { createPostHog } from '@posthog/browser'
@@ -56,6 +56,23 @@ await analytics?.group('organization', 'current-group')
 analytics?.groupIdentify('organization', 'another-group', { plan: 'enterprise' })
 analytics?.resetGroups()
 ```
+
+## Persistent event properties
+
+Use the installed analytics product to register context for future events:
+
+```ts
+const analytics = await posthog.resolveExtension('analytics')
+analytics?.register({ plan: 'pro', region: 'eu' })
+analytics?.registerOnce({ acquisitionSource: 'website' })
+analytics?.capture('dashboard', { plan: 'enterprise' })
+const region = analytics?.getProperty('region')
+analytics?.unregister('region')
+```
+
+`register(properties)` merges JSON-serializable properties into analytics' Core-owned persistent storage. `registerOnce(properties, defaultValue = 'None')` adds missing keys or replaces existing values strictly equal to the sentinel; other existing values, including `false`, `0`, `''` and `null`, are retained. `getProperty(key)` returns an isolated stored value, or `undefined` for a missing key. Registration inputs and captured events are snapshotted, so later input or stored-property changes do not rewrite queued events.
+
+Persistent properties are overridden by dynamic event-property producers, then caller properties and capture options. SDK identity, group, session, library and person-processing metadata remains authoritative. Registration and removal only change local context, do not emit events, and remain available when capture consent is denied or person processing is disabled. Properties survive reload with persistent storage, until overwritten, unregistered or cleared by full `reset()`; `resetGroups()` retains them.
 
 ## Classic script installation (draft CDN distribution)
 

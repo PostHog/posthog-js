@@ -79,6 +79,25 @@ export const publicProductViews = async (posthog: IPostHog, internal: IPostHogIn
     posthog.analytics?.unsetPersonProperties('plan')
     posthog.analytics?.unsetPersonProperties(['plan', 'initial'] as const)
     posthog.analytics?.setInternalOrTestUser()
+    posthog.analytics?.register({ plan: 'paid', nested: { count: 1 } })
+    posthog.analytics?.registerOnce({ acquisitionSource: 'website' })
+    posthog.analytics?.registerOnce({ region: 'eu' }, null)
+    posthog.analytics?.unregister('plan')
+    const registered: unknown = posthog.analytics?.getProperty('nested')
+    const acquiredProperty: unknown = acquired?.getProperty('region')
+    acquired?.register({ source: 'acquired' })
+    acquired?.registerOnce({ initial: true }, false)
+    acquired?.unregister('source')
+    internal.analytics?.register({ source: 'internal' })
+    internal.analytics?.registerOnce({ initial: true })
+    internal.analytics?.unregister('source')
+    const internalProperty: unknown = internal.analytics?.getProperty('initial')
+    void registered
+    void acquiredProperty
+    void internalProperty
+    // @ts-expect-error Registered values require narrowing before assigning a concrete type.
+    const plan: string = acquired?.getProperty('plan')
+    void plan
     posthog.analytics?.reset()
     const custom = await posthog.resolveExtension(CustomExtension)
     const value: string | undefined = custom?.read()

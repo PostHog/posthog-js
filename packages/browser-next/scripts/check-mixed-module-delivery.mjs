@@ -382,6 +382,128 @@ for (const create of [createPostHog, createEsmPostHog]) {
 }
 process.stdout.write('Built CommonJS/ESM acquired analytics alias, group profile and group-only reset passed\n')
 
+for (const create of [createPostHog, createEsmPostHog]) {
+    const requests = []
+    const values = new Map()
+    const storage = {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => values.set(key, value),
+        removeItem: (key) => values.delete(key),
+    }
+    const options = {
+        projectToken: 'ph_registered_properties',
+        storage,
+        navigator: false,
+        capturePageview: false,
+        analytics: { flushInterval: 0 },
+        flags: false,
+        logs: false,
+        surveys: false,
+        autocapture: false,
+        remoteConfig: {
+            supportedCompression: [],
+            toolbarParams: {},
+            toolbarVersion: 'toolbar',
+            isAuthenticated: false,
+            siteApps: [],
+        },
+        fetch: async (_input, init) => {
+            const body = JSON.parse(init.body)
+            requests.push(body)
+            return new Response(
+                JSON.stringify({
+                    results: Object.fromEntries(body.batch.map(({ uuid }) => [uuid, { result: 'ok' }])),
+                })
+            )
+        },
+    }
+    const client = await create(options)
+    const product = await client.resolveExtension('analytics')
+    assert.ok(product)
+    const { register, registerOnce, unregister, getProperty } = product
+    const copied = { register, registerOnce, unregister, getProperty }
+    const nested = { count: 1 }
+    register({ nested, plan: 'persistent', tier: 'persistent', initial: 'None', retained: false })
+    registerOnce({ initial: 'first', retained: true })
+    registerOnce({ initial: 'second' })
+    copied.register(JSON.parse('{"__proto__":{"own":true},"constructor":"application","prototype":"own"}'))
+    nested.count = 2
+    const read = getProperty('nested')
+    assert.deepEqual(read, { count: 1 })
+    read.count = 3
+    assert.deepEqual(copied.getProperty('nested'), { count: 1 })
+    assert.equal(getProperty('initial'), 'first')
+    assert.equal(getProperty('retained'), false)
+    assert.deepEqual(getProperty('__proto__'), { own: true })
+    assert.equal(getProperty('constructor'), 'application')
+    assert.equal(getProperty('prototype'), 'own')
+    assert.equal(client.session, undefined)
+    assert.equal(requests.length, 0)
+    const dynamic = product.registerDynamicEventProperties(() => ({ plan: 'dynamic', tier: 'dynamic' }))
+    let serialized = 0
+    product.capture(
+        'registered_queued',
+        {
+            plan: 'caller',
+            token: 'wrong',
+            $device_id: 'wrong',
+            $process_person_profile: true,
+            converted: {
+                toJSON() {
+                    serialized++
+                    return { count: 1 }
+                },
+            },
+        },
+        { uuid: 'registered-queued', set: { plan: 'person' } }
+    )
+    register({ nested: { count: 9 }, plan: 'later' })
+    copied.unregister('initial')
+    const immediate = await product.captureImmediate(
+        'registered_immediate',
+        { plan: 'immediate' },
+        { uuid: 'registered-immediate' }
+    )
+    assert.equal(immediate.allPersisted, true)
+    await client.flush()
+    const events = requests.flatMap(({ batch }) => batch)
+    const queued = events.find(({ event }) => event === 'registered_queued')
+    const inline = events.find(({ event }) => event === 'registered_immediate')
+    assert.ok(queued)
+    assert.ok(inline)
+    assert.equal(serialized, 1)
+    assert.equal(queued.properties.plan, 'caller')
+    assert.equal(queued.properties.tier, 'dynamic')
+    assert.deepEqual(queued.properties.nested, { count: 1 })
+    assert.deepEqual(queued.properties.converted, { count: 1 })
+    assert.deepEqual(queued.properties.$set, { plan: 'person' })
+    assert.equal(queued.properties.$device_id, client.deviceId)
+    assert.equal(queued.options.process_person_profile, false)
+    assert.deepEqual(queued.properties['__proto__'], { own: true })
+    assert.equal(inline.properties.plan, 'immediate')
+    assert.deepEqual(inline.properties.nested, { count: 9 })
+    assert.equal(Object.hasOwn(inline.properties, 'initial'), false)
+    product.resetGroups()
+    assert.deepEqual(getProperty('nested'), { count: 9 })
+    dynamic.dispose()
+    await client.dispose()
+    copied.register({ late: true })
+    copied.registerOnce({ late: true })
+    copied.unregister('nested')
+    assert.equal(getProperty('late'), undefined)
+    const fresh = await create(options)
+    const restored = await fresh.resolveExtension('analytics')
+    assert.ok(restored)
+    assert.deepEqual(restored.getProperty('nested'), { count: 9 })
+    assert.equal(restored.getProperty('late'), undefined)
+    restored.reset()
+    assert.equal(restored.getProperty('nested'), undefined)
+    await fresh.dispose()
+}
+process.stdout.write(
+    'Built CommonJS/ESM acquired persistent analytics properties, snapshots, precedence and reset passed\n'
+)
+
 for (const factory of [surveys, commonJsSurveys]) {
     const client = await createCorePostHog({
         projectToken: 'ph_surveys_test',
