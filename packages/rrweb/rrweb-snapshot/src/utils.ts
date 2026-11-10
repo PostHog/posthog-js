@@ -34,6 +34,8 @@ export {
   exposeStyleRuleSource,
   disableStyleRuleSources,
   resetStyleRuleSources,
+  clearStyleRuleSources,
+  trackStyleRuleSourceRealm,
 } from './stylesheet-source';
 
 /**

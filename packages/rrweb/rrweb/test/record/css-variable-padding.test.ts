@@ -47,6 +47,292 @@ describe('CSS variable shorthand sources', () => {
   });
 
   it.each([
+    'unchanged',
+    'gap-mutation',
+    'startup-mutation',
+    'gap-group',
+  ] as const)('hands off source across rotation safely: %s', async (mode) => {
+    const result = await page.evaluate(async (mode) => {
+      const api = (
+        window as unknown as {
+          rrweb: { record: typeof record; Replayer: typeof Replayer };
+        }
+      ).rrweb;
+      const getter = Object.getOwnPropertyDescriptor(
+        CSSStyleRule.prototype,
+        'style',
+      )!.get;
+      const insert = CSSGroupingRule.prototype.insertRule;
+      let stop = api.record({ emit: () => {} })!;
+      const sheet = new CSSStyleSheet();
+      const rule = '#card { padding: var(--p); padding-left: 12px; }';
+      sheet.replaceSync(
+        ':root { --p: 8px; --q: 16px; }' +
+          (mode === 'gap-group' ? '@media all {' + rule + '}' : rule),
+      );
+      document.adoptedStyleSheets = [sheet];
+      const events: eventWithTime[] = [];
+      const mutate = () => {
+        const style = (sheet.cssRules[1] as CSSStyleRule).style;
+        style.padding = 'var(--q)';
+        style.paddingLeft = '12px';
+      };
+      const handoff =
+        (
+          api.record as typeof record & {
+            withStyleRuleSourceHandoff?: (
+              stop: () => void,
+              restart: (cancel: () => void) => void,
+            ) => void;
+          }
+        ).withStyleRuleSourceHandoff ??
+        ((_stop: () => void, restart: (cancel: () => void) => void) =>
+          restart(() => {}));
+      handoff(stop, () => {
+        stop();
+        if (mode === 'gap-mutation') mutate();
+        if (mode === 'gap-group') {
+          const group = sheet.cssRules[1] as CSSMediaRule;
+          group.deleteRule(0);
+          group.insertRule(rule.replace('--p', '--q'), 0);
+        }
+        let mutated = false;
+        stop = api.record({
+          emit: (event) => {
+            if (mode === 'startup-mutation' && !mutated) {
+              mutated = true;
+              mutate();
+            }
+            events.push(event);
+          },
+        })!;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      api.record.takeFullSnapshot();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      stop();
+      const root = document.createElement('div');
+      document.body.append(root);
+      const replay = new api.Replayer(events, { root, mouseTail: false });
+      replay.pause(
+        events[events.length - 1].timestamp - events[0].timestamp + 100,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const doc = replay.iframe.contentDocument!;
+      const result = {
+        live: getComputedStyle(document.querySelector('#card')!).paddingTop,
+        replay: doc.defaultView!.getComputedStyle(doc.querySelector('#card')!)
+          .paddingTop,
+        restored:
+          Object.getOwnPropertyDescriptor(CSSStyleRule.prototype, 'style')!
+            .get === getter && CSSGroupingRule.prototype.insertRule === insert,
+      };
+      replay.destroy();
+      return result;
+    }, mode);
+    expect(result).toEqual({
+      live: mode === 'unchanged' ? '8px' : '16px',
+      replay: mode === 'unchanged' ? '8px' : '0px',
+      restored: true,
+    });
+  });
+
+  it.each([
+    'repeat',
+    'cancel',
+    'no-replacement',
+    'failed-start',
+    'deferred-start',
+    'teardown-mutation',
+  ] as const)('bounds source handoff ownership: %s', async (mode) => {
+    const result = await page.evaluate(async (mode) => {
+      const api = (
+        window as unknown as {
+          rrweb: { record: typeof record; Replayer: typeof Replayer };
+        }
+      ).rrweb;
+      const getter = Object.getOwnPropertyDescriptor(
+        CSSStyleRule.prototype,
+        'style',
+      )!.get;
+      const insert = CSSGroupingRule.prototype.insertRule;
+      const input = document.createElement('input');
+      input.type = 'password';
+      input.value = 'rotation-secret';
+      document.body.append(input);
+      const sheet = new CSSStyleSheet();
+      const mutate = () => {
+        const style = (sheet.cssRules[1] as CSSStyleRule).style;
+        style.padding = 'var(--q)';
+        style.paddingLeft = '12px';
+      };
+      let events: eventWithTime[] = [];
+      let stop = api.record({
+        emit: () => {},
+        maskAllInputs: true,
+        plugins:
+          mode === 'teardown-mutation'
+            ? [{ name: 'mutation-on-stop', observer: () => mutate }]
+            : [],
+      })!;
+      sheet.replaceSync(
+        ':root { --p: 8px; --q: 16px; } #card { padding: var(--p); padding-left: 12px; }',
+      );
+      document.adoptedStyleSheets = [sheet];
+      const start = () => {
+        events = [];
+        return api.record({
+          maskAllInputs: true,
+          recordAfter: 'DOMContentLoaded',
+          emit: (event) => events.push(event),
+        })!;
+      };
+      const handoff = api.record.withStyleRuleSourceHandoff;
+      let cleanedAfterFailure = true;
+      for (let round = 0; round < (mode === 'repeat' ? 3 : 1); round++) {
+        handoff(stop, (cancel) => {
+          stop();
+          if (mode === 'cancel') cancel();
+          if (mode === 'no-replacement') return;
+          if (mode === 'failed-start') {
+            const failed = api.record({
+              emit: () => {
+                throw new Error('startup failure');
+              },
+            });
+            cleanedAfterFailure =
+              failed === undefined &&
+              Object.getOwnPropertyDescriptor(CSSStyleRule.prototype, 'style')!
+                .get === getter;
+            return;
+          }
+          if (mode === 'deferred-start') {
+            Object.defineProperty(document, 'readyState', {
+              configurable: true,
+              value: 'loading',
+            });
+          }
+          stop = start();
+        });
+      }
+      if (mode === 'no-replacement' || mode === 'failed-start') {
+        cleanedAfterFailure =
+          cleanedAfterFailure &&
+          Object.getOwnPropertyDescriptor(CSSStyleRule.prototype, 'style')!
+            .get === getter;
+        stop = start();
+      }
+      if (mode === 'deferred-start') {
+        delete (document as Partial<Document>).readyState;
+        document.dispatchEvent(new Event('DOMContentLoaded'));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      stop();
+      const root = document.createElement('div');
+      document.body.append(root);
+      const replay = new api.Replayer(events, { root, mouseTail: false });
+      replay.pause(
+        events[events.length - 1].timestamp - events[0].timestamp + 100,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const doc = replay.iframe.contentDocument!;
+      const result = {
+        padding: doc.defaultView!.getComputedStyle(doc.querySelector('#card')!)
+          .paddingTop,
+        restored:
+          Object.getOwnPropertyDescriptor(CSSStyleRule.prototype, 'style')!
+            .get === getter && CSSGroupingRule.prototype.insertRule === insert,
+        cleanedAfterFailure,
+        leaked: JSON.stringify(events).includes('rotation-secret'),
+      };
+      replay.destroy();
+      return result;
+    }, mode);
+    expect(result).toEqual({
+      padding: mode === 'repeat' ? '8px' : '0px',
+      restored: true,
+      cleanedAfterFailure: true,
+      leaked: false,
+    });
+  });
+
+  it.each([false, true])(
+    'transfers iframe guards without retaining a detached realm: %s',
+    async (detach) => {
+      const result = await page.evaluate(async (detach) => {
+        const api = (
+          window as unknown as {
+            rrweb: { record: typeof record; Replayer: typeof Replayer };
+          }
+        ).rrweb;
+        let stop = api.record({ emit: () => {} })!;
+        const css =
+          ':root { --p: 8px; } #card { padding: var(--p); padding-left: 12px; }';
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(css);
+        document.adoptedStyleSheets = [sheet];
+        const iframe = document.createElement('iframe');
+        iframe.id = 'source-child';
+        iframe.srcdoc = '<div id="card">Iframe fixture</div>';
+        await new Promise<void>((resolve) => {
+          iframe.onload = () => resolve();
+          document.body.append(iframe);
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const child = iframe.contentWindow as Window & typeof globalThis;
+        const childSheet = new child.CSSStyleSheet();
+        childSheet.replaceSync(css);
+        child.document.adoptedStyleSheets = [childSheet];
+        const events: eventWithTime[] = [];
+        api.record.withStyleRuleSourceHandoff(stop, () => {
+          stop();
+          if (detach) iframe.remove();
+          stop = api.record({ emit: (event) => events.push(event) })!;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        api.record.takeFullSnapshot();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        stop();
+        const root = document.createElement('div');
+        document.body.append(root);
+        const replay = new api.Replayer(events, { root, mouseTail: false });
+        replay.pause(
+          events[events.length - 1].timestamp - events[0].timestamp + 100,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const doc = replay.iframe.contentDocument!;
+        const replayChild = (
+          doc.querySelector('#source-child') as HTMLIFrameElement | null
+        )?.contentDocument;
+        const result = {
+          parent: doc.defaultView!.getComputedStyle(doc.querySelector('#card')!)
+            .paddingTop,
+          child: replayChild
+            ? replayChild.defaultView!.getComputedStyle(
+                replayChild.querySelector('#card')!,
+              ).paddingTop
+            : null,
+          restored: Function.prototype.toString
+            .call(
+              Object.getOwnPropertyDescriptor(
+                child.CSSStyleRule.prototype,
+                'style',
+              )!.get,
+            )
+            .includes('[native code]'),
+        };
+        replay.destroy();
+        return result;
+      }, detach);
+      expect(result).toEqual({
+        parent: '8px',
+        child: detach ? null : '8px',
+        restored: true,
+      });
+    },
+  );
+
+  it.each([
     'replaceSync',
     'replace',
     'insertRule',

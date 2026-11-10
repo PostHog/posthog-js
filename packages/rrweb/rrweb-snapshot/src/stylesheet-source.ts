@@ -1,6 +1,26 @@
 // CSSOM loses var()-bearing shorthands after a longhand override. Save source
 // only for those rules; ordinary rules retain their existing serialization.
-type RuleSource = { text: string; cssText: string };
+type SourceRealm = { active: boolean };
+type RuleSource = { text: string; cssText: string; realm?: SourceRealm };
+const sourceRealms = new WeakMap<object, SourceRealm>();
+
+export function trackStyleRuleSourceRealm(prototype: object): () => void {
+  const realm = { active: true };
+  sourceRealms.set(prototype, realm);
+  return () => {
+    realm.active = false;
+    if (sourceRealms.get(prototype) === realm) sourceRealms.delete(prototype);
+  };
+}
+
+function sourceRealm(rule: CSSRule): SourceRealm | undefined {
+  let prototype = Object.getPrototypeOf(rule);
+  while (prototype) {
+    const realm = sourceRealms.get(prototype);
+    if (realm) return realm;
+    prototype = Object.getPrototypeOf(prototype);
+  }
+}
 let sources = new WeakMap<CSSRule, RuleSource>();
 let sourceParents = new WeakSet<CSSRule>();
 let exposedRules = new WeakSet<CSSRule>();
@@ -119,7 +139,7 @@ export function rememberStyleRuleSource(rule: CSSRule, text: string): void {
     }
     const cssText = rule.cssText;
     if (hasEmptyShorthandLonghand(cssText)) {
-      sources.set(rule, { text, cssText });
+      sources.set(rule, { text, cssText, realm: sourceRealm(rule) });
       let parent = rule.parentRule;
       while (parent) {
         sourceParents.add(parent);
@@ -155,7 +175,7 @@ export function rememberStylesheetSource(
 export function getStyleRuleSource(rule: CSSRule): string | undefined {
   const source = sources.get(rule);
   if (!source) return;
-  if (source.cssText !== rule.cssText) {
+  if (source.realm?.active === false || source.cssText !== rule.cssText) {
     sources.delete(rule);
     return;
   }
@@ -179,15 +199,18 @@ export function exposeStyleRuleSource(rule: CSSRule): void {
   }
 }
 
-export function disableStyleRuleSources(): void {
+export function clearStyleRuleSources(): void {
   sources = new WeakMap();
   sourceParents = new WeakSet();
+}
+
+export function disableStyleRuleSources(): void {
+  clearStyleRuleSources();
   disabled = true;
 }
 
 export function resetStyleRuleSources(): void {
-  sources = new WeakMap();
-  sourceParents = new WeakSet();
+  clearStyleRuleSources();
   exposedRules = new WeakSet();
   disabled = false;
 }

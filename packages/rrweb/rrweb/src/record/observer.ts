@@ -7,8 +7,6 @@ import {
   rememberStyleRuleSource,
   rememberStylesheetSource,
   invalidateStyleRuleSource,
-  exposeStyleRuleSource,
-  disableStyleRuleSources,
   toLowerCase,
 } from '@posthog/rrweb-snapshot';
 import type { FontFaceSet } from 'css-font-loading-module';
@@ -1386,113 +1384,9 @@ function initStyleDeclarationObserver(
     ),
   });
 
-  const restoreDeclarations: (() => void)[] = [];
-  // Named declaration assignments cannot be intercepted without proxying native
-  // style objects. Once an application obtains a mutable handle, its source is
-  // no longer safe to reuse: a different var() can have identical cssText.
-  const observeDeclaration = (prototype: object, name: string) => {
-    const mutationMethod = name === 'appendRule' || name === 'deleteRule';
-    const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
-    if (!descriptor) {
-      if (name === 'style' || mutationMethod) disableStyleRuleSources();
-      return;
-    }
-    const mutableHandle =
-      name === 'style' || name === 'styleMap' || name === 'media';
-    if (
-      !descriptor.configurable ||
-      (mutableHandle && !descriptor.get) ||
-      (mutationMethod && typeof descriptor.value !== 'function')
-    ) {
-      disableStyleRuleSources();
-      return;
-    }
-    const replacement = { ...descriptor };
-    if (mutationMethod) {
-      replacement.value = new Proxy(descriptor.value, {
-        apply(target, thisArg: CSSRule, argumentsList: unknown[]) {
-          const result = target.apply(thisArg, argumentsList);
-          exposeStyleRuleSource(thisArg);
-          return result;
-        },
-      });
-    }
-    if (descriptor.get && mutableHandle) {
-      const originalGet = descriptor.get;
-      replacement.get = function (this: CSSRule) {
-        const result = originalGet.call(this);
-        exposeStyleRuleSource(this);
-        return result;
-      };
-    }
-    if (descriptor.set) {
-      const originalSet = descriptor.set;
-      replacement.set = function (this: CSSRule, value: unknown) {
-        const result = originalSet.call(this, value);
-        exposeStyleRuleSource(this);
-        return result;
-      };
-    }
-    try {
-      Object.defineProperty(prototype, name, replacement);
-      restoreDeclarations.push(() => {
-        const current = Object.getOwnPropertyDescriptor(prototype, name);
-        if (
-          current?.get === replacement.get &&
-          current?.set === replacement.set &&
-          current?.value === replacement.value
-        ) {
-          Object.defineProperty(prototype, name, descriptor);
-        }
-      });
-    } catch {
-      disableStyleRuleSources();
-    }
-  };
-  const newerRuleTypes = win as IWindow & {
-    CSSNestedDeclarations?: { prototype: object };
-    CSSMarginRule?: { prototype: object };
-    CSSPositionTryRule?: { prototype: object };
-  };
-  for (const ruleType of [
-    win.CSSStyleRule,
-    win.CSSKeyframeRule,
-    win.CSSPageRule,
-    win.CSSFontFaceRule,
-    newerRuleTypes.CSSNestedDeclarations,
-    newerRuleTypes.CSSMarginRule,
-    newerRuleTypes.CSSPositionTryRule,
-  ]) {
-    if (!ruleType) continue;
-    observeDeclaration(ruleType.prototype, 'style');
-    observeDeclaration(ruleType.prototype, 'styleMap');
-  }
-  for (const ruleType of [win.CSSMediaRule, win.CSSImportRule]) {
-    if (ruleType) observeDeclaration(ruleType.prototype, 'media');
-  }
-  if (win.CSSStyleRule) {
-    observeDeclaration(win.CSSStyleRule.prototype, 'selectorText');
-  }
-  if (win.CSSKeyframeRule) {
-    observeDeclaration(win.CSSKeyframeRule.prototype, 'keyText');
-  }
-  if (win.CSSKeyframesRule) {
-    observeDeclaration(win.CSSKeyframesRule.prototype, 'name');
-    observeDeclaration(win.CSSKeyframesRule.prototype, 'appendRule');
-    observeDeclaration(win.CSSKeyframesRule.prototype, 'deleteRule');
-  }
-  const rulePrototype = win.CSSRule?.prototype;
-  if (
-    rulePrototype &&
-    Object.getOwnPropertyDescriptor(rulePrototype, 'cssText')?.set
-  ) {
-    observeDeclaration(rulePrototype, 'cssText');
-  }
-
   return callbackWrapper(() => {
     win.CSSStyleDeclaration.prototype.setProperty = setProperty;
     win.CSSStyleDeclaration.prototype.removeProperty = removeProperty;
-    callAllSafely(restoreDeclarations);
   });
 }
 
