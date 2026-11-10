@@ -1604,6 +1604,9 @@ export interface PostHogConfig {
      * - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes
      * - An object: Capture the initial pageview and pageviews when any selected URL component changes
      *
+     * With the slim bundle, history-based pageviews require `AnalyticsExtensions.historyAutocapture`
+     * from `posthog-js/extensions` in `__extensionClasses`. Without it, only the initial pageview is captured.
+     *
      * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
     capture_pageview: boolean | 'history_change' | CapturePageviewOptions

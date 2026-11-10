@@ -620,10 +620,7 @@ export class PostHog implements PostHogInterface {
             return
         }
         this._hasWarnedAboutMissingHistoryAutocapture = true
-        // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-        // oxlint-disable-next-line no-console
-        console.warn(
-            '[PostHog.js]',
+        logger.warn(
             'capture_pageview is set to capture history changes, but the history autocapture extension is not ' +
                 'loaded, so only the first pageview of each page load is captured. With the slim bundle, pass ' +
                 "__extensionClasses: { historyAutocapture: AnalyticsExtensions.historyAutocapture } from 'posthog-js/dist/extension-bundles', " +

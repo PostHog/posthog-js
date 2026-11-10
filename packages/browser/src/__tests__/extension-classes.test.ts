@@ -733,6 +733,7 @@ void exact`
 
             beforeEach(() => {
                 PostHog.__defaultExtensionClasses = {}
+                console.log = vi.fn()
                 warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             })
 
@@ -749,16 +750,28 @@ void exact`
                 const posthog = await createPosthogInstance(undefined, {
                     __preview_deferred_init_extensions: false,
                     capture_pageview: capturePageview,
+                    debug: true,
                 })
 
                 expect(posthog.historyAutocapture).toBeUndefined()
                 expect(historyWarnings()).toHaveLength(1)
             })
 
+            it.each([false, undefined])('does not warn when debug is %s', async (debug) => {
+                await createPosthogInstance(undefined, {
+                    __preview_deferred_init_extensions: false,
+                    capture_pageview: 'history_change',
+                    debug,
+                })
+
+                expect(historyWarnings()).toHaveLength(0)
+            })
+
             it('warns only once per instance', async () => {
                 const posthog = await createPosthogInstance(undefined, {
                     __preview_deferred_init_extensions: false,
                     capture_pageview: 'history_change',
+                    debug: true,
                 })
                 // Re-running extension setup, as the deferred path does, must not repeat it
                 ;(posthog as any)._warnIfHistoryAutocaptureMissing()
@@ -775,6 +788,7 @@ void exact`
                     __preview_deferred_init_extensions: false,
                     capture_pageview: capturePageview,
                     disable_capture_url_hashes: true,
+                    debug: true,
                 })
 
                 expect(historyWarnings()).toHaveLength(0)
@@ -785,6 +799,7 @@ void exact`
                     __preview_deferred_init_extensions: false,
                     __extensionClasses: { historyAutocapture: AnalyticsExtensions.historyAutocapture },
                     capture_pageview: 'history_change',
+                    debug: true,
                 })
 
                 expect(posthog.historyAutocapture).toBeDefined()
@@ -797,6 +812,7 @@ void exact`
                 await createPosthogInstance(undefined, {
                     __preview_deferred_init_extensions: false,
                     capture_pageview: 'history_change',
+                    debug: true,
                 })
 
                 expect(historyWarnings()).toHaveLength(0)
@@ -806,6 +822,7 @@ void exact`
                 const posthog = await createPosthogInstance(undefined, {
                     __preview_deferred_init_extensions: false,
                     defaults: '2026-05-30',
+                    debug: true,
                 })
 
                 expect(posthog.config.capture_pageview).toBe('history_change')
@@ -816,6 +833,7 @@ void exact`
                 await createPosthogInstance(undefined, {
                     __preview_deferred_init_extensions: true,
                     capture_pageview: 'history_change',
+                    debug: true,
                 })
                 await new Promise((resolve) => setTimeout(resolve, 0))
 
