@@ -438,6 +438,35 @@ describe('stateful class matching', () => {
 });
 
 describe('select snapshot values', () => {
+  it.each([
+    'empty select',
+    'empty option',
+    'no selection',
+    'blocked selection',
+  ])('does not call a custom masker for an empty value (%s)', (selection) => {
+    const doc = document.implementation.createHTMLDocument();
+    doc.body.innerHTML =
+      '<select value="stale-empty-secret">' +
+      (selection === 'empty select'
+        ? ''
+        : '<option value="" selected>Empty</option>' +
+          '<option class="rr-block" value="blocked-empty-secret">Hidden</option>') +
+      '</select>';
+    const select = doc.querySelector('select')!;
+    if (selection === 'no selection') select.selectedIndex = -1;
+    if (selection === 'blocked selection') select.selectedIndex = 1;
+    const maskInputFn = vi.fn((text: string) => `masked:${text}`);
+    const mirror = new Mirror();
+    const result = snapshot(doc, {
+      mirror,
+      maskAllInputs: { select: true },
+      maskInputFn,
+    });
+    expect(maskInputFn).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('empty-secret');
+    expect(mirror.getMeta(select)).toMatchObject({ attributes: { value: '' } });
+  });
+
   it.each(['blocked', 'empty option', 'no selection'])(
     'replaces a stale value attribute (%s)',
     (selection) => {

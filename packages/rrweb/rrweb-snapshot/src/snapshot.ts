@@ -1000,14 +1000,16 @@ function serializeElementNode(
       attributes.type !== 'button' &&
       (selectedOptions || value)
     ) {
-      attributes.value = maskInputValue({
-        element: n as HTMLElement,
-        type: getInputType(n as HTMLElement),
-        tagName,
-        value,
-        maskInputOptions,
-        maskInputFn,
-      });
+      attributes.value = value
+        ? maskInputValue({
+            element: n as HTMLElement,
+            type: getInputType(n as HTMLElement),
+            tagName,
+            value,
+            maskInputOptions,
+            maskInputFn,
+          })
+        : '';
     } else if (checked) {
       attributes.checked = checked;
     }

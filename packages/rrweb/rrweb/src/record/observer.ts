@@ -444,7 +444,7 @@ function initInputObserver({
   userTriggeredOnInput,
 }: observerParam): listenerHandler {
   let active = true;
-  const pendingSelects = new Set<HTMLElement>();
+  const pendingSelects = new Map<HTMLElement, boolean>();
   let selectFlushScheduled = false;
 
   function getInputTarget(target: HTMLElement | null): HTMLElement | null {
@@ -473,7 +473,17 @@ function initInputObserver({
     );
   }
 
-  function processInput(target: HTMLElement | null, userTriggered: boolean) {
+  function getSelectedOptions(select: HTMLSelectElement) {
+    return Array.from(select.selectedOptions).filter(
+      (option) => !isBlocked(option, blockClass, blockSelector, true),
+    );
+  }
+
+  function processInput(
+    target: HTMLElement | null,
+    userTriggered: boolean,
+    deferred = false,
+  ) {
     const tagName = target && target.tagName;
     if (
       !target ||
@@ -490,14 +500,25 @@ function initInputObserver({
     ) {
       return;
     }
-    const selectedOptions =
+    let selectedOptions =
       tagName === 'SELECT'
-        ? Array.from((target as HTMLSelectElement).selectedOptions).filter(
-            (option) =>
-              !isBlocked(option, blockClass, blockSelector, true) &&
-              mirror.getId(option) > 0,
-          )
+        ? getSelectedOptions(target as HTMLSelectElement)
         : undefined;
+    if (selectedOptions?.some((option) => mirror.getId(option) <= 0)) {
+      // Input normally unfreezes mutations at emission; IDs are needed before that.
+      if (mutationBuffers[0]?.isFrozen()) {
+        mutationBuffers.forEach((buffer) => buffer.unfreeze());
+        if (!active) return;
+        // Emission callbacks can change the selection or its blocking rules.
+        selectedOptions = getSelectedOptions(target as HTMLSelectElement);
+      }
+      if (!deferred) {
+        queueSelect(target, userTriggered);
+        return;
+      }
+      // Never retry indefinitely or emit a partial selection without node IDs.
+      if (selectedOptions.some((option) => mirror.getId(option) <= 0)) return;
+    }
     let text = selectedOptions
       ? selectedOptions[0]?.value || ''
       : (target as HTMLInputElement).value;
@@ -545,13 +566,25 @@ function initInputObserver({
         });
     }
   }
+  function queueSelect(select: HTMLElement, userTriggered: boolean) {
+    pendingSelects.set(
+      select,
+      userTriggered || pendingSelects.get(select) || false,
+    );
+    if (!selectFlushScheduled) {
+      selectFlushScheduled = true;
+      // Mutation delivery and already-deferred setter callbacks finish first.
+      defer(flushPendingSelects);
+    }
+  }
+
   function flushPendingSelects() {
     selectFlushScheduled = false;
     const selects = Array.from(pendingSelects);
     pendingSelects.clear();
     callAllSafely(
-      selects.map((select) => () => {
-        if (active) callbackWrapper(processInput)(select, false);
+      selects.map(([select, userTriggered]) => () => {
+        if (active) callbackWrapper(processInput)(select, userTriggered, true);
       }),
     );
   }
@@ -611,12 +644,7 @@ function initInputObserver({
               const target = callbackWrapper(getInputTarget)(this);
               if (!target) return;
               if (target.tagName === 'SELECT') {
-                pendingSelects.add(target);
-                if (!selectFlushScheduled) {
-                  selectFlushScheduled = true;
-                  // Let the already-deferred setter callbacks join the same batch.
-                  defer(flushPendingSelects);
-                }
+                queueSelect(target, false);
               } else {
                 callbackWrapper(processInput)(target, false);
               }

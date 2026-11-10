@@ -243,7 +243,12 @@ describe('select review regressions', () => {
   }
 
   for (const blocked of ['option', 'optgroup']) {
-    for (const rule of ['class', 'class regex', 'class regex global', 'selector']) {
+    for (const rule of [
+      'class',
+      'class regex',
+      'class regex global',
+      'selector',
+    ]) {
       it.each(['single', 'multiple blocked only', 'multiple mixed'])(
         `excludes an initially selected blocked ${blocked} (${rule}, %s)`,
         async (selection) => {
@@ -377,6 +382,250 @@ describe('select review regressions', () => {
       );
     }
   }
+
+  for (const mode of ['play', 'seek', 'seek-real'] as const) {
+    it.each(['replace single', 'replace multiple', 'append mixed multiple'])(
+      `records same-task option changes after mirror assignment (${mode}, %s)`,
+      async (change) => {
+        await page.evaluate((change) => {
+          const win = window as unknown as TestWindow;
+          document.querySelector('#fixture')!.innerHTML =
+            `<select id="privacy" ${change === 'replace single' ? '' : 'multiple'}>` +
+            '<option value="public" selected>Public</option></select>';
+          const select = document.querySelector('select')!;
+          win.events = [];
+          win.stop = win.rrweb.record({
+            maskAllInputs: false,
+            emit: (event) => win.events.push(event),
+          })!;
+          if (change === 'replace single') {
+            select.innerHTML =
+              '<option value="same">First</option>' +
+              '<option value="same" selected>Second</option>';
+          } else if (change === 'replace multiple') {
+            select.innerHTML =
+              '<option value="a" selected>A</option><option value="b">B</option>' +
+              '<option value="c" selected>C</option>';
+          } else {
+            select.insertAdjacentHTML(
+              'beforeend',
+              '<option value="b" selected>B</option>' +
+                '<optgroup class="rr-block"><option value="fresh-option-secret" selected>Hidden</option></optgroup>',
+            );
+          }
+          select.dispatchEvent(new Event('input', { bubbles: true }));
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        }, change);
+        const result = await finishReplay(page, mode);
+        const selected =
+          change === 'replace single'
+            ? [1]
+            : change === 'replace multiple'
+              ? [0, 2]
+              : [0, 1];
+        expect(result.liveIndices).toEqual(
+          change === 'append mixed multiple' ? [0, 1, 2] : selected,
+        );
+        expect(result.inputs).toHaveLength(1);
+        expect(result.inputs[0].text).toBe(
+          change === 'replace single'
+            ? 'same'
+            : change === 'replace multiple'
+              ? 'a'
+              : 'public',
+        );
+        expect(result.inputs[0].selectedOptionIds).toEqual(
+          selected.map((index) => result.optionIds[index]),
+        );
+        expect(result.replayIndices).toEqual(selected);
+        expect(result.payload).not.toContain('fresh-option-secret');
+      },
+    );
+  }
+
+  it.each([false, true])(
+    'retains trusted metadata after option replacement (frozen=%s)',
+    async (frozen) => {
+      await page.evaluate((frozen) => {
+        const win = window as unknown as TestWindow;
+        document.querySelector('#fixture')!.innerHTML =
+          '<select id="privacy" size="2"><option value="a" selected>A</option>' +
+          '<option value="b">B</option></select>';
+        const select = document.querySelector('select')!;
+        document.addEventListener(
+          'change',
+          () => {
+            if (frozen) win.rrweb.record.freezePage();
+            select.innerHTML = '<option value="c" selected>C</option>';
+            select.selectedIndex = 0;
+          },
+          { capture: true, once: true },
+        );
+        win.events = [];
+        win.stop = win.rrweb.record({
+          maskAllInputs: false,
+          sampling: { input: 'last' },
+          userTriggeredOnInput: true,
+          emit: (event) => win.events.push(event),
+        })!;
+      }, frozen);
+      await page.click('#privacy option[value="b"]');
+      const result = await finishReplay(page, 'seek');
+      expect(result.replayValues).toEqual(['c']);
+      expect(result.inputs).toHaveLength(1);
+      expect(result.inputs[0].text).toBe('c');
+      expect(result.inputs[0].selectedOptionIds).toEqual([result.optionIds[0]]);
+      expect(result.inputs[0].userTriggered).toBe(true);
+    },
+  );
+
+  it.each(['change', 'setter'])(
+    'unfreezes fresh selected options before capture (%s)',
+    async (update) => {
+      await page.evaluate((update) => {
+        const win = window as unknown as TestWindow;
+        document.querySelector('#fixture')!.innerHTML =
+          '<select id="privacy"><option value="old">Old</option></select>';
+        const select = document.querySelector('select')!;
+        win.events = [];
+        win.stop = win.rrweb.record({
+          maskAllInputs: false,
+          emit: (event) => win.events.push(event),
+        })!;
+        win.rrweb.record.freezePage();
+        select.innerHTML =
+          '<option value="same">First</option><option value="same" selected>Second</option>';
+        if (update === 'change')
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        else select.selectedIndex = 1;
+      }, update);
+      const result = await finishReplay(page, 'seek');
+      expect(result.inputs).toHaveLength(1);
+      expect(result.inputs[0].text).toBe('same');
+      expect(result.inputs[0].selectedOptionIds).toEqual([result.optionIds[1]]);
+      expect(result.replayIndices).toEqual([1]);
+    },
+  );
+
+  it('rechecks blocking after unfreezing emits pending mutations', async () => {
+    await page.evaluate(() => {
+      const win = window as unknown as TestWindow;
+      document.querySelector('#fixture')!.innerHTML =
+        '<select id="privacy"><option value="public">Public</option></select>';
+      const select = document.querySelector('select')!;
+      win.events = [];
+      win.stop = win.rrweb.record({
+        maskAllInputs: false,
+        emit: (event) => {
+          win.events.push(event);
+          if (
+            event.type === 3 &&
+            event.data.source === 0 &&
+            event.data.adds.length
+          )
+            select.options[1].className = 'rr-block';
+        },
+      })!;
+      win.rrweb.record.freezePage();
+      select.innerHTML =
+        '<option value="public">Public</option>' +
+        '<option value="late-blocked-choice">Hidden</option>';
+      select.selectedIndex = 1;
+    });
+    const result = await finishReplay(page, 'seek');
+    expect(result.liveIndices).toEqual([1]);
+    expect(result.inputs).toHaveLength(1);
+    expect(result.inputs[0].text).toBe('');
+    expect(result.inputs[0].selectedOptionIds).toEqual([]);
+  });
+
+  it('stops reading selections when an unfreeze callback stops recording', async () => {
+    const result = await page.evaluate(async () => {
+      const win = window as unknown as TestWindow;
+      document.querySelector('#fixture')!.innerHTML =
+        '<select><option value="public">Public</option></select>';
+      const select = document.querySelector('select')!;
+      const descriptor = Object.getOwnPropertyDescriptor(
+        HTMLSelectElement.prototype,
+        'selectedOptions',
+      )!;
+      let stopped = false;
+      let lateScans = 0;
+      Object.defineProperty(select, 'selectedOptions', {
+        get() {
+          if (stopped) lateScans++;
+          return descriptor.get!.call(this);
+        },
+      });
+      const events: eventWithTime[] = [];
+      const stop = win.rrweb.record({
+        maskAllInputs: false,
+        emit: (event) => {
+          events.push(event);
+          if (
+            event.type === 3 &&
+            event.data.source === 0 &&
+            event.data.adds.length
+          ) {
+            stop();
+            stopped = true;
+          }
+        },
+      })!;
+      win.rrweb.record.freezePage();
+      select.innerHTML = '<option value="fresh">Fresh</option>';
+      select.selectedIndex = 0;
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      return {
+        stopped,
+        lateScans,
+        inputs: events.filter(
+          (event) => event.type === 3 && event.data.source === 5,
+        ),
+      };
+    });
+    expect(result.stopped).toBe(true);
+    expect(result.lateScans).toBe(0);
+    expect(result.inputs).toEqual([]);
+  });
+
+  it('does not retry indefinitely or emit empty input when options remain unmirrored', async () => {
+    const result = await page.evaluate(async () => {
+      const win = window as unknown as TestWindow;
+      document.querySelector('#fixture')!.innerHTML =
+        '<select><option value="public">Public</option></select>';
+      const select = document.querySelector('select')!;
+      const descriptor = Object.getOwnPropertyDescriptor(
+        HTMLSelectElement.prototype,
+        'selectedOptions',
+      )!;
+      let scans = 0;
+      Object.defineProperty(select, 'selectedOptions', {
+        get() {
+          scans++;
+          return descriptor.get!.call(this);
+        },
+      });
+      const events: eventWithTime[] = [];
+      const stop = win.rrweb.record({
+        recordDOM: false,
+        maskAllInputs: false,
+        emit: (event) => events.push(event),
+      })!;
+      scans = 0;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      stop();
+      return {
+        scans,
+        inputs: events.filter(
+          (event) => event.type === 3 && event.data.source === 5,
+        ),
+      };
+    });
+    expect(result.inputs).toEqual([]);
+    expect(result.scans).toBeLessThanOrEqual(2);
+  });
 
   it('reads each selected set once during a burst of option writes', async () => {
     const scans = await page.evaluate(async () => {
