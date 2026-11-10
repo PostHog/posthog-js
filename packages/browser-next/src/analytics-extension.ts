@@ -828,11 +828,6 @@ export class Analytics implements IAnalyticsExtension {
         }
     }
 
-    readonly getSessionProperty = (property: string): unknown => {
-        if (!this._propertyStore()) return undefined
-        return this._sessionProperties?.get(property, this._host?.state.sessionId)
-    }
-
     readonly unregister = (property: string): void => {
         this._propertyStore()?.unregister(property)
     }

@@ -14,11 +14,6 @@ export class SessionRegisteredProperties {
         return scope === undefined || scope === sessionId ? this._properties.values() : {}
     }
 
-    get(property: string, sessionId: string | undefined): unknown {
-        const values = this.values(sessionId)
-        return Object.prototype.hasOwnProperty.call(values, property) ? values[property] : undefined
-    }
-
     register(properties: Record<string, unknown>, sessionId: string | undefined): void {
         this._kv.set({ superProperties: { ...this.values(sessionId), ...properties }, sessionId })
     }
