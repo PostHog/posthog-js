@@ -692,6 +692,7 @@ describe('emails', () => {
 
     it("refuses an upload URL that isn't https before any upload, and keeps the URL out of the error", async () => {
       const fake = againstPostHog({ storageOrigin: 'http://email-files.s3.example.com' })
+      fake.holdAlready(utf8('hello'))
 
       const { data, error } = await sendFiles([
         { filename: 'hello.txt', content: Buffer.from('hello') },
@@ -701,9 +702,9 @@ describe('emails', () => {
       expect(data).toBeNull()
       expect(error).toMatchObject({
         code: 'api_error',
-        field: 'attachments__0',
+        field: 'attachments__1',
         message:
-          "PostHog named an upload URL for attachments__0 that isn't https, so the file would travel unencrypted. No email was sent.",
+          "PostHog named an upload URL for attachments__1 that isn't https, so the file would travel unencrypted. No email was sent.",
         fix: "Make your PostHog's file storage URL use https. For local development over plain HTTP, set appHost to your http app host.",
       })
       expectNothingSent(fake)
