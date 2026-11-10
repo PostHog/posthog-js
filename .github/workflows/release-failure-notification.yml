@@ -14,6 +14,9 @@ jobs:
     notify-failed:
         name: Notify Slack - Failed
         runs-on: ubuntu-latest
+        if: >-
+            github.event.workflow_run.head_repository.full_name == github.repository &&
+            (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
         timeout-minutes: 10
         steps:
             # This workflow must survive cancellation or runner startup failure in Release.
