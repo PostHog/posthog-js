@@ -17,8 +17,8 @@ import type { V1BatchResponse, V1Event } from './types'
 const V1_ANALYTICS_PATH = '/i/v1/analytics/events'
 const DEFAULT_MAX_BACKOFF_MS = 30_000
 
-/** HTTP statuses the v1 backend wants retried. 429 is intentionally terminal in v1. */
-const RETRYABLE_STATUSES = new Set([408, 500, 502, 503, 504])
+/** HTTP statuses a capture request is retried on. 404 and 429 can come from a proxy in front of capture. */
+const RETRYABLE_STATUSES = new Set([404, 408, 429, 500, 502, 503, 504])
 
 export interface V1CaptureSenderConfig {
   host: string

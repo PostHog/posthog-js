@@ -365,7 +365,7 @@ describe('V1CaptureSender', () => {
   })
 
   describe('HTTP status classification', () => {
-    it.each([408, 500, 502, 503, 504])('retries retryable status %s then succeeds', async (status) => {
+    it.each([404, 408, 429, 500, 502, 503, 504])('retries retryable status %s then succeeds', async (status) => {
       const { sender, fetch, errors } = makeSender()
       fetch.mockResolvedValueOnce(makeResponse(status)).mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
@@ -375,16 +375,17 @@ describe('V1CaptureSender', () => {
       expect(errors).toEqual([])
     })
 
-    it('treats 429 as terminal in v1 (no retry)', async () => {
-      const { sender, fetch, errors } = makeSender()
-      fetch.mockResolvedValueOnce(makeResponse(429, '', { 'Retry-After': '1' }))
+    it.each([404, 429, 503])('honors Retry-After as a minimum wait on retryable status %s', async (status) => {
+      const { sender, fetch, errors, sleeps } = makeSender({ initialRetryDelayMs: 100 })
+      fetch
+        .mockResolvedValueOnce(makeResponse(status, '', { 'Retry-After': '2' }))
+        .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       await sender.sendV1Batch([msg('u1')])
 
-      expect(fetch).toHaveBeenCalledTimes(1)
-      const error = errors[0] as CaptureV1Error
-      expect(error.retryExhausted).toEqual(['u1'])
-      expect((error.cause as Error).message).toContain('429')
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(sleeps).toEqual([2000])
+      expect(errors).toEqual([])
     })
 
     it.each([400, 401, 402, 413, 415])('treats non-retryable status %s as terminal', async (status) => {
@@ -398,14 +399,20 @@ describe('V1CaptureSender', () => {
       expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
     })
 
-    it('exhausts the budget on a persistently retryable status', async () => {
-      const { sender, fetch, errors } = makeSender({ maxAttempts: 4 })
-      fetch.mockResolvedValue(makeResponse(503))
+    it.each([404, 429, 503])('exhausts the budget on a persistently retryable status %s', async (status) => {
+      const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 4 })
+      fetch.mockResolvedValue(makeResponse(status))
 
       await sender.sendV1Batch([msg('u1')])
 
       expect(fetch).toHaveBeenCalledTimes(4)
-      expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
+      // Every attempt stays on the v1 endpoint, and there is no wait after the last one.
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual(Array(4).fill('https://t.posthog.com/i/v1/analytics/events'))
+      expect(sleeps).toEqual([100, 200, 400])
+      expect(errors).toHaveLength(1)
+      const error = errors[0] as CaptureV1Error
+      expect(error.retryExhausted).toEqual(['u1'])
+      expect((error.cause as Error).message).toContain(`HTTP ${status}`)
     })
 
     it('bounds response body cancellation by the request deadline before retrying a 5xx', async () => {
