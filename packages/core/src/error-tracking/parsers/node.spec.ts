@@ -16,4 +16,19 @@ describe('nodeStackLineParser', () => {
       platform: 'node:javascript',
     })
   })
+
+  it.each([
+    ['at async (/app/server/api/handler.ts:91:27)', 'async'],
+    ['at async (work) (/app/server/api/handler.ts:91:27)', '(work)'],
+  ])('parses the function name and filename in %s', (line, functionName) => {
+    expect(nodeStackLineParser(line, 'node:javascript')).toEqual({
+      filename: '/app/server/api/handler.ts',
+      module: undefined,
+      function: functionName,
+      lineno: 91,
+      colno: 27,
+      in_app: true,
+      platform: 'node:javascript',
+    })
+  })
 })

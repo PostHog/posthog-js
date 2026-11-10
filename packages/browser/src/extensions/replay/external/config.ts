@@ -308,7 +308,7 @@ export const buildNetworkRequestOptions = (
             // Preserve the nullish signal for initial entries so the required-metadata fallback below can
             // remove all customer-controlled content. Keep the deprecated URL-only behavior otherwise.
             if (!cleanedURL && data.isInitial) {
-                return cleanedURL
+                return undefined
             }
             // the deprecated mask fn can suppress the URL, leaving `name` undefined on purpose
             // oxlint-disable-next-line typescript/consistent-type-assertions

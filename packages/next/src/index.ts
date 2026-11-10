@@ -1,6 +1,6 @@
 export { PostHogProvider } from './app/PostHogProvider.js'
 export { createPostHog } from './server/createPostHog.js'
-export { captureRequestError, createOnRequestError, onRequestError } from './server/onRequestError.js'
+export { captureRequestError, createOnRequestError, onRequestError, withPostHogProxy } from './server/onRequestError.js'
 export { postHogMiddleware } from './middleware/postHogMiddleware.js'
 export { PostHogPageView } from './client/PostHogPageView.js'
 export { DEFAULT_INGEST_PATH } from './shared/constants.js'

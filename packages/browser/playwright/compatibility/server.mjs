@@ -48,15 +48,26 @@ export function compatibilityServer(settings) {
         'version-fallback',
     ].includes(settings.scenario)
     let flagSequence = 0
+    let xhrFault
     const server = createMockServer({
-        barriers: ['config', 'flags', 'extensions', 'surveys', ...(settings.mode === 'snippet' ? ['core'] : [])],
+        barriers: [
+            'config',
+            'flags',
+            'extensions',
+            'surveys',
+            ...(['snippet', 'loader'].includes(settings.mode) ? ['core'] : []),
+        ],
         state: {
             sessionReplayEnabled: settings.scenario.startsWith('replay'),
             minimumDurationMilliseconds:
                 settings.scenario === 'replay-minimum-duration' ? replayMinimumDurationMs : null,
             surveysEnabled,
             surveys: [survey],
-            flags: { 'compat-enabled': true, 'compat-variant': 'blue' },
+            flags: {
+                'compat-enabled': true,
+                'compat-variant': 'blue',
+                ...(settings.scenario.startsWith('xhr-timeout') ? { 'compat-timeout': 'cached' } : {}),
+            },
             projectToken: 'phc_COMPAT',
             configOverrides: {
                 supportedCompression: [],
@@ -90,6 +101,18 @@ export function compatibilityServer(settings) {
         },
         async adapter(request, context) {
             const path = request.path
+            if (path === '/__compat/xhr-timeout' && request.method === 'POST') {
+                const mode = request.body?.mode
+                if (!['recover', 'exhaust'].includes(mode)) return { status: 400, json: { error: 'Invalid XHR fault' } }
+                xhrFault = { mode, attempts: 0 }
+                server.holdBarrier('xhr-timeout')
+                server.updateState({ flags: { 'compat-timeout': 'fresh' } })
+                return { json: { afterId: request.id } }
+            }
+            if (xhrFault && request.method === 'POST' && /^\/(flags|decide)\/?$/.test(path)) {
+                xhrFault.attempts++
+                if (xhrFault.mode === 'exhaust' || xhrFault.attempts === 1) await context.waitForBarrier('xhr-timeout')
+            }
             const networkSample = replayNetworkCases.find((sample) => path === `${replayNetworkPath}/${sample.name}`)
             if (settings.scenario === 'replay' && request.method === 'POST' && networkSample)
                 return { body: networkSample.responseBody, headers: replayNetworkHeaders.response }
@@ -118,8 +141,11 @@ export function compatibilityServer(settings) {
                     body +=
                         '<script>document.getElementById("action").addEventListener("mousedown", (event) => event.preventDefault())</script>'
                 }
-                if (path === '/')
-                    body += `<script src="/harness.js"></script><script src="/${settings.mode === 'snippet' ? 'snippet' : 'consumer'}.js"></script>`
+                if (path === '/') {
+                    body += '<script src="/harness.js"></script>'
+                    if (settings.mode !== 'loader')
+                        body += `<script src="/${settings.mode === 'snippet' ? 'snippet' : 'consumer'}.js"></script>`
+                }
                 if (path === '/player') body += '<script src="/player.js"></script>'
                 return { body: body + '</body></html>', headers: { 'Content-Type': 'text/html' } }
             }
@@ -141,13 +167,14 @@ export function compatibilityServer(settings) {
                 )
                     return { status: 404, json: { error: 'Unknown artifact' } }
                 const isCore = filename === 'array.js'
-                await context.waitForBarrier(isCore ? 'core' : 'extensions')
+                const isLoader = filename === 'loader.js'
+                if (!isLoader) await context.waitForBarrier(isCore ? 'core' : 'extensions')
                 const failure = settings.scenario === 'extension-failure' && filename === 'surveys.js'
-                const fallback = settings.scenario === 'version-fallback' && parts.length === 4 && !isCore
+                const fallback = settings.scenario === 'version-fallback' && parts.length === 4 && !isCore && !isLoader
                 if (failure || fallback)
                     return { status: failure ? 503 : 404, json: { error: 'Controlled extension failure' } }
                 return {
-                    body: readFileSync(join(isCore ? settings.coreDist : settings.extensionDist, filename)),
+                    body: readFileSync(join(isCore || isLoader ? settings.coreDist : settings.extensionDist, filename)),
                     headers: { 'Content-Type': 'text/javascript' },
                 }
             }

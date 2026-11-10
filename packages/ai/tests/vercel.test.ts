@@ -353,6 +353,129 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(input).not.toContain('redacted')
     })
 
+    const bytes = new Uint8Array([0x50, 0x4e, 0x47])
+    const oversizedBytes = new Uint8Array(6 * 1024 * 1024)
+    it.each([
+      {
+        name: 'bytes, redacted',
+        fullCapture: false,
+        data: bytes,
+        mediaType: 'image/png',
+        expected: '[base64 image/png redacted]',
+      },
+      { name: 'bytes', fullCapture: true, data: bytes, mediaType: 'image/png', expected: 'data:image/png;base64,UE5H' },
+      {
+        name: 'bare base64',
+        fullCapture: true,
+        data: 'UE5H',
+        mediaType: 'image/png',
+        expected: 'data:image/png;base64,UE5H',
+      },
+      {
+        name: 'wildcard type',
+        fullCapture: true,
+        data: bytes,
+        mediaType: 'image/*',
+        expected: 'data:application/octet-stream;base64,UE5H',
+      },
+      {
+        name: 'type params',
+        fullCapture: true,
+        data: 'UE5H',
+        mediaType: 'audio/L16;rate=24000',
+        expected: 'data:application/octet-stream;base64,UE5H',
+      },
+      {
+        name: 'oversized bytes',
+        fullCapture: true,
+        data: oversizedBytes,
+        mediaType: 'image/png',
+        expected: '[base64 image/png redacted]',
+      },
+      {
+        name: 'oversized bytes with a wildcard type',
+        fullCapture: true,
+        data: oversizedBytes,
+        mediaType: 'image/*',
+        expected: '[base64 image/* redacted]',
+      },
+      {
+        name: 'oversized base64 with a wildcard type',
+        fullCapture: true,
+        data: Buffer.from(oversizedBytes).toString('base64'),
+        mediaType: 'image/*',
+        expected: '[base64 image/* redacted]',
+      },
+      {
+        name: 'file ID',
+        fullCapture: true,
+        data: 'file-abc123',
+        mediaType: 'application/pdf',
+        expected: 'file-abc123',
+      },
+    ])('records file $name, full capture $fullCapture', async ({ fullCapture, data, mediaType, expected }) => {
+      const client = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      client.enableFullAiCapture = fullCapture
+      const baseModel = {
+        ...createMockV3Model('image-model'),
+        doGenerate: vi.fn().mockResolvedValue({
+          content: [{ type: 'file', data, mediaType }],
+          usage: v3TokenUsage(1, 1),
+          response: { modelId: 'image-model' },
+          providerMetadata: {},
+          finishReason: { unified: 'stop', raw: undefined },
+          warnings: [],
+        }),
+      } as LanguageModelV3
+      const model = withTracing(baseModel, client, { posthogDistinctId: 'test-user' })
+
+      await model.doGenerate({
+        prompt: [{ role: 'user', content: [{ type: 'file', data, mediaType }] }],
+      } as any)
+
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_input'][0].content[0].file).toBe(expected)
+      expect(properties['$ai_output_choices'][0].content[0].data).toBe(expected)
+    })
+
+    it.each(['generate', 'stream'])('shares one file budget between input and output in %s', async (mode) => {
+      const client = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      client.enableFullAiCapture = true
+      const outputFile = new Uint8Array(1024 * 1024)
+      const baseModel = {
+        ...createMockStreamingModel('v3', [
+          { type: 'file', mediaType: 'image/png', data: outputFile },
+          { type: 'finish', usage: v3TokenUsage(1, 1), finishReason: { unified: 'stop' as const, raw: undefined } },
+        ]),
+        doGenerate: vi.fn().mockResolvedValue({
+          content: [{ type: 'file', data: outputFile, mediaType: 'image/png' }],
+          usage: v3TokenUsage(1, 1),
+          finishReason: { unified: 'stop', raw: undefined },
+          warnings: [],
+        }),
+      } as LanguageModelV3
+      const model = withTracing(baseModel, client, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          { role: 'user', content: [{ type: 'file', data: new Uint8Array(5 * 1024 * 1024), mediaType: 'image/png' }] },
+        ],
+      } as any
+
+      if (mode === 'generate') {
+        await model.doGenerate(params)
+      } else {
+        const reader = (await model.doStream(params)).stream.getReader()
+        while (!(await reader.read()).done) {
+          // Consume stream
+        }
+        await flushPromises()
+      }
+
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_output_choices'][0].content[0].data.startsWith('data:image/png;base64,')).toBe(true)
+      expect(properties['$ai_input'][0].content[0].file).toBe('[base64 image/png redacted]')
+    })
+
     it('redacts data URL objects from input while preserving HTTP URL objects', async () => {
       const binary = 'SU5QVVQgVVJMIERBVEE='
       const dataUrl = new URL(`data:audio/wav;base64,${binary}`)
@@ -476,6 +599,28 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(captureCall[0].properties['$ai_time_to_first_token']).toBeLessThanOrEqual(
         captureCall[0].properties['$ai_latency']
       )
+    })
+
+    it('records files from a stream in the output', async () => {
+      const client = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      client.enableFullAiCapture = true
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'file', mediaType: 'image/png', data: 'UE5H' },
+        { type: 'finish', usage: v3TokenUsage(1, 1), finishReason: { unified: 'stop' as const, raw: undefined } },
+      ]
+      const model = withTracing(createMockStreamingModel('v3', streamParts), client, { posthogDistinctId: 'test-user' })
+
+      const result = await model.doStream({ prompt: [] } as any)
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume stream
+      }
+      await flushPromises()
+
+      const output = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_output_choices']
+      expect(output[0].content).toEqual([
+        { type: 'file', name: 'generated_file', mediaType: 'image/png', data: 'data:image/png;base64,UE5H' },
+      ])
     })
 
     it('should track time to first token in V2 streaming', async () => {

@@ -3,6 +3,7 @@
     "compilerOptions": {
         "skipLibCheck": true,
         "strict": false,
+        "module": "ESNext",
         "noImplicitReturns": false,
         "allowJs": true,
         "types": ["node", "vitest/globals"],

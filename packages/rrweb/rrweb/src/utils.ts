@@ -371,6 +371,34 @@ export function isBlocked(
   return false;
 }
 
+// `isBlocked` with ancestors stops at a shadow root; this continues from each
+// shadow host, because closest()/parentElement do not cross that boundary.
+export function isBlockedIncludingShadowHosts(
+  node: Node | null,
+  blockClass: blockClass,
+  blockSelector: string | null,
+): boolean {
+  // Match stateful patterns from zero without writing to the configured
+  // regexp, whose lastIndex may be non-writable. Keep all flags, including y.
+  const stateful =
+    blockClass &&
+    typeof blockClass !== 'string' &&
+    (blockClass.global || blockClass.sticky)
+      ? new RegExp(blockClass)
+      : null;
+  while (node) {
+    if (stateful) stateful.lastIndex = 0;
+    if (isBlocked(node, stateful || blockClass, blockSelector, true))
+      return true;
+    const root = 'getRootNode' in node ? dom.getRootNode(node) : null;
+    node =
+      root?.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+        ? dom.host(root as ShadowRoot)
+        : null;
+  }
+  return false;
+}
+
 export function isSerialized(n: Node, mirror: Mirror): boolean {
   return mirror.getId(n) !== -1;
 }
@@ -556,6 +584,15 @@ export function hasShadowRoot<T extends Node | RRNode>(
     return Boolean(n.shadowRoot);
   }
   return Boolean(dom.shadowRoot(n as unknown as Element));
+}
+
+// Leaf nodes expose appendChild/removeChild too, but those methods throw.
+export function canContainChildren(node: Node | RRNode): boolean {
+  return (
+    node.nodeType === Node.ELEMENT_NODE ||
+    node.nodeType === Node.DOCUMENT_NODE ||
+    node.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+  );
 }
 
 export function getNestedRule(

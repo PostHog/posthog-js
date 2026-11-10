@@ -99,7 +99,7 @@ function makeClient(
   const listeners = new Map<string, Set<(value: any) => void>>()
   const emit = (event: string, payload?: unknown) => listeners.get(event)?.forEach((listener) => listener(payload))
   const sdk = {
-    apiKey: 'project',
+    projectToken: 'project',
     optedOut: false,
     ready: async () => {
       await storage.preloadPromise

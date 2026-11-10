@@ -1,4 +1,4 @@
-import { createPosthogInstance, createRemoteConfig } from './helpers/posthog-instance'
+import { createPosthogInstance, createRemoteConfig, requirePostHogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { Compression, RemoteConfig, RemoteConfigResult } from '../types'
 import type { Client } from '@posthog/browser-common'
@@ -121,7 +121,7 @@ describe('deferred extension initialization', () => {
                             instance.identify('early-logs-user')
                             instance.captureLog({ body: 'loaded callback' })
                             logger.info('logger callback')
-                            expect((instance.logs as any)._queue).toHaveLength(0)
+                            expect((requirePostHogInstance(instance).logs as any)._queue).toHaveLength(0)
                             expect(setup).not.toHaveBeenCalled()
                             expect(loader).not.toHaveBeenCalled()
                             expect(console.log).toBe(originalLog)

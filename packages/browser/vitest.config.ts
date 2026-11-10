@@ -2,11 +2,13 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath, URL } from 'node:url'
 import { configDefaults, defineConfig } from 'vitest/config'
+import { loaderMethods } from './scripts/loader-methods.mjs'
 
 const require = createRequire(import.meta.url)
 const fromRoot = (relativePath: string): string => fileURLToPath(new URL(relativePath, import.meta.url))
 
 export default defineConfig({
+    plugins: [loaderMethods()],
     define: {
         __SURVEY_CSS__: JSON.stringify(readFileSync(fromRoot('../browser-common/src/surveys/survey.css'), 'utf8')),
     },
@@ -24,6 +26,15 @@ export default defineConfig({
                 find: '@posthog/browser-common/feature-flags',
                 replacement: fromRoot('../browser-common/src/feature-flags.ts'),
             },
+            {
+                find: '@posthog/browser-common/autocapture-config',
+                replacement: fromRoot('../browser-common/src/autocapture-config.ts'),
+            },
+            {
+                find: '@posthog/browser-common/autocapture',
+                replacement: fromRoot('../browser-common/src/autocapture.ts'),
+            },
+            { find: '@posthog/browser-common/rageclick', replacement: fromRoot('../browser-common/src/rageclick.ts') },
             {
                 find: '@posthog/browser-common/logs-types',
                 replacement: fromRoot('../browser-common/src/logs-types.ts'),

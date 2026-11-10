@@ -2,7 +2,7 @@
   "name": "posthog-next15-integration",
   "private": true,
   "dependencies": {
-    "next": "15.5.27",
+    "next": "15.5.28",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   }

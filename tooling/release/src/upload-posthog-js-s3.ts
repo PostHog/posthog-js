@@ -1,37 +1,23 @@
 import fs from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import { parseSemver } from './release-utils.ts'
-import { putS3ObjectFromFile, s3ObjectMatchesFile } from './s3.ts'
-import { mapConcurrent } from './concurrency.ts'
+import { writeIntegrityManifest } from './integrity-manifest.ts'
+import {
+    IMMUTABLE_ASSET_CACHE_CONTROL,
+    MUTABLE_ALIAS_CACHE_CONTROL,
+    inferContentType,
+    assertCanUploadImmutableAssets,
+    uploadReleaseAssets,
+    verifyUploadedAssets,
+    type ReleaseAsset,
+    type PlannedAssetUpload,
+} from './release-assets.ts'
 
-const require = createRequire(import.meta.url)
-const mimeTypes = require('mime-types') as {
-    lookup(filePath: string): string | false
-}
+export { inferContentType, assertCanUploadImmutableAssets } from './release-assets.ts'
+export type { ReleaseAsset, PlannedAssetUpload } from './release-assets.ts'
 
-const IMMUTABLE_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable'
-const MUTABLE_ALIAS_CACHE_CONTROL = 'public, max-age=300'
 const COMPATIBILITY_VERSION_NAMESPACE_COLLISION_PATH = /^\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.]+)?(?:\/|$)/
 const DIST_DIR = path.resolve('packages/browser/dist')
-
-export type ReleaseAsset = {
-    relativeKey: string
-    filePath: string
-    contentType?: string
-}
-
-export type PlannedAssetUpload = {
-    key: string
-    filePath: string
-    contentType?: string
-    cacheControl: string
-}
-
-export function inferContentType(filePath: string): string | undefined {
-    const inferred = mimeTypes.lookup(filePath)
-    return inferred || undefined
-}
 
 async function fileExists(filePath: string): Promise<boolean> {
     try {
@@ -60,11 +46,12 @@ async function listFilesRecursively(root: string): Promise<string[]> {
 export async function collectReleaseAssets(distDir = DIST_DIR): Promise<ReleaseAsset[]> {
     const distEntries = (await fs.readdir(distDir)).sort()
     const assets: ReleaseAsset[] = distEntries
-        .filter((name) => name.endsWith('.js') || name.endsWith('.js.map'))
+        .filter((name) => name.endsWith('.js') || name.endsWith('.js.map') || name === 'integrity.json')
         .map((entry) => ({
             relativeKey: entry,
             filePath: path.join(distDir, entry),
-            contentType: entry.endsWith('.js.map') ? 'application/json' : 'application/javascript',
+            contentType:
+                entry.endsWith('.json') || entry.endsWith('.js.map') ? 'application/json' : 'application/javascript',
         }))
 
     const toolbarCssPath = path.join(distDir, 'toolbar.css')
@@ -148,6 +135,7 @@ export function buildAssetUploadPlans(
     const shouldPublishMutableAliases = publishMutableAliases && !parsedVersion.prerelease
 
     assertNoCompatibilityVersionNamespaceCollisions(assets)
+    const aliasAssets = assets.filter((asset) => asset.relativeKey !== 'integrity.json')
 
     return {
         immutable: assets.map((asset) => ({
@@ -157,7 +145,7 @@ export function buildAssetUploadPlans(
             cacheControl: IMMUTABLE_ASSET_CACHE_CONTROL,
         })),
         majorAlias: shouldPublishMutableAliases
-            ? assets.map((asset) => ({
+            ? aliasAssets.map((asset) => ({
                   key: getAssetKey(majorPrefix, asset),
                   filePath: asset.filePath,
                   contentType: asset.contentType,
@@ -165,7 +153,7 @@ export function buildAssetUploadPlans(
               }))
             : [],
         compatibility: shouldPublishMutableAliases
-            ? assets.map((asset) => ({
+            ? aliasAssets.map((asset) => ({
                   key: getAssetKey(compatibilityPrefix, asset),
                   filePath: asset.filePath,
                   contentType: asset.contentType,
@@ -173,55 +161,6 @@ export function buildAssetUploadPlans(
               }))
             : [],
     }
-}
-
-async function uploadReleaseAssets(
-    bucket: string,
-    uploads: PlannedAssetUpload[],
-    label: string,
-    options: { ifNoneMatch?: string } = {}
-): Promise<void> {
-    if (uploads.length === 0) {
-        return
-    }
-
-    console.log(`==> Uploading ${label} to s3://${bucket}`)
-
-    await mapConcurrent(uploads, (upload) =>
-        putS3ObjectFromFile(bucket, upload.key, upload.filePath, {
-            cacheControl: upload.cacheControl,
-            contentType: upload.contentType,
-            ifNoneMatch: options.ifNoneMatch,
-        })
-    )
-}
-
-async function matchesUploadedAsset(bucket: string, upload: PlannedAssetUpload): Promise<boolean> {
-    return s3ObjectMatchesFile(bucket, upload.key, upload.filePath, upload)
-}
-
-async function verifyUploadedAssets(bucket: string, uploads: PlannedAssetUpload[], label: string): Promise<void> {
-    console.log(`==> Verifying ${label} bytes and metadata in s3://${bucket}`)
-    await mapConcurrent(uploads, async (upload) => {
-        if (!(await matchesUploadedAsset(bucket, upload))) {
-            throw new Error(`Expected uploaded object s3://${bucket}/${upload.key} to exist`)
-        }
-    })
-}
-
-export async function assertCanUploadImmutableAssets(
-    bucket: string,
-    uploads: PlannedAssetUpload[],
-    forceOverwrite: boolean,
-    matchesExisting: (bucket: string, upload: PlannedAssetUpload) => Promise<boolean> = matchesUploadedAsset
-): Promise<void> {
-    if (forceOverwrite) {
-        return
-    }
-
-    // Check the whole immutable set before writing anything. Missing or identical
-    // objects are safe to resume; mismatches and lookup failures throw.
-    await mapConcurrent(uploads, (upload) => matchesExisting(bucket, upload))
 }
 
 export async function uploadPostHogJsS3(
@@ -236,6 +175,18 @@ export async function uploadPostHogJsS3(
 
     const assets = await collectReleaseAssets()
     if (assets.length === 0) throw new Error('No release assets found')
+    await writeIntegrityManifest(
+        DIST_DIR,
+        version,
+        assets.map((asset) => asset.relativeKey)
+    )
+    if (!assets.some((asset) => asset.relativeKey === 'integrity.json')) {
+        assets.push({
+            relativeKey: 'integrity.json',
+            filePath: path.join(DIST_DIR, 'integrity.json'),
+            contentType: 'application/json',
+        })
+    }
     const publishMutableAliases = options.publishMutableAliases ?? true
     const forceOverwrite = options.forceOverwrite ?? false
     if (options.aliasesOnly && (!publishMutableAliases || forceOverwrite)) {

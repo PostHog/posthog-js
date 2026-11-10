@@ -8,6 +8,9 @@
 import 'core-js/features/object/entries'
 import 'core-js/features/object/from-entries'
 import 'core-js/features/promise'
+// used by uuidv7, in both @posthog/core and @posthog/browser-common
+import 'core-js/features/math/trunc'
+import 'core-js/features/number/is-integer'
 
 if (typeof performance === 'undefined' || typeof performance.now !== 'function') {
     const perf = typeof performance !== 'undefined' ? performance : ({} as any)

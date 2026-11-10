@@ -507,6 +507,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _forceAllowLocalhostNetworkCapture = false
     private _stopRrweb: listenerHandler | undefined = undefined
+    private _styleRuleSourceHandoff: { cancelled: boolean; cancel: () => void } | undefined = undefined
     private _jsonLdCapture: ReturnType<typeof startJsonLdCapture> | undefined
     private _jsonLdCaptureReady = false
     private _lastActivityTimestamp: number = Date.now()
@@ -859,8 +860,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                             this._networkPayloadCapture,
                             isIngestionEndpoint
                         ),
-                        // This private init option is deliberately off by default, including for old
-                        // cores loading a new recorder from the unversioned CDN. Never infer it from a version.
+                        // Only new cores default this private option to true. Old cores loading the
+                        // unversioned recorder lack it and must retain legacy fetch delegation.
                         captureFetchSynchronously: this._instance.config.__preview_replay_sync_fetch === true,
                     })
                 )
@@ -1459,7 +1460,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._strategy?.makeSamplingDecisions(sessionId)
     }
 
-    private _teardown() {
+    private _teardown(preserveStyleRuleSourceHandoff = false) {
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
         window?.removeEventListener('pagehide', this._onPageHide)
         window?.removeEventListener('offline', this._onOffline)
@@ -1482,7 +1483,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._strategy?.stop()
 
-        this._stopRecordingProducers()
+        this._stopRecordingProducers(preserveStyleRuleSourceHandoff)
 
         this._invalidateCompressionQueue()
     }
@@ -1497,7 +1498,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._isStoppingAfterCompression = false
     }
 
-    private _stopRecordingProducers() {
+    private _stopRecordingProducers(preserveStyleRuleSourceHandoff = false) {
+        if (!preserveStyleRuleSourceHandoff) {
+            this._styleRuleSourceHandoff?.cancel()
+        }
         this._mutationThrottler?.stop()
 
         // Clear any queued rrweb events to prevent memory leaks from closures
@@ -1559,12 +1563,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return true
     }
 
-    stop() {
+    stop(preserveStyleRuleSourceHandoff = false) {
         // Stop rrweb first: its teardown synchronously flushes any deferred
         // stylesheet mutations through the emit path, and they must reach the
         // buffer (or the compression queue, checked next) before the final
         // flush below, or they are cleared unshipped.
-        this._stopRecordingProducers()
+        this._stopRecordingProducers(preserveStyleRuleSourceHandoff)
 
         // a rotation's synchronous start() would invalidate a deferred drain, destroying the old session's tail
         if (this._isRestartingForSessionIdChange) {
@@ -1578,7 +1582,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._flushBuffer()
         this._clearBuffer()
         this._releaseHoldAfterStop()
-        this._teardown()
+        this._teardown(preserveStyleRuleSourceHandoff)
         logger.info('stopped')
     }
 
@@ -1612,11 +1616,32 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _isRestartingForSessionIdChange = false
 
     private _restartForSessionIdChange(holdNextEpoch: boolean) {
+        const previousHandoff = this._styleRuleSourceHandoff
+        const wasRestarting = this._isRestartingForSessionIdChange
         this._isRestartingForSessionIdChange = true
         // the new epoch's idle clock starts now, before teardown or the restart snapshot can emit
         this._lastActivityTimestamp = Date.now()
-        try {
-            this.stop()
+        let cancelSources: (() => void) | undefined
+        // A stop/opt-out inside teardown or startup must cancel the entire replacement.
+        const cancellation = {
+            cancelled: false,
+            cancel: (): void => {
+                cancellation.cancelled = true
+                previousHandoff?.cancel()
+                cancelSources?.()
+            },
+        }
+        this._styleRuleSourceHandoff = cancellation
+        const restart = () => {
+            this.stop(true)
+            if (
+                cancellation.cancelled ||
+                this._instance.config.disable_session_recording ||
+                this._instance.has_opted_out_capturing()
+            ) {
+                cancellation.cancel()
+                return
+            }
             // cost metrics are per-session; reset them only after the old recorder has
             // stopped (its teardown flush still records deferred stylesheet work, which
             // belongs to the old session) and before the new one takes its first snapshot
@@ -1628,8 +1653,31 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._oversizedMutationBytesDropped = 0
             getRRWeb()?.resetSnapshotCostState?.()
             this.start('session_id_changed')
+            if (
+                cancellation.cancelled ||
+                this._instance.config.disable_session_recording ||
+                this._instance.has_opted_out_capturing()
+            ) {
+                cancellation.cancel()
+                this.discard({ discardProducerEvents: true })
+            }
+        }
+        try {
+            const handoff = getRRWebRecord()?.withStyleRuleSourceHandoff
+            if (handoff && this._stopRrweb) {
+                handoff(this._stopRrweb, (cancel) => {
+                    cancelSources = cancel
+                    restart()
+                })
+            } else {
+                restart()
+            }
         } finally {
-            this._isRestartingForSessionIdChange = false
+            this._styleRuleSourceHandoff = previousHandoff
+            this._isRestartingForSessionIdChange = wasRestarting
+        }
+        if (cancellation.cancelled) {
+            return
         }
         this._setFlushHold(holdNextEpoch ? 'no_interaction_since_session_rotated' : undefined)
         this._heldEpochShipsOnUnload = false
@@ -2977,8 +3025,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
 
         const activePlugins = this._gatherRRWebPlugins()
+        const sourceHandoff = this._styleRuleSourceHandoff
         this._stopRrweb = rrwebRecord({
             emit: (event) => {
+                if (sourceHandoff?.cancelled) {
+                    return
+                }
+                if (
+                    sourceHandoff &&
+                    this._styleRuleSourceHandoff === sourceHandoff &&
+                    (this._instance.config.disable_session_recording || this._instance.has_opted_out_capturing())
+                ) {
+                    sourceHandoff.cancel()
+                    return
+                }
                 this.onRRwebEmit(event)
             },
             plugins: activePlugins,

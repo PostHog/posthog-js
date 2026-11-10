@@ -91,7 +91,8 @@
         lab.call('isFeatureEnabled', ['compat-enabled', { send_event: false }])
         lab.call('onFeatureFlags', [lab.callback('feature-flags')])
         // Keep stateful pre-init probes in the lifecycle scenario; product scenarios use clean initialization.
-        if (lab.scenario === 'core' || phase !== 'before-init') lab.call('getSurveys', [lab.callback('surveys')])
+        if (['core', 'xhr'].includes(lab.scenario) || phase !== 'before-init')
+            lab.call('getSurveys', [lab.callback('surveys')])
         lab.call('canRenderSurveyAsync', ['compat-survey'])
         lab.call('register', [{ compatibility_property: 'retained' }])
         lab.call('capture', [
@@ -109,6 +110,7 @@
     lab.options = () => ({
         api_host: location.origin,
         ui_host: location.origin,
+        ...(lab.scenario.startsWith('xhr') ? { api_transport: 'XHR' } : {}),
         persistence: 'localStorage',
         capture_pageview: false,
         capture_pageleave: false,
@@ -159,7 +161,24 @@
     })
     lab.initialize = (scenario) => {
         lab.scenario = scenario
-        if (lab.mode === 'snippet') {
+        if (lab.mode === 'loader') {
+            const { loaded, ...config } = lab.options()
+            const script = document.createElement('script')
+            script.src = '/static/loader.js?project_token=phc_COMPAT'
+            script.crossOrigin = 'anonymous'
+            script.setAttribute('data-config', JSON.stringify(config))
+            script.onload = () => {
+                lab.ph = window.posthog
+                lab.probe('before-init')
+                lab.probe('init-return')
+                // Auto-init accepts JSON only; observe readiness through the public SDK queue.
+                lab.ph.push(function () {
+                    loaded(this)
+                })
+                lab.initialized = true
+            }
+            document.head.appendChild(script)
+        } else if (lab.mode === 'snippet') {
             lab.ph = window.posthog
             lab.phase = 'snippet-init-call'
             lab.call('init', ['phc_COMPAT', lab.options()], 'snippet.init')

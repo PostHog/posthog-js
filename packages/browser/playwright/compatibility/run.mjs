@@ -2,13 +2,16 @@
 import { createRequire } from 'node:module'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { normalize, differences, decodeReplay } from './normalize.mjs'
+import { normalize, decodeReplay } from './normalize.mjs'
 import { parseOptions, selection } from './options.mjs'
+import { runMatrix } from './matrix.mjs'
 import { assertLoaderProof } from './loader-proof.mjs'
 import { interactionScenarios, exerciseInteractions } from './interaction-cases.mjs'
 import { replayLifecycleScenarios, exerciseReplayLifecycle } from './replay-cases.mjs'
+import { trackReplayCompression } from './replay-compression.mjs'
 import { exerciseReplayNetwork, assertReplayNetworkCapture, freezeReplayDate } from './replay-network.mjs'
 import { compatibilityServer } from './server.mjs'
+import { xhrScenarios, assertXHRTransport, exerciseXHRTimeout } from './xhr-cases.mjs'
 import {
     legacyRecordingConfig,
     expectedReplayStyles,
@@ -108,18 +111,22 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
     const pageErrors = []
     const unexpectedNetwork = []
     const consoleErrors = []
+    const xhrRequests = []
     page.on('pageerror', (error) => pageErrors.push({ name: error.name, message: error.message }))
     page.on('console', (message) => {
         if (message.type() === 'error') consoleErrors.push(message.text())
     })
     context.on('request', (request) => {
         const url = new URL(request.url())
+        if (xhrScenarios.includes(scenario) && url.origin === server.origin && request.method() === 'POST')
+            xhrRequests.push({ path: url.pathname, resourceType: request.resourceType() })
         if (['http:', 'https:'].includes(url.protocol) && url.origin !== server.origin)
             unexpectedNetwork.push(request.url())
     })
     const interactionCase = interactionScenarios.includes(scenario)
     const replayLifecycleCase = replayLifecycleScenarios.includes(scenario)
     const controlledClock = interactionCase || replayLifecycleCase
+    if (replayLifecycleCase) await page.addInitScript(trackReplayCompression)
     if (controlledClock) {
         await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
         await page.clock.pauseAt(new Date('2024-01-01T00:00:01Z'))
@@ -151,6 +158,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
         ui = {},
         replay = {}
     const loading = {}
+    let transport
     try {
         if (scenario === 'replay-persisted-config')
             await page.addInitScript(
@@ -164,7 +172,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 { origin: server.origin, config: legacyRecordingConfig }
             )
         await page.goto(server.origin, { waitUntil: 'domcontentloaded' })
-        if (mode !== 'snippet') await waitFor(() => window.__compat?.installed)
+        if (['npm', 'slim'].includes(mode)) await waitFor(() => window.__compat?.installed)
         await page.evaluate(
             ({ scenario, mode, comparison }) => {
                 window.__compat.mode = mode
@@ -173,6 +181,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             },
             { scenario, mode, comparison }
         )
+        await waitFor(() => window.__compat?.initialized)
         await release('core')
         await waitFor(() => window.__compat?.loaded)
         assert(
@@ -288,7 +297,13 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             await page.waitForFunction(() => window.__compat.surveyNotifications >= 3)
         }
         await page.evaluate(() => window.__compat.readyProbe())
-        if (scenario === 'core') {
+        if (scenario.startsWith('xhr-timeout')) {
+            await waitFor(() => window.__compat.promises.every((promise) => promise.state !== 'pending'))
+            transport = {
+                timeout: await exerciseXHRTimeout({ scenario, comparison, page, server, remote, received, expect }),
+            }
+        }
+        if (['core', 'xhr'].includes(scenario)) {
             let notifications = await page.evaluate(() => window.__compat.flagNotifications)
             await page.evaluate(() => window.__compat.identity())
             await page.waitForFunction((count) => window.__compat.flagNotifications > count, notifications)
@@ -460,7 +475,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             await player.close()
         }
         if (interactionCase)
-            ui = await exerciseInteractions({ scenario, page, received, expect, origin: server.origin })
+            ui = await exerciseInteractions({ scenario, page, received, expect, origin: server.origin, comparison })
         await waitFor(() => window.__compat.promises.every((promise) => promise.state !== 'pending'))
         if (replayLifecycleCase)
             ({ replay, api } = await exerciseReplayLifecycle({
@@ -486,13 +501,32 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                             e.event ===
                             (scenario === 'unload'
                                 ? 'compat-unload-marker'
-                                : scenario === 'core'
+                                : ['core', 'xhr'].includes(scenario)
                                   ? 'compat-after-opt-in'
                                   : 'compat-ready')
                     ).length
             )
             .toBe(1)
         const network = await received()
+        if (xhrScenarios.includes(scenario)) transport = { ...transport, ...assertXHRTransport(xhrRequests) }
+        if (mode === 'loader') {
+            const bootstrap = network.requests.filter((request) => request.path === '/static/loader.js')
+            const coreRequests = network.requests.filter((request) => request.path.endsWith('/array.js'))
+            assert(
+                bootstrap.length === 1 &&
+                    bootstrap[0].status === 200 &&
+                    bootstrap[0].query.project_token?.length === 1 &&
+                    bootstrap[0].query.project_token[0] === 'phc_COMPAT',
+                'Missing or duplicate native loader request'
+            )
+            assert(
+                coreRequests.length === 1 &&
+                    coreRequests[0].status === 200 &&
+                    coreRequests[0].path === '/static/array.js' &&
+                    Object.keys(coreRequests[0].query).length === 0,
+                'Loader did not fetch exactly one core from its unversioned namespace without query parameters'
+            )
+        }
         if (scenario === 'replay') assertReplayNetworkCapture(network, server.inspect(), server.origin)
         if (scenario === 'web-vitals') assertWebVitalsDelivery(network)
         if (['surveys', 'surveys-auto'].includes(scenario)) {
@@ -538,6 +572,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             replay,
             loading,
             loaderCoverage,
+            ...(transport ? { transport } : {}),
             pageErrors,
             unexpectedNetwork,
             consoleErrors,
@@ -551,6 +586,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 replay,
                 loading,
                 ...(loaderCoverage ? { loaderCoverage } : {}),
+                ...(transport ? { transport } : {}),
                 pageErrors,
                 unexpectedNetwork,
             },
@@ -593,57 +629,21 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
     }
 }
 
-const runs = [],
-    results = [],
-    cellFailures = [],
-    browserVersions = {}
-for (const engine of selectedEngines) {
-    let browser
-    try {
-        browser = await playwright[engine].launch({ headless: true })
-        browserVersions[engine] = browser.version()
-    } catch (error) {
-        cellFailures.push({ engine, error: error.message })
-        continue
-    }
-    try {
-        for (const mode of selectedModes)
-            for (const comparison of selectedComparisons)
-                for (const scenario of selectedScenarios) {
-                    const cell = {
-                        browser: engine,
-                        entrypoint: mode,
-                        coreFamily: comparison,
-                        scenario,
-                    }
-                    const result = { ...cell, status: 'passed', runs: [], differences: [] }
-                    let expected
-                    for (let repeat = 0; repeat < repeats; repeat++) {
-                        const run = {
-                            ...cell,
-                            repeat,
-                            ...(await runCell(browser, { engine, mode, comparison, scenario, repeat })),
-                        }
-                        runs.push(run)
-                        result.runs.push({ ...run, observations: undefined })
-                        if (run.status !== 'passed') result.status = 'failed'
-                        else if (!expected) expected = run.observations
-                        else {
-                            const diff = differences(expected, run.observations)
-                            if (diff.length) {
-                                result.status = 'failed'
-                                result.differences.push({ label: run.label, count: diff.length, differences: diff })
-                            }
-                        }
-                    }
-                    results.push(result)
-                    write(join(output, 'progress.json'), results)
-                    console.log(`${result.status.toUpperCase()} ${engine}/${mode}/${comparison}/${scenario}`)
-                }
-    } finally {
-        await browser.close()
-    }
-}
+const { runs, results, cellFailures, browserVersions } = await runMatrix({
+    engines: selectedEngines,
+    modes: selectedModes,
+    comparisons: selectedComparisons,
+    scenarios: selectedScenarios,
+    repeats,
+    launch: (engine) => playwright[engine].launch({ headless: true }),
+    runCell,
+    onCell(result, progress) {
+        write(join(output, 'progress.json'), progress)
+        console.log(
+            `${result.status.toUpperCase()} ${result.browser}/${result.entrypoint}/${result.coreFamily}/${result.scenario}`
+        )
+    },
+})
 let goldenResult, input, error
 try {
     const after = verifyInputs(manifest)

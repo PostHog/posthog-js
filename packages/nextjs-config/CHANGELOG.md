@@ -1,5 +1,26 @@
 # @posthog/nextjs-config
 
+## 1.12.1
+
+### Patch Changes
+
+- [#5446](https://github.com/PostHog/posthog-js/pull/5446) [`2c03f4a`](https://github.com/PostHog/posthog-js/commit/2c03f4a6dc21883207a38ffd9fef5fdae5896328) Thanks [@hpouillot](https://github.com/hpouillot)! - Preserve Next.js 16 Turbopack release IDs on server exceptions from externalized SDKs.
+  (2026-11-04)
+- Updated dependencies [[`13457bd`](https://github.com/PostHog/posthog-js/commit/13457bd62c8ec7e7fcc0f8c1afe0395c3aaebb2b), [`720059d`](https://github.com/PostHog/posthog-js/commit/720059d13d7bc9bd7a118350ced0250234b419ae)]:
+  - posthog-js@1.445.4
+
+## 1.12.0
+
+### Minor Changes
+
+- [#5398](https://github.com/PostHog/posthog-js/pull/5398) [`88f8655`](https://github.com/PostHog/posthog-js/commit/88f8655708ccbb1c3d474f3f579c644524c5d190) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fail webpack, Next.js webpack, and Nuxt builds when PostHog cannot process or upload source maps; set `sourcemaps.failOnError: false` to log the error and continue the build instead.
+  (2026-10-23)
+
+### Patch Changes
+
+- Updated dependencies [[`88f8655`](https://github.com/PostHog/posthog-js/commit/88f8655708ccbb1c3d474f3f579c644524c5d190)]:
+  - @posthog/webpack-plugin@1.8.0
+
 ## 1.11.6
 
 ### Patch Changes

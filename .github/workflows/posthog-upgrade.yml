@@ -31,11 +31,6 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            - name: Audit runner egress
-              uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
-              with:
-                egress-policy: audit
-
             - name: Get upgrader token
               id: upgrader
               uses: getsentry/action-github-app-token@5c1e90706fe007857338ac1bfbd7a4177db2f789 # v4.0.0
@@ -55,7 +50,7 @@ jobs:
                   node-version: 24
 
             - name: Setup pnpm
-              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+              uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
               with:
                   cache: false
                   run_install: false
@@ -253,6 +248,7 @@ jobs:
                   echo "PostHog pull request for $PACKAGE_NAME version $PACKAGE_VERSION ready: $PR_URL"
 
             - name: Update pull request metadata
+              if: ${{ steps.main-repo-pr.outputs.pull-request-number != '' }}
               env:
                   GH_TOKEN: ${{ steps.upgrader.outputs.token }}
                   PR_BODY: ${{ steps.generate-pr-details.outputs.body }}
@@ -265,6 +261,7 @@ jobs:
                       --body "$PR_BODY"
 
             - name: Assign reviewers
+              if: ${{ steps.main-repo-pr.outputs.pull-request-number != '' }}
               env:
                   GH_TOKEN: ${{ steps.upgrader.outputs.token }}
                   PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}

@@ -1,16 +1,15 @@
-import { getSurveyRenderContext } from '../../browser-surveys'
+import { BrowserSurveys, getSurveyRenderContext } from '../../browser-surveys'
 import { SurveyManager } from '@posthog/browser-common/surveys-renderer'
 import { Survey, SurveyQuestionType, SurveyType } from '@posthog/browser-common'
 import { beforeEach } from 'vitest'
-import { PostHog, defaultConfig } from '../../posthog-core'
-import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
-import { MutableFeatureFlagsConfigSource } from '../../feature-flags-config'
+import { PostHog } from '../../posthog-core'
+import { PostHogFeatureFlags } from '../../posthog-featureflags'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import { FlagsResponse } from '../../types'
 import { createMockPostHog } from '../helpers/posthog-instance'
 
-const createSurveyFeatureFlags = (values: Record<string, boolean | string>): PostHogFeatureFlags => {
-    const flags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+const createSurveyFeatureFlags = (instance: PostHog, values: Record<string, boolean | string>): PostHogFeatureFlags => {
+    const flags = new PostHogFeatureFlags(instance)
     vi.spyOn(flags, 'getFeatureFlag').mockImplementation((key) => values[key])
     vi.spyOn(flags, 'isFeatureEnabled').mockImplementation((key) => !!values[key])
     return flags
@@ -71,15 +70,19 @@ describe('SurveyManager', () => {
             get_session_replay_url: vi.fn(),
             is_capturing: vi.fn(() => true),
             capture: vi.fn(),
-            featureFlags: createSurveyFeatureFlags(flagsResponse.featureFlags),
-            surveys: { getSurveys: vi.fn((callback) => callback(mockSurveys)) },
+            _shouldDisableFlags: vi.fn(() => false),
         })
+        mockPostHog.featureFlags = createSurveyFeatureFlags(mockPostHog, flagsResponse.featureFlags)
+        mockPostHog.surveys = new BrowserSurveys(mockPostHog)
+        // Exercise the legacy adapter for cores without a render-context API.
+        mockPostHog.surveys.getRenderContext = undefined
+        vi.spyOn(mockPostHog.surveys, 'getSurveys').mockImplementation((callback) => callback(mockSurveys))
 
         surveyManager = new SurveyManager(getSurveyRenderContext(mockPostHog)!)
     })
 
     it('resolves feature flags through the extension registry', () => {
-        const registeredFeatureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(mockPostHog.config))
+        const registeredFeatureFlags = new PostHogFeatureFlags(mockPostHog)
         vi.spyOn(registeredFeatureFlags, 'getFeatureFlag').mockReturnValue('control')
         vi.spyOn(registeredFeatureFlags, 'isFeatureEnabled').mockReturnValue(true)
         const client = getSurveyRenderContext(mockPostHog)!.client!
@@ -110,7 +113,7 @@ describe('SurveyManager', () => {
 
     describe('on a core without is_capturing (version skew)', () => {
         beforeEach(() => {
-            // @ts-expect-error deliberately removing the method to emulate an older core
+            // Deliberately remove the method to emulate an older core.
             mockPostHog.is_capturing = undefined
         })
 

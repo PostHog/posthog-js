@@ -23,6 +23,10 @@ const failOnUnexpectedConsoleOutput = () => {
     }
 
     console.warn = (...args) => {
+        // jsdom's user agent trips the bot filter; the one-time warning is expected and tested explicitly
+        if (String(args[0]).includes('user agent looks like a bot')) {
+            return
+        }
         throw new Error(`Unexpected console.warn: ${args}`)
     }
 }

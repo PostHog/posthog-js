@@ -122,6 +122,37 @@ describe('PostHogInterceptor', () => {
     })
 
     it.each([
+      { name: 'reads the posthog-js cookie when readPostHogCookie is on', readPostHogCookie: true, linked: true },
+      { name: 'ignores the posthog-js cookie by default', readPostHogCookie: undefined, linked: false },
+    ])('should $name', async ({ readPostHogCookie, linked }) => {
+      await posthog.shutdown()
+      posthog = createPostHog({ readPostHogCookie })
+      const interceptor = new PostHogInterceptor(posthog)
+      const now = Date.now()
+      const cookieValue = encodeURIComponent(
+        JSON.stringify({
+          distinct_id: 'user-from-cookie',
+          $user_state: 'identified',
+          $sesid: [now, 'cookie-session', now],
+        })
+      )
+      const context = createMockContext({ headers: { cookie: `ph_TEST_API_KEY_posthog=${cookieValue}` } })
+
+      let capturedContext: any
+      const handler = {
+        handle: () => {
+          capturedContext = posthog.getContext()
+          return of({ success: true })
+        },
+      }
+
+      await lastValueFrom(interceptor.intercept(context, handler))
+
+      expect(capturedContext.sessionId).toBe(linked ? 'cookie-session' : undefined)
+      expect(capturedContext.distinctId).toBe(linked ? 'user-from-cookie' : undefined)
+    })
+
+    it.each([
       {
         name: 'strips request path search and preserves URL hash by default',
         options: {},
@@ -281,7 +312,7 @@ describe('PostHogInterceptor', () => {
       })
     })
 
-    it('should give headerless requests a fresh context at subscription', async () => {
+    it('should keep tracing headers over ambient identity and never leak ambient properties', async () => {
       const interceptor = new PostHogInterceptor(posthog)
       const capturedContexts: Record<string, any> = {}
       const createHandler = (request: string) => ({
@@ -320,11 +351,12 @@ describe('PostHogInterceptor', () => {
         distinctId: 'request-user',
       })
       expect(capturedContexts['with-headers'].properties.ambient).toBeUndefined()
+      // Without headers, identity already in the context fills in, but its properties don't leak.
       expect(capturedContexts.headerless).toMatchObject({
+        sessionId: 'ambient-session',
+        distinctId: 'ambient-user',
         properties: { $request_path: '/headerless' },
       })
-      expect(capturedContexts.headerless.sessionId).toBeUndefined()
-      expect(capturedContexts.headerless.distinctId).toBeUndefined()
       expect(capturedContexts.headerless.properties.ambient).toBeUndefined()
     })
 
@@ -365,6 +397,144 @@ describe('PostHogInterceptor', () => {
 
       await lastValueFrom(interceptor.intercept(context, handler))
       expect(capturedContext.properties.$ip).toBe('10.0.0.1')
+    })
+  })
+
+  describe('request identity', () => {
+    const createCapturingHandler = (seen: { context?: any }) => ({
+      handle: () =>
+        defer(() => {
+          seen.context = posthog.getContext()
+          return of(undefined)
+        }),
+    })
+
+    it('should use getDistinctId over tracing headers and existing context', async () => {
+      const interceptor = new PostHogInterceptor(posthog, {
+        captureExceptions: true,
+        getDistinctId: (request) => request.user?.id,
+      })
+      const context = createMockContext({ headers: { 'x-posthog-distinct-id': 'header-user' } })
+      ;(context.switchToHttp().getRequest() as any).user = { id: 'auth-user' }
+      const seen: { context?: any } = {}
+
+      await posthog.withContext({ distinctId: 'middleware-user' }, () =>
+        lastValueFrom(interceptor.intercept(context, createCapturingHandler(seen)))
+      )
+      expect(seen.context.distinctId).toBe('auth-user')
+
+      const error = new Error('resolver error')
+      await expect(
+        posthog.withContext({ distinctId: 'middleware-user' }, () =>
+          lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))
+        )
+      ).rejects.toThrow(error)
+      await waitForFlushTimer(posthog)
+
+      const event = getLastBatchEvents()!.find((e) => e.event === '$exception')
+      expect(event.distinct_id).toBe('auth-user')
+    })
+
+    it('should use identity set before the interceptor when there is no tracing header', async () => {
+      const interceptor = new PostHogInterceptor(posthog, { captureExceptions: true })
+      const error = new Error('middleware identity error')
+      const seen: { context?: any } = {}
+
+      await posthog.withContext({ distinctId: 'middleware-user', sessionId: 'middleware-session' }, () =>
+        lastValueFrom(interceptor.intercept(createMockContext({ headers: {} }), createCapturingHandler(seen)))
+      )
+      expect(seen.context).toMatchObject({ distinctId: 'middleware-user', sessionId: 'middleware-session' })
+
+      await expect(
+        posthog.withContext({ distinctId: 'middleware-user' }, () =>
+          lastValueFrom(interceptor.intercept(createMockContext({ headers: {} }), createMockCallHandler(error)))
+        )
+      ).rejects.toThrow(error)
+      await waitForFlushTimer(posthog)
+
+      const event = getLastBatchEvents()!.find((e) => e.event === '$exception')
+      expect(event.distinct_id).toBe('middleware-user')
+    })
+
+    it('should keep a nonblank getDistinctId result verbatim', async () => {
+      const interceptor = new PostHogInterceptor(posthog, { getDistinctId: () => ' padded-user ' })
+      const seen: { context?: any } = {}
+
+      await lastValueFrom(interceptor.intercept(createMockContext({ headers: {} }), createCapturingHandler(seen)))
+
+      expect(seen.context.distinctId).toBe(' padded-user ')
+    })
+
+    it('should end inherited identity when the context it came from ends', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
+      const controller = new AbortController()
+      const seen: { before?: any; after?: any } = {}
+      const handler = {
+        handle: () =>
+          defer(() => {
+            seen.before = posthog.getContext()
+            controller.abort()
+            seen.after = posthog.getContext()
+            return of(undefined)
+          }),
+      }
+
+      await posthog.withContext(
+        { distinctId: 'middleware-user' },
+        () => lastValueFrom(interceptor.intercept(createMockContext({ headers: {} }), handler)),
+        { signal: controller.signal }
+      )
+
+      expect(seen.before?.distinctId).toBe('middleware-user')
+      expect(seen.after).toBeUndefined()
+    })
+
+    it('should not label an exception with inherited identity after the context it came from ends', async () => {
+      const interceptor = new PostHogInterceptor(posthog, { captureExceptions: true })
+      const controller = new AbortController()
+      const error = new Error('after abort')
+      const handler = {
+        handle: () =>
+          defer(() => {
+            controller.abort()
+            return throwError(() => error)
+          }),
+      }
+
+      await expect(
+        posthog.withContext(
+          { distinctId: 'middleware-user' },
+          () => lastValueFrom(interceptor.intercept(createMockContext({ headers: {} }), handler)),
+          { signal: controller.signal }
+        )
+      ).rejects.toThrow(error)
+      await waitForFlushTimer(posthog)
+
+      const event = getLastBatchEvents()!.find((e) => e.event === '$exception')
+      expect(event.distinct_id).not.toBe('middleware-user')
+    })
+
+    it.each([
+      ['returns undefined', () => undefined],
+      ['returns an empty string', () => '  '],
+      [
+        'throws',
+        () => {
+          throw new Error('resolver failed')
+        },
+      ],
+    ])('should fall back to the tracing header when getDistinctId %s', async (_name, getDistinctId) => {
+      const interceptor = new PostHogInterceptor(posthog, { getDistinctId })
+      const seen: { context?: any } = {}
+
+      await lastValueFrom(
+        interceptor.intercept(
+          createMockContext({ headers: { 'x-posthog-distinct-id': 'header-user' } }),
+          createCapturingHandler(seen)
+        )
+      )
+
+      expect(seen.context.distinctId).toBe('header-user')
     })
   })
 

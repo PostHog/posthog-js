@@ -141,4 +141,77 @@ describe('mutation child traversal', () => {
       expect(buffer['movedSet'].has(removed)).toBe(false);
     },
   );
+
+  // A single-render large-batch sibling addition must emit every added
+  // node, in a parent-before-child order the replay engine can consume,
+  // without stalling the test runner. 500 rows × (1 div + 3 spans + 3
+  // text nodes) = exactly 3500 adds expected.
+  it('emits every node in a single-render large-batch sibling addition in parent-before-child order', async () => {
+    const events: Array<{ type: number }> = [];
+    stop = record({
+      emit: (event) => {
+        events.push(event);
+      },
+    });
+    await settle();
+    const destination = document.getElementById('destination')!;
+
+    const batch = document.createDocumentFragment();
+    for (let i = 0; i < 500; i++) {
+      const row = document.createElement('div');
+      row.className = `row-${i}`;
+      for (let j = 0; j < 3; j++) {
+        const cell = document.createElement('span');
+        cell.textContent = `r${i}c${j}`;
+        row.appendChild(cell);
+      }
+      batch.appendChild(row);
+    }
+
+    destination.appendChild(batch);
+    await settle();
+
+    const addsAfterBatch: Array<{
+      id: number;
+      parentId: number;
+      nextId: number | null;
+    }> = [];
+    for (const event of events) {
+      if (event.type !== 3) continue;
+      const data = (event as unknown as { data: { adds?: unknown[] } }).data;
+      if (!data?.adds) continue;
+      for (const add of data.adds as Array<{
+        parentId: number;
+        nextId: number | null;
+        node: { id: number };
+      }>) {
+        addsAfterBatch.push({
+          id: add.node.id,
+          parentId: add.parentId,
+          nextId: add.nextId,
+        });
+      }
+    }
+
+    // Exact count: 500 rows + 1500 cells + 1500 text nodes.
+    expect(addsAfterBatch.length).toBe(3500);
+
+    // Every emitted add must reference a parent that was itself serialised
+    // earlier in the same emission (or already in the mirror). parentId
+    // -1 or an unseen parentId would signal that pushAdd silently dropped
+    // a resolvable node.
+    const seen = new Set<number>();
+    for (const add of addsAfterBatch) {
+      expect(add.parentId).not.toBe(-1);
+      // The destination (<aside id="destination">) was in the mirror
+      // before the batch, so its id is a valid parentId that doesn't
+      // appear in the adds. Only check parent-before-child for ids that
+      // are themselves added in this batch.
+      const addedParent = addsAfterBatch.some((a) => a.id === add.parentId);
+      if (addedParent) {
+        expect(seen.has(add.parentId)).toBe(true);
+      }
+      seen.add(add.id);
+    }
+  });
 });

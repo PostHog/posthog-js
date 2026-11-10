@@ -8,6 +8,10 @@ SDK usage examples and code snippets live in the official documentation so they 
 
 - [MCP analytics docs](https://posthog.com/docs/mcp-analytics)
 
+## Versioning
+
+From 1.0.0, `@posthog/mcp` follows semver for its API and for the events it sends. A minor or patch release doesn't rename or remove a `$mcp_*` event or property, change its type, or change which requests send an event, so saved insights keep working across upgrades. It may add events and properties, and redact more of a captured value. The rules come from the [MCP analytics spec](https://github.com/PostHog/sdk-specs/blob/main/openspec/specs/mcp-analytics/spec.md), section "Event schema stability".
+
 ## Stateless & multi-pod servers
 
 On stateless deployments the SDK mints the `Mcp-Session-Id` response header at `initialize`
@@ -177,21 +181,33 @@ On fresh low-level instances, tools with an `outputSchema` deliver new handles t
 
 A valid echoed conversation handle takes precedence over transport sessions. A request that already carries a transport session or a PostHog session token does not mint a new handle or append a prompt-back block. Requests carrying neither use the conversation fallback.
 
-Intent, model capture, conversation correlation, and exception capture are enabled by default.
-Missing-capability reporting and feedback collection remain disabled.
+Intent, model capture, conversation correlation, exception capture, and `$mcp_initialize` are
+enabled by default. Missing-capability reporting and feedback collection remain disabled.
 
 ```ts
 instrument(server, posthog, { captureModel: false, enableConversationId: false })
 ```
 
-Model capture adds a required `llm_model` argument to compatible tool schemas. Dispatch never
-enforces it, so servers keep working; strict-schema clients see the new field. Set
-`captureModel: false` to leave schemas untouched. Conversation correlation adds an optional
+Model capture adds an optional `llm_model` argument to compatible tool schemas. Strict-schema
+clients see the new field. Set `captureModel: false` to leave schemas untouched. Conversation correlation adds an optional
 `conversation_id` argument and returns a handle in eligible tool results. Clients must echo that
 handle to group later calls; calls without it mint new handles. Set `enableConversationId: false`
 to retain transport-based session grouping and unchanged response content. Custom `PostHogMCP`
 dispatchers also enable model capture and conversation correlation by default.
 The reasoning behind these defaults is in [ADR-0013](./docs/adr/0013-analytics-capture-is-on-by-default.md).
+
+Set `sendInitializeEvent: false` to stop sending `$mcp_initialize`. Many clients reconnect before
+every few tool calls, so this event can outnumber `$mcp_tool_call`. Nothing else changes in what
+the SDK sends: tool calls keep their sessions and client identity. In PostHog, MCP onboarding and
+the users and sessions tiles of the default MCP dashboard read `$mcp_initialize`. They show no data
+while the option is off.
+
+```ts
+instrument(server, posthog, { sendInitializeEvent: false })
+```
+
+Set `sendToolsListEvent: false` to stop sending `$mcp_tools_list`. Nothing else changes: tools keep
+their injected arguments, and the virtual tools stay listed.
 
 ### Identifying the deployed server build
 
@@ -214,7 +230,7 @@ Omit `serverBuild` when the deployment does not provide a reliable value.
 
 `captureModel` is **on** by default. The SDK records the best model id visible to the
 server as `$mcp_llm_model`. Recognized client metadata wins with source `client_metadata`. Otherwise,
-the SDK injects a required `llm_model` parameter and records the answer with source `self_reported`.
+the SDK injects an optional `llm_model` parameter and records the answer with source `self_reported`.
 
 MCP does not standardize or attest model identity. Client metadata and self-report are both
 unverified. Use the value to spot degradation across models, never for billing or access control.
@@ -288,10 +304,9 @@ the previous custom-dispatcher behavior.
 ### Collecting agent feedback (`send_feedback`)
 
 `collectFeedback` is **off** by default. Turn it on and the SDK advertises a `send_feedback` virtual
-tool: an honest, general feedback channel from the agent to your team. The tool description makes
-missing capabilities the priority category ("report a missing capability whenever no available tool
-fits your task, even if you can work around it") and also invites reports about a tool that failed
-or confused the agent, and praise. Every call emits one `$mcp_feedback` event — never a
+tool: an honest, general feedback channel from the agent to your team. The tool description lists
+a capability the agent needed that no tool provides first, and also invites reports about a tool
+that failed or misled the agent, and praise. Every call emits one `$mcp_feedback` event — never a
 `$mcp_tool_call` — with `$mcp_feedback_type`, `$mcp_feedback_summary`, and the other
 `$mcp_feedback_*` properties; the summary and details double as `$mcp_intent`. The agent receives an
 acknowledgement that says exactly what happened: the report was recorded, no tools were added.

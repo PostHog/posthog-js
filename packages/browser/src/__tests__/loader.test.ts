@@ -39,6 +39,7 @@ import { defaultPostHog } from './helpers/posthog-instance'
 import sinon from 'sinon'
 import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
+import { createPostHogStub } from '../utils/loader-stub'
 
 describe(`Module-based loader in Node env`, () => {
     const posthog = defaultPostHog()
@@ -187,6 +188,63 @@ describe('Snippet loader', () => {
         init_from_snippet()
 
         expect(assignableWindow.posthog).toBe(posthog)
+    })
+
+    it('preserves calls until a valid init when the SDK arrives before initialization', () => {
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        vi.spyOn(console, 'warn').mockImplementation(() => {})
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        const capture = vi.spyOn(PostHog.prototype, 'capture')
+        assignableWindow.posthog = createPostHogStub()
+        const stub = assignableWindow.posthog
+        stub.register({ early: true })
+        stub.capture('early event')
+        stub.people.set({ plan: 'paid' })
+
+        init_from_snippet()
+        const posthog = assignableWindow.posthog
+        const setPeople = vi.spyOn(posthog.people, 'set')
+        init_from_snippet()
+        posthog.init('', snippetConfig())
+        expect(capture).not.toHaveBeenCalledWith('early event')
+
+        posthog.init('phc_late_init', {
+            ...snippetConfig(),
+            loaded: () => posthog.init('phc_late_init', snippetConfig()),
+        })
+
+        expect(posthog.get_property('early')).toBe(true)
+        expect(capture.mock.calls.filter(([event]) => event === 'early event')).toHaveLength(1)
+        expect(setPeople).toHaveBeenCalledWith({ plan: 'paid' })
+        posthog.init('phc_late_init', snippetConfig())
+        expect(capture.mock.calls.filter(([event]) => event === 'early event')).toHaveLength(1)
+        expect(setPeople).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the pending primary queue separate when a named instance initializes first', () => {
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        const capture = vi.spyOn(PostHog.prototype, 'capture')
+        assignableWindow.posthog = createPostHogStub()
+        const stub = assignableWindow.posthog
+        stub.register({ primary_only: true })
+        stub.capture('pending primary event')
+        stub.init('phc_named_first', snippetConfig(), 'namedFirst')
+        stub.namedFirst.capture('named event')
+
+        init_from_snippet()
+        const posthog = assignableWindow.posthog
+        expect(posthog.__loaded).toBe(false)
+        expect(posthog.namedFirst.__loaded).toBe(true)
+        expect(capture).not.toHaveBeenCalledWith('pending primary event')
+        expect(posthog.namedFirst.get_property('primary_only')).toBeUndefined()
+        posthog.init('phc_another_named', snippetConfig(), 'anotherNamed')
+        expect(capture).not.toHaveBeenCalledWith('pending primary event')
+
+        posthog.init('phc_primary_later', snippetConfig(), 'posthog')
+
+        expect(posthog.get_property('primary_only')).toBe(true)
+        expect(capture.mock.calls.filter(([event]) => event === 'pending primary event')).toHaveLength(1)
+        expect(capture.mock.calls.filter(([event]) => event === 'named event')).toHaveLength(1)
     })
 
     it('preserves the loaded instance and replays a shared queue once when array.js executes twice', () => {

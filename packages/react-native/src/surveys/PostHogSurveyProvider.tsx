@@ -9,7 +9,7 @@ import { getSurveyIterationKey } from '@posthog/core/surveys'
 import { useActivatedSurveys } from './useActivatedSurveys'
 import { SurveyModal } from './components/SurveyModal'
 import {
-  defaultSurveyAppearance,
+  defaultSurveyAppearance as builtInSurveyAppearance,
   getContrastingTextColor,
   SurveyAppearance,
   SurveyAppearanceTheme,
@@ -117,15 +117,20 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
   const shownSurveyIdRef = useRef<string | undefined>(undefined)
   const sessionEpochRef = useRef(0)
   const activeSessionRef = useRef<object | undefined>(undefined)
+  const pendingSurveyRef = useRef<{ surveyKey: string; startedAt: number } | undefined>(undefined)
   const activatedSurveys = useActivatedSurveys(posthog, surveys)
   const invalidateSession = useCallback(() => {
     sessionEpochRef.current++
     activeSessionRef.current = undefined
     shownSurveyIdRef.current = undefined
+    pendingSurveyRef.current = undefined
   }, [])
 
   const flags = useFeatureFlags(posthog)
   const [userLanguage, setUserLanguage] = useState(() => detectUserLanguage(posthog))
+  const defaultSurveyAppearance = useMemo(() => props?.defaultSurveyAppearance ?? {}, [props?.defaultSurveyAppearance])
+
+  const overrideAppearanceWithDefault = props?.overrideAppearanceWithDefault
 
   useEffect(() => {
     const updateLanguage = () => setUserLanguage(detectUserLanguage(posthog))
@@ -176,33 +181,101 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
   // painted is left alone; an armed-but-deferred one is re-validated so it can't be presented
   // after it stops matching (e.g. its targeting flag flips off during a long deferral).
   useEffect(() => {
-    if (!isReady || !canCaptureSurvey(posthog)) return
+    if (!isReady || !canCaptureSurvey(posthog)) {
+      pendingSurveyRef.current = undefined
+      return
+    }
     const isShown = !!activeSurvey && shownSurveyIdRef.current === activeSurvey.id
     if (isShown) {
       return
     }
-
+    const inProgressSurveys = new Set(surveys.filter((survey) => progressStore.load(survey)).map(getSurveyIterationKey))
     const activeSurveys = getActiveMatchingSurveys(
       surveys,
       flags ?? {},
       seenSurveys,
       activatedSurveys,
-      new Set(surveys.filter((survey) => progressStore.load(survey)).map(getSurveyIterationKey)),
+      inProgressSurveys,
       lastSeenSurveyDate
     )
-
+    const defaultDelay = defaultSurveyAppearance.surveyPopupDelaySeconds ?? 0
+    const getDelaySeconds = (survey: Survey) =>
+      Math.max(
+        0,
+        overrideAppearanceWithDefault ? defaultDelay : (survey.appearance?.surveyPopupDelaySeconds ?? defaultDelay)
+      )
     const popoverSurveys = activeSurveys
-      .filter((survey: Survey) => survey.type === SurveyType.Popover)
-      .sort((a, b) => Number(!!progressStore.load(b)) - Number(!!progressStore.load(a)))
-    // TODO: sort by appearance delay, implement delay
-    // const popoverSurveyQueue = sortSurveysByAppearanceDelay(popoverSurveys)
+      .filter((survey) => survey.type === SurveyType.Popover)
+      .sort((a, b) => {
+        // Resume an existing response before starting a new survey, then prefer the shortest delay.
+        const progressPriority =
+          Number(inProgressSurveys.has(getSurveyIterationKey(b))) -
+          Number(inProgressSurveys.has(getSurveyIterationKey(a)))
+        return progressPriority || getDelaySeconds(a) - getDelaySeconds(b)
+      })
 
+    // Keep an eligible armed survey, including one whose delay has already elapsed.
     if (activeSurvey && popoverSurveys.some((survey) => survey.id === activeSurvey.id)) {
       return
     }
 
-    setActiveSurvey(popoverSurveys.length > 0 ? popoverSurveys[0] : undefined)
-  }, [activeSurvey, flags, surveys, seenSurveys, lastSeenSurveyDate, activatedSurveys, isReady, posthog, progressStore])
+    // An ineligible armed survey must not be presented while its replacement waits.
+    setActiveSurvey(undefined)
+    const nextSurvey =
+      popoverSurveys.find((survey) => getSurveyIterationKey(survey) === pendingSurveyRef.current?.surveyKey) ??
+      popoverSurveys[0]
+    if (!nextSurvey) {
+      pendingSurveyRef.current = undefined
+      return
+    }
+
+    const surveyKey = getSurveyIterationKey(nextSurvey)
+    if (pendingSurveyRef.current?.surveyKey !== surveyKey) {
+      pendingSurveyRef.current = { surveyKey, startedAt: Date.now() }
+    }
+    const elapsed = Math.max(0, Date.now() - pendingSurveyRef.current.startedAt)
+    const remainingDelay = Math.max(0, getDelaySeconds(nextSurvey) * 1000 - elapsed)
+
+    if (remainingDelay === 0) {
+      pendingSurveyRef.current = undefined
+      setActiveSurvey(nextSurvey)
+      return
+    }
+
+    const surveyActivationTimeoutId = setTimeout(() => {
+      pendingSurveyRef.current = undefined
+      if (!canCaptureSurvey(posthog)) return
+
+      const currentActiveSurveys = getActiveMatchingSurveys(
+        surveys,
+        flags ?? {},
+        seenSurveys,
+        activatedSurveys,
+        new Set(surveys.filter((survey) => progressStore.load(survey)).map(getSurveyIterationKey)),
+        lastSeenSurveyDate
+      )
+
+      const nextSurveyEligible = currentActiveSurveys.some((survey: Survey) => survey.id === nextSurvey.id)
+
+      if (nextSurveyEligible) {
+        setActiveSurvey(nextSurvey)
+      }
+    }, remainingDelay)
+
+    return () => clearTimeout(surveyActivationTimeoutId)
+  }, [
+    activeSurvey,
+    flags,
+    surveys,
+    seenSurveys,
+    lastSeenSurveyDate,
+    defaultSurveyAppearance,
+    overrideAppearanceWithDefault,
+    activatedSurveys,
+    isReady,
+    posthog,
+    progressStore,
+  ])
 
   const translatedActiveSurvey = useMemo(() => {
     return activeSurvey ? applySurveyTranslationForUser(activeSurvey, posthog, userLanguage) : undefined
@@ -210,15 +283,15 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
 
   // Merge survey appearance so that components and hooks can use a consistent model
   const surveyAppearance = useMemo<SurveyAppearanceTheme>(() => {
-    if (props.overrideAppearanceWithDefault || !translatedActiveSurvey) {
+    if (overrideAppearanceWithDefault || !translatedActiveSurvey) {
       return {
+        ...builtInSurveyAppearance,
         ...defaultSurveyAppearance,
-        ...(props.defaultSurveyAppearance ?? {}),
       }
     }
     return {
+      ...builtInSurveyAppearance,
       ...defaultSurveyAppearance,
-      ...(props.defaultSurveyAppearance ?? {}),
       ...(translatedActiveSurvey.survey.appearance ?? {}),
       // If submitButtonColor is set by PostHog, ensure submitButtonTextColor is also set to contrast
       ...(translatedActiveSurvey.survey.appearance?.submitButtonColor
@@ -229,7 +302,7 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
           }
         : {}),
     }
-  }, [translatedActiveSurvey, props.defaultSurveyAppearance, props.overrideAppearanceWithDefault])
+  }, [translatedActiveSurvey, defaultSurveyAppearance, overrideAppearanceWithDefault])
 
   const activeSession = useMemo(
     () =>
@@ -336,9 +409,3 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
     </ActiveSurveyContext.Provider>
   )
 }
-
-// function sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
-//   return surveys.sort(
-//     (a, b) => (a.appearance?.surveyPopupDelaySeconds ?? 0) - (b.appearance?.surveyPopupDelaySeconds ?? 0)
-//   )
-// }

@@ -11,6 +11,7 @@ const arrayJs = fs.readFileSync(path.join(__dirname, '../../../dist/array.js'), 
 const arrayFullJs = fs.readFileSync(path.join(__dirname, '../../../dist/array.full.js'), 'utf-8')
 const arrayNoExternalJs = fs.readFileSync(path.join(__dirname, '../../../dist/array.no-external.js'), 'utf-8')
 const arrayFullNoExternalJs = fs.readFileSync(path.join(__dirname, '../../../dist/array.full.no-external.js'), 'utf-8')
+const arrayFullEs5Js = fs.readFileSync(path.join(__dirname, '../../../dist/array.full.es5.js'), 'utf-8')
 
 const moduleJs = fs.readFileSync(path.join(__dirname, '../../../dist/module.js'), 'utf-8')
 const moduleFullJs = fs.readFileSync(path.join(__dirname, '../../../dist/module.full.js'), 'utf-8')
@@ -19,6 +20,7 @@ const moduleFullNoExternalJs = fs.readFileSync(
     path.join(__dirname, '../../../dist/module.full.no-external.js'),
     'utf-8'
 )
+const moduleSlimJs = fs.readFileSync(path.join(__dirname, '../../../dist/module.slim.js'), 'utf-8')
 const moduleSlimDts = fs.readFileSync(path.join(__dirname, '../../../dist/module.slim.d.ts'), 'utf-8')
 const extensionBundlesDts = fs.readFileSync(path.join(__dirname, '../../../dist/extension-bundles.d.ts'), 'utf-8')
 const webVitalsSoftNavsJs = fs.readFileSync(path.join(__dirname, '../../../dist/web-vitals-soft-navs.js'), 'utf-8')
@@ -201,7 +203,117 @@ describe('Web vitals bundles', () => {
     })
 })
 
+describe('uuidv7 polyfills', () => {
+    const es5Builtins = ['Math.trunc', 'Number.isInteger']
+    const assignsPolyfill = /\b(Math\.trunc|Number\.isInteger)\s*=(?!=)/
+
+    afterEach(() => {
+        document.querySelectorAll('iframe').forEach((iframe) => iframe.remove())
+    })
+
+    // Lighthouse reports these polyfills as "Legacy JavaScript", and every browser in the modern
+    // targets has both built-ins, so only the IE11 bundle should carry them
+    it.each([
+        ['array', arrayJs],
+        ['array.full', arrayFullJs],
+        ['module', moduleJs],
+        ['module.full', moduleFullJs],
+        ['module.slim', moduleSlimJs],
+    ])('%s does not polyfill Math.trunc or Number.isInteger', (_name, bundle) => {
+        expect(bundle.match(assignsPolyfill)?.[0]).toBeUndefined()
+    })
+
+    it('array.full.es5 installs Math.trunc and Number.isInteger for IE11', () => {
+        const { frameWindow } = evaluateBundle(arrayFullEs5Js, false, es5Builtins)
+
+        const frameMath = (frameWindow as unknown as { Math: Math }).Math
+        const frameNumber = (frameWindow as unknown as { Number: NumberConstructor }).Number
+        expect(frameMath.trunc(-1.5)).toBe(-1)
+        expect(frameNumber.isInteger(5)).toBe(true)
+        expect(frameNumber.isInteger(5.5)).toBe(false)
+    })
+})
+
 describe('Slim runtime bundles', () => {
+    const bundleEntry = (entry: string): string =>
+        execFileSync(
+            process.execPath,
+            [
+                '--eval',
+                `
+const { buildSync } = require(${JSON.stringify(require.resolve('esbuild'))})
+const result = buildSync({
+    stdin: {
+        contents: ${JSON.stringify(entry)},
+        resolveDir: ${JSON.stringify(path.resolve(__dirname, '../../../dist'))},
+    },
+    bundle: true,
+    format: 'iife',
+    minify: true,
+    write: false,
+})
+process.stdout.write(result.outputFiles[0].text)
+`,
+            ],
+            { encoding: 'utf8' }
+        )
+
+    it('preserves HTML sanitization when web experiments are selected', () => {
+        const entry = `
+import { ExperimentsExtensions } from './extension-bundles.js'
+document.body.innerHTML = '<div id="experiment-target"></div>'
+const experiments = new ExperimentsExtensions.experiments({
+    config: {},
+    onFeatureFlags() {},
+    getFeatureFlag() { return 'test' },
+    get_property() {
+        return [{
+            name: 'HTML sanitization',
+            feature_flag_key: 'experiment',
+            variants: {
+                test: {
+                    transforms: [{
+                        selector: '#experiment-target',
+                        html: '<script>alert(1)</script><b onclick="alert(1)">Safe</b><img src="x" onerror="alert(1)">',
+                    }],
+                },
+            },
+        }]
+    },
+})
+experiments.getWebExperimentsAndEvaluateDisplayLogic()
+`
+        const { frameWindow, iframe } = evaluateBundle(bundleEntry(entry))
+        try {
+            expect(frameWindow.document.querySelector('#experiment-target')?.innerHTML).toBe('<b>Safe</b><img src="x">')
+        } finally {
+            iframe.remove()
+        }
+    })
+
+    it.each(['__posthog', 'state'])('captures toolbar %s before a router clears the hash', (key) => {
+        const state = { action: 'ph_authorize', token: 'test_token', desiredHash: '#restored' }
+        const hash = `#${key}=${encodeURIComponent(JSON.stringify(state))}`
+        const bundle = bundleEntry(`
+import { ToolbarExtensions } from './extension-bundles.js'
+window.location.hash = '#routed'
+const toolbar = new ToolbarExtensions.toolbar({ config: { token: 'test_token' } })
+toolbar.loadToolbar = (params) => {
+    document.body.textContent = JSON.stringify(params)
+    return true
+}
+document.body.dataset.loaded = String(toolbar.maybeLoadToolbar())
+`)
+        const { frameWindow, iframe } = evaluateBundle(`window.location.hash = ${JSON.stringify(hash)};\n${bundle}`)
+        try {
+            expect(frameWindow.document.body.dataset.loaded).toBe('true')
+            expect(JSON.parse(frameWindow.document.body.textContent || '{}')).toMatchObject({ ...state, source: 'url' })
+            expect(frameWindow.location.hash).toBe('#restored')
+        } finally {
+            iframe.remove()
+        }
+    })
+
     it('does not retain request transport or compression code in the extension bundle', () => {
         const map = JSON.parse(
             fs.readFileSync(path.resolve(__dirname, '../../../dist/extension-bundles.js.map'), 'utf-8')
@@ -230,7 +342,9 @@ import posthog from '${distPath}/module.slim'
 import type { PostHog, PostHogConfig } from '${distPath}/module.slim.no-external'
 
 const instance: PostHog = posthog
-void instance
+if (instance.autocapture) {
+    instance.getExtension(instance.autocapture.name)?.setElementSelectors(new Set(['button']))
+}
 
 const extensionClasses = {
     ...SessionReplayExtensions,

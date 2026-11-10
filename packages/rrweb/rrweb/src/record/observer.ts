@@ -4,6 +4,9 @@ import {
   Mirror,
   getInputType,
   stringifyStylesheet,
+  rememberStyleRuleSource,
+  rememberStylesheetSource,
+  invalidateStyleRuleSource,
   toLowerCase,
 } from '@posthog/rrweb-snapshot';
 import type { FontFaceSet } from 'css-font-loading-module';
@@ -110,6 +113,7 @@ export function initMutationObserver(
       mutationObserverInit.attributeFilter = options.attributeFilter;
     }
     observer.observe(rootEl, mutationObserverInit);
+    mutationBuffer.readPendingRecordsFrom(observer);
     mutationBuffers.push(mutationBuffer);
     return { observer, buffer: mutationBuffer };
   } catch (error) {
@@ -784,6 +788,7 @@ function initStyleSheetObserver(
         const [rule] = argumentsList;
 
         const insertedIndex = target.apply(thisArg, argumentsList);
+        rememberStyleRuleSource(thisArg.cssRules[insertedIndex], rule);
 
         // A pending budget-deferred inlining of this sheet must not emit its
         // defer-time text over the successful mutation.
@@ -888,46 +893,52 @@ function initStyleSheetObserver(
               return result;
             }
 
-            stylesheetManager.onCssomSheetMutation(thisArg);
+            const revision = stylesheetManager.onCssomSheetMutation(thisArg);
             const { id, styleId } = getIdAndStyleId(
               thisArg,
               mirror,
               stylesheetManager.styleMirror,
             );
-            if (!((id && id !== -1) || (styleId && styleId !== -1))) {
-              return result;
-            }
-
-            const completeMutation = mutationQueue.queuePendingMutation(
-              thisArg,
-              () =>
-                styleSheetRuleCb({
-                  id,
-                  styleId,
-                  replace: text,
-                }),
-              () => {
-                const lateStyleSheetText = stringifyStylesheet(thisArg);
-                if (lateStyleSheetText !== null) {
-                  styleSheetRuleCb({
-                    id,
-                    styleId,
-                    replace: lateStyleSheetText,
-                  });
-                }
-              },
-            );
+            const tracked = (id && id !== -1) || (styleId && styleId !== -1);
+            const completeMutation = tracked
+              ? mutationQueue.queuePendingMutation(
+                  thisArg,
+                  () =>
+                    styleSheetRuleCb({
+                      id,
+                      styleId,
+                      replace: text,
+                    }),
+                  () => {
+                    const lateStyleSheetText = stringifyStylesheet(thisArg);
+                    if (lateStyleSheetText !== null) {
+                      styleSheetRuleCb({
+                        id,
+                        styleId,
+                        replace: lateStyleSheetText,
+                      });
+                    }
+                  },
+                )
+              : undefined;
             try {
               // Observing fulfillment requires a rejection handler; omitting it
               // creates a second unhandled rejection even when the caller handles
               // the original promise. Prefer not to introduce a new host error.
               void then.call(
                 result,
-                () => completeMutation(true),
-                () => completeMutation(false),
+                () => {
+                  if (
+                    stylesheetManager.isCurrentCssomMutation(thisArg, revision)
+                  ) {
+                    rememberStylesheetSource(thisArg, text);
+                  }
+                  completeMutation?.(true);
+                },
+                () => completeMutation?.(false),
               );
             } catch {
-              completeMutation(false);
+              completeMutation?.(false);
             }
           } catch {
             // Recorder errors must not affect the native promise result.
@@ -951,6 +962,7 @@ function initStyleSheetObserver(
         ) => {
           const [text] = argumentsList;
           const result = target.apply(thisArg, argumentsList);
+          rememberStylesheetSource(thisArg, text);
 
           stylesheetManager.onCssomSheetMutation(thisArg);
           const { id, styleId } = getIdAndStyleId(
@@ -1021,6 +1033,10 @@ function initStyleSheetObserver(
             const [rule] = argumentsList;
 
             const insertedIndex = target.apply(thisArg, argumentsList);
+            rememberStyleRuleSource(
+              (thisArg as CSSGroupingRule).cssRules[insertedIndex],
+              rule,
+            );
 
             stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
@@ -1065,6 +1081,7 @@ function initStyleSheetObserver(
             const [index] = argumentsList;
 
             const result = target.apply(thisArg, argumentsList);
+            invalidateStyleRuleSource(thisArg);
 
             stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
@@ -1110,6 +1127,22 @@ function initStyleSheetObserver(
   });
 }
 
+// Setter results are ignored by assignments but propagate through chained hooks.
+const REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT = Symbol.for(
+  'rrweb.adoptedStyleSheets.rejected',
+);
+
+type AdoptedStyleSheetObserver = {
+  stylesheetManager: observerParam['stylesheetManager'] | undefined;
+  previousDescriptor: PropertyDescriptor | undefined;
+  get: PropertyDescriptor['get'];
+};
+
+const adoptedStyleSheetObservers = new WeakMap<
+  NonNullable<PropertyDescriptor['set']>,
+  AdoptedStyleSheetObserver
+>();
+
 export function initAdoptedStyleSheetObserver(
   {
     mirror,
@@ -1127,25 +1160,37 @@ export function initAdoptedStyleSheetObserver(
     host.nodeName === '#document'
       ? (host as Document).defaultView?.Document
       : host.ownerDocument?.defaultView?.ShadowRoot;
-  const originalPropertyDescriptor = patchTarget?.prototype
-    ? Object.getOwnPropertyDescriptor(
-        patchTarget?.prototype,
-        'adoptedStyleSheets',
-      )
-    : undefined;
+  const ownPropertyDescriptor = Object.getOwnPropertyDescriptor(
+    host,
+    'adoptedStyleSheets',
+  );
+  const originalPropertyDescriptor =
+    ownPropertyDescriptor ??
+    (patchTarget?.prototype
+      ? Object.getOwnPropertyDescriptor(
+          patchTarget.prototype,
+          'adoptedStyleSheets',
+        )
+      : undefined);
   if (
     hostId === null ||
     hostId === -1 ||
     !patchTarget ||
-    !originalPropertyDescriptor
+    ownPropertyDescriptor?.configurable === false ||
+    !originalPropertyDescriptor?.get ||
+    !originalPropertyDescriptor?.set
   )
     return () => {
       //
     };
 
-  // Patch adoptedStyleSheets by overriding the original one.
-  Object.defineProperty(host, 'adoptedStyleSheets', {
-    configurable: originalPropertyDescriptor.configurable,
+  const observer: AdoptedStyleSheetObserver = {
+    stylesheetManager,
+    previousDescriptor: ownPropertyDescriptor,
+    get: undefined,
+  };
+  const patchedPropertyDescriptor: PropertyDescriptor = {
+    configurable: true,
     enumerable: originalPropertyDescriptor.enumerable,
     get(): CSSStyleSheet[] {
       return originalPropertyDescriptor.get?.call(this) as CSSStyleSheet[];
@@ -1162,7 +1207,7 @@ export function initAdoptedStyleSheetObserver(
         // operation, but because our patched setter sits on the call stack
         // the exception would otherwise be attributed to the recorder and
         // churn fingerprints in error tracking. The browser rejects the
-        // assignment atomically, so recording simply degrades (we skip the
+        // stylesheet, so recording simply degrades (we skip the
         // adoption below). Contain only this specific, unactionable case;
         // re-throw everything else so genuine host-page failures are
         // preserved (mirrors `callSafely` in ../utils).
@@ -1179,28 +1224,63 @@ export function initAdoptedStyleSheetObserver(
           typeof e === 'object' &&
           (e as { name?: unknown }).name === 'NotAllowedError'
         ) {
-          return;
+          return REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT;
         }
         throw e;
       }
-      if (hostId !== null && hostId !== -1) {
+      if (result === REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT) return result;
+      if (observer.stylesheetManager && hostId !== null && hostId !== -1) {
         try {
-          stylesheetManager.adoptStyleSheets(sheets, hostId);
+          observer.stylesheetManager.adoptStyleSheets(sheets, hostId);
         } catch (e) {
           // for safety
         }
       }
       return result;
     },
-  });
+  };
+  try {
+    Object.defineProperty(
+      host,
+      'adoptedStyleSheets',
+      patchedPropertyDescriptor,
+    );
+  } catch {
+    return () => {};
+  }
+
+  observer.get = patchedPropertyDescriptor.get;
+  adoptedStyleSheetObservers.set(patchedPropertyDescriptor.set!, observer);
 
   return callbackWrapper(() => {
-    Object.defineProperty(host, 'adoptedStyleSheets', {
-      configurable: originalPropertyDescriptor.configurable,
-      enumerable: originalPropertyDescriptor.enumerable,
-      get: originalPropertyDescriptor.get,
-      set: originalPropertyDescriptor.set,
-    });
+    observer.stylesheetManager = undefined;
+    const current = Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets');
+    // A later recorder or polyfill may have replaced or locked our hook.
+    if (
+      !current?.configurable ||
+      current.get !== patchedPropertyDescriptor.get ||
+      current.set !== patchedPropertyDescriptor.set
+    )
+      return;
+    let previousDescriptor = ownPropertyDescriptor;
+    while (previousDescriptor?.set) {
+      const previousObserver = adoptedStyleSheetObservers.get(
+        previousDescriptor.set,
+      );
+      if (
+        !previousObserver ||
+        previousObserver.stylesheetManager ||
+        previousObserver.get !== previousDescriptor.get
+      )
+        break;
+      previousDescriptor = previousObserver.previousDescriptor;
+    }
+    if (previousDescriptor) {
+      Object.defineProperty(host, 'adoptedStyleSheets', previousDescriptor);
+    } else {
+      delete (host as { adoptedStyleSheets?: CSSStyleSheet[] })
+        .adoptedStyleSheets;
+    }
   });
 }
 
@@ -1227,6 +1307,7 @@ function initStyleDeclarationObserver(
         const [property, value, priority] = argumentsList;
 
         const result = target.apply(thisArg, argumentsList);
+        invalidateStyleRuleSource(thisArg.parentRule);
 
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {
@@ -1271,6 +1352,7 @@ function initStyleDeclarationObserver(
         const [property] = argumentsList;
 
         const result = target.apply(thisArg, argumentsList);
+        invalidateStyleRuleSource(thisArg.parentRule);
 
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {

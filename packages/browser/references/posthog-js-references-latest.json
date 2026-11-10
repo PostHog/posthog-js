@@ -288,7 +288,7 @@
         },
         {
           "category": "Logs",
-          "description": "Capture a log entry and send it to the PostHog logs endpoint.",
+          "description": "Capture a log entry and send it to the PostHog logs endpoint.\nNote: logs are not subject to the user agent (bot) filter that drops events, so they are still sent from sessions whose events are dropped.",
           "details": null,
           "id": "captureLog",
           "showDocs": true,
@@ -1427,7 +1427,7 @@
         {
           "category": "Privacy",
           "description": "Opts the user into data capturing and persistence.",
-          "details": "Enables event tracking and data persistence (cookies/localStorage) for this PostHog instance. By default, captures an `$opt_in` event unless disabled.",
+          "details": "Enables event tracking and data persistence (cookies/localStorage) for this PostHog instance. By default, captures an `$opt_in` event unless disabled. The event is only captured when the user was not already opted in, so calling this on every page load (for example from a consent tool callback that re-applies stored consent) sends it once per user rather than once per page.",
           "id": "opt_in_capturing",
           "showDocs": true,
           "title": "opt_in_capturing",
@@ -3099,7 +3099,7 @@
           "releaseTag": "deprecated"
         },
         {
-          "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture the initial pageview\n- `false`: Don't capture any pageviews\n- `'history_change'`: Capture the initial pageview and pageviews when the pathname changes\n- An object: Capture the initial pageview and pageviews when any selected URL component changes",
+          "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture the initial pageview\n- `false`: Don't capture any pageviews\n- `'history_change'`: Capture the initial pageview and pageviews when the pathname changes\n- An object: Capture the initial pageview and pageviews when any selected URL component changes\n\nWith the slim bundle, history-based pageviews require `AnalyticsExtensions.historyAutocapture`\nfrom `posthog-js/extensions` in `__extensionClasses`. Without it, only the initial pageview is captured.",
           "type": "boolean | \"history_change\" | CapturePageviewOptions",
           "name": "capture_pageview"
         },
@@ -3185,6 +3185,11 @@
           "name": "disable_conversations"
         },
         {
+          "description": "Conversations-specific configuration options, such as the support widget theme.",
+          "type": "ConversationsConfig",
+          "name": "conversations"
+        },
+        {
           "description": "Verified distinct_id for HMAC-based identity verification.\nWhen both `identity_distinct_id` and `identity_hash` are provided,\nproducts like conversations use server-verified identity instead of\nanonymous session identifiers.\n\nCan be set at init time or later via `posthog.setIdentity()`.",
           "type": "string",
           "name": "identity_distinct_id"
@@ -3260,7 +3265,7 @@
           "name": "opt_out_persistence_by_default"
         },
         {
-          "description": "Determines if users should be opted out of user agent filtering such as googlebot or other bots.\nIf this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,\nbut will process all events as if they were from a browser.",
+          "description": "Determines if users should be opted out of user agent filtering such as googlebot or other bots.\nIf this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,\nbut will process all events as if they were from a browser.\n\nWhen the filter drops events, a one-time warning is written to the console (even without debug mode).\nThe filter applies to events only; logs sent with `captureLog` bypass it.\nSet this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer).",
           "type": "boolean",
           "name": "opt_out_useragent_filter"
         },
@@ -3329,7 +3334,7 @@
           "name": "properties_string_max_length"
         },
         {
-          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)\n- `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)\n- `'2026-08-30'`: Defaults from '2026-08-29' plus `session_recording.captureJsonLd` defaults to `true`",
+          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\nSet to `'latest'` to always use the newest defaults in the loaded SDK version.\nUnlike a pinned date, `'latest'` opts into future default changes when the SDK is upgraded,\nwhich may include breaking changes. Explicit configuration options still take precedence.\nEvents report the resolved date in `$config_defaults` when using `'latest'`.\n\n- `'latest'`: Use all default changes available in the loaded SDK version\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)\n- `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)\n- `'2026-08-30'`: Defaults from '2026-08-29' plus `session_recording.captureJsonLd` defaults to `true`",
           "type": "ConfigDefaults",
           "name": "defaults"
         },
@@ -4769,6 +4774,11 @@
         {
           "type": "boolean",
           "name": "noRetries"
+        },
+        {
+          "description": "Called each time `_send_request` hands the request to the transport. It is not called on the paths that drop the request before the network.",
+          "type": "() => void",
+          "name": "onDispatch"
         },
         {
           "description": "Bypasses asynchronous CompressionStream gzip in favor of synchronous compression. Used for immediate requests so compression does not delay dispatch until after a navigation or page unload.",

@@ -9,9 +9,12 @@ import {
   eventWithTime,
   EventType,
   IncrementalSource,
+  MouseInteractions,
+  NodeType,
   styleSheetRuleData,
   selectionData,
 } from '@posthog/rrweb-types';
+import type { elementNode } from '@posthog/rrweb-types';
 import {
   assertSnapshot,
   getServerURL,
@@ -97,6 +100,43 @@ describe('record', function (this: ISuite) {
       </html>
     `,
   );
+
+  it('records a text mutation flood once and replays its final value', async () => {
+    const result = await ctx.page.evaluate(async () => {
+      const { record, Replayer, EventType, IncrementalSource } = (
+        window as unknown as {
+          rrweb: typeof import('../src');
+        }
+      ).rrweb;
+      const span = document.createElement('span');
+      span.textContent = 'initial';
+      document.body.appendChild(span);
+      const events: eventWithTime[] = [];
+      const stop = record({ emit: (event) => events.push(event) })!;
+      for (let i = 0; i < 2000; i++) span.firstChild!.textContent = String(i);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      stop();
+      const texts = events.flatMap((event) =>
+        event.type === EventType.IncrementalSnapshot &&
+        event.data.source === IncrementalSource.Mutation
+          ? event.data.texts
+          : [],
+      );
+      const replayer = new Replayer(events);
+      replayer.pause(
+        events[events.length - 1].timestamp - events[0].timestamp + 1,
+      );
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      const replayed =
+        replayer.iframe.contentDocument!.querySelector('span')!.textContent;
+      replayer.destroy();
+      return { texts, replayed };
+    });
+    expect(result.texts).toEqual([{ id: expect.any(Number), value: '1999' }]);
+    expect(result.replayed).toBe('1999');
+  });
 
   // Resting offset from a real silk-sheet recording where the reveal scroll clamped to 0.
   const SILK_SHEET_RESTING_Y = 787;
@@ -698,6 +738,228 @@ describe('record', function (this: ISuite) {
 
     expect(threw).toBe(false);
   });
+
+  it.each(['document', 'shadow root'] as const)(
+    'keeps recording when a %s has a non-configurable adoptedStyleSheets property',
+    async (kind) => {
+      const pageErrors: string[] = [];
+      ctx.page.on('pageerror', (error) => pageErrors.push(error.message));
+      const result = await ctx.page.evaluate(async (kind) => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const target =
+          kind === 'document' ? document : host.attachShadow({ mode: 'open' });
+        const prototype =
+          kind === 'document' ? Document.prototype : ShadowRoot.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(
+          prototype,
+          'adoptedStyleSheets',
+        )!;
+        Object.defineProperty(target, 'adoptedStyleSheets', {
+          ...descriptor,
+          configurable: false,
+        });
+        const initial = new CSSStyleSheet();
+        initial.replaceSync(
+          '.initial-adopted-stylesheet-marker { color: green; }',
+        );
+        target.adoptedStyleSheets = [initial];
+        const errors: string[] = [];
+        const stop = (window as unknown as IWindow).rrweb.record({
+          emit: (window as unknown as IWindow).emit,
+          errorHandler: (error) => {
+            errors.push(String(error));
+            return true;
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync('body { color: green; }');
+        target.adoptedStyleSheets = [sheet];
+        document.querySelector('input')!.click();
+        stop?.();
+        const after = Object.getOwnPropertyDescriptor(
+          target,
+          'adoptedStyleSheets',
+        )!;
+        return {
+          started: typeof stop === 'function',
+          errors,
+          preserved:
+            after.get === descriptor.get &&
+            after.set === descriptor.set &&
+            !after.configurable,
+          adopted: target.adoptedStyleSheets[0] === sheet,
+        };
+      }, kind);
+      await waitForRAF(ctx.page);
+
+      expect(result).toEqual({
+        started: true,
+        errors: [],
+        preserved: true,
+        adopted: true,
+      });
+      expect(pageErrors).toEqual([]);
+      expect(
+        ctx.events.some((event) => event.type === EventType.FullSnapshot),
+      ).toBe(true);
+      expect(
+        ctx.events.flatMap((event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.AdoptedStyleSheet
+            ? event.data.styles?.flatMap((style) =>
+                style.rules.map(({ rule }) => rule),
+              ) ?? []
+            : [],
+        ),
+      ).toEqual(['.initial-adopted-stylesheet-marker { color: green; }']);
+      expect(
+        ctx.events.some(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.MouseInteraction,
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each(['document', 'shadow root'] as const)(
+    'does not record a rejected stylesheet through overlapping %s observers from separate bundles',
+    async (kind) => {
+      const firstRecord = await ctx.page.evaluateHandle(
+        () => (window as unknown as IWindow).rrweb.record,
+      );
+      await ctx.page.evaluate(ctx.code);
+      const result = await ctx.page.evaluate(async (kind, firstRecord) => {
+        const element = document.createElement('div');
+        document.body.appendChild(element);
+        const target =
+          kind === 'document'
+            ? document
+            : element.attachShadow({ mode: 'open' });
+        const span = document.createElement('span');
+        (target === document ? document.body : target).appendChild(span);
+        const initial = new CSSStyleSheet();
+        initial.replaceSync('span { color: rgb(1, 2, 3); }');
+        target.adoptedStyleSheets = [initial];
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const foreignSheet = new (
+          iframe.contentWindow as IWindow & typeof globalThis
+        ).CSSStyleSheet();
+        foreignSheet.replaceSync('.rejected-stylesheet-marker { color: red; }');
+        let nativeError: string | undefined;
+        try {
+          target.adoptedStyleSheets = [foreignSheet];
+        } catch (error) {
+          nativeError = (error as DOMException).name;
+        }
+        const nativeLength = target.adoptedStyleSheets.length;
+        const nativeColor = getComputedStyle(span).color;
+        target.adoptedStyleSheets = [initial];
+        const records = [
+          firstRecord,
+          (window as unknown as IWindow).rrweb.record,
+        ];
+        const events: eventWithTime[][] = [[], []];
+        const stops = events.map(
+          (observerEvents, index) =>
+            records[index]({
+              emit: (event) => observerEvents.push(event),
+            })!,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const counts = events.map((observerEvents) => observerEvents.length);
+        target.adoptedStyleSheets = [foreignSheet];
+        const rejectedEvents = events.map(
+          (observerEvents, index) => observerEvents.length - counts[index],
+        );
+        const recordedRejectedCSS = events.map((observerEvents) =>
+          JSON.stringify(observerEvents).includes('rejected-stylesheet-marker'),
+        );
+        const nativeMatchesControl =
+          target.adoptedStyleSheets.length === nativeLength &&
+          getComputedStyle(span).color === nativeColor;
+        const accepted = new CSSStyleSheet();
+        accepted.replaceSync('.accepted-stylesheet-marker { color: green; }');
+        target.adoptedStyleSheets = [accepted];
+        const recordedAcceptedCSS = events.some((observerEvents) =>
+          JSON.stringify(observerEvents).includes('accepted-stylesheet-marker'),
+        );
+        stops.reverse().forEach((stop) => stop());
+        return {
+          nativeError,
+          nativeMatchesControl,
+          rejectedEvents,
+          recordedRejectedCSS,
+          recordedAcceptedCSS,
+        };
+      }, kind, firstRecord);
+      await firstRecord.dispose();
+      expect(result).toEqual({
+        nativeError: 'NotAllowedError',
+        nativeMatchesControl: true,
+        rejectedEvents: [0, 0],
+        recordedRejectedCSS: [false, false],
+        recordedAcceptedCSS: true,
+      });
+    },
+  );
+
+  it.each(['document', 'shadow root'] as const)(
+    'stops recording adopted stylesheets through a retained %s wrapper',
+    async (kind) => {
+      const result = await ctx.page.evaluate(async (kind) => {
+        const element = document.createElement('div');
+        document.body.appendChild(element);
+        const target =
+          kind === 'document'
+            ? document
+            : element.attachShadow({ mode: 'open' });
+        const span = document.createElement('span');
+        (target === document ? document.body : target).appendChild(span);
+        const events: eventWithTime[] = [];
+        const stop = (window as unknown as IWindow).rrweb.record({
+          emit: (event) => events.push(event),
+        })!;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const hook = Object.getOwnPropertyDescriptor(
+          target,
+          'adoptedStyleSheets',
+        )!;
+        Object.defineProperty(target, 'adoptedStyleSheets', {
+          configurable: true,
+          get: hook.get,
+          set(sheets: CSSStyleSheet[]) {
+            hook.set!.call(this, sheets);
+          },
+        });
+        const activeSheet = new CSSStyleSheet();
+        activeSheet.replaceSync('span { color: rgb(1, 2, 3); }');
+        target.adoptedStyleSheets = [activeSheet];
+        const activeColor = getComputedStyle(span).color;
+        const captured = JSON.stringify(events).includes('rgb(1, 2, 3)');
+        stop();
+        const countAfterStop = events.length;
+        const stoppedSheet = new CSSStyleSheet();
+        stoppedSheet.replaceSync('span { color: rgb(4, 5, 6); }');
+        target.adoptedStyleSheets = [stoppedSheet];
+        return {
+          activeColor,
+          captured,
+          stoppedColor: getComputedStyle(span).color,
+          eventsAfterStop: events.length - countAfterStop,
+        };
+      }, kind);
+      expect(result).toEqual({
+        activeColor: 'rgb(1, 2, 3)',
+        captured: true,
+        stoppedColor: 'rgb(4, 5, 6)',
+        eventsAfterStop: 0,
+      });
+    },
+  );
 
   it('captures consecutive stylesheet replacements', async () => {
     await ctx.page.evaluate(async () => {
@@ -1317,6 +1579,74 @@ describe('record', function (this: ISuite) {
     expect(serializedEvents).not.toContain('updated-private-value');
   });
 
+  it('keeps recording shadow content of a host that is moved or re-inserted', async () => {
+    await ctx.page.evaluate(async () => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+      const host = document.createElement('div');
+      host.attachShadow({ mode: 'open' }).innerHTML = '<span>initial</span>';
+      const other = document.createElement('section');
+      document.body.append(host, other);
+      await settle();
+      const span = host.shadowRoot!.querySelector('span')!;
+
+      // Removed and re-attached within one mutation batch.
+      host.remove();
+      other.appendChild(host);
+      await settle();
+      span.textContent = 'after-move';
+      await settle();
+
+      // Removed, then re-inserted in a later batch.
+      host.remove();
+      await settle();
+      document.body.appendChild(host);
+      await settle();
+      span.textContent = 'after-reinsert';
+      await settle();
+    });
+    await waitForRAF(ctx.page);
+
+    const serializedEvents = JSON.stringify(ctx.events);
+    expect(serializedEvents).toContain('after-move');
+    expect(serializedEvents).toContain('after-reinsert');
+  });
+
+  it('keeps shadow changes made while frozen on a host removed and re-inserted', async () => {
+    await ctx.page.evaluate(async () => {
+      const { record, freezePage } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+      const host = document.createElement('div');
+      host.attachShadow({ mode: 'open' }).innerHTML = '<span>initial</span>';
+      document.body.appendChild(host);
+      await settle();
+      const span = host.shadowRoot!.querySelector('span')!;
+
+      freezePage();
+      span.textContent = 'while-frozen';
+      await settle();
+      host.remove();
+      await settle();
+      document.body.appendChild(host);
+      await settle();
+      // 'unfreeze' happens upon a user event
+      document.body.click();
+      await settle();
+
+      span.textContent = 'after-unfreeze';
+      await settle();
+    });
+    await waitForRAF(ctx.page);
+
+    const serializedEvents = JSON.stringify(ctx.events);
+    expect(serializedEvents).toContain('while-frozen');
+    expect(serializedEvents).toContain('after-unfreeze');
+  });
+
   it('records mouse movement inside a same-origin iframe as MouseMove', async () => {
     await ctx.page.evaluate(async () => {
       const iframe = document.createElement('iframe');
@@ -1416,7 +1746,7 @@ describe('record', function (this: ISuite) {
   });
 
   it('captures adopted stylesheets in nested shadow doms and iframes', async () => {
-    await ctx.page.evaluate(() => {
+    const fixture = await ctx.page.evaluateHandle(() => {
       document.body.innerHTML = `
         <div id="shadow-host-1">entry</div>
       `;
@@ -1451,19 +1781,36 @@ describe('record', function (this: ISuite) {
         emit,
       });
 
-      setTimeout(() => {
-        sheet1.insertRule!('div { display: inline ; }', 1);
-        sheet2.replaceSync!('h1 { font-size: large; }');
-      }, 100);
-
-      setTimeout(() => {
-        const sheet3 = new iframeWin.CSSStyleSheet();
-        sheet3.replaceSync!('span {background-color: red;}');
-        iframeDocument!.adoptedStyleSheets = [sheet3, sheet2];
-        shadowHost.shadowRoot!.adoptedStyleSheets = [sheet1, sheet3];
-      }, 150);
+      return { iframeDocument: iframeDocument!, shadowHost, sheet1, sheet2 };
     });
-    await ctx.page.waitForTimeout(200);
+    // All nested iframe and shadow root sheets must be recorded before mutation.
+    await waitForCondition(
+      () =>
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.AdoptedStyleSheet,
+        ).length === 2,
+    );
+    await fixture.evaluate(({ iframeDocument, shadowHost, sheet1, sheet2 }) => {
+      sheet1.insertRule!('div { display: inline ; }', 1);
+      sheet2.replaceSync!('h1 { font-size: large; }');
+
+      const iframeWin = iframeDocument.defaultView!;
+      const sheet3 = new iframeWin.CSSStyleSheet();
+      sheet3.replaceSync!('span {background-color: red;}');
+      iframeDocument.adoptedStyleSheets = [sheet3, sheet2];
+      shadowHost.shadowRoot!.adoptedStyleSheets = [sheet1, sheet3];
+    });
+    await waitForCondition(
+      () =>
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.AdoptedStyleSheet,
+        ).length === 4,
+    );
+    await fixture.dispose();
     await assertSnapshot(ctx.events);
   });
 
@@ -1746,6 +2093,509 @@ describe('record', function (this: ISuite) {
 
       await assertSnapshot(ctx.events);
     });
+
+    const attributeMutations = () =>
+      ctx.events.flatMap((e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        e.data.source === IncrementalSource.Mutation
+          ? e.data.attributes
+          : [],
+      );
+
+    it('inlines a preload link once it becomes a stylesheet', async () => {
+      await ctx.page.evaluate((serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'preload');
+        link.setAttribute('as', 'style');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?async`);
+        link.onload = () => {
+          link.onload = null;
+          link.rel = 'stylesheet';
+          link.media = 'screen';
+        };
+        document.head.appendChild(link);
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+      }, serverURL);
+
+      const cssTextMutation = await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+
+      expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+      expect(cssTextMutation.attributes.media).toBe('screen');
+      expect(
+        attributeMutations().find((m) => m.attributes.rel === 'stylesheet')
+          ?.id,
+      ).toBe(cssTextMutation.id);
+    });
+
+    it('records the new href and inlines the new sheet when a stylesheet link changes href', async () => {
+      await ctx.page.evaluate(async (serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+        await new Promise((resolve) => {
+          link.onload = resolve;
+          document.head.appendChild(link);
+        });
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=2`);
+      }, serverURL);
+
+      const cssTextMutation = await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+
+      const hrefMutation = attributeMutations().find(
+        (m) => 'href' in m.attributes,
+      );
+      expect(hrefMutation?.attributes.href).toBe(
+        `${serverURL}/html/assets/style.css?v=2`,
+      );
+      expect(cssTextMutation.id).toBe(hrefMutation?.id);
+      expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+    });
+
+    it('sends null for attributes removed from a changed stylesheet link', async () => {
+      await ctx.page.evaluate(async (serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('media', 'screen');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+        await new Promise((resolve) => {
+          link.onload = resolve;
+          document.head.appendChild(link);
+        });
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        link.removeAttribute('media');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=2`);
+      }, serverURL);
+
+      const cssTextMutation = await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+
+      expect(cssTextMutation.attributes).toHaveProperty('media', null);
+    });
+
+    it('sends null for attributes removed from a stylesheet link before its sheet loads', async () => {
+      await ctx.page.evaluate(async (serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('media', 'screen');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?late`);
+        document.head.appendChild(link);
+        // the add is serialized with media first, and the sheet cannot load within a microtask
+        await Promise.resolve();
+        link.removeAttribute('media');
+      }, serverURL);
+
+      const cssTextMutation = await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+
+      expect(cssTextMutation.attributes).toHaveProperty('media', null);
+      expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+    });
+
+    it('inlines the new sheet of a relative href that changed before a pushState', async () => {
+      await ctx.page.evaluate(async () => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('href', 'assets/style.css?v=1');
+        await new Promise((resolve) => {
+          link.onload = resolve;
+          document.head.appendChild(link);
+        });
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        link.setAttribute('href', 'assets/style.css?v=2');
+        history.pushState({}, '', '/elsewhere/page');
+      });
+
+      const cssTextMutation = await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+
+      expect(cssTextMutation.attributes._cssText).toContain('color: pink');
+    });
+
+    const addedLinks = () =>
+      ctx.events.flatMap((e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        e.data.source === IncrementalSource.Mutation
+          ? e.data.adds.filter(
+              (add) =>
+                add.node.type === NodeType.Element &&
+                add.node.tagName === 'link',
+            )
+          : [],
+      );
+
+    const replayAtEnd = async () => {
+      const recordedEvents = [...ctx.events];
+      const firstTimestamp = recordedEvents[0].timestamp;
+      const lastTimestamp = recordedEvents[recordedEvents.length - 1].timestamp;
+      await ctx.page.evaluate(
+        ({ events, pauseAt }) => {
+          const { Replayer } = (
+            window as unknown as {
+              rrweb: {
+                Replayer: new (e: eventWithTime[]) => {
+                  pause: (t: number) => void;
+                };
+              };
+            }
+          ).rrweb;
+          new Replayer(events).pause(pauseAt);
+        },
+        {
+          events: recordedEvents,
+          pauseAt: lastTimestamp - firstTimestamp + 200,
+        },
+      );
+      return (await (await ctx.page.$('iframe'))!.contentFrame())!;
+    };
+    const replayedStyleText = (replayFrame: puppeteer.Frame) =>
+      replayFrame.$$eval('style', (styles) =>
+        styles.map((style) => style.textContent).join(''),
+      );
+
+    it('replays a plain link when the new sheet of a changed link cannot be read', async () => {
+      const crossOriginURL = serverURL.replace('localhost', '127.0.0.1');
+      const newHref = `${crossOriginURL}/html/assets/style.css?v=2`;
+      await ctx.page.evaluate(
+        async ({ serverURL, newHref }) => {
+          const { record } = (window as unknown as IWindow).rrweb;
+          const link = document.createElement('link');
+          link.setAttribute('rel', 'stylesheet');
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+          await new Promise((resolve) => {
+            link.onload = resolve;
+            document.head.appendChild(link);
+          });
+
+          record({
+            inlineStylesheet: true,
+            emit: (window as unknown as IWindow).emit,
+          });
+
+          link.setAttribute('href', newHref);
+        },
+        { serverURL, newHref },
+      );
+
+      const readd = await waitForCondition(() => addedLinks()[0]);
+      expect((readd.node as elementNode).attributes.href).toBe(newHref);
+      expect((readd.node as elementNode).attributes).not.toHaveProperty(
+        '_cssText',
+      );
+
+      const replayFrame = await replayAtEnd();
+      expect(
+        await replayFrame.$$eval('link', (links) =>
+          links.map((link) => link.getAttribute('href')),
+        ),
+      ).toContain(newHref);
+      expect(await replayedStyleText(replayFrame)).not.toContain('pink');
+    });
+
+    it('replays a plain link in its new place when the link moved while recording was frozen', async () => {
+      const crossOriginURL = serverURL.replace('localhost', '127.0.0.1');
+      const newHref = `${crossOriginURL}/html/assets/style.css?frozen`;
+      await ctx.page.evaluate(
+        async ({ serverURL, newHref }) => {
+          const { record, freezePage } = (window as unknown as IWindow).rrweb;
+          const link = document.createElement('link');
+          link.setAttribute('rel', 'stylesheet');
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+          await new Promise((resolve) => {
+            link.onload = resolve;
+            document.head.appendChild(link);
+          });
+
+          record({
+            inlineStylesheet: true,
+            emit: (window as unknown as IWindow).emit,
+          });
+
+          link.setAttribute('href', newHref);
+          // the href mutation is emitted first, and the sheet cannot load within a microtask
+          await Promise.resolve();
+          freezePage();
+          document.body.appendChild(link);
+          // the new sheet loads, and its fallback runs, while the move is still buffered
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          // 'unfreeze' happens upon a user event
+          document.body.click();
+        },
+        { serverURL, newHref },
+      );
+
+      await waitForCondition(() => addedLinks()[0]);
+      const replayFrame = await replayAtEnd();
+      expect(
+        await replayFrame.$$eval('body link', (links) =>
+          links.map((link) => link.getAttribute('href')),
+        ),
+      ).toContain(newHref);
+      expect(await replayedStyleText(replayFrame)).not.toContain('pink');
+    });
+
+    it('does not re-add a changed link that replay still shows as a link', async () => {
+      const crossOriginURL = serverURL.replace('localhost', '127.0.0.1');
+      await ctx.page.evaluate((crossOriginURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'preload');
+        link.setAttribute('as', 'style');
+        link.setAttribute(
+          'href',
+          `${crossOriginURL}/html/assets/style.css?preload`,
+        );
+        link.onload = () => {
+          link.onload = null;
+          link.rel = 'stylesheet';
+        };
+        document.head.appendChild(link);
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+      }, crossOriginURL);
+
+      await waitForCondition(() =>
+        attributeMutations().find((m) => m.attributes.rel === 'stylesheet'),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(addedLinks()).toHaveLength(0);
+    });
+
+    it('inlines the new sheet when a full snapshot runs while a changed link loads', async () => {
+      await ctx.page.evaluate(async (serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+        await new Promise((resolve) => {
+          link.onload = resolve;
+          document.head.appendChild(link);
+        });
+
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?v=2`);
+        // the full snapshot lands while the v=2 sheet is still loading
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        record.takeFullSnapshot(true);
+      }, serverURL);
+
+      await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+      const lastFullSnapshotIndex = ctx.events
+        .map((e) => e.type)
+        .lastIndexOf(EventType.FullSnapshot);
+      const cssTextEventIndex = ctx.events.findIndex(
+        (e) =>
+          e.type === EventType.IncrementalSnapshot &&
+          e.data.source === IncrementalSource.Mutation &&
+          e.data.attributes.some((m) => '_cssText' in m.attributes),
+      );
+
+      expect(lastFullSnapshotIndex).toBeGreaterThan(0);
+      expect(cssTextEventIndex).toBeGreaterThan(lastFullSnapshotIndex);
+    });
+
+    it('masks the attributes and CSS it sends after a stylesheet link changes', async () => {
+      await ctx.page.evaluate((serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'preload');
+        link.setAttribute('as', 'style');
+        link.setAttribute('data-owner', 'person@example.com');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?masked`);
+        link.onload = () => {
+          link.onload = null;
+          link.rel = 'stylesheet';
+        };
+        document.head.appendChild(link);
+
+        record({
+          inlineStylesheet: true,
+          maskAllElementAttributes: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+      }, serverURL);
+
+      await waitForCondition(() =>
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      );
+      const emittedBytes = JSON.stringify(ctx.events);
+      expect(emittedBytes).not.toContain('person@example.com');
+      expect(emittedBytes).not.toContain('color: pink');
+    });
+
+    it('does not inline a late-loading stylesheet whose ancestor became blocked', async () => {
+      await ctx.page.evaluate(async (serverURL) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({
+          inlineStylesheet: true,
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        const wrapper = document.createElement('div');
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('href', `${serverURL}/html/assets/style.css?late`);
+        wrapper.appendChild(link);
+        document.body.appendChild(wrapper);
+        // let the add go out while the sheet is still loading
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        wrapper.classList.add('rr-block');
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }, serverURL);
+
+      expect(
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      ).toBeUndefined();
+    });
+
+    const changeHrefThen = (serverURL: string, afterChange: 'block' | 'stop') =>
+      ctx.page.evaluate(
+        async (serverURL, afterChange) => {
+          const { record } = (window as unknown as IWindow).rrweb;
+          const link = document.createElement('link');
+          link.setAttribute('rel', 'stylesheet');
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+          await new Promise((resolve) => {
+            link.onload = resolve;
+            document.head.appendChild(link);
+          });
+
+          const stopRecording = record({
+            inlineStylesheet: true,
+            emit: (window as unknown as IWindow).emit,
+          });
+
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=2`);
+          // let the href mutation go out before the new sheet arrives
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          if (afterChange === 'block') {
+            link.classList.add('rr-block');
+          } else {
+            stopRecording?.();
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        },
+        serverURL,
+        afterChange,
+      );
+
+    it('does not inline a changed stylesheet link that became blocked before its sheet loaded', async () => {
+      await changeHrefThen(serverURL, 'block');
+
+      expect(
+        attributeMutations().find((m) => 'href' in m.attributes),
+      ).toBeDefined();
+      expect(
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      ).toBeUndefined();
+    });
+
+    it('does not track a changed stylesheet link when emit stops the recording', async () => {
+      const loadListenersAddedAfterStop = await ctx.page.evaluate(
+        async (serverURL) => {
+          const { record } = (window as unknown as IWindow).rrweb;
+          const link = document.createElement('link');
+          link.setAttribute('rel', 'stylesheet');
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=1`);
+          await new Promise((resolve) => {
+            link.onload = resolve;
+            document.head.appendChild(link);
+          });
+
+          let stopped = false;
+          let loadListenersAfterStop = 0;
+          const addEventListener = link.addEventListener.bind(link);
+          link.addEventListener = ((type: string, ...rest: unknown[]) => {
+            if (type === 'load' && stopped) loadListenersAfterStop += 1;
+            return (addEventListener as (...args: unknown[]) => void)(
+              type,
+              ...rest,
+            );
+          }) as typeof link.addEventListener;
+
+          const stopRecording = record({
+            inlineStylesheet: true,
+            emit: (event) => {
+              (window as unknown as IWindow).emit(event);
+              const changedAttributes = (
+                event.data as { attributes?: { attributes: object }[] }
+              ).attributes;
+              if (
+                !stopped &&
+                changedAttributes?.some((m) => 'href' in m.attributes)
+              ) {
+                stopped = true;
+                stopRecording?.();
+              }
+            },
+          });
+
+          link.setAttribute('href', `${serverURL}/html/assets/style.css?v=2`);
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return stopped ? loadListenersAfterStop : -1;
+        },
+        serverURL,
+      );
+
+      expect(loadListenersAddedAfterStop).toBe(0);
+    });
+
+    it('does not inline a changed stylesheet link after recording stops', async () => {
+      await changeHrefThen(serverURL, 'stop');
+
+      expect(
+        attributeMutations().find((m) => 'href' in m.attributes),
+      ).toBeDefined();
+      expect(
+        attributeMutations().find((m) => '_cssText' in m.attributes),
+      ).toBeUndefined();
+    });
   });
 
   it('captures CORS stylesheets that are still loading', async () => {
@@ -1865,6 +2715,8 @@ describe('record iframes', function (this: ISuite) {
   );
 
   it('captures iframe content in correct order', async () => {
+    // Let the initial viewport resize finish before counting recorder events.
+    await waitForRAF(ctx.page);
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;
       record({
@@ -1886,6 +2738,128 @@ describe('record iframes', function (this: ISuite) {
       EventType.FullSnapshot,
       EventType.IncrementalSnapshot,
     ]);
+  });
+
+  it('captures each iframe mutation once after repeated full snapshots', async () => {
+    await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+    });
+    await waitForRAF(ctx.page);
+    for (let i = 0; i < 3; i++) {
+      await ctx.page.evaluate(() => {
+        (window as unknown as IWindow).rrweb.record.takeFullSnapshot(true);
+      });
+      await waitForRAF(ctx.page);
+    }
+    ctx.events = [];
+    await ctx.page.evaluate(() => {
+      document
+        .querySelector('iframe')!
+        .contentDocument!.querySelector('button')!.firstChild!.textContent =
+        'changed once';
+    });
+    await waitForRAF(ctx.page);
+    const textEvents = ctx.events.filter(
+      (event) =>
+        event.type === EventType.IncrementalSnapshot &&
+        event.data.source === IncrementalSource.Mutation &&
+        event.data.texts.some((text) => text.value === 'changed once'),
+    );
+    expect(textEvents).toHaveLength(1);
+
+    await ctx.page.evaluate(() => {
+      document
+        .querySelector('iframe')!
+        .contentDocument!.querySelector('button')!
+        .click();
+    });
+    await waitForRAF(ctx.page);
+    expect(
+      ctx.events.filter(
+        (event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.MouseInteraction &&
+          event.data.type === MouseInteractions.Click,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('captures iframe clicks after same-document rewrites and repeated checkouts', async () => {
+    await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+    });
+    await waitForRAF(ctx.page);
+
+    for (let rewrite = 0; rewrite < 2; rewrite++) {
+      const result = await ctx.page.evaluate(async () => {
+        const iframe = document.querySelector('iframe')!;
+        const doc = iframe.contentDocument!;
+        let pagehides = 0;
+        iframe.contentWindow!.addEventListener('pagehide', () => pagehides++);
+        const loaded = new Promise<void>((resolve) =>
+          iframe.addEventListener('load', () => resolve(), { once: true }),
+        );
+        doc.open();
+        doc.write(
+          '<!DOCTYPE html><html><body><button>Rewritten</button></body></html>',
+        );
+        doc.close();
+        await loaded;
+        return { sameDocument: doc === iframe.contentDocument, pagehides };
+      });
+      expect(result).toEqual({ sameDocument: true, pagehides: 0 });
+      await waitForRAF(ctx.page);
+      ctx.events = [];
+      const frame = (await ctx.page.$('iframe'))!;
+      const content = (await frame.contentFrame())!;
+      await content.click('button');
+      await content.click('button');
+      await waitForRAF(ctx.page);
+      expect(
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.MouseInteraction &&
+            event.data.type === MouseInteractions.Click,
+        ),
+      ).toHaveLength(2);
+
+      for (let checkout = 0; checkout < 3; checkout++) {
+        await ctx.page.evaluate(() => {
+          (window as unknown as IWindow).rrweb.record.takeFullSnapshot(true);
+        });
+        await waitForRAF(ctx.page);
+      }
+
+      ctx.events = [];
+      await content.click('button');
+      await content.click('button');
+      await waitForRAF(ctx.page);
+      expect(
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.MouseInteraction &&
+            event.data.type === MouseInteractions.Click,
+        ),
+      ).toHaveLength(2);
+
+      await content.evaluate(() => {
+        document.querySelector('button')!.firstChild!.textContent =
+          'rewritten once';
+      });
+      await waitForRAF(ctx.page);
+      expect(
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.Mutation &&
+            event.data.texts.some((text) => text.value === 'rewritten once'),
+        ),
+      ).toHaveLength(1);
+    }
   });
 
   it('captures stylesheet mutations in iframes', async () => {

@@ -9,8 +9,8 @@ const script = new URL('./run-compliance.sh', import.meta.url).pathname
 for (const [scenario, exit, mode = 'v0', suite] of [
     ['success', 0],
     ['success', 0, 'v1'],
-    ['success', 0, 'v0', 'acceptance'],
-    ['success', 0, 'v1', 'acceptance'],
+    ['success', 0, 'v0', 'migration'],
+    ['success', 0, 'v1', 'migration'],
     ['cli-failed', 7, 'v1', 'acceptance'],
     ['cli-and-cleanup-failed', 7],
     ['cli-failed', 7],
@@ -26,7 +26,7 @@ for (const [scenario, exit, mode = 'v0', suite] of [
     ['startup-hung', 1],
     ['cleanup-hung', 1],
 ]) {
-    test(`compliance caller (${mode}, ${suite || 'migration'}): ${scenario}`, (t) => {
+    test(`compliance caller (${mode}, ${suite || 'acceptance'}): ${scenario}`, (t) => {
         const root = mkdtempSync(join(tmpdir(), 'node-caller-test-'))
         t.after(() => rmSync(root, { recursive: true, force: true }))
         const bin = join(root, 'bin')
@@ -94,7 +94,7 @@ esac
         if (!scenario.startsWith('startup-')) {
             const profile = mode === 'v0' ? 'node-legacy' : 'node-analytics-v1'
             assert.ok(commands.includes(`check-report --report /reports/report.json --profile ${profile}`))
-            assert.ok(commands.includes(`run --${suite || 'migration'}-suite --adapter-url`))
+            assert.ok(commands.includes(`run --${suite || 'acceptance'}-suite --adapter-url`))
             assert.ok(commands.includes(`--profile ${profile} --timeout-ms`))
             assert.ok(commands.includes(`POSTHOG_CAPTURE_MODE=${mode}`))
             assert.ok(commands.includes('--network none'))

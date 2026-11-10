@@ -30,6 +30,8 @@ export interface ResultPayload {
 type PayloadOptions<T> = (T & { payload?: never }) | ({ payload: T } & { [K in keyof T]?: never })
 export interface ItemIdentifiers {
   id?: string
+  /** Model used for this execution. Omitted or null inherits the experiment's model. */
+  modelVersion?: string | null
   caseKey?: string | null
   trial?: string | null
   datasetItemIdentifier?: string | null
@@ -68,6 +70,7 @@ const RESULT_FIELDS: Record<string, string> = {
   metadata: 'metadata',
 }
 const ITEM_IDS: Record<string, string> = {
+  modelVersion: 'model_version',
   caseKey: 'case_key',
   trial: 'trial',
   datasetItemIdentifier: 'dataset_item_identifier',
@@ -174,10 +177,17 @@ export class EvaluationItem {
   }
   static fromDatasetItem(
     item: DatasetItem,
-    options: { output?: JSONValue; id?: string; caseKey?: string; trial?: string; applicationTraceId?: string } = {}
+    options: {
+      output?: JSONValue
+      id?: string
+      modelVersion?: string | null
+      caseKey?: string
+      trial?: string
+      applicationTraceId?: string
+    } = {}
   ): EvaluationItem {
     if (item.archived !== false) throw new TypeError('Archived dataset items cannot be evaluated.')
-    keys(options, ['output', 'id', 'caseKey', 'trial', 'applicationTraceId'])
+    keys(options, ['output', 'id', 'modelVersion', 'caseKey', 'trial', 'applicationTraceId'])
     return new EvaluationItem({
       ...options,
       caseKey: options.caseKey ?? item.clientItemId ?? item.id,

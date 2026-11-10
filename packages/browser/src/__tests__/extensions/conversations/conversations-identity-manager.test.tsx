@@ -11,6 +11,7 @@ vi.mock('../../../extensions/conversations/external/persistence', () => {
             let storedTicketId: string | null = null
             return {
                 getOrCreateWidgetSessionId: vi.fn().mockReturnValue('test-widget-session-id'),
+                isNewWidgetSession: vi.fn().mockReturnValue(false),
                 setWidgetSessionId: vi.fn(),
                 loadTicketId: vi.fn(() => storedTicketId),
                 saveTicketId: vi.fn((ticketId: string) => {

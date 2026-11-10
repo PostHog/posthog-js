@@ -144,6 +144,8 @@ const DEFAULT_OPTIONS = {
   collectFeedback: false,
   enableConversationId: true,
   captureModel: true,
+  sendInitializeEvent: true,
+  sendToolsListEvent: true,
 } satisfies Partial<MCPAnalyticsOptions>
 
 function buildTrackingData(
@@ -269,6 +271,7 @@ export type {
   ToolCallCaptureData,
   ToolInputOptions,
   ToolsListCaptureData,
+  UnknownToolCaptureData,
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']

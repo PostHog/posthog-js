@@ -1,3 +1,4 @@
+import { snapshotAutocaptureOptions } from './autocapture-options'
 import { snapshotSurveysOptions } from './surveys-options'
 import { snapshotLogsOptions } from './logs-options'
 import type { Extension, PostHog, PostHogOptions } from './types'
@@ -78,6 +79,17 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
         }
     )
     if (surveysLoading) await surveysLoading
+    const autocaptureLoading = install(
+        'autocapture',
+        (extension) => extension.name === 'autocapture',
+        () => {
+            const configuration = options?.autocapture
+            if (configuration === false) return
+            const snapshot = snapshotAutocaptureOptions(configuration)
+            return import('./autocapture').then(({ autocapture }) => autocapture(snapshot))
+        }
+    )
+    if (autocaptureLoading) await autocaptureLoading
     const client = await createPostHogCore(options, extensions)
     for (const [label, error] of loadingErrors.reverse()) {
         client.logger.error(`Automatic ${label} loading failed`, error)
@@ -131,3 +143,5 @@ export type {
     DisplaySurveyOptions,
     SurveyRenderReason,
 } from './surveys-options'
+
+export type { AutocaptureOptions, AutocaptureConfiguration, RageclickOptions } from './autocapture-options'

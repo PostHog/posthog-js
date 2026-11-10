@@ -193,32 +193,137 @@ describe('consentManager', () => {
             // Wait for the $pageview timeout to be called
             await new Promise((r) => setTimeout(r, 10))
             posthog.opt_in_capturing()
-            expect(beforeSendMock).toHaveBeenCalledTimes(3)
-            expect(beforeSendMock).not.lastCalledWith(expect.objectContaining({ event: '$pageview' }))
+            // consent was already granted, so neither $opt_in nor $pageview is captured again
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+        })
+
+        const optInEvents = () => beforeSendMock.mock.calls.filter(([e]) => e.event === '$opt_in')
+
+        it('should send opt in event once when called again after consent was granted', () => {
+            posthog.opt_in_capturing()
+            posthog.opt_in_capturing()
+            posthog.opt_in_capturing({ captureEventName: 'override-opt-in' })
+            expect(optInEvents()).toHaveLength(1)
+            expect(beforeSendMock).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'override-opt-in' }))
+        })
+
+        it('should not send opt in event on a later page load that re-applies stored consent', async () => {
+            posthog.opt_in_capturing()
+            expect(optInEvents()).toHaveLength(1)
+
+            // a new instance with the same token reads the stored consent, like the next page load
+            beforeSendMock.mockClear()
+            posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
+            expect(posthog.get_explicit_consent_status()).toBe('granted')
+            posthog.opt_in_capturing()
+            expect(optInEvents()).toHaveLength(0)
+        })
+
+        it('should send opt in event again after opting out and back in', () => {
+            posthog.opt_in_capturing()
+            posthog.opt_out_capturing()
+            posthog.opt_in_capturing()
+            expect(optInEvents()).toHaveLength(2)
+        })
+
+        it('should send opt in event again after reset clears consent', () => {
+            posthog.opt_in_capturing()
+            posthog.reset()
+            posthog.opt_in_capturing()
+            expect(optInEvents()).toHaveLength(2)
         })
     })
 
     describe('feature flag exposures before consent', () => {
+        const optIn = (ph: PostHog) => ph.opt_in_capturing({ captureEventName: false })
+        // Consent written by another tab or a consent manager sharing the consent cookie
+        const writeConsentStorage = (ph: PostHog) => ph.consent.optInOut(true)
+        const readFlag = (ph: PostHog) => ph.getFeatureFlag('beta-ui')
+        const readFlagWithoutEvent = (ph: PostHog) => ph.getFeatureFlag('beta-ui', { send_event: false })
+        const noop = () => {}
+
         it.each([
-            ['opt_in_capturing()', (ph: PostHog) => ph.opt_in_capturing({ captureEventName: false })],
-            // Consent written by another tab or a consent manager sharing the consent cookie
-            ['consent storage', (ph: PostHog) => ph.consent.optInOut(true)],
-        ])('sends $feature_flag_called for a flag read before consent is granted via %s', async (_, grantConsent) => {
-            const beforeSendMock = vi.fn().mockImplementation((e) => e)
-            posthog = await createPostHog({
-                opt_out_capturing_by_default: true,
-                capture_pageview: false,
-                bootstrap: { featureFlags: { 'beta-ui': true } },
-                before_send: beforeSendMock,
-            })
+            ['opt_in_capturing()', readFlag, optIn, readFlag, [true]],
+            ['consent storage', readFlag, writeConsentStorage, readFlag, [true]],
+            // The React hooks read a flag on mount and only again when flags change
+            ['opt_in_capturing() without a second read', readFlag, optIn, noop, [true]],
+            [
+                'consent storage and a later event',
+                readFlag,
+                writeConsentStorage,
+                (ph: PostHog) => ph.capture('clicked'),
+                [true],
+            ],
+            [
+                'opt_in_capturing() after a read without send_event, which sends nothing',
+                readFlagWithoutEvent,
+                optIn,
+                noop,
+                [],
+            ],
+            [
+                'consent storage and identify() as another user, which sends nothing',
+                readFlag,
+                writeConsentStorage,
+                (ph: PostHog) => ph.identify('other-user'),
+                [],
+            ],
+        ])(
+            'sends $feature_flag_called for a flag read before consent as expected: %s',
+            async (_, readBeforeConsent, grantConsent, afterConsent, expectedResponses) => {
+                const beforeSendMock = vi.fn().mockImplementation((e) => e)
+                posthog = await createPostHog({
+                    opt_out_capturing_by_default: true,
+                    capture_pageview: false,
+                    bootstrap: { featureFlags: { 'beta-ui': true } },
+                    before_send: beforeSendMock,
+                })
 
-            posthog.getFeatureFlag('beta-ui')
-            grantConsent(posthog)
-            posthog.getFeatureFlag('beta-ui')
+                readBeforeConsent(posthog)
+                grantConsent(posthog)
+                afterConsent(posthog)
 
-            const flagCalledEvents = beforeSendMock.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
-            expect(flagCalledEvents).toHaveLength(1)
-        })
+                const flagCalledEvents = beforeSendMock.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
+                expect(flagCalledEvents.map(([e]) => e.properties.$feature_flag_response)).toEqual(expectedResponses)
+            }
+        )
+
+        it.each([
+            ['the same identity', false, ['control']],
+            ['an identity a sibling subdomain wrote to the shared cookie, which sends nothing', true, []],
+        ])(
+            'sends $feature_flag_called on opt_in_capturing() without an event under %s',
+            async (_, siblingChangesIdentity, expectedResponses) => {
+                const beforeSendMock = vi.fn().mockImplementation((e) => e)
+                posthog = await createPostHog({
+                    persistence: 'localStorage+cookie',
+                    persistence_name: 'deferred-reader',
+                    cookieWinsOnConflict: true,
+                    secure_cookie: false,
+                    opt_out_capturing_by_default: true,
+                    disable_session_recording: true,
+                    capture_pageview: false,
+                    bootstrap: { distinctID: 'reader', isIdentifiedID: true, featureFlags: { 'beta-ui': 'control' } },
+                    before_send: beforeSendMock,
+                })
+
+                posthog.getFeatureFlag('beta-ui')
+                if (siblingChangesIdentity) {
+                    const cookieName = 'ph_deferred-reader'
+                    cookieStore._set(
+                        cookieName,
+                        { ...cookieStore._parse(cookieName), distinct_id: 'other', $user_state: 'identified' },
+                        365,
+                        true,
+                        false
+                    )
+                }
+                posthog.opt_in_capturing({ captureEventName: false })
+
+                const flagCalledEvents = beforeSendMock.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
+                expect(flagCalledEvents.map(([e]) => e.properties.$feature_flag_response)).toEqual(expectedResponses)
+            }
+        )
 
         it('sends $feature_flag_called for a flag an older SDK version marked as reported before consent', async () => {
             const beforeSendMock = vi.fn().mockImplementation((e) => e)
@@ -432,6 +537,8 @@ describe('consentManager', () => {
                     posthog.opt_in_capturing()
                     expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
 
+                    // opt out first, otherwise the second opt in is a repeat and captures nothing
+                    posthog.opt_out_capturing()
                     beforeSendMock.mockClear()
                     const captureEventName = `єνєηт`
                     const captureProperties = { '𝖕𝖗𝖔𝖕𝖊𝖗𝖙𝖞': `𝓿𝓪𝓵𝓾𝓮` }

@@ -31,6 +31,15 @@ describe('PostHog React Native', () => {
       expect(mockPostHog.autocapture.mock.calls[0]).toMatchSnapshot()
     })
 
+    it('should capture a valid event via the Fabric instance handle when _targetInst is absent', () => {
+      const mockPostHog = { autocapture: vi.fn() } as any
+      // A Fabric host instance (ReactNativeElement) has no __reactFiber$ key, only the handle
+      const fabricEvent = { target: { __nativeTag: 7, __internalInstanceHandle: goodEvent }, nativeEvent }
+      autocaptureFromTouchEvent(fabricEvent, mockPostHog)
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+      expect(mockPostHog.autocapture.mock.calls[0]).toMatchSnapshot()
+    })
+
     it('should skip framework-internal components so the touched component heads the chain', () => {
       const mockPostHog = { autocapture: vi.fn() } as any
       autocaptureFromTouchEvent({ target: { ['__reactFiber$abc123']: localeProviderFiber }, nativeEvent }, mockPostHog)

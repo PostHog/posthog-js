@@ -812,6 +812,8 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
         '_deleteProp',
         '_syncCookieProperties',
         '_mergeCrossTabFeatureFlagProperties',
+        '_mergeMetaIdentifierProperties',
+        '_adoptMetaIdentifiersFromCookie',
         '_truncateExistingPersonInfoForCookie',
         'register',
         'register_once',
@@ -819,7 +821,7 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
         'set_event_timer',
         'remove_event_timer',
         'set_property',
-        'refreshKey',
+        '_refreshKeys',
     ])
 
     const visit = (node: ts.Node) => {

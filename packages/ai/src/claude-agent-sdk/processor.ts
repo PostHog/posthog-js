@@ -14,7 +14,7 @@ import { version } from '../../package.json'
 import { captureAiEvent, captureAiEventImmediate } from '../captureAiEvent'
 import { captureAiGeneration } from '../captureAiGeneration'
 import type { CaptureAiGenerationOptions } from '../captureAiGeneration'
-import { stringifyError } from '../serializeError'
+import { formatAiError } from '../serializeError'
 import type { FormattedMessage, TokenUsage } from '../types'
 import { isPrivacyModeEnabled } from '../utils'
 import { extractSystemPrompt, formatAssistantBlocks, formatContent, formatUserContent } from './formatting'
@@ -70,6 +70,7 @@ type StreamEvent = SDKPartialAssistantMessage['event']
 interface AnthropicUsage {
   input_tokens?: number | null
   output_tokens?: number | null
+  output_tokens_details?: { thinking_tokens?: number | null } | null
   cache_read_input_tokens?: number | null
   cache_creation_input_tokens?: number | null
   server_tool_use?: { web_search_requests?: number | null } | null
@@ -779,7 +780,9 @@ export class PostHogClaudeAgentProcessor {
         $ai_latency: latency,
         ...(state.turnCost != null ? { $ai_total_cost_usd: state.turnCost } : {}),
         ...(isError ? { $ai_is_error: true } : {}),
-        ...(error !== undefined ? { $ai_error: stringifyError(error) } : {}),
+        ...(error !== undefined
+          ? { $ai_error: formatAiError(error, isPrivacyModeEnabled(this._client, trace.privacyMode ?? false)) }
+          : {}),
         ...(result?.subtype === 'success' && result.api_error_status != null
           ? { $ai_http_status: result.api_error_status }
           : {}),
@@ -870,6 +873,9 @@ function readUsage(usage: AnthropicUsage | undefined): TokenUsage {
     ...(usage && Object.keys(usage).length > 0 ? { rawUsage: { ...usage } } : {}),
     ...(usage?.input_tokens != null ? { inputTokens: usage.input_tokens } : {}),
     ...(usage?.output_tokens != null ? { outputTokens: usage.output_tokens } : {}),
+    ...(usage?.output_tokens_details?.thinking_tokens != null
+      ? { reasoningTokens: usage.output_tokens_details.thinking_tokens }
+      : {}),
     ...(usage?.cache_read_input_tokens != null ? { cacheReadInputTokens: usage.cache_read_input_tokens } : {}),
     ...(usage?.cache_creation_input_tokens != null
       ? { cacheCreationInputTokens: usage.cache_creation_input_tokens }

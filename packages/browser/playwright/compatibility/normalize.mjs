@@ -25,6 +25,9 @@ const eventRoot =
 const eventEnvelope = new RegExp(`^${eventRoot}\\.(?:uuid|distinct_id)$`)
 const eventProperty = new RegExp(`^${eventRoot}\\.properties\\.[^.]+$`)
 const sdkProperties = new RegExp(`^${eventRoot}\\.properties$`)
+const replayNodeAttributes = new RegExp(
+    `^${eventRoot}\\.properties\\.\\$snapshot_data\\[\\d+\\]\\.data\\.node(?:\\.childNodes\\[\\d+\\])*\\.attributes$`
+)
 const storageRoot = /^api\.storage\.(?:local|session)\.[^.]+$/
 const storageProperty = /^api\.storage\.(?:local|session)\.[^.]+\.[^.]+(?:\[\d+\])?$/
 const storedSessionId =
@@ -67,6 +70,14 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
         'domComplete',
         'loadEventStart',
         'loadEventEnd',
+    ])
+    const initialNavigationClocks = new Set([
+        'fetchStart',
+        'domainLookupStart',
+        'domainLookupEnd',
+        'connectStart',
+        'connectEnd',
+        'requestStart',
     ])
     const metadataVersion = (value, expected, role, path) => {
         if (value !== expected)
@@ -202,6 +213,13 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                 childPath = `api.${value.method}`
             if (child === 'version' && /\.resourceLogs\[\d+\]\.scopeLogs\[\d+\]\.scope$/.test(path))
                 item = metadataVersion(item, version, 'core', childPath)
+            if (
+                child === 'data-config' &&
+                replayNodeAttributes.test(path) &&
+                value.src === `${origin}/static/loader.js?project_token=phc_COMPAT` &&
+                typeof item === 'string'
+            )
+                item = JSON.stringify(visit(JSON.parse(item), child, childPath))
             if (child === 'path' && /^network\.requests\[\d+\]$/.test(path) && typeof item === 'string')
                 item = item.replace(`/static/${version}/`, '/static/<core-version>/')
             if (
@@ -220,11 +238,11 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                 (['timeOrigin', 'timestamp'].includes(child)
                     ? item > 0
                     : item >= 0 ||
-                      // Firefox may expose initial navigation fetchStart up to 1 ms before the time origin.
-                      (child === 'fetchStart' &&
+                      // Firefox can report initial navigation phases up to 2 ms before the time origin.
+                      (initialNavigationClocks.has(child) &&
                           value.entryType === 'navigation' &&
                           value.isInitial === true &&
-                          item >= -1))
+                          item >= -2))
             )
                 item = '<network-clock-ms>'
             const debugProperties = sdkProperties.test(path) || storageRoot.test(path)

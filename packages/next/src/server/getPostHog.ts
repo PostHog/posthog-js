@@ -1,5 +1,5 @@
 import { isFunction } from '@posthog/core'
-import type { PostHogOptions, IPostHog } from 'posthog-node'
+import type { PostHog, PostHogOptions, IPostHog } from 'posthog-node'
 import { cookies, headers } from 'next/headers.js'
 import { getOrCreateNodeClient } from './clientCache.node.js'
 import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
@@ -60,24 +60,33 @@ function resolveServerDistinctIdOncePerRequest(
     return result
 }
 
-export async function getRequestScopedPostHog(
+export async function getConfiguredPostHogClient(
     apiKey?: string,
-    options?: Partial<PostHogOptions>,
-    getDistinctId?: PostHogDistinctIdResolver
-): Promise<IPostHog> {
+    options?: Partial<PostHogOptions>
+): Promise<{ client: PostHog; resolvedApiKey?: string }> {
     const resolvedApiKey = resolveApiKey(apiKey)
     const host = resolveHostOrDefault(options?.host)
     const resolvedOptions = { ...options, host }
     const client = await getOrCreateNodeClient(resolvedApiKey ?? '', resolvedOptions)
 
+    return { client, resolvedApiKey }
+}
+
+export async function resolvePostHogRequest(
+    apiKey?: string,
+    options?: Partial<PostHogOptions>,
+    getDistinctId?: PostHogDistinctIdResolver
+): Promise<{ client: PostHog; contextData?: Parameters<IPostHog['withContext']>[0] }> {
+    const { client, resolvedApiKey } = await getConfiguredPostHogClient(apiKey, options)
+
     if (!resolvedApiKey) {
-        return client
+        return { client }
     }
 
     const cookieStore = await cookies()
 
     if (isOptedOut(cookieStore, resolvedApiKey)) {
-        return client
+        return { client }
     }
 
     const state = readPostHogCookie(cookieStore, resolvedApiKey)
@@ -92,5 +101,14 @@ export async function getRequestScopedPostHog(
         }
     }
 
-    return withRequestContext(client, contextData)
+    return { client, contextData }
+}
+
+export async function getRequestScopedPostHog(
+    apiKey?: string,
+    options?: Partial<PostHogOptions>,
+    getDistinctId?: PostHogDistinctIdResolver
+): Promise<IPostHog> {
+    const { client, contextData } = await resolvePostHogRequest(apiKey, options, getDistinctId)
+    return contextData ? withRequestContext(client, contextData) : client
 }

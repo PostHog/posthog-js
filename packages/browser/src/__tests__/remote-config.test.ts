@@ -12,12 +12,12 @@ import { RemoteConfigLoader } from '../remote-config'
 import { RequestRouter } from '../utils/request-router'
 import { PostHog, defaultConfig } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
-import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
-import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
+import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { BrowserClientAdapter } from '../extensions/browser-client'
 import { PostHogConfig } from '../types'
 import type { Client } from '@posthog/browser-common'
 import type { RequestResponse } from '@posthog/types'
+import type { Mock } from 'vitest'
 import { Autocapture } from '../autocapture'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import '../entrypoints/external-scripts-loader'
@@ -49,7 +49,7 @@ describe('RemoteConfigLoader', () => {
         posthog.persistence = new PostHogPersistence(config)
         vi.spyOn(posthog, '_onRemoteConfig').mockImplementation(() => {})
         vi.spyOn(posthog, '_send_request').mockImplementation(({ callback }) => callback?.({ statusCode: 200 }))
-        posthog.featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
+        posthog.featureFlags = new PostHogFeatureFlags(posthog)
         vi.spyOn(posthog.featureFlags, 'ensureFlagsLoaded').mockImplementation(() => {})
         vi.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
         posthog.requestRouter = new RequestRouter(posthog)
@@ -62,14 +62,14 @@ describe('RemoteConfigLoader', () => {
 
     describe('autocapture with cached remote config', () => {
         let autocapture: Autocapture
-        let capture: ReturnType<typeof vi.fn>
+        let capture: Mock<Parameters<Client['capture']>, boolean>
         let button: HTMLButtonElement
         let completeRequest: (response: RequestResponse) => void
         let cachedOptOut: boolean | undefined
 
         beforeEach(() => {
             cachedOptOut = false
-            capture = vi.fn()
+            capture = vi.fn<Parameters<Client['capture']>, boolean>(() => true)
             button = document.createElement('button')
             document.body.appendChild(button)
             assignableWindow._POSTHOG_REMOTE_CONFIG = undefined

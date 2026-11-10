@@ -1,5 +1,112 @@
 # posthog-react-native
 
+## 4.86.0
+
+### Minor Changes
+
+- [#5601](https://github.com/PostHog/posthog-js/pull/5601) [`09a0f1f`](https://github.com/PostHog/posthog-js/commit/09a0f1fa25946196895e2023e61da0609bef7579) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `setAppLanguage()` to send the language your app displays as `$app_language` on every event
+  (2026-11-10)
+
+### Patch Changes
+
+- Updated dependencies [[`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3), [`1ae99e2`](https://github.com/PostHog/posthog-js/commit/1ae99e2909dbbf5b21b374a850c56bbf2fbee52b), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - @posthog/types@1.423.0
+  - @posthog/react-native-plugin@2.13.1
+  - @posthog/core@1.66.0
+
+## 4.85.4
+
+### Patch Changes
+
+- [#5586](https://github.com/PostHog/posthog-js/pull/5586) [`441658f`](https://github.com/PostHog/posthog-js/commit/441658f2519af0b17ec33c2a31eddb6ee9f59f50) Thanks [@marandaneto](https://github.com/marandaneto)! - Forward Expo skipOnConflict and force options to shared Android upload defaults when native symbol uploads are enabled.
+  (2026-11-09)
+
+## 4.85.3
+
+### Patch Changes
+
+- [#5481](https://github.com/PostHog/posthog-js/pull/5481) [`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` when the user opts in, without being read again. This fixes missing exposures from the React and React Native hooks, which read a flag once on mount.
+  (2026-11-04)
+- Updated dependencies [[`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6)]:
+  - @posthog/core@1.63.1
+
+## 4.85.2
+
+### Patch Changes
+
+- [#5525](https://github.com/PostHog/posthog-js/pull/5525) [`f3fe629`](https://github.com/PostHog/posthog-js/commit/f3fe629b0788325a1ebd5610a6b1a410bff2b4ef) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Fix `posthog-xcode.sh` uploading from `DERIVED_FILE_DIR` when `SOURCEMAP_FILE` is preset elsewhere (e.g. EAS builds), so the composed source map is found.
+  (2026-11-03)
+
+## 4.85.1
+
+### Patch Changes
+
+- [#5489](https://github.com/PostHog/posthog-js/pull/5489) [`a055ee6`](https://github.com/PostHog/posthog-js/commit/a055ee65e61a876a7b399271b9df026d22dbb144) Thanks [@ioannisj](https://github.com/ioannisj)! - Document that `sessionReplayConfig.screenshotScale` now defaults to one pixel per dp on Android with posthog-android 3.74.0, instead of native resolution.
+  (2026-10-30)
+- Updated dependencies [[`a055ee6`](https://github.com/PostHog/posthog-js/commit/a055ee65e61a876a7b399271b9df026d22dbb144)]:
+  - @posthog/react-native-plugin@2.13.0
+
+## 4.85.0
+
+### Minor Changes
+
+- [#5243](https://github.com/PostHog/posthog-js/pull/5243) [`a96d286`](https://github.com/PostHog/posthog-js/commit/a96d286acf5b313af96beea1ebd7ce1b0a66c153) Thanks [@cacheflow](https://github.com/cacheflow)! - Respect survey popup delays while prioritizing surveys with saved responses.
+  (2026-10-29)
+
+## 4.84.3
+
+### Patch Changes
+
+- [#5466](https://github.com/PostHog/posthog-js/pull/5466) [`8c136a8`](https://github.com/PostHog/posthog-js/commit/8c136a8608187dc77b97cc4724639755b37d3c85) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix: capture touch autocapture events on React Native's new architecture (Fabric), where the touched element is only reachable through `target.__internalInstanceHandle`
+  (2026-10-28)
+
+## 4.84.2
+
+### Patch Changes
+
+- [#5431](https://github.com/PostHog/posthog-js/pull/5431) [`96d7ff2`](https://github.com/PostHog/posthog-js/commit/96d7ff2e394126e2bd03a2422f60b5892a85d87f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Deprecate `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` in favor of `getAllFeatureFlags()`, `onFeatureFlag()` in favor of `onFeatureFlags()`, the `cb` option of `reloadFeatureFlags()` in favor of `reloadFeatureFlagsAsync()`, and `overrideFeatureFlag()` in favor of `updateFlags()`. In React Native, also deprecate the `useFeatureFlagWithPayload()` hook in favor of `useFeatureFlagResult()`. They continue to work.
+  (2026-10-27)
+- Updated dependencies [[`96d7ff2`](https://github.com/PostHog/posthog-js/commit/96d7ff2e394126e2bd03a2422f60b5892a85d87f)]:
+  - @posthog/core@1.61.1
+
+## 4.84.1
+
+### Patch Changes
+
+- [#5445](https://github.com/PostHog/posthog-js/pull/5445) [`b9fe0ab`](https://github.com/PostHog/posthog-js/commit/b9fe0abf6f9c335b6ca49d9fb496662cca5806e5) Thanks [@ioannisj](https://github.com/ioannisj)! - Require `@posthog/react-native-plugin` 2.12.7 or newer, which pulls in OkHttp 4.12.1 on Android to block the compromised eMudhra intermediate certificates.
+  (2026-10-27)
+
+## 4.84.0
+
+### Minor Changes
+
+- [#5436](https://github.com/PostHog/posthog-js/pull/5436) [`43ad061`](https://github.com/PostHog/posthog-js/commit/43ad061185c7f8b0a36ed87bb6a28214d4224e9d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add the `projectToken` prop to `PostHogProvider` and the `projectToken` property to the client, and deprecate the `apiKey` prop and property in favor of them. `apiKey` keeps working, and `projectToken` wins when both are set.
+  (2026-10-26)
+
+### Patch Changes
+
+- Updated dependencies [[`43ad061`](https://github.com/PostHog/posthog-js/commit/43ad061185c7f8b0a36ed87bb6a28214d4224e9d)]:
+  - @posthog/core@1.61.0
+
+## 4.83.0
+
+### Minor Changes
+
+- [#5390](https://github.com/PostHog/posthog-js/pull/5390) [`662fd8b`](https://github.com/PostHog/posthog-js/commit/662fd8b237731d53db638dbf3b5b9871f25200fa) Thanks [@petrapresecki](https://github.com/petrapresecki)! - Error tracking drops exceptions that match the project's suppression rules, as posthog-js already does.
+  (2026-10-23)
+
+## 4.82.0
+
+### Minor Changes
+
+- [#5101](https://github.com/PostHog/posthog-js/pull/5101) [`997d4ff`](https://github.com/PostHog/posthog-js/commit/997d4ff074b9919121b274b614bd0e34628d8316) Thanks [@ioannisj](https://github.com/ioannisj)! - Attach `$recording_status` and the replay trigger and buffer `$sdk_debug_*` properties to every captured event, and the rest of the session replay debug properties to SDK events at most once every 30 seconds, reading the native replay state (`buffering`, hold reason, buffer length) from `@posthog/react-native-plugin` 2.12.0 or newer
+  (2026-10-23)
+
+### Patch Changes
+
+- Updated dependencies [[`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d)]:
+  - @posthog/core@1.60.1
+
 ## 4.81.10
 
 ### Patch Changes

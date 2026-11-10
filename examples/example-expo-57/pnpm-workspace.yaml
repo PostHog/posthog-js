@@ -7,3 +7,7 @@ overrides:
 
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
+
+# This locked transitive version lost provenance attestation.
+trustPolicyExclude:
+  - eslint-import-resolver-typescript@3.10.1

@@ -19,6 +19,11 @@ export function useFeatureFlag(flag: string, client?: PostHog): FeatureFlagValue
 
 export type FeatureFlagWithPayload = [FeatureFlagValue | undefined, JsonType | undefined]
 
+/**
+ * Returns a flag's value and payload, and updates when flags reload.
+ *
+ * @deprecated Use `useFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
+ */
 export function useFeatureFlagWithPayload(flag: string, client?: PostHog): FeatureFlagWithPayload {
   const posthog = useOverridablePostHog(client, 'useFeatureFlagWithPayload')
   const [featureFlag, setFeatureFlag] = useState<FeatureFlagWithPayload>([undefined, undefined])

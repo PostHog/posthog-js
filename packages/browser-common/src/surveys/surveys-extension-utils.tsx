@@ -1,3 +1,4 @@
+import { sanitizeSurveyHtml } from './survey-html-sanitizer'
 import { FeatureFlagsCommonExtension } from '../extension-tokens'
 import { getTargetingUrl } from '../utils/url-targeting-utils'
 import { getSurveyReplayUrl } from '../survey-render-context'
@@ -726,7 +727,8 @@ interface RenderProps {
 export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, style }: RenderProps) => {
     return renderAsHtml
         ? cloneElement(component, {
-              dangerouslySetInnerHTML: { __html: children },
+              // Remote descriptions may contain rich text, but never executable markup or non-HTML namespaces.
+              dangerouslySetInnerHTML: { __html: sanitizeSurveyHtml(children) },
               style,
           })
         : cloneElement(component, {
@@ -889,4 +891,18 @@ export function getPopoverPosition(
         case SurveyPosition.Right:
             return { right: type === SurveyType.Widget && surveyWidgetType === SurveyWidgetType.Tab ? '60px' : '30px' }
     }
+}
+
+/**
+ * Style overrides for a tab widget's popup. The popup is centred next to the
+ * tab only while the survey uses the default right position or explicitly
+ * asks to sit next to its trigger. Any other selected position is a
+ * deliberate placement, so no override applies and getPopoverPosition alone
+ * decides where the popup goes.
+ */
+export function getTabWidgetPopupOverrides(position?: SurveyPosition): Record<string, string> {
+    if (!position || position === SurveyPosition.Right || position === SurveyPosition.NextToTrigger) {
+        return { top: '50%', bottom: 'auto' }
+    }
+    return {}
 }

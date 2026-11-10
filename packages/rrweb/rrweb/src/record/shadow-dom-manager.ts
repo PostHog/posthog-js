@@ -1,5 +1,6 @@
 import type { MutationBufferParam } from '../types';
 import type {
+  listenerHandler,
   mutationCallBack,
   scrollCallback,
   SamplingStrategy,
@@ -22,14 +23,17 @@ type BypassOptions = Omit<
   sampling: SamplingStrategy;
 };
 
+type ObservedShadowRoot = { doc: Document; handlers: listenerHandler[] };
+
 export class ShadowDomManager {
-  private shadowDoms = new WeakSet<ShadowRoot>();
+  // Strong refs, so each root's entry must be dropped when its host is removed.
+  private shadowDoms = new Map<ShadowRoot, ObservedShadowRoot>();
   private mutationCb: mutationCallBack;
   private scrollCb: scrollCallback;
   private bypassOptions: BypassOptions;
   private mirror: Mirror;
-  // Handlers are tagged with the document that owns their shadow root so a
-  // single iframe can be torn down without disconnecting the rest of the page.
+  // attachShadow patches, tagged with the document they patch so a single
+  // iframe can be torn down without disconnecting the rest of the page.
   private restoreHandlers: { doc: Document; handler: () => void }[] = [];
 
   constructor(options: {
@@ -55,11 +59,12 @@ export class ShadowDomManager {
   public addShadowRoot(shadowRoot: ShadowRoot, doc: Document): void {
     if (!isNativeShadowDom(shadowRoot)) return;
     if (this.shadowDoms.has(shadowRoot)) return;
-    this.shadowDoms.add(shadowRoot);
     // Derive the owning document from the host so a shadow root nested in an
     // iframe is keyed to that iframe's document, not whatever the caller passed
     // (takeFullSnapshot's onSerialize hands us the top-level document).
     const ownerDoc = dom.host(shadowRoot)?.ownerDocument ?? doc;
+    const observed: ObservedShadowRoot = { doc: ownerDoc, handlers: [] };
+    this.shadowDoms.set(shadowRoot, observed);
     const { observer, buffer } = initMutationObserver(
       {
         ...this.bypassOptions,
@@ -70,22 +75,18 @@ export class ShadowDomManager {
       },
       shadowRoot,
     );
-    this.restoreHandlers.push({
-      doc: ownerDoc,
-      handler: () => {
-        observer.disconnect();
-        buffer.destroy();
-        // Release the canvas directly, not via buffer.reset(), per the recursion-guard unit test.
-        buffer.releaseCanvasManager();
-        const index = mutationBuffers.indexOf(buffer);
-        if (index !== -1) {
-          mutationBuffers.splice(index, 1);
-        }
-      },
+    observed.handlers.push(() => {
+      observer.disconnect();
+      buffer.destroy();
+      // Release the canvas directly, not via buffer.reset(), per the recursion-guard unit test.
+      buffer.releaseCanvasManager();
+      const index = mutationBuffers.indexOf(buffer);
+      if (index !== -1) {
+        mutationBuffers.splice(index, 1);
+      }
     });
-    this.restoreHandlers.push({
-      doc: ownerDoc,
-      handler: initScrollObserver({
+    observed.handlers.push(
+      initScrollObserver({
         ...this.bypassOptions,
         scrollCb: this.scrollCb,
         // https://gist.github.com/praveenpuglia/0832da687ed5a5d7a0907046c9ef1813
@@ -93,9 +94,11 @@ export class ShadowDomManager {
         doc: shadowRoot as unknown as Document,
         mirror: this.mirror,
       }),
-    });
+    );
     // Defer this to avoid adoptedStyleSheet events being created before the full snapshot is created or attachShadow action is recorded.
     setTimeout(() => {
+      // The root was released, or the manager reset, in the meantime.
+      if (this.shadowDoms.get(shadowRoot) !== observed) return;
       if (
         shadowRoot.adoptedStyleSheets &&
         shadowRoot.adoptedStyleSheets.length > 0
@@ -104,17 +107,35 @@ export class ShadowDomManager {
           shadowRoot.adoptedStyleSheets,
           this.mirror.getId(dom.host(shadowRoot)),
         );
-      this.restoreHandlers.push({
-        doc: ownerDoc,
-        handler: initAdoptedStyleSheetObserver(
+      observed.handlers.push(
+        initAdoptedStyleSheetObserver(
           {
             mirror: this.mirror,
             stylesheetManager: this.bypassOptions.stylesheetManager,
           },
           shadowRoot,
         ),
-      });
+      );
     }, 0);
+  }
+
+  // Release every observed shadow root in a subtree that has left the DOM.
+  public removeShadowRootsIn(n: Node): void {
+    if (this.shadowDoms.size === 0) return;
+    const shadowRoot = dom.shadowRoot(n);
+    if (shadowRoot) {
+      if (this.shadowDoms.has(shadowRoot)) {
+        this.removeShadowRoot(shadowRoot);
+      }
+      this.removeShadowRootsIn(shadowRoot);
+    }
+    dom.childNodes(n).forEach((child) => this.removeShadowRootsIn(child));
+  }
+
+  private removeShadowRoot(shadowRoot: ShadowRoot): void {
+    const observed = this.shadowDoms.get(shadowRoot);
+    this.shadowDoms.delete(shadowRoot);
+    observed?.handlers.forEach(runHandler);
   }
 
   /**
@@ -163,15 +184,11 @@ export class ShadowDomManager {
   }
 
   public reset(): void {
-    this.restoreHandlers.forEach(({ handler }) => {
-      try {
-        handler();
-      } catch (e) {
-        //
-      }
-    });
+    this.restoreHandlers.forEach(({ handler }) => runHandler(handler));
     this.restoreHandlers = [];
-    this.shadowDoms = new WeakSet();
+    const shadowDoms = this.shadowDoms;
+    this.shadowDoms = new Map();
+    shadowDoms.forEach(({ handlers }) => handlers.forEach(runHandler));
   }
 
   // Tear down only the shadow observers owned by `doc` (e.g. one iframe being removed), leaving the rest of the page's shadow observation intact.
@@ -179,15 +196,24 @@ export class ShadowDomManager {
     const remaining: { doc: Document; handler: () => void }[] = [];
     for (const entry of this.restoreHandlers) {
       if (entry.doc === doc) {
-        try {
-          entry.handler();
-        } catch (e) {
-          //
-        }
+        runHandler(entry.handler);
       } else {
         remaining.push(entry);
       }
     }
     this.restoreHandlers = remaining;
+    this.shadowDoms.forEach((observed, shadowRoot) => {
+      if (observed.doc === doc) {
+        this.removeShadowRoot(shadowRoot);
+      }
+    });
+  }
+}
+
+function runHandler(handler: listenerHandler) {
+  try {
+    handler();
+  } catch (e) {
+    //
   }
 }

@@ -72,6 +72,7 @@ import {
     getSurveyStylesheet,
     addSurveyCSSVariablesToElement,
     getPopoverPosition,
+    getTabWidgetPopupOverrides,
 } from './surveys/surveys-extension-utils'
 import {
     extractPrefillParamsFromUrl,
@@ -765,7 +766,12 @@ export class SurveyManager {
             const submissionId = uuidv7()
 
             // calculate which question to start at based on prefilled questions
-            const prefilledIndices = Object.keys(prefillParams).map((k) => parseInt(k, 10))
+            const prefilledIndices = Object.keys(prefillParams)
+                .map((k) => parseInt(k, 10))
+                .filter((index) => {
+                    const question = survey.questions[index]
+                    return question?.id && !isUndefined(responses[getSurveyResponseKey(question.id)])
+                })
             const { startQuestionIndex, skippedResponses, skippedIndices } = calculatePrefillStartIndex(
                 survey,
                 prefilledIndices,
@@ -2007,10 +2013,7 @@ export function FeedbackWidget({
         }
 
         if (survey.appearance?.widgetType === 'tab') {
-            setStyleOverrides({
-                top: '50%',
-                bottom: 'auto',
-            })
+            setStyleOverrides(getTabWidgetPopupOverrides(survey.appearance?.position))
         }
         const handleShowSurvey = (event: Event) => {
             const customEvent = event as CustomEvent
@@ -2036,6 +2039,7 @@ export function FeedbackWidget({
         readOnly,
         survey.id,
         survey.appearance?.widgetType,
+        survey.appearance?.position,
         survey.appearance?.widgetSelector,
         survey.appearance?.borderColor,
     ])

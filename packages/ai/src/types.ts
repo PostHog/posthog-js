@@ -44,6 +44,14 @@ export interface FormattedImageContent {
 }
 
 /**
+ * Formatted refusal content item
+ */
+export interface FormattedRefusalContent {
+  type: 'refusal'
+  refusal: string
+}
+
+/**
  * Formatted audio content item
  */
 export interface FormattedAudioContent {
@@ -80,6 +88,7 @@ export type FormattedContentItem =
   | FormattedFunctionCall
   | FormattedImageContent
   | FormattedAudioContent
+  | FormattedRefusalContent
   | FormattedDocumentContent
 
 /**

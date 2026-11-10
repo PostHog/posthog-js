@@ -32,7 +32,7 @@ import {
   injectConversationIdPromptBack,
   resolveConversationId,
 } from './conversation-id'
-import { stampClientIdentity } from './client-identity'
+import { readHostClientInfo, stampClientIdentity } from './client-identity'
 import { stampTransportIdentity } from './transport-identity'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { captureEvent } from './capture'
@@ -128,6 +128,11 @@ interface TraceToolCallParams {
    * read it here to capture the real stack rather than the result envelope.
    */
   takeCapturedError?: () => unknown
+  /**
+   * The SDK knows the server has no tool by this name, so a rejected call is
+   * recorded as `$mcp_unknown_tool`, not as a tool call.
+   */
+  isUnknownTool?: boolean
 }
 
 /**
@@ -152,6 +157,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     extraEventProperties,
     omitCapturedParameters,
     takeCapturedError,
+    isUnknownTool,
   } = params
   const resolvedEventType = eventType ?? MCPAnalyticsEventType.mcpToolsCall
   // The SDK's own virtual tools carry their intent in their own arguments, so
@@ -190,6 +196,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     resolvedEventType,
     canCaptureContextIntent
   )
+  const hostProperties = preparedEvent?.event.properties
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
     const sessionSchemas =
       (preparedEvent.event.sessionId ? data.toolInputSchemas.get(preparedEvent.event.sessionId) : undefined) ??
@@ -217,14 +224,25 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   try {
     result = await execute(downstreamRequest)
   } catch (error) {
-    publishFailedToolEvent(server, preparedEvent, error, startTime, conversation, data.logger)
+    if (preparedEvent && conversation.minted) {
+      preparedEvent.event.conversationId = undefined
+    }
+    if (isUnknownTool) {
+      publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
+    } else {
+      publishFailedToolEvent(server, preparedEvent, error, startTime, data.logger)
+    }
     throw error
   }
 
   const finalResult = applyConversationInstructions(preparedEvent?.event ?? null, result, conversation, ownership)
-  // `result`, not `finalResult`: the error is read from what the tool produced,
-  // before the conversation handle was written into it. See below.
-  publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
+  if (isUnknownTool && isToolResultError(result)) {
+    publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
+  } else {
+    // `result`, not `finalResult`: the error is read from what the tool produced,
+    // before the conversation handle was written into it. See below.
+    publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
+  }
   return finalResult
 }
 
@@ -331,7 +349,7 @@ async function prepareToolCallEvent(
   canCaptureContextIntent: boolean
 ): Promise<PreparedToolEvent | null> {
   try {
-    const sessionId = getSessionId(server, extra, conversation.conversationId)
+    const sessionId = getSessionId(server, extra, conversation.conversationId, request)
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
     const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -469,7 +487,6 @@ function publishFailedToolEvent(
   preparedEvent: PreparedToolEvent | null,
   error: unknown,
   startTime: Date,
-  conversation: ConversationIdResolution,
   logger: LoggerFn
 ): void {
   if (!preparedEvent) {
@@ -477,15 +494,50 @@ function publishFailedToolEvent(
   }
   const { event, requestAttribution } = preparedEvent
   try {
-    if (conversation.minted) {
-      event.conversationId = undefined
-    }
     event.isError = true
     event.error = captureException(error)
     event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, logger, requestAttribution)
   } catch (publishError) {
     logger(`Warning: PostHog MCP analytics failed to publish failed tool event - ${publishError}`)
+  }
+}
+
+/**
+ * The agent asked for a tool the server does not have, so the call is not a
+ * tool call: only the requested name, identity, and session are recorded.
+ */
+function publishUnknownToolEvent(
+  server: MCPServerLike,
+  preparedEvent: PreparedToolEvent | null,
+  properties: McpEvent['properties'],
+  logger: LoggerFn
+): void {
+  if (!preparedEvent) {
+    return
+  }
+  const { event, requestAttribution } = preparedEvent
+  try {
+    captureEvent(
+      server,
+      {
+        eventType: MCPAnalyticsEventType.mcpUnknownTool,
+        timestamp: event.timestamp,
+        resourceName: event.resourceName,
+        sessionId: event.sessionId,
+        conversationId: event.conversationId,
+        clientName: event.clientName,
+        clientVersion: event.clientVersion,
+        protocolVersion: event.protocolVersion,
+        clientUserAgent: event.clientUserAgent,
+        vendorClient: event.vendorClient,
+        properties,
+      },
+      logger,
+      requestAttribution
+    )
+  } catch (publishError) {
+    logger(`Warning: PostHog MCP analytics failed to publish unknown tool event - ${publishError}`)
   }
 }
 
@@ -564,7 +616,7 @@ async function captureResourceRequest(params: TraceRequestParams): Promise<unkno
   const startTime = new Date()
   let preparedEvent: PreparedToolEvent | null = null
   try {
-    const sessionId = getSessionId(server, extra)
+    const sessionId = getSessionId(server, extra, undefined, request)
     const sessionInfo = getSessionInfo(server, data, sessionId)
     const event: McpEvent = {
       sessionId,
@@ -752,7 +804,7 @@ export async function handleListToolsRequest(
 ): Promise<CompatibleToolsListLike> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
-  const sessionId = getSessionId(server, extra)
+  const sessionId = getSessionId(server, extra, undefined, request)
   // Snapshot before identify, metadata resolution, or the list handler can yield
   // to a concurrent request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -788,7 +840,8 @@ export async function handleListToolsRequest(
     extra,
     event,
     logger,
-    requestAttribution
+    requestAttribution,
+    data?.options.sendToolsListEvent !== false
   )
   const tools = response.tools
 
@@ -806,7 +859,9 @@ export async function handleListToolsRequest(
     event.error = captureException('No tools were sent to MCP client.')
     event.isError = true
     event.duration = Date.now() - startTime.getTime()
-    captureEvent(server, event, data.logger, requestAttribution)
+    if (data.options.sendToolsListEvent !== false) {
+      captureEvent(server, event, data.logger, requestAttribution)
+    }
     return response
   }
 
@@ -814,7 +869,9 @@ export async function handleListToolsRequest(
   event.listedToolNames = collectListedToolNames(tools)
   event.isError = false
   event.duration = Date.now() - startTime.getTime()
-  captureEvent(server, event, data.logger, requestAttribution)
+  if (data.options.sendToolsListEvent !== false) {
+    captureEvent(server, event, data.logger, requestAttribution)
+  }
   return response
 }
 
@@ -852,7 +909,8 @@ async function getTracedToolsList(
   extra: CompatibleRequestHandlerExtra | undefined,
   event: McpEvent,
   logger: LoggerFn,
-  requestAttribution: SessionInfo
+  requestAttribution: SessionInfo,
+  sendToolsListEvent: boolean
 ): Promise<CompatibleToolsListLike> {
   try {
     const data = getServerTrackingData(server)
@@ -957,7 +1015,9 @@ async function getTracedToolsList(
     event.error = captureException(error)
     event.isError = true
     event.duration = event.timestamp ? Date.now() - event.timestamp.getTime() : 0
-    captureEvent(server, event, logger, requestAttribution)
+    if (sendToolsListEvent) {
+      captureEvent(server, event, logger, requestAttribution)
+    }
     throw error
   }
 }
@@ -1139,7 +1199,7 @@ export async function handleInitializeRequest(
 
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
   const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
-  const sessionId = getSessionId(server, extra)
+  const sessionId = getSessionId(server, extra, undefined, request)
   // Snapshot before identify, metadata, or the initialize handler can yield to
   // another request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -1175,6 +1235,15 @@ export async function handleInitializeRequest(
   if (initializeClientInfo?.version) {
     event.clientVersion = initializeClientInfo.version
   }
+  // The host's `clientInfo` callback outranks everything, the handshake body
+  // included, so `$mcp_initialize` names the same client as later requests.
+  const hostClientInfo = readHostClientInfo(server, request, extra)
+  if (hostClientInfo?.name) {
+    event.clientName = hostClientInfo.name
+  }
+  if (hostClientInfo?.version) {
+    event.clientVersion = hostClientInfo.version
+  }
   stampTransportIdentity(event, extra)
 
   const identity = await handleIdentify(data, sessionId, request, extra)
@@ -1198,10 +1267,12 @@ export async function handleInitializeRequest(
   if (mintedSessionId) {
     upgradeMintedTokenToNegotiated(server, mintedSessionId, requestSessionInfo, negotiatedProtocolVersion, data.logger)
   }
-  captureEvent(server, event, data.logger, {
-    ...requestAttribution,
-    protocolVersion: negotiatedProtocolVersion,
-  })
+  if (data.options.sendInitializeEvent !== false) {
+    captureEvent(server, event, data.logger, {
+      ...requestAttribution,
+      protocolVersion: negotiatedProtocolVersion,
+    })
+  }
   return result
 }
 

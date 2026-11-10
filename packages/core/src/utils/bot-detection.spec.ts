@@ -43,6 +43,13 @@ describe('isBlockedUA', () => {
     expect(isBlockedUA('headlessChrome/119.0')).toBe(true)
   })
 
+  it.each(['Lightpanda/1.0', 'lightpanda/2.3.4', 'LIGHTPANDA/10.0', 'Mozilla/5.0 (compatible; Lightpanda/1.0)'])(
+    'blocks the self-declared headless browser %s',
+    (ua) => {
+      expect(isBlockedUA(ua)).toBe(true)
+    }
+  )
+
   it('is case-insensitive on the UA input', () => {
     const bot = 'Mozilla/5.0 (compatible; Googlebot/2.1)'
     expect(isBlockedUA(bot)).toBe(true)

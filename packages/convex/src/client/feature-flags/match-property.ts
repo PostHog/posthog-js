@@ -63,6 +63,7 @@ export function matchPropertyGroup(
   if (!properties || properties.length === 0) return true
 
   let errorMatchingLocally = false
+  let regexError: InconclusiveMatchError | undefined
 
   if ('values' in properties[0]) {
     for (const prop of properties as PropertyGroup[]) {
@@ -78,6 +79,7 @@ export function matchPropertyGroup(
         if (err instanceof InconclusiveMatchError) {
           if (debugMode) console.debug(`Failed to compute property ${prop} locally: ${err}`)
           errorMatchingLocally = true
+          if (Symbol.for('posthog.requiresServerRegexEvaluation') in err) regexError = err
         } else {
           throw err
         }
@@ -85,6 +87,7 @@ export function matchPropertyGroup(
     }
 
     if (errorMatchingLocally) {
+      if (regexError) throw regexError
       throw new InconclusiveMatchError("Can't match cohort without a given cohort property value")
     }
     return propertyGroupType === 'AND'
@@ -124,6 +127,7 @@ export function matchPropertyGroup(
         if (err instanceof InconclusiveMatchError) {
           if (debugMode) console.debug(`Failed to compute property ${prop} locally: ${err}`)
           errorMatchingLocally = true
+          if (Symbol.for('posthog.requiresServerRegexEvaluation') in err) regexError = err
         } else {
           throw err
         }
@@ -131,6 +135,7 @@ export function matchPropertyGroup(
     }
 
     if (errorMatchingLocally) {
+      if (regexError) throw regexError
       throw new InconclusiveMatchError("can't match cohort without a given cohort property value")
     }
     return propertyGroupType === 'AND'

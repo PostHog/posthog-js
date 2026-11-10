@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+    <head><title>Classic PostHog script fixture</title></head>
+    <body>
+        <script>
+            window.snippetEvidence = { readyCount: 0, detailMatchesGlobal: false, flushed: false }
+            window.addEventListener('posthog:ready', (event) => {
+                const client = event.detail
+                window.snippetEvidence.readyCount++
+                window.snippetEvidence.detailMatchesGlobal = client === window.posthog
+                client.capture('snippet_early', { placement: 'plain-html' })
+                client.flush().then(() => { window.snippetEvidence.flushed = true })
+            })
+        </script>
+        <!-- snippet-tags -->
+    </body>
+</html>

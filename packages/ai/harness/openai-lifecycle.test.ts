@@ -216,6 +216,54 @@ it('keeps interleaved Chat tool arguments associated with their tool IDs', async
   })
 })
 
+it('keeps Chat tool calls streamed by a compatible provider without an index', async () => {
+  const chunk = (delta: unknown, finish_reason: string | null = null) => ({
+    id: 'chatcmpl_synthetic',
+    object: 'chat.completion.chunk',
+    model,
+    created: 100,
+    choices: [{ index: 0, delta, finish_reason }],
+  })
+  const body =
+    [
+      chunk({
+        tool_calls: [
+          { id: 'call_a', type: 'function', function: { name: 'lookup', arguments: '{"city":"' } },
+          { id: 'call_b', type: 'function', function: { name: 'lookup', arguments: '{"city":"Oslo"}' } },
+        ],
+      }),
+      chunk({ tool_calls: [{ id: 'call_a', function: { arguments: 'Lima' } }] }),
+      chunk({ tool_calls: [{ function: { arguments: '"}' } }] }),
+      chunk({}, 'tool_calls'),
+      {
+        id: 'chatcmpl_synthetic',
+        object: 'chat.completion.chunk',
+        model,
+        created: 100,
+        choices: [],
+        usage: { prompt_tokens: 7, completion_tokens: 12, total_tokens: 19 },
+      },
+    ]
+      .map(data)
+      .join('') + 'data: [DONE]\n\n'
+  const { events } = await run('tools', [{ path: '/v1/chat/completions', body, sse: true }], {
+    EXPECT_EVENTS: '1',
+  })
+  expect(events).toHaveLength(1)
+  expect(events[0].properties).toMatchObject({
+    $ai_stop_reason: 'tool_calls',
+    $ai_output_choices: [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'function', id: 'call_a', function: { name: 'lookup', arguments: '{"city":"Lima"}' } },
+          { type: 'function', id: 'call_b', function: { name: 'lookup', arguments: '{"city":"Oslo"}' } },
+        ],
+      },
+    ],
+  })
+})
+
 const failure = { code: 'server_error', message: 'Synthetic provider failure' }
 it.each([false, true])(
   'captures an HTTP 200 failed Response (stream: %s) without changing its caller contract',

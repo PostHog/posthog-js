@@ -60,6 +60,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private sendFeatureFlagEvent: boolean
   private disableRemoteFeatureFlags: boolean
   private flagCallReported: { [key: string]: Set<FeatureFlagValue | undefined> } = {}
+  private flagCallsPendingOptIn = new Set<string>()
   private _beforeSend?: BeforeSendFn | BeforeSendFn[]
 
   // internal
@@ -78,14 +79,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   // cache for person properties to avoid duplicate $set events
   protected _cachedPersonProperties: string | null = null
 
-  constructor(apiKey: string, options?: PostHogCoreOptions) {
+  constructor(projectToken: string, options?: PostHogCoreOptions) {
     // Default for stateful mode is to not disable geoip. Only override if explicitly set
     const disableGeoipOption = options?.disableGeoip ?? false
 
     // Default for stateful mode is to timeout at 10s. Only override if explicitly set
     const featureFlagsRequestTimeoutMs = options?.featureFlagsRequestTimeoutMs ?? 10000 // 10 seconds
 
-    super(apiKey, { ...options, disableGeoip: disableGeoipOption, featureFlagsRequestTimeoutMs })
+    super(projectToken, { ...options, disableGeoip: disableGeoipOption, featureFlagsRequestTimeoutMs })
 
     this.sendFeatureFlagEvent = options?.sendFeatureFlagEvent ?? true
     this.disableRemoteFeatureFlags = options?.disableRemoteFeatureFlags ?? false
@@ -149,10 +150,26 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     this.props = undefined
     this.sessionProps = {}
     this.flagCallReported = {}
+    this.flagCallsPendingOptIn = new Set()
   }
 
   on(event: string, cb: (...args: any[]) => void): () => void {
     return this._events.on(event, cb)
+  }
+
+  async optIn(): Promise<void> {
+    await super.optIn()
+    this.wrap(() => {
+      const pending = this.flagCallsPendingOptIn
+      this.flagCallsPendingOptIn = new Set()
+      const distinctId = this.getDistinctId()
+      pending.forEach((key) => {
+        // A capture listener can call identify() during this loop
+        if (this.getDistinctId() === distinctId) {
+          this._getFeatureFlagResult(key, { sendEvent: true })
+        }
+      })
+    })
   }
 
   /**
@@ -386,6 +403,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const shouldTransitionToIdentified = idWasSupplied && !identityChanged && !this._isIdentified()
 
       if (identityChanged) {
+        // Reads made while opted out belong to the previous identity
+        this.flagCallsPendingOptIn = new Set()
         // We keep the AnonymousId to be used by flags calls and identify to link the previousId
         this.setPersistedProperty(PostHogPersistedProperty.AnonymousId, previousDistinctId)
         this.setPersistedProperty(PostHogPersistedProperty.DistinctId, distinctId)
@@ -1044,9 +1063,13 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
     const featureFlag = details?.flags[key]
     const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
+    const sendEventRequested = options.sendEvent ?? this.sendFeatureFlagEvent
+    // Callers such as the React Native hooks do not read the flag again after opt in, so optIn() reports this read.
+    if (sendEventRequested && this.optedOut) {
+      this.flagCallsPendingOptIn.add(key)
+    }
     // An opted-out client drops the event, so marking the flag as reported would suppress the exposure after opt in.
-    const sendEvent =
-      (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.optedOut && !this.flagCallReported[key]?.has(flagValue)
+    const sendEvent = sendEventRequested && !this.optedOut && !this.flagCallReported[key]?.has(flagValue)
 
     if (sendEvent) {
       const errors: string[] = []
@@ -1145,10 +1168,20 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return result?.payload
   }
 
+  /**
+   * Returns the payload of every loaded flag, keyed by flag key.
+   *
+   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
+   */
   getFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
     return this.getFeatureFlagDetails()?.featureFlagPayloads
   }
 
+  /**
+   * Returns the value of every loaded flag, keyed by flag key.
+   *
+   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
+   */
   getFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
     // NOTE: We don't check for _initPromise here as the function is designed to be
     // callable before the state being loaded anyways
@@ -1188,6 +1221,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return normalizeFlagsResponse(result) as PostHogFeatureFlagDetails
   }
 
+  /**
+   * Returns the values and payloads of every loaded flag, as two maps keyed by flag key.
+   *
+   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
+   */
   getFeatureFlagsAndPayloads(): {
     flags: PostHogFlagsResponse['featureFlags'] | undefined
     payloads: PostHogFlagsResponse['featureFlagPayloads'] | undefined
@@ -1219,7 +1257,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   // Used when we want to trigger the reload but we don't care about the result
-  reloadFeatureFlags(options?: { cb?: (err?: Error, flags?: PostHogFlagsResponse['featureFlags']) => void }): void {
+  reloadFeatureFlags(options?: {
+    /**
+     * Called with the loaded flags when the reload finishes.
+     *
+     * @deprecated Use `reloadFeatureFlagsAsync()` to wait for the reload instead.
+     */
+    cb?: (err?: Error, flags?: PostHogFlagsResponse['featureFlags']) => void
+  }): void {
     if (this.disableRemoteFeatureFlags && !this.disabled) {
       this._initPromise.then(() => options?.cb?.(undefined, this.getFeatureFlags()))
       return
@@ -1259,6 +1304,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     })
   }
 
+  /**
+   * Calls `cb` with the flag's value whenever flags load.
+   *
+   * @deprecated Use `onFeatureFlags()` and read the flag with `getFeatureFlagResult()` in the callback.
+   */
   onFeatureFlag(key: string, cb: (value: FeatureFlagValue) => void): () => void {
     return this.on('featureflags', async () => {
       const flagResponse = this.getFeatureFlag(key)
@@ -1268,6 +1318,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     })
   }
 
+  /**
+   * Overrides the values of the given flags locally until cleared with `null`.
+   *
+   * @deprecated Use `updateFlags()` instead. To keep the values from being replaced by the next flags load, also set `disableRemoteFeatureFlags`.
+   */
   async overrideFeatureFlag(flags: PostHogFlagsResponse['featureFlags'] | null): Promise<void> {
     this.wrap(() => {
       if (flags === null) {

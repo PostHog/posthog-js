@@ -1,5 +1,14 @@
 # @posthog/openfeature-node-provider
 
+## 0.1.3
+
+### Patch Changes
+
+- [#5252](https://github.com/PostHog/posthog-js/pull/5252) [`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a) Thanks [@andehen](https://github.com/andehen)! - When `sendFeatureFlagEvents` is not set, follow the posthog-node client's `sendFeatureFlagEvent` option instead of always sending `$feature_flag_called` events.
+  (2026-10-28)
+- Updated dependencies [[`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a)]:
+  - posthog-node@5.59.0
+
 ## 0.1.2
 
 ### Patch Changes

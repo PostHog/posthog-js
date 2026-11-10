@@ -6,17 +6,18 @@ import { join } from 'node:path'
 import { compatibilityServer, observations, survey } from './server.mjs'
 import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
 
-async function fixture(t, scenario = 'core') {
+async function fixture(t, scenario = 'core', mode = 'snippet') {
     const folder = await mkdtemp(join(tmpdir(), 'compat-server-'))
     await writeFile(join(folder, 'surveys.js'), 'window.nativeSurvey = true;')
     await writeFile(join(folder, 'array.js'), 'window.nativeCore = true;')
+    await writeFile(join(folder, 'loader.js'), 'window.nativeLoader = true;')
     const settings = {
-        mode: 'snippet',
+        mode,
         scenario,
         coreVersion: '1.2.3',
         coreDist: folder,
         extensionDist: folder,
-        allowedAssets: ['array.js', 'surveys.js'],
+        allowedAssets: ['array.js', 'surveys.js', 'loader.js'],
         harness: join(folder, 'array.js'),
         snippet: join(folder, 'array.js'),
         player: join(folder, 'array.js'),
@@ -49,6 +50,24 @@ test('compatibility server holds actual native assets and supplies scenario conf
     assert.equal(flags.requestId, '00000000-0000-4000-8000-000000000001')
     assert.deepEqual(flags.surveys, config.surveys)
     assert.deepEqual(await (await fetch(origin + '/api/surveys')).json(), { surveys: [survey] })
+})
+
+test('loader deployment serves its bootstrap immediately while holding the matching core', async (t) => {
+    const { server, origin } = await fixture(t, 'core', 'loader')
+    const html = await (await fetch(origin)).text()
+    assert.match(html, /src="\/harness\.js"/)
+    assert.doesNotMatch(html, /src="\/(?:consumer|snippet)\.js"/)
+    const bootstrap = await fetch(origin + '/static/loader.js?project_token=phc_COMPAT', {
+        signal: AbortSignal.timeout(2000),
+    })
+    assert.equal(bootstrap.status, 200)
+    assert.equal(await bootstrap.text(), 'window.nativeLoader = true;')
+    const pending = fetch(origin + '/static/1.2.3/array.js')
+    while (!server.inspect().blockedRequests.length) await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(server.inspect().blockedRequests[0].barrier, 'core')
+    server.releaseBarrier('core')
+    assert.equal(await (await pending).text(), 'window.nativeCore = true;')
+    assert.deepEqual(server.inspect().errors, [])
 })
 
 test('compatibility server preserves native versioned fallback and extension faults', async (t) => {
@@ -87,6 +106,55 @@ test('Replay network fixture preserves application headers and bodies on the wir
         assert.equal(requests[index].rawBody, sample.requestBody)
         assert.equal(requests[index].headers.authorization, replayNetworkHeaders.request.authorization)
     }
+    assert.deepEqual(server.inspect().errors, [])
+})
+
+test('XHR recovery holds the first real flags response until client cancellation, then returns fresh flags', async (t) => {
+    const { server, origin } = await fixture(t, 'xhr-timeout-recovery')
+    server.releaseBarrier('flags')
+    const request = { method: 'POST', body: '{}' }
+    const initial = await (await fetch(origin + '/flags/', request)).json()
+    assert.equal(initial.featureFlags['compat-timeout'], 'cached')
+    await fetch(origin + '/__compat/xhr-timeout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'recover' }),
+    })
+    await assert.rejects(fetch(origin + '/flags/', { ...request, signal: AbortSignal.timeout(100) }))
+    const recovered = await (await fetch(origin + '/flags/', request)).json()
+    assert.equal(recovered.featureFlags['compat-timeout'], 'fresh')
+    assert.equal(recovered.featureFlags['compat-enabled'], true)
+    while (server.inspect().blockedRequests.length) await new Promise((resolve) => setImmediate(resolve))
+    const flags = server.inspect().requests.filter(({ path }) => path === '/flags/')
+    assert.deepEqual(
+        flags.map(({ status }) => status),
+        [200, null, 200]
+    )
+    assert.equal(flags[1].responseFinished, false)
+    assert.deepEqual(server.inspect().errors, [])
+})
+
+test('XHR exhaustion holds every flags attempt and leaves unrelated delivery available', async (t) => {
+    const { server, origin } = await fixture(t, 'xhr-timeout-exhausted')
+    server.releaseBarrier('flags')
+    await fetch(origin + '/__compat/xhr-timeout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'exhaust' }),
+    })
+    for (let attempt = 0; attempt < 2; attempt++)
+        await assert.rejects(
+            fetch(origin + '/flags/', { method: 'POST', body: '{}', signal: AbortSignal.timeout(100) })
+        )
+    while (server.inspect().blockedRequests.length) await new Promise((resolve) => setImmediate(resolve))
+    assert.deepEqual(
+        server
+            .inspect()
+            .requests.filter(({ path }) => path === '/flags/')
+            .map(({ status }) => status),
+        [null, null]
+    )
+    assert.equal((await fetch(origin + '/e/', { method: 'POST', body: '[]' })).status, 200)
     assert.deepEqual(server.inspect().errors, [])
 })
 

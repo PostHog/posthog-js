@@ -16,10 +16,10 @@ export class PostHogCoreTestClient extends PostHogCore {
 
   constructor(
     private mocks: PostHogCoreTestClientMocks,
-    apiKey: string,
+    projectToken: string,
     options?: PostHogCoreOptions
   ) {
-    super(apiKey, options)
+    super(projectToken, options)
 
     this.setupBootstrap(options)
   }
@@ -60,7 +60,7 @@ export class PostHogCoreTestClient extends PostHogCore {
 }
 
 export const createTestClient = (
-  apiKey: string,
+  projectToken: string,
   options?: PostHogCoreOptions,
   setupMocks?: (mocks: PostHogCoreTestClientMocks) => void,
   storageCache: { [key: string]: string | JsonType } = {}
@@ -85,5 +85,5 @@ export const createTestClient = (
 
   setupMocks?.(mocks)
 
-  return [new PostHogCoreTestClient(mocks, apiKey, { disableCompression: true, ...options }), mocks]
+  return [new PostHogCoreTestClient(mocks, projectToken, { disableCompression: true, ...options }), mocks]
 }

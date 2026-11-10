@@ -53,6 +53,7 @@ const createOptions = (doc: Document = document): observerParam =>
       addShadowRoot: vi.fn(),
       observeAttachShadow: vi.fn(),
       resetForDoc: vi.fn(),
+      removeShadowRootsIn: vi.fn(),
     },
     canvasManager: {
       acquire: vi.fn(),

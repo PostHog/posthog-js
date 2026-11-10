@@ -375,7 +375,7 @@ describe('posthog-xcode.sh conflict upload flags', () => {
     expect(contents).toContain('POSTHOG_UPLOAD_ARGS+=(--skip-on-conflict)')
     expect(contents).toContain('POSTHOG_UPLOAD_ARGS+=(--force)')
     expect(contents).toContain(
-      'CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$DERIVED_FILE_DIR" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" "${POSTHOG_RELEASE_MODE_ARGS[@]}" 2>&1)'
+      'CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$(dirname "$SOURCEMAP_FILE")" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" "${POSTHOG_RELEASE_MODE_ARGS[@]}" 2>&1)'
     )
     expect(contents).not.toContain('hermes clone --skip-on-conflict')
     expect(contents).not.toContain('hermes clone --force')
@@ -512,6 +512,23 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
       fs.rmSync(tempDir, { recursive: true, force: true })
     }
   }
+
+  it('uploads from the directory of a preset SOURCEMAP_FILE rather than DERIVED_FILE_DIR', () => {
+    // EAS and similar callers point SOURCEMAP_FILE outside DERIVED_FILE_DIR; the clone writes the
+    // composed map there, so the upload has to read from the same directory.
+    const sourcemapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-sourcemap-'))
+    try {
+      const { status, invocations } = runWrapper([], {
+        SOURCEMAP_FILE: path.join(sourcemapDir, 'main.jsbundle.map'),
+      })
+
+      expect(status).toBe(0)
+      const upload = invocations.find((invocation) => invocation.includes('hermes upload'))
+      expect(upload).toContain(`--directory ${sourcemapDir}`)
+    } finally {
+      fs.rmSync(sourcemapDir, { recursive: true, force: true })
+    }
+  })
 
   // `git config --get` exits 1 with no origin; `rev-parse HEAD` exits 128 with no commits.
   it.each([

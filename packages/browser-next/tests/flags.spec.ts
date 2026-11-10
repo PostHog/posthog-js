@@ -252,6 +252,29 @@ describe('flags', () => {
         expect(captured.mock.calls.filter(([event]) => event.event === '$feature_flag_called')).toHaveLength(2)
     })
 
+    it.each([
+        ['sends it at a capture that leaves a spare token', 2_000, 1],
+        ['holds it while each capture uses the only refilled token', 100, 0],
+    ])('for a flag read past the client rate limit, %s', async (_, elapsedMs, expectedExposures) => {
+        const now = vi.spyOn(Date, 'now').mockReturnValue(1_000)
+        vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const client = await create({ flags: { featureFlagEvaluation: false } })
+        const captured = vi.fn()
+        client.onEvent(captured)
+        for (let index = 0; index < 100; index++) client.capture('flood')
+        client.getExtension(FeatureFlagsExtension)!.updateFlags({ test: true })
+        client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('test')
+
+        now.mockReturnValue(1_000 + elapsedMs)
+        client.capture('next')
+
+        const events = captured.mock.calls.map(([event]) => event.event)
+        expect({
+            exposures: events.filter((event) => event === '$feature_flag_called').length,
+            warnings: events.filter((event) => event === '$$client_ingestion_warning').length,
+        }).toEqual({ exposures: expectedExposures, warnings: 0 })
+    })
+
     it('clears evaluation properties when the group key changes', async () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response('{}'))

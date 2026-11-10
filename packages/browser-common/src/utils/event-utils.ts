@@ -47,7 +47,7 @@ export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
     '_kx', // klaviyo
 ]
 
-export const CAMPAIGN_PARAMS = [
+export const CAMPAIGN_PARAMS = /* @__PURE__ */ (() => [
     'utm_source',
     'utm_medium',
     'utm_campaign',
@@ -56,7 +56,7 @@ export const CAMPAIGN_PARAMS = [
     'gad_source', // google ads source
     'mc_cid', // mailchimp campaign id
     ...PERSONAL_DATA_CAMPAIGN_PARAMS,
-]
+])()
 
 export const EVENT_TO_PERSON_PROPERTIES = [
     // mobile params

@@ -22,6 +22,27 @@ describe('OpenAI-compatible stream accumulators', () => {
     expect(usage.outputTokens).toBeUndefined()
   })
 
+  test('chat keeps a refusal streamed in delta.refusal', () => {
+    const accumulator = new OpenAIChatStreamAccumulator()
+    const chunk = (delta: object, finishReason: string | null = null) =>
+      ({
+        id: 'chatcmpl-1',
+        model: 'gpt-4o',
+        object: 'chat.completion.chunk',
+        created: 1,
+        choices: [{ index: 0, finish_reason: finishReason, logprobs: null, delta }],
+      }) as any
+    accumulator.consume(chunk({ refusal: "I can't " }), 100)
+    accumulator.consume(chunk({ refusal: 'help with that' }), 110)
+    accumulator.consume(chunk({}, 'stop'), 120)
+
+    const result = accumulator.result()
+    expect(result.output).toEqual([
+      { role: 'assistant', content: [{ type: 'refusal', refusal: "I can't help with that" }] },
+    ])
+    expect(result.firstTokenTime).toBe(100)
+  })
+
   test('chat accumulates text, tools, stop reason, metadata, web search, and raw usage', () => {
     const accumulator = new OpenAIChatStreamAccumulator()
     accumulator.consume(
@@ -101,6 +122,79 @@ describe('OpenAI-compatible stream accumulators', () => {
         webSearchCount: 1,
         rawUsage,
       },
+    })
+  })
+
+  describe('chat tool calls without an index', () => {
+    const chunk = (toolCalls: unknown[], finishReason: string | null = null): any => ({
+      id: 'chatcmpl-noindex',
+      model: 'compat-model',
+      object: 'chat.completion.chunk',
+      created: 1,
+      choices: [{ index: 0, finish_reason: finishReason, logprobs: null, delta: { tool_calls: toolCalls } }],
+    })
+    const toolCallContent = (accumulator: OpenAIChatStreamAccumulator) => accumulator.result().output[0].content
+
+    test('keeps two whole calls that carry an id and no index', () => {
+      const accumulator = new OpenAIChatStreamAccumulator()
+      accumulator.consume(
+        chunk([
+          { id: 'call-a', type: 'function', function: { name: 'lookup', arguments: '{"q":"a"}' } },
+          { id: 'call-b', type: 'function', function: { name: 'search', arguments: '{"q":"b"}' } },
+        ])
+      )
+      accumulator.consume(chunk([], 'tool_calls'))
+
+      expect(toolCallContent(accumulator)).toEqual([
+        { type: 'function', id: 'call-a', function: { name: 'lookup', arguments: '{"q":"a"}' } },
+        { type: 'function', id: 'call-b', function: { name: 'search', arguments: '{"q":"b"}' } },
+      ])
+    })
+
+    test('joins argument fragments by id, then onto the latest call when there is no id', () => {
+      const accumulator = new OpenAIChatStreamAccumulator()
+      accumulator.consume(chunk([{ id: 'call-a', type: 'function', function: { name: 'lookup', arguments: '{"q":' } }]))
+      accumulator.consume(chunk([{ id: 'call-a', function: { arguments: '"a"' } }]))
+      accumulator.consume(chunk([{ function: { arguments: '}' } }]))
+
+      expect(toolCallContent(accumulator)).toEqual([
+        { type: 'function', id: 'call-a', function: { name: 'lookup', arguments: '{"q":"a"}' } },
+      ])
+    })
+
+    test('keeps two named calls that have neither id nor index', () => {
+      const accumulator = new OpenAIChatStreamAccumulator()
+      accumulator.consume(chunk([{ function: { name: 'lookup', arguments: '{}' } }]))
+      accumulator.consume(chunk([{ function: { name: 'search', arguments: '{}' } }]))
+
+      expect(toolCallContent(accumulator)).toEqual([
+        { type: 'function', id: '', function: { name: 'lookup', arguments: '{}' } },
+        { type: 'function', id: '', function: { name: 'search', arguments: '{}' } },
+      ])
+    })
+
+    test('does not let a later real index overwrite an earlier call without one', () => {
+      const accumulator = new OpenAIChatStreamAccumulator()
+      accumulator.consume(chunk([{ id: 'call-b', type: 'function', function: { name: 'search', arguments: '{}' } }]))
+      accumulator.consume(chunk([{ index: 0, id: 'call-a', function: { name: 'lookup', arguments: '{}' } }]))
+      accumulator.consume(chunk([{ index: 0, function: { arguments: '' } }], 'tool_calls'))
+
+      expect(toolCallContent(accumulator)).toEqual([
+        { type: 'function', id: 'call-b', function: { name: 'search', arguments: '{}' } },
+        { type: 'function', id: 'call-a', function: { name: 'lookup', arguments: '{}' } },
+      ])
+    })
+
+    test('still groups indexed deltas by index', () => {
+      const accumulator = new OpenAIChatStreamAccumulator()
+      accumulator.consume(chunk([{ index: 1, id: 'call-b', function: { name: 'search', arguments: '{' } }]))
+      accumulator.consume(chunk([{ index: 0, id: 'call-a', function: { name: 'lookup', arguments: '{}' } }]))
+      accumulator.consume(chunk([{ index: 1, function: { arguments: '}' } }]))
+
+      expect(toolCallContent(accumulator)).toEqual([
+        { type: 'function', id: 'call-b', function: { name: 'search', arguments: '{}' } },
+        { type: 'function', id: 'call-a', function: { name: 'lookup', arguments: '{}' } },
+      ])
     })
   })
 

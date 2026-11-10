@@ -37,12 +37,16 @@ for (const syncFetch of [undefined, false, true]) {
             context
         )
         await waitForSessionRecordingToStart(page)
-        expect(
-            await page.evaluate(
-                () => (window as WindowWithPostHog).posthog!.config.__preview_replay_sync_fetch === true
-            )
-        ).toBe(syncFetch === true)
-        if (testInfo.project.name === 'chromium-legacy-replay-fetch') {
+        const legacyCore = testInfo.project.name === 'chromium-legacy-replay-fetch'
+        const configured = await page.evaluate(
+            () => (window as WindowWithPostHog).posthog!.config.__preview_replay_sync_fetch === true
+        )
+        // npm-latest can be older or newer than this checkout; only the pinned old core must lack the default.
+        const synchronous =
+            syncFetch === true ||
+            (syncFetch === undefined && (testInfo.project.name === 'chromium-compat' ? configured : !legacyCore))
+        expect(configured).toBe(synchronous)
+        if (legacyCore) {
             expect(await page.evaluate(() => (window as WindowWithPostHog).posthog!.version)).toBe('1.360.0')
         }
 
@@ -57,7 +61,7 @@ for (const syncFetch of [undefined, false, true]) {
         ).toBe('application response')
         // A previously published recorder ignores the private option and retains legacy ordering.
         const legacyRecorder = testInfo.project.name === 'chromium-legacy-replay-recorder'
-        expect(await page.evaluate(() => (window as any).delegations)).toEqual([syncFetch === true && !legacyRecorder])
+        expect(await page.evaluate(() => (window as any).delegations)).toEqual([synchronous && !legacyRecorder])
 
         let attempt = 0
         await expect

@@ -1,5 +1,231 @@
 # posthog-node
 
+## 5.68.1
+
+### Patch Changes
+
+- [#5649](https://github.com/PostHog/posthog-js/pull/5649) [`69b3cb8`](https://github.com/PostHog/posthog-js/commit/69b3cb8a72ff1c56fd53f922961b8fe9607d99b4) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix empty OR and legacy cohort group matching, and fall back to the server for unsupported group types.
+  (2026-11-10)
+
+## 5.68.0
+
+### Minor Changes
+
+- [#5642](https://github.com/PostHog/posthog-js/pull/5642) [`21eb6bb`](https://github.com/PostHog/posthog-js/commit/21eb6bb4e1ff56f539c3f2e7db728a20d9393809) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - feat(node): let the NestJS interceptor take the request's distinct ID from a `getDistinctId` option or from identity already set in the PostHog context
+  (2026-11-10)
+
+## 5.67.2
+
+### Patch Changes
+
+- [#5648](https://github.com/PostHog/posthog-js/pull/5648) [`f413efc`](https://github.com/PostHog/posthog-js/commit/f413efc47a7810af81de0c8f0c032bd0f6932834) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix nested cohort `not_in` conditions in local feature flag evaluation.
+  (2026-11-10)
+
+## 5.67.1
+
+### Patch Changes
+
+- [#5626](https://github.com/PostHog/posthog-js/pull/5626) [`44e6251`](https://github.com/PostHog/posthog-js/commit/44e62517c5ff4089a6c316ca4796677a4072ba30) Thanks [@luantaraschi](https://github.com/luantaraschi)! - Relative date filters in local flag evaluation no longer roll past the end of a shorter month. `1m` on March 31 now resolves to February 28, matching the flags service.
+  (2026-11-10)
+- Updated dependencies [[`44e6251`](https://github.com/PostHog/posthog-js/commit/44e62517c5ff4089a6c316ca4796677a4072ba30)]:
+  - @posthog/core@1.67.1
+
+## 5.67.0
+
+### Minor Changes
+
+- [#5596](https://github.com/PostHog/posthog-js/pull/5596) [`9ffdaf6`](https://github.com/PostHog/posthog-js/commit/9ffdaf6075bfaa18de4b6a2cacc9c8fea1aac04c) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): add `instrumentRequest` and `posthogHonoMiddleware` for fetch-API servers (Hono, Bun, Deno, Next route handlers). They read `x-posthog-session-id`, wrap the request in `withContext`, open a server span that continues `traceparent` and is named by route, mark 5xx as errors, and record `http.server.request.duration` and `http.server.request.count`.
+
+  feat(core): add `PostHogMetrics.flushCoalesced()`, a flush that callers can request once per unit of work: concurrent calls share one queued send, and it waits out a metrics backoff. (2026-11-10)
+
+### Patch Changes
+
+- Updated dependencies [[`9ffdaf6`](https://github.com/PostHog/posthog-js/commit/9ffdaf6075bfaa18de4b6a2cacc9c8fea1aac04c)]:
+  - @posthog/core@1.67.0
+
+## 5.66.0
+
+### Minor Changes
+
+- [#5633](https://github.com/PostHog/posthog-js/pull/5633) [`12d1f15`](https://github.com/PostHog/posthog-js/commit/12d1f15a96b5b2180d674967b5bb5de240698013) Thanks [@Silthus](https://github.com/Silthus)! - Convex functions in the default runtime can now import `posthog-node` without `"use node"`.
+  (2026-11-10)
+
+## 5.65.0
+
+### Minor Changes
+
+- [#5598](https://github.com/PostHog/posthog-js/pull/5598) [`fb313fe`](https://github.com/PostHog/posthog-js/commit/fb313fe7f5259fc104cff213aa07c24d03fbfd23) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): stamp the configured `serviceName` (from `traces` or `metrics`) on events as `service_name`
+  (2026-11-10)
+
+- [#5599](https://github.com/PostHog/posthog-js/pull/5599) [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): add a logs API, `posthog.logger.info(...)` and `posthog.captureLog(...)`, configured with the `logs` option. Records attach the active span's trace and span ids and the `withContext` distinctId and sessionId, and `serviceName` defaults to the traces or metrics one.
+  (2026-11-10)
+
+- [#5599](https://github.com/PostHog/posthog-js/pull/5599) [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): expose `traceId` and `spanId` getters on the `Span` handle, for correlating logs from other loggers with a trace without parsing `traceparent()`
+  (2026-11-10)
+
+### Patch Changes
+
+- Updated dependencies [[`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - @posthog/core@1.66.0
+
+## 5.64.0
+
+### Minor Changes
+
+- [#5594](https://github.com/PostHog/posthog-js/pull/5594) [`bfbaff7`](https://github.com/PostHog/posthog-js/commit/bfbaff7e597428cdd6f683c78e60e651f6d2c590) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): expose `traceId` and `spanId` getters on the `Span` handle, for correlating logs from other loggers with a trace without parsing `traceparent()`
+  (2026-11-09)
+
+### Patch Changes
+
+- Updated dependencies [[`fac34e4`](https://github.com/PostHog/posthog-js/commit/fac34e4b57b8fd0bdc5acb11451891adbe53f36f), [`bfbaff7`](https://github.com/PostHog/posthog-js/commit/bfbaff7e597428cdd6f683c78e60e651f6d2c590)]:
+  - @posthog/core@1.65.0
+
+## 5.63.2
+
+### Patch Changes
+
+- [#5540](https://github.com/PostHog/posthog-js/pull/5540) [`f8e4866`](https://github.com/PostHog/posthog-js/commit/f8e48661baa72fd3586c6e00cde5bcf30fe486ea) Thanks [@andehen](https://github.com/andehen)! - Treat a `/flags` response whose `flags` field is not an object as a failed request instead of throwing a `TypeError`, and report it to `error` event listeners.
+  (2026-11-09)
+
+## 5.63.1
+
+### Patch Changes
+
+- [#5545](https://github.com/PostHog/posthog-js/pull/5545) [`28fe8c0`](https://github.com/PostHog/posthog-js/commit/28fe8c0aa0577db27affcc7445ab72d2a1f6ebb2) Thanks [@onmax](https://github.com/onmax)! - Parse Node stack frames for functions named `async` without a leading parenthesis in the filename.
+  (2026-11-06)
+- Updated dependencies [[`28fe8c0`](https://github.com/PostHog/posthog-js/commit/28fe8c0aa0577db27affcc7445ab72d2a1f6ebb2)]:
+  - @posthog/core@1.64.1
+
+## 5.63.0
+
+### Minor Changes
+
+- [#5580](https://github.com/PostHog/posthog-js/pull/5580) [`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f) Thanks [@haacked](https://github.com/haacked)! - `metrics.histogram()` accepts a `bounds` option that sets the histogram's bucket boundaries, and `beforeSend` sees and can change them. The first sample of a histogram (name and unit) fixes its bounds until the client resets. A later sample with different bounds is recorded in the fixed buckets and logs a warning, and a sample with invalid bounds is dropped. The experimental `posthog.flags.request.duration` histogram now uses the bounds `[50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]` ms, so its p50 and p95 resolve between 50ms and 5s. This changes the metric's buckets, which its experimental status allows.
+  (2026-11-05)
+
+### Patch Changes
+
+- Updated dependencies [[`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f)]:
+  - @posthog/core@1.64.0
+
+## 5.62.0
+
+### Minor Changes
+
+- [#5509](https://github.com/PostHog/posthog-js/pull/5509) [`71c2464`](https://github.com/PostHog/posthog-js/commit/71c24646209d686c39b516c000d3e3412447774b) Thanks [@Silthus](https://github.com/Silthus)! - `posthog.emails.send()` can now send email content your code rendered, such as HTML from React Email. Give the email a `templateKey` and a `subject`, and pass `html`, `text` or both.
+
+  ```ts
+  const posthog = new PostHog("phc_...", { secretKey: "phs_..." });
+
+  const { data, error } = await posthog.emails.send({
+    to: "user@example.com",
+    distinctId: "user_123",
+    templateKey: "password-reset",
+    subject: "Reset your password",
+    html: renderedHtml,
+  });
+  if (error) throw error;
+
+  // 'delivered', 'bounced', ...
+  const { data: status } = await posthog.emails.get(data.id);
+  ```
+
+  You need a project secret API key, the kind that starts with `phs_`. Create one under **Project secret API keys** in your project settings. Set its **Transactional email** scope to Write to send emails, or to Read for a key that only reads statuses. Pass it to the client as `secretKey`. Set `appHost` to your PostHog app URL when you self-host PostHog or send through a reverse proxy.
+
+  PostHog records each email's delivery, opens and clicks on the person with that `distinctId`. It groups every email with the same `templateKey`, so you see their metrics and logs in one place. The SDK retries a request that hits a network error, a rate limit or an outage twice by default. Every send carries an idempotency key, so a retry never sends the email twice. Pass your own `idempotencyKey`, such as `welcome:user_123`, and your job runner's retries are safe too.
+
+  A send with your own content also takes `from`, `replyTo` and `captureEngagement: false`. Set `migratedFrom` on the client to tell PostHog which email provider you moved from. A failed call returns an `EmailError` with PostHog's `code` and the HTTP `statusCode`.
+
+  Docs: [Send transactional emails with Node.js](https://posthog.com/docs/workflows/transactional-emails/node) and the [transactional email overview](https://posthog.com/docs/workflows/transactional-emails). (2026-11-05)
+
+## 5.61.3
+
+### Patch Changes
+
+- [#5532](https://github.com/PostHog/posthog-js/pull/5532) [`88744a9`](https://github.com/PostHog/posthog-js/commit/88744a9945691e8b88c0c9ee7f716ec6b93192af) Thanks [@marandaneto](https://github.com/marandaneto)! - Skip client-only flag warnings and unnecessary server fallback during bulk evaluation.
+  (2026-11-05)
+
+## 5.61.2
+
+### Patch Changes
+
+- [#5487](https://github.com/PostHog/posthog-js/pull/5487) [`c019e96`](https://github.com/PostHog/posthog-js/commit/c019e969bc3ef182d04eaa1d612225866855baa4) Thanks [@mayteio](https://github.com/mayteio)! - `posthog.emails.send()` now sends a flat request body with `template_id` and `distinct_id` at the top level.
+  (2026-11-02)
+
+## 5.61.1
+
+### Patch Changes
+
+- [#5472](https://github.com/PostHog/posthog-js/pull/5472) [`de8435f`](https://github.com/PostHog/posthog-js/commit/de8435f08d73955d19d893f4a446f291c3abf9bb) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - fix: exception autocapture now captures unhandled promise rejections when the app or framework (for example Next.js, Nitro or PM2) has its own `unhandledRejection` listener, without changing what Node does with the rejection. Each occurrence is captured once per project, however many clients the app creates, and an error reported more than once in the same turn of the event loop (rethrown by a host listener, or one Error object rejected by two promises) is captured once. When the process survives the error, autocapture captures it at the end of the current turn of the event loop, so that a `captureException` call for the same error in that turn, from the app's own listener or a framework's error hook such as Nitro's, is the one sent, with its `distinctId` and properties. A `captureException` call for an error that autocapture already captured in the same turn is skipped. When the app flushes or shuts down a client, that client captures at once what is still waiting for the end of the turn, so a crash handler that flushes or shuts down and then exits still sends the error. A crash is captured whatever the error, an `AbortError` or a framework's control flow included. A rejection that the app handles only later is still captured, as Node reports it as unhandled. Next.js and React control-flow errors and `AbortError` rejections are skipped when the process survives them.
+  (2026-10-30)
+
+## 5.61.0
+
+### Minor Changes
+
+- [#5418](https://github.com/PostHog/posthog-js/pull/5418) [`c705824`](https://github.com/PostHog/posthog-js/commit/c705824357b00a1187302224a58f478d1f652a54) Thanks [@mayteio](https://github.com/mayteio)! - Send transactional email from a PostHog email template with `posthog.emails.send()`, using the new `appHost`, `emailRequestTimeoutMs` and `emailRequestMaxRetries` client options. Read what happened to a sent email with `posthog.emails.get(id)`, using the message ID that `send()` returned.
+  (2026-10-30)
+
+### Patch Changes
+
+- Updated dependencies [[`c705824`](https://github.com/PostHog/posthog-js/commit/c705824357b00a1187302224a58f478d1f652a54)]:
+  - @posthog/core@1.62.0
+
+## 5.60.1
+
+### Patch Changes
+
+- [#5471](https://github.com/PostHog/posthog-js/pull/5471) [`0058ef9`](https://github.com/PostHog/posthog-js/commit/0058ef9664f27224de6377ec18d786bdc0e67e4d) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix: let later conditions resolve a flag locally when an unexpected error follows a filter that local evaluation cannot check, instead of failing the whole flag
+  (2026-10-29)
+
+- [#5471](https://github.com/PostHog/posthog-js/pull/5471) [`0058ef9`](https://github.com/PostHog/posthog-js/commit/0058ef9664f27224de6377ec18d786bdc0e67e4d) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix: fall back to the server when a flag depends on a flag that only the server can evaluate (for example, one with a static cohort), instead of letting a later condition choose a different value locally. `unresolvedFlags` reports such a flag as `unresolved_dependency`
+  (2026-10-29)
+
+## 5.60.0
+
+### Minor Changes
+
+- [#5270](https://github.com/PostHog/posthog-js/pull/5270) [`4b25f7f`](https://github.com/PostHog/posthog-js/commit/4b25f7f1d8fff0e442f6cf9403beec2b4a96b743) Thanks [@DanielVisca](https://github.com/DanielVisca)! - The Express and NestJS integrations can read the session ID, and the distinct ID of an identified user, from the posthog-js cookie when a request has no tracing headers, so backend events link to browser sessions on same-site requests without frontend configuration. Turn it on with the `readPostHogCookie` option.
+  (2026-10-29)
+
+## 5.59.0
+
+### Minor Changes
+
+- [#5252](https://github.com/PostHog/posthog-js/pull/5252) [`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a) Thanks [@andehen](https://github.com/andehen)! - Reads from an `evaluateFlags()` snapshot now honor `sendFeatureFlagEvent: false`, and `isEnabled()` / `getFlag()` accept a `sendFeatureFlagEvents` option that overrides it for one read. If you set `sendFeatureFlagEvent: false` and rely on snapshot reads for experiment exposures, pass `sendFeatureFlagEvents: true` on those reads.
+  (2026-10-28)
+
+### Patch Changes
+
+- Updated dependencies [[`503c3ea`](https://github.com/PostHog/posthog-js/commit/503c3ea1ee79d3ff8c6cce90c9e455a0455af50a)]:
+  - @posthog/core@1.61.2
+
+## 5.58.0
+
+### Minor Changes
+
+- [#5314](https://github.com/PostHog/posthog-js/pull/5314) [`096131d`](https://github.com/PostHog/posthog-js/commit/096131dc7cf6115217996ff8fccace5598ed1e31) Thanks [@pauldambra](https://github.com/pauldambra)! - Add an optional OpenTelemetry context processor, and an optional `signal` that ends a context's lifetime.
+  (2026-10-28)
+
+## 5.57.2
+
+### Patch Changes
+
+- [#5422](https://github.com/PostHog/posthog-js/pull/5422) [`b5036c4`](https://github.com/PostHog/posthog-js/commit/b5036c46ccef4f653a9cb13b32543e3fa2a45c6d) Thanks [@posthog](https://github.com/apps/posthog)! - fix: esbuild no longer fails to bundle posthog-node when the optional `@opentelemetry/api` peer is not installed
+  (2026-10-25)
+
+## 5.57.1
+
+### Patch Changes
+
+- [#5385](https://github.com/PostHog/posthog-js/pull/5385) [`faacff0`](https://github.com/PostHog/posthog-js/commit/faacff022eb958e3c2180c6d9867f5568fdf4237) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Apply the client `privacyMode` option to AI integrations, keep prompts out of errors, provider metadata and OTel spans in privacy mode, and redact MCP tool credentials
+  (2026-10-23)
+
+- [#5354](https://github.com/PostHog/posthog-js/pull/5354) [`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back instead of returning inconsistent local regex flag results for Unicode and advanced patterns.
+  (2026-10-23)
+- Updated dependencies [[`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d)]:
+  - @posthog/core@1.60.1
+
 ## 5.57.0
 
 ### Minor Changes

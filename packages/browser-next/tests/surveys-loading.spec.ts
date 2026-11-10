@@ -13,11 +13,22 @@ const options = {
 
 afterEach(() => {
     vi.doUnmock('../src/automatic-surveys')
+    vi.doUnmock('@posthog/browser-common/surveys-renderer')
     vi.resetModules()
     vi.restoreAllMocks()
 })
 
 describe('automatic surveys module loading', () => {
+    it('does not load the renderer when importing or constructing an explicit extension', async () => {
+        const imported = vi.fn(() => ({ generateSurveys: vi.fn() }))
+        vi.doMock('@posthog/browser-common/surveys-renderer', imported)
+
+        const { surveys } = await import('../src/surveys')
+        expect(imported).not.toHaveBeenCalled()
+        expect(surveys().name).toBe('surveys')
+        expect(imported).not.toHaveBeenCalled()
+    })
+
     it('waits for the dynamic module and extension setup before returning the client', async () => {
         let loaded!: (module: { surveys: () => Extension }) => void
         let setupFinished!: () => void

@@ -33,6 +33,7 @@
 
 ## Checklist
 
+- [ ] All commits are signed (see [Commit signing](https://github.com/PostHog/posthog-js/blob/main/CONTRIBUTING.md#commit-signing))
 - [ ] Tests for new code
 - [ ] Accounted for the impact of any changes across different platforms
 - [ ] Accounted for backwards compatibility of any changes (no breaking changes!)

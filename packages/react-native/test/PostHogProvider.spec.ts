@@ -313,4 +313,25 @@ describe('PostHogProvider', () => {
       consoleErrorSpy.mockRestore()
     }
   })
+
+  it.each([
+    ['projectToken', { projectToken: 'phc_token' }, 'phc_token'],
+    ['deprecated apiKey', { apiKey: 'phc_legacy' }, 'phc_legacy'],
+    ['projectToken over apiKey', { projectToken: 'phc_token', apiKey: 'phc_legacy' }, 'phc_token'],
+  ])('should create the client with %s', (_case, props, expected) => {
+    const onClient = vi.fn()
+
+    render(
+      React.createElement(
+        PostHogProvider,
+        { ...props, autocapture: false, options: { persistence: 'memory' } },
+        React.createElement(CaptureClient, { onClient })
+      )
+    )
+
+    const posthog = onClient.mock.calls[0][0] as PostHog
+    expect(posthog.projectToken).toEqual(expected)
+    expect(posthog.apiKey).toEqual(expected)
+    expect(posthog.isDisabled).toEqual(false)
+  })
 })
