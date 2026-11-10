@@ -1,5 +1,42 @@
 # posthog-node
 
+## 5.66.0
+
+### Minor Changes
+
+- [#5633](https://github.com/PostHog/posthog-js/pull/5633) [`12d1f15`](https://github.com/PostHog/posthog-js/commit/12d1f15a96b5b2180d674967b5bb5de240698013) Thanks [@Silthus](https://github.com/Silthus)! - Convex functions in the default runtime can now import `posthog-node` without `"use node"`.
+  (2026-11-10)
+
+## 5.65.0
+
+### Minor Changes
+
+- [#5598](https://github.com/PostHog/posthog-js/pull/5598) [`fb313fe`](https://github.com/PostHog/posthog-js/commit/fb313fe7f5259fc104cff213aa07c24d03fbfd23) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): stamp the configured `serviceName` (from `traces` or `metrics`) on events as `service_name`
+  (2026-11-10)
+
+- [#5599](https://github.com/PostHog/posthog-js/pull/5599) [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): add a logs API, `posthog.logger.info(...)` and `posthog.captureLog(...)`, configured with the `logs` option. Records attach the active span's trace and span ids and the `withContext` distinctId and sessionId, and `serviceName` defaults to the traces or metrics one.
+  (2026-11-10)
+
+- [#5599](https://github.com/PostHog/posthog-js/pull/5599) [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): expose `traceId` and `spanId` getters on the `Span` handle, for correlating logs from other loggers with a trace without parsing `traceparent()`
+  (2026-11-10)
+
+### Patch Changes
+
+- Updated dependencies [[`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - @posthog/core@1.66.0
+
+## 5.64.0
+
+### Minor Changes
+
+- [#5594](https://github.com/PostHog/posthog-js/pull/5594) [`bfbaff7`](https://github.com/PostHog/posthog-js/commit/bfbaff7e597428cdd6f683c78e60e651f6d2c590) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): expose `traceId` and `spanId` getters on the `Span` handle, for correlating logs from other loggers with a trace without parsing `traceparent()`
+  (2026-11-09)
+
+### Patch Changes
+
+- Updated dependencies [[`fac34e4`](https://github.com/PostHog/posthog-js/commit/fac34e4b57b8fd0bdc5acb11451891adbe53f36f), [`bfbaff7`](https://github.com/PostHog/posthog-js/commit/bfbaff7e597428cdd6f683c78e60e651f6d2c590)]:
+  - @posthog/core@1.65.0
+
 ## 5.63.2
 
 ### Patch Changes
