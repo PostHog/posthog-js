@@ -39,6 +39,12 @@ export interface ExceptionCaptureOptions {
 export interface PostHogInterceptorOptions {
   /** Enable exception capture. Pass `true` for defaults or an object to configure. @default false */
   captureExceptions?: boolean | ExceptionCaptureOptions
+  /**
+   * Returns the distinct ID for a request, such as the signed-in user's ID from your auth layer.
+   * It takes precedence over the `X-POSTHOG-DISTINCT-ID` tracing header and over a distinct ID
+   * already set in the PostHog context. Return `undefined` to fall back to those.
+   */
+  getDistinctId?: (request: any) => string | undefined
 }
 
 function getClientIp(headers: IncomingHttpHeaders, request: any): string | undefined {
@@ -67,12 +73,27 @@ export class PostHogInterceptor implements NestInterceptor {
   private posthog: PostHogBackendClient
   private captureExceptions: boolean
   private minStatusToCapture: number
+  private getDistinctId?: (request: any) => string | undefined
 
   constructor(posthog: PostHogBackendClient, options?: PostHogInterceptorOptions) {
     this.posthog = posthog
     const capture = options?.captureExceptions
     this.captureExceptions = !!capture
     this.minStatusToCapture = (typeof capture === 'object' ? capture.minStatusToCapture : undefined) ?? 500
+    this.getDistinctId = options?.getDistinctId
+  }
+
+  private resolveDistinctId(request: any): string | undefined {
+    if (!this.getDistinctId) {
+      return undefined
+    }
+    try {
+      const distinctId = this.getDistinctId(request)
+      return typeof distinctId === 'string' && distinctId.trim() ? distinctId.trim() : undefined
+    } catch {
+      // A failing resolver must not break the request; fall back to headers and context.
+      return undefined
+    }
   }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
@@ -95,14 +116,21 @@ export class PostHogInterceptor implements NestInterceptor {
     addProperty(properties, '$user_agent', getFirstHeaderValue(headers['user-agent']))
     addProperty(properties, '$ip', getClientIp(headers, request))
 
-    const contextData = {
-      ...(sessionId !== undefined ? { sessionId } : {}),
-      ...(distinctId !== undefined ? { distinctId } : {}),
-      properties,
-    }
+    return new Observable((subscriber) => {
+      // Read identity at subscription time, inside this request's async context. The resolver is
+      // the application's own identity and wins. Tracing headers come next, so a stray ambient
+      // context can't override them. Identity the application set before the interceptor, such as
+      // in a middleware, fills in when there is no header. Properties always start fresh.
+      const existing = this.posthog.getContext()
+      const requestDistinctId = this.resolveDistinctId(request) ?? distinctId ?? existing?.distinctId
+      const requestSessionId = sessionId ?? existing?.sessionId
+      const contextData = {
+        ...(requestSessionId !== undefined ? { sessionId: requestSessionId } : {}),
+        ...(requestDistinctId !== undefined ? { distinctId: requestDistinctId } : {}),
+        properties,
+      }
 
-    return new Observable((subscriber) =>
-      this.posthog.withContext(
+      return this.posthog.withContext(
         contextData,
         () => {
           notifyContextListeners(this.posthog, true)
@@ -121,7 +149,7 @@ export class PostHogInterceptor implements NestInterceptor {
                 const responseStatus = status ?? response?.statusCode
                 const additionalProperties: Record<string, any> | undefined =
                   responseStatus !== undefined ? { $response_status_code: responseStatus } : undefined
-                this.posthog.captureException(exception, distinctId, additionalProperties)
+                this.posthog.captureException(exception, requestDistinctId, additionalProperties)
                 return throwError(() => exception)
               })
             )
@@ -131,6 +159,6 @@ export class PostHogInterceptor implements NestInterceptor {
         },
         { fresh: true }
       )
-    )
+    })
   }
 }
