@@ -456,6 +456,39 @@ describe('PostHogInterceptor', () => {
       expect(event.distinct_id).toBe('middleware-user')
     })
 
+    it('should keep a nonblank getDistinctId result verbatim', async () => {
+      const interceptor = new PostHogInterceptor(posthog, { getDistinctId: () => ' padded-user ' })
+      const seen: { context?: any } = {}
+
+      await lastValueFrom(interceptor.intercept(createMockContext({ headers: {} }), createCapturingHandler(seen)))
+
+      expect(seen.context.distinctId).toBe(' padded-user ')
+    })
+
+    it('should end inherited identity when the context it came from ends', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
+      const controller = new AbortController()
+      const seen: { before?: any; after?: any } = {}
+      const handler = {
+        handle: () =>
+          defer(() => {
+            seen.before = posthog.getContext()
+            controller.abort()
+            seen.after = posthog.getContext()
+            return of(undefined)
+          }),
+      }
+
+      await posthog.withContext(
+        { distinctId: 'middleware-user' },
+        () => lastValueFrom(interceptor.intercept(createMockContext({ headers: {} }), handler)),
+        { signal: controller.signal }
+      )
+
+      expect(seen.before?.distinctId).toBe('middleware-user')
+      expect(seen.after).toBeUndefined()
+    })
+
     it.each([
       ['returns undefined', () => undefined],
       ['returns an empty string', () => '  '],

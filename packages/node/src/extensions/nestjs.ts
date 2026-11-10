@@ -11,6 +11,7 @@ import {
 } from './tracing-headers'
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import { notifyContextListeners } from './context/listeners'
+import { getContextLifetimeSignal } from './context/lifetime'
 import { PostHogBackendClient } from '../client'
 
 // Local interfaces to avoid runtime dependency on @nestjs/common
@@ -89,7 +90,8 @@ export class PostHogInterceptor implements NestInterceptor {
     }
     try {
       const distinctId = this.getDistinctId(request)
-      return typeof distinctId === 'string' && distinctId.trim() ? distinctId.trim() : undefined
+      // Blank IDs fall back; any other ID is kept verbatim, as explicit captures keep it.
+      return typeof distinctId === 'string' && distinctId.trim() ? distinctId : undefined
     } catch {
       // A failing resolver must not break the request; fall back to headers and context.
       return undefined
@@ -122,8 +124,15 @@ export class PostHogInterceptor implements NestInterceptor {
       // context can't override them. Identity the application set before the interceptor, such as
       // in a middleware, fills in when there is no header. Properties always start fresh.
       const existing = this.posthog.getContext()
-      const requestDistinctId = this.resolveDistinctId(request) ?? distinctId ?? existing?.distinctId
+      const resolvedDistinctId = this.resolveDistinctId(request)
+      const requestDistinctId = resolvedDistinctId ?? distinctId ?? existing?.distinctId
       const requestSessionId = sessionId ?? existing?.sessionId
+      // Identity copied from the existing context keeps that context's lifetime, so it ends when
+      // the middleware's scope ends instead of outliving it in detached work.
+      const inheritsIdentity =
+        (resolvedDistinctId === undefined && distinctId === undefined && existing?.distinctId !== undefined) ||
+        (sessionId === undefined && existing?.sessionId !== undefined)
+      const signal = inheritsIdentity && existing ? getContextLifetimeSignal(existing) : undefined
       const contextData = {
         ...(requestSessionId !== undefined ? { sessionId: requestSessionId } : {}),
         ...(requestDistinctId !== undefined ? { distinctId: requestDistinctId } : {}),
@@ -157,7 +166,7 @@ export class PostHogInterceptor implements NestInterceptor {
 
           return source.subscribe(subscriber)
         },
-        { fresh: true }
+        { fresh: true, ...(signal ? { signal } : {}) }
       )
     })
   }
