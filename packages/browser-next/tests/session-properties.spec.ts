@@ -1,4 +1,6 @@
+import type { KeyValueStore } from '@posthog/browser-common'
 import { analytics, type AnalyticsOptions } from '../src/analytics'
+import { isAnalyticsExtension } from '../src/analytics-internal'
 import { BrowserState } from '../src/state'
 import { EventBuffer } from '../src/event-buffer'
 import { ClientRateLimiter } from '../src/rate-limiter'
@@ -18,10 +20,23 @@ const events = (requests: SentRequest[]): Event[] =>
 const clients: Array<Awaited<ReturnType<typeof createPostHog>>> = []
 let local: MemoryStorage
 let tab: MemoryStorage
+const sessionStores = new WeakMap<object, KeyValueStore>()
+const storedSessionProperty = (product: object, property: string): unknown => {
+    const store = sessionStores.get(product)
+    if (!store) throw new Error('Expected a bound session store')
+    const properties = store.get<Record<string, unknown>>('superProperties')
+    return properties && Object.prototype.hasOwnProperty.call(properties, property) ? properties[property] : undefined
+}
 
 const create = async (memory = false, config: AnalyticsOptions = {}, projectToken = TOKEN) => {
     const requests: SentRequest[] = []
     const product = analytics({ flushInterval: 0, ...config })
+    if (!isAnalyticsExtension(product)) throw new Error('Expected an internal analytics owner')
+    const bind = product.bindCaptureHost
+    vi.spyOn(product, 'bindCaptureHost').mockImplementation((host) => {
+        sessionStores.set(product, host.sessionKv)
+        bind(host)
+    })
     const client = await createPostHog({
         projectToken,
         ...(memory ? { storage: false as const } : {}),
@@ -90,9 +105,6 @@ describe('session registered properties', () => {
             })
             product.registerForSession({ outer: true })
             expect(callbacks).toBe(1)
-            expect(product.getSessionProperty('nested')).toBe(true)
-            expect(product.getSessionProperty('outer')).toBe(true)
-            expect(product.getSessionProperty('retained')).toBe(true)
             product.capture('reentrant_read')
             await client.flush()
             expect(events(requests)).toMatchObject([
@@ -104,14 +116,12 @@ describe('session registered properties', () => {
     it('registers local context without creating a session or writing window identity', async () => {
         const { product, client, requests } = await create()
         product.registerForSession({ session_only: 'tab', nested: { value: 1 } })
-        expect(product.getSessionProperty('session_only')).toBe('tab')
+        expect(storedSessionProperty(product, 'session_only')).toBe('tab')
         expect(client.session).toBeUndefined()
         expect(requests).toHaveLength(0)
         expect(tab.values.has(`ph_${TOKEN}_window_id`)).toBe(false)
         expect([...local.values.values()].join('')).not.toContain('session_only')
-        const read = product.getSessionProperty('nested') as { value: number }
-        read.value = 2
-        expect(product.getSessionProperty('nested')).toEqual({ value: 1 })
+        expect(storedSessionProperty(product, 'nested')).toEqual({ value: 1 })
     })
 
     it('merges persistent, session, dynamic and caller context in order with SDK metadata last', async () => {
@@ -136,14 +146,14 @@ describe('session registered properties', () => {
         if (admitted) first.product.capture('before')
         await first.client.dispose()
         const second = await create()
-        expect(second.product.getSessionProperty('session_only')).toBe('reload')
+        expect(storedSessionProperty(second.product, 'session_only')).toBe('reload')
         second.product.capture('reloaded')
         await second.client.flush()
         expect(events(second.requests)[0]?.properties.session_only).toBe('reload')
         second.product.unregisterForSession('session_only')
         await second.client.dispose()
         const third = await create()
-        expect(third.product.getSessionProperty('session_only')).toBeUndefined()
+        expect(storedSessionProperty(third.product, 'session_only')).toBeUndefined()
     })
 
     it('removes a session override without changing persistent fallback or other session keys', async () => {
@@ -152,9 +162,9 @@ describe('session registered properties', () => {
         product.registerForSession({ context: 'session', retained: true })
         product.unregisterForSession('context')
         product.unregisterForSession('missing')
-        expect(product.getSessionProperty('context')).toBeUndefined()
+        expect(storedSessionProperty(product, 'context')).toBeUndefined()
         expect(product.getProperty('context')).toBe('persistent')
-        expect(product.getSessionProperty('retained')).toBe(true)
+        expect(storedSessionProperty(product, 'retained')).toBe(true)
         product.capture('fallback')
         await client.flush()
         expect(events(requests)[0]?.properties).toMatchObject({ context: 'persistent', retained: true })
@@ -168,10 +178,10 @@ describe('session registered properties', () => {
         vi.stubGlobal('sessionStorage', new MemoryStorage())
         const second = await create()
         expect(second.product.getProperty('shared')).toBe(true)
-        expect(second.product.getSessionProperty('owner')).toBeUndefined()
+        expect(storedSessionProperty(second.product, 'owner')).toBeUndefined()
         second.product.registerForSession({ owner: 'second' })
         second.product.capture('second')
-        expect(first.product.getSessionProperty('owner')).toBe('first')
+        expect(storedSessionProperty(first.product, 'owner')).toBe('first')
         await second.client.flush()
         expect(events(second.requests)[0]?.properties.owner).toBe('second')
     })
@@ -189,7 +199,7 @@ describe('session registered properties', () => {
                     vi.setSystemTime(START + minute * 60_000 - 1)
                     product.capture('active')
                 }
-                expect(product.getSessionProperty('old_session')).toBe(true)
+                expect(storedSessionProperty(product, 'old_session')).toBe(true)
                 vi.setSystemTime(START + 86_400_001)
             } else vi.setSystemTime(START + 1_800_001)
             product.capture('rotated')
@@ -197,7 +207,7 @@ describe('session registered properties', () => {
             expect(client.session?.sessionId).not.toBe(old)
             expect(events(requests).at(-1)?.properties).toMatchObject({ persistent: true })
             expect(events(requests).at(-1)?.properties).not.toHaveProperty('old_session')
-            expect(product.getSessionProperty('old_session')).toBeUndefined()
+            expect(storedSessionProperty(product, 'old_session')).toBeUndefined()
         }
     )
 
@@ -225,7 +235,7 @@ describe('session registered properties', () => {
         product.capture('oversized', { value: 'a'.repeat(8 * 1024 * 1024) })
         expect(client.session).toEqual(old)
         expect([...tab.values.entries()]).toEqual(persisted)
-        expect(product.getSessionProperty('old_session')).toBe(true)
+        expect(storedSessionProperty(product, 'old_session')).toBe(true)
         product.capture('admitted')
         await client.flush()
         expect(events(requests).at(-1)?.properties).not.toHaveProperty('old_session')
@@ -235,9 +245,9 @@ describe('session registered properties', () => {
         const { product, client, requests } = await create()
         product.registerForSession({ session_only: true })
         product.resetGroups()
-        expect(product.getSessionProperty('session_only')).toBe(true)
+        expect(storedSessionProperty(product, 'session_only')).toBe(true)
         product.reset()
-        expect(product.getSessionProperty('session_only')).toBeUndefined()
+        expect(storedSessionProperty(product, 'session_only')).toBeUndefined()
         product.capture('reset')
         await client.flush()
         expect(events(requests)[0]?.properties).not.toHaveProperty('session_only')
@@ -338,11 +348,11 @@ describe('session registered properties', () => {
     it('keeps session storage optional for memory-only clients and failed native access', async () => {
         const memory = await create(true)
         memory.product.registerForSession({ ephemeral: true })
-        expect(memory.product.getSessionProperty('ephemeral')).toBe(true)
+        expect(storedSessionProperty(memory.product, 'ephemeral')).toBe(true)
         expect(tab.values.size).toBe(0)
         await memory.client.dispose()
         const fresh = await create(true)
-        expect(fresh.product.getSessionProperty('ephemeral')).toBeUndefined()
+        expect(storedSessionProperty(fresh.product, 'ephemeral')).toBeUndefined()
         vi.stubGlobal('sessionStorage', {
             getItem() {
                 throw new Error('denied')
@@ -410,16 +420,15 @@ describe('session registered properties', () => {
     it('contains malformed input and makes unbound/disposed handles inert', async () => {
         const raw = analytics()
         expect(() => raw.registerForSession({ value: true })).not.toThrow()
-        expect(raw.getSessionProperty('value')).toBeUndefined()
         const { product, client } = await create()
         const revoked = Proxy.revocable({}, {})
         revoked.revoke()
         expect(() => product.registerForSession(revoked.proxy)).not.toThrow()
         product.registerForSession({ retained: true })
-        expect(product.getSessionProperty('toString')).toBeUndefined()
+        expect(storedSessionProperty(product, 'toString')).toBeUndefined()
         await client.dispose()
         expect(() => product.unregisterForSession('retained')).not.toThrow()
-        expect(product.getSessionProperty('retained')).toBeUndefined()
+        expect(storedSessionProperty(product, 'retained')).toBeUndefined()
     })
 })
 
@@ -450,7 +459,7 @@ describe('session property admission and lifecycle', () => {
             capture()
             expect(client.session).toBeUndefined()
             expect(tab.getItem(TAB_KEY)).toBe(pending)
-            expect(product.getSessionProperty('pending')).toBe(true)
+            expect(storedSessionProperty(product, 'pending')).toBe(true)
             fault?.mockRestore()
             product.capture('first')
             const current = client.session
@@ -464,13 +473,13 @@ describe('session property admission and lifecycle', () => {
             capture()
             expect(client.session).toEqual(current)
             expect(tab.getItem(TAB_KEY)).toBe(labelled)
-            expect(product.getSessionProperty('pending')).toBe(true)
+            expect(storedSessionProperty(product, 'pending')).toBe(true)
             fault?.mockRestore()
             product.capture('rotated')
             await client.flush()
             expect(events(requests).map(({ event }) => event)).toEqual(['first', 'rotated'])
             expect(events(requests).at(-1)?.properties).not.toHaveProperty('pending')
-            expect(product.getSessionProperty('pending')).toBeUndefined()
+            expect(storedSessionProperty(product, 'pending')).toBeUndefined()
             expect(JSON.parse(tab.getItem(TAB_KEY) ?? '{}')).toEqual({
                 superProperties: {},
                 sessionId: client.session?.sessionId,
@@ -487,7 +496,7 @@ describe('session property admission and lifecycle', () => {
             if (!first) return
             first = false
             expect(JSON.parse(tab.getItem(TAB_KEY) ?? '{}').sessionId).toBe(client.session?.sessionId)
-            expect(product.getSessionProperty('pending')).toBe(true)
+            expect(storedSessionProperty(product, 'pending')).toBe(true)
             product.unregisterForSession('pending')
             product.registerForSession({ nested: true })
             product.capture('nested')
@@ -499,8 +508,8 @@ describe('session property admission and lifecycle', () => {
             { event: 'outer', properties: { pending: true } },
             { event: 'nested', properties: { nested: true } },
         ])
-        expect(product.getSessionProperty('pending')).toBeUndefined()
-        expect(product.getSessionProperty('nested')).toBe(true)
+        expect(storedSessionProperty(product, 'pending')).toBeUndefined()
+        expect(storedSessionProperty(product, 'nested')).toBe(true)
     })
 
     it('clears rotated scope before session and event observers, without overwriting reentrant registration', async () => {
@@ -509,12 +518,12 @@ describe('session property admission and lifecycle', () => {
         product.capture('first')
         vi.setSystemTime(START + 1_800_001)
         client.onNewSession(() => {
-            expect(product.getSessionProperty('old')).toBeUndefined()
+            expect(storedSessionProperty(product, 'old')).toBeUndefined()
             product.registerForSession({ fresh: true })
         })
         product.onEvent(({ event }) => {
             if (event !== 'outer') return
-            expect(product.getSessionProperty('fresh')).toBe(true)
+            expect(storedSessionProperty(product, 'fresh')).toBe(true)
             product.capture('nested')
         })
         product.capture('outer')
@@ -523,7 +532,7 @@ describe('session property admission and lifecycle', () => {
         expect(events(requests)[1]?.properties).not.toHaveProperty('old')
         expect(events(requests)[1]?.properties).not.toHaveProperty('fresh')
         expect(events(requests)[2]?.properties.fresh).toBe(true)
-        expect(product.getSessionProperty('fresh')).toBe(true)
+        expect(storedSessionProperty(product, 'fresh')).toBe(true)
     })
 
     it.each(['capture', 'captureImmediate'] as const)('%s retains finalized session snapshots', async (method) => {
@@ -544,7 +553,7 @@ describe('session property admission and lifecycle', () => {
             { event: 'snapshot', properties: { value: { count: 1 }, removed: true, $set: { correct: true } } },
         ])
         expect(observed).toMatchObject([{ value: { count: 1 }, removed: true, $set: { correct: true } }])
-        expect(product.getSessionProperty('value')).toEqual({ count: 9 })
+        expect(storedSessionProperty(product, 'value')).toEqual({ count: 9 })
     })
 
     it('keeps local session context under denial and never mode without reading or creating session/window context', async () => {
@@ -552,11 +561,11 @@ describe('session property admission and lifecycle', () => {
         client.optOut()
         const read = vi.spyOn(BrowserState.prototype, 'session', 'get')
         const prepare = vi.spyOn(BrowserState.prototype, 'prepareSessionForEvent')
-        const { registerForSession, unregisterForSession, getSessionProperty } = product
-        const copied = { registerForSession, unregisterForSession, getSessionProperty }
+        const { registerForSession, unregisterForSession } = product
+        const copied = { registerForSession, unregisterForSession }
         registerForSession({ retained: true, removed: true })
         copied.unregisterForSession('removed')
-        expect(copied.getSessionProperty('retained')).toBe(true)
+        expect(storedSessionProperty(product, 'retained')).toBe(true)
         product.capture('denied')
         expect(read).not.toHaveBeenCalled()
         expect(prepare).not.toHaveBeenCalled()
@@ -569,7 +578,7 @@ describe('session property admission and lifecycle', () => {
         await client.dispose()
         copied.registerForSession({ late: true })
         copied.unregisterForSession('retained')
-        expect(copied.getSessionProperty('late')).toBeUndefined()
+        expect(storedSessionProperty(product, 'late')).toBeUndefined()
     })
 
     it('rechecks readiness and ownership after registration serialization', async () => {
@@ -586,7 +595,7 @@ describe('session property admission and lifecycle', () => {
             },
         })
         prepare.mockRestore()
-        expect(product.getSessionProperty('late')).toBeUndefined()
+        expect(storedSessionProperty(product, 'late')).toBeUndefined()
         const disposing: Promise<void>[] = []
         product.registerForSession({
             toJSON() {
@@ -596,7 +605,7 @@ describe('session property admission and lifecycle', () => {
         })
         await Promise.all(disposing)
         const fresh = await create()
-        expect(fresh.product.getSessionProperty('late')).toBeUndefined()
+        expect(storedSessionProperty(fresh.product, 'late')).toBeUndefined()
     })
 
     it('serializes registration once and merges nested local mutations with own prototype keys', async () => {
@@ -609,17 +618,17 @@ describe('session property admission and lifecycle', () => {
         })
         product.registerForSession({ toJSON: serialize })
         expect(serialize).toHaveBeenCalledTimes(1)
-        expect(product.getSessionProperty('removed')).toBeUndefined()
-        expect(product.getSessionProperty('nested')).toBe(true)
-        expect(product.getSessionProperty('__proto__')).toEqual({ own: true })
-        expect(product.getSessionProperty('constructor')).toBe('application')
-        expect(product.getSessionProperty('prototype')).toBe('own')
-        expect(product.getSessionProperty('')).toBe('empty')
-        expect(product.getSessionProperty('toString')).toBeUndefined()
+        expect(storedSessionProperty(product, 'removed')).toBeUndefined()
+        expect(storedSessionProperty(product, 'nested')).toBe(true)
+        expect(storedSessionProperty(product, '__proto__')).toEqual({ own: true })
+        expect(storedSessionProperty(product, 'constructor')).toBe('application')
+        expect(storedSessionProperty(product, 'prototype')).toBe('own')
+        expect(storedSessionProperty(product, '')).toBe('empty')
+        expect(storedSessionProperty(product, 'toString')).toBeUndefined()
         product.unregisterForSession('__proto__')
         product.unregisterForSession('')
-        expect(product.getSessionProperty('__proto__')).toBeUndefined()
-        expect(product.getSessionProperty('')).toBeUndefined()
+        expect(storedSessionProperty(product, '__proto__')).toBeUndefined()
+        expect(storedSessionProperty(product, '')).toBeUndefined()
     })
 
     it('isolates projects and lets copied tabs inherit then diverge without sharing window identity', async () => {
@@ -630,16 +639,16 @@ describe('session property admission and lifecycle', () => {
         for (const [key, value] of tab.values) copied.setItem(key, value)
         vi.stubGlobal('sessionStorage', copied)
         const duplicate = await create()
-        expect(duplicate.product.getSessionProperty('owner')).toBe('opener')
+        expect(storedSessionProperty(duplicate.product, 'owner')).toBe('opener')
         duplicate.product.capture('duplicate')
         expect(duplicate.client.session?.sessionId).toBe(first.client.session?.sessionId)
         expect(duplicate.client.session?.windowId).not.toBe(first.client.session?.windowId)
         duplicate.product.registerForSession({ owner: 'copied' })
-        expect(first.product.getSessionProperty('owner')).toBe('opener')
+        expect(storedSessionProperty(first.product, 'owner')).toBe('opener')
         const other = await create(false, {}, 'ph_other_project')
-        expect(other.product.getSessionProperty('owner')).toBeUndefined()
+        expect(storedSessionProperty(other.product, 'owner')).toBeUndefined()
         other.product.registerForSession({ owner: 'other' })
-        expect(duplicate.product.getSessionProperty('owner')).toBe('copied')
+        expect(storedSessionProperty(duplicate.product, 'owner')).toBe('copied')
     })
 
     it.each(['read', 'write', 'malformed'] as const)(
@@ -659,7 +668,7 @@ describe('session property admission and lifecycle', () => {
             const { client, product, requests } = await create()
             product.registerForSession({ first: { count: 1 } })
             product.unregisterForSession('missing')
-            expect(product.getSessionProperty('first')).toEqual({ count: 1 })
+            expect(storedSessionProperty(product, 'first')).toEqual({ count: 1 })
             fault?.mockRestore()
             product.registerForSession({ second: true })
             product.capture('fallback')
@@ -680,7 +689,7 @@ describe('session enrichment preserves person admission and caller serialization
             const unset = () => {
                 if (nested) return
                 nested = true
-                expect(product.getSessionProperty('context')).toBe(true)
+                expect(storedSessionProperty(product, 'context')).toBe(true)
                 product.unsetPersonProperties('plan')
             }
             if (notification === 'onEvent') product.onEvent(unset)
@@ -769,7 +778,7 @@ describe('session enrichment preserves person admission and caller serialization
             await client.flush()
             expect(events(requests)).toHaveLength(0)
             expect(client.session).toBeUndefined()
-            expect(product.getSessionProperty('value')).toBe('small')
+            expect(storedSessionProperty(product, 'value')).toBe('small')
         }
     )
 })
@@ -806,7 +815,7 @@ describe('protected session capture metadata size', () => {
             await client.flush()
             expect(events(requests)).toHaveLength(0)
             expect(client.session).toBeUndefined()
-            expect(product.getSessionProperty('$groups')).toBeNull()
+            expect(storedSessionProperty(product, '$groups')).toBeNull()
         }
     )
 })

@@ -37,7 +37,6 @@ interface ConsentHarness {
     remoteConfig(): Promise<{ config: unknown; canCapture: boolean }>
     registerForSession(properties: Record<string, unknown>): Promise<void>
     unregisterForSession(property: string): Promise<void>
-    sessionProperty(property: string): Promise<unknown>
     delivered(): string | undefined
     reset(): Promise<void>
     session(): Promise<SessionContext | undefined>
@@ -206,9 +205,6 @@ window.consentHarness = {
     },
     async unregisterForSession(property) {
         requireInstalledExtension((await client).analytics).unregisterForSession(property)
-    },
-    async sessionProperty(property) {
-        return requireInstalledExtension((await client).analytics).getSessionProperty(property)
     },
     delivered: () => lastDelivery?.body,
     async reset() {

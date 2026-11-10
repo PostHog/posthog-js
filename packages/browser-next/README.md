@@ -79,13 +79,12 @@ Persistent properties are overridden by session properties, then dynamic event-p
 ```ts
 const analytics = await posthog.resolveExtension('analytics')
 analytics?.registerForSession({ checkoutFlow: 'express' })
-const flow: unknown = analytics?.getSessionProperty('checkoutFlow')
 analytics?.unregisterForSession('checkoutFlow')
 ```
 
 With default browser storage, session properties use Core-owned per-tab storage, surviving reloads in the same SDK session. Independent tabs are isolated; copied tabs inherit a snapshot and then diverge. With a custom `storage` adapter, `storage: false` or unavailable native session storage, properties remain in per-instance memory. They override persistent defaults, but dynamic producers, caller properties, capture options and protected SDK metadata take precedence.
 
-Registration and removal are local, do not create a session, and remain available under capture denial or `personProfiles: 'never'`. Properties registered before the first event apply to its session. On Core session rotation or adoption, old properties are excluded from the new session's events and cleared only after successful admission; rejected events retain the old scope. `getSessionProperty(key)` returns an isolated stored value, or `undefined` when absent. Full `reset()` clears session properties; `resetGroups()` retains them. Already-admitted events retain their finalized properties.
+Registration and removal are local, do not create a session, and remain available under capture denial or `personProfiles: 'never'`. Properties registered before the first event apply to its session. On Core session rotation or adoption, old properties are excluded from the new session's events and cleared only after successful admission; rejected events retain the old scope. Full `reset()` clears session properties; `resetGroups()` retains them. Already-admitted events retain their finalized properties.
 
 ## Classic script installation (draft CDN distribution)
 

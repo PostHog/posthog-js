@@ -98,17 +98,8 @@ export const publicProductViews = async (posthog: IPostHog, internal: IPostHogIn
     posthog.analytics?.unregisterForSession('step')
     internal.analytics?.registerForSession({ source: 'internal' })
     internal.analytics?.unregisterForSession('source')
-    const sessionProperty: unknown = acquired?.getSessionProperty('flow')
-    const internalSessionProperty: unknown = internal.analytics?.getSessionProperty('source')
-    void sessionProperty
-    void internalSessionProperty
-    // @ts-expect-error Session values require narrowing before assigning a concrete type.
-    const sessionFlow: string = acquired?.getSessionProperty('flow')
-    void sessionFlow
     // @ts-expect-error Session property keys are strings.
     acquired?.unregisterForSession(42)
-    // @ts-expect-error Session property keys are strings.
-    acquired?.getSessionProperty(42)
     void registered
     void acquiredProperty
     void internalProperty

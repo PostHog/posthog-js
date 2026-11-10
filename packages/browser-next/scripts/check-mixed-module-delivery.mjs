@@ -557,16 +557,12 @@ for (const create of [createPostHog, createEsmPostHog]) {
         const client = await create(options)
         const product = await client.resolveExtension('analytics')
         assert.ok(product)
-        const { registerForSession, unregisterForSession, getSessionProperty } = product
-        const copied = { registerForSession, unregisterForSession, getSessionProperty }
+        const { registerForSession, unregisterForSession } = product
+        const copied = { registerForSession, unregisterForSession }
         const input = { count: 1 }
         product.register({ precedence: 'persistent', fallback: true })
         registerForSession({ input, precedence: 'session', removed: true, nullable: null })
         input.count = 2
-        const read = copied.getSessionProperty('input')
-        assert.deepEqual(read, { count: 1 })
-        read.count = 3
-        assert.deepEqual(getSessionProperty('input'), { count: 1 })
         assert.equal(client.session, undefined)
         copied.unregisterForSession('removed')
         product.capture('session_queued')
@@ -585,18 +581,29 @@ for (const create of [createPostHog, createEsmPostHog]) {
         assert.equal(Object.hasOwn(queued.properties, 'nullable'), false)
         assert.equal(inline.properties.precedence, 'caller')
         product.resetGroups()
-        assert.deepEqual(getSessionProperty('input'), { count: 1 })
+        product.capture('after_group_reset')
+        await client.flush()
+        const groupReset = requests.flatMap(({ batch }) => batch).find(({ event }) => event === 'after_group_reset')
+        assert.ok(groupReset)
+        assert.deepEqual(groupReset.properties.input, { count: 1 })
         product.reset()
-        assert.equal(getSessionProperty('input'), undefined)
+        product.capture('after_full_reset')
+        await client.flush()
+        const fullReset = requests.flatMap(({ batch }) => batch).find(({ event }) => event === 'after_full_reset')
+        assert.ok(fullReset)
+        assert.equal(Object.hasOwn(fullReset.properties, 'input'), false)
         copied.registerForSession({ reload: true })
         await client.dispose()
         copied.registerForSession({ late: true })
-        assert.equal(getSessionProperty('late'), undefined)
         const fresh = await create(options)
         const restored = await fresh.resolveExtension('analytics')
         assert.ok(restored)
-        assert.equal(restored.getSessionProperty('reload'), true)
-        assert.equal(restored.getSessionProperty('late'), undefined)
+        restored.capture('session_reloaded')
+        await fresh.flush()
+        const reloaded = requests.flatMap(({ batch }) => batch).find(({ event }) => event === 'session_reloaded')
+        assert.ok(reloaded)
+        assert.equal(reloaded.properties.reload, true)
+        assert.equal(Object.hasOwn(reloaded.properties, 'late'), false)
         await fresh.dispose()
     } finally {
         if (descriptor) Object.defineProperty(globalThis, 'sessionStorage', descriptor)
