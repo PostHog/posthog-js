@@ -55,8 +55,8 @@ jobs:
                 shell: bash
         env:
             NODE_IMAGE: node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
-            # Harness release 1.19.0; pin the published multi-platform image index.
-            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness-v2@sha256:c1e36d011ec4dec0102fb52b5e6fd3b156b0de9251e0d6b735385876d9a897b4
+            # Harness release 1.31.0; pin the published multi-platform image index.
+            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness-v2@sha256:73014b9bc105f8164c0b679f4f9e8a11ec5c59db3652e3b4579141d055b53002
             CAPTURE_MODE: ${{ matrix.mode }}
         steps:
             # Test the PR head or the triggering commit for push/manual runs.
