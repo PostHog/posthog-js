@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.66.0
+
+### Minor Changes
+
+- [#5633](https://github.com/PostHog/posthog-js/pull/5633) [`12d1f15`](https://github.com/PostHog/posthog-js/commit/12d1f15a96b5b2180d674967b5bb5de240698013) Thanks [@Silthus](https://github.com/Silthus)! - Convex functions in the default runtime can now import `posthog-node` without `"use node"`.
+  (2026-11-10)
+
 ## 5.65.0
 
 ### Minor Changes
