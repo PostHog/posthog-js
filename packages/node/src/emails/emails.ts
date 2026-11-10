@@ -589,10 +589,6 @@ function invalid(code: string, message: string, field: string): EmailError {
   return new EmailError({ code, message, field })
 }
 
-/**
- * The app host for a send, or undefined when the client can't tell it.
- * PostHog Cloud ingestion hosts don't serve the app API, so they map to their region's app host.
- */
 function isHttps(url: string): boolean {
   return url.toLowerCase().startsWith('https://')
 }
@@ -601,6 +597,10 @@ function isPlainHttp(url: string): boolean {
   return url.toLowerCase().startsWith('http://')
 }
 
+/**
+ * The app host for a send, or undefined when the client can't tell it.
+ * PostHog Cloud ingestion hosts don't serve the app API, so they map to their region's app host.
+ */
 function resolveAppHost(host: string, appHost: string | undefined): string | undefined {
   const explicit = typeof appHost === 'string' ? removeTrailingSlash(appHost.trim()) : ''
   if (explicit) {
