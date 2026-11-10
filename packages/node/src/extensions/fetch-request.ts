@@ -290,7 +290,8 @@ export function posthogHonoMiddleware(
 ): (c: HonoContextLike, next: () => Promise<void>) => Promise<void> {
   return async (c, next) => {
     // Hono's `next()` resolves with the response on `c.res` (error handlers set it too), so wrap that.
-    await instrument(
+    // A streamed body is wrapped, so the wrapper has to replace `c.res` for Hono to send the live stream.
+    c.res = await instrument(
       posthog,
       c.req.raw,
       async () => {

@@ -258,6 +258,15 @@ describe('fetch request instrumentation', () => {
       expect(spans[0].status?.code).toBe('error')
     })
 
+    it('leaves a readable response on c.res when the body streams', async () => {
+      const c: any = { req: { raw: new Request('http://localhost/x'), routePath: '/x' }, res: undefined }
+      await posthogHonoMiddleware(posthog)(c, async () => {
+        c.res = new Response('streamed body', { status: 200 })
+      })
+      expect(await c.res.text()).toBe('streamed body')
+      expect(c.res.status).toBe(200)
+    })
+
     it('does not record an error Hono turned into a 4xx', async () => {
       const c: any = { req: { raw: new Request('http://localhost/x'), routePath: '/x' }, res: undefined }
       await posthogHonoMiddleware(posthog)(c, async () => {
