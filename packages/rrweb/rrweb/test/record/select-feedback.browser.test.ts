@@ -125,6 +125,77 @@ describe('select review regressions', () => {
     await browser.close();
   });
 
+  for (const mode of ['play', 'seek', 'seek-real'] as const) {
+    for (const stage of ['snapshot', 'update', 'added']) {
+      const cases =
+        stage === 'snapshot'
+          ? [
+              { masker: 'passthrough', value: 'public', replayIndex: 0 },
+              { masker: 'default', value: 'public', replayIndex: -1 },
+              { masker: 'default', value: '*', replayIndex: -1 },
+            ]
+          : [
+              { masker: 'passthrough', value: 'private', replayIndex: 2 },
+              { masker: 'passthrough', value: '*', replayIndex: 3 },
+              { masker: 'custom redactor', value: 'private', replayIndex: 1 },
+              { masker: 'custom redactor', value: '*', replayIndex: 3 },
+              { masker: 'default', value: 'private', replayIndex: -1 },
+              { masker: 'default', value: '*', replayIndex: -1 },
+            ];
+      it.each(cases)(
+        `preserves custom-mask scalar compatibility (${mode}, ${stage}, $masker, $value)`,
+        async ({ masker, value, replayIndex }) => {
+          await page.evaluate(
+            ({ masker, value, stage }) => {
+              const win = window as unknown as TestWindow;
+              const mount = () => {
+                document.querySelector('#fixture')!.innerHTML =
+                  '<select id="privacy"><option value="public">Public</option>' +
+                  '<option value="*******">Stars</option>' +
+                  '<option value="private">Private</option>' +
+                  '<option value="*">Wildcard</option></select>';
+                document.querySelector('select')!.value =
+                  stage === 'update' ? 'public' : value;
+              };
+              if (stage !== 'added') mount();
+              win.events = [];
+              win.stop = win.rrweb.record({
+                maskAllInputs: true,
+                maskInputFn:
+                  masker === 'default'
+                    ? undefined
+                    : (text, element) =>
+                        masker === 'passthrough' && element.id === 'privacy'
+                          ? text
+                          : '*'.repeat(text.length),
+                emit: (event) => win.events.push(event),
+              })!;
+              if (stage === 'added') mount();
+              if (stage === 'update')
+                document.querySelector('select')!.value = value;
+            },
+            { masker, value, stage },
+          );
+          const result = await finishReplay(page, mode);
+          expect(result.liveIndices).toEqual([
+            ['public', '*******', 'private', '*'].indexOf(value),
+          ]);
+          expect(result.replayIndices).toEqual(
+            replayIndex < 0 ? [] : [replayIndex],
+          );
+          if (stage === 'update')
+            expect(result.inputs.length).toBeGreaterThan(0);
+          for (const input of result.inputs) {
+            expect(input.text).toBe(
+              masker === 'passthrough' ? value : '*'.repeat(value.length),
+            );
+            expect(input).not.toHaveProperty('selectedOptionIds');
+          }
+        },
+      );
+    }
+  }
+
   for (const blocked of ['option', 'optgroup']) {
     for (const flags of ['g', 'y']) {
       it.each(['native event', 'sibling setter'])(

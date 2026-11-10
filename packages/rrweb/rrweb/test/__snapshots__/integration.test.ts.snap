@@ -6264,8 +6264,7 @@ exports[`record integration tests > should mask inputs via function call 1`] = `
                             \\"attributes\\": {
                               \\"name\\": \\"\\",
                               \\"id\\": \\"\\",
-                              \\"value\\": \\"*\\",
-                              \\"rr_maskedSelect\\": true
+                              \\"value\\": \\"*\\"
                             },
                             \\"childNodes\\": [
                               {

@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Fix native dropdown replay updates, hide masked selections, and prevent blocked option values leaking into snapshots.
+Fix dropdown replay updates and blocked-value leaks, and preserve custom mask passthrough.

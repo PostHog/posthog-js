@@ -109,6 +109,30 @@ describe('rebuild', function () {
       },
     );
 
+    it.each(['public', 'private', '*'])(
+      'preserves a custom-mask passthrough first option %j',
+      (value) => {
+        const source = document.implementation.createHTMLDocument();
+        source.body.innerHTML =
+          `<select><option value="${value}">Allowed</option>` +
+          '<option value="other">Other</option></select>';
+        const serialized = snapshot(source, {
+          maskAllInputs: true,
+          maskInputFn: (text) => text,
+        })!;
+        const doc = document.implementation.createHTMLDocument();
+        rebuild(serialized, { doc, mirror, cache });
+        expect(doc.querySelector('select')!.value).toBe(value);
+        visitSnapshot(serialized, (node) => {
+          if (node.type !== NodeType.Element) return;
+          if (node.tagName === 'select')
+            expect(node.attributes.rr_maskedSelect).toBeUndefined();
+          if (node.tagName === 'option')
+            expect(node.attributes.selected).toBeUndefined();
+        });
+      },
+    );
+
     it('does not infer masking from a literal asterisk in a legacy snapshot', () => {
       const source = document.implementation.createHTMLDocument();
       source.body.innerHTML =

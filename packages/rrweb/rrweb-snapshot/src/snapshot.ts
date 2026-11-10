@@ -1012,7 +1012,8 @@ function serializeElementNode(
       attributes.checked = checked;
     }
   }
-  if (tagName === 'select' && maskInputOptions['select']) {
+  // Custom callbacks keep scalar replay; their output does not encode masking intent.
+  if (tagName === 'select' && maskInputOptions['select'] && !maskInputFn) {
     attributes.rr_maskedSelect = true;
     generatedAttributeNames.add('rr_maskedSelect');
   }
