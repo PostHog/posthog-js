@@ -419,6 +419,11 @@ export class BrowserState {
         return true
     }
 
+    resetGroups(): void {
+        this._state.groups = emptyRecord<string>()
+        this._save()
+    }
+
     prepareSessionForEvent(now = Date.now()): PreparedSession {
         const safeNow = isTimestamp(now) ? now : 0
         const [sharedRead, external] = this._readPersistedState()

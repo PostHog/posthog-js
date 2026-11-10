@@ -60,6 +60,8 @@ export interface ICoreCapabilities extends Omit<
     readonly onIdentify: Listener<IdentifyInfo>
     /** Fires after group membership or property updates, independently of capture consent. Does not replay. */
     readonly onGroup: Listener<GroupInfo>
+    /** Fires after group-only reset clears local membership. Does not replay. */
+    readonly onGroupsReset: Listener<void>
     /** Fires after local identity and persisted extension state are reset. Does not replay. */
     readonly onReset: Listener<void>
 }

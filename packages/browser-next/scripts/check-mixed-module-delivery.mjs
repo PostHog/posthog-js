@@ -284,6 +284,104 @@ for (const create of [createPostHog, createEsmPostHog]) {
 }
 process.stdout.write('Built CommonJS/ESM dynamic flags public/shared lookup, async reload, reset and disposal passed\n')
 
+for (const create of [createPostHog, createEsmPostHog]) {
+    const requests = []
+    let scoped
+    const client = await create({
+        projectToken: 'ph_identity_helpers',
+        storage: false,
+        navigator: false,
+        capturePageview: false,
+        analytics: { flushInterval: 0 },
+        flags: false,
+        logs: false,
+        surveys: false,
+        autocapture: false,
+        extensions: [
+            {
+                name: 'observer',
+                setup(value) {
+                    scoped = value
+                },
+            },
+        ],
+        remoteConfig: {
+            supportedCompression: [],
+            toolbarParams: {},
+            toolbarVersion: 'toolbar',
+            isAuthenticated: false,
+            siteApps: [],
+        },
+        fetch: async (input, init) => {
+            requests.push({ url: String(input), body: JSON.parse(init.body) })
+            return new Response('{}')
+        },
+    })
+    const product = await client.resolveExtension('analytics')
+    assert.ok(product)
+    assert.equal(product, client.analytics)
+    assert.equal(product, scoped.analytics)
+    const identity = { distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId }
+    let groupResets = 0
+    let scopedGroupResets = 0
+    let fullResets = 0
+    let identifies = 0
+    client.onGroupsReset(() => {
+        groupResets++
+    })
+    scoped.onGroupsReset(() => {
+        scopedGroupResets++
+    })
+    client.onReset(() => {
+        fullResets++
+    })
+    client.onIdentify(() => {
+        identifies++
+    })
+    client.kv.set('retained', true)
+    await product.group('organization', 'current')
+    const { alias, groupIdentify, resetGroups } = product
+    alias('account-123')
+    groupIdentify('organization', 0, { plan: 'paid' }, { uuid: 'group-profile-uuid' })
+    assert.deepEqual(client.groups, { organization: 'current' })
+    assert.deepEqual(
+        { distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId },
+        identity
+    )
+    product.capture('before_group_reset')
+    const session = client.session
+    resetGroups()
+    assert.deepEqual(client.groups, {})
+    assert.deepEqual(client.session, session)
+    assert.equal(client.kv.get('retained'), true)
+    assert.equal(groupResets, 1)
+    assert.equal(scopedGroupResets, 1)
+    assert.equal(fullResets, 0)
+    assert.equal(identifies, 0)
+    product.capture('after_group_reset')
+    await client.flush()
+    const events = requests.flatMap(({ body }) => body.batch)
+    assert.deepEqual(
+        events.map(({ event }) => event),
+        ['$groupidentify', '$create_alias', '$groupidentify', 'before_group_reset', 'after_group_reset']
+    )
+    assert.equal(events[1].distinct_id, identity.distinctId)
+    assert.equal(events[1].properties.alias, 'account-123')
+    assert.equal(events[1].options.process_person_profile, true)
+    assert.equal(events[2].properties.$group_key, 0)
+    assert.deepEqual(events[2].properties.$group_set, { plan: 'paid' })
+    assert.equal(events[2].uuid, 'group-profile-uuid')
+    assert.deepEqual(events[3].properties.$groups, { organization: 'current' })
+    assert.deepEqual(events[4].properties.$groups, {})
+    await client.dispose()
+    resetGroups()
+    alias('disposed')
+    groupIdentify('organization', 'disposed')
+    assert.equal(groupResets, 1)
+    assert.equal(scopedGroupResets, 1)
+}
+process.stdout.write('Built CommonJS/ESM acquired analytics alias, group profile and group-only reset passed\n')
+
 for (const factory of [surveys, commonJsSurveys]) {
     const client = await createCorePostHog({
         projectToken: 'ph_surveys_test',

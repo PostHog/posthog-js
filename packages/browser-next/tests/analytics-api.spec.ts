@@ -22,7 +22,10 @@ describe('analytics product API', () => {
             'capture',
             'captureImmediate',
             'identify',
+            'alias',
             'group',
+            'groupIdentify',
+            'resetGroups',
             'reset',
             'registerDynamicEventProperties',
             'onEvent',
@@ -106,6 +109,34 @@ describe('analytics product API', () => {
         await copied.group('company', 'disposed')
         copied.reset()
         expect(posthog.distinctId).not.toBe('disposed')
+    })
+
+    it('keeps detached alias and group helpers bound to the same installed product', async () => {
+        const extension = analytics({ flushInterval: 0 })
+        const posthog = await createPostHog({ ...options, fetch: false, extensions: [extension] })
+        const { alias, groupIdentify, resetGroups } = extension
+        const copied = { alias, groupIdentify, resetGroups }
+        const observed = vi.fn()
+        extension.onEvent(observed)
+        await extension.group('company', 'retained')
+        copied.alias('account')
+        copied.groupIdentify('company', 0, { plan: 'paid' })
+        expect(posthog.groups).toEqual({ company: 'retained' })
+        copied.resetGroups()
+        expect(posthog.groups).toEqual({})
+        expect(observed.mock.calls.map(([event]) => event.event)).toEqual([
+            '$groupidentify',
+            '$create_alias',
+            '$groupidentify',
+        ])
+        await extension.group('company', 'after-reset')
+        await posthog.dispose()
+        expect(() => {
+            copied.alias('late')
+            copied.groupIdentify('company', 'late')
+            copied.resetGroups()
+        }).not.toThrow()
+        expect(posthog.groups).toEqual({ company: 'after-reset' })
     })
 
     it.each(['enqueue', 'sessionAdmitted'] as const)(

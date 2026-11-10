@@ -79,6 +79,7 @@ export interface AnalyticsCaptureHost {
         | 'identify'
         | 'group'
         | 'reset'
+        | 'resetGroups'
     >
     readonly onEvent: Listener<CapturedEventInfo>
     canCapture(): boolean
@@ -90,6 +91,7 @@ export interface AnalyticsCaptureHost {
     publishIdentify(info: IdentifyInfo): void
     publishGroup(info: GroupInfo): void
     publishReset(value: void): void
+    publishGroupsReset(): void
 }
 
 /** First-party analytics is one configured owner of operations, buffering and delivery. */

@@ -276,6 +276,52 @@ describe('flags', () => {
         }).toEqual({ exposures: expectedExposures, warnings: 0 })
     })
 
+    it('clears group evaluation context on group-only reset without clearing person context or flags', async () => {
+        vi.useFakeTimers()
+        const fetch = vi.fn(async () => new Response(JSON.stringify({ featureFlags: { retained: true } })))
+        const client = await create({ fetch })
+        await requireInstalledExtension(client.analytics).identify('member', { plan: 'paid' })
+        await requireInstalledExtension(client.analytics).group('organization', 'acme', { region: 'west' })
+        await requireInstalledExtension(client.analytics).group('project', 'web', { stage: 'production' })
+        await vi.advanceTimersByTimeAsync(5)
+        fetch.mockClear()
+        requireInstalledExtension(client.analytics).resetGroups()
+        expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('retained')?.enabled).toBe(true)
+        await vi.advanceTimersByTimeAsync(5)
+        expect(fetch).toHaveBeenCalledOnce()
+        const init = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
+        const body = JSON.parse(String(init?.body))
+        expect(body).toMatchObject({ distinct_id: 'member', groups: {}, person_properties: { plan: 'paid' } })
+        expect(body.group_properties ?? {}).toEqual({})
+        expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('retained')?.enabled).toBe(true)
+    })
+
+    it('does not reload flags or replace evaluation context for alias and direct group profile updates', async () => {
+        vi.useFakeTimers()
+        const fetch = vi.fn(async () => new Response(JSON.stringify({ featureFlags: { retained: true } })))
+        const client = await create({ fetch })
+        const product = requireInstalledExtension(client.analytics)
+        await product.identify('member', { plan: 'paid' })
+        await product.group('organization', 'acme', { region: 'west' })
+        await vi.advanceTimersByTimeAsync(5)
+        fetch.mockClear()
+        product.alias('another-account')
+        product.groupIdentify('organization', 'external', { region: 'east' }, { set: { plan: 'other' } })
+        await vi.advanceTimersByTimeAsync(5)
+        expect(fetch).not.toHaveBeenCalled()
+        const reload = requireInstalledExtension(client.featureFlags).reloadFeatureFlags()
+        await vi.advanceTimersByTimeAsync(5)
+        await reload
+        expect(fetch).toHaveBeenCalledOnce()
+        const init = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+            distinct_id: 'member',
+            groups: { organization: 'acme' },
+            person_properties: { plan: 'paid' },
+            group_properties: { organization: { region: 'west' } },
+        })
+    })
+
     it('clears evaluation properties when the group key changes', async () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response('{}'))

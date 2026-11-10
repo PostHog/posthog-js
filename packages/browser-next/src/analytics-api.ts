@@ -13,7 +13,15 @@ export interface IAnalytics extends BrowserExtension {
         options?: CaptureOptions
     ): Promise<CaptureSummary>
     identify(distinctId: string, set?: Record<string, unknown>, setOnce?: Record<string, unknown>): Promise<void>
+    alias(alias: string): void
     group(type: string, key: string, properties?: Record<string, unknown>): Promise<void>
+    groupIdentify(
+        type: string,
+        key: string | number,
+        properties?: Record<string, unknown>,
+        options?: CaptureOptions
+    ): void
+    resetGroups(): void
     reset(): void
     createPersonProfile(): void
     setPersonProperties(set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void

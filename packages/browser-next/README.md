@@ -6,7 +6,7 @@ An experimental PostHog client for modern browsers. The API is not yet stable.
 npm install @posthog/browser
 ```
 
-Capture, immediate capture, identify, group, reset and dynamic event-property registration live on the analytics extension. Core owns shared identity, sessions, groups, consent, persistence and lifecycle. The npm root acquires the complete analytics API through asynchronous resolution; delivery remains a separate lazy chunk until an admitted capture or an operation needs it. An enabled initial pageview or capture-producing product also acquires it. Feature flags initialize during startup. When their options are omitted, logs, surveys orchestration and autocapture load on existing saved-state or remote-config signals, or explicit asynchronous acquisition. Their collection and display retain their own consent and remote-configuration gates; survey rendering is a further deferred chunk.
+Capture, immediate capture, identity and group controls, reset and dynamic event-property registration live on the analytics extension. Core owns shared identity, sessions, groups, consent, persistence and lifecycle. The npm root acquires the complete analytics API through asynchronous resolution; delivery remains a separate lazy chunk until an admitted capture or an operation needs it. An enabled initial pageview or capture-producing product also acquires it. Feature flags initialize during startup. When their options are omitted, logs, surveys orchestration and autocapture load on existing saved-state or remote-config signals, or explicit asynchronous acquisition. Their collection and display retain their own consent and remote-configuration gates; survey rendering is a further deferred chunk.
 
 ```ts
 import { createPostHog } from '@posthog/browser'
@@ -44,6 +44,18 @@ Product namespaces expose owners only after successful setup. Reading a namespac
 Analytics owns person-profile policy through `personProfiles: 'always' | 'never' | 'identified_only'`, defaulting to `identified_only`. Anonymous events carry `process_person_profile: false` in Capture V1 options until identification, group registration or explicit profile enablement. Configure it through `analytics: { personProfiles: 'always' }` or an explicit `analytics({ personProfiles: 'always' })` instance.
 
 Use the analytics product's `createPersonProfile()`, `setPersonProperties(set?, setOnce?)`, `unsetPersonProperties(names)` and `setInternalOrTestUser()` controls for explicit person updates. Profile creation and property updates preserve the current anonymous identity; they do not identify the user. Set, set-once and unset also update local feature-flag person context. Exact repeated property updates are deduplicated only after local event admission. Reset clears explicit profile enablement and deduplication, without rewriting queued events. In `never` mode, person helpers, identify and group registration are no-ops; ordinary capture continues without person processing.
+
+Resolve or explicitly compose analytics before using its identity controls. `alias(targetId)` links the current ID without changing the current identity or marking it identified; it enables person processing unless disabled by policy. Use `identify()` to switch the ambient identity.
+
+`group(type, key, properties?)` persists ambient membership. `groupIdentify(type, key, properties?, options?)` sends a group-profile update without changing membership or local flag-evaluation context; its key can be a string or finite number, and its options use the ordinary capture pipeline. Alias and group-profile events require capture consent and are suppressed in `never` mode. `resetGroups()` clears memberships and group properties used for flags and requests a flag reload, retaining identity, sessions, person properties and other stored state. It remains available for cleanup when capture is denied or person processing is disabled. Previously queued events retain their captured group context.
+
+```ts
+const analytics = await posthog.resolveExtension('analytics')
+analytics?.alias('account-123')
+await analytics?.group('organization', 'current-group')
+analytics?.groupIdentify('organization', 'another-group', { plan: 'enterprise' })
+analytics?.resetGroups()
+```
 
 ## Classic script installation (draft CDN distribution)
 
@@ -179,7 +191,7 @@ Creating an extension does not initialize it. Pass it in the `extensions` option
 
 ### Lifecycle notifications
 
-Browser-next supplies a `BrowserClient` to extension setup. It extends the shared client with `onIdentify`, `onGroup`, and `onReset` listeners. These fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
+Browser-next supplies a `BrowserClient` to extension setup. It exposes browser namespaces, asynchronous dependency resolution, and `onIdentify`, `onGroup`, `onGroupsReset` and `onReset` listeners. Group-only reset uses `onGroupsReset`; full identity reset uses `onReset`. These notifications fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
 
 ```ts
 import type { BrowserClient, Disposable } from '@posthog/browser'
