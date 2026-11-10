@@ -26,7 +26,7 @@ const rejected = (status: number, code?: string, headers: Record<string, string>
 
 const RECEIPT = { to: 'user@example.com', templateKey: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>' }
 const COPIES = { cc: 'finance@example.com', bcc: ['audit@example.com', 'archive@example.com'] }
-const LARGEST_FILE_WITH_EMPTY_BODIES = 29_182_875
+const LARGEST_FILE_WITH_EMPTY_BODIES = 29_182_821
 const EMPTY_EMAIL_ESTIMATE = 64 * 1024
 
 const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text)
@@ -623,7 +623,7 @@ describe('emails', () => {
       ],
       [
         'Base64 files over 40 MB after Base64 encoding',
-        [{ filename: 'scan.pdf', content: `${'A'.repeat(38_910_500)}AA==` }],
+        [{ filename: 'scan.pdf', content: `${'A'.repeat(38_910_428)}AA==` }],
         { html: '' },
         { code: 'message_too_large', field: 'attachments' },
       ],
@@ -643,10 +643,10 @@ describe('emails', () => {
     })
 
     it.each([
-      ['57 ASCII bytes, counted as 78', 29_182_818, true, 'a'.repeat(57)],
-      ['57 ASCII bytes, counted as 78', 29_182_819, false, 'a'.repeat(57)],
-      ['57 two-byte characters, counted as 156', 29_182_761, true, 'é'.repeat(57)],
-      ['57 two-byte characters, counted as 156', 29_182_762, false, 'é'.repeat(57)],
+      ['57 ASCII bytes, counted as 78', 29_182_764, true, 'a'.repeat(57)],
+      ['57 ASCII bytes, counted as 78', 29_182_765, false, 'a'.repeat(57)],
+      ['57 two-byte characters, counted as 156', 29_182_707, true, 'é'.repeat(57)],
+      ['57 two-byte characters, counted as 156', 29_182_708, false, 'é'.repeat(57)],
     ])(
       'counts an html body of %s like a file, beside a file of %i bytes (fits: %s)',
       async (_name, size, fits, html) => {
@@ -669,8 +669,51 @@ describe('emails', () => {
     )
 
     it.each([
+      ['42 ASCII bytes, counted as 75', 'x'.repeat(42), 29_182_821],
+      ['43 ASCII bytes, counted as 150', 'x'.repeat(43), 29_182_767],
+      ['21 two-byte characters, counted as 75', 'é'.repeat(21), 29_182_821],
+      ['22 two-byte characters, counted as 150', 'é'.repeat(22), 29_182_767],
+      ['420 ASCII bytes, counted as 750', 'x'.repeat(420), 29_182_329],
+    ])(
+      'counts a subject of %s, so the largest file that fits beside it is sent and one byte more is refused',
+      async (_name, subject, largest) => {
+        const fake = againstPostHog()
+        const withFile = (size: number): SendEmailOptions => ({
+          ...RECEIPT,
+          subject,
+          html: '',
+          attachments: [{ filename: 'scan.pdf', content: new Uint8Array(size) }],
+        })
+
+        const over = await posthog.emails.send(withFile(largest + 1))
+        const fits = await posthog.emails.send(withFile(largest))
+
+        expect(over.error).toMatchObject({ code: 'message_too_large', field: 'attachments', statusCode: undefined })
+        expect(fits.error).toBeNull()
+        expect(fake.emails.map(({ attachments }) => attachments[0].bytes.byteLength)).toEqual([largest])
+      }
+    )
+
+    it('counts an empty subject as nothing, so only PostHog refuses it', async () => {
+      const fake = againstPostHog()
+      const withFile = (size: number): SendEmailOptions => ({
+        ...RECEIPT,
+        subject: '',
+        html: '',
+        attachments: [{ filename: 'scan.pdf', content: new Uint8Array(size) }],
+      })
+
+      const over = await posthog.emails.send(withFile(29_182_876))
+      const fits = await posthog.emails.send(withFile(29_182_875))
+
+      expect(over.error).toMatchObject({ code: 'message_too_large', field: 'attachments', statusCode: undefined })
+      expect(fits.error).toMatchObject({ field: 'subject', statusCode: 400 })
+      expect(fake.emails).toEqual([])
+    })
+
+    it.each([
       ['bytes', new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES)],
-      ['Base64', 'A'.repeat(38_910_500)],
+      ['Base64', 'A'.repeat(38_910_428)],
     ])('sends the largest file that fits an email with empty bodies, as %s', async (_name, content) => {
       const fake = againstPostHog()
 

@@ -4,6 +4,8 @@ import type { EmailAttachment } from './types'
 const MAX_ATTACHMENTS = 10
 const MAX_MESSAGE_BYTES = 40_000_000
 const MESSAGE_HEADERS_BYTES = 64 * 1024
+const SUBJECT_BYTES_PER_ENCODED_WORD = 42
+const ENCODED_WORD_BYTES = 75
 const MESSAGE_LIMIT = '40 MB after Base64 encoding, about 29 MB of files'
 const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/
 
@@ -27,7 +29,7 @@ interface CheckedAttachment {
   contentId?: string
 }
 
-export function attachmentFiles(attachments: unknown, bodies: string[]): AttachmentFile[] {
+export function attachmentFiles(attachments: unknown, bodies: string[], subject: string): AttachmentFile[] {
   if (!Array.isArray(attachments)) {
     throw invalid('attachments must be a list of files.', 'attachments')
   }
@@ -42,7 +44,8 @@ export function attachmentFiles(attachments: unknown, bodies: string[]): Attachm
   const checked = Array.from(attachments, checkedAttachment)
   refuseMessageOverLimit(
     checked.map(({ size }) => size),
-    bodies
+    bodies,
+    subject
   )
   return checked.map(({ content, size, ...file }) => ({
     ...file,
@@ -155,13 +158,16 @@ function bytesOfBase64(text: string): Uint8Array<ArrayBuffer> {
   return bytes
 }
 
-function refuseMessageOverLimit(fileSizes: number[], bodies: string[]): void {
+function refuseMessageOverLimit(fileSizes: number[], bodies: string[], subject: string): void {
   if (fileSizes.length === 0) {
     return
   }
   const encoder = new TextEncoder()
   const sizes = [...fileSizes, ...bodies.map((body) => encoder.encode(body).byteLength)]
-  if (sizes.reduce((total, size) => total + base64LinesBytes(size), MESSAGE_HEADERS_BYTES) > MAX_MESSAGE_BYTES) {
+  const headersBytes =
+    MESSAGE_HEADERS_BYTES +
+    Math.ceil(encoder.encode(subject).byteLength / SUBJECT_BYTES_PER_ENCODED_WORD) * ENCODED_WORD_BYTES
+  if (sizes.reduce((total, size) => total + base64LinesBytes(size), headersBytes) > MAX_MESSAGE_BYTES) {
     throw new EmailError({
       code: 'message_too_large',
       message: `These files make the email larger than ${MESSAGE_LIMIT}, so no email was sent.`,

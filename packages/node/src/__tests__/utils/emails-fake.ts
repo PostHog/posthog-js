@@ -8,6 +8,8 @@ const STORAGE_ORIGIN = 'https://email-files.s3.example.com'
 const UPLOAD_ROUTE = 'POST /api/projects/{project_id}/messaging/attachments/uploads/'
 const MESSAGE_LIMIT_BYTES = 40_000_000
 const MESSAGE_HEADERS_BYTES = 64 * 1024
+const SUBJECT_BYTES_PER_ENCODED_WORD = 42
+const ENCODED_WORD_BYTES = 75
 const MAX_FILES = 10
 const MAX_ADDRESSES = 10
 const UPLOAD_URL_TTL_MS = 15 * 60_000
@@ -355,7 +357,7 @@ export class FakePostHog {
     if (capture_engagement !== undefined && typeof capture_engagement !== 'boolean') {
       throw invalidField('capture_engagement', 'Must be a valid boolean.')
     }
-    const attachments = this.attachmentsOf(body.attachments, [html ?? '', text ?? ''])
+    const attachments = this.attachmentsOf(body.attachments, [html ?? '', text ?? ''], subject)
     return {
       to,
       cc: addresses(body.cc, 'cc'),
@@ -371,7 +373,7 @@ export class FakePostHog {
     }
   }
 
-  private attachmentsOf(value: unknown, bodies: string[]): QueuedAttachment[] {
+  private attachmentsOf(value: unknown, bodies: string[], subject: string): QueuedAttachment[] {
     if (value === undefined) {
       return []
     }
@@ -399,7 +401,8 @@ export class FakePostHog {
     const bodySizes = bodies.map((body) => encoder.encode(body).byteLength)
     const largest = this.largestOverLimit(
       attachments.map(({ bytes }) => bytes.byteLength),
-      bodySizes
+      bodySizes,
+      encoder.encode(subject).byteLength
     )
     if (largest !== undefined) {
       throw refusal(400, 'invalid_request', 'message_too_large', `attachments__${largest}__sha256`, {
@@ -411,10 +414,10 @@ export class FakePostHog {
     return attachments
   }
 
-  private largestOverLimit(fileSizes: number[], bodySizes: number[] = []): number | undefined {
+  private largestOverLimit(fileSizes: number[], bodySizes: number[] = [], subjectBytes = 0): number | undefined {
     const estimate = [...fileSizes, ...bodySizes].reduce(
       (total, size) => total + Math.ceil((Math.ceil(size / 3) * 4 * 78) / 76),
-      MESSAGE_HEADERS_BYTES
+      MESSAGE_HEADERS_BYTES + Math.ceil(subjectBytes / SUBJECT_BYTES_PER_ENCODED_WORD) * ENCODED_WORD_BYTES
     )
     if (estimate <= this.options.messageLimitBytes) {
       return undefined

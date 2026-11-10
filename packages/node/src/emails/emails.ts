@@ -506,7 +506,8 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
   if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
   }
-  const files = send.attachments === undefined ? [] : attachmentFiles(send.attachments, [html ?? '', text ?? ''])
+  const files =
+    send.attachments === undefined ? [] : attachmentFiles(send.attachments, [html ?? '', text ?? ''], subject)
   return {
     content: {
       template_key: templateKey,
