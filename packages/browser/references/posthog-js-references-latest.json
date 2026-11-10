@@ -3099,7 +3099,7 @@
           "releaseTag": "deprecated"
         },
         {
-          "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture the initial pageview\n- `false`: Don't capture any pageviews\n- `'history_change'`: Capture the initial pageview and pageviews when the pathname changes\n- An object: Capture the initial pageview and pageviews when any selected URL component changes",
+          "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture the initial pageview\n- `false`: Don't capture any pageviews\n- `'history_change'`: Capture the initial pageview and pageviews when the pathname changes\n- An object: Capture the initial pageview and pageviews when any selected URL component changes\n\nWith the slim bundle, history-based pageviews require `AnalyticsExtensions.historyAutocapture`\nfrom `posthog-js/extensions` in `__extensionClasses`. Without it, only the initial pageview is captured.",
           "type": "boolean | \"history_change\" | CapturePageviewOptions",
           "name": "capture_pageview"
         },
