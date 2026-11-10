@@ -425,13 +425,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
   if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
   }
-  if (category !== undefined && !isCategory(category)) {
-    throw invalid(
-      'invalid_category',
-      "category must be TRANSACTIONAL_EMAIL_CATEGORY or a MessageCategory with a string key and name, a type of 'marketing' or 'transactional', and an optional string description.",
-      'category'
-    )
-  }
+  const wireCategory = category === undefined ? undefined : categoryOnTheWire(category)
   const sendsReplyTo = replyTo !== undefined && !(Array.isArray(replyTo) && replyTo.length === 0)
   return {
     template_key: templateKey,
@@ -441,33 +435,31 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
     ...(from !== undefined && { from }),
     ...(sendsReplyTo && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
     capture_engagement: captureEngagement ?? true,
-    ...(category !== undefined && { category: categoryOnTheWire(category) }),
+    ...(wireCategory !== undefined && { category: wireCategory }),
     ...(distinctId !== undefined && { distinct_id: distinctId }),
   }
 }
 
-function isCategory(value: unknown): value is typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
+function categoryOnTheWire(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
   if (value === TRANSACTIONAL_EMAIL_CATEGORY) {
-    return true
+    return value
   }
-  if (value === null || typeof value !== 'object') {
-    return false
+  if (value !== null && typeof value === 'object') {
+    const { key, type, name, description } = value as Record<string, unknown>
+    if (
+      typeof key === 'string' &&
+      typeof name === 'string' &&
+      CATEGORY_TYPES.has(type) &&
+      (description === undefined || typeof description === 'string')
+    ) {
+      return { key, type: type as MessageCategory['type'], name, description }
+    }
   }
-  const { key, type, name, description } = value as Record<string, unknown>
-  return (
-    typeof key === 'string' &&
-    typeof name === 'string' &&
-    CATEGORY_TYPES.has(type) &&
-    (description === undefined || typeof description === 'string')
+  throw invalid(
+    'invalid_category',
+    "category must be TRANSACTIONAL_EMAIL_CATEGORY or a MessageCategory with a string key and name, a type of 'marketing' or 'transactional', and an optional string description.",
+    'category'
   )
-}
-
-function categoryOnTheWire(category: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory): unknown {
-  if (category === TRANSACTIONAL_EMAIL_CATEGORY) {
-    return category
-  }
-  const { key, type, name, description } = category
-  return { key, type, name, description }
 }
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
