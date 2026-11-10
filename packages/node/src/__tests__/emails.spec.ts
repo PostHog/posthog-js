@@ -1,6 +1,6 @@
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
 
-import { FakePostHog, type FakePostHogOptions } from './utils/emails-fake'
+import { FakePostHog, type FakePostHogOptions, type ServerChange } from './utils/emails-fake'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
@@ -273,6 +273,7 @@ describe('emails', () => {
     "reports a PostHog that doesn't take %s yet as its own refusal, without retrying",
     async (field) => {
       const fake = againstPostHog({ fieldsNotTaken: [field] })
+      fake.recoverAfter('send', 1, { fieldsNotTaken: [] })
 
       const { data, error } = await settle(posthog.emails.send({ ...RECEIPT, ...COPIES }))
 
@@ -287,7 +288,6 @@ describe('emails', () => {
         fix: 'Send the email without this field, or send it again once PostHog takes the field.',
       })
       expect(fake.emails).toEqual([])
-      expect(fake.refusals).toEqual([{ route: 'send', code: 'field_not_accepted' }])
     }
   )
 
@@ -362,7 +362,7 @@ describe('emails', () => {
       ])
     })
 
-    it("sends nothing when the file storage refuses an upload, and returns the storage's answer at once", async () => {
+    it("sends nothing when the file storage refuses an expired upload, and returns the storage's answer", async () => {
       const fake = againstPostHog({ uploadUrlTtlMs: 0 })
       fake.holdAlready(utf8('hello'))
 
@@ -381,7 +381,16 @@ describe('emails', () => {
           "PostHog's file storage refused the upload of attachments__1, so no email was sent. It answered HTTP 403 AccessDenied: Request has expired.",
       })
       expectNothingSent(fake)
-      expect(fake.refusals).toEqual([{ route: 'storage', code: 'AccessDenied' }])
+    })
+
+    it('sends nothing when the file storage refuses an upload once, without retrying', async () => {
+      const fake = againstPostHog()
+      fake.failNext('storage', { status: 403, code: 'AccessDenied', message: 'Access Denied' })
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toMatchObject({ code: 'attachment_upload_failed', name: 'application_error', statusCode: 403 })
+      expectNothingSent(fake)
     })
 
     it.each([
@@ -463,6 +472,7 @@ describe('emails', () => {
 
     it("reports a project that can't send files yet as a refusal of attachments, and sends nothing", async () => {
       const fake = againstPostHog({ filesAllowed: false })
+      fake.recoverAfter('uploads', 1, { filesAllowed: true })
 
       const { data, error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
 
@@ -477,7 +487,6 @@ describe('emails', () => {
         fix: 'Send the email without files, or try again once files are available to this project.',
       })
       expectNothingSent(fake)
-      expect(fake.refusals).toEqual([{ route: 'uploads', code: 'field_not_accepted' }])
     })
 
     it('sends the bytes of the call, through a busy file storage and a send whose answer was lost', async () => {
@@ -502,29 +511,47 @@ describe('emails', () => {
       [
         'a message too large, without retrying',
         { messageLimitBytes: EMPTY_EMAIL_ESTIMATE },
-        { code: 'message_too_large', name: 'validation_error', field: 'attachments__0' },
         1,
+        { messageLimitBytes: Number.MAX_SAFE_INTEGER },
+        { code: 'message_too_large', name: 'validation_error', field: 'attachments__0' },
       ],
       [
         'a daily upload quota, without retrying',
         { uploadQuotaBytes: 4 },
-        { code: 'upload_quota_exceeded', name: 'rate_limit_exceeded', field: undefined },
         1,
+        { uploadQuotaBytes: Number.MAX_SAFE_INTEGER },
+        { code: 'upload_quota_exceeded', name: 'rate_limit_exceeded', field: undefined },
       ],
       [
         'an unavailable file storage, after retrying',
         { storageAvailable: false },
-        { code: 'delivery_unavailable', name: 'service_unavailable', field: undefined },
         3,
+        { storageAvailable: true },
+        { code: 'delivery_unavailable', name: 'service_unavailable', field: undefined },
       ],
-    ])('sends nothing when PostHog refuses the uploads for %s', async (_name, options, refusal, refusals) => {
-      const fake = againstPostHog(options)
+    ])(
+      'sends nothing when PostHog refuses the uploads for %s',
+      async (_name, options, refusals, change: ServerChange, refusal) => {
+        const fake = againstPostHog(options)
+        fake.recoverAfter('uploads', refusals, change)
 
-      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+        const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
 
-      expect(error).toMatchObject(refusal)
-      expectNothingSent(fake)
-      expect(fake.refusals).toEqual(Array(refusals).fill({ route: 'uploads', code: refusal.code }))
+        expect(error).toMatchObject(refusal)
+        expectNothingSent(fake)
+      }
+    )
+
+    it('sends once the file storage is back within the retries', async () => {
+      const fake = againstPostHog({ storageAvailable: false })
+      fake.recoverAfter('uploads', 2, { storageAvailable: true })
+
+      const { data, error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toBeNull()
+      expect(fake.emails).toEqual([
+        expect.objectContaining({ id: data?.id, attachments: [{ filename: 'hello.txt', bytes: utf8('hello') }] }),
+      ])
     })
 
     it.each([

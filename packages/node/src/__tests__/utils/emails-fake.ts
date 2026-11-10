@@ -83,9 +83,12 @@ export interface QueuedEmail {
   attachments: QueuedAttachment[]
 }
 
-export interface Refusal {
+export type ServerChange = Partial<Omit<FakePostHogOptions, 'secretKey'>>
+
+interface Recovery {
   route: Route
-  code: string
+  refusals: number
+  change: ServerChange
 }
 
 interface IssuedUpload {
@@ -112,13 +115,13 @@ class Refused extends Error {
 export class FakePostHog {
   readonly emails: QueuedEmail[] = []
   readonly writes: Uint8Array[] = []
-  readonly refusals: Refusal[] = []
 
   private readonly options: Required<FakePostHogOptions>
   private readonly files = new Map<string, Uint8Array>()
   private readonly issued = new Map<string, IssuedUpload>()
   private readonly sends = new Map<string, { body: string; id: string }>()
   private readonly faults: Record<Route, Fault[]> = { uploads: [], storage: [], send: [] }
+  private readonly recoveries: Recovery[] = []
   private uploadedBytes = 0
 
   constructor(options: FakePostHogOptions) {
@@ -136,6 +139,10 @@ export class FakePostHog {
 
   failNext(route: Route, ...faults: Fault[]): void {
     this.faults[route].push(...faults)
+  }
+
+  recoverAfter(route: Route, refusals: number, change: ServerChange): void {
+    this.recoveries.push({ route, refusals, change })
   }
 
   holdAlready(bytes: Uint8Array): void {
@@ -167,7 +174,7 @@ export class FakePostHog {
       }
     }
     if (route && (answer.status < 200 || answer.status >= 300)) {
-      this.refusals.push({ route, code: codeOf(answer) })
+      this.recover(route)
     }
     if (fault === 'lost reply') {
       throw new TypeError('fetch failed', { cause: new Error('ECONNRESET') })
@@ -187,6 +194,17 @@ export class FakePostHog {
         return this.send(options)
       default:
         return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
+    }
+  }
+
+  private recover(route: Route): void {
+    for (const recovery of this.recoveries) {
+      if (recovery.route === route && recovery.refusals > 0) {
+        recovery.refusals -= 1
+        if (recovery.refusals === 0) {
+          Object.assign(this.options, recovery.change)
+        }
+      }
     }
   }
 
@@ -431,13 +449,6 @@ function faultAnswer(route: Route, { status, code, message, page }: Exclude<Faul
     return code ? storageError(status, code, message ?? code) : { status, text: '' }
   }
   return { status, body: code ? { type: 'server_error', code, detail: message ?? code, attr: null } : undefined }
-}
-
-function codeOf({ body, text }: Answer): string {
-  if (body && typeof body === 'object' && 'code' in body) {
-    return String(body.code)
-  }
-  return /<Code>([^<]+)<\/Code>/.exec(text ?? '')?.[1] ?? 'none'
 }
 
 function refusal(status: number, type: string, code: string, attr: string | null, explained: Json): Refused {
