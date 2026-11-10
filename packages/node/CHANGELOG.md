@@ -1,5 +1,14 @@
 # posthog-node
 
+## 5.67.1
+
+### Patch Changes
+
+- [#5626](https://github.com/PostHog/posthog-js/pull/5626) [`44e6251`](https://github.com/PostHog/posthog-js/commit/44e62517c5ff4089a6c316ca4796677a4072ba30) Thanks [@luantaraschi](https://github.com/luantaraschi)! - Relative date filters in local flag evaluation no longer roll past the end of a shorter month. `1m` on March 31 now resolves to February 28, matching the flags service.
+  (2026-11-10)
+- Updated dependencies [[`44e6251`](https://github.com/PostHog/posthog-js/commit/44e62517c5ff4089a6c316ca4796677a4072ba30)]:
+  - @posthog/core@1.67.1
+
 ## 5.67.0
 
 ### Minor Changes
