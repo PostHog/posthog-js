@@ -132,6 +132,9 @@ async function instrument(
   // Ends the request context once the response settles, so detached work started by the handler
   // does not keep attributing later events and spans to this request.
   const lifetime = new AbortController()
+  // Streaming bodies keep the context and the metrics open until they settle, so work the
+  // framework does while streaming stays attributed to this request.
+  let streaming = false
 
   try {
     return await posthog.withContext(
@@ -207,6 +210,12 @@ async function instrument(
             if (failed) {
               throw thrown
             }
+            // The duration covers the time to the response, not the body. The context stays open
+            // until the body ends, so work done while streaming stays attributed to this request.
+            if (response?.body) {
+              streaming = true
+              return holdUntilBodySettles(response, () => lifetime.abort())
+            }
             return response as Response
           }
         )
@@ -214,8 +223,46 @@ async function instrument(
       { signal: lifetime.signal }
     )
   } finally {
-    lifetime.abort()
+    if (!streaming) {
+      lifetime.abort()
+    }
   }
+}
+
+/**
+ * Returns a copy of `response` whose body is passed through unchanged, and calls `settle` once the
+ * body ends, errors or is cancelled by the consumer.
+ */
+function holdUntilBodySettles(response: Response, settle: () => void): Response {
+  const reader = (response.body as ReadableStream<Uint8Array>).getReader()
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read()
+        if (done) {
+          controller.close()
+          settle()
+        } else {
+          controller.enqueue(value)
+        }
+      } catch (error) {
+        settle()
+        controller.error(error)
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason)
+      } finally {
+        settle()
+      }
+    },
+  })
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  })
 }
 
 /** The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency. */

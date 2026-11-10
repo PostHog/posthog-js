@@ -151,7 +151,7 @@ describe('fetch request instrumentation', () => {
     let release!: () => void
     const released = new Promise<void>((resolve) => (release = resolve))
     let detached: Promise<unknown> | undefined
-    await instrumentRequest(
+    const response = await instrumentRequest(
       posthog,
       new Request('http://localhost/x', { headers: { 'x-posthog-session-id': 'sess-1' } }),
       () => {
@@ -160,14 +160,41 @@ describe('fetch request instrumentation', () => {
         return new Response('ok')
       }
     )
+    await response.text()
     release()
     expect(await detached).toBeUndefined()
+  })
+
+  it('keeps the request context open until a streamed body ends', async () => {
+    const encoder = new TextEncoder()
+    let controllerRef!: ReadableStreamDefaultController<Uint8Array>
+    const body = new ReadableStream<Uint8Array>({ start: (c) => (controllerRef = c) })
+    const response = await instrumentRequest(
+      posthog,
+      new Request('http://localhost/stream', { headers: { 'x-posthog-session-id': 'sess-1' } }),
+      () => new Response(body, { status: 200 })
+    )
+
+    expect(histogram).toHaveBeenCalledTimes(1)
+    controllerRef.enqueue(encoder.encode('chunk'))
+    const reader = response.body!.getReader()
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('chunk')
+    expect(posthog.getContext()).toBeUndefined()
+    controllerRef.close()
+    expect((await reader.read()).done).toBe(true)
+  })
+
+  it('ends the streamed request context when the consumer cancels', async () => {
+    const body = new ReadableStream<Uint8Array>({ pull: () => new Promise(() => {}) })
+    const response = await instrumentRequest(posthog, new Request('http://localhost/stream'), () => new Response(body))
+    await expect(response.body!.cancel('client went away')).resolves.toBeUndefined()
+    expect(histogram).toHaveBeenCalledTimes(1)
   })
 
   it('hands the metrics flush to waitUntil', async () => {
     const waitUntil = vi.fn()
     posthog.options.waitUntil = waitUntil
-    const flush = vi.spyOn(posthog.metrics as any, 'flushCoalesced').mockResolvedValue(undefined)
+    const flush = vi.spyOn((posthog as any)._metrics, 'flushCoalesced').mockResolvedValue(undefined)
     await instrumentRequest(posthog, new Request('http://localhost/x'), () => new Response('ok'))
     expect(flush).toHaveBeenCalled()
     expect(waitUntil).toHaveBeenCalled()
