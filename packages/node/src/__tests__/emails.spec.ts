@@ -722,6 +722,25 @@ describe('emails', () => {
       expect(filedUnder).toEqual(['newsletter'])
     })
 
+    it('sends the category type it checked when a getter changes its answer', async () => {
+      let typeReads = 0
+      const shiftingCategory: MessageCategory = {
+        key: 'newsletter',
+        name: 'Newsletter',
+        get type(): MessageCategory['type'] {
+          typeReads += 1
+          return typeReads === 1 ? 'marketing' : 'transactional'
+        },
+      }
+      optedOut.add('reader@example.com:newsletter')
+
+      const { data, error } = await sendIn(shiftingCategory)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'recipient_opted_out', statusCode: 422 })
+      expect(filedUnder).toEqual([])
+    })
+
     it.each([
       ['keeps the description when the send leaves it out', undefined, 'Monthly product news'],
       ['clears the description with an empty string', '', ''],
