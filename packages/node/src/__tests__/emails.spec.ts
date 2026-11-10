@@ -496,6 +496,35 @@ describe('emails', () => {
       expect(error).toMatchObject({ code: 'message_too_large', field: 'attachments__2' })
     })
 
+    it("reports a project that can't send files yet as a refusal of attachments, and sends nothing", async () => {
+      replies = [
+        {
+          status: 400,
+          body: {
+            type: 'invalid_request',
+            code: 'field_not_accepted',
+            detail: "This project can't send files yet, so PostHog didn't prepare the uploads.",
+            attr: 'files',
+            why: "Sending files isn't available to this project yet.",
+            fix: 'Send the email without files, or try again once files are available to this project.',
+          },
+        },
+      ]
+
+      const { data, error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'field_not_accepted',
+        name: 'validation_error',
+        statusCode: 400,
+        field: 'attachments',
+        message: "This project can't send files yet, so PostHog didn't prepare the uploads.",
+        fix: 'Send the email without files, or try again once files are available to this project.',
+      })
+      expect(requests()).toEqual([`POST ${UPLOADS_URL}`])
+    })
+
     it('sends nothing when an upload never reaches the file storage', async () => {
       replies = [
         filesAnswer(uploadSlot(HELLO_SHA256, 5)),

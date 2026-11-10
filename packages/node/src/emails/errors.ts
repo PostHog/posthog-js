@@ -70,9 +70,6 @@ function emailErrorName(status: number | undefined, code: string): EmailErrorNam
     }
     return code.startsWith('invalid_') || ATTACHMENT_LIMIT_CODES.has(code) ? 'validation_error' : 'application_error'
   }
-  if (code === 'field_not_accepted') {
-    return 'validation_error'
-  }
   if (code === 'attachment_upload_failed') {
     return status >= 500 ? 'service_unavailable' : 'application_error'
   }

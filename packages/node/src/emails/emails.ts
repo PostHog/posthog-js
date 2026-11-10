@@ -110,9 +110,11 @@ interface PreparedSend {
   maxRetries: number
 }
 
-interface UploadTarget {
+interface Upload {
   url: string
   headers: Record<string, string>
+  bytes: Uint8Array<ArrayBuffer>
+  field: string
 }
 
 interface Reply {
@@ -226,22 +228,19 @@ export class EmailSender implements Emails {
       files: requested.map(({ sha256, bytes }) => ({ sha256, size: bytes.byteLength })),
     })
     const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
-    const targets = await this.withRetries(maxRetries, async () =>
+    const uploads = await this.withRetries(maxRetries, async () =>
       parseUploadsReply(await this.request(appHost + UPLOADS_PATH, 'POST', headers, body), requested)
     )
-    for (const file of requested) {
-      const target = targets.get(file.sha256)
-      if (target) {
-        await this.withRetries(maxRetries, () => this.uploadFile(target, file))
-      }
+    for (const upload of uploads) {
+      await this.withRetries(maxRetries, () => this.uploadFile(upload))
     }
     return hashed.map(attachmentReference)
   }
 
-  private async uploadFile(target: UploadTarget, { bytes, field }: HashedFile): Promise<void> {
+  private async uploadFile({ url, headers, bytes, field }: Upload): Promise<void> {
     let reply: Reply
     try {
-      reply = await this.request(target.url, 'PUT', target.headers, bytes)
+      reply = await this.request(url, 'PUT', headers, bytes)
     } catch (cause) {
       if (cause instanceof Error && cause.name === 'AbortError') {
         throw new EmailError({
@@ -654,10 +653,7 @@ function parseStatusReply({ status, text: body, retryAfterMs }: Reply): EmailSta
   return { id, status: deliveryStatus, createdAt, statusAt, reason: text(fields.reason) ?? null }
 }
 
-function parseUploadsReply(
-  { status, text: body, retryAfterMs }: Reply,
-  requested: HashedFile[]
-): Map<string, UploadTarget> {
+function parseUploadsReply({ status, text: body, retryAfterMs }: Reply, requested: HashedFile[]): Upload[] {
   const fields = replyFields(parseJson(body))
   if (status === 404) {
     throw replyError({ code: 'not_found', ...fields, attr: text(fields.attr) ?? 'attachments' }, status, retryAfterMs)
@@ -666,8 +662,8 @@ function parseUploadsReply(
     throw replyError({ ...fields, attr: callerField(text(fields.attr), requested) }, status, retryAfterMs)
   }
   const answers = Array.isArray(fields.files) ? fields.files.map(replyFields) : []
-  const targets = new Map<string, UploadTarget>()
-  for (const { sha256 } of requested) {
+  const uploads: Upload[] = []
+  for (const { sha256, bytes, field } of requested) {
     const answer = answers.find((file) => file.sha256 === sha256)
     if (answer?.status === 'present') {
       continue
@@ -680,14 +676,18 @@ function parseUploadsReply(
         statusCode: status,
       })
     }
-    targets.set(sha256, { url, headers: answer.headers })
+    uploads.push({ url, headers: answer.headers, bytes, field })
   }
-  return targets
+  return uploads
 }
 
+/** The upload route names `files` or `files__<i>`, indexing the asked files; the caller passed `attachments`. */
 function callerField(attr: string | undefined, requested: HashedFile[]): string | undefined {
-  const file = attr === undefined ? null : /^files__(\d+)(?:__|$)/.exec(attr)
-  return file ? (requested[Number(file[1])]?.field ?? 'attachments') : attr
+  const file = attr === undefined ? null : /^files(?:__(\d+))?(?:__|$)/.exec(attr)
+  if (!file) {
+    return attr
+  }
+  return file[1] === undefined ? 'attachments' : (requested[Number(file[1])]?.field ?? 'attachments')
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {
