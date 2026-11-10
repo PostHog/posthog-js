@@ -691,7 +691,18 @@ export class PostHog extends PostHogCore {
     // Core notifies here only when no flags load follows (or after that load, which re-evaluates on its
     // own), so apply the freshly cached replay config now: without preloadFeatureFlags, or with remote
     // flags disabled, nothing else would evaluate it. The evaluation is serialized and deduplicated.
-    if (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending) {
+    // Only a response that carries replay config is applied: for `sessionRecording: false` core drops
+    // the cached config, which the evaluation would read as unrestricted and start native; the
+    // project disable is native's own `/config` to enforce. Disarm the triggers and groups armed
+    // before it too, or the next session rotation would re-evaluate into that same unrestricted start.
+    if (response.sessionRecording === false) {
+      this._sessionReplayEventTriggers = []
+      this._sessionReplayTriggerGroups = null
+      this._unregisterTriggerGroupsDebugProperties()
+      return
+    }
+    const freshReplayConfig = typeof response.sessionRecording === 'object' && response.sessionRecording !== null
+    if (freshReplayConfig && (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending)) {
       void this._evaluateAndStartSessionReplay()
     }
   }
@@ -3153,8 +3164,20 @@ export class PostHog extends PostHogCore {
     let recordingActive: boolean
     const triggerGroups = parseSessionRecordingTriggerGroups(cachedSessionReplayConfig)
     this._replayEvaluatedSessionId = super.getSessionId()
+    // Core drops the cached replay config both before the first fetch and for an explicit project
+    // disable. Only the cached /config tells them apart: without this, a disabled project reads as
+    // unrestricted v1 and any later evaluation (flags reload, rotation, restart) starts native.
+    const projectDisabled =
+      this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) == null &&
+      remoteConfig?.sessionRecording === false
 
-    if (triggerGroups) {
+    if (projectDisabled) {
+      this._logger.info('Session replay is disabled for the project.')
+      this._sessionReplayEventTriggers = []
+      this._sessionReplayTriggerGroups = null
+      this._unregisterTriggerGroupsDebugProperties()
+      recordingActive = false
+    } else if (triggerGroups) {
       this._sessionReplayEventTriggers = []
       this._sessionReplayTriggerGroups = triggerGroups
       this._triggerGroupsEvaluator.onConfig(triggerGroups)
