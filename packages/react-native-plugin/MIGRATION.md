@@ -191,7 +191,7 @@ If your app creates PostHog clients for more than one project, native events tak
 
 #### Native surveys are left out of full Swift Package Manager apps
 
-Apps on React Native's full Swift Package Manager integration no longer bundle the native surveys from `posthog-ios`. The plugin doesn't use them, because surveys render in JavaScript. The CocoaPods path still includes the full SDK.
+Apps on React Native's full Swift Package Manager integration no longer bundle the native surveys from `posthog-ios`, unless another package in the app depends on `posthog-ios` with its default traits. The plugin doesn't use them, because surveys render in JavaScript, and it keeps them turned off when they are bundled. The CocoaPods path still includes the full SDK.
 
 ### New in 3.0
 

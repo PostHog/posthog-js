@@ -29,7 +29,8 @@ let package = Package(
         ),
     ],
     dependencies: reactNativeDependencies + [
-        // Native surveys are disabled (surveys are rendered in JS), so leave out the `Surveys` trait.
+        // Surveys render in JS, so leave out the `Surveys` trait. Another package that asks for the default
+        // traits still turns it on, and the plugin then turns native surveys off at runtime.
         .package(
             url: "https://github.com/PostHog/posthog-ios.git",
             .upToNextMinor(from: "4.0.0"),
@@ -48,11 +49,7 @@ let package = Package(
                 "PosthogReactNativePlugin-Bridging-Header.h",
                 "PosthogReactNativePlugin.mm",
             ],
-            sources: ["PosthogReactNativePlugin.swift"],
-            // Without the `Surveys` trait posthog-ios has no `config.surveys`, so the plugin skips setting it.
-            // The CocoaPods path doesn't set this: `spm_dependency` can't pass traits, so it builds the
-            // surveys code and the plugin still has to turn it off.
-            swiftSettings: [.define("POSTHOG_IOS_NO_SURVEYS")]
+            sources: ["PosthogReactNativePlugin.swift"]
         ),
         // SwiftPM cannot compile Swift and Objective-C++ in one target. The
         // RCT_EXTERN_MODULE registration bridge is independent and is linked
