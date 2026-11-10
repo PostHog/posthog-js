@@ -30,22 +30,37 @@ test.describe('CSS source across session rotation', () => {
             await start(
                 {
                     options: { session_recording: { compress_events: false } },
+                    // array.js lazy-loads today's recorder, so the compatibility job pairs it with a published core.
+                    url: './playground/cypress/index.html',
                     runBeforePostHogInit: async (page) => {
-                        // Exercise today's CDN recorder even when the compatibility job supplies an older full core.
-                        await page.addScriptTag({ url: 'https://localhost:1234/static/lazy-recorder.js' })
                         await page.evaluate(() => {
                             const win = window as FixtureWindow
                             win.forwardedAfterCancel = false
-                            const initialize = win.__PosthogExtensions__!.initSessionRecording!
-                            win.__PosthogExtensions__!.initSessionRecording = (...args) => {
-                                const recorder = initialize(...args)
-                                const emit = recorder.onRRwebEmit.bind(recorder)
-                                recorder.onRRwebEmit = (event) => {
-                                    if (win.cancelledDuringStartup && event.type === 2) win.forwardedAfterCancel = true
-                                    emit(event)
+                            type Initialize = NonNullable<
+                                NonNullable<FixtureWindow['__PosthogExtensions__']>['initSessionRecording']
+                            >
+                            const wrap =
+                                (initialize: Initialize): Initialize =>
+                                (...args) => {
+                                    const recorder = initialize(...args)
+                                    const emit = recorder.onRRwebEmit.bind(recorder)
+                                    recorder.onRRwebEmit = (event) => {
+                                        if (win.cancelledDuringStartup && event.type === 2)
+                                            win.forwardedAfterCancel = true
+                                        emit(event)
+                                    }
+                                    return recorder
                                 }
-                                return recorder
-                            }
+                            // The lazy recorder registers initSessionRecording after this runs.
+                            const extensions = (win.__PosthogExtensions__ ??= {})
+                            let wrapped: Initialize | undefined
+                            Object.defineProperty(extensions, 'initSessionRecording', {
+                                configurable: true,
+                                get: () => wrapped,
+                                set: (initialize: Initialize) => {
+                                    wrapped = wrap(initialize)
+                                },
+                            })
                             win.nativeStyleGetter = Object.getOwnPropertyDescriptor(
                                 CSSStyleRule.prototype,
                                 'style'

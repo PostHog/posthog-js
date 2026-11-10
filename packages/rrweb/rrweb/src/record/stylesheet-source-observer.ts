@@ -131,6 +131,16 @@ function initSourceGuard(win: IWindow): listenerHandler {
       observeDeclaration(ruleType.prototype, 'insertRule');
       observeDeclaration(ruleType.prototype, 'deleteRule');
     }
+    // Nested style rules define their own rule-list methods instead of inheriting them.
+    const styleRulePrototype = win.CSSStyleRule?.prototype;
+    for (const name of ['insertRule', 'deleteRule']) {
+      if (
+        styleRulePrototype &&
+        Object.prototype.hasOwnProperty.call(styleRulePrototype, name)
+      ) {
+        observeDeclaration(styleRulePrototype, name);
+      }
+    }
     const rulePrototype = win.CSSRule?.prototype;
     if (
       rulePrototype &&

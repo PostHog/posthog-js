@@ -681,6 +681,71 @@ describe('CSS variable shorthand sources', () => {
     },
   );
 
+  it('does not reuse stale source after nested style-rule list edits', async () => {
+    const result = await page.evaluate(async () => {
+      const api = (
+        window as unknown as {
+          rrweb: { record: typeof record; Replayer: typeof Replayer };
+        }
+      ).rrweb;
+      const ownMethods = Object.prototype.hasOwnProperty.call(
+        CSSStyleRule.prototype,
+        'insertRule',
+      );
+      const originalInsert = CSSStyleRule.prototype.insertRule;
+      const originalDelete = CSSStyleRule.prototype.deleteRule;
+      document.querySelector('#card')!.innerHTML =
+        '<span class="child">Nested fixture</span>';
+      const events: eventWithTime[] = [];
+      const stop = api.record({ emit: (event) => events.push(event) });
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(
+        ':root { --p: 8px; --q: 16px; }' +
+          '#card { color: red; & .child { padding: var(--p); padding-left: 12px; display: block; } }',
+      );
+      document.adoptedStyleSheets = [sheet];
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const parent = sheet.cssRules[1] as CSSStyleRule;
+      const before = parent.cssText;
+      parent.deleteRule(0);
+      parent.insertRule(
+        '& .child { padding: var(--q); padding-left: 12px; display: block; }',
+        0,
+      );
+      const checkpoint = events.length;
+      api.record.takeFullSnapshot();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      stop?.();
+      const snapshot = events.slice(checkpoint);
+      const root = document.createElement('div');
+      document.body.append(root);
+      const replayer = new api.Replayer([events[0], ...snapshot], {
+        root,
+        mouseTail: false,
+      });
+      replayer.pause(100);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const replayDoc = replayer.iframe.contentDocument!;
+      const result = {
+        ownMethods,
+        sameCssText: parent.cssText === before,
+        live: getComputedStyle(document.querySelector('.child')!).paddingTop,
+        replay: replayDoc.defaultView!.getComputedStyle(
+          replayDoc.querySelector('.child')!,
+        ).paddingTop,
+        restored:
+          CSSStyleRule.prototype.insertRule === originalInsert &&
+          CSSStyleRule.prototype.deleteRule === originalDelete,
+      };
+      replayer.destroy();
+      return result;
+    });
+    expect(result.sameCssText).toBe(true);
+    expect(result.live).toBe('16px');
+    expect(result.replay).not.toBe('8px');
+    expect(result.restored).toBe(true);
+  });
+
   it('does not overwrite a later keyframe method wrapper on stop', async () => {
     const preserved = await page.evaluate(() => {
       const api = (window as unknown as { rrweb: { record: typeof record } })
