@@ -955,6 +955,7 @@
         "_storesIdentityInCookie",
         "_strategy",
         "_stripUrlHash",
+        "_styleRuleSourceHandoff",
         "_subscribeSession",
         "_suppressNextFreshStartHold",
         "_suppressionRules",
