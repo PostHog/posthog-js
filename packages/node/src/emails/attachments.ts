@@ -27,10 +27,6 @@ interface CheckedAttachment {
   contentId?: string
 }
 
-/**
- * The files of a send, copied at the call. Refuses a list PostHog would refuse, before any request, and checks the
- * email's size before it copies any file.
- */
 export function attachmentFiles(attachments: unknown, bodies: string[]): AttachmentFile[] {
   if (!Array.isArray(attachments)) {
     throw invalid('attachments must be a list of files.', 'attachments')

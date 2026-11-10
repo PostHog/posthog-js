@@ -728,14 +728,12 @@ function isRetryable(error: EmailError): boolean {
     return error.code === 'network_error'
   }
   if (error.code === 'attachment_upload_failed') {
-    // A PUT carries the same bytes and checksum to the same URL, so a retry can't store a different file.
     return error.statusCode === 429 || error.statusCode >= 500
   }
   if (error.statusCode === 409) {
     return error.code === 'idempotency_key_in_flight'
   }
   if (error.statusCode === 429) {
-    // Waiting doesn't fix a monthly quota or a daily upload quota.
     return error.code !== 'quota_limited' && error.code !== 'upload_quota_exceeded'
   }
   return error.statusCode === 503
