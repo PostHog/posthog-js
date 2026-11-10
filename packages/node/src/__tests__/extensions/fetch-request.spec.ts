@@ -184,6 +184,24 @@ describe('fetch request instrumentation', () => {
     expect((await reader.read()).done).toBe(true)
   })
 
+  it('ends the request context of a HEAD request even when the route returned a body', async () => {
+    let release!: () => void
+    const released = new Promise<void>((resolve) => (release = resolve))
+    let detached: Promise<unknown> | undefined
+    const response = await instrumentRequest(
+      posthog,
+      new Request('http://localhost/x', { method: 'HEAD', headers: { 'x-posthog-session-id': 'head-session' } }),
+      () => {
+        detached = released.then(() => posthog.getContext())
+        // Like Hono, which runs the GET route and drops its body without reading it.
+        return new Response('ok')
+      }
+    )
+    expect(response.bodyUsed).toBe(false)
+    release()
+    expect(await detached).toBeUndefined()
+  })
+
   it('ends the streamed request context when the consumer cancels', async () => {
     const body = new ReadableStream<Uint8Array>({ pull: () => new Promise(() => {}) })
     const response = await instrumentRequest(posthog, new Request('http://localhost/stream'), () => new Response(body))

@@ -166,7 +166,7 @@ export class PostHogMetrics {
    * backing off it starts nothing and the retry timer owns the next send.
    */
   flushCoalesced(): Promise<void> {
-    if (this._consecutiveFlushFailures > 0 || this._retryAfter.remainingMs() > 0) {
+    if (this._isBackingOff()) {
       return this._flushPromise ?? Promise.resolve()
     }
     if (!this._queuedFlush) {
@@ -175,10 +175,15 @@ export class PostHogMetrics {
         .catch(() => {})
         .then(() => {
           this._queuedFlush = null
-          return this.flush()
+          // The send it waited behind may have failed and started a backoff.
+          return this._isBackingOff() ? undefined : this.flush()
         })
     }
     return this._queuedFlush
+  }
+
+  private _isBackingOff(): boolean {
+    return this._consecutiveFlushFailures > 0 || this._retryAfter.remainingMs() > 0
   }
 
   /**

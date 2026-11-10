@@ -86,6 +86,31 @@ describe('PostHogMetrics', () => {
       expect(sentMetrics().reduce((sum, m) => sum + m.sum!.dataPoints[0].asDouble!, 0)).toBe(6)
     })
 
+    it('does not start a queued flush when the send it waited behind starts a backoff', async () => {
+      let resolveSend!: (o: SendMetricsBatchOutcome) => void
+      mockInstance._sendMetricsBatch
+        .mockImplementationOnce(() => new Promise<SendMetricsBatchOutcome>((r) => (resolveSend = r)))
+        .mockResolvedValue({ kind: 'ok' })
+      const metrics = createMetrics()
+
+      metrics.count('requests', 1)
+      const first = metrics.flushCoalesced()
+      await Promise.resolve()
+      await Promise.resolve()
+      metrics.count('requests', 1)
+      const queued = metrics.flushCoalesced()
+
+      resolveSend({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      await Promise.all([first, queued])
+      expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      // The retry timer delivers the retained samples once the backoff ends.
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+      const retried = sentPayloads()[1].resourceMetrics[0].scopeMetrics[0].metrics
+      expect(retried[0].sum!.dataPoints[0].asDouble).toBe(2)
+    })
+
     it('does not send while a failed send is backing off', async () => {
       mockInstance._sendMetricsBatch.mockResolvedValueOnce({
         kind: 'retry-later',

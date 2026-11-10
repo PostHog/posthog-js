@@ -212,7 +212,9 @@ async function instrument(
             }
             // The duration covers the time to the response, not the body. The context stays open
             // until the body ends, so work done while streaming stays attributed to this request.
-            if (response?.body) {
+            // A HEAD response sends no content (frameworks such as Hono drop the GET route's body
+            // without reading it), so it is complete once returned.
+            if (response?.body && method !== 'HEAD') {
               streaming = true
               return holdUntilBodySettles(response, () => lifetime.abort())
             }
@@ -258,11 +260,9 @@ function holdUntilBodySettles(response: Response, settle: () => void): Response 
       }
     },
   })
-  return new Response(body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-  })
+  // The original response as the initializer keeps runtime-specific state, such as Workers'
+  // `encodeBody: 'manual'` for precompressed bodies, that a status/headers copy drops.
+  return new Response(body, response)
 }
 
 /** The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency. */
