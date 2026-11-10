@@ -1501,16 +1501,19 @@ async function matchPropertyGroup(
   flagDependencyEvaluator?: FlagDependencyEvaluator,
   propertyMatchingVersion?: number
 ): Promise<boolean> {
-  if (!propertyGroup) {
+  // The backend's canonical empty PropertyGroup is {}.
+  if (!propertyGroup || Object.keys(propertyGroup).length === 0) {
     return true
   }
 
-  const propertyGroupType = propertyGroup.type
+  const propertyGroupType = (propertyGroup.type as string) === 'property' ? 'AND' : propertyGroup.type
+  if (propertyGroupType !== 'AND' && propertyGroupType !== 'OR') {
+    throw new RequiresServerEvaluation(`Unsupported cohort property group type: ${propertyGroup.type}`)
+  }
   const properties = propertyGroup.values
 
   if (!properties || properties.length === 0) {
-    // empty groups are no-ops, always match
-    return true
+    return propertyGroupType === 'AND'
   }
 
   let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
