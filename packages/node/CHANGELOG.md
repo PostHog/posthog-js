@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.68.2
+
+### Patch Changes
+
+- [#5637](https://github.com/PostHog/posthog-js/pull/5637) [`5fc2aab`](https://github.com/PostHog/posthog-js/commit/5fc2aabfda1ddd494f520f2f69e0ddf8bbedea4b) Thanks [@andehen](https://github.com/andehen)! - With `POSTHOG_CAPTURE_MODE=v1`, capture now retries `404` and `429` responses like `408` and `5xx` instead of failing the batch at once.
+  (2026-11-10)
+
 ## 5.68.1
 
 ### Patch Changes
