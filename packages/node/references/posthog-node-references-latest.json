@@ -2982,6 +2982,7 @@
       "name": "MessageCategory",
       "properties": [
         {
+          "description": "Notes about which emails belong to the category. Without it, an existing category keeps its description.",
           "type": "string",
           "name": "description"
         },
@@ -2991,7 +2992,7 @@
           "name": "key"
         },
         {
-          "description": "The name recipients see on their email preferences page.",
+          "description": "The category's name, shown in PostHog.",
           "type": "string",
           "name": "name"
         },

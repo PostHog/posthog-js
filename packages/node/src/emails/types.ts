@@ -31,8 +31,9 @@ export interface MessageCategory {
   key: string
   /** A marketing category honors the recipient's opt-outs. A transactional one only files the email. */
   type: 'marketing' | 'transactional'
-  /** The name recipients see on their email preferences page. */
+  /** The category's name, shown in PostHog. */
   name: string
+  /** Notes about which emails belong to the category. Without it, an existing category keeps its description. */
   description?: string
 }
 
