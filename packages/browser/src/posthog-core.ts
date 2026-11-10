@@ -557,6 +557,7 @@ export class PostHog implements PostHogInterface {
     private _replayDebugPropertiesPaused = false
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
+    private _hasWarnedAboutMissingHistoryAutocapture = false
     private _isConsentTransition = false
 
     private _removeExtension<T extends Extension>(extension: T | undefined): void {
@@ -589,6 +590,44 @@ export class PostHog implements PostHogInterface {
     // its events from person pages and the session tab. Warn once, when person processing is first requested,
     // unless a stable ID is supplied.
     // Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
+    // Bundles without default extensions (module.slim) only create HistoryAutocapture when it is passed via
+    // __extensionClasses. Without it, a history-based capture_pageview captures the first pageview of each
+    // page load and drops every SPA navigation. The first pageview still arrives, so the setup looks healthy.
+    // Warn once, and only when the app set capture_pageview itself: the 'history_change' that comes from
+    // `defaults` is also what multi-page sites get, and they lose nothing without the extension.
+    private _warnIfHistoryAutocaptureMissing(): void {
+        if (this._hasWarnedAboutMissingHistoryAutocapture) {
+            return
+        }
+        if (!this._originalUserConfig || !('capture_pageview' in this._originalUserConfig)) {
+            return
+        }
+        const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
+        if (ext.historyAutocapture) {
+            return
+        }
+        // Mirrors HistoryAutocapture.isEnabled
+        const capturePageview = this.config.capture_pageview
+        const tracksHistory =
+            capturePageview === 'history_change' ||
+            (isObject(capturePageview) &&
+                !!(
+                    capturePageview.path ||
+                    capturePageview.search ||
+                    (capturePageview.hash && !this.config.disable_capture_url_hashes)
+                ))
+        if (!tracksHistory) {
+            return
+        }
+        this._hasWarnedAboutMissingHistoryAutocapture = true
+        logger.warn(
+            'capture_pageview is set to capture history changes, but the history autocapture extension is not ' +
+                'loaded, so only the first pageview of each page load is captured. With the slim bundle, pass ' +
+                "__extensionClasses: { historyAutocapture: AnalyticsExtensions.historyAutocapture } from 'posthog-js/dist/extension-bundles', " +
+                'or set capture_pageview: true to capture page loads only.'
+        )
+    }
+
     private _warnIfVolatileIdentityWithoutStableId(): void {
         if (this._hasWarnedAboutVolatileIdentity) {
             return
@@ -1235,6 +1274,7 @@ export class PostHog implements PostHogInterface {
         if (ext.historyAutocapture) {
             this._extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
         }
+        this._warnIfHistoryAutocaptureMissing()
         if (ext.tracingHeaders) {
             this._extensions.push((this.tracingHeaders = new ext.tracingHeaders(this)))
         }
