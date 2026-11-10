@@ -59,6 +59,8 @@ export interface FakePostHogOptions {
   uploadQuotaBytes?: number
   messageLimitBytes?: number
   uploadUrlTtlMs?: number
+  appHost?: string
+  storageOrigin?: string
 }
 
 export interface QueuedAttachment {
@@ -135,6 +137,8 @@ export class FakePostHog {
       uploadQuotaBytes: Number.MAX_SAFE_INTEGER,
       messageLimitBytes: MESSAGE_LIMIT_BYTES,
       uploadUrlTtlMs: UPLOAD_URL_TTL_MS,
+      appHost: APP_HOST,
+      storageOrigin: STORAGE_ORIGIN,
       ...options,
     }
   }
@@ -152,7 +156,7 @@ export class FakePostHog {
   }
 
   readonly fetch = async (url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> => {
-    const route = routeOf(url)
+    const route = this.routeOf(url)
     const fault = route ? this.faults[route].shift() : undefined
     if (fault === 'network error') {
       throw new TypeError('fetch failed', { cause: new Error('ECONNRESET') })
@@ -197,6 +201,16 @@ export class FakePostHog {
       default:
         return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
     }
+  }
+
+  private routeOf(url: string): Route | undefined {
+    if (url === this.options.appHost + UPLOADS_PATH) {
+      return 'uploads'
+    }
+    if (url === this.options.appHost + SEND_PATH) {
+      return 'send'
+    }
+    return url.startsWith(`${this.options.storageOrigin}/`) ? 'storage' : undefined
   }
 
   private recover(route: Route): void {
@@ -260,7 +274,7 @@ export class FakePostHog {
             return { sha256, status: 'present', expires_at: new Date(now + FILE_TTL_MS).toISOString() }
           }
           const expiresAt = now + this.options.uploadUrlTtlMs
-          const url = `${STORAGE_ORIGIN}/team/2/${sha256}?X-Amz-Expires=900&X-Amz-Signature=${globalThis.crypto.randomUUID()}`
+          const url = `${this.options.storageOrigin}/team/2/${sha256}?X-Amz-Expires=900&X-Amz-Signature=${globalThis.crypto.randomUUID()}`
           const checksum = toBase64(fromHex(sha256))
           this.issued.set(url, { sha256, size, checksum, expiresAt })
           return {
@@ -357,7 +371,7 @@ export class FakePostHog {
     if (capture_engagement !== undefined && typeof capture_engagement !== 'boolean') {
       throw invalidField('capture_engagement', 'Must be a valid boolean.')
     }
-    const attachments = this.attachmentsOf(body.attachments, [html ?? '', text ?? ''], subject)
+    const attachments = this.attachmentsOf(body.attachments, [html ?? '', text || textFromHtml(html ?? '')], subject)
     return {
       to,
       cc: addresses(body.cc, 'cc'),
@@ -432,16 +446,6 @@ export class FakePostHog {
       })
     }
   }
-}
-
-function routeOf(url: string): Route | undefined {
-  if (url === APP_HOST + UPLOADS_PATH) {
-    return 'uploads'
-  }
-  if (url === APP_HOST + SEND_PATH) {
-    return 'send'
-  }
-  return url.startsWith(`${STORAGE_ORIGIN}/`) ? 'storage' : undefined
 }
 
 function faultAnswer(route: Route, { status, code, message, page }: Exclude<Fault, string>): Answer {
@@ -607,6 +611,10 @@ function optionalString(value: unknown, attr: string): asserts value is string |
 
 function hasControlCharacter(text: string): boolean {
   return Array.from(text).some((character) => character.charCodeAt(0) < 0x20 || character.charCodeAt(0) === 0x7f)
+}
+
+function textFromHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '')
 }
 
 function isRecord(value: unknown): value is Json {

@@ -643,12 +643,12 @@ describe('emails', () => {
     })
 
     it.each([
-      ['57 ASCII bytes, counted as 78', 29_182_764, true, 'a'.repeat(57)],
-      ['57 ASCII bytes, counted as 78', 29_182_765, false, 'a'.repeat(57)],
-      ['57 two-byte characters, counted as 156', 29_182_707, true, 'é'.repeat(57)],
-      ['57 two-byte characters, counted as 156', 29_182_708, false, 'é'.repeat(57)],
+      ['57 ASCII bytes, counted as 78', 29_182_707, true, 'a'.repeat(57)],
+      ['57 ASCII bytes, counted as 78', 29_182_708, false, 'a'.repeat(57)],
+      ['57 two-byte characters, counted as 156', 29_182_593, true, 'é'.repeat(57)],
+      ['57 two-byte characters, counted as 156', 29_182_594, false, 'é'.repeat(57)],
     ])(
-      'counts an html body of %s like a file, beside a file of %i bytes (fits: %s)',
+      'counts an html body of %s like a file, and again for the text PostHog derives from it, beside a file of %i bytes (fits: %s)',
       async (_name, size, fits, html) => {
         const fake = againstPostHog()
 
@@ -667,6 +667,63 @@ describe('emails', () => {
         }
       }
     )
+
+    it.each([
+      ['refuses it locally without a text body, since PostHog derives one from the html', {}, false],
+      ['sends it beside a text body', { text: 'Thanks' }, true],
+    ])('counts an html body that fits once but not twice: %s', async (_name, content, sent) => {
+      const fake = againstPostHog()
+
+      const { error } = await posthog.emails.send({
+        ...RECEIPT,
+        html: 'a'.repeat(5_700),
+        ...content,
+        attachments: [{ filename: 'scan.pdf', content: new Uint8Array(29_177_115) }],
+      })
+
+      if (sent) {
+        expect(error).toBeNull()
+        expect(fake.emails.map(({ attachments }) => attachments[0].bytes.byteLength)).toEqual([29_177_115])
+      } else {
+        expect(error).toMatchObject({ code: 'message_too_large', field: 'attachments', statusCode: undefined })
+        expectNothingSent(fake)
+      }
+    })
+
+    it("refuses an upload URL that isn't https before any upload, and keeps the URL out of the error", async () => {
+      const fake = againstPostHog({ storageOrigin: 'http://email-files.s3.example.com' })
+
+      const { data, error } = await sendFiles([
+        { filename: 'hello.txt', content: Buffer.from('hello') },
+        { filename: 'logo.png', content: new Uint8Array(LOGO) },
+      ])
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'api_error',
+        field: 'attachments__0',
+        message:
+          "PostHog named an upload URL for attachments__0 that isn't https, so the file would travel unencrypted. No email was sent.",
+        fix: "Make your PostHog's file storage URL use https. For local development over plain HTTP, set appHost to your http app host.",
+      })
+      expectNothingSent(fake)
+    })
+
+    it('uploads over plain HTTP when the client sends to a plain-HTTP app host for local development', async () => {
+      const fake = new FakePostHog({
+        secretKey: SECRET_KEY,
+        appHost: 'http://localhost:8010',
+        storageOrigin: 'http://localhost:19000',
+      })
+      makeClient({ appHost: 'http://localhost:8010', fetch: fake.fetch })
+
+      const { data, error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toBeNull()
+      expect(fake.emails).toEqual([
+        expect.objectContaining({ id: data?.id, attachments: [{ filename: 'hello.txt', bytes: utf8('hello') }] }),
+      ])
+    })
 
     it.each([
       ['42 ASCII bytes, counted as 75', 'x'.repeat(42), 29_182_821],

@@ -29,7 +29,10 @@ interface CheckedAttachment {
   contentId?: string
 }
 
-export function attachmentFiles(attachments: unknown, bodies: string[], subject: string): AttachmentFile[] {
+export function attachmentFiles(
+  attachments: unknown,
+  { html, text, subject }: { html?: string; text?: string; subject: string }
+): AttachmentFile[] {
   if (!Array.isArray(attachments)) {
     throw invalid('attachments must be a list of files.', 'attachments')
   }
@@ -44,7 +47,7 @@ export function attachmentFiles(attachments: unknown, bodies: string[], subject:
   const checked = Array.from(attachments, checkedAttachment)
   refuseMessageOverLimit(
     checked.map(({ size }) => size),
-    bodies,
+    [html ?? '', text || html || ''],
     subject
   )
   return checked.map(({ content, size, ...file }) => ({

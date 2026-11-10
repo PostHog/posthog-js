@@ -231,6 +231,15 @@ export class EmailSender implements Emails {
     const uploads = await this.withRetries(maxRetries, async () =>
       parseUploadsReply(await this.request(appHost + UPLOADS_PATH, 'POST', headers, body), requested)
     )
+    const unencrypted = isPlainHttp(appHost) ? undefined : uploads.find(({ url }) => !isHttps(url))
+    if (unencrypted) {
+      throw new EmailError({
+        code: 'api_error',
+        message: `PostHog named an upload URL for ${unencrypted.field} that isn't https, so the file would travel unencrypted. No email was sent.`,
+        field: unencrypted.field,
+        fix: "Make your PostHog's file storage URL use https. For local development over plain HTTP, set appHost to your http app host.",
+      })
+    }
     for (const upload of uploads) {
       await this.withRetries(maxRetries, () => this.uploadFile(upload))
     }
@@ -506,8 +515,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
   if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
   }
-  const files =
-    send.attachments === undefined ? [] : attachmentFiles(send.attachments, [html ?? '', text ?? ''], subject)
+  const files = send.attachments === undefined ? [] : attachmentFiles(send.attachments, { html, text, subject })
   return {
     content: {
       template_key: templateKey,
@@ -570,6 +578,14 @@ function invalid(code: string, message: string, field: string): EmailError {
  * The app host for a send, or undefined when the client can't tell it.
  * PostHog Cloud ingestion hosts don't serve the app API, so they map to their region's app host.
  */
+function isHttps(url: string): boolean {
+  return url.toLowerCase().startsWith('https://')
+}
+
+function isPlainHttp(url: string): boolean {
+  return url.toLowerCase().startsWith('http://')
+}
+
 function resolveAppHost(host: string, appHost: string | undefined): string | undefined {
   const explicit = typeof appHost === 'string' ? removeTrailingSlash(appHost.trim()) : ''
   if (explicit) {
