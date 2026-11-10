@@ -1,5 +1,28 @@
 # @posthog/mcp
 
+## 1.1.0
+
+### Minor Changes
+
+- [#5597](https://github.com/PostHog/posthog-js/pull/5597) [`4d0681f`](https://github.com/PostHog/posthog-js/commit/4d0681fc2843c1299bf3955884dbcb4944518f74) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat: add `sessionId` and `clientInfo` options so stateless per-request servers can supply the session id and client name for each request
+  (2026-11-10)
+
+### Patch Changes
+
+- Updated dependencies [[`fb313fe`](https://github.com/PostHog/posthog-js/commit/fb313fe7f5259fc104cff213aa07c24d03fbfd23), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - posthog-node@5.65.0
+  - @posthog/core@1.66.0
+
+## 1.0.1
+
+### Patch Changes
+
+- [#5607](https://github.com/PostHog/posthog-js/pull/5607) [`fac34e4`](https://github.com/PostHog/posthog-js/commit/fac34e4b57b8fd0bdc5acb11451891adbe53f36f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Fix intent and payload capture bugs: a long digit run no longer drops `$mcp_intent` with a stack overflow (card redaction is otherwise unchanged), captured tool arguments are limited before they are sanitized and credential-named arguments are not walked, and `$mcp_feedback_<name>` object extras redact identifiers in keys and numbers. A parsed `__proto__` argument is still dropped, as before.
+  (2026-11-09)
+- Updated dependencies [[`fac34e4`](https://github.com/PostHog/posthog-js/commit/fac34e4b57b8fd0bdc5acb11451891adbe53f36f), [`bfbaff7`](https://github.com/PostHog/posthog-js/commit/bfbaff7e597428cdd6f683c78e60e651f6d2c590)]:
+  - @posthog/core@1.65.0
+  - posthog-node@5.64.0
+
 ## 1.0.0
 
 ### Major Changes
