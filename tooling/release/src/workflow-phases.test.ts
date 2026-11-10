@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -23,6 +23,16 @@ function dependencies(block: string): string[] {
     const match = block.match(/^ {8}needs:\s*\[([^\]]+)\]/m)
     assert.ok(match)
     return match[1].split(',').map((id) => id.trim())
+}
+function stepScript(block: string, name: string): string {
+    const start = block.indexOf(`name: ${name}`)
+    assert.notEqual(start, -1, `Missing step ${name}`)
+    const script = block.slice(start).match(/ {14}run: \|\n((?: {18}.*\n|\n)+)/)?.[1]
+    assert.ok(script)
+    return script.replace(/^ {18}/gm, '')
+}
+function runScript(script: string, env: Record<string, string>, cwd?: string): SpawnSyncReturns<string> {
+    return spawnSync('bash', ['-c', script], { cwd, env: { ...process.env, ...env }, encoding: 'utf8' })
 }
 function assertSameArtifacts(first: string, second: string) {
     const artifacts = [...first.matchAll(/ {18}name: (.*dist.*)/g)]
@@ -74,24 +84,18 @@ test('recovery has the same barrier, retains explicit force only in immutable ph
     assert.match(recovery, /Updating latest CDN aliases requires region=all/)
 })
 
-test('npm gate fails closed for failed, cancelled or skipped alias promotion', () => {
-    const gate = job(release, 'gate-posthog-js-publish')
-    const step = gate.slice(gate.indexOf('            - name: Require successful'))
-    const script = step.match(/ {14}run: \|\n((?: {18}.*\n|\n)+)/)?.[1]
-    assert.ok(script)
-    const run = script.replace(/^ {18}/gm, '')
+test('npm gate fails closed for failed, cancelled or skipped alias promotion on main only', () => {
+    const run = stepScript(job(release, 'gate-posthog-js-publish'), 'Require successful')
     for (const result of ['success', 'failure', 'cancelled', 'skipped', '']) {
-        const child = spawnSync('bash', ['-c', run], {
-            env: {
-                ...process.env,
-                BUILD_RESULT: 'success',
-                CHECK_RESULT: 'success',
-                IS_NEW_VERSION: 'true',
-                UPLOAD_RESULT: result,
-            },
-            encoding: 'utf8',
-        })
-        assert.equal(child.status, result === 'success' ? 0 : 1, child.stdout + child.stderr)
+        for (const env of [
+            { MAINTENANCE: 'false', BUILD_RESULT: 'success', CHECK_RESULT: 'success', IS_NEW_VERSION: 'true' },
+            // Maintenance runs skip every posthog-js S3 job.
+            { MAINTENANCE: 'true', BUILD_RESULT: 'skipped', CHECK_RESULT: 'skipped', IS_NEW_VERSION: '' },
+        ]) {
+            const child = runScript(run, { ...env, UPLOAD_RESULT: result })
+            const allowed = env.MAINTENANCE === 'true' || result === 'success'
+            assert.equal(child.status, allowed ? 0 : 1, child.stdout + child.stderr)
+        }
     }
 })
 
@@ -249,4 +253,218 @@ test('@posthog/browser reports S3 failures to the release approval thread', () =
     assert.match(notify, /actions\/slack-thread-reply@/)
     assert.match(notify, /thread_ts: \$\{\{ needs.notify-approval-needed.outputs.slack_ts \}\}/)
     assert.match(notify, /message: '❌ `@posthog\/browser` S3 release failed/)
+})
+
+test('release context allows main and listed maintenance branches only', () => {
+    const run = stepScript(job(release, 'release-context'), 'Resolve release context')
+    const main = 'branch=main\nmaintenance=false\npackage=\ndist-tag=latest\n'
+    const node5 = 'branch=posthog-node-5\nmaintenance=true\npackage=posthog-node\ndist-tag=latest-5\n'
+    const cases: [Record<string, string>, string | null][] = [
+        [{ BRANCH: 'main' }, main],
+        [{ BRANCH: 'main', RECOVERY: 'true' }, main],
+        [{ BRANCH: 'main', DRY_RUN: 'true' }, null],
+        [{ BRANCH: 'posthog-node-5' }, node5],
+        [{ BRANCH: 'posthog-node-5', DRY_RUN: 'true' }, node5],
+        [{ BRANCH: 'posthog-node-5', RECOVERY: 'true' }, null],
+        [{ BRANCH: 'posthog-node-6' }, null],
+        [{ BRANCH: 'main', REF_TYPE: 'tag' }, null],
+    ]
+    const root = mkdtempSync(path.join(os.tmpdir(), 'release-context-'))
+    try {
+        for (const [env, expected] of cases) {
+            const output = path.join(root, 'output')
+            writeFileSync(output, '')
+            const child = runScript(run, {
+                REF_TYPE: 'branch',
+                DRY_RUN: 'false',
+                RECOVERY: 'false',
+                ...env,
+                GITHUB_OUTPUT: output,
+            })
+            const label = `${JSON.stringify(env)}: ${child.stdout}${child.stderr}`
+            assert.equal(child.status, expected === null ? 1 : 0, label)
+            assert.equal(readFileSync(output, 'utf8'), expected ?? '', label)
+        }
+    } finally {
+        rmSync(root, { recursive: true, force: true })
+    }
+})
+
+test('maintenance changeset guard rejects any changeset that releases another package', () => {
+    const run = stepScript(job(release, 'check-changesets'), 'Require pending changesets')
+    const allowed = {
+        'single.md': "---\n'posthog-node': patch\n---\n\nFix a bug\n",
+        'double.md': '---\n"posthog-node": minor\n---\n\nBody\n\n---\n\n@posthog/core: not front matter\n',
+        'comment.md': '---\n# note\nposthog-node: patch\n\n---\n',
+        'empty.md': '---\n---\n',
+        'crlf.md': "---\r\n'posthog-node': patch\r\n---\r\n",
+        'README.md': "---\n'@posthog/core': patch\n---\n",
+    }
+    const rejected: [string, string][] = [
+        ["---\n'@posthog/core': patch\n---\n", '@posthog/core'],
+        ["---\n'posthog-node': patch\n'@posthog/types': patch\n---\n", '@posthog/types'],
+        ["---\n'posthog-js-lite': patch\n---\n", 'posthog-js-lite'],
+        ["---\n'posthog-node-compat': patch\n---\n", 'posthog-node-compat'],
+        ["---\r\n'@posthog/ai': patch\r\n---\r\n", '@posthog/ai'],
+        ['---\nnot a release line\n---\n', 'not a release line'],
+    ]
+    const guard = (files: Record<string, string>): SpawnSyncReturns<string> => {
+        const root = mkdtempSync(path.join(os.tmpdir(), 'changeset-scope-'))
+        try {
+            mkdirSync(path.join(root, '.changeset'))
+            for (const [name, contents] of Object.entries(files)) {
+                writeFileSync(path.join(root, '.changeset', name), contents)
+            }
+            return runScript(run, { RELEASE_BRANCH: 'posthog-node-5', RELEASE_PACKAGE: 'posthog-node' }, root)
+        } finally {
+            rmSync(root, { recursive: true, force: true })
+        }
+    }
+    for (const files of [{}, allowed]) {
+        const child = guard(files)
+        assert.equal(child.status, 0, child.stdout + child.stderr)
+        assert.match(child.stdout, /Pending changesets release only posthog-node/)
+    }
+    for (const [contents, release] of rejected) {
+        const child = guard({ ...allowed, 'stray.md': contents })
+        assert.equal(child.status, 1, child.stdout + child.stderr)
+        assert.ok(child.stdout.includes(`::error file=.changeset/stray.md::Releases '${release}'`), child.stdout)
+    }
+})
+
+test('the changeset guard runs before approval, after the version-bump pull and in the dry run', () => {
+    const assertOrder = (block: string, ...markers: string[]) => {
+        const positions = markers.map((marker) => block.indexOf(marker))
+        assert.ok(!positions.includes(-1), `Missing one of ${markers.join(', ')}`)
+        assert.deepEqual(
+            positions,
+            [...positions].sort((a, b) => a - b),
+            `Out of order: ${markers.join(', ')}`
+        )
+    }
+    const check = job(release, 'check-changesets')
+    assertOrder(check, '- &changeset-scope-guard', '- name: Check for changesets')
+    assert.match(check, /if: needs.release-context.outputs.maintenance == 'true'\n/)
+    assertOrder(
+        job(release, 'version-bump'),
+        'git pull --ff-only origin "$RELEASE_BRANCH"',
+        '- *changeset-scope-guard',
+        '- name: Update versions and changelogs'
+    )
+    assertOrder(
+        job(release, 'maintenance-dry-run'),
+        '- *changeset-scope-guard',
+        '- name: Update versions and changelogs'
+    )
+})
+
+test('maintenance releases skip posthog-js, browser CDN, recovery and PostHog/posthog upgrade jobs', () => {
+    for (const id of [
+        'recover-posthog-js-s3',
+        'check-browser-version',
+        'check-posthog-browser-version',
+        'publish-posthog-js',
+        'dispatch-posthog-upgrade',
+        'notify-recovery-result',
+    ]) {
+        const block = job(release, id)
+        assert.ok(dependencies(block).includes('release-context'), id)
+        assert.match(
+            block,
+            /^ {8}if: >-\n(?: {12}.*\n)*? {12}needs\.release-context\.outputs\.maintenance == 'false' &&$/m,
+            id
+        )
+    }
+    const publish = job(release, 'publish')
+    assert.match(
+        publish,
+        /needs.release-context.outputs.maintenance == 'false' \|\|\n {18}matrix.package.name == needs.release-context.outputs.package\n {14}uses: PostHog\/check-package-version@/
+    )
+    assert.match(publish, /latest_option=\(--latest=false\)/)
+    assert.match(job(release, 'check-changesets'), /inputs.maintenance_dry_run != true &&/)
+})
+
+test('the maintenance dry run has no approval, secrets or npm credentials', () => {
+    const dryRun = job(release, 'maintenance-dry-run')
+    assert.deepEqual(dependencies(dryRun), ['release-context'])
+    assert.match(dryRun, /permissions:\n {12}contents: read\n {8}steps:/)
+    assert.doesNotMatch(dryRun, /environment:|id-token|secrets\./)
+    assert.match(dryRun, /persist-credentials: false/)
+    assert.match(
+        dryRun,
+        /pnpm publish --filter="\$PACKAGE" --access public --no-git-checks --tag "\$DIST_TAG" --dry-run/
+    )
+})
+
+test('main publishes with its original argv and a maintenance branch publishes under its dist-tag', () => {
+    const script = stepScript(job(release, 'publish'), 'Publish ${{ matrix.package.name }} to NPM').replaceAll(
+        '${{ matrix.package.name }}',
+        'posthog-node'
+    )
+    const root = mkdtempSync(path.join(os.tmpdir(), 'publish-argv-'))
+    try {
+        const bin = path.join(root, 'bin')
+        const argvFile = path.join(root, 'argv')
+        mkdirSync(bin)
+        writeFileSync(path.join(bin, 'pnpm'), '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$ARGV_FILE"\n', { mode: 0o755 })
+        const publish = (env: Record<string, string>) => {
+            rmSync(argvFile, { force: true })
+            const child = runScript(script, { ...env, ARGV_FILE: argvFile, PATH: `${bin}:${process.env.PATH}` })
+            const argv = existsSync(argvFile) ? readFileSync(argvFile, 'utf8').trimEnd().split('\n') : null
+            return { child, argv }
+        }
+        const original = ['publish', '--filter=posthog-node', '--access', 'public', '--no-git-checks']
+        const cases: [Record<string, string>, string[] | null][] = [
+            [{ MAINTENANCE: 'false', DIST_TAG: 'latest' }, original],
+            [{ MAINTENANCE: 'false', DIST_TAG: '' }, original],
+            [{ MAINTENANCE: 'true', DIST_TAG: 'latest-5' }, [...original, '--tag', 'latest-5']],
+            [{ MAINTENANCE: 'true', DIST_TAG: '' }, null],
+        ]
+        for (const [env, expected] of cases) {
+            const { child, argv } = publish(env)
+            const label = `${JSON.stringify(env)}: ${child.stdout}${child.stderr}`
+            assert.equal(child.status, expected === null ? 1 : 0, label)
+            assert.deepEqual(argv, expected, label)
+        }
+    } finally {
+        rmSync(root, { recursive: true, force: true })
+    }
+})
+
+test('a maintenance release fails when its package version is already on npm', () => {
+    const publish = job(release, 'publish')
+    const run = stepScript(publish, 'Require unpublished maintenance release')
+    for (const [isNewVersion, status] of [
+        ['true', 0],
+        ['false', 1],
+        ['', 1],
+    ] as const) {
+        const child = runScript(run, {
+            IS_NEW_VERSION: isNewVersion,
+            PACKAGE_NAME: 'posthog-node',
+            PACKAGE_VERSION: '5.0.1',
+        })
+        assert.equal(child.status, status, child.stdout + child.stderr)
+    }
+    assert.match(
+        publish,
+        /- name: Require unpublished maintenance release\n {14}if: >-\n {18}needs.release-context.outputs.maintenance == 'true' &&\n {18}matrix.package.name == needs.release-context.outputs.package\n/
+    )
+    const order = [
+        'id: check-package-version',
+        '- name: Require unpublished maintenance release',
+        '- name: Publish ${{ matrix.package.name }} to NPM',
+    ].map((marker) => publish.indexOf(marker))
+    assert.ok(!order.includes(-1))
+    assert.deepEqual(
+        order,
+        [...order].sort((a, b) => a - b)
+    )
+})
+
+test('main keeps the release concurrency group and other branches and dry runs get their own', () => {
+    assert.match(
+        release,
+        /\nconcurrency:\n {4}group: >-\n {8}\$\{\{ inputs.maintenance_dry_run == true && format\('release-dry-run-\{0\}', github.ref_name\) \|\|\n {8}github.ref_name != 'main' && format\('release-\{0\}', github.ref_name\) \|\| 'release' \}\}\n {4}cancel-in-progress: false\n/
+    )
 })

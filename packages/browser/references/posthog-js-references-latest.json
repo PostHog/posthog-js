@@ -288,7 +288,7 @@
         },
         {
           "category": "Logs",
-          "description": "Capture a log entry and send it to the PostHog logs endpoint.",
+          "description": "Capture a log entry and send it to the PostHog logs endpoint.\nNote: logs are not subject to the user agent (bot) filter that drops events, so they are still sent from sessions whose events are dropped.",
           "details": null,
           "id": "captureLog",
           "showDocs": true,
@@ -3265,7 +3265,7 @@
           "name": "opt_out_persistence_by_default"
         },
         {
-          "description": "Determines if users should be opted out of user agent filtering such as googlebot or other bots.\nIf this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,\nbut will process all events as if they were from a browser.",
+          "description": "Determines if users should be opted out of user agent filtering such as googlebot or other bots.\nIf this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,\nbut will process all events as if they were from a browser.\n\nWhen the filter drops events, a one-time warning is written to the console (even without debug mode).\nThe filter applies to events only; logs sent with `captureLog` bypass it.\nSet this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer).",
           "type": "boolean",
           "name": "opt_out_useragent_filter"
         },
