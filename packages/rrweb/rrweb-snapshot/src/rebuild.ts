@@ -582,6 +582,11 @@ export function buildNodeWithSN(
         n.type === NodeType.Document &&
         childN.type == NodeType.Element
       ) {
+        // Defensive: a root left over after `doc.open()` throws HierarchyRequestError on append, cause unknown.
+        const existingRoot = (node as Document).documentElement;
+        if (existingRoot) {
+          node.removeChild(existingRoot);
+        }
         const htmlElement = childNode as HTMLElement;
         let body: HTMLBodyElement | null = null;
         htmlElement.childNodes.forEach((child) => {

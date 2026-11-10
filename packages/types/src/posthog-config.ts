@@ -1907,6 +1907,10 @@ export interface PostHogConfig {
      * If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,
      * but will process all events as if they were from a browser.
      *
+     * When the filter drops events, a one-time warning is written to the console (even without debug mode).
+     * The filter applies to events only; logs sent with `captureLog` bypass it.
+     * Set this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer).
+     *
      * @default false
      */
     opt_out_useragent_filter: boolean

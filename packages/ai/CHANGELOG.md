@@ -1,5 +1,29 @@
 # posthog-ai
 
+## 8.19.1
+
+### Patch Changes
+
+- [#5624](https://github.com/PostHog/posthog-js/pull/5624) [`567c5b7`](https://github.com/PostHog/posthog-js/commit/567c5b73c8125bad4baf69549ea3387b604e9190) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - OpenAI Agents `instrument()` now passes `onError` to the tracing processor it registers. It was accepted but ignored, so processor failures stayed silent.
+  (2026-11-10)
+- Updated dependencies [[`fb313fe`](https://github.com/PostHog/posthog-js/commit/fb313fe7f5259fc104cff213aa07c24d03fbfd23), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - posthog-node@5.65.0
+  - @posthog/core@1.66.0
+
+## 8.19.0
+
+### Minor Changes
+
+- [#5625](https://github.com/PostHog/posthog-js/pull/5625) [`a93bee2`](https://github.com/PostHog/posthog-js/commit/a93bee2f32562f0f901c97d89aa8fa7e09b39cf5) Thanks [@tokerson](https://github.com/tokerson)! - Support `openai` 7 alongside 6, and type `embeddings.create` with `encoding_format: 'base64'` as returning base64 strings.
+  (2026-11-09)
+
+## 8.18.6
+
+### Patch Changes
+
+- [#5609](https://github.com/PostHog/posthog-js/pull/5609) [`eb11f00`](https://github.com/PostHog/posthog-js/commit/eb11f00d30c734d2de3a5f71aa7d814343588a9f) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Report `$ai_reasoning_tokens` for Anthropic calls from `usage.output_tokens_details.thinking_tokens`, in the wrapper (streaming and non-streaming) and in the Claude Agent SDK processor.
+  (2026-11-09)
+
 ## 8.18.5
 
 ### Patch Changes
