@@ -219,18 +219,35 @@ export function getPersonInfo(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[],
     disableCaptureUrlHashes: boolean = false,
-    sanitizeReferrer?: (url: string) => string | undefined
+    sanitizeReferrer?: (url: string) => string | undefined,
+    sanitizeLandingUrl?: (url: string) => string | undefined
 ) {
     const paramsToMask = maskPersonalDataProperties
         ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
         : []
     const href = disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href
     const url = href?.substring(0, 1000)
+    const maskedUrl = url ? maskQueryParams(url, paramsToMask, MASKED) : undefined
     const referrer = sanitizeReferrer && document?.referrer ? sanitizeReferrer(document.referrer) : getReferrer()
+    const recordedUrl =
+        sanitizeLandingUrl && location?.href ? sanitizeLandingUrl(location.href)?.substring(0, 1000) : maskedUrl
+    let campaignOverrides: Record<string, string | null> | undefined
+    if (sanitizeLandingUrl) {
+        const campaigns = _getCampaignParamsFromUrl(maskedUrl || '')
+        const recordedCampaigns = _getCampaignParamsFromUrl(recordedUrl || '')
+        // Keep only changed values: campaigns still present in the URL need no extra cookie space.
+        each(campaigns, (value, key) => {
+            if (value !== recordedCampaigns[key]) {
+                campaignOverrides = campaignOverrides || {}
+                campaignOverrides[key] = value
+            }
+        })
+    }
     // we're being a bit more economical with bytes here because this is stored in the cookie
     return {
         r: referrer?.substring(0, 1000),
-        u: url ? maskQueryParams(url, paramsToMask, MASKED) : undefined,
+        u: recordedUrl,
+        ...(campaignOverrides ? { c: campaignOverrides } : {}),
     }
 }
 
@@ -251,8 +268,9 @@ export function getPersonPropsFromInfo(
         const location = convertToURL(url)
         props['$host'] = location?.host
         props['$pathname'] = location?.pathname
-        const campaignParams = _getCampaignParamsFromUrl(url)
-        extend(props, campaignParams)
+    }
+    if (url || info.c) {
+        extend(props, _getCampaignParamsFromUrl(url || ''), info.c || {})
     }
     if (referrer) {
         const searchInfo = _getSearchInfoFromReferrer(referrer)

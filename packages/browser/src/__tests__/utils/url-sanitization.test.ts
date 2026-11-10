@@ -89,7 +89,7 @@ describe('recorded URL policy', () => {
         (result) => {
             expect(
                 getRecordedUrl(url, {
-                    url_sanitization: { sanitize: (() => result) as UrlSanitizationOptions['sanitize'] },
+                    url_sanitization: { sanitize: (() => result) as unknown as UrlSanitizationOptions['sanitize'] },
                 })
             ).toBeUndefined()
         }

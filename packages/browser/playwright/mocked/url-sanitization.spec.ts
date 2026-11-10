@@ -11,7 +11,7 @@ declare global {
 const source = '/playwright/fixtures/url-sanitization.html?token=synthetic-referrer-token#synthetic-fragment'
 
 for (const persistence of ['localStorage', 'localStorage+cookie', 'cookie', 'sessionStorage'] as const) {
-    test(`sanitizes referrers before persistence and preserves reload continuity with ${persistence}`, async ({
+    test(`sanitizes attribution URLs before persistence and preserves campaign/reload continuity with ${persistence}`, async ({
         page,
     }) => {
         await page.goto(source)
@@ -46,6 +46,7 @@ for (const persistence of ['localStorage', 'localStorage+cookie', 'cookie', 'ses
                     session: window.urlProbe.get_session_id(),
                     initial: window.urlProbe.persistence.props.$initial_person_info,
                     sessionProps: window.urlProbe.persistence.props.$client_session_props.props,
+                    attribution: window.urlProbe.sessionPropsManager.getSessionProps(),
                     stored: JSON.stringify({
                         local: { ...localStorage },
                         session: { ...sessionStorage },
@@ -56,9 +57,14 @@ for (const persistence of ['localStorage', 'localStorage+cookie', 'cookie', 'ses
         const before = await init()
         expect(before.referrer).toContain('/playwright/fixtures/url-sanitization.html?token=synthetic-referrer-token')
         expect(before.referrer).not.toContain('synthetic-fragment')
-        expect(before.initial.r).toBe('http://localhost:2345/')
+        expect(before.initial).toEqual({
+            r: 'http://localhost:2345/',
+            u: 'http://localhost:2345/',
+            c: { utm_source: 'allowed' },
+        })
         expect(before.sessionProps).toEqual(before.initial)
-        expect(before.stored).not.toContain('synthetic-referrer-token')
+        expect(before.attribution.$session_entry_utm_source).toBe('allowed')
+        expect(before.stored).not.toMatch(/synthetic-referrer-token|synthetic-current-token|synthetic-hash/)
         await page.reload()
         await page.waitForFunction(() => !!window.urlProbe)
         const after = await init()
@@ -66,6 +72,49 @@ for (const persistence of ['localStorage', 'localStorage+cookie', 'cookie', 'ses
         expect(after.session).toBe(before.session)
         expect(after.initial.r).toBe('http://localhost:2345/')
         expect(after.sessionProps.r).toBe('http://localhost:2345/')
-        expect(after.stored).not.toContain('synthetic-referrer-token')
+        expect(after.initial.u).toBe('http://localhost:2345/')
+        expect(after.sessionProps.u).toBe('http://localhost:2345/')
+        expect(after.attribution.$session_entry_utm_source).toBe('allowed')
+        expect(after.stored).not.toMatch(/synthetic-referrer-token|synthetic-current-token|synthetic-hash/)
+    })
+
+    test(`preserves explicit attribution hash inclusion across reload with ${persistence}`, async ({ page }) => {
+        await page.goto('/playwright/fixtures/url-sanitization.html#synthetic-hash')
+        await page.waitForFunction(() => !!window.urlProbe)
+        const init = () =>
+            page.evaluate((mode) => {
+                window.urlProbe.init('synthetic-hash-policy-probe', {
+                    defaults: '2026-08-30',
+                    persistence: mode,
+                    persistence_save_debounce_ms: 0,
+                    split_storage: false,
+                    cross_subdomain_cookie: false,
+                    capture_pageview: false,
+                    autocapture: false,
+                    opt_out_useragent_filter: true,
+                    disable_session_recording: true,
+                    disable_surveys: true,
+                    disable_conversations: true,
+                    advanced_disable_flags: true,
+                    advanced_disable_toolbar_metrics: true,
+                    disable_external_dependency_loading: true,
+                    disable_capture_url_hashes: true,
+                    url_sanitization: { path: false, query: false, hash: true },
+                    before_send: () => null,
+                } satisfies Partial<PostHogConfig>)
+                window.urlProbe.capture('probe')
+                return {
+                    id: window.urlProbe.get_distinct_id(),
+                    session: window.urlProbe.get_session_id(),
+                    initialUrl: window.urlProbe.persistence.get_initial_props().$initial_current_url,
+                    sessionUrl: window.urlProbe.sessionPropsManager.getSessionProps().$session_entry_url,
+                }
+            }, persistence)
+        const before = await init()
+        expect(before.initialUrl).toBe('http://localhost:2345/#synthetic-hash')
+        expect(before.sessionUrl).toBe(before.initialUrl)
+        await page.reload()
+        await page.waitForFunction(() => !!window.urlProbe)
+        expect(await init()).toEqual(before)
     })
 }

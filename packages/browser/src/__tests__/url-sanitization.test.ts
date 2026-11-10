@@ -3,13 +3,14 @@ import { PostHog } from '../posthog-core'
 import {
     getEventProperties,
     getPersonInfo,
+    getPersonPropsFromInfo,
     getReferrerInfo,
     getSearchInfo,
 } from '@posthog/browser-common/utils/event-utils'
 import { autocapturePropertiesForElement } from '@posthog/browser-common/autocapture'
 import { getRecordedUrl, getUrlSanitizer } from '../utils/url-sanitization'
 import * as globals from '@posthog/browser-common/utils/globals'
-import type { PostHogConfig, UrlSanitizationOptions } from '../types'
+import type { CaptureResult, PostHogConfig, UrlSanitizationOptions } from '../types'
 
 const current = 'http://localhost/private-preview?token=current-secret&utm_source=allowed#private'
 const referrer = 'https://www.google.com/private-referrer?q=search-secret&token=referrer-secret'
@@ -42,6 +43,251 @@ describe('url_sanitization', () => {
         instances.push(instance)
         return instance
     }
+
+    it.each(['localStorage', 'localStorage+cookie', 'cookie', 'sessionStorage'] as const)(
+        'preserves campaign attribution while sanitizing stored landing URLs with %s',
+        async (persistence) => {
+            const beforeSend = vi.fn((_event: CaptureResult) => null)
+            const posthog = await create({
+                persistence,
+                cross_subdomain_cookie: false,
+                bootstrap: { distinctID: 'synthetic-attribution-id' },
+                url_sanitization: { path: false, query: false, hash: false },
+                before_send: beforeSend,
+            })
+            posthog.capture('probe')
+            const initial = posthog.persistence.props.$initial_person_info
+            const session = posthog.persistence.props.$client_session_props.props
+            expect(initial.u).toBe('http://localhost/')
+            expect(session.u).toBe('http://localhost/')
+            expect(initial.c).toEqual({ utm_source: 'allowed' })
+            expect(session.c).toEqual(initial.c)
+            const event = beforeSend.mock.calls.find(([event]) => event?.event === 'probe')![0]
+            expect(event.properties.$session_entry_url).toBe('http://localhost/')
+            expect(event.properties.$session_entry_utm_source).toBe('allowed')
+            const setOnce = beforeSend.mock.calls.map(([event]) => event.$set_once).find(Boolean)!
+            expect(setOnce.$initial_current_url).toBe('http://localhost/')
+            expect(setOnce.$current_url).toBe('http://localhost/')
+            expect(setOnce.$initial_utm_source).toBe('allowed')
+            expect(setOnce.utm_source).toBe('allowed')
+            expect(setOnce.$initial_utm_medium).toBeNull()
+            expect(setOnce.utm_medium).toBeNull()
+            expect(JSON.stringify({ initial, session, events: beforeSend.mock.calls })).not.toMatch(
+                /current-secret|private-preview|#private/
+            )
+        }
+    )
+
+    it('keeps extracted campaign values when both URL callbacks omit their URLs', async () => {
+        const posthog = await create({
+            url_sanitization: {
+                sanitize: () => {
+                    throw new Error('failure')
+                },
+            },
+        })
+        posthog.capture('probe')
+        const stored = JSON.parse(JSON.stringify(posthog.persistence.props.$client_session_props))
+        posthog.persistence.props.$client_session_props = stored
+        expect(stored.props).toEqual({ c: { utm_source: 'allowed' } })
+        expect(posthog.sessionPropsManager.getSessionProps().$session_entry_utm_source).toBe('allowed')
+        expect(posthog.sessionPropsManager.getSessionProps().$session_entry_url).toBeUndefined()
+        expect(posthog.persistence.get_initial_props().$initial_utm_source).toBe('allowed')
+    })
+
+    it('extracts campaign values before URL rewriting and preserves personal-data masking', async () => {
+        const input = current.replace('utm_source=allowed', 'utm_source=original&gclid=personal-id')
+        vi.spyOn(globals, 'location', 'get').mockReturnValue(new URL(input) as unknown as Location)
+        const posthog = await create({
+            mask_personal_data_properties: true,
+            url_sanitization: {
+                sanitize: (url) => {
+                    url.searchParams.set('utm_source', 'rewritten')
+                    return url
+                },
+            },
+        })
+        posthog.capture('probe')
+        expect(posthog.persistence.props.$initial_person_info.c).toEqual({ utm_source: 'original' })
+        expect(posthog.persistence.get_initial_props().$initial_gclid).toBe('<masked>')
+        expect(posthog.persistence.get_initial_props().$initial_utm_source).toBe('original')
+        expect(posthog.sessionPropsManager.getSessionProps().$session_entry_utm_source).toBe('original')
+    })
+
+    it('masks campaign values before retaining them separately from a filtered URL', async () => {
+        const posthog = await create({
+            mask_personal_data_properties: true,
+            custom_personal_data_properties: ['utm_source'],
+            url_sanitization: { path: false, query: false, hash: false },
+        })
+        posthog.capture('probe')
+        expect(posthog.persistence.props.$initial_person_info.c).toEqual({ utm_source: '<masked>' })
+        expect(posthog.persistence.props.$client_session_props.props.c).toEqual({ utm_source: '<masked>' })
+        expect(JSON.stringify(posthog.persistence.props)).not.toMatch(/allowed|current-secret|referrer-secret/)
+    })
+
+    it('uses null overrides for campaigns introduced by URL rewriting', async () => {
+        vi.spyOn(globals, 'location', 'get').mockReturnValue(new URL('http://localhost/private') as unknown as Location)
+        const posthog = await create({
+            url_sanitization: {
+                sanitize: (url) => {
+                    url.searchParams.set('utm_source', 'rewritten')
+                    return url
+                },
+            },
+        })
+        posthog.capture('probe')
+        expect(posthog.persistence.props.$initial_person_info.c).toEqual({ utm_source: null })
+        expect(posthog.persistence.get_initial_props().$initial_utm_source).toBeNull()
+        expect(posthog.sessionPropsManager.getSessionProps().$session_entry_utm_source).toBeUndefined()
+    })
+
+    it('does not duplicate campaign values retained in the sanitized URL', async () => {
+        const posthog = await create({
+            url_sanitization: { sanitize: (url) => url },
+        })
+        posthog.capture('probe')
+        expect(posthog.persistence.props.$initial_person_info.c).toBeUndefined()
+        expect(posthog.persistence.props.$client_session_props.props.c).toBeUndefined()
+        expect(posthog.persistence.get_initial_props().$initial_utm_source).toBe('allowed')
+    })
+
+    it('keeps long campaign attribution within the encoded cookie budget', async () => {
+        const source = '🙂'.repeat(60)
+        const landing = new URL('http://localhost/private')
+        landing.searchParams.set('utm_source', source)
+        vi.spyOn(globals, 'location', 'get').mockReturnValue(landing as unknown as Location)
+        const posthog = await create({
+            persistence: 'localStorage+cookie',
+            persistence_name: 'campaign-cookie-size',
+            cross_subdomain_cookie: false,
+            url_sanitization: { path: false, query: false },
+        })
+        posthog.capture('probe')
+        posthog.persistence.save()
+        expect(posthog.persistence.get_initial_props().$initial_utm_source).toBe(source)
+        const cookie = document.cookie.split('; ').find((cookie) => cookie.startsWith('ph_campaign-cookie-size='))!
+        expect(cookie.length).toBeLessThan(4096 * 0.9)
+    })
+
+    it.each(['cookie', 'localStorage+cookie'] as const)(
+        'bounds encoded campaign overrides together with other cookie state in %s',
+        async (persistence) => {
+            const landing = new URL('http://localhost/')
+            landing.searchParams.set('utm_source', '\\'.repeat(800))
+            vi.spyOn(globals, 'location', 'get').mockReturnValue(landing as unknown as Location)
+            vi.spyOn(document, 'referrer', 'get').mockReturnValue('')
+            const original = getPersonPropsFromInfo(getPersonInfo()).utm_source
+            const posthog = await create({
+                persistence,
+                persistence_name: 'bounded-campaign-' + persistence,
+                cross_subdomain_cookie: false,
+                persistence_save_debounce_ms: 0,
+                cookie_persisted_properties: ['budget_padding'],
+                url_sanitization: { query: false },
+            })
+            if (persistence === 'localStorage+cookie') {
+                posthog.register({ budget_padding: 'p'.repeat(2400) })
+            }
+            posthog.capture('probe')
+            const cookie = document.cookie
+                .split('; ')
+                .find((value) => value.startsWith('ph_bounded-campaign-' + persistence + '='))!
+            expect(cookie.length).toBeLessThan(4096)
+            const stored = JSON.parse(decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1)))
+            const initial = stored.$initial_person_info
+            expect(initial.c.utm_source.length).toBeGreaterThan(0)
+            expect(initial.c.utm_source.length).toBeLessThan(original.length)
+            expect(original.startsWith(initial.c.utm_source)).toBe(true)
+            expect(initial.u).toBe('http://localhost/')
+            expect(stored.distinct_id).toBe(posthog.get_distinct_id())
+            expect(stored.$sesid[1]).toBe(posthog.get_session_id())
+            if (persistence === 'cookie') {
+                expect(stored.$client_session_props.props.c.utm_source).toBe(initial.c.utm_source)
+            } else {
+                expect(stored.budget_padding).toBe('p'.repeat(2400))
+            }
+        }
+    )
+
+    it.each(['localStorage', 'sessionStorage'] as const)(
+        'retains campaign values without cookie bounds in %s',
+        async (persistence) => {
+            const landing = new URL('http://localhost/')
+            landing.searchParams.set('utm_source', '\\'.repeat(800))
+            vi.spyOn(globals, 'location', 'get').mockReturnValue(landing as unknown as Location)
+            const original = getPersonPropsFromInfo(getPersonInfo()).utm_source
+            const posthog = await create({
+                persistence,
+                bootstrap: { distinctID: 'synthetic-unbounded-campaign-id' },
+                url_sanitization: { query: false },
+            })
+            posthog.capture('probe')
+            expect(posthog.persistence.props.$initial_person_info.c.utm_source).toBe(original)
+            expect(posthog.persistence.props.$client_session_props.props.c.utm_source).toBe(original)
+        }
+    )
+
+    it('excludes split localStorage groups from the cookie campaign budget', async () => {
+        const posthog = await create({
+            persistence: 'localStorage+cookie',
+            persistence_name: 'split-campaign-budget',
+            split_storage: true,
+            cookie_persisted_properties: ['$enabled_feature_flags'],
+            url_sanitization: { query: false },
+        })
+        posthog.capture('probe')
+        const flags = { 'large-variant': 'v'.repeat(6000) }
+        posthog.persistence.register({ $enabled_feature_flags: flags })
+        expect(posthog.persistence.get_initial_props().$initial_utm_source).toBe('allowed')
+        expect(posthog.sessionPropsManager.getSessionProps().$session_entry_utm_source).toBe('allowed')
+        expect(JSON.parse(localStorage.getItem('ph_split-campaign-budget__flags')!).$enabled_feature_flags).toEqual(
+            flags
+        )
+        const cookie = document.cookie.split('; ').find((value) => value.startsWith('ph_split-campaign-budget='))!
+        const stored = JSON.parse(decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1)))
+        expect(stored.$initial_person_info.c.utm_source).toBe('allowed')
+        expect(stored.$enabled_feature_flags).toBeUndefined()
+    })
+
+    it('preserves null overrides and Unicode boundaries when cookie campaigns are bounded', async () => {
+        const landing = new URL('http://localhost/')
+        landing.searchParams.set('utm_source', '🙂'.repeat(60))
+        vi.spyOn(globals, 'location', 'get').mockReturnValue(landing as unknown as Location)
+        vi.spyOn(document, 'referrer', 'get').mockReturnValue('')
+        const posthog = await create({
+            persistence: 'cookie',
+            cross_subdomain_cookie: false,
+            url_sanitization: {
+                sanitize: (url) => {
+                    url.searchParams.delete('utm_source')
+                    url.searchParams.set('utm_medium', 'introduced')
+                    return url
+                },
+            },
+        })
+        posthog.register({ budget_padding: 'p'.repeat(2000) })
+        posthog.capture('probe')
+        const initial = posthog.persistence.props.$initial_person_info.c
+        const session = posthog.persistence.props.$client_session_props.props.c
+        expect(initial.utm_medium).toBeNull()
+        expect(session.utm_medium).toBeNull()
+        expect(Array.from(initial.utm_source).length).toBeLessThan(60)
+        expect(Array.from(initial.utm_source).every((character) => character === '🙂')).toBe(true)
+        expect(session.utm_source).toBe(initial.utm_source)
+        expect(posthog.persistence.get_initial_props().$initial_utm_medium).toBeNull()
+        expect(posthog.sessionPropsManager.getSessionProps().$session_entry_utm_medium).toBeUndefined()
+    })
+
+    it('reads campaign values from older landing URL records', async () => {
+        const posthog = await create({ url_sanitization: { query: false } })
+        posthog.capture('probe')
+        posthog.persistence.props.$initial_person_info = { r: referrer, u: current }
+        posthog.persistence.props.$client_session_props.props = { r: referrer, u: current }
+        expect(posthog.persistence.get_initial_props().$initial_utm_source).toBe('allowed')
+        expect(posthog.sessionPropsManager.getSessionProps().$session_entry_utm_source).toBe('allowed')
+        expect(posthog.persistence.get_initial_props().$initial_current_url).toBe(current)
+    })
 
     it('sanitizes current URLs and persisted referrers even when before_send drops every event', async () => {
         const posthog = await create({ url_sanitization: { path: false, query: false, hash: false } })
@@ -165,11 +411,15 @@ describe('url_sanitization', () => {
         )
     })
 
-    it('honors explicit hash inclusion in current event URLs', async () => {
+    it('honors explicit hash inclusion in current and persisted attribution URLs', async () => {
         const posthog = await create({ disable_capture_url_hashes: true, url_sanitization: { hash: true } })
         posthog.capture('probe')
         const props = posthog.calculateEventProperties('probe', {}, new Date())
         expect(props.$current_url).toBe(current)
+        expect(posthog.persistence.props.$initial_person_info.u).toBe(current)
+        expect(posthog.persistence.props.$client_session_props.props.u).toBe(current)
+        expect(posthog.persistence.get_initial_props().$initial_current_url).toBe(current)
+        expect(props.$session_entry_url).toBe(current)
     })
 
     it('removes private paths from previous-pageview metadata', async () => {
