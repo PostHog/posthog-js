@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.68.0
+
+### Minor Changes
+
+- [#5642](https://github.com/PostHog/posthog-js/pull/5642) [`21eb6bb`](https://github.com/PostHog/posthog-js/commit/21eb6bb4e1ff56f539c3f2e7db728a20d9393809) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - feat(node): let the NestJS interceptor take the request's distinct ID from a `getDistinctId` option or from identity already set in the PostHog context
+  (2026-11-10)
+
 ## 5.67.2
 
 ### Patch Changes
