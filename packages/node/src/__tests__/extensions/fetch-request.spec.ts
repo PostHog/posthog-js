@@ -202,6 +202,37 @@ describe('fetch request instrumentation', () => {
     expect(await detached).toBeUndefined()
   })
 
+  it('runs the stream producer in the request context when the body is read outside it', async () => {
+    const seen: unknown[] = []
+    let chunks = 0
+    const response = await instrumentRequest(
+      posthog,
+      new Request('http://localhost/stream', { headers: { 'x-posthog-session-id': 'sess-stream' } }),
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>(
+            {
+              pull(controller) {
+                seen.push(posthog.getContext()?.sessionId)
+                if (chunks++ < 3) {
+                  controller.enqueue(new TextEncoder().encode('x'))
+                } else {
+                  controller.close()
+                }
+              },
+            },
+            { highWaterMark: 0 }
+          )
+        )
+    )
+    // The server consumes the body after the handler's scope has returned; with no buffering, every
+    // pull happens on the consumer's read.
+    expect(posthog.getContext()).toBeUndefined()
+    expect(await response.text()).toBe('xxx')
+    expect(seen.length).toBeGreaterThanOrEqual(4)
+    expect(seen.every((id) => id === 'sess-stream')).toBe(true)
+  })
+
   it('ends the streamed request context when the consumer cancels', async () => {
     const body = new ReadableStream<Uint8Array>({ pull: () => new Promise(() => {}) })
     const response = await instrumentRequest(posthog, new Request('http://localhost/stream'), () => new Response(body))

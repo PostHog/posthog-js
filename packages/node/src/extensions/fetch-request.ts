@@ -216,7 +216,13 @@ async function instrument(
             // without reading it), so it is complete once returned.
             if (response?.body && method !== 'HEAD') {
               streaming = true
-              return holdUntilBodySettles(response, () => lifetime.abort())
+              return holdUntilBodySettles(
+                response,
+                // The server reads the body outside this scope, so each read re-enters the request
+                // context: the handler's stream producer runs with the request's IDs.
+                (fn) => posthog.withContext(contextData, fn, { signal: lifetime.signal }),
+                () => lifetime.abort()
+              )
             }
             return response as Response
           }
@@ -233,14 +239,14 @@ async function instrument(
 
 /**
  * Returns a copy of `response` whose body is passed through unchanged, and calls `settle` once the
- * body ends, errors or is cancelled by the consumer.
+ * body ends, errors or is cancelled by the consumer. Reads and cancellation run through `inContext`.
  */
-function holdUntilBodySettles(response: Response, settle: () => void): Response {
+function holdUntilBodySettles(response: Response, inContext: <T>(fn: () => T) => T, settle: () => void): Response {
   const reader = (response.body as ReadableStream<Uint8Array>).getReader()
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
-        const { done, value } = await reader.read()
+        const { done, value } = await inContext(() => reader.read())
         if (done) {
           controller.close()
           settle()
@@ -254,7 +260,7 @@ function holdUntilBodySettles(response: Response, settle: () => void): Response 
     },
     async cancel(reason) {
       try {
-        await reader.cancel(reason)
+        await inContext(() => reader.cancel(reason))
       } finally {
         settle()
       }
