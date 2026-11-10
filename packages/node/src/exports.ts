@@ -11,6 +11,7 @@ export type {
   EmailDeliveryStatus,
   Emails,
   EmailStatus,
+  EmailTracking,
   EmailWarning,
   GetEmailResponse,
   SendCodeEmailOptions,

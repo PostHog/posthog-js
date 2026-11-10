@@ -2040,9 +2040,10 @@
       "name": "CodeEmailFields",
       "properties": [
         {
-          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.",
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.\nDeprecated: Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a send that sets both `captureEngagement` and `tracking`.",
           "type": "boolean",
-          "name": "captureEngagement"
+          "name": "captureEngagement",
+          "releaseTag": "deprecated"
         },
         {
           "description": "A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender.",
@@ -2063,9 +2064,9 @@
           "name": "templateKey"
         },
         {
-          "description": "Whether PostHog tracks opens and clicks of the email. Defaults to `true`. With `false`, the email goes out without PostHog's open pixel, so PostHog can't count its opens. PostHog doesn't track clicks on emails sent from code, so their links are never rewritten either way. Independent of `captureEngagement`, which decides whether engagement events are captured on the recipient's person.",
-          "type": "boolean",
-          "name": "trackOpensAndClicks"
+          "description": "What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel, leaves the links as they are, and captures engagement events.\n- `true` turns on opens, clicks and engagement events. - `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the email's opens or clicks, and captures no engagement events. - An object turns each kind on or off. A key you leave out keeps its default.\nClicks are off by default because PostHog can't tell whether a link carries a login or password reset token. Turn them on only when the email's links are safe to send through PostHog's click tracking.",
+          "type": "boolean | EmailTracking",
+          "name": "tracking"
         }
       ],
       "path": "src/emails/types.ts"
@@ -2245,6 +2246,28 @@
           "description": "When the email reached its current status, as an ISO 8601 timestamp.",
           "type": "string",
           "name": "statusAt"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
+      "id": "EmailTracking",
+      "name": "EmailTracking",
+      "properties": [
+        {
+          "description": "Counts clicks by sending the email's links through PostHog's click tracking. Defaults to `false`. Needs `opens`: PostHog refuses a send with `opens: false` and `clicks: true`.",
+          "type": "boolean",
+          "name": "clicks"
+        },
+        {
+          "description": "Captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks.",
+          "type": "boolean",
+          "name": "engagement"
+        },
+        {
+          "description": "Counts opens with PostHog's open pixel. Defaults to `true`.",
+          "type": "boolean",
+          "name": "opens"
         }
       ],
       "path": "src/emails/types.ts"
@@ -4551,14 +4574,15 @@
           "name": "replyTo"
         },
         {
-          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.",
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.\nDeprecated: Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a\nsend that sets both `captureEngagement` and `tracking`.",
           "type": "never",
-          "name": "captureEngagement"
+          "name": "captureEngagement",
+          "releaseTag": "deprecated"
         },
         {
-          "description": "Whether PostHog tracks opens and clicks of the email. Defaults to `true`. With `false`, the\nemail goes out without PostHog's open pixel, so PostHog can't count its opens. PostHog doesn't\ntrack clicks on emails sent from code, so their links are never rewritten either way.\nIndependent of `captureEngagement`, which decides whether engagement events are captured on\nthe recipient's person.",
+          "description": "What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel,\nleaves the links as they are, and captures engagement events.\n\n- `true` turns on opens, clicks and engagement events.\n- `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the\n  email's opens or clicks, and captures no engagement events.\n- An object turns each kind on or off. A key you leave out keeps its default.\n\nClicks are off by default because PostHog can't tell whether a link carries a login or\npassword reset token. Turn them on only when the email's links are safe to send through\nPostHog's click tracking.",
           "type": "never",
-          "name": "trackOpensAndClicks"
+          "name": "tracking"
         },
         {
           "type": "never",

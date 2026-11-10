@@ -44,16 +44,42 @@ interface CodeEmailFields {
    * bounced) as events of the recipient. Defaults to `true`. A project whose admin turned
    * engagement capture off captures nothing, whatever the send asks. A template made in PostHog
    * follows the project's setting.
+   *
+   * @deprecated Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a
+   * send that sets both `captureEngagement` and `tracking`.
    */
   captureEngagement?: boolean
   /**
-   * Whether PostHog tracks opens and clicks of the email. Defaults to `true`. With `false`, the
-   * email goes out without PostHog's open pixel, so PostHog can't count its opens. PostHog doesn't
-   * track clicks on emails sent from code, so their links are never rewritten either way.
-   * Independent of `captureEngagement`, which decides whether engagement events are captured on
-   * the recipient's person.
+   * What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel,
+   * leaves the links as they are, and captures engagement events.
+   *
+   * - `true` turns on opens, clicks and engagement events.
+   * - `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the
+   *   email's opens or clicks, and captures no engagement events.
+   * - An object turns each kind on or off. A key you leave out keeps its default.
+   *
+   * Clicks are off by default because PostHog can't tell whether a link carries a login or
+   * password reset token. Turn them on only when the email's links are safe to send through
+   * PostHog's click tracking.
    */
-  trackOpensAndClicks?: boolean
+  tracking?: boolean | EmailTracking
+}
+
+/** Which kinds of tracking a send with `templateKey` turns on. */
+export interface EmailTracking {
+  /** Counts opens with PostHog's open pixel. Defaults to `true`. */
+  opens?: boolean
+  /**
+   * Counts clicks by sending the email's links through PostHog's click tracking. Defaults to
+   * `false`. Needs `opens`: PostHog refuses a send with `opens: false` and `clicks: true`.
+   */
+  clicks?: boolean
+  /**
+   * Captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events
+   * of the recipient. Defaults to `true`. A project whose admin turned engagement capture off
+   * captures nothing, whatever the send asks.
+   */
+  engagement?: boolean
 }
 
 /**
