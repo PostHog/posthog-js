@@ -631,7 +631,18 @@ function hasControlCharacter(text: string): boolean {
 }
 
 function textFromHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, '')
+  let text = ''
+  let inTag = false
+  for (const character of html) {
+    if (character === '<') {
+      inTag = true
+    } else if (character === '>') {
+      inTag = false
+    } else if (!inTag) {
+      text += character
+    }
+  }
+  return text
 }
 
 function isRecord(value: unknown): value is Json {
