@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.67.2
+
+### Patch Changes
+
+- [#5648](https://github.com/PostHog/posthog-js/pull/5648) [`f413efc`](https://github.com/PostHog/posthog-js/commit/f413efc47a7810af81de0c8f0c032bd0f6932834) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix nested cohort `not_in` conditions in local feature flag evaluation.
+  (2026-11-10)
+
 ## 5.67.1
 
 ### Patch Changes

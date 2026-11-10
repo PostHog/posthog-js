@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.447.8
+
+### Patch Changes
+
+- [#5619](https://github.com/PostHog/posthog-js/pull/5619) [`8006468`](https://github.com/PostHog/posthog-js/commit/80064688f89a6b1a8c729957d4b04dda03b8bdae) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve observed CSS-variable shorthands across full session replay snapshots, including uninterrupted session rotations.
+  (2026-11-10)
+
+- [#5644](https://github.com/PostHog/posthog-js/pull/5644) [`145fb45`](https://github.com/PostHog/posthog-js/commit/145fb457d5fa09aaf819743a85df00159e6d9645) Thanks [@RoderickQiu](https://github.com/RoderickQiu)! - Warn once in debug mode when history-based pageviews are explicitly configured without the required history autocapture extension.
+  (2026-11-10)
+
 ## 1.447.7
 
 ### Patch Changes
