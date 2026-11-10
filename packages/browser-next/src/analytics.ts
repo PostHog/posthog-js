@@ -5,7 +5,7 @@ import { createAnalyticsDelivery } from './analytics-delivery'
 import type { AnalyticsOptions } from './analytics-options'
 
 export type { IAnalytics } from './analytics-api'
-export type { AnalyticsOptions } from './analytics-options'
+export type { AnalyticsOptions, PersonProfileMode } from './analytics-options'
 
 /** Creates analytics with its buffer and Capture V1 delivery statically included. */
 export const analytics = (options: AnalyticsOptions = {}): IAnalytics =>

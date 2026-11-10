@@ -41,6 +41,10 @@ Use `analytics: false` to block implicit analytics acquisition, including reques
 
 Product namespaces expose owners only after successful setup. Reading a namespace never initiates loading. Use `await posthog.resolveExtension(token)` for typed custom-extension access; resolution waits for readiness and returns `undefined` when the extension is unavailable. Shared implementations receive a separate `Client` adapter with shared binding lookup.
 
+Analytics owns person-profile policy through `personProfiles: 'always' | 'never' | 'identified_only'`, defaulting to `identified_only`. Anonymous events carry `process_person_profile: false` in Capture V1 options until identification, group registration or explicit profile enablement. Configure it through `analytics: { personProfiles: 'always' }` or an explicit `analytics({ personProfiles: 'always' })` instance.
+
+Use the analytics product's `createPersonProfile()`, `setPersonProperties(set?, setOnce?)`, `unsetPersonProperties(names)` and `setInternalOrTestUser()` controls for explicit person updates. Profile creation and property updates preserve the current anonymous identity; they do not identify the user. Set, set-once and unset also update local feature-flag person context. Exact repeated property updates are deduplicated only after local event admission. Reset clears explicit profile enablement and deduplication, without rewriting queued events. In `never` mode, person helpers, identify and group registration are no-ops; ordinary capture continues without person processing.
+
 ## Classic script installation (draft CDN distribution)
 
 The CDN build supports a plain external classic script in ordinary, `async`, or `defer` placement. The proposed asset namespace is `/static/browser/<exact-version-or-major>/`; availability depends on CDN deployment. For example, once deployed:

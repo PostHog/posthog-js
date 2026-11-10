@@ -8,6 +8,7 @@ import type {
     AnalyticsOptions,
     AutomaticAnalyticsOptions,
     LoadStrategy,
+    PersonProfileMode,
 } from './analytics-options'
 
 import type {
@@ -136,6 +137,7 @@ export type {
     AnalyticsOptions,
     AutomaticAnalyticsOptions,
     LoadStrategy,
+    PersonProfileMode,
     ApiResponse,
     CaptureOptions,
     Disposable,

@@ -61,3 +61,5 @@ export type {
 } from './surveys-options'
 
 export type { AutocaptureOptions, AutocaptureConfiguration, RageclickOptions } from './autocapture-options'
+
+export type { PersonProfileMode } from './analytics-options'

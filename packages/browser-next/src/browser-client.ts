@@ -13,6 +13,7 @@ export interface IdentifyInfo {
     readonly wasIdentified: boolean
     readonly set: DeepReadonly<Record<string, unknown>> | undefined
     readonly setOnce: DeepReadonly<Record<string, unknown>> | undefined
+    readonly unset?: readonly string[]
 }
 
 export interface GroupInfo {

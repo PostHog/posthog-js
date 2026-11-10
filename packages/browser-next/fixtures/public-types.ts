@@ -1,5 +1,19 @@
-import type { Extension, IPostHog, IPostHogInternal, NewSessionInfo, NewSessionReason } from '@posthog/browser'
+import type {
+    Extension,
+    IPostHog,
+    IPostHogInternal,
+    NewSessionInfo,
+    NewSessionReason,
+    PersonProfileMode,
+} from '@posthog/browser'
+import type { PersonProfileMode as CorePersonProfileMode } from '@posthog/browser/core'
+import { analytics, type PersonProfileMode as AnalyticsPersonProfileMode } from '@posthog/browser/analytics'
 import type { Extension as SharedExtension, ExtensionToken } from '@posthog/browser-common'
+
+const personProfiles: PersonProfileMode = 'identified_only'
+const corePersonProfiles: CorePersonProfileMode = personProfiles
+const analyticsPersonProfiles: AnalyticsPersonProfileMode = corePersonProfiles
+export const personAnalytics = analytics({ personProfiles: analyticsPersonProfiles })
 
 export const sessionReason = (session: NewSessionInfo): NewSessionReason => session.reason
 
@@ -42,6 +56,12 @@ export const publicProductViews = async (posthog: IPostHog, internal: IPostHogIn
     posthog.analytics?.captureImmediate('immediate')
     posthog.analytics?.identify('person')
     posthog.analytics?.group('company', 'company-123')
+    posthog.analytics?.createPersonProfile()
+    posthog.analytics?.setPersonProperties({ plan: 'paid' }, { initial: true })
+    posthog.analytics?.setPersonProperties(undefined, { initial: true })
+    posthog.analytics?.unsetPersonProperties('plan')
+    posthog.analytics?.unsetPersonProperties(['plan', 'initial'] as const)
+    posthog.analytics?.setInternalOrTestUser()
     posthog.analytics?.reset()
     const custom = await posthog.resolveExtension(CustomExtension)
     const value: string | undefined = custom?.read()

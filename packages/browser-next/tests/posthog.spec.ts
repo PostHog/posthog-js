@@ -262,7 +262,7 @@ describe('@posthog/browser core', () => {
                     timestamp: '2026-01-02T03:04:05.000Z',
                     session_id: posthog.session!.sessionId,
                     window_id: posthog.session!.windowId,
-                    options: {},
+                    options: { process_person_profile: false },
                     properties: {
                         dynamic: 'yes',
                         plan: 'pro',

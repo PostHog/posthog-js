@@ -46,13 +46,14 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             await shared.setup(value.sharedClient)
             if (disposed) return
             subscriptions.push(
-                value.onIdentify(({ distinctId, previousDistinctId, wasIdentified, set, setOnce }) => {
+                value.onIdentify(({ distinctId, previousDistinctId, wasIdentified, set, setOnce, unset }) => {
                     if (distinctId !== previousDistinctId) {
                         shared.resetFlagCallReported()
                         if (!wasIdentified) shared.setAnonymousDistinctId(previousDistinctId)
                     }
                     if (set || setOnce)
                         shared.setPersonPropertiesForFlags({ $set: set ?? {}, $set_once: setOnce ?? {} }, false)
+                    if (unset) shared.unsetPersonPropertiesForFlags([...unset], false)
                     shared.reloadFeatureFlags()
                 })
             )
