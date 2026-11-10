@@ -376,6 +376,10 @@ export class PostHog extends PostHogCore {
   private _appProperties: PostHogCustomAppProperties = {}
   private _appLanguage: string | undefined
   private _currentSessionId?: string | undefined
+  // The session the JS replay evaluation last decided for. Tracked apart from _currentSessionId, which is
+  // only set once native initializes: a session that samples out never initializes native, and the next
+  // session must still be re-evaluated on rotation.
+  private _replayEvaluatedSessionId?: string | undefined
   private _enableSessionReplay?: boolean
   private _sessionReplayNativeInitialized: boolean = false
   private _nativeErrorTrackingInitialized: boolean = false
@@ -773,6 +777,12 @@ export class PostHog extends PostHogCore {
    */
   protected onRemoteConfig(response: PostHogRemoteConfig): void {
     this._errorTracking.onRemoteConfig(response.errorTracking)
+    // Core notifies here only when no flags load follows (or after that load, which re-evaluates on its
+    // own), so apply the freshly cached replay config now: without preloadFeatureFlags, or with remote
+    // flags disabled, nothing else would evaluate it. The evaluation is serialized and deduplicated.
+    if (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending) {
+      void this._evaluateAndStartSessionReplay()
+    }
   }
 
   /**
@@ -2127,14 +2137,20 @@ export class PostHog extends PostHogCore {
         }
       }
       this._currentSessionId = sessionId
-
-      // Event triggers are armed per session: the previous activation no longer matches the new
-      // session id, so re-evaluate to stop recording until a fresh matching event fires.
-      if (this._sessionReplayEventTriggers.length > 0 || this._sessionReplayTriggerGroups !== null) {
-        void this._evaluateAndStartSessionReplay()
-      }
     } else {
       this._logger.info(`sessionId not rotated, sessionId ${sessionId} and currentSessionId ${this._currentSessionId}.`)
+    }
+
+    // Triggers and trigger groups are decided per session: re-evaluate once the session moves on from
+    // the one last evaluated, whether or not native has initialized (a sampled-out session never does).
+    if (
+      sessionId.length > 0 &&
+      this._replayEvaluatedSessionId !== undefined &&
+      sessionId !== this._replayEvaluatedSessionId &&
+      (this._sessionReplayEventTriggers.length > 0 || this._sessionReplayTriggerGroups !== null)
+    ) {
+      this._replayEvaluatedSessionId = sessionId
+      void this._evaluateAndStartSessionReplay()
     }
 
     return sessionId
@@ -2328,6 +2344,8 @@ export class PostHog extends PostHogCore {
       // Handle session ID if not resuming
       if (!resumeCurrent) {
         this._rotateReplaySession()
+        // An explicit start into a new session is its own decision: don't re-evaluate it as a rotation.
+        this._replayEvaluatedSessionId = super.getSessionId()
       }
 
       await OptionalReactNativePlugin.startRecording(resumeCurrent)
@@ -3684,6 +3702,7 @@ export class PostHog extends PostHogCore {
 
     let recordingActive: boolean
     const triggerGroups = parseSessionRecordingTriggerGroups(cachedSessionReplayConfig)
+    this._replayEvaluatedSessionId = super.getSessionId()
 
     if (triggerGroups) {
       this._sessionReplayEventTriggers = []

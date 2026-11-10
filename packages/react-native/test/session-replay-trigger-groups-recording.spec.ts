@@ -1,7 +1,9 @@
 import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
-import { waitForExpect, wait } from './test-utils'
+import { waitForExpect, wait, waitForNativePluginEvaluation } from './test-utils'
+import * as uuidModule from '../../core/src/vendor/uuidv7'
+import { sampleOnTriggerProperty } from '../src/session-replay/triggerGroups'
 
 // Mock the native plugin bridge so we can assert which native calls happen. No `setup`
 // key, so the SDK takes the legacy start() path (same surface as the standalone
@@ -86,7 +88,7 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     await posthog.shutdown()
   })
 
-  const newPostHog = (options: { enablePersistSessionIdAcrossRestart?: boolean } = {}): PostHog =>
+  const newPostHog = (options: Record<string, any> = {}): PostHog =>
     new PostHog('test-token', {
       customStorage: mockStorage,
       enableSessionReplay: true,
@@ -401,4 +403,86 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     rotateSession()
     await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(2))
   })
+  // A session id the given group samples in (or out), picked through the SDK's own sampling hash.
+  const sessionIdSampled = (groupId: string, rate: number, sampledIn: boolean): string => {
+    for (let i = 0; i < 1000; i++) {
+      const id = `01934000-0000-7000-8000-${i.toString(16).padStart(12, '0')}`
+      if (sampleOnTriggerProperty(id + groupId, rate) === sampledIn) {
+        return id
+      }
+    }
+    throw new Error('no session id found')
+  }
+
+  it('re-evaluates a new session when the first one sampled out before native initialized', async () => {
+    currentSessionRecording = v2Config([{ id: 'g1', sampleRate: 0.5, conditions: {} }])
+    await warmup()
+
+    const outId = sessionIdSampled('g1', 0.5, false)
+    const inId = sessionIdSampled('g1', 0.5, true)
+    const uuid = vi.spyOn(uuidModule, 'uuidv7').mockReturnValue(outId)
+    try {
+      posthog = newPostHog({
+        preloadFeatureFlags: false,
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+        errorTracking: { autocapture: false },
+      })
+      await posthog.ready()
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+      expect(posthog.getSessionId()).toBe(outId)
+      expect(replay.start).not.toHaveBeenCalled()
+
+      uuid.mockReturnValue(inId)
+      rotateSession()
+      posthog.capture('ordinary_event_after_inactivity')
+      expect(posthog.getSessionId()).toBe(inId)
+
+      await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    } finally {
+      uuid.mockRestore()
+    }
+  })
+
+  const configOnlyFetch = (configResponses: any[]): string[] => {
+    const requests: string[] = []
+    ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
+      requests.push(String(url))
+      const res = String(url).includes('/config') ? (configResponses.shift() ?? { status: 'ok' }) : { status: 'ok' }
+      return { status: 200, json: () => Promise.resolve(res) }
+    })
+    return requests
+  }
+
+  it.each([{ preloadFeatureFlags: false }, { disableRemoteFeatureFlags: true }])(
+    'applies a fresh /config replay config without a flags load (%o)',
+    async (flagsOption) => {
+      currentSessionRecording = v2Config([{ id: 'g1', sampleRate: 1, conditions: {} }])
+      await warmup()
+
+      configOnlyFetch([])
+      posthog = newPostHog({
+        ...flagsOption,
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+        errorTracking: { autocapture: false },
+      })
+      await posthog.ready()
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+      expect(replay.start).toHaveBeenCalledTimes(1)
+      replay.isEnabled.mockImplementation(async () => true)
+
+      const requests = configOnlyFetch([
+        {
+          hasFeatureFlags: true,
+          sessionRecording: v2Config([{ id: 'g1', sampleRate: 0, conditions: {} }]),
+        },
+      ])
+      await posthog.reloadRemoteConfigAsync()
+      await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+      expect(requests.some((url) => url.includes('/flags'))).toBe(false)
+    }
+  )
 })
