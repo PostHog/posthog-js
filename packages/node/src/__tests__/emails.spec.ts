@@ -1,3 +1,6 @@
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
@@ -124,7 +127,7 @@ describe('emails', () => {
 
   it.each([
     [
-      'html alone, which leaves every unset option out',
+      'html',
       { templateKey: 'password-reset', subject: 'Reset your password', html: '<p>Reset</p>' },
       {
         template_key: 'password-reset',
@@ -180,31 +183,6 @@ describe('emails', () => {
         template_key: 'password-reset',
         subject: 'Reset',
         html: '<p>Reset</p>',
-      },
-    ],
-    [
-      'all tracking turned off',
-      { templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', tracking: false },
-      { template_key: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', tracking: false },
-    ],
-    [
-      'all tracking turned on',
-      { templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', tracking: true },
-      { template_key: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', tracking: true },
-    ],
-    [
-      'each kind of tracking chosen',
-      {
-        templateKey: 'welcome',
-        subject: 'Welcome',
-        html: '<p>Hi</p>',
-        tracking: { opens: true, clicks: true, engagement: false },
-      },
-      {
-        template_key: 'welcome',
-        subject: 'Welcome',
-        html: '<p>Hi</p>',
-        tracking: { opens: true, clicks: true, engagement: false },
       },
     ],
   ])('posts content from code with %s to the same send URL', async (_name, content, body) => {
@@ -686,5 +664,61 @@ describe('emails', () => {
       expect(data?.status).toBe('bounced')
       expect(fetch).toHaveBeenCalledTimes(2)
     })
+  })
+})
+
+describe('emails over HTTP', () => {
+  const CODE_SEND = { to: 'user@example.com', templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>' }
+  const CODE_SEND_BODY = { to: 'user@example.com', template_key: 'welcome', subject: 'Welcome', html: '<p>Hi</p>' }
+
+  let server: Server
+  let posthog: PostHog
+  let received: unknown[]
+
+  beforeAll(async () => {
+    vi.useRealTimers()
+    server = createServer((request, response) => {
+      let body = ''
+      request.on('data', (chunk) => (body += chunk))
+      request.on('end', () => {
+        received.push(JSON.parse(body))
+        response.writeHead(202, { 'Content-Type': 'application/json' })
+        response.end(JSON.stringify({ message_id: 'msg_1', replayed: false }))
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    posthog = new PostHog('phc_test', {
+      secretKey: SECRET_KEY,
+      appHost: `http://127.0.0.1:${port}`,
+      enableLocalEvaluation: false,
+    })
+  })
+
+  afterAll(async () => {
+    await posthog.shutdown()
+    await new Promise((resolve) => server.close(resolve))
+  })
+
+  beforeEach(() => {
+    received = []
+  })
+
+  it.each([
+    ['no tracking choice, which leaves tracking and capture_engagement out', {}, {}],
+    ['all tracking turned off', { tracking: false }, { tracking: false }],
+    ['all tracking turned on', { tracking: true }, { tracking: true }],
+    [
+      'each kind of tracking chosen',
+      { tracking: { opens: true, clicks: true, engagement: false } },
+      { tracking: { opens: true, clicks: true, engagement: false } },
+    ],
+    ['the deprecated captureEngagement', { captureEngagement: false }, { capture_engagement: false }],
+  ])('delivers a code send with %s', async (_name, options, body) => {
+    const { data, error } = await posthog.emails.send({ ...CODE_SEND, ...options })
+
+    expect(error).toBeNull()
+    expect(data?.id).toBe('msg_1')
+    expect(received).toEqual([{ ...CODE_SEND_BODY, ...body }])
   })
 })
