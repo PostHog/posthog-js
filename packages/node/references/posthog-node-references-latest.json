@@ -370,6 +370,35 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
+          "category": "Logs",
+          "description": "Captures one structured log record to PostHog Logs. Attaches the active span's ids and the `withContext` person and session unless the options set their own.",
+          "details": null,
+          "id": "captureLog",
+          "showDocs": true,
+          "title": "captureLog",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nclient.captureLog({ body: 'payment failed', level: 'error', attributes: { code: 'E001' } })\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "CaptureLogOptions",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
           "category": "Initialization",
           "description": "Enable or disable debug logging.",
           "details": null,
@@ -2027,6 +2056,12 @@
         }
       ],
       "path": "../core/src/types.ts"
+    },
+    {
+      "id": "CaptureLogger",
+      "name": "CaptureLogger",
+      "properties": [],
+      "path": "../core/src/logs/types.ts"
     },
     {
       "id": "ChunkIdMapType",
@@ -3733,6 +3768,58 @@
       "path": "../core/src/types.ts"
     },
     {
+      "id": "PostHogLogsConfig",
+      "name": "PostHogLogsConfig",
+      "properties": [
+        {
+          "description": "Pre-send filter. See  for shape and examples. Configure as a single function or a chain.",
+          "type": "BeforeSendLogFn | BeforeSendLogFn[]",
+          "name": "beforeSend"
+        },
+        {
+          "description": "Deployment environment attached as OTLP `deployment.environment` (e.g. `'production'`, `'staging'`, `'dev'`).",
+          "type": "string",
+          "name": "environment"
+        },
+        {
+          "description": "How often the periodic background flush fires (ms). Records also flush eagerly when the buffer fills, on AppState changes (RN), and on `shutdown()`. Lower values trade battery/bandwidth for fresher data. Default: 10000 (RN) / 3000 (browser).",
+          "type": "number",
+          "name": "flushIntervalMs"
+        },
+        {
+          "description": "Max records per outbound POST. Keeps each request under the server's request body cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser).",
+          "type": "number",
+          "name": "maxBatchRecordsPerPost"
+        },
+        {
+          "description": "Number of buffered records that triggers an immediate flush. Records also flush on the periodic interval and on `shutdown()`. The queue can grow past this while an async flush is in flight (e.g. during a synchronous burst); a separate, larger memory backstop evicts the oldest only once the queue exceeds the per-interval rate cap. Default: 100.",
+          "type": "number",
+          "name": "maxBufferSize"
+        },
+        {
+          "description": "Tumbling-window rate cap. Bounds how many records can be captured within a sliding (technically tumbling) time window. Records exceeding the cap are dropped synchronously at `captureLog()` (they never enter the buffer or consume bandwidth). A single warn line is logged per window when the cap is hit.\nDefaults are per-SDK; on RN the default is `{ maxLogs: 500, windowMs: 10000 }` (≈50 logs/sec ceiling, tuned for cellular bandwidth).",
+          "type": "{\n        maxLogs?: number;\n        windowMs?: number;\n    }",
+          "name": "rateCap"
+        },
+        {
+          "description": "Extra OTLP resource attributes attached to every record. Spread first; SDK-controlled keys (`service.name`, `telemetry.sdk.*`, RN's `os.*`) are layered on top so users cannot accidentally clobber them. Use the dedicated `serviceName` / `environment` / `serviceVersion` fields to override those keys.",
+          "type": "Record<string, LogAttributeValue>",
+          "name": "resourceAttributes"
+        },
+        {
+          "description": "Service name attached to every record as the OTLP `service.name` resource attribute. Used by the Logs UI for filtering / grouping. Defaults to `'unknown_service'` when unset.",
+          "type": "string",
+          "name": "serviceName"
+        },
+        {
+          "description": "Service version attached as OTLP `service.version`. Useful for correlating regressions to specific app releases.",
+          "type": "string",
+          "name": "serviceVersion"
+        }
+      ],
+      "path": "../core/src/logs/types.ts"
+    },
+    {
       "id": "PostHogOptions",
       "name": "PostHogOptions",
       "properties": [
@@ -3891,6 +3978,11 @@
           "description": "Configuration for the `posthog.metrics` API (count, gauge, histogram).\nSet `serviceName` so series can be filtered per service in the Metrics UI.",
           "type": "MetricsConfig",
           "name": "metrics"
+        },
+        {
+          "description": "Configuration for the `posthog.logger` / `posthog.captureLog` logs API. Logs are sent\nto PostHog Logs as OTLP records, with no OpenTelemetry packages needed.\n\nEach record carries the active span's `trace_id` / `span_id` and, inside `withContext`,\nthe `distinctId` and `sessionId`, so logs join back to traces, persons and replays.\n`serviceName` defaults to the `traces` / `metrics` `serviceName`.",
+          "type": "PostHogLogsConfig",
+          "name": "logs"
         },
         {
           "description": "Configuration for distributed tracing (`startSpan` / `withSpan`). Tracing is\noff until this is set; supplying it is all that's needed to turn it on.\n\nSet `serviceName` so spans can be attributed and grouped per service — the\nproduct aggregates operations by service and span name.\n\n`shutdown()` drains spans that have already ended, within the shutdown\ntimeout; spans still open at that point are discarded.",
@@ -5258,6 +5350,7 @@
     "Identification",
     "Capture",
     "Error tracking",
+    "Logs",
     "Privacy",
     "Feature flags",
     "Traces",
