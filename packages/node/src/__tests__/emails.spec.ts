@@ -542,11 +542,6 @@ describe('emails', () => {
         'scheduledAt',
       ],
       ["Resend's scheduledAt on a code send", { ...CODE_SEND, scheduledAt: 'in 1 hour' }, 'scheduledAt'],
-      [
-        'category on the template form',
-        { templateId: TEMPLATE_ID, category: TRANSACTIONAL_EMAIL_CATEGORY },
-        'category',
-      ],
     ])('refuses %s before sending', async (_name, form, field) => {
       const { data, error } = await sendForm(form)
 
@@ -584,23 +579,6 @@ describe('emails', () => {
       const { error } = await sendForm(form)
 
       expect({ why: error?.why, fix: error?.fix }).toEqual({ why, fix })
-    })
-
-    const NEWSLETTER = { key: 'newsletter', type: 'marketing', name: 'Newsletter' }
-
-    it.each([
-      ['a category key as a bare string', 'newsletter'],
-      ['null', null],
-      ['a category without a name', { key: 'newsletter', type: 'marketing' }],
-      ['a category with a key that is not a string', { ...NEWSLETTER, key: 7 }],
-      ['a category of a type PostHog does not have', { ...NEWSLETTER, type: 'promotional' }],
-      ['a category with a description that is not a string', { ...NEWSLETTER, description: ['Monthly'] }],
-    ])('refuses %s as the category before sending', async (_name, category) => {
-      const { data, error } = await sendForm({ ...CODE_SEND, category })
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'invalid_category', name: 'validation_error', field: 'category' })
-      expect(fetch).not.toHaveBeenCalled()
     })
 
     it.each([
@@ -653,16 +631,19 @@ describe('emails', () => {
       return answer(202, { message_id: MESSAGE_ID, replayed: false })
     }
 
+    const CODE_SEND = {
+      to: 'reader@example.com',
+      templateKey: 'monthly-news',
+      subject: 'This month',
+      html: '<a href="{{ unsubscribe_url }}">Unsubscribe</a>',
+    }
+
     const sendIn = (
       category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
-    ): ReturnType<PostHog['emails']['send']> =>
-      posthog.emails.send({
-        to: 'reader@example.com',
-        templateKey: 'monthly-news',
-        subject: 'This month',
-        html: '<a href="{{ unsubscribe_url }}">Unsubscribe</a>',
-        category,
-      })
+    ): ReturnType<PostHog['emails']['send']> => posthog.emails.send({ ...CODE_SEND, category })
+
+    const sendUnchecked = (send: Record<string, unknown>): ReturnType<PostHog['emails']['send']> =>
+      posthog.emails.send(send as unknown as SendEmailOptions)
 
     const NEWSLETTER: MessageCategory = {
       key: 'newsletter',
@@ -716,6 +697,33 @@ describe('emails', () => {
 
       expect(error).toBeNull()
       expect(categories.get('newsletter')).toEqual({ type: 'marketing', name: 'Product news', description: stored })
+    })
+
+    it.each([
+      ['a category key as a bare string', 'newsletter'],
+      ['null', null],
+      ['a category without a name', { key: 'newsletter', type: 'marketing' }],
+      ['a category with a key that is not a string', { ...NEWSLETTER, key: 7 }],
+      ['a category of a type PostHog does not have', { ...NEWSLETTER, type: 'promotional' }],
+      ['a category with a description that is not a string', { ...NEWSLETTER, description: ['Monthly'] }],
+    ])('refuses %s as the category and sends nothing', async (_name, category) => {
+      const { data, error } = await sendUnchecked({ ...CODE_SEND, category })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_category', name: 'validation_error', field: 'category' })
+      expect(filedUnder).toEqual([])
+    })
+
+    it('refuses a category on the template form and sends nothing', async () => {
+      const { data, error } = await sendUnchecked({
+        to: 'reader@example.com',
+        templateId: TEMPLATE_ID,
+        category: TRANSACTIONAL_EMAIL_CATEGORY,
+      })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: 'category' })
+      expect(filedUnder).toEqual([])
     })
 
     it.each([
