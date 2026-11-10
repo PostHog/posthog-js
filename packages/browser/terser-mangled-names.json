@@ -42,6 +42,7 @@
         "_beforeUnloadListener",
         "_beginCookieSyncSuppression",
         "_bootstrapState",
+        "_botFilterWarned",
         "_boundsByHistogram",
         "_boundsCapWarned",
         "_boundsConflictWarned",

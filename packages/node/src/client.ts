@@ -179,6 +179,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _traces?: PostHogTraces
   private _logs?: PostHogLogs
   private _captureLogger?: CaptureLogger
+  /** Resolved once on first event; `null` means no service name is configured. */
+  private _serviceName?: string | null
   private _spanContext?: SpanContextManager
 
   private readonly captureMode: CaptureMode
@@ -709,10 +711,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private get _logsPipeline(): PostHogLogs {
     if (!this._logs) {
       const config = resolveNodeLogsConfig(this.options.logs, {
-        serviceName:
-          (this.hostResourceAttributes()['service.name'] as string | undefined) ||
-          this.options.traces?.serviceName ||
-          this.options.metrics?.serviceName,
+        serviceName: this._resolveServiceName() ?? undefined,
         hostResourceAttributes: this.hostResourceAttributes(),
       })
       this._logs = new PostHogLogs(
@@ -3507,6 +3506,32 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this._prepareEventMessage(props)
   }
 
+  /**
+   * The configured service name, stamped on events as `service_name` so events
+   * from several services sharing one project can be told apart. Resolved with
+   * the same resolvers as the traces and metrics `service.name`, so the event
+   * carries the name the telemetry does: traces first (resource attributes,
+   * host attributes, then `serviceName`), then metrics. Lowest precedence: a
+   * property set by the caller, the context or `register` wins.
+   */
+  private _serviceNameProperties(): PostHogEventProperties {
+    const serviceName = this._resolveServiceName()
+    return serviceName ? { service_name: serviceName } : {}
+  }
+
+  /** The configured service name shared by events and logs, or `null` when none is set. */
+  private _resolveServiceName(): string | null {
+    if (this._serviceName === undefined) {
+      this._serviceName =
+        (this.options.traces
+          ? resolveTracesConfig(this.options.traces, this.hostResourceAttributes()).serviceName
+          : undefined) ||
+        resolveMetricsConfig(this.options.metrics).serviceName ||
+        null
+    }
+    return this._serviceName
+  }
+
   private async _prepareEventMessage(
     props: EventMessage,
     options: { includeContextProperties?: boolean } = {}
@@ -3535,11 +3560,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const mergedProperties = includeContextProperties
       ? {
+          ...this._serviceNameProperties(),
           ...this.props,
           ...(contextData?.properties || {}),
           ...(properties || {}),
         }
-      : { ...(properties || {}) }
+      : { ...this._serviceNameProperties(), ...(properties || {}) }
 
     if (event === '$exception' && !('$trace_id' in mergedProperties || '$span_id' in mergedProperties)) {
       Object.assign(mergedProperties, await getActiveTraceProperties())

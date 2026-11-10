@@ -32,7 +32,7 @@ import {
   injectConversationIdPromptBack,
   resolveConversationId,
 } from './conversation-id'
-import { stampClientIdentity } from './client-identity'
+import { readHostClientInfo, stampClientIdentity } from './client-identity'
 import { stampTransportIdentity } from './transport-identity'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { captureEvent } from './capture'
@@ -349,7 +349,7 @@ async function prepareToolCallEvent(
   canCaptureContextIntent: boolean
 ): Promise<PreparedToolEvent | null> {
   try {
-    const sessionId = getSessionId(server, extra, conversation.conversationId)
+    const sessionId = getSessionId(server, extra, conversation.conversationId, request)
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
     const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -616,7 +616,7 @@ async function captureResourceRequest(params: TraceRequestParams): Promise<unkno
   const startTime = new Date()
   let preparedEvent: PreparedToolEvent | null = null
   try {
-    const sessionId = getSessionId(server, extra)
+    const sessionId = getSessionId(server, extra, undefined, request)
     const sessionInfo = getSessionInfo(server, data, sessionId)
     const event: McpEvent = {
       sessionId,
@@ -804,7 +804,7 @@ export async function handleListToolsRequest(
 ): Promise<CompatibleToolsListLike> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
-  const sessionId = getSessionId(server, extra)
+  const sessionId = getSessionId(server, extra, undefined, request)
   // Snapshot before identify, metadata resolution, or the list handler can yield
   // to a concurrent request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -1199,7 +1199,7 @@ export async function handleInitializeRequest(
 
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
   const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
-  const sessionId = getSessionId(server, extra)
+  const sessionId = getSessionId(server, extra, undefined, request)
   // Snapshot before identify, metadata, or the initialize handler can yield to
   // another request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -1234,6 +1234,15 @@ export async function handleInitializeRequest(
   }
   if (initializeClientInfo?.version) {
     event.clientVersion = initializeClientInfo.version
+  }
+  // The host's `clientInfo` callback outranks everything, the handshake body
+  // included, so `$mcp_initialize` names the same client as later requests.
+  const hostClientInfo = readHostClientInfo(server, request, extra)
+  if (hostClientInfo?.name) {
+    event.clientName = hostClientInfo.name
+  }
+  if (hostClientInfo?.version) {
+    event.clientVersion = hostClientInfo.version
   }
   stampTransportIdentity(event, extra)
 
