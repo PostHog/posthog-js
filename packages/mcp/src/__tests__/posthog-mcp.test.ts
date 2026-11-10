@@ -402,7 +402,7 @@ describe('PostHogMCP', () => {
       try {
         const prepared = client.prepareToolList(tools)
         expect(prepared[0].inputSchema?.properties?.llm_model).toMatchObject({ type: 'string' })
-        expect(prepared[0].inputSchema?.required).toContain('llm_model')
+        expect(prepared[0].inputSchema?.required ?? []).not.toContain('llm_model')
 
         const call = client.prepareToolCall('execute-sql', {
           query: 'select 1',
@@ -873,6 +873,28 @@ describe('PostHogMCP', () => {
     })
   })
 
+  describe('captureUnknownTool', () => {
+    it('emits only $mcp_unknown_tool with the requested name and session', async () => {
+      posthog.captureUnknownTool({ toolName: 'no_such_tool', sessionId: 'ses_123' })
+      await tick()
+
+      expect(capture.getCaptures().map((c) => c.event)).toEqual([PostHogMCPAnalyticsEvent.UnknownTool])
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.UnknownTool).properties).toMatchObject({
+        [PostHogMCPAnalyticsProperty.ToolName]: 'no_such_tool',
+        [PostHogMCPAnalyticsProperty.SessionId]: 'ses_123',
+      })
+    })
+    it.each([
+      ['empty', ''],
+      ['missing', undefined as unknown as string],
+    ])('emits nothing when the name is %s', async (_, toolName) => {
+      posthog.captureUnknownTool({ toolName, sessionId: 'ses_123' })
+      await tick()
+
+      expect(capture.getCaptures()).toHaveLength(0)
+    })
+  })
+
   describe('getMoreToolsResult', () => {
     it('returns a text acknowledgement for the agent', () => {
       const result = getMoreToolsResult()
@@ -953,21 +975,25 @@ describe('PostHogMCP', () => {
       expect(p.$set).toEqual({ email: 'a@b.com', plan: 'pro' })
     })
 
-    it('marks anonymous and skips person processing when no distinctId is given', async () => {
-      posthog.captureToolCall({ toolName: 'execute-sql', isError: false })
+    it('uses the session as the distinct id and skips person processing when no distinctId is given', async () => {
+      posthog.captureToolCall({ toolName: 'execute-sql', sessionId: 'ses_abc', isError: false })
       await tick()
 
       const payload = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
-      expect(payload.distinct_id).toBe('anonymous')
+      expect(payload.distinct_id).toBe('ses_abc')
       expect(payload.properties.$process_person_profile).toBe(false)
     })
 
-    it('omits $session_id entirely when no session is supplied', async () => {
-      posthog.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: false })
+    it('gives each capture without a session a fresh $session_id, which anonymous calls use as their distinct id', async () => {
+      posthog.captureToolCall({ toolName: 'execute-sql', isError: false })
+      posthog.captureToolCall({ toolName: 'execute-sql', isError: false })
       await tick()
 
-      const payload = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
-      expect(payload.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.SessionId)
+      const payloads = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.ToolCall)
+      const sessionIds = payloads.map((payload) => payload.properties[PostHogMCPAnalyticsProperty.SessionId])
+      expect(sessionIds).toEqual([expect.stringMatching(/^ses_/), expect.stringMatching(/^ses_/)])
+      expect(sessionIds[0]).not.toBe(sessionIds[1])
+      expect(payloads.map((payload) => payload.distinct_id)).toEqual(sessionIds)
     })
   })
 })

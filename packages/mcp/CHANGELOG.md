@@ -1,5 +1,29 @@
 # @posthog/mcp
 
+## 1.0.1
+
+### Patch Changes
+
+- [#5607](https://github.com/PostHog/posthog-js/pull/5607) [`fac34e4`](https://github.com/PostHog/posthog-js/commit/fac34e4b57b8fd0bdc5acb11451891adbe53f36f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Fix intent and payload capture bugs: a long digit run no longer drops `$mcp_intent` with a stack overflow (card redaction is otherwise unchanged), captured tool arguments are limited before they are sanitized and credential-named arguments are not walked, and `$mcp_feedback_<name>` object extras redact identifiers in keys and numbers. A parsed `__proto__` argument is still dropped, as before.
+  (2026-11-09)
+- Updated dependencies [[`fac34e4`](https://github.com/PostHog/posthog-js/commit/fac34e4b57b8fd0bdc5acb11451891adbe53f36f), [`bfbaff7`](https://github.com/PostHog/posthog-js/commit/bfbaff7e597428cdd6f683c78e60e651f6d2c590)]:
+  - @posthog/core@1.65.0
+  - posthog-node@5.64.0
+
+## 1.0.0
+
+### Major Changes
+
+- [#5584](https://github.com/PostHog/posthog-js/pull/5584) [`650e968`](https://github.com/PostHog/posthog-js/commit/650e968dbc6d7f62af3eaa17299d0e0d1096799a) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Release 1.0.0. The API and the `$mcp_*` events are now stable: a minor or patch release no longer renames or removes an event or property, changes its type, or changes which requests send an event, so your saved insights keep working across upgrades. New events and properties can still arrive in minor releases. Upgrading from 0.x needs no code change.
+  (2026-11-06)
+
+## 0.26.0
+
+### Minor Changes
+
+- [#5583](https://github.com/PostHog/posthog-js/pull/5583) [`2a08e91`](https://github.com/PostHog/posthog-js/commit/2a08e91a69b0c1d9e24ccf177505e63f94f139d3) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Aligned with the MCP analytics spec: a call to a tool the server never registered now emits `$mcp_unknown_tool` instead of a failed `$mcp_tool_call`, `llm_model` is advertised as optional, the `get_more_tools` and `send_feedback` annotations now declare that they record data, and the injected `context` argument has a shorter description. A server whose own dispatcher bypasses the MCP SDK's tool registry (such as `@rekog/mcp-nest`) keeps recording calls to unknown names as failed tool calls, since the SDK cannot tell whether such a tool exists. On a low-level server, `resolveOriginalTool` returning `undefined` now marks a failing call as an unknown tool, so return a tool for every name your server serves. Strings cut to a property limit (such as 256 characters for names and 2,048 for intent and error text) now stop exactly at the limit, `...` included, instead of 3 characters past it. `PostHogMCP` capture methods called without a `sessionId` now send a fresh `$session_id` per call, and anonymous calls use it as their distinct id instead of the shared `"anonymous"`. This changes your published tool definitions; if your server is listed in the ChatGPT or Claude directories, those platforms may re-review the updated tools.
+  (2026-11-06)
+
 ## 0.25.2
 
 ### Patch Changes

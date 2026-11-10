@@ -19,6 +19,9 @@ import {
   PostHogMetrics,
   PostHogPersistedProperty,
   PostHogTraces,
+  PostHogLogs,
+  type CaptureLogger,
+  type CaptureLogOptions,
   inertSpan,
   Properties,
   resolveMetricsConfig,
@@ -32,6 +35,7 @@ import {
 } from '@posthog/core'
 import type {
   Metrics,
+  PostHogFeatureFlagDetails,
   Span,
   SpanContextManager,
   StartSpanOptions,
@@ -81,6 +85,7 @@ import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
 import { DEFAULT_EMAIL_REQUEST_MAX_RETRIES, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS, EmailSender } from './emails/emails'
 import type { Emails } from './emails/types'
+import { resolveNodeLogsConfig } from './logs-config'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -172,6 +177,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
   private _traces?: PostHogTraces
+  private _logs?: PostHogLogs
+  private _captureLogger?: CaptureLogger
+  /** Resolved once on first event; `null` means no service name is configured. */
+  private _serviceName?: string | null
   private _spanContext?: SpanContextManager
 
   private readonly captureMode: CaptureMode
@@ -341,14 +350,23 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   private _flushEventsAndSpans(skipThrottledSpans = false): Promise<void> {
     const events = this.flushWithPendingPromises()
-    if (!this._traces || (skipThrottledSpans && this._traces.throttled)) {
+    const others: Promise<unknown>[] = []
+    if (this._traces && !(skipThrottledSpans && this._traces.throttled)) {
+      others.push(this._traces.flush().catch(() => {}))
+    }
+    // Same as spans: an automatic flush leaves logs alone while the endpoint's Retry-After window is open.
+    if (this._logs && !(skipThrottledSpans && this._logs.throttled)) {
+      // Not `flush()`: it clears the logs timer, and a failure here must re-arm it.
+      others.push(this._logs.flushInBackground())
+    }
+    if (others.length === 0) {
       return events
     }
     // Settled, not `all`: `all` rejects the moment the event flush does, and a
     // serverless host that treats this promise as the end of the invocation can
-    // freeze it with the span request still open. The events rejection is still
-    // the one the caller sees.
-    return allSettled([events, this._traces.flush().catch(() => {})]).then(([eventsResult]) => {
+    // freeze it with the span or log request still open. The events rejection is
+    // still the one the caller sees.
+    return allSettled([events, ...others]).then(([eventsResult]) => {
       if (eventsResult.status === 'rejected') {
         throw eventsResult.reason
       }
@@ -702,6 +720,97 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
     }
     return this._metrics
+  }
+
+  /**
+   * The `posthog.logs` pipeline, built on first use.
+   */
+  private get _logsPipeline(): PostHogLogs {
+    if (!this._logs) {
+      const config = resolveNodeLogsConfig(this.options.logs, {
+        serviceName: this._resolveServiceName() ?? undefined,
+        hostResourceAttributes: this.hostResourceAttributes(),
+      })
+      this._logs = new PostHogLogs(
+        this,
+        config,
+        this._logger,
+        () => this._logContext(),
+        (fn) => fn(),
+        undefined,
+        undefined,
+        () => this.disabled || this.optedOut
+      )
+    }
+    return this._logs
+  }
+
+  /** Identity attached to each log record, from the current `withContext`. */
+  private _logContext(): { distinctId?: string; sessionId?: string } {
+    const context = this.context?.get()
+    return { distinctId: context?.distinctId, sessionId: context?.sessionId }
+  }
+
+  /**
+   * Captures one structured log record to PostHog Logs. Attaches the active span's
+   * ids and the `withContext` person and session unless the options set their own.
+   *
+   * {@label Logs}
+   *
+   * @example
+   * ```ts
+   * client.captureLog({ body: 'payment failed', level: 'error', attributes: { code: 'E001' } })
+   * ```
+   */
+  captureLog(options: CaptureLogOptions): void {
+    let record = options
+    if (!options.trace_id && !options.span_id) {
+      const span = this.getActiveSpan()
+      const traceId = span?.traceId
+      const spanId = span?.spanId
+      if (traceId && spanId) {
+        const flags = parseInt(span?.traceparent()?.split('-')[3] ?? '', 16)
+        record = {
+          ...options,
+          trace_id: traceId,
+          span_id: spanId,
+          ...(options.trace_flags === undefined && !Number.isNaN(flags) && { trace_flags: flags }),
+        }
+      }
+    }
+    this._logsPipeline.captureLog(record)
+    // A handler that only logs still has to hold the invocation open.
+    this.scheduleDebouncedFlush()
+  }
+
+  /**
+   * Per-level logger: `client.logger.info('message', { attributes })`. Equivalent to
+   * `captureLog` at the matching severity.
+   *
+   * {@label Logs}
+   *
+   * @example
+   * ```ts
+   * client.logger.info('checkout completed', { order_id: 'ord_789' })
+   * client.logger.error('payment failed', { code: 'E001' })
+   * ```
+   */
+  public get logger(): CaptureLogger {
+    if (!this._captureLogger) {
+      const log =
+        (level: NonNullable<CaptureLogOptions['level']>) =>
+        (body: string, attributes?: CaptureLogOptions['attributes']): void =>
+          this.captureLog({ body, level, attributes })
+      this._captureLogger = {
+        trace: log('trace'),
+        debug: log('debug'),
+        info: log('info'),
+        warn: log('warn'),
+        error: log('error'),
+        fatal: log('fatal'),
+      }
+    }
+    return this._captureLogger
   }
 
   /**
@@ -1551,6 +1660,36 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Treats a `/flags` body whose `flags` field is not an object (for example `null`, a string or
+   * an array) like a failed request. Every remote flag read goes through this method, so callers
+   * get the same fallback, `$feature_flag_error` and `error` event as for a failed request instead of a `TypeError`.
+   */
+  protected override async getFeatureFlagDetailsStateless(
+    distinctId: string,
+    groups: Record<string, string | number> = {},
+    personProperties: Record<string, string> = {},
+    groupProperties: Record<string, Record<string, string>> = {},
+    disableGeoip?: boolean,
+    flagKeysToEvaluate?: string[]
+  ): Promise<PostHogFeatureFlagDetails | undefined> {
+    const details = await super.getFeatureFlagDetailsStateless(
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties,
+      disableGeoip,
+      flagKeysToEvaluate
+    )
+    if (details !== undefined && !isPlainObject(details.flags)) {
+      const message = '/flags response has a non-object `flags` field, treating it as a failed request'
+      this._logger.warn(`[FEATURE FLAGS] ${message}`)
+      this._events.emit('error', new Error(message))
+      return undefined
+    }
+    return details
+  }
+
+  /**
    * Internal method that handles feature flag evaluation with full details.
    * Used by getFeatureFlag, getFeatureFlagPayload, and getFeatureFlagResult.
    *
@@ -1669,7 +1808,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // Fall back to remote evaluation if needed
     if (!flagWasLocallyEvaluated && !onlyEvaluateLocally) {
-      const flagsResponse = await super.getFeatureFlagDetailsStateless(
+      const flagsResponse = await this.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
         personProperties,
@@ -2494,7 +2633,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       Array.from(requestedFlagKeys).some((key) => this.featureFlagsPoller?.featureFlagsByKey[key] === undefined)
     const fallbackToFlags = localResult ? localResult.fallbackToFlags || requestedFlagMissingLocally : true
     if (fallbackToFlags && !onlyEvaluateLocally) {
-      const details = await super.getFeatureFlagDetailsStateless(
+      const details = await this.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
         personProperties,
@@ -3025,6 +3164,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this._isShutdown = true
     // Sends that started before shutdown keep running alongside the flushes below, within the same budget.
     const emailsDrained = this._emails?.drain()
+    // Logs drain alongside the other pipelines rather than ahead of them, so a stalled
+    // logs endpoint can't spend the budget traces and events need.
+    const logs = this._logs
+    const logsDrained = logs
+      ? raceWithTimeout(
+          logs.flush().catch(() => {}),
+          Math.max(0, shutdownDeadlineMs - Date.now())
+        ).then(() => {
+          logs.reset()
+          // Retire a flush that lost the race: otherwise, when it settles with records
+          // left, its background retry re-arms the timer and keeps sending after shutdown.
+          logs.clearQueue()
+        })
+      : undefined
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
@@ -3061,6 +3214,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return await super._shutdown(remainingMs)
     } finally {
       await emailsSettled
+      await logsDrained
       this._distinctIdHasSentFlagCalls.clear()
       resolve?.()
     }
@@ -3369,6 +3523,32 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this._prepareEventMessage(props)
   }
 
+  /**
+   * The configured service name, stamped on events as `service_name` so events
+   * from several services sharing one project can be told apart. Resolved with
+   * the same resolvers as the traces and metrics `service.name`, so the event
+   * carries the name the telemetry does: traces first (resource attributes,
+   * host attributes, then `serviceName`), then metrics. Lowest precedence: a
+   * property set by the caller, the context or `register` wins.
+   */
+  private _serviceNameProperties(): PostHogEventProperties {
+    const serviceName = this._resolveServiceName()
+    return serviceName ? { service_name: serviceName } : {}
+  }
+
+  /** The configured service name shared by events and logs, or `null` when none is set. */
+  private _resolveServiceName(): string | null {
+    if (this._serviceName === undefined) {
+      this._serviceName =
+        (this.options.traces
+          ? resolveTracesConfig(this.options.traces, this.hostResourceAttributes()).serviceName
+          : undefined) ||
+        resolveMetricsConfig(this.options.metrics).serviceName ||
+        null
+    }
+    return this._serviceName
+  }
+
   private async _prepareEventMessage(
     props: EventMessage,
     options: { includeContextProperties?: boolean } = {}
@@ -3397,11 +3577,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const mergedProperties = includeContextProperties
       ? {
+          ...this._serviceNameProperties(),
           ...this.props,
           ...(contextData?.properties || {}),
           ...(properties || {}),
         }
-      : { ...(properties || {}) }
+      : { ...this._serviceNameProperties(), ...(properties || {}) }
 
     if (event === '$exception' && !('$trace_id' in mergedProperties || '$span_id' in mergedProperties)) {
       Object.assign(mergedProperties, await getActiveTraceProperties())
