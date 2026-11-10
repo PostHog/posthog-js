@@ -636,7 +636,7 @@ function textFromHtml(html: string): string {
   for (const character of html) {
     if (character === '<') {
       inTag = true
-    } else if (character === '>') {
+    } else if (inTag && character === '>') {
       inTag = false
     } else if (!inTag) {
       text += character
