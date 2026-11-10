@@ -249,7 +249,7 @@ export class EmailSender implements Emails {
   private async uploadFile({ url, headers, bytes, field }: Upload): Promise<void> {
     let reply: Reply
     try {
-      reply = await this.request(url, 'PUT', headers, bytes)
+      reply = await this.request(url, 'PUT', headers, bytes, 'manual')
     } catch (cause) {
       if (cause instanceof Error && cause.name === 'AbortError') {
         throw new EmailError({
@@ -265,6 +265,15 @@ export class EmailSender implements Emails {
         message: `The upload of ${field} didn't reach PostHog's file storage, so no email was sent.`,
         field,
         cause,
+      })
+    }
+    if (reply.status >= 300 && reply.status < 400) {
+      throw new EmailError({
+        code: 'attachment_upload_failed',
+        message: `PostHog's file storage redirected the upload of ${field} elsewhere. The SDK uploads only to the URL PostHog signed, so no email was sent.`,
+        statusCode: reply.status,
+        fix: "Make your PostHog's file storage URL point straight at the storage, over https.",
+        field,
       })
     }
     if (reply.status < 200 || reply.status >= 300) {
@@ -351,7 +360,8 @@ export class EmailSender implements Emails {
     url: string,
     method: 'GET' | 'POST' | 'PUT',
     headers: Record<string, string>,
-    body?: string | Uint8Array<ArrayBuffer>
+    body?: string | Uint8Array<ArrayBuffer>,
+    redirect?: 'manual'
   ): Promise<Reply> {
     const controller = new AbortController()
     const timeoutMs = this.config.requestTimeoutMs
@@ -372,6 +382,7 @@ export class EmailSender implements Emails {
         method,
         headers,
         ...(body === undefined ? {} : { body }),
+        ...(redirect ? { redirect } : {}),
         signal: controller.signal,
       })
     )

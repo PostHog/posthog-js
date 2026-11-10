@@ -710,6 +710,24 @@ describe('emails', () => {
       expectNothingSent(fake)
     })
 
+    it("refuses an upload that file storage redirects, so the file goes nowhere PostHog didn't sign", async () => {
+      const fake = againstPostHog({ storageRedirectOrigin: 'http://email-files.example.com' })
+
+      const { data, error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'attachment_upload_failed',
+        field: 'attachments__0',
+        statusCode: 307,
+        message:
+          "PostHog's file storage redirected the upload of attachments__0 elsewhere. The SDK uploads only to the URL PostHog signed, so no email was sent.",
+        fix: "Make your PostHog's file storage URL point straight at the storage, over https.",
+      })
+      expect(fake.writes).toEqual([])
+      expectNothingSent(fake)
+    })
+
     it('uploads over plain HTTP when the client sends to a plain-HTTP app host for local development', async () => {
       const fake = new FakePostHog({
         secretKey: SECRET_KEY,

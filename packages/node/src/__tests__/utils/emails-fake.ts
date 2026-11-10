@@ -61,6 +61,7 @@ export interface FakePostHogOptions {
   uploadUrlTtlMs?: number
   appHost?: string
   storageOrigin?: string
+  storageRedirectOrigin?: string
 }
 
 export interface QueuedAttachment {
@@ -106,6 +107,7 @@ interface Answer {
   status: number
   body?: unknown
   text?: string
+  location?: string
 }
 
 type Json = Record<string, unknown>
@@ -139,6 +141,7 @@ export class FakePostHog {
       uploadUrlTtlMs: UPLOAD_URL_TTL_MS,
       appHost: APP_HOST,
       storageOrigin: STORAGE_ORIGIN,
+      storageRedirectOrigin: '',
       ...options,
     }
   }
@@ -185,8 +188,14 @@ export class FakePostHog {
     if (fault === 'lost reply') {
       throw new TypeError('fetch failed', { cause: new Error('ECONNRESET') })
     }
+    if (answer.location && options.redirect !== 'manual') {
+      return this.fetch(answer.location, options)
+    }
     const text = answer.text ?? (answer.body === undefined ? '' : JSON.stringify(answer.body))
     const headers = new Headers(answer.text === undefined ? { 'Content-Type': 'application/json' } : {})
+    if (answer.location) {
+      headers.set('Location', answer.location)
+    }
     return { status: answer.status, headers, text: async () => text, json: async () => JSON.parse(text) }
   }
 
@@ -210,7 +219,10 @@ export class FakePostHog {
     if (url === this.options.appHost + SEND_PATH) {
       return 'send'
     }
-    return url.startsWith(`${this.options.storageOrigin}/`) ? 'storage' : undefined
+    const { storageOrigin, storageRedirectOrigin } = this.options
+    return url.startsWith(`${storageOrigin}/`) || (storageRedirectOrigin && url.startsWith(`${storageRedirectOrigin}/`))
+      ? 'storage'
+      : undefined
   }
 
   private recover(route: Route): void {
@@ -291,7 +303,12 @@ export class FakePostHog {
   }
 
   private store(url: string, options: PostHogFetchOptions): Answer {
-    const upload = this.issued.get(url)
+    const { storageOrigin, storageRedirectOrigin } = this.options
+    if (storageRedirectOrigin && url.startsWith(`${storageOrigin}/`)) {
+      return { status: 307, text: '', location: storageRedirectOrigin + url.slice(storageOrigin.length) }
+    }
+    const signed = storageRedirectOrigin ? url.replace(storageRedirectOrigin, storageOrigin) : url
+    const upload = this.issued.get(signed)
     if (options.method !== 'PUT' || !upload) {
       return storageError(403, 'AccessDenied', 'Access Denied')
     }
