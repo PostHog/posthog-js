@@ -160,6 +160,9 @@ function createHarness(sessionIdleTimeoutSeconds = 30 * 60) {
         sessionManager,
         requestRouter: new RequestRouter({ config } as any),
         consent: { isOptedOut: () => false } as unknown as ConsentManager,
+        has_opted_out_capturing(): boolean {
+            return this.consent.isOptedOut()
+        },
         register_for_session() {},
         _internalEventEmitter: emitter,
         on: vi.fn().mockImplementation((event, cb) => emitter.on(event, cb)),

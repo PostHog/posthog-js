@@ -1,5 +1,19 @@
 # posthog-react-native
 
+## 4.86.0
+
+### Minor Changes
+
+- [#5601](https://github.com/PostHog/posthog-js/pull/5601) [`09a0f1f`](https://github.com/PostHog/posthog-js/commit/09a0f1fa25946196895e2023e61da0609bef7579) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `setAppLanguage()` to send the language your app displays as `$app_language` on every event
+  (2026-11-10)
+
+### Patch Changes
+
+- Updated dependencies [[`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3), [`1ae99e2`](https://github.com/PostHog/posthog-js/commit/1ae99e2909dbbf5b21b374a850c56bbf2fbee52b), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - @posthog/types@1.423.0
+  - @posthog/react-native-plugin@2.13.1
+  - @posthog/core@1.66.0
+
 ## 4.85.4
 
 ### Patch Changes

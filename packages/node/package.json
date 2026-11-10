@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.63.2",
+  "version": "5.68.2",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -92,6 +92,11 @@
         "import": "./dist/entrypoints/index.node.mjs",
         "require": "./dist/entrypoints/index.node.js",
         "default": "./dist/entrypoints/index.node.js"
+      },
+      "convex": {
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
       },
       "edge-light": {
         "import": "./dist/entrypoints/index.edge.mjs",
