@@ -38,7 +38,7 @@ export const CONFIG_VERSION_2_ATTRIBUTION_PROPERTIES: readonly string[] = [
   '$feature_flag_reason_code',
   '$feature_flag_rule_id',
   '$feature_flag_rule_type',
-  '$feature_flag_variant',
+  '$feature_flag_variant_key',
 ]
 
 // Properties a super or context property must not add to, or change on, a config version 2
@@ -226,7 +226,7 @@ export function buildConfigVersion2FlagEvents(params: {
     attributionProperties.$feature_flag_rule_type = ruleType
   }
   if (variantKey !== undefined) {
-    attributionProperties.$feature_flag_variant = variantKey
+    attributionProperties.$feature_flag_variant_key = variantKey
   }
   const { $feature_flag_reason: _reason, ...flagCalledProperties } = params.properties
   Object.assign(flagCalledProperties, attributionProperties)
@@ -256,7 +256,7 @@ export function buildConfigVersion2FlagEvents(params: {
   const exposureIdentity: Record<string, unknown> = {
     $feature_flag: key,
     $feature_flag_response: response,
-    $feature_flag_variant: variantKey,
+    $feature_flag_variant_key: variantKey,
     $feature_flag_rule_id: ruleId,
     locally_evaluated: flagCalledProperties.locally_evaluated === true,
   }

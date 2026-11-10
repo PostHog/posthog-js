@@ -7,7 +7,7 @@
   "required": [
     "$feature_flag",
     "$feature_flag_response",
-    "$feature_flag_variant",
+    "$feature_flag_variant_key",
     "$feature_flag_rule_id",
     "locally_evaluated"
   ],
@@ -27,7 +27,7 @@
         }
       ]
     },
-    "$feature_flag_variant": {
+    "$feature_flag_variant_key": {
       "type": "string"
     },
     "$feature_flag_rule_id": {

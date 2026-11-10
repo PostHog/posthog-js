@@ -9,7 +9,7 @@ import type { PostHogOptions } from '@/types'
 // `$experiment_exposure` and the attribution of `$feature_flag_called`. A remotely evaluated config
 // version 2 record that assigns an experiment variant sends `$experiment_exposure` next to its
 // `$feature_flag_called`, and every config version 2 record adds its rule attribution to
-// `$feature_flag_called`. The reader fixtures and event schemas are copied unchanged from a released
+// `$feature_flag_called`. The reader fixtures and event schemas are copied unchanged from a
 // PostHog/posthog-sdk-test-harness contract; `fixtures/feature_flag_rules_v2/SOURCE.json` records which.
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/feature_flag_rules_v2/', import.meta.url))
@@ -32,7 +32,7 @@ const ATTRIBUTION_PROPERTIES = [
   '$feature_flag_reason_code',
   '$feature_flag_rule_id',
   '$feature_flag_rule_type',
-  '$feature_flag_variant',
+  '$feature_flag_variant_key',
 ]
 
 // `$experiment_exposure` leaves these out. The config version, rule type and reason code stay on
@@ -293,13 +293,13 @@ const EXPECTED_ATTRIBUTION = {
   $feature_flag_reason_code: 'experiment_split',
   $feature_flag_rule_id: RULE,
   $feature_flag_rule_type: 'experiment',
-  $feature_flag_variant: 'annual-first',
+  $feature_flag_variant_key: 'annual-first',
 }
 
 const EXPECTED_EXPOSURE = {
   $feature_flag: FLAG,
   $feature_flag_response: 'annual',
-  $feature_flag_variant: 'annual-first',
+  $feature_flag_variant_key: 'annual-first',
   $feature_flag_rule_id: RULE,
   locally_evaluated: false,
   $feature_flag_id: 77,
@@ -374,7 +374,7 @@ describe('$experiment_exposure', () => {
           $feature_flag_reason_code: 'experiment_split',
           $feature_flag_rule_id: RULE_ID,
           $feature_flag_rule_type: 'experiment',
-          $feature_flag_variant: 'arm_a',
+          $feature_flag_variant_key: 'arm_a',
         },
       ],
       ...(
@@ -429,7 +429,7 @@ describe('$experiment_exposure', () => {
         expect(attribution(called.properties)).toEqual(expected)
         checkFlagCalled(called.properties)
         expect(named(events, EXPOSURE, 'garden-layout')).toHaveLength(
-          '$feature_flag_variant' in (expected as object) ? 1 : 0
+          '$feature_flag_variant_key' in (expected as object) ? 1 : 0
         )
       }
     )
@@ -635,9 +635,9 @@ describe('$experiment_exposure', () => {
       const events = await readEvents(path, [response([split({ variantKey: '' })])])
 
       const [called] = named(events, FLAG_CALLED)
-      expect(called.properties.$feature_flag_variant).toBe('')
+      expect(called.properties.$feature_flag_variant_key).toBe('')
       const [exposure] = named(events, EXPOSURE)
-      expect(exposure.properties.$feature_flag_variant).toBe('')
+      expect(exposure.properties.$feature_flag_variant_key).toBe('')
       checkExposure(exposure.properties)
     })
 
@@ -814,7 +814,7 @@ describe('$experiment_exposure', () => {
 
       const [exposure] = named(events, EXPOSURE)
       expect(exposure.properties.$feature_flag_response).toBe(false)
-      expect(exposure.properties.$feature_flag_variant).toBe('no-banner')
+      expect(exposure.properties.$feature_flag_variant_key).toBe('no-banner')
     })
 
     it.each([
@@ -827,7 +827,7 @@ describe('$experiment_exposure', () => {
       const [exposure] = named(events, EXPOSURE)
       expect(called.properties.$feature_flag_response).toBe(true)
       expect(exposure.properties.$feature_flag_response).toBe(true)
-      expect(exposure.properties.$feature_flag_variant).toBe('boosted')
+      expect(exposure.properties.$feature_flag_variant_key).toBe('boosted')
     })
 
     it('does not depend on a linked experiment', async () => {
@@ -980,7 +980,7 @@ describe('$experiment_exposure', () => {
         { reads: 2 }
       )
 
-      expect(named(events, EXPOSURE).map((event) => event.properties.$feature_flag_variant)).toEqual([
+      expect(named(events, EXPOSURE).map((event) => event.properties.$feature_flag_variant_key)).toEqual([
         'control',
         'test',
       ])
@@ -1087,7 +1087,7 @@ describe('$experiment_exposure', () => {
       }
       await client.shutdown()
 
-      expect(events.map((event) => [event.event, event.properties.$feature_flag_variant])).toEqual([
+      expect(events.map((event) => [event.event, event.properties.$feature_flag_variant_key])).toEqual([
         [FLAG_CALLED, 'control'],
         [EXPOSURE, 'control'],
         [FLAG_CALLED, 'test'],
@@ -1317,7 +1317,7 @@ describe('$experiment_exposure', () => {
       $feature_flag_reason_code: 'spoofed',
       $feature_flag_rule_type: 'spoofed',
       $feature_flag_rule_id: OTHER_RULE,
-      $feature_flag_variant: 'spoofed',
+      $feature_flag_variant_key: 'spoofed',
       $feature_flag_reason: 'spoofed',
       $feature_flag_forced_variant: true,
       $feature_flag_experiment_id: 301,
