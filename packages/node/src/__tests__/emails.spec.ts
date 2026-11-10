@@ -303,15 +303,38 @@ describe('emails', () => {
     })
 
     it('renders content that waits inside nested Suspense boundaries', async () => {
-      const firstName = new Promise<string>((resolve) => queueMicrotask(() => resolve('Ada')))
-      const Greeting = (): ReactElement => createElement('p', null, `Welcome, ${use(firstName)}`)
+      let startLoading = (): void => {}
+      const firstName = new Promise<string>((resolve) => {
+        startLoading = () => setTimeout(() => resolve('Ada'), 10)
+      })
+      const Greeting = (): ReactElement => {
+        startLoading()
+        return createElement('p', null, `Welcome, ${use(firstName)}`)
+      }
       const fallback = createElement('p', null, 'Loading')
       const Mail = (): ReactElement =>
-        createElement(Suspense, { fallback }, createElement(Suspense, { fallback }, createElement(Greeting)))
+        createElement(
+          'html',
+          null,
+          createElement(
+            'body',
+            null,
+            createElement(Suspense, { fallback }, createElement(Suspense, { fallback }, createElement(Greeting)))
+          )
+        )
 
-      await sendReact({ react: createElement(Mail) })
+      let settled = false
+      const pending = sendReact({ react: createElement(Mail) }).finally(() => {
+        settled = true
+      })
+      while (!settled) {
+        await vi.advanceTimersByTimeAsync(5)
+      }
+      await pending
 
       expect(inbox).toEqual([expect.objectContaining({ text: 'Welcome, Ada' })])
+      expect(inbox[0].html).toEqual(expect.stringContaining('<p>Welcome, Ada</p>'))
+      expect(inbox[0].html).not.toMatch(/Loading|<script|<template/)
     })
 
     it('keeps the text the caller wrote', async () => {
