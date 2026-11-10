@@ -689,6 +689,23 @@ describe('emails', () => {
       })
     })
 
+    it('files the email under a category whose fields are getters', async () => {
+      class NewsletterCategory implements MessageCategory {
+        readonly type = 'marketing'
+        get key(): string {
+          return 'newsletter'
+        }
+        get name(): string {
+          return 'Newsletter'
+        }
+      }
+
+      const { error } = await sendIn(new NewsletterCategory())
+
+      expect(error).toBeNull()
+      expect(filedUnder).toEqual(['newsletter'])
+    })
+
     it.each([
       ['keeps the description when the send leaves it out', undefined, 'Monthly product news'],
       ['clears the description with an empty string', '', ''],

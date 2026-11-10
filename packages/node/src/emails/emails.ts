@@ -452,7 +452,7 @@ function checkedCategory(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | 
       CATEGORY_TYPES.has(type) &&
       (description === undefined || typeof description === 'string')
     ) {
-      return value as MessageCategory
+      return { key, type: type as MessageCategory['type'], name, description }
     }
   }
   throw invalid(
