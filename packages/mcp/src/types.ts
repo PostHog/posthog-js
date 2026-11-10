@@ -145,6 +145,25 @@ export interface MCPAnalyticsOptions {
    */
   enableConversationId?: boolean
   /**
+   * Resolve the session id for each request yourself. For stateless per-request servers
+   * that already carry their own session header (or any host-side session id), so every
+   * request does not become its own `$session_id`. Return a non-empty string to use it,
+   * or `null`/`undefined` to fall back to the SDK's resolution. The value is hashed into
+   * a `ses_` id, never used verbatim. Takes precedence over `conversation_id` and any
+   * transport session. A throwing callback is ignored.
+   */
+  sessionId?: (request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => string | null | undefined
+  /**
+   * Resolve the calling client's name and version for each request, for servers that
+   * never see `initialize` on the instance handling a tool call. Fields returned win
+   * over everything the SDK resolved itself (`_meta`, session token, handshake) →
+   * `$mcp_client_name` / `$mcp_client_version`. A throwing callback is ignored.
+   */
+  clientInfo?: (
+    request: MCPRequestLike,
+    extra?: CompatibleRequestHandlerExtra
+  ) => { name?: string; version?: string } | null | undefined
+  /**
    * Emit a `$exception` event alongside any failed tool call. Defaults to `true`.
    * Set to `false` if you handle error tracking elsewhere and don't want MCP errors
    * fanning out into PostHog error tracking.
