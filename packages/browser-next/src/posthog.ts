@@ -792,6 +792,7 @@ class PostHog implements IPostHog {
         return {
             projectToken: this.projectToken,
             logger: this.logger,
+            sessionKv: this._state.tabKeyValueStore('analytics', () => canMutate() && this._state.prepare()),
             state: this._state,
             canCapture: () => canMutate() && !this._blocked && !this.hasOptedOut(),
             canMutate,

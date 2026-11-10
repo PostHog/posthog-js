@@ -24,7 +24,13 @@ import { captureFailure, EMPTY_CAPTURE_SUMMARY } from './capture-summary'
 import { createId } from './id'
 import { deepFreeze } from './immutable'
 import { ClientRateLimiter } from './rate-limiter'
-import { snapshotCaptureProperties, type CaptureProperties } from './capture-properties'
+import {
+    applySessionProperties,
+    snapshotCaptureProperties,
+    unavoidableProperties,
+    type CaptureProperties,
+} from './capture-properties'
+import { SessionRegisteredProperties } from './analytics-session-properties'
 import { RegisteredProperties, snapshotRegisteredProperties } from './analytics-properties'
 import {
     personPropertyNames,
@@ -94,6 +100,7 @@ export class Analytics implements IAnalyticsExtension {
     private _failures = 0
     private _kv: KeyValueStore | undefined
     private _registeredProperties: RegisteredProperties | undefined
+    private _sessionProperties: SessionRegisteredProperties | undefined
     private _lastPersonProperties: string | undefined
     private readonly _personProfiles: PersonProfileMode
     private readonly _rateLimiter: ClientRateLimiter
@@ -146,6 +153,7 @@ export class Analytics implements IAnalyticsExtension {
 
     readonly bindCaptureHost = (host: AnalyticsCaptureHost): void => {
         this._host = host
+        this._sessionProperties = new SessionRegisteredProperties(host.sessionKv)
     }
 
     readonly setup = (value: IPostHogInternal): void => {
@@ -197,6 +205,7 @@ export class Analytics implements IAnalyticsExtension {
     readonly dispose = (): Promise<void> | undefined => {
         this._disposed = true
         this._registeredProperties = undefined
+        this._sessionProperties = undefined
         this._dynamicEventProperties.splice(0)
         for (const release of this._disposalWaiters) release()
         this._disposalWaiters.clear()
@@ -458,7 +467,6 @@ export class Analytics implements IAnalyticsExtension {
             $lib_version: version,
             $process_person_profile: processPersonProfile,
         }
-        const observedProperties = { ...snapshot.observed, ...metadata, $groups: { ...groups } }
         const message: AnalyticsMessage = {
             uuid: snapshot.uuid ?? createId(),
             event,
@@ -466,23 +474,46 @@ export class Analytics implements IAnalyticsExtension {
             properties: { ...snapshot.message, ...metadata },
             timestamp: eventTimestamp(snapshot.timestamp),
         }
-        const bytes = this._measureCapture(message)
+        const bytes = this._enrichAndMeasure(message, snapshot, metadata, session.sessionId)
         if (bytes === undefined) return undefined
         return {
             message,
             bytes,
             preparedSession,
-            observedProperties,
+            observedProperties: { ...snapshot.observed, ...metadata, $groups: { ...groups } },
         }
     }
 
-    private _measureCapture(message: AnalyticsMessage): number | undefined {
+    private _enrichAndMeasure(
+        message: AnalyticsMessage,
+        snapshot: CaptureProperties,
+        metadata: Record<string, unknown>,
+        sessionId: string
+    ): number | undefined {
         try {
-            return utf8Bytes(JSON.stringify(message))
+            let bytes = utf8Bytes(JSON.stringify(message))
+            if (!this._fitsUnavoidableProperties(message, snapshot, metadata, bytes)) return undefined
+            const changed = applySessionProperties(snapshot, this._sessionProperties?.values(sessionId) ?? {})
+            message.properties = { ...snapshot.message, ...metadata }
+            if (changed) bytes = utf8Bytes(JSON.stringify(message))
+            return bytes
         } catch (error) {
             this._host?.logger.error('The finalized event could not be measured', error)
             return undefined
         }
+    }
+
+    private _fitsUnavoidableProperties(
+        message: AnalyticsMessage,
+        snapshot: CaptureProperties,
+        metadata: Record<string, unknown>,
+        bytes: number
+    ): boolean {
+        if (bytes <= MAX_ANALYTICS_BYTES) return true
+        const minimum = utf8Bytes(JSON.stringify({ ...message, properties: unavoidableProperties(snapshot, metadata) }))
+        if (minimum <= MAX_ANALYTICS_BYTES) return true
+        this._warnOversized(message.event, bytes)
+        return false
     }
 
     private _warnOversized(event: string, bytes: number): void {
@@ -511,6 +542,7 @@ export class Analytics implements IAnalyticsExtension {
         }
         // Commit in admission order before session/event observers can admit another person operation.
         if (personProperties) this._lastPersonProperties = personProperties.signature
+        this._sessionProperties?.admitted(candidate.preparedSession.context.sessionId)
         this._publishCapture(candidate, host)
         if (!immediate) void this._ensureDelivery('capture')
         return candidate.message
@@ -741,6 +773,7 @@ export class Analytics implements IAnalyticsExtension {
         this._host.state.prepare()
         this._host.state.reset()
         this._lastPersonProperties = undefined
+        this._sessionProperties?.clear()
         this._host.publishReset(undefined)
     }
 
@@ -772,6 +805,22 @@ export class Analytics implements IAnalyticsExtension {
     readonly registerOnce = (properties: Record<string, unknown>, defaultValue: unknown = 'None'): void => {
         const registration = this._prepareRegistration(properties)
         registration?.store.registerOnce(registration.properties, defaultValue)
+    }
+
+    readonly registerForSession = (properties: Record<string, unknown>): void => {
+        const registration = this._prepareRegistration(properties)
+        if (registration) this._sessionProperties?.register(registration.properties, this._host?.state.sessionId)
+    }
+
+    readonly unregisterForSession = (property: string): void => {
+        if (this._propertyStore()) {
+            this._sessionProperties?.unregister(property, this._host?.state.sessionId)
+        }
+    }
+
+    readonly getSessionProperty = (property: string): unknown => {
+        if (!this._propertyStore()) return undefined
+        return this._sessionProperties?.get(property, this._host?.state.sessionId)
     }
 
     readonly unregister = (property: string): void => {
