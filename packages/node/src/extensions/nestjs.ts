@@ -119,20 +119,26 @@ export class PostHogInterceptor implements NestInterceptor {
     addProperty(properties, '$ip', getClientIp(headers, request))
 
     return new Observable((subscriber) => {
-      // Read identity at subscription time, inside this request's async context. The resolver is
-      // the application's own identity and wins. Tracing headers come next, so a stray ambient
-      // context can't override them. Identity the application set before the interceptor, such as
-      // in a middleware, fills in when there is no header. Properties always start fresh.
+      // Identity is read when the request subscribes, so it comes from this request's async context.
+      // The order is: the app's getDistinctId, then the tracing headers, then identity the app set
+      // before this interceptor ran, for example in a middleware. Headers come before that earlier
+      // identity, so a context the app entered globally can't override a request's own header.
       const existing = this.posthog.getContext()
       const resolvedDistinctId = this.resolveDistinctId(request)
       const requestDistinctId = resolvedDistinctId ?? distinctId ?? existing?.distinctId
       const requestSessionId = sessionId ?? existing?.sessionId
-      // Identity copied from the existing context keeps that context's lifetime, so it ends when
-      // the middleware's scope ends instead of outliving it in detached work.
-      const inheritsIdentity =
-        (resolvedDistinctId === undefined && distinctId === undefined && existing?.distinctId !== undefined) ||
-        (sessionId === undefined && existing?.sessionId !== undefined)
-      const signal = inheritsIdentity && existing ? getContextLifetimeSignal(existing) : undefined
+
+      // The app can give withContext an AbortSignal to end that context early, for example when the
+      // request it belongs to is cancelled. After the signal aborts, getContext() no longer returns
+      // the context. The fresh context below would not see that signal, so identity copied from the
+      // earlier context would stay visible to the handler after the app ended it. Passing the earlier
+      // context's signal on makes the copied identity end at the same time as the original.
+      const copiesDistinctId =
+        resolvedDistinctId === undefined && distinctId === undefined && existing?.distinctId !== undefined
+      const copiesSessionId = sessionId === undefined && existing?.sessionId !== undefined
+      const signal = existing && (copiesDistinctId || copiesSessionId) ? getContextLifetimeSignal(existing) : undefined
+
+      // Properties always start fresh, so properties from an earlier context never reach this request.
       const contextData = {
         ...(requestSessionId !== undefined ? { sessionId: requestSessionId } : {}),
         ...(requestDistinctId !== undefined ? { distinctId: requestDistinctId } : {}),

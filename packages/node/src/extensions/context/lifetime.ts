@@ -28,14 +28,21 @@ export function isContextActive(context: ContextData): boolean {
 }
 
 /**
- * The signal that ends this context's lifetime, combining every signal it inherited, or
- * `undefined` when nothing bounds it. Lets a fresh context end when the context it copies ends.
+ * Returns a signal that aborts when the given context ends, or `undefined` if nothing can end it.
+ *
+ * A context ends when the AbortSignal given to its `withContext` call aborts. A nested context
+ * also ends when any context it is nested in ends, so it can depend on several signals. This
+ * combines them into one signal, so a fresh context can take it and end at the same time.
  */
 export function getContextLifetimeSignal(context: ContextData): AbortSignal | undefined {
   const signals: AbortSignal[] = []
   for (let lifetime = lifetimes.get(context); lifetime; lifetime = lifetime.parent) {
     signals.push(lifetime.signal)
   }
-  if (signals.length === 0) return undefined
+
+  if (signals.length === 0) {
+    return undefined
+  }
+
   return signals.length === 1 ? signals[0] : AbortSignal.any(signals)
 }
