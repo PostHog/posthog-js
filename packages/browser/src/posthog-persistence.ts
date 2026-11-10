@@ -17,6 +17,7 @@ import { PersistentStore, PostHogConfig, Properties } from './types'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import {
     ALIAS_ID_KEY,
+    CLIENT_SESSION_PROPS,
     DISTINCT_ID,
     ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
@@ -81,14 +82,19 @@ const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['pers
 const getCookieIdentityChangePendingName = (name: string): string => `${name}_cookie_identity_change_pending`
 
 const MAX_COOKIE_PERSON_INFO_FIELD_SIZE = 1000
+const MAX_COOKIE_SIZE = 4096
+// Reserve room for expires, path, SameSite, secure and domain attributes, in addition to the hostname itself.
+const COOKIE_ATTRIBUTE_OVERHEAD = 128
+// Leave room for normal metadata changes so a reload does not repeatedly shorten attribution.
+const COOKIE_CAMPAIGN_HEADROOM = 128
 
-const truncateForCookie = (value: string): string => {
+const truncateForCookie = (value: string, maxEncodedLength = MAX_COOKIE_PERSON_INFO_FIELD_SIZE): string => {
     // Persistence JSON-stringifies and URI-encodes this value, so raw character count is not its cookie size.
     let result = ''
     let encodedLength = 0
     for (const character of value) {
         const encodedCharacterLength = encodeURIComponent(JSON.stringify(character).slice(1, -1)).length
-        if (encodedLength + encodedCharacterLength > MAX_COOKIE_PERSON_INFO_FIELD_SIZE) {
+        if (encodedLength + encodedCharacterLength > maxEncodedLength) {
             break
         }
         result += character
@@ -1367,6 +1373,7 @@ export class PostHogPersistence {
             }
             return
         }
+        this._boundCampaignOverridesForCookie()
         if (this._splitStorage) {
             this._writeNowSplit()
             if (crossTabPropertiesChanged) {
@@ -1874,6 +1881,84 @@ export class PostHogPersistence {
                 // subdomain can initialize.
                 this._endCookieSyncSuppression()
             }
+        }
+    }
+
+    private _boundCampaignOverridesForCookie(): void {
+        if (
+            !this._storesIdentityInCookie ||
+            (!this.props[INITIAL_PERSON_INFO]?.c && !this.props[CLIENT_SESSION_PROPS]?.props?.c)
+        ) {
+            return
+        }
+        const main = this._splitStorage ? this._partitionProps().main : this.props
+        const cookieProps = this._splitStorageEligible
+            ? getCookiePersistedProperties(main, this._config.cookie_persisted_properties || [])
+            : { ...main }
+        const records: { key: string; info: Properties; overrides: Properties }[] = []
+        for (const key of [INITIAL_PERSON_INFO, CLIENT_SESSION_PROPS]) {
+            const record = cookieProps[key]
+            const info = key === CLIENT_SESSION_PROPS ? record?.props : record
+            if (isObject(info?.c)) {
+                const bounded = { ...info, c: { ...info.c } }
+                records.push({ key, info: bounded, overrides: info.c })
+                cookieProps[key] = key === CLIENT_SESSION_PROPS ? { ...record, props: bounded } : bounded
+            }
+        }
+        if (!records.length) {
+            return
+        }
+
+        try {
+            const budget =
+                MAX_COOKIE_SIZE -
+                this._name.length -
+                (document?.location.hostname.length || 0) -
+                COOKIE_ATTRIBUTE_OVERHEAD
+            const encodedSize = () => encodeURIComponent(JSON.stringify(cookieProps)).length
+            if (encodedSize() <= budget) {
+                return
+            }
+            const target = budget - COOKIE_CAMPAIGN_HEADROOM
+
+            let low = 0
+            let high = 0
+            for (const { overrides } of records) {
+                each(overrides, (value) => {
+                    if (isString(value)) {
+                        high = Math.max(high, encodeURIComponent(JSON.stringify(value).slice(1, -1)).length)
+                    }
+                })
+            }
+            const capValues = (limit: number) => {
+                for (const { info, overrides } of records) {
+                    each(overrides, (value, key) => {
+                        if (isString(value) && value) {
+                            info.c[key] = truncateForCookie(value, limit) || null
+                        }
+                    })
+                }
+            }
+            // Share one encoded-value cap across initial and session attribution, keeping ordinary values intact.
+            while (low < high) {
+                const mid = Math.ceil((low + high) / 2)
+                capValues(mid)
+                if (encodedSize() <= target) {
+                    low = mid
+                } else {
+                    high = mid - 1
+                }
+            }
+            capValues(low)
+            for (const { key, info } of records) {
+                if (key === CLIENT_SESSION_PROPS) {
+                    this._setProp(CLIENT_SESSION_PROPS, { ...this.props[CLIENT_SESSION_PROPS], props: info })
+                } else {
+                    this._setProp(INITIAL_PERSON_INFO, info)
+                }
+            }
+        } catch {
+            // Let the storage layer handle serialization errors through its existing no-throw path.
         }
     }
 

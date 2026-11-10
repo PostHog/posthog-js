@@ -3,6 +3,7 @@ import { PostHog } from '../posthog-core'
 import {
     getEventProperties,
     getPersonInfo,
+    getPersonPropsFromInfo,
     getReferrerInfo,
     getSearchInfo,
 } from '@posthog/browser-common/utils/event-utils'
@@ -167,6 +168,115 @@ describe('url_sanitization', () => {
         expect(posthog.persistence.get_initial_props().$initial_utm_source).toBe(source)
         const cookie = document.cookie.split('; ').find((cookie) => cookie.startsWith('ph_campaign-cookie-size='))!
         expect(cookie.length).toBeLessThan(4096 * 0.9)
+    })
+
+    it.each(['cookie', 'localStorage+cookie'] as const)(
+        'bounds encoded campaign overrides together with other cookie state in %s',
+        async (persistence) => {
+            const landing = new URL('http://localhost/')
+            landing.searchParams.set('utm_source', '\\'.repeat(800))
+            vi.spyOn(globals, 'location', 'get').mockReturnValue(landing as unknown as Location)
+            vi.spyOn(document, 'referrer', 'get').mockReturnValue('')
+            const original = getPersonPropsFromInfo(getPersonInfo()).utm_source
+            const posthog = await create({
+                persistence,
+                persistence_name: 'bounded-campaign-' + persistence,
+                cross_subdomain_cookie: false,
+                persistence_save_debounce_ms: 0,
+                cookie_persisted_properties: ['budget_padding'],
+                url_sanitization: { query: false },
+            })
+            if (persistence === 'localStorage+cookie') {
+                posthog.register({ budget_padding: 'p'.repeat(2400) })
+            }
+            posthog.capture('probe')
+            const cookie = document.cookie
+                .split('; ')
+                .find((value) => value.startsWith('ph_bounded-campaign-' + persistence + '='))!
+            expect(cookie.length).toBeLessThan(4096)
+            const stored = JSON.parse(decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1)))
+            const initial = stored.$initial_person_info
+            expect(initial.c.utm_source.length).toBeGreaterThan(0)
+            expect(initial.c.utm_source.length).toBeLessThan(original.length)
+            expect(original.startsWith(initial.c.utm_source)).toBe(true)
+            expect(initial.u).toBe('http://localhost/')
+            expect(stored.distinct_id).toBe(posthog.get_distinct_id())
+            expect(stored.$sesid[1]).toBe(posthog.get_session_id())
+            if (persistence === 'cookie') {
+                expect(stored.$client_session_props.props.c.utm_source).toBe(initial.c.utm_source)
+            } else {
+                expect(stored.budget_padding).toBe('p'.repeat(2400))
+            }
+        }
+    )
+
+    it.each(['localStorage', 'sessionStorage'] as const)(
+        'retains campaign values without cookie bounds in %s',
+        async (persistence) => {
+            const landing = new URL('http://localhost/')
+            landing.searchParams.set('utm_source', '\\'.repeat(800))
+            vi.spyOn(globals, 'location', 'get').mockReturnValue(landing as unknown as Location)
+            const original = getPersonPropsFromInfo(getPersonInfo()).utm_source
+            const posthog = await create({
+                persistence,
+                bootstrap: { distinctID: 'synthetic-unbounded-campaign-id' },
+                url_sanitization: { query: false },
+            })
+            posthog.capture('probe')
+            expect(posthog.persistence.props.$initial_person_info.c.utm_source).toBe(original)
+            expect(posthog.persistence.props.$client_session_props.props.c.utm_source).toBe(original)
+        }
+    )
+
+    it('excludes split localStorage groups from the cookie campaign budget', async () => {
+        const posthog = await create({
+            persistence: 'localStorage+cookie',
+            persistence_name: 'split-campaign-budget',
+            split_storage: true,
+            cookie_persisted_properties: ['$enabled_feature_flags'],
+            url_sanitization: { query: false },
+        })
+        posthog.capture('probe')
+        const flags = { 'large-variant': 'v'.repeat(6000) }
+        posthog.persistence.register({ $enabled_feature_flags: flags })
+        expect(posthog.persistence.get_initial_props().$initial_utm_source).toBe('allowed')
+        expect(posthog.sessionPropsManager.getSessionProps().$session_entry_utm_source).toBe('allowed')
+        expect(JSON.parse(localStorage.getItem('ph_split-campaign-budget__flags')!).$enabled_feature_flags).toEqual(
+            flags
+        )
+        const cookie = document.cookie.split('; ').find((value) => value.startsWith('ph_split-campaign-budget='))!
+        const stored = JSON.parse(decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1)))
+        expect(stored.$initial_person_info.c.utm_source).toBe('allowed')
+        expect(stored.$enabled_feature_flags).toBeUndefined()
+    })
+
+    it('preserves null overrides and Unicode boundaries when cookie campaigns are bounded', async () => {
+        const landing = new URL('http://localhost/')
+        landing.searchParams.set('utm_source', '🙂'.repeat(60))
+        vi.spyOn(globals, 'location', 'get').mockReturnValue(landing as unknown as Location)
+        vi.spyOn(document, 'referrer', 'get').mockReturnValue('')
+        const posthog = await create({
+            persistence: 'cookie',
+            cross_subdomain_cookie: false,
+            url_sanitization: {
+                sanitize: (url) => {
+                    url.searchParams.delete('utm_source')
+                    url.searchParams.set('utm_medium', 'introduced')
+                    return url
+                },
+            },
+        })
+        posthog.register({ budget_padding: 'p'.repeat(2000) })
+        posthog.capture('probe')
+        const initial = posthog.persistence.props.$initial_person_info.c
+        const session = posthog.persistence.props.$client_session_props.props.c
+        expect(initial.utm_medium).toBeNull()
+        expect(session.utm_medium).toBeNull()
+        expect(Array.from(initial.utm_source).length).toBeLessThan(60)
+        expect(Array.from(initial.utm_source).every((character) => character === '🙂')).toBe(true)
+        expect(session.utm_source).toBe(initial.utm_source)
+        expect(posthog.persistence.get_initial_props().$initial_utm_medium).toBeNull()
+        expect(posthog.sessionPropsManager.getSessionProps().$session_entry_utm_medium).toBeUndefined()
     })
 
     it('reads campaign values from older landing URL records', async () => {

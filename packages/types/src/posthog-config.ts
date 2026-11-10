@@ -1520,7 +1520,7 @@ export interface PostHogConfig {
      * Campaign values are extracted with existing personal-data masking before URL sanitization and retained
      * separately when URL filtering changes attribution. Removing a campaign query parameter from a URL does not
      * remove its campaign property. Use `mask_personal_data_properties` and `custom_personal_data_properties`
-     * to mask those values.
+     * to mask those values. Cookie-backed persistence may truncate oversized campaign values to fit the cookie.
      *
      * Path and query default to included; omitted hash inherits `disable_capture_url_hashes`.
      * The optional synchronous callback runs before component filtering and existing personal-data query masking.

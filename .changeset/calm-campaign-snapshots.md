@@ -4,4 +4,4 @@
 '@posthog/types': patch
 ---
 
-Sanitize stored initial and session landing URLs while preserving campaign attribution.
+Sanitize stored initial and session landing URLs while preserving campaign attribution within cookie-size limits.

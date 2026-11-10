@@ -80,4 +80,75 @@ for (const persistence of ['cookie', 'localStorage+cookie', 'localStorage'] as c
         expect(after.sessionProps).toEqual(before.sessionProps)
         expect(after.attribution).toEqual(before.attribution)
     })
+
+    test(`persists encoded campaign values within cookie capacity across reload with ${persistence}`, async ({
+        page,
+    }) => {
+        await page.route('**/*', (route) =>
+            new URL(route.request().url()).hostname === 'localhost' ? route.continue() : route.abort()
+        )
+        await page.goto('/playwright/fixtures/url-sanitization.html?utm_source=' + encodeURIComponent('\\'.repeat(800)))
+        const init = async () => {
+            await page.waitForFunction(() => !!window.urlProbe)
+            return page.evaluate((mode) => {
+                window.urlProbe.init('synthetic-bounded-campaign', {
+                    defaults: '2026-08-30',
+                    persistence: mode,
+                    persistence_name: 'bounded-campaign-reload',
+                    persistence_save_debounce_ms: 0,
+                    split_storage: false,
+                    cross_subdomain_cookie: false,
+                    cookie_persisted_properties: ['budget_padding'],
+                    capture_pageview: false,
+                    autocapture: false,
+                    person_profiles: 'always',
+                    opt_out_useragent_filter: true,
+                    disable_session_recording: true,
+                    disable_surveys: true,
+                    disable_conversations: true,
+                    advanced_disable_flags: true,
+                    advanced_disable_toolbar_metrics: true,
+                    disable_external_dependency_loading: true,
+                    url_sanitization: { query: false },
+                    before_send: () => null,
+                } satisfies Partial<PostHogConfig>)
+                if (mode === 'localStorage+cookie') {
+                    window.urlProbe.register({ budget_padding: 'p'.repeat(2400) })
+                }
+                window.urlProbe.capture('probe')
+                const cookie = document.cookie
+                    .split('; ')
+                    .find((value) => value.startsWith('ph_bounded-campaign-reload='))
+                const cookieProps = cookie ? JSON.parse(decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1))) : {}
+                const localProps = JSON.parse(localStorage.getItem('ph_bounded-campaign-reload') || '{}')
+                return {
+                    id: window.urlProbe.get_distinct_id(),
+                    session: window.urlProbe.get_session_id(),
+                    initial:
+                        mode === 'localStorage' ? localProps.$initial_person_info : cookieProps.$initial_person_info,
+                    sessionProps:
+                        mode === 'cookie' ? cookieProps.$client_session_props : localProps.$client_session_props,
+                    attribution: window.urlProbe.sessionPropsManager.getSessionProps(),
+                    padding: cookieProps.budget_padding,
+                    cookieLength: cookie?.length || 0,
+                }
+            }, persistence)
+        }
+        const before = await init()
+        expect(before.initial.c.utm_source.length).toBeGreaterThan(0)
+        expect(before.initial.u).not.toContain('?')
+        expect(before.sessionProps.props.c.utm_source.length).toBeGreaterThan(0)
+        expect(before.sessionProps.props.u).not.toContain('?')
+        expect(before.cookieLength).toBeLessThan(4096)
+        if (persistence === 'localStorage+cookie') {
+            expect(before.padding).toBe('p'.repeat(2400))
+        }
+        await page.reload()
+        const after = await init()
+        expect(after.id).toBe(before.id)
+        expect(after.session).toBe(before.session)
+        expect(after.initial).toEqual(before.initial)
+        expect(after.sessionProps).toEqual(before.sessionProps)
+        expect(after.attribution).toEqual(before.attribution)
+    })
 }
