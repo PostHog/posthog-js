@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.447.9
+
+### Patch Changes
+
+- [#5647](https://github.com/PostHog/posthog-js/pull/5647) [`a95d952`](https://github.com/PostHog/posthog-js/commit/a95d95235af803c2ebabeb69c5e77ec5f1d5c793) Thanks [@zocario](https://github.com/zocario)! - fix(replay): full snapshots no longer force the layout of `content-visibility` content the browser skips
+  (2026-11-10)
+
 ## 1.447.8
 
 ### Patch Changes
