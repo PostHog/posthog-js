@@ -2982,7 +2982,7 @@
       "name": "MessageCategory",
       "properties": [
         {
-          "description": "Notes about which emails belong to the category. Without it, an existing category keeps its description.",
+          "description": "Notes about which emails belong to the category. Without it, an existing category keeps its description, and an empty string clears it.",
           "type": "string",
           "name": "description"
         },

@@ -33,7 +33,7 @@ export interface MessageCategory {
   type: 'marketing' | 'transactional'
   /** The category's name, shown in PostHog. */
   name: string
-  /** Notes about which emails belong to the category. Without it, an existing category keeps its description. */
+  /** Notes about which emails belong to the category. Without it, an existing category keeps its description, and an empty string clears it. */
   description?: string
 }
 

@@ -209,6 +209,22 @@ describe('emails', () => {
       },
     ],
     [
+      'a message category whose description it clears',
+      {
+        templateKey: 'receipt',
+        subject: 'Your receipt',
+        text: 'Thanks',
+        category: { key: 'receipts', type: 'transactional', name: 'Receipts', description: '' },
+      },
+      {
+        template_key: 'receipt',
+        subject: 'Your receipt',
+        text: 'Thanks',
+        category: { key: 'receipts', type: 'transactional', name: 'Receipts', description: '' },
+        capture_engagement: true,
+      },
+    ],
+    [
       'the transactional category named',
       { templateKey: 'password-reset', subject: 'Reset', text: 'Reset', category: TRANSACTIONAL_EMAIL_CATEGORY },
       {
