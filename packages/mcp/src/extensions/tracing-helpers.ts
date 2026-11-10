@@ -4,7 +4,8 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, McpEvent } from '../types'
-import { resolveEventProperties } from './internal'
+import { mergeEventOptions } from './event-options'
+import { resolveEventOptions, resolveEventProperties } from './internal'
 
 /**
  * Helpers shared by the low-level (`instrument-lowlevel.ts`) and high-level
@@ -23,8 +24,9 @@ export function isToolResultError(result: unknown): boolean {
 }
 
 /**
- * Resolves the `eventProperties` callback (if configured) and stamps the
- * result onto the event. No-op when the callback is absent or returns nullish.
+ * Resolves the `eventProperties` and `eventOptions` callbacks (if configured) and
+ * stamps the results onto the event. Options the event already carries win over
+ * the callback's. No-op for a callback that is absent or returns nullish.
  */
 export async function applyResolvedMetadata(
   event: McpEvent,
@@ -35,6 +37,10 @@ export async function applyResolvedMetadata(
   const resolvedProperties = await resolveEventProperties(data, request, extra)
   if (resolvedProperties) {
     event.properties = resolvedProperties
+  }
+  const resolvedOptions = await resolveEventOptions(data, request, extra)
+  if (resolvedOptions) {
+    event.eventOptions = mergeEventOptions(resolvedOptions, event.eventOptions)
   }
 }
 

@@ -1,4 +1,4 @@
-import { toContentString, getTokensSource, getModelParams } from '../src/utils'
+import { toContentString, getTokensSource, getModelParams, extractPosthogParams } from '../src/utils'
 
 describe('getTokensSource', () => {
   it.each([
@@ -14,6 +14,29 @@ describe('getTokensSource', () => {
     ['mixed override and custom', { $ai_input_tokens: 999, custom_key: 'value' }, 'passthrough'],
   ])('%s → %s', (_name, props, expected) => {
     expect(getTokensSource(props)).toBe(expected)
+  })
+})
+
+describe('extractPosthogParams', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('takes posthogOptions as the event options and never hands them to the provider', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const options = { process_person_profile: false, cookieless_mode: true }
+
+    const { providerParams, posthogParams } = extractPosthogParams({
+      model: 'gpt-5',
+      temperature: 0.2,
+      posthogDistinctId: 'user-1',
+      posthogOptions: options,
+    })
+
+    expect(posthogParams.options).toBe(options)
+    expect(posthogParams.distinctId).toBe('user-1')
+    expect(providerParams).toEqual({ model: 'gpt-5', temperature: 0.2 })
+    expect(warn).not.toHaveBeenCalled()
   })
 })
 

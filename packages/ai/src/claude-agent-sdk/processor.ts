@@ -8,10 +8,17 @@ import type {
   SDKResultMessage,
   SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk'
+import type { JsonType } from '@posthog/core'
 import type { EventMessage, PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
 import { version } from '../../package.json'
-import { captureAiEvent, captureAiEventImmediate, personlessOptions, userDistinctId } from '../captureAiEvent'
+import {
+  captureAiEvent,
+  captureAiEventImmediate,
+  eventOptionFields,
+  readAiEventOptions,
+  userDistinctId,
+} from '../captureAiEvent'
 import { captureAiGeneration } from '../captureAiGeneration'
 import type { CaptureAiGenerationOptions } from '../captureAiGeneration'
 import { formatAiError } from '../serializeError'
@@ -45,6 +52,11 @@ export interface ClaudeAgentTraceOptions {
   groups?: Record<string, string | number>
   /** Extra properties merged into every captured AI event. */
   properties?: Record<string, unknown>
+  /**
+   * Per-event options for posthog-node, such as `{ process_person_profile: false }`, sent with
+   * every event. An event with no distinct id always has person processing turned off.
+   */
+  options?: Record<string, JsonType>
 }
 
 export interface PostHogClaudeAgentProcessorOptions extends ClaudeAgentTraceOptions {
@@ -281,6 +293,7 @@ export class PostHogClaudeAgentProcessor {
       // configured for privacy stays private.
       privacyMode: this._traceOptions.privacyMode === true || posthog?.privacyMode === true,
       properties: { ...this._traceOptions.properties, ...posthog?.properties },
+      options: { ...readAiEventOptions(this._traceOptions.options), ...readAiEventOptions(posthog?.options) },
     }
     for (const key of ['$ai_trace_id', '$ai_span_id', '$ai_parent_id', '$ai_session_id']) {
       delete trace.properties?.[key]
@@ -637,6 +650,7 @@ export class PostHogClaudeAgentProcessor {
       usage: generation.usage,
       stopReason: generation.stopReason,
       groups: trace.groups,
+      options: trace.options,
       privacyMode: trace.privacyMode ?? false,
       captureImmediate: this._captureImmediate,
       onError: this._onError,
@@ -819,22 +833,21 @@ export class PostHogClaudeAgentProcessor {
     trace: ClaudeAgentTraceOptions,
     properties: Record<string, unknown>
   ): Promise<void> {
+    const eventProperties = {
+      $ai_lib: 'posthog-ai',
+      $ai_lib_version: version,
+      $ai_framework: FRAMEWORK,
+      $ai_provider: PROVIDER,
+      $ai_trace_id: state.traceId,
+      ...(state.sessionId ? { $ai_session_id: state.sessionId } : {}),
+      ...properties,
+      ...trace.properties,
+    }
     const message: EventMessage = {
       distinctId: distinctId ?? state.traceId,
       event,
-      properties: {
-        $ai_lib: 'posthog-ai',
-        $ai_lib_version: version,
-        $ai_framework: FRAMEWORK,
-        $ai_provider: PROVIDER,
-        $ai_trace_id: state.traceId,
-        ...(state.sessionId ? { $ai_session_id: state.sessionId } : {}),
-        ...properties,
-        ...trace.properties,
-        ...(distinctId ? {} : { $process_person_profile: false }),
-      },
+      ...eventOptionFields(this._client, eventProperties, trace.options, !distinctId),
       groups: trace.groups,
-      ...personlessOptions(!distinctId),
     }
 
     try {

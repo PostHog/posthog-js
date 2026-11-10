@@ -112,8 +112,10 @@ describe('PostHog Node.js', () => {
           timestamp: expect.any(String),
         },
       ])
-      // On the wire, `$lib`/`$lib_version` travel in the SDK info header, not in properties.
-      expect(lastCaptureBatch(mockedFetch)?.[0].properties).not.toHaveProperty('$lib')
+      expect(lastCaptureBatch(mockedFetch)?.[0].properties).toMatchObject({
+        $lib: 'posthog-node',
+        $lib_version: '1.2.3',
+      })
       const [, options] = mockedFetch.mock.calls.at(-1)!
       expect((options as any).headers['PostHog-Sdk-Info']).toBe('posthog-node/1.2.3')
     })
@@ -731,7 +733,7 @@ describe('PostHog Node.js', () => {
       expect(beforeSendFn).toHaveBeenCalledWith({
         distinctId: '123',
         event: 'test-event',
-        properties: { foo: 'bar', $geoip_disable: true, $is_server: true },
+        properties: { foo: 'bar', $lib: 'posthog-node', $lib_version: '1.2.3', $geoip_disable: true, $is_server: true },
         options: {},
         groups: undefined,
         flags: undefined,

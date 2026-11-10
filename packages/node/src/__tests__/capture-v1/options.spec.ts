@@ -341,7 +341,7 @@ describe('per-event capture options', () => {
       expect(event.options).toStrictEqual(expected)
     })
 
-    it('sees a caller $lib, and neither it nor a hook-set $lib is sent', async () => {
+    it('sees a caller $lib, and a hook-set $lib and $lib_version are sent', async () => {
       const seenLib: unknown[] = []
       const event = await sendOne(
         (client) => client.capture({ distinctId: 'u', event: 'e', properties: { $lib: 'caller-lib', keep: 'me' } }),
@@ -354,9 +354,7 @@ describe('per-event capture options', () => {
       )
 
       expect(seenLib).toEqual(['caller-lib'])
-      expect(event.properties.keep).toBe('me')
-      expect(event.properties).not.toHaveProperty('$lib')
-      expect(event.properties).not.toHaveProperty('$lib_version')
+      expect(event.properties).toMatchObject({ keep: 'me', $lib: 'hook-lib', $lib_version: 'hook-version' })
     })
 
     it('can add $session_id and $window_id, which move to the top level', async () => {

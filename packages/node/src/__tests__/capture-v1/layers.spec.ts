@@ -3,6 +3,7 @@ import type { JsonType } from '@posthog/core'
 import { _resetDeprecationWarningsForTests } from '@/client'
 import { CaptureExceptionOptions, EventMessage, PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { FeatureFlagEvaluations } from '@/feature-flag-evaluations'
+import { version } from '@/version'
 import { AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, apiImplementationV4, captureEvents } from '../utils'
 import { V1WiringHarness } from '../utils/v1-wiring'
 
@@ -24,6 +25,12 @@ type Layers = {
 type Source = keyof Layers
 
 const SOURCES: Source[] = ['event', 'context', 'global']
+
+const SDK_PAIR = { $lib: 'posthog-node', $lib_version: version }
+
+/** The `$lib` and `$lib_version` keys that are present, so a missing key fails `toStrictEqual`. */
+const libPair = (properties: Record<string, any>): Record<string, any> =>
+  Object.fromEntries(['$lib', '$lib_version'].filter((key) => key in properties).map((key) => [key, properties[key]]))
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
@@ -198,11 +205,178 @@ describe('layered event values', () => {
     })
 
     describe('SDK values', () => {
-      it('fill $is_server and $geoip_disable when no layer sets them, before before_send', async () => {
+      it('fill $lib, $lib_version, $is_server and $geoip_disable when no layer sets them, before before_send', async () => {
         const { event, hookSaw } = await sendWithPropertyLayers({})
 
-        expect(event.properties).toStrictEqual({ $is_server: true, $geoip_disable: true })
-        expect(hookSaw.properties).toStrictEqual({ $is_server: true, $geoip_disable: true })
+        const expected = {
+          $lib: 'posthog-node',
+          $lib_version: version,
+          $is_server: true,
+          $geoip_disable: true,
+        }
+        expect(event.properties).toStrictEqual(expected)
+        expect(hookSaw.properties).toStrictEqual(expected)
+      })
+
+      describe('$lib and $lib_version', () => {
+        it.each<[string, Layers, Record<string, JsonType>]>([
+          ['no layer sets them', {}, SDK_PAIR],
+          ['a $lib alone gets no SDK $lib_version', { event: { $lib: 'my-wrapper' } }, { $lib: 'my-wrapper' }],
+          [
+            'a $lib alone keeps an odd $lib_version',
+            { event: { $lib: 'my-wrapper', $lib_version: null } },
+            { $lib: 'my-wrapper', $lib_version: null },
+          ],
+          ["the SDK's own $lib alone gets the SDK $lib_version", { event: { $lib: 'posthog-node' } }, SDK_PAIR],
+          [
+            "the SDK's own $lib keeps its $lib_version",
+            { event: { $lib: 'posthog-node', $lib_version: '0.0.1' } },
+            { $lib: 'posthog-node', $lib_version: '0.0.1' },
+          ],
+          [
+            "the SDK's own $lib replaces an empty $lib_version",
+            { event: { $lib: 'posthog-node', $lib_version: '' } },
+            SDK_PAIR,
+          ],
+          [
+            "the SDK's own $lib replaces a null $lib_version",
+            { event: { $lib: 'posthog-node', $lib_version: null } },
+            SDK_PAIR,
+          ],
+          [
+            "the SDK's own $lib replaces a number $lib_version",
+            { event: { $lib: 'posthog-node', $lib_version: 6 } },
+            SDK_PAIR,
+          ],
+          ...SOURCES.map((source): [string, Layers, Record<string, JsonType>] => [
+            `a lone $lib_version from the ${source} layer is replaced`,
+            { [source]: { $lib_version: '9.9.9' } },
+            SDK_PAIR,
+          ]),
+          ['undefined $lib gets both', { event: { $lib: undefined as any } }, SDK_PAIR],
+          ['null $lib gets both', { event: { $lib: null, $lib_version: '9.9.9' } }, SDK_PAIR],
+          ["'' $lib gets both", { event: { $lib: '' } }, SDK_PAIR],
+          ['a whitespace $lib is a $lib, so it gets no SDK $lib_version', { event: { $lib: ' ' } }, { $lib: ' ' }],
+          ['a number $lib gets both', { event: { $lib: 5 } }, SDK_PAIR],
+          ['a boolean $lib gets both', { event: { $lib: true } }, SDK_PAIR],
+          ['an object $lib gets both', { event: { $lib: {} } }, SDK_PAIR],
+          ...SOURCES.map((source): [string, Layers, Record<string, JsonType>] => [
+            `a pair from the ${source} layer beats the SDK`,
+            { [source]: { $lib: 'mine', $lib_version: '1.0.0' } },
+            { $lib: 'mine', $lib_version: '1.0.0' },
+          ]),
+          [
+            'the event pair beats context and register()',
+            {
+              event: { $lib: 'event', $lib_version: '1' },
+              context: { $lib: 'context', $lib_version: '2' },
+              global: { $lib: 'global', $lib_version: '3' },
+            },
+            { $lib: 'event', $lib_version: '1' },
+          ],
+          [
+            'a register() $lib alone gets no SDK $lib_version',
+            { global: { $lib: 'registered' } },
+            { $lib: 'registered' },
+          ],
+          [
+            "the SDK's own $lib from register() gets the SDK $lib_version",
+            { global: { $lib: 'posthog-node' } },
+            SDK_PAIR,
+          ],
+          [
+            'a non-string $lib on the event leaves the context $lib in place',
+            { event: { $lib: null }, context: { $lib: 'context', $lib_version: '2' } },
+            { $lib: 'context', $lib_version: '2' },
+          ],
+          [
+            'an empty $lib in context leaves the register() $lib in place',
+            { context: { $lib: '' }, global: { $lib: 'global', $lib_version: '3' } },
+            { $lib: 'global', $lib_version: '3' },
+          ],
+          [
+            'the layers merge key by key before the SDK fill',
+            { event: { $lib: 'event' }, global: { $lib_version: '3' } },
+            { $lib: 'event', $lib_version: '3' },
+          ],
+        ])('%s', async (_label, layers, expected) => {
+          const { event, hookSaw } = await sendWithPropertyLayers(layers)
+
+          expect(libPair(event.properties)).toStrictEqual(expected)
+          expect(libPair(hookSaw.properties)).toStrictEqual(expected)
+        })
+
+        it.each<[string, Record<string, JsonType>, Record<string, JsonType>]>([
+          ['a relabeled $lib alone', { $lib: 'relabeled' }, { $lib: 'relabeled', $lib_version: '9.9.9' }],
+          ['nothing', {}, { $lib: 'relabeled', $lib_version: '9.9.9' }],
+          ['the default posthog-node $lib alone', { $lib: 'posthog-node' }, { $lib: 'posthog-node' }],
+          ['an explicit pair', { $lib: 'mine', $lib_version: '1.0.0' }, { $lib: 'mine', $lib_version: '1.0.0' }],
+        ])(
+          'a relabeled client given %s on the event follows the rule for its own name',
+          async (_label, props, expected) => {
+            const event = await sendOne((client) => {
+              client.getLibraryId = () => 'relabeled'
+              client.getLibraryVersion = () => '9.9.9'
+              client.capture({ distinctId: 'u', event: 'e', properties: props })
+            })
+
+            expect(libPair(event.properties)).toStrictEqual(expected)
+          }
+        )
+      })
+
+      it('before_send can change $lib and $lib_version', async () => {
+        const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }), {
+          before_send: (hookEvent) => {
+            Object.assign(hookEvent!.properties!, { $lib: 'hook-lib', $lib_version: 'hook-version' })
+            return hookEvent
+          },
+        })
+
+        expect(event.properties).toMatchObject({ $lib: 'hook-lib', $lib_version: 'hook-version' })
+      })
+
+      it('before_send can remove $lib and $lib_version', async () => {
+        const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }), {
+          before_send: (hookEvent) => {
+            delete hookEvent!.properties!.$lib
+            delete hookEvent!.properties!.$lib_version
+            return hookEvent
+          },
+        })
+
+        expect(event.properties).not.toHaveProperty('$lib')
+        expect(event.properties).not.toHaveProperty('$lib_version')
+      })
+
+      it.each<[string, (properties: Record<string, any>) => void, Record<string, JsonType>]>([
+        ['removing only $lib_version', (p) => delete p.$lib_version, { $lib: 'posthog-node' }],
+        ['removing only $lib', (p) => delete p.$lib, { $lib_version: version }],
+        ['setting $lib to null', (p) => (p.$lib = null), { $lib: null, $lib_version: version }],
+        ['setting $lib alone', (p) => (p.$lib = 'hook-lib'), { $lib: 'hook-lib', $lib_version: version }],
+      ])('the SDK never refills after before_send, so %s is sent as is', async (_label, edit, expected) => {
+        const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }), {
+          before_send: (hookEvent) => {
+            edit(hookEvent!.properties!)
+            return hookEvent
+          },
+        })
+
+        expect(libPair(event.properties)).toStrictEqual(expected)
+      })
+
+      it('reads getLibraryId() and getLibraryVersion() per event', async () => {
+        const client = harness.makeClient()
+        client.capture({ distinctId: 'u', event: 'before' })
+        client.getLibraryId = () => 'relabeled'
+        client.getLibraryVersion = () => '9.9.9'
+        client.capture({ distinctId: 'u', event: 'after' })
+        await client.flush()
+
+        const [before, after] = wireEvents()
+        expect(before.properties).toMatchObject({ $lib: 'posthog-node' })
+        expect(before.properties.$lib_version).not.toBe('9.9.9')
+        expect(after.properties).toMatchObject({ $lib: 'relabeled', $lib_version: '9.9.9' })
       })
 
       it.each<[string, PostHogOptions, string]>([
@@ -351,6 +525,34 @@ describe('layered event values', () => {
 
       expect(event.properties).toStrictEqual({})
       expect(event.options).toStrictEqual({})
+    })
+
+    it.each<[string, Record<string, JsonType>, Record<string, JsonType>]>([
+      ['the SDK pair', {}, SDK_PAIR],
+      ['a registered $lib alone', { $lib: 'my-wrapper' }, { $lib: 'my-wrapper' }],
+    ])('a minimal $feature_flag_called event keeps %s', async (_label, registered, expected) => {
+      harness.fetch.mockImplementation(
+        apiImplementationV4({
+          flags: {
+            'test-flag': {
+              key: 'test-flag',
+              enabled: true,
+              variant: undefined,
+              reason: { code: 'condition_match', condition_index: 0, description: 'Matched' },
+              metadata: { id: 1, version: 1, payload: undefined, has_experiment: false },
+            },
+          },
+          errorsWhileComputingFlags: false,
+          minimalFlagCalledEvents: true,
+        } as any)
+      )
+      const event = await sendOne(async (client) => {
+        await client.register(registered)
+        await client.getFeatureFlag('test-flag', 'u')
+      })
+
+      expect(event.event).toBe('$feature_flag_called')
+      expect(libPair(event.properties)).toStrictEqual(expected)
     })
 
     it('a minimal $feature_flag_called event keeps the properties that set options and session fields', async () => {
@@ -639,7 +841,7 @@ describe('layered event values', () => {
   })
 
   describe('layers reach every message type', () => {
-    it.each<[string, (client: PostHog) => unknown, string]>([
+    const MESSAGE_TYPES: [string, (client: PostHog) => unknown, string][] = [
       ['capture', (c) => c.capture({ distinctId: 'u', event: 'e' }), ANALYTICS_CAPTURE_PATH],
       ['captureAi', (c) => c.captureAi({ distinctId: 'u', event: '$ai_span' }), AI_CAPTURE_PATH],
       ['captureException', (c) => c.captureException(new Error('boom'), { distinctId: 'u' }), ANALYTICS_CAPTURE_PATH],
@@ -648,6 +850,12 @@ describe('layered event values', () => {
       ['alias', (c) => c.alias({ distinctId: 'u', alias: 'anon' }), ANALYTICS_CAPTURE_PATH],
       ['aliasImmediate', (c) => c.aliasImmediate({ distinctId: 'u', alias: 'anon' }), ANALYTICS_CAPTURE_PATH],
       ['groupIdentify', (c) => c.groupIdentify({ groupType: 'company', groupKey: 'acme' }), ANALYTICS_CAPTURE_PATH],
+      [
+        'groupIdentifyImmediate',
+        (c) => c.groupIdentifyImmediate({ groupType: 'company', groupKey: 'acme' }),
+        ANALYTICS_CAPTURE_PATH,
+      ],
+      ['captureAiImmediate', (c) => c.captureAiImmediate({ distinctId: 'u', event: '$ai_span' }), AI_CAPTURE_PATH],
       [
         'setPersonProperties',
         (c) => c.setPersonProperties({ distinctId: 'u', properties: { a: 1 } }),
@@ -658,7 +866,15 @@ describe('layered event values', () => {
         (c) => c.unsetPersonProperties({ distinctId: 'u', properties: ['a'] }),
         ANALYTICS_CAPTURE_PATH,
       ],
-    ])('%s', async (_method, send, path) => {
+      ['captureImmediate', (c) => c.captureImmediate({ distinctId: 'u', event: 'e' }), ANALYTICS_CAPTURE_PATH],
+      [
+        'captureExceptionImmediate',
+        (c) => c.captureExceptionImmediate(new Error('boom'), { distinctId: 'u' }),
+        ANALYTICS_CAPTURE_PATH,
+      ],
+    ]
+
+    it.each(MESSAGE_TYPES)('%s', async (_method, send, path) => {
       const event = await sendOne(
         async (client) => {
           await client.register({ global_prop: 'g' })
@@ -672,8 +888,22 @@ describe('layered event values', () => {
       )
 
       expect(event.properties).toMatchObject({ global_prop: 'g', context_prop: 'c', $is_server: true })
+      expect(libPair(event.properties)).toStrictEqual(SDK_PAIR)
       expect(event.options).toMatchObject({ global_option: 'g', context_option: 'c' })
     })
+
+    it.each(MESSAGE_TYPES)(
+      '%s sends a context $lib alone, without the SDK $lib_version',
+      async (_method, send, path) => {
+        const event = await sendOne(
+          (client) => client.withContext({ properties: { $lib: 'my-wrapper' } }, () => send(client)),
+          undefined,
+          path
+        )
+
+        expect(libPair(event.properties)).toStrictEqual({ $lib: 'my-wrapper' })
+      }
+    )
   })
 
   describe('captureException', () => {

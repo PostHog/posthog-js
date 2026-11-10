@@ -7,6 +7,7 @@ import type { PostHog } from 'posthog-node'
 import { uuidv7 } from '@posthog/core'
 
 import type { BeforeSendFn, Event, McpEvent } from '../types'
+import { clientOptionFields, hasPersonlessDefault, settlePersonProcessing } from './event-options'
 import { log, type LoggerFn } from './logger'
 import { type PostHogCaptureEvent, buildPostHogCaptureEvents } from './posthog-events'
 import { newPrefixedId } from './ids'
@@ -22,7 +23,8 @@ export interface McpCaptureOptions {
 
 /**
  * Runs an MCP event through the full transform: sanitize → truncate → fan out
- * into the `$mcp_*` / `$exception` capture payloads → `beforeSend`. Returns
+ * into the `$mcp_*` / `$exception` capture payloads → `beforeSend` → settle
+ * person processing into the `process_person_profile` option. Returns
  * `null` (and logs) if a transform stage throws, so the event is dropped rather
  * than partially sent. Individual payloads dropped by `beforeSend` are filtered
  * out of the returned `captures`.
@@ -59,7 +61,9 @@ export async function processMcpEvent(
     enableExceptionAutocapture: options.enableExceptionAutocapture,
   })
 
-  const captures = await applyBeforeSend(built, options.beforeSend, logger)
+  const personlessDefault = hasPersonlessDefault(fullEvent)
+  const kept = await applyBeforeSend(built, options.beforeSend, logger)
+  const captures = kept.map((capture) => settlePersonProcessing(capture, personlessDefault))
 
   return { event: fullEvent, captures }
 }
@@ -125,7 +129,7 @@ export class McpEventSink {
         this.posthog.capture({
           distinctId: captureEvent.distinct_id,
           event: captureEvent.event,
-          properties: captureEvent.properties,
+          ...clientOptionFields(this.posthog, captureEvent.properties, captureEvent.options),
           ...(groups ? { groups } : {}),
           timestamp: new Date(captureEvent.timestamp),
           uuid: uuidv7(),

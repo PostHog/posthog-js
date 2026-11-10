@@ -1,6 +1,12 @@
 import { PostHog } from 'posthog-node'
 
-import { captureAiEvent, captureAiEventImmediate, isFullAiCaptureEnabled, usesAiLane } from '../src/captureAiEvent'
+import {
+  captureAiEvent,
+  captureAiEventImmediate,
+  eventOptionFields,
+  isFullAiCaptureEnabled,
+  usesAiLane,
+} from '../src/captureAiEvent'
 
 const makeClient = (overrides: Record<string, unknown> = {}): any => ({
   capture: vi.fn(),
@@ -90,5 +96,114 @@ describe('isFullAiCaptureEnabled', () => {
     expect(isFullAiCaptureEnabled({ enableFullAiCapture: 1 } as any)).toBe(false)
     expect(isFullAiCaptureEnabled({})).toBe(false)
     expect(isFullAiCaptureEnabled(undefined)).toBe(false)
+  })
+})
+
+describe('eventOptionFields', () => {
+  const node5 = {}
+  const node6 = { registerOptions: vi.fn() }
+  const properties = { $ai_trace_id: 'trace', feature: 'chat' }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('passes options through unchanged on posthog-node 6 and writes no option property', () => {
+    const options = {
+      process_person_profile: true,
+      cookieless_mode: true,
+      disable_skew_correction: true,
+      product_tour_id: 'tour',
+      custom_option: 'kept',
+    }
+
+    const fields = eventOptionFields(node6, properties, options, false)
+
+    expect(fields).toEqual({ properties, options })
+    expect(fields.options).not.toBe(options)
+  })
+
+  it('maps each known option to the property posthog-node 5 reads and drops unknown keys', () => {
+    const fields = eventOptionFields(
+      node5,
+      properties,
+      {
+        process_person_profile: true,
+        cookieless_mode: true,
+        disable_skew_correction: true,
+        product_tour_id: 'tour',
+        custom_option: 'dropped',
+      },
+      false
+    )
+
+    expect(fields).toEqual({
+      properties: {
+        ...properties,
+        $process_person_profile: true,
+        $cookieless_mode: true,
+        $ignore_sent_at: true,
+        $product_tour_id: 'tour',
+      },
+    })
+    expect(properties).toEqual({ $ai_trace_id: 'trace', feature: 'chat' })
+  })
+
+  it('does not map an option posthog-node 6 would treat as unset', () => {
+    expect(
+      eventOptionFields(node5, properties, { process_person_profile: null, cookieless_mode: undefined } as any, false)
+    ).toEqual({ properties })
+  })
+
+  it('turns person processing off last for a personless event on posthog-node 6', () => {
+    expect(eventOptionFields(node6, properties, { process_person_profile: true, cookieless_mode: true }, true)).toEqual(
+      {
+        properties,
+        options: { process_person_profile: false, cookieless_mode: true },
+      }
+    )
+  })
+
+  it('turns person processing off last for a personless event on posthog-node 5, over option and property', () => {
+    expect(
+      eventOptionFields(
+        node5,
+        { ...properties, $process_person_profile: true },
+        { process_person_profile: true, cookieless_mode: true },
+        true
+      )
+    ).toEqual({ properties: { ...properties, $process_person_profile: false, $cookieless_mode: true } })
+  })
+
+  it.each([
+    ['posthog-node 6', node6],
+    ['posthog-node 5', node5],
+  ])('leaves the event untouched on %s without options or personless', (_label, client) => {
+    expect(eventOptionFields(client, properties, undefined, false)).toEqual({ properties })
+    expect(eventOptionFields(client, properties, {}, false)).toEqual({ properties })
+  })
+
+  it.each([
+    ['a string', 'abc', 'string'],
+    ['an array', [{ process_person_profile: true }], 'array'],
+    ['a number', 1, 'number'],
+  ])('warns about and ignores options that are %s', (_label, options, typeName) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    expect(eventOptionFields(node6, properties, options, false)).toEqual({ properties })
+    expect(eventOptionFields(node5, properties, options, false)).toEqual({ properties })
+    expect(eventOptionFields(node6, properties, options, true)).toEqual({
+      properties,
+      options: { process_person_profile: false },
+    })
+    expect(warn).toHaveBeenCalledTimes(3)
+    expect(warn).toHaveBeenCalledWith(`[PostHog AI] options must be an object, got ${typeName}; ignoring them`)
+  })
+
+  it('treats null options as none without a warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    expect(eventOptionFields(node6, properties, null, false)).toEqual({ properties })
+    expect(warn).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,6 @@
 import { EventMessage, PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue } from '@posthog/core'
+import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue, type JsonType } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
 import { formatAiError } from './serializeError'
@@ -10,8 +10,8 @@ import { warnIfPostHogAiGateway } from './gatewayWarning'
 import {
   captureAiEvent,
   captureAiEventImmediate,
+  eventOptionFields,
   isPostHogNode6,
-  personlessOptions,
   userDistinctId,
 } from './captureAiEvent'
 
@@ -56,6 +56,11 @@ export interface CaptureAiGenerationOptions {
   properties?: Record<string, unknown>
   /** Mapping of group type to group id, matching `EventMessage.groups`. */
   groups?: Record<string, string | number>
+  /**
+   * Per-event options for posthog-node, such as `{ process_person_profile: false }`. An event with
+   * no `distinctId` always has person processing turned off.
+   */
+  options?: Record<string, JsonType>
   privacyMode?: boolean
 
   /**
@@ -258,7 +263,6 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       ...(options.baseURL === null ? {} : { $ai_base_url: options.baseURL ?? '' }),
       ...options.properties,
       $ai_tokens_source: getTokensSource(options.properties),
-      ...(distinctId ? {} : { $process_person_profile: false }),
       ...(options.stopReason ? { $ai_stop_reason: options.stopReason } : {}),
       ...(options.tools ? { $ai_tools: redactMcpToolCredentials(options.tools) } : {}),
       ...(options.completionId ? { $ai_completion_id: options.completionId } : {}),
@@ -272,9 +276,8 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     const event: EventMessage = {
       distinctId: distinctId ?? traceId,
       event: eventType,
-      properties,
+      ...eventOptionFields(client, properties, options.options, !distinctId),
       groups: options.groups,
-      ...personlessOptions(!distinctId),
     }
 
     if (options.captureImmediate) {

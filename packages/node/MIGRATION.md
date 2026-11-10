@@ -11,24 +11,28 @@ For background on capture v1, its options, limits and per-event results, see the
 You need to change code or configuration if your app does any of these:
 
 - sends events through a reverse proxy, or to a self-hosted PostHog (see [Reverse proxies and self-hosted PostHog](#reverse-proxies-and-self-hosted-posthog))
-- relies on `flush()`, `shutdown()` or `captureImmediate()` rejecting when delivery fails
+- relies on `flush()` rejecting when delivery fails
 - listens for the `'error'` event and inspects the error's type or fields
 - sets `POSTHOG_CAPTURE_MODE`
 - calls `captureException()` or `captureExceptionImmediate()` with positional arguments after `error` (still works in 6.x, with a deprecation error)
 - sets `$exception_level` or another reserved exception property in `captureException()` properties
 - reads the result of `prepareEventMessage()`
 - reuses one event `uuid` for more than one event
-- passes strings such as `"true"` for `$process_person_profile`, `$cookieless_mode` or `$ignore_sent_at`
+- sets `$process_person_profile`, `$cookieless_mode`, `$ignore_sent_at` or `$product_tour_id` as a property: use the matching option instead (see [Event options](#event-options))
 - sets `$is_server`, `$geoip_disable` or feature flag properties on events, in context or with `register()`, and expects the SDK's value to win
-- turns person processing off with `register()`, `registerOptions()` or a context, and calls `identify`, `alias` or `groupIdentify` (see [Layer order](#layer-order))
-- sets `$lib` or `$lib_version`
+- turns person processing off with `registerOptions()` or context options, and calls `identify`, `alias` or `groupIdentify` (see [Layer order](#layer-order))
+- sets `$lib` or `$lib_version` (see [SDK identity](#sdk-identity))
 - sends a `$session_id` or `$window_id` that is not a string
 - passes a personal API key (`phx_...`) as the project API key
 - reads event content from the SDK's debug log, or alerts on SDK log text
+- sends `$ai_` events with `capture()` or `captureImmediate()` instead of `captureAi()` (see [AI events](#ai-events))
 - sends AI events with `captureAi()` and tunes the AI queue, timeout or compression
 - uses `sendFeatureFlags` together with a `before_send` hook that drops events or edits `groups` or `sendFeatureFlags`
-- uses `@posthog/convex`, `@posthog/next` or `@posthog/nuxt` (stay on posthog-node 5 for now)
-- uses `@posthog/ai` or `@posthog/mcp` and does not list `posthog-node` in its own dependencies (see [Wrapper packages](#wrapper-packages))
+- has a `before_send` hook that returns a new message instead of the one it gets (see [Layer order](#layer-order))
+- sends distinct ids over 200 UTF-8 bytes (see [Identity and request context](#identity-and-request-context))
+- sends event names over 200 UTF-8 bytes (see [Invalid events](#invalid-events))
+- uses `@posthog/convex`, `@posthog/next` or `@posthog/nuxt`, which depend on posthog-node 5 (see [Wrapper packages](#wrapper-packages))
+- uses `@posthog/ai`, `@posthog/mcp` or `@posthog/openfeature-node-provider` and does not list `posthog-node` in its own dependencies (see [Wrapper packages](#wrapper-packages))
 
 ## Reverse proxies and self-hosted PostHog
 
@@ -39,9 +43,11 @@ posthog-node 6.0 sends events to new paths:
 | `capture`, `captureImmediate`, `identify`, `alias`, `groupIdentify`, `captureException` and the other event methods | `/i/v1/analytics/events` |
 | `captureAi`, `captureAiImmediate`, and `@posthog/ai` on posthog-node 6                                              | `/i/v1/ai/events`        |
 
-An `$ai_*` event sent with `capture()` goes to the analytics endpoint. Only `captureAi()` and `captureAiImmediate()` use the AI endpoint.
+Send `$ai_` events with `captureAi()` or `captureAiImmediate()`. Only these methods use the AI endpoint, and `@posthog/ai` on posthog-node 6 already uses them.
+An `$ai_` event sent with `capture()` goes to the analytics endpoint. PostHog accepts it there for now, but this is temporary.
 
-If you send events to a self-hosted PostHog, check that it serves both endpoints before you upgrade.
+If you send events to a self-hosted PostHog, check that it serves both `/i/v1/analytics/events` and `/i/v1/ai/events` before you upgrade.
+Self-hosted PostHog serves the AI endpoint from a separate capture service, so check each one.
 An endpoint that is not served drops every event sent to it.
 A `404` that lasts through every retry can mean the deployment has no capture v1 route.
 
@@ -70,7 +76,7 @@ Feature flag requests are unchanged.
 
 | 5.x                                                                                                             | 6.0                                                                                                                                                                                         |
 | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POSTHOG_CAPTURE_MODE` environment variable                                                                     | Not read. Capture v1 is the only path. The client logs one warning when the variable is set.                                                                                                |
+| `POSTHOG_CAPTURE_MODE` environment variable                                                                     | Not read. Capture v1 is the only path. Each client logs one warning when it is created with the variable set.                                                                               |
 | `CaptureV1Error` (the error name in capture v1 mode)                                                            | `CaptureError`, exported from `posthog-node`. There is no alias.                                                                                                                            |
 | `captureException(error, distinctId, properties, uuid, flags)`                                                  | `captureException(error, { distinctId, properties, options, uuid, flags, level })`. JavaScript positional calls still work in 6.x. TypeScript callers must use the options object.          |
 | `captureExceptionImmediate(error, distinctId, properties, flags)`                                               | `captureExceptionImmediate(error, { distinctId, properties, options, uuid, flags, level })`. JavaScript positional calls still work in 6.x. TypeScript callers must use the options object. |
@@ -93,7 +99,7 @@ posthog.captureException(error, {
 
 - The positional form logs one deprecation error per method per process. It will be removed in the next major version.
 - Arguments after the options object are ignored, with one warning per process.
-- `level` sets `$exception_level`. It is read case-insensitively, and `critical`, `alert` and `emergency` mean `fatal`, `warn` means `warning`, `notice` means `info` and `trace` means `debug`, as in posthog-python. The default is `'error'`, and an unknown value is ignored.
+- `level` sets `$exception_level`. Its TypeScript type allows `'fatal'`, `'error'`, `'warning'`, `'log'`, `'info'` and `'debug'`, so `'warn'` does not compile. At runtime the SDK also reads it case-insensitively, and `critical`, `alert` and `emergency` mean `fatal`, `warn` means `warning`, `notice` means `info` and `trace` means `debug`, as in posthog-python. The default is `'error'`, and an unknown value is ignored.
 - Exception properties the SDK owns, such as `$exception_list` and `$exception_level`, are ignored in `properties`. Use `level` instead. A reserved property the SDK does not set, such as `$exception_types`, still reaches the event when you set it in context or with `register()`, so do not set it there.
 
 ### `prepareEventMessage()`
@@ -109,6 +115,7 @@ const { properties, options, uuid, timestamp, disableGeoip } = await posthog.pre
 ```
 
 The result is built in the same order as a real event, including `before_send`.
+It is not exactly what is sent. `$session_id` and `$window_id` stay in `properties`. The SDK moves them only when it sends the event.
 It still rejects with `null` when `before_send` drops the event.
 
 ## Errors and the `'error'` event
@@ -118,7 +125,7 @@ An event can be dropped inside a `2xx` response, for example when it is over a p
 6.0 reports those events as failures.
 When the whole request is over the billing limit, capture answers `402`, which fails the batch without a retry.
 
-`flush()`, `shutdown()` and `captureImmediate()` no longer reject when delivery fails.
+`flush()` no longer rejects when delivery fails. `shutdown()` and `captureImmediate()` still resolve, as in 5.x.
 Every delivery failure arrives on the `'error'` event as a `CaptureError`:
 
 ```ts
@@ -155,7 +162,7 @@ A proxy in front of capture can return `404` or `429`.
 - Waits start at 100 ms and double each retry, up to 30 seconds. Each wait varies randomly by up to 25%, so many clients do not retry at the same moment.
 - A `Retry-After` header sets the minimum wait, up to 30 seconds.
 - `fetchRetryDelay` (default 3000 ms) no longer affects capture. It still applies to other requests.
-- Events whose last attempt got no response, such as after a network error or a timeout, stay in the queue and are sent again on the next flush.
+- Queued events whose last attempt got no response, such as after a network error or a timeout, stay in the queue and are sent again on the next flush. An event sent with an `Immediate` method is not kept, and `'error'` reports it in `retryExhausted`.
 
 ## Lanes, batching and sizes
 
@@ -167,7 +174,7 @@ Each lane has its own queue, batches and requests, so a slow or failing lane nev
 - `maxQueueSize` (default 10000) now applies to analytics events only. When a queue is full, the oldest event is dropped and reported through `'error'`.
 - `flush()` and `shutdown()` send both lanes at the same time. `shutdown(shutdownTimeoutMs)` uses one deadline for both. Events still queued at the deadline are reported through `'error'`.
 - The `'flush'` event fires once per lane.
-- The `'capture'` and `'flush'` events carry each message as it was queued, before the SDK builds the capture v1 event. Its properties can still hold `$lib`, `$lib_version`, legacy option properties such as `$process_person_profile`, and `$session_id` or `$window_id`, although the SDK removes or moves them before sending.
+- The `'capture'` and `'flush'` events carry each message as it was queued, before the SDK builds the capture v1 event. Its properties can still hold `$session_id` or `$window_id`, although the SDK moves them before sending.
 - `captureCompression` (new) sets how analytics requests are compressed: `'none'`, `'gzip'`, `'deflate'` or `'zstd'`. The default is `'gzip'`. `disableCompression: true` still turns compression off when `captureCompression` is not set. `'zstd'` needs Node 22.15 or later and falls back to `'gzip'` elsewhere, including the edge build.
 - `requestTimeout` (default 10000 ms) still sets the timeout of analytics requests.
 
@@ -175,6 +182,7 @@ Each lane has its own queue, batches and requests, so a slow or failing lane nev
 
 `captureAi()` and `captureAiImmediate()` send to `/i/v1/ai/events`.
 In 5.x they sent to the legacy AI endpoint.
+Send `$ai_` events with these methods, not `capture()`. PostHog accepts `$ai_` events on the analytics endpoint for now, but this is temporary.
 
 - An AI event whose `properties` are larger than 8 MiB is dropped before sending and reported through `'error'`.
 - PostHog drops an event sent with `captureAi()` whose name does not start with `$ai_` (`misrouted_event`), and `'error'` reports it. Send other events with `capture()`.
@@ -194,6 +202,20 @@ In 5.x they sent to the legacy AI endpoint.
 With posthog-node 5, nothing changes: AI events use `capture()` unless `enableFullAiCapture` is set.
 When an `@posthog/ai` integration has no user distinct id, it sends the event under the trace or run id with the option `process_person_profile: false`, so a `registerOptions()` or context `process_person_profile: true` doesn't create a person for each trace. An empty or whitespace-only distinct id counts as missing.
 
+`@posthog/ai` takes per-event options too: `posthogOptions` on each wrapped provider call and on `withTracing()`, and `options` on the LangChain callback handler and the OpenAI Agents, Claude Agent SDK, Google ADK and Genkit integrations.
+An event with no distinct id still has person processing turned off, whatever its options say.
+
+```ts
+await openai.responses.create({
+  model: 'gpt-5-mini',
+  input: 'Hello',
+  posthogDistinctId: 'user_123',
+  posthogOptions: { process_person_profile: false },
+})
+
+const handler = new LangChainCallbackHandler({ client: posthog, options: { process_person_profile: false } })
+```
+
 ## Event options
 
 Capture v1 sends processing options in an `options` object, next to `properties`.
@@ -211,8 +233,9 @@ Capture v1 sends processing options in an `options` object, next to `properties`
 - `registerOptions(options)` (new) sets options on every event, like `register()` does for properties. `unregisterOptions(key)` removes one. Both return a promise.
 - `withContext()` and `enterContext()` accept `options`, which apply to every event in the context.
 - Options are sent as given. The SDK no longer converts their values. PostHog validates them and drops an event whose option value it cannot read, which reaches `'error'` with `details: 'invalid_options'`.
+- Capture reads common forms of a boolean option value, such as the strings `"true"`, `"yes"`, `"on"` or `"1"`, but a value it cannot read drops the whole event (`invalid_options`). Pass `true` or `false`.
 - An `options` value that is not an object is logged as an error and ignored. The event is still sent.
-- The legacy option properties, the `$`-prefixed properties legacy capture reads as settings, still work. They fill the matching option only when it is unset, and the SDK always removes them from `properties`. Their values are no longer converted, so pass `true` or `false`, not `"true"`.
+- Legacy option properties still work, but an option overrides its legacy property. Use options.
 
   | Legacy option property    | Option                    |
   | ------------------------- | ------------------------- |
@@ -221,36 +244,37 @@ Capture v1 sends processing options in an `options` object, next to `properties`
   | `$ignore_sent_at`         | `disable_skew_correction` |
   | `$product_tour_id`        | `product_tour_id`         |
 
-- An option set at any layer wins over its legacy property set at any layer. For example, `registerOptions({ cookieless_mode: true })` wins over an event's `$cookieless_mode: false` property. When you move a default to options, move the per-event overrides of that key to options too.
 - A `null` or `undefined` option counts as unset, so a later layer can fill it.
 
 ## Layer order
 
-Each event is built in this order. Each step fills only the properties and options the steps before it left unset:
+Each event is built in this order. Each step fills only the properties and options the steps before it left unset, except for `$lib` and `$lib_version` (see [SDK identity](#sdk-identity)):
 
 1. the call's own `properties` and `options`, then its `groups` (merged into `$groups`) and `disableGeoip` (fills `$geoip_disable`)
 2. context `properties` and `options`, from `withContext()`, `enterContext()` or the Express and NestJS integrations
 3. `register()` properties and `registerOptions()` options
-4. values the SDK adds: `$is_server` (from `isServer`), `$geoip_disable` (from `disableGeoip`), the `$feature/<key>` and `$active_feature_flags` properties (from `flags` or `sendFeatureFlags`), `$trace_id` and `$span_id` from the active OpenTelemetry span on `$exception` events, and `options.process_person_profile = false` for an event without a distinct id
+4. values the SDK adds: `$lib` and `$lib_version` (the client's library name and version, see [SDK identity](#sdk-identity)), `$is_server` (from `isServer`), `$geoip_disable` (from `disableGeoip`), the `$feature/<key>` and `$active_feature_flags` properties (from `flags` or `sendFeatureFlags`), `$trace_id` and `$span_id` from the active OpenTelemetry span on `$exception` events, and `options.process_person_profile = false` for an event without a distinct id
 5. `before_send`, which sees the result of steps 1 to 4 and can change or remove any of it. Nothing is added after it.
-6. legacy option properties, which fill unset options and are then removed
 
 A property set to `undefined` counts as unset.
+A `$lib` or `$lib_version` counts as unset unless it is a non-empty string.
 `$set`, `$set_once`, `$groups` and `$group_set` fill one level deep.
 When the call and a later step both set one of them to an object, the later step adds only the keys the call left out.
 For example, `register({ $set: { plan: 'free', source: 'web' } })` and a call with `properties: { $set: { plan: 'pro' } }` send `{ plan: 'pro', source: 'web' }`.
+The call's `groups` merges into its own `$groups` property key by key, and `groups` wins for a key both set. 5.x replaced the `$groups` property with `groups`.
 
 These changes follow from this order:
 
-- A `$is_server`, `$geoip_disable` or feature flag property set on the event, in context or with `register()` now wins over the SDK's value. In 5.x the SDK overwrote some of them.
-- `before_send` now sees `$is_server`, `$geoip_disable`, feature flag properties, trace ids and `options`. In 5.x it ran before the SDK added them. To change an option in `before_send`, edit `options`, which is always an object.
-- Review your `before_send` hooks for the new event shape. A legacy property such as `$process_person_profile` that the hook sets does not replace an option that is already set. A hook that returns a new message must copy `options`, or the event is sent without them. That includes the `process_person_profile: false` the SDK sets for an event without a distinct id, so PostHog would create a person for its generated id.
+- A `$lib`, `$is_server`, `$geoip_disable` or feature flag property set on the event, in context or with `register()` now wins over the SDK's value. In 5.x the SDK overwrote some of them. For `$lib_version`, see [SDK identity](#sdk-identity).
+- `before_send` now sees `$lib`, `$lib_version`, `$is_server`, `$geoip_disable`, feature flag properties and `options`. In 5.x the SDK added these properties after the hook, and events had no `options`. Trace ids and the `$session_id` from context were already set before the hook in 5.x. For an event without a distinct id, the hook now sees `process_person_profile: false` in `options`.
+- To change an option in `before_send`, edit `options`. The first hook always gets an `options` object. With an array of hooks, each later hook gets what the previous one returned, which may have no `options`.
+- Review your `before_send` hooks for the new event shape. A hook that returns a new message must copy `options`, or the event is sent without them. That includes the `process_person_profile: false` the SDK sets for an event without a distinct id, so PostHog would create a person for its generated id.
 - `before_send` gets its own copy of the event's plain objects and arrays. Changing a nested value no longer changes your objects or the `register()` and context values, as it could in 5.x. Class instances, such as `Date`, are not copied.
 - `$geoip_disable` and `$groups` are set before `before_send`, so to change them, edit the properties. Changing the message's `disableGeoip` or `groups` field has no effect.
 - A `before_send` hook that throws drops the event, as in 5.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing. It is printed with `console.error` even when `debug` is off; in 5.x it showed only with `debug` on.
 - With `sendFeatureFlags`, the `/flags` request now runs before `before_send` and uses the event's own distinct id, even for an event the hook then drops. Changes the hook makes to the message's `groups` or `sendFeatureFlags` no longer reach that request, as editing those objects in place could in 5.x. To avoid that request, call `evaluateFlags()` yourself and pass the snapshot as `flags`.
 - Context and `register()` properties and options now reach `identify`, `alias` and `groupIdentify` events, not only `capture`.
-- That includes a `process_person_profile: false` option or `$process_person_profile: false` property set with `register()`, `registerOptions()` or a context. PostHog drops `$identify`, `$create_alias` and `$groupidentify` events with person processing off and shows an ingestion warning. `'error'` does not report these drops, because capture accepts the events. Set person processing off on each event instead, or pass `options: { process_person_profile: true }` to `identify`, `alias` and `groupIdentify`.
+- That includes a `process_person_profile: false` option set with `registerOptions()` or a context. PostHog drops `$identify`, `$create_alias` and `$groupidentify` events with person processing off and shows an ingestion warning. `'error'` does not report these drops, because capture accepts the events. Set person processing off on each event instead, or pass `options: { process_person_profile: true }` to `identify`, `alias` and `groupIdentify`.
 
 ## GeoIP
 
@@ -264,7 +288,7 @@ These changes follow from this order:
 ## Identity and request context
 
 - An empty or whitespace-only `distinctId` counts as missing. The event uses the context distinct id, or else a generated personless distinct id with `options.process_person_profile = false`. 5.x sent a whitespace-only id, and capture dropped the event.
-- The SDK's `process_person_profile: false` for a personless event fills only an unset option. An option set on the event, in context or with `registerOptions()` wins over it. A `$process_person_profile: true` property no longer turns person processing back on. Set the option instead.
+- The SDK's `process_person_profile: false` for a personless event fills only an unset option. An option set on the event, in context or with `registerOptions()` wins over it.
 - `groupIdentify` uses the `distinctId` you pass, then the context distinct id, then `$<groupType>_<groupKey>`. In 5.x it skipped the context id. If `$<groupType>_<groupKey>` is over 200 bytes, pass `distinctId`.
 - `groupIdentify` never adds the context session id.
 - `identify` and `alias` now add the context session id as `$session_id`, like `capture`. 5.x did not add it to them.
@@ -288,9 +312,22 @@ To stop all request linking, set `captureTracingHeaders: false` and leave `readP
 
 ## SDK identity
 
-PostHog sets `$lib` and `$lib_version` on every event from the `PostHog-Sdk-Info` request header, which the client sets.
-The SDK removes `$lib` and `$lib_version` from the properties it sends.
-A value you set on an event, in context, with `register()` or in `before_send` does not reach PostHog.
+Each event's `$lib` and `$lib_version` properties name the library that sent it.
+The SDK sends them in the event's properties, and PostHog stores the values the event sends.
+
+The SDK fills them after the event, context and `register()` values, and only counts a `$lib` or `$lib_version` that is a non-empty string:
+
+- If nothing sets `$lib`, the SDK sets both to the client's library name and version: `posthog-node`, `posthog-edge`, or the name a wrapper package such as `@posthog/mcp` sets. This replaces a `$lib_version` set without `$lib`.
+- If `$lib` is the client's own library name and `$lib_version` is missing, the SDK fills in `$lib_version`.
+- If `$lib` names another library, the SDK sends both as set, even without `$lib_version`. Set both when you override them.
+
+An app that relays events from another PostHog SDK, such as posthog-js events with `$lib: 'web'`, now keeps their `$lib` and `$lib_version`. 5.x replaced them with `posthog-node` and its version.
+
+`before_send` sees the result and can change or remove either property. In 5.x the SDK overwrote them after `before_send`.
+
+The client also sends its library name and version in the `PostHog-Sdk-Info` request header.
+PostHog uses the header only for an event whose `$lib` is missing, empty or not a string, such as one whose `before_send` removed it.
+If an event's `$lib` matches the header's library and its `$lib_version` is missing, empty or not a string, PostHog fills in `$lib_version` from the header.
 
 ## Session and window ids
 
@@ -317,7 +354,7 @@ Capture rejects a whole request when one event has a broken field.
 
 ## Timestamps
 
-- Timestamps are sent in UTC, with millisecond precision.
+- Timestamps are sent in UTC, with millisecond precision. A string timestamp with more than 3 fractional digits keeps them.
 - An invalid `timestamp` is still replaced with the current time. The SDK now logs a warning, which never includes the value.
 
 ## Event uuids
@@ -345,15 +382,20 @@ The SDK's own logs no longer print whole events or `before_send` error messages.
 
 ## Wrapper packages
 
-| Package                                             | Works with                                                                    |
-| --------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `@posthog/ai`                                       | posthog-node 5 and 6. On 6 it sends AI events with `captureAi()`.             |
-| `@posthog/mcp`                                      | posthog-node 5 and 6                                                          |
-| `@posthog/convex`, `@posthog/next`, `@posthog/nuxt` | posthog-node 5. They move to posthog-node 6 in their own next major versions. |
+| Package                                             | Works with                                                                                  |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `@posthog/ai`                                       | posthog-node 5 and 6. On 6 it sends AI events with `captureAi()`.                           |
+| `@posthog/mcp`                                      | posthog-node 5 and 6                                                                        |
+| `@posthog/openfeature-node-provider`                | posthog-node 5 and 6. It uses only the feature flag APIs.                                   |
+| `@posthog/convex`, `@posthog/next`, `@posthog/nuxt` | posthog-node 5, as a dependency. Check each package's changelog for posthog-node 6 support. |
 
 Upgrade `@posthog/ai` and `@posthog/mcp` to a version that accepts posthog-node 6 before or together with posthog-node.
 
-These versions accept both posthog-node 5 and 6. If your app does not list `posthog-node` in its own dependencies, upgrading `@posthog/ai` or `@posthog/mcp` can install posthog-node 6. List `posthog-node` in your dependencies so you choose when to move to 6.
+These versions accept both posthog-node 5 and 6. If your app does not list `posthog-node` in its own dependencies, upgrading `@posthog/ai` or `@posthog/mcp` can install posthog-node 6. `@posthog/openfeature-node-provider` accepts any posthog-node from 5.21.2, so installing it fresh can install posthog-node 6 too. List `posthog-node` in your dependencies so you choose when to move to 6.
+
+`@posthog/mcp` labels the whole client, as in 5.x: every event that the client you pass to `instrument()` or `PostHogMCP` captures afterwards reports `$lib` `posthog-node-mcp` and the `@posthog/mcp` version. In 6.0 a `$lib` set on the event, in context or with `register()` wins over the label. If your app also captures its own events, give MCP analytics its own client. To find MCP traffic, filter on `$mcp_*` events rather than `$lib`.
+
+`@posthog/mcp` takes per-event options as `eventOptions`, per call or from an `instrument()` callback, and passes them as the event's `options`. Its `beforeSend` hook gets them as `event.options` and can change them. On 6, an MCP event from a session with no resolved identity carries the `process_person_profile: false` option, so a client `before_send` sees the anonymous default there. As a per-event option it wins over a `registerOptions()` or context `process_person_profile`. A `process_person_profile` you set in `eventOptions` wins over the default.
 
 ## posthog-node 5.x support
 
