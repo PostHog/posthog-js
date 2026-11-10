@@ -681,7 +681,6 @@ function parseUploadsReply({ status, text: body, retryAfterMs }: Reply, requeste
   return uploads
 }
 
-/** The upload route names `files` or `files__<i>`, indexing the asked files; the caller passed `attachments`. */
 function callerField(attr: string | undefined, requested: HashedFile[]): string | undefined {
   const file = attr === undefined ? null : /^files(?:__(\d+))?(?:__|$)/.exec(attr)
   if (!file) {
