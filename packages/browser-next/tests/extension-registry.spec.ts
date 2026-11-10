@@ -1,9 +1,9 @@
+import { requireInstalledExtension } from './helpers'
 import type { Client } from '@posthog/browser-common'
 import { ExtensionRegistry } from '../src/extensions/registry'
 import { flags } from '../src/flags'
-import { FeatureFlagsExtension } from '../src/flags-token'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
-import type { BrowserClient } from '../src/browser-client'
+import type { IPostHogInternal } from '../src/browser-client'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { createPostHog } from '../src/core'
 import { createFetch, localRemoteConfig } from './helpers'
@@ -100,10 +100,10 @@ describe('extension flushing', () => {
 })
 
 describe('extension lookup bindings', () => {
-    it('resolves SDK and common tokens consistently from public and extension clients', async () => {
+    it('keeps browser namespaces separate from shared implementation lookup', async () => {
         const facade = flags({ featureFlagEvaluation: false })
         let shared: PostHogFeatureFlags | undefined
-        let scoped!: Client
+        let scoped!: IPostHogInternal
         const setup = vi.spyOn(PostHogFeatureFlags.prototype, 'setup')
         const dispose = vi.spyOn(PostHogFeatureFlags.prototype, 'dispose')
         const client = await createPostHog({
@@ -119,16 +119,19 @@ describe('extension lookup bindings', () => {
                     name: 'consumer',
                     setup(client) {
                         scoped = client
-                        shared = client.getExtension(FeatureFlagsCommonExtension)
+                        shared = client.sharedClient.getExtension(FeatureFlagsCommonExtension)
                     },
                 },
             ],
         })
-        expect(client.getExtension(FeatureFlagsExtension)).toBe(facade)
-        expect(scoped.getExtension(FeatureFlagsExtension)).toBe(facade)
-        expect(client.getExtension(FeatureFlagsCommonExtension)).toBe(shared)
+        expect(client.featureFlags).toBe(facade)
+        expect(scoped.featureFlags).toBe(facade)
+        expect('getExtension' in client).toBe(false)
+        expect('getExtension' in scoped).toBe(false)
+        expect(scoped.sharedClient.getExtension<PostHogFeatureFlags>('featureFlags')).toBe(shared)
+        expect(await client.resolveExtension('featureFlags')).toBe(facade)
         expect(shared).toBeInstanceOf(PostHogFeatureFlags)
-        const subscription = scoped.getExtension(FeatureFlagsExtension)!.onFeatureFlags(vi.fn())
+        const subscription = requireInstalledExtension(scoped.featureFlags).onFeatureFlags(vi.fn())
         subscription.dispose()
         expect(shared).not.toBe(facade)
         expect(setup).toHaveBeenCalledTimes(1)
@@ -137,16 +140,16 @@ describe('extension lookup bindings', () => {
         expect(reload).toHaveBeenCalledOnce()
         await client.dispose()
         expect(dispose).toHaveBeenCalledTimes(1)
-        expect(scoped.getExtension(FeatureFlagsExtension)).toBeUndefined()
-        expect(scoped.getExtension(FeatureFlagsCommonExtension)).toBeUndefined()
-        expect(client.getExtension(FeatureFlagsCommonExtension)).toBeUndefined()
+        expect(scoped.featureFlags).toBeUndefined()
+        expect(scoped.sharedClient.getExtension(FeatureFlagsCommonExtension)).toBeUndefined()
+        expect(await client.resolveExtension('featureFlags')).toBeUndefined()
         vi.restoreAllMocks()
     })
 
     it.each(['rollback', 'failure', 'dispose-during-setup'] as const)(
         'cleans real flag subscriptions and all bindings on %s',
         async (mode) => {
-            let scoped!: BrowserClient
+            let scoped!: IPostHogInternal
             const client = await createPostHog({
                 projectToken: 'ph_lifecycle',
                 storage: false,
@@ -157,7 +160,7 @@ describe('extension lookup bindings', () => {
                 extensions: [
                     {
                         name: 'observer',
-                        setup(value: BrowserClient) {
+                        setup(value: IPostHogInternal) {
                             scoped = value
                         },
                     },
@@ -189,6 +192,7 @@ describe('extension lookup bindings', () => {
             const installed = registry.install(facade)
             const outcome = installed.catch((error: unknown) => error)
             if (mode === 'dispose-during-setup') {
+                await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
                 await registry.dispose()
                 finish()
             }
@@ -199,11 +203,11 @@ describe('extension lookup bindings', () => {
                 expect(grouped).toHaveBeenCalledOnce()
                 expect(resetListener).toHaveBeenCalledOnce()
                 reload.mockClear()
-                client.identify('person')
+                requireInstalledExtension(client.analytics).identify('person')
                 expect(reload).toHaveBeenCalledTimes(1)
-                client.group('company', 'team')
+                requireInstalledExtension(client.analytics).group('company', 'team')
                 expect(reload).toHaveBeenCalledTimes(2)
-                client.reset()
+                requireInstalledExtension(client.analytics).reset()
                 expect(reload).toHaveBeenCalledTimes(3)
                 expect(reset).toHaveBeenCalledOnce()
                 await registry.rollback(facade)
@@ -212,9 +216,9 @@ describe('extension lookup bindings', () => {
             expect(registry.get(FeatureFlagsCommonExtension)).toBeUndefined()
             reload.mockClear()
             reset.mockClear()
-            client.identify('after-cleanup')
-            client.group('company', 'after-cleanup')
-            client.reset()
+            requireInstalledExtension(client.analytics).identify('after-cleanup')
+            requireInstalledExtension(client.analytics).group('company', 'after-cleanup')
+            requireInstalledExtension(client.analytics).reset()
             expect(reload).not.toHaveBeenCalled()
             expect(reset).not.toHaveBeenCalled()
             await registry.dispose()
@@ -230,39 +234,41 @@ describe('extension lookup bindings', () => {
         Object.assign(extension, { bindings: { customCommon: extension } })
         await registry.install(extension)
         expect(registry.get('custom')).toBe(extension)
-        expect(registry.get('customCommon')).toBe(extension)
+        expect(registry.getShared('customCommon')).toBe(extension)
         await registry.dispose()
         expect(extension.dispose).toHaveBeenCalledTimes(1)
     })
 
-    it.each(['owner', 'common'])('rejects collisions with an installed %s atomically', async (key) => {
+    it.each(['browser', 'shared'])('rejects collisions within the %s view atomically', async (view) => {
         const registry = makeRegistry()
         const target = { name: 'implementation', setup: vi.fn() }
         const owner = { name: 'owner', bindings: { common: target }, setup: vi.fn() }
         await registry.install(owner)
         const conflicting = {
-            name: 'next',
-            bindings: { available: target, [key]: target },
+            name: view === 'browser' ? 'owner' : 'next',
+            bindings: view === 'shared' ? { available: target, common: target } : { available: target },
             setup: vi.fn(),
             dispose: vi.fn(),
         }
         await expect(registry.install(conflicting)).rejects.toThrow('already installed')
-        await expect(registry.install({ name: key, setup: vi.fn() })).rejects.toThrow('already installed')
         expect(registry.get('next')).toBeUndefined()
-        expect(registry.get('available')).toBeUndefined()
+        expect(registry.getShared('available')).toBeUndefined()
         expect(registry.get('owner')).toBe(owner)
-        expect(registry.get('common')).toBe(target)
+        expect(registry.getShared('common')).toBe(target)
         expect(conflicting.setup).not.toHaveBeenCalled()
         expect(conflicting.dispose).not.toHaveBeenCalled()
         await registry.dispose()
     })
 
-    it('rejects a binding that duplicates its owner name before setup', async () => {
+    it('allows a browser wrapper and its shared target to have the same name', async () => {
         const registry = makeRegistry()
-        const owner = { name: 'owner', bindings: { owner: { name: 'target', setup: vi.fn() } }, setup: vi.fn() }
-        await expect(registry.install(owner)).rejects.toThrow('already installed')
-        expect(registry.get('owner')).toBeUndefined()
-        expect(owner.setup).not.toHaveBeenCalled()
+        const shared = { name: 'owner', setup: vi.fn() }
+        const owner = { name: 'owner', bindings: { owner: shared }, setup: vi.fn() }
+        await registry.install(owner)
+        expect(registry.get('owner')).toBe(owner)
+        expect(registry.getShared('owner')).toBe(shared)
+        expect(shared.setup).not.toHaveBeenCalled()
+        await registry.dispose()
     })
 
     it.each(['failure', 'rollback', 'dispose-during-setup'] as const)(
@@ -284,8 +290,8 @@ describe('extension lookup bindings', () => {
             }
             const installed = registry.install(owner)
             const outcome = installed.catch((error) => error)
-            expect(registry.get('flags')).toBe(owner)
-            expect(registry.get('flagsCommon')).toBe(implementation)
+            expect(registry.get('flags')).toBeUndefined()
+            expect(registry.getShared('flagsCommon')).toBeUndefined()
             expect(implementation.setup).not.toHaveBeenCalled()
             if (mode === 'dispose-during-setup') await registry.dispose()
             finish()

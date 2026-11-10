@@ -1,3 +1,4 @@
+import { requireInstalledExtension } from './helpers'
 import { createPostHog } from '../src'
 import { createAnalyticsExtension } from '../src/analytics-buffer'
 import { analytics } from '../src/automatic-analytics'
@@ -25,7 +26,7 @@ describe('default analytics selection', () => {
         expect(constructionCount).toBe(1)
         expect(analytics).toHaveBeenCalledOnce()
         expect(analytics).toHaveBeenCalledWith({ load: 'lazy' })
-        expect(client.getExtension('analytics')).toBe(vi.mocked(analytics).mock.results[0]?.value)
+        expect(client.analytics).toBe(vi.mocked(analytics).mock.results[0]?.value)
         await client.shutdown()
     })
 
@@ -46,7 +47,7 @@ describe('default analytics selection', () => {
             },
         })
         expect(analytics).not.toHaveBeenCalled()
-        expect(client.getExtension('analytics')).toBe(supplied)
+        expect(client.analytics).toBe(supplied)
         await client.shutdown()
     })
 
@@ -61,7 +62,7 @@ describe('default analytics selection', () => {
             throw new Error('analytics could not initialize')
         })
         const client = await createPostHog(options)
-        expect(() => client.capture('buffered')).not.toThrow()
+        expect(() => requireInstalledExtension(client.analytics).capture('buffered')).not.toThrow()
         await expect(client.flush()).resolves.toBeUndefined()
         await client.shutdown()
     })

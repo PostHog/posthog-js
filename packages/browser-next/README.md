@@ -12,7 +12,7 @@ The client installs one analytics extension with a bounded in-memory buffer duri
 import { createPostHog } from '@posthog/browser'
 
 const posthog = await createPostHog({ projectToken: '<project-token>' })
-posthog.capture('signed_up')
+posthog.analytics?.capture('signed_up')
 await posthog.flush()
 ```
 
@@ -36,7 +36,9 @@ const posthog = await createPostHog({
 })
 ```
 
-Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no delivery dynamic-import reference. Both modes retain the analytics extension and its buffer. `getExtension('analytics')` returns the same instance before and after delivery loads; its presence alone does not indicate that delivery is available. Analytics initializes before other configured extensions so they can capture during setup. Other extensions retain their configured order.
+Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no delivery dynamic-import reference. Both modes retain the analytics extension and its buffer. `posthog.analytics` returns the same instance before and after delivery loads; its presence alone does not indicate that delivery is available. Analytics initializes before other configured extensions so they can capture during setup. Other extensions retain their configured order.
+
+Product namespaces expose owners only after successful setup. Reading a namespace never initiates loading. Use `await posthog.resolveExtension(token)` for typed custom-extension access; resolution waits for readiness and returns `undefined` when the extension is unavailable. Shared implementations receive a separate `Client` adapter with shared binding lookup.
 
 ## Classic script installation (draft CDN distribution)
 
@@ -63,7 +65,7 @@ After the existing `createPostHog()` factory resolves, the script assigns `windo
 
 ```js
 function onPostHogReady(client) {
-    client.capture('signed_up')
+    client.analytics?.capture('signed_up')
 }
 if (window.posthog) {
     onPostHogReady(window.posthog)
@@ -127,7 +129,7 @@ const posthog = await createPostHog({
     projectToken: '<project-token>',
     flags: { evaluationContexts: ['web'], requestTimeoutMs: 3_000 },
 })
-const featureFlags = posthog.getExtension(FeatureFlagsExtension)
+const featureFlags = await posthog.resolveExtension(FeatureFlagsExtension)
 const subscription = featureFlags?.onFeatureFlags((results, errorsLoading) => {
     if (!errorsLoading) console.log(results)
 })
@@ -136,7 +138,7 @@ if (result?.enabled) console.log(result.variant, result.payload)
 subscription?.dispose()
 ```
 
-`FeatureFlagsExtension` is a lightweight typed lookup token, exported from the root, core, and flags entrypoints. `getExtension(FeatureFlagsExtension)` returns undefined when flags is disabled or failed to install. The extension's `getFeatureFlag()` returns undefined until a value is available. A disabled flag returns an object with `enabled: false`. Reads emit deduplicated flag-called analytics through ordinary capture; subscriptions do not. `updateFlags(values, payloads?, { merge })` injects flag values.
+`FeatureFlagsExtension` is a lightweight typed lookup token, exported from the root, core, and flags entrypoints. `resolveExtension(FeatureFlagsExtension)` resolves to undefined when flags is disabled or failed to install. The extension's `getFeatureFlag()` returns undefined until a value is available. A disabled flag returns an object with `enabled: false`. Reads emit deduplicated flag-called analytics through ordinary capture; subscriptions do not. `updateFlags(values, payloads?, { merge })` injects flag values.
 
 Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
 
@@ -196,15 +198,13 @@ const extension = {
 Logs dynamically load during initialization by default, separately from analytics. `captureLog()` explicitly queues an OTLP log; loading the extension alone does not turn on console capture. Console capture follows remote configuration or a local `captureConsoleLogs` opt-in:
 
 ```ts
-import type { LogsExtension } from '@posthog/browser/logs'
-
 const posthog = await createPostHog({
     projectToken: '<project-token>',
     logs: { captureConsoleLogs: true, serviceName: 'storefront', flushIntervalMs: 3_000 },
 })
-const logger = posthog.getExtension<LogsExtension>('logs')!
-logger.captureLog({ body: 'Checkout completed', level: 'info', attributes: { orderId: '123' } })
-await logger.flush()
+const logger = posthog.logs
+logger?.captureLog({ body: 'Checkout completed', level: 'info', attributes: { orderId: '123' } })
+await logger?.flush()
 ```
 
 Use `logs: false` to disable automatic inclusion. For static inclusion without a runtime module request:
@@ -231,13 +231,11 @@ The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits 
 Surveys orchestration loads dynamically during initialization by default. Its UI is a separate dynamic chunk: a successful remote configuration with surveys enabled loads it automatically; otherwise an explicit survey call can load it for manual use. Definitions come from a separate `/api/surveys/` request and are cached for five minutes. Client creation does not wait for the renderer or definitions.
 
 ```ts
-import type { SurveysExtension } from '@posthog/browser/surveys'
-
 const posthog = await createPostHog({
     projectToken: '<project-token>',
     surveys: { automaticDisplay: false, requestTimeoutMs: 10_000 },
 })
-const feedback = posthog.getExtension<SurveysExtension>('surveys')
+const feedback = posthog.surveys
 feedback?.getSurveys((surveys, context) => {
     if (context?.isLoaded && surveys[0]) feedback.displaySurvey(surveys[0].id)
 })
@@ -274,8 +272,10 @@ Queued and immediate capture omit null or undefined object properties from deliv
 Use `captureImmediate()` only when the caller needs a terminal delivery outcome before continuing:
 
 ```ts
-const summary = await posthog.captureImmediate('import_completed', { source: 'warehouse' })
-if (summary.error) {
+const summary = await posthog.analytics?.captureImmediate('import_completed', { source: 'warehouse' })
+if (!summary) {
+    console.warn('Analytics is unavailable')
+} else if (summary.error) {
     console.warn('Immediate capture failed', summary.error)
 } else if (summary.submitted !== 1 || !summary.allPersisted) {
     // Capture V1 did not confirm persistence of this event.

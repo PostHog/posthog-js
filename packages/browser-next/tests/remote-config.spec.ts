@@ -1,3 +1,4 @@
+import { requireInstalledExtension } from './helpers'
 import { createPostHog as createRoot } from '../src'
 import { createPostHog as createCore, type BrowserFetch, type CorePostHogOptions } from '../src/core'
 import { localRemoteConfig } from './helpers'
@@ -78,13 +79,13 @@ describe.each([
                     name: 'subscriber',
                     setup(client) {
                         client.onRemoteConfig(first)
-                        client.capture('setup')
+                        requireInstalledExtension(client.analytics).capture('setup')
                     },
                 },
             ],
         })
         posthog.onRemoteConfig(second)
-        posthog.capture('before config')
+        requireInstalledExtension(posthog.analytics).capture('before config')
         expect(posthog.session!.sessionId).not.toBe('')
         const pending = posthog.getRemoteConfig()
         expect(fetch).toHaveBeenCalledTimes(1)

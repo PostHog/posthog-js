@@ -1,3 +1,4 @@
+import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { analytics } from '../src/analytics'
 import { createPostHog } from '../src/core'
@@ -50,9 +51,13 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
         })
         const snapshot = structuredClone(properties)
         const observed: unknown[] = []
-        posthog.onEvent(({ properties }) => observed.push(properties))
+        requireInstalledExtension(posthog.analytics).onEvent(({ properties }) => observed.push(properties))
         try {
-            const result = await posthog[method]('Nullable Properties', properties, { uuid: 'nullable-uuid' })
+            const result = await requireInstalledExtension(posthog.analytics)[method](
+                'Nullable Properties',
+                properties,
+                { uuid: 'nullable-uuid' }
+            )
             if (method === 'captureImmediate') {
                 expect(result).toMatchObject({ submitted: 1, notPersisted: 0, allPersisted: true })
             }
@@ -94,9 +99,13 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
         })
         const toJSON = vi.fn(() => ({ drop: null, items: [null, { drop: null }], keep: true }))
         const enrich = vi.fn(() => ({ dynamicNull: null, dynamicObject: { drop: null } }))
-        posthog.registerDynamicEventProperties(enrich)
+        requireInstalledExtension(posthog.analytics).registerDynamicEventProperties(enrich)
         try {
-            await posthog[method]('Enriched Properties', { converted: { toJSON } }, { uuid: 'nullable-uuid' })
+            await requireInstalledExtension(posthog.analytics)[method](
+                'Enriched Properties',
+                { converted: { toJSON } },
+                { uuid: 'nullable-uuid' }
+            )
             await posthog.flush()
 
             expect(received).toHaveLength(1)

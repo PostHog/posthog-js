@@ -1,8 +1,9 @@
-import { createPostHog, FeatureFlagsExtension } from '../src'
+import { requireInstalledExtension } from './helpers'
+import { createPostHog } from '../src'
 import { createPostHog as createCore } from '../src/core'
 import { flags } from '../src/flags'
 import type { FlagsOptions } from '../src/flags'
-import type { PostHog, PostHogOptions } from '../src/types'
+import type { IPostHog, PostHogOptions } from '../src/types'
 import { localRemoteConfig, MemoryStorage } from './helpers'
 
 const base = {
@@ -13,7 +14,7 @@ const base = {
     navigator: false,
     analytics: false,
 } as const
-const clients: PostHog[] = []
+const clients: IPostHog[] = []
 const create = async (options: Partial<PostHogOptions> = {}) => {
     const client = await createPostHog({ ...base, fetch: false, ...options })
     clients.push(client)
@@ -30,8 +31,8 @@ describe('flags', () => {
         vi.useFakeTimers()
         const fetch = vi.fn(() => new Promise<Response>(() => {}))
         const client = await create({ fetch })
-        expect(client.getExtension('featureFlags')).toBeDefined()
-        expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('pending')).toBeUndefined()
+        expect(client.featureFlags).toBeDefined()
+        expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('pending')).toBeUndefined()
         await vi.advanceTimersByTimeAsync(5)
         expect(fetch).toHaveBeenCalledTimes(1)
         expect(String((fetch.mock.calls as unknown as Array<[unknown]>)[0]?.[0])).toContain('/flags/?v=2')
@@ -41,7 +42,7 @@ describe('flags', () => {
         vi.useFakeTimers()
         const fetch = vi.fn()
         const client = await create({ flags: false, fetch })
-        expect(client.getExtension('featureFlags')).toBeUndefined()
+        expect(client.featureFlags).toBeUndefined()
         await vi.advanceTimersByTimeAsync(10)
         expect(fetch).not.toHaveBeenCalled()
     })
@@ -49,7 +50,7 @@ describe('flags', () => {
     it('keeps the manual core entrypoint free of automatic flags', async () => {
         const client = await createCore({ ...base, fetch: false })
         clients.push(client)
-        expect(client.getExtension('featureFlags')).toBeUndefined()
+        expect(client.featureFlags).toBeUndefined()
     })
 
     it.each([false, { bootstrap: { featureFlags: { ignored: true } } }] as const)(
@@ -60,12 +61,12 @@ describe('flags', () => {
                 bootstrap: { featureFlags: { static: 'variant' } },
             })
             const client = await create({ flags: configuration, extensions: [extension] })
-            expect(client.getExtension('featureFlags')).toBe(extension)
-            expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('static')).toMatchObject({
+            expect(client.featureFlags).toBe(extension)
+            expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('static')).toMatchObject({
                 enabled: true,
                 variant: 'variant',
             })
-            expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('ignored')).toBeUndefined()
+            expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('ignored')).toBeUndefined()
         }
     )
 
@@ -80,9 +81,9 @@ describe('flags', () => {
             mode === 'static' ? { fetch, extensions: [flags(options)] } : { fetch, flags: options }
         )
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         const callback = vi.fn()
-        const subscription = client.getExtension(FeatureFlagsExtension)!.onFeatureFlags(callback)
+        const subscription = requireInstalledExtension(client.featureFlags).onFeatureFlags(callback)
         expect(callback).toHaveBeenCalledWith(
             [
                 expect.objectContaining({ key: 'off', enabled: false }),
@@ -91,15 +92,15 @@ describe('flags', () => {
             false
         )
         expect(captured).not.toHaveBeenCalled()
-        expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('off')).toMatchObject({ enabled: false })
-        client.getExtension(FeatureFlagsExtension)!.updateFlags({ test: 'b' }, { test: 42 }, { merge: true })
-        expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('test')).toMatchObject({
+        expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('off')).toMatchObject({ enabled: false })
+        requireInstalledExtension(client.featureFlags).updateFlags({ test: 'b' }, { test: 42 }, { merge: true })
+        expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('test')).toMatchObject({
             variant: 'b',
             payload: 42,
         })
         expect(callback).toHaveBeenCalledTimes(2)
         subscription.dispose()
-        client.getExtension(FeatureFlagsExtension)!.updateFlags({ after: true })
+        requireInstalledExtension(client.featureFlags).updateFlags({ after: true })
         expect(callback).toHaveBeenCalledTimes(2)
         await vi.advanceTimersByTimeAsync(20)
         expect(fetch).not.toHaveBeenCalled()
@@ -133,7 +134,7 @@ describe('flags', () => {
             flag_keys: ['test'],
             distinct_id: client.distinctId,
         })
-        expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('test')).toMatchObject({
+        expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('test')).toMatchObject({
             key: 'test',
             variant: 'blue',
             payload: { ok: true },
@@ -144,7 +145,7 @@ describe('flags', () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response(JSON.stringify({ featureFlags: { test: 'remote' } })))
         const client = await create({ fetch, flags: { bootstrap: { featureFlags: { test: 'bootstrap' } } } })
-        const extension = client.getExtension(FeatureFlagsExtension)!
+        const extension = requireInstalledExtension(client.featureFlags)
         expect(extension.getFeatureFlag('test')?.variant).toBe('bootstrap')
         const reload = extension.reloadFeatureFlags()
         await vi.advanceTimersByTimeAsync(5)
@@ -161,7 +162,7 @@ describe('flags', () => {
                 fetch: async () => new Response(body),
                 flags: { bootstrap: { featureFlags: { test: 'bootstrap' } } },
             })
-            const extension = client.getExtension(FeatureFlagsExtension)!
+            const extension = requireInstalledExtension(client.featureFlags)
             const reload = extension.reloadFeatureFlags()
             await vi.advanceTimersByTimeAsync(5)
             expect(await reload).toEqual({ status: 'error' })
@@ -171,7 +172,7 @@ describe('flags', () => {
 
     it('reports disabled evaluation and reloads after disposal without waiting', async () => {
         const client = await create({ flags: { featureFlagEvaluation: false } })
-        const extension = client.getExtension(FeatureFlagsExtension)!
+        const extension = requireInstalledExtension(client.featureFlags)
         expect(await extension.reloadFeatureFlags()).toEqual({ status: 'skipped' })
         await client.dispose()
         expect(await extension.reloadFeatureFlags()).toEqual({ status: 'cancelled' })
@@ -183,7 +184,7 @@ describe('flags', () => {
             async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 500 })
         )
         const client = await create({ fetch, flags: { requestTimeoutMs: 25 } })
-        const extension = client.getExtension(FeatureFlagsExtension)!
+        const extension = requireInstalledExtension(client.featureFlags)
         const failed = extension.reloadFeatureFlags()
         await vi.advanceTimersByTimeAsync(5)
         expect(await failed).toEqual({ status: 'error' })
@@ -201,10 +202,10 @@ describe('flags', () => {
     it('cancels in-flight explicit reloads on reset and disposal', async () => {
         vi.useFakeTimers()
         const client = await create({ fetch: () => new Promise(() => {}) })
-        const extension = client.getExtension(FeatureFlagsExtension)!
+        const extension = requireInstalledExtension(client.featureFlags)
         const reset = extension.reloadFeatureFlags()
         await vi.advanceTimersByTimeAsync(5)
-        client.reset()
+        requireInstalledExtension(client.analytics).reset()
         expect(await reset).toEqual({ status: 'cancelled' })
         const disposed = extension.reloadFeatureFlags()
         await client.dispose()
@@ -216,15 +217,15 @@ describe('flags', () => {
         const extension = flags(options)
         options.bootstrap.featureFlags.test = 'changed'
         const client = await create({ extensions: [extension] })
-        expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('test')?.variant).toBe('original')
+        expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('test')?.variant).toBe('original')
     })
 
     it('tracks identity, group and reset independently of capture consent', async () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch, optOutByDefault: true })
-        await client.identify('person', { plan: 'pro' })
-        await client.group('organization', 'team', { size: 5 })
+        await requireInstalledExtension(client.analytics).identify('person', { plan: 'pro' })
+        await requireInstalledExtension(client.analytics).group('organization', 'team', { size: 5 })
         client.optIn()
         await vi.advanceTimersByTimeAsync(5)
         const init = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
@@ -234,9 +235,9 @@ describe('flags', () => {
             person_properties: { plan: 'pro' },
             group_properties: { organization: { size: 5 } },
         })
-        client.getExtension(FeatureFlagsExtension)!.updateFlags({ old: true })
-        client.reset()
-        expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('old')).toBeUndefined()
+        requireInstalledExtension(client.featureFlags).updateFlags({ old: true })
+        requireInstalledExtension(client.analytics).reset()
+        expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('old')).toBeUndefined()
         await vi.advanceTimersByTimeAsync(5)
         expect(fetch).toHaveBeenCalledTimes(2)
     })
@@ -244,11 +245,11 @@ describe('flags', () => {
     it('reports flag exposure again after changing identity', async () => {
         const client = await create({ flags: { featureFlagEvaluation: false } })
         const captured = vi.fn()
-        client.onEvent(captured)
-        client.getExtension(FeatureFlagsExtension)!.updateFlags({ test: true })
-        client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('test')
-        await client.identify('next-person')
-        client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('test')
+        requireInstalledExtension(client.analytics).onEvent(captured)
+        requireInstalledExtension(client.featureFlags).updateFlags({ test: true })
+        requireInstalledExtension(client.featureFlags).getFeatureFlag('test')
+        await requireInstalledExtension(client.analytics).identify('next-person')
+        requireInstalledExtension(client.featureFlags).getFeatureFlag('test')
         expect(captured.mock.calls.filter(([event]) => event.event === '$feature_flag_called')).toHaveLength(2)
     })
 
@@ -260,13 +261,13 @@ describe('flags', () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {})
         const client = await create({ flags: { featureFlagEvaluation: false } })
         const captured = vi.fn()
-        client.onEvent(captured)
-        for (let index = 0; index < 100; index++) client.capture('flood')
-        client.getExtension(FeatureFlagsExtension)!.updateFlags({ test: true })
-        client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('test')
+        requireInstalledExtension(client.analytics).onEvent(captured)
+        for (let index = 0; index < 100; index++) requireInstalledExtension(client.analytics).capture('flood')
+        requireInstalledExtension(client.featureFlags).updateFlags({ test: true })
+        requireInstalledExtension(client.featureFlags).getFeatureFlag('test')
 
         now.mockReturnValue(1_000 + elapsedMs)
-        client.capture('next')
+        requireInstalledExtension(client.analytics).capture('next')
 
         const events = captured.mock.calls.map(([event]) => event.event)
         expect({
@@ -279,8 +280,8 @@ describe('flags', () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch })
-        await client.group('org', 'A', { plan: 'paid' })
-        await client.group('org', 'B')
+        await requireInstalledExtension(client.analytics).group('org', 'A', { plan: 'paid' })
+        await requireInstalledExtension(client.analytics).group('org', 'B')
         await vi.advanceTimersByTimeAsync(5)
         const init = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
         expect(JSON.parse(String(init?.body)).groups).toEqual({ org: 'B' })
@@ -292,11 +293,11 @@ describe('flags', () => {
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch })
         const anonymousId = client.distinctId
-        await client.identify('A')
+        await requireInstalledExtension(client.analytics).identify('A')
         await vi.advanceTimersByTimeAsync(5)
         const first = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
         expect(JSON.parse(String(first?.body)).$anon_distinct_id).toBe(anonymousId)
-        await client.identify('B')
+        await requireInstalledExtension(client.analytics).identify('B')
         await vi.advanceTimersByTimeAsync(5)
         const last = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>).at(-1)?.[1]
         expect(JSON.parse(String(last?.body))).toMatchObject({ distinct_id: 'B' })
@@ -306,12 +307,12 @@ describe('flags', () => {
     it('uses bootstrap ahead of previously persisted evaluations', async () => {
         const storage = new MemoryStorage()
         const sibling = await create({ storage, flags: { featureFlagEvaluation: false } })
-        sibling.getExtension(FeatureFlagsExtension)!.updateFlags({ test: 'old' })
+        requireInstalledExtension(sibling.featureFlags).updateFlags({ test: 'old' })
         const bootstrapped = await create({
             storage,
             flags: { featureFlagEvaluation: false, bootstrap: { featureFlags: { test: 'new' } } },
         })
-        expect(bootstrapped.getExtension(FeatureFlagsExtension)!.getFeatureFlag('test')?.variant).toBe('new')
+        expect(requireInstalledExtension(bootstrapped.featureFlags).getFeatureFlag('test')?.variant).toBe('new')
     })
 
     it('contains failing flags delegates and setup while keeping core capture usable', async () => {
@@ -325,15 +326,15 @@ describe('flags', () => {
                 },
             ],
         })
-        expect(client.getExtension('featureFlags')).toBeUndefined()
-        client.capture('still works')
+        expect(client.featureFlags).toBeUndefined()
+        requireInstalledExtension(client.analytics).capture('still works')
     })
 
     it('disposal prevents pending requests and extension callbacks', async () => {
         vi.useFakeTimers()
         const fetch = vi.fn()
         const client = await create({ fetch })
-        const extension = client.getExtension(FeatureFlagsExtension)!
+        const extension = requireInstalledExtension(client.featureFlags)
         const callback = vi.fn()
         extension.onFeatureFlags(callback)
         await client.dispose()
@@ -347,33 +348,33 @@ describe('flags', () => {
     it('retains flags across core writes and reloads through client persistence', async () => {
         const storage = new MemoryStorage()
         const first = await create({ storage, flags: { featureFlagEvaluation: false } })
-        first.getExtension(FeatureFlagsExtension)!.updateFlags({ saved: 'blue' }, { saved: { enabled: true } })
+        requireInstalledExtension(first.featureFlags).updateFlags({ saved: 'blue' }, { saved: { enabled: true } })
         first.kv.set('unrelated', 1)
-        await first.group('organization', 'team')
+        await requireInstalledExtension(first.analytics).group('organization', 'team')
         await first.dispose()
 
         const reloaded = await create({ storage, flags: { featureFlagEvaluation: false } })
-        expect(reloaded.getExtension(FeatureFlagsExtension)!.getFeatureFlag('saved')).toMatchObject({
+        expect(requireInstalledExtension(reloaded.featureFlags).getFeatureFlag('saved')).toMatchObject({
             variant: 'blue',
             payload: { enabled: true },
         })
         expect(reloaded.kv.get('unrelated')).toBe(1)
-        reloaded.reset()
-        expect(reloaded.getExtension(FeatureFlagsExtension)!.getFeatureFlag('saved')).toBeUndefined()
+        requireInstalledExtension(reloaded.analytics).reset()
+        expect(requireInstalledExtension(reloaded.featureFlags).getFeatureFlag('saved')).toBeUndefined()
         await reloaded.dispose()
 
         const reset = await create({ storage, flags: { featureFlagEvaluation: false } })
-        expect(reset.getExtension(FeatureFlagsExtension)!.getFeatureFlag('saved')).toBeUndefined()
+        expect(requireInstalledExtension(reset.featureFlags).getFeatureFlag('saved')).toBeUndefined()
     })
 
     it('honors custom persistence keys and storage:false', async () => {
         const storage = new MemoryStorage()
         const client = await create({ storage, persistenceKey: 'custom', flags: { featureFlagEvaluation: false } })
-        client.getExtension(FeatureFlagsExtension)!.updateFlags({ durable: true })
+        requireInstalledExtension(client.featureFlags).updateFlags({ durable: true })
         expect(storage.getItem('custom')).toContain('durable')
         const memory = await create({ flags: { featureFlagEvaluation: false } })
-        memory.getExtension(FeatureFlagsExtension)!.updateFlags({ local: true })
-        expect(memory.getExtension(FeatureFlagsExtension)!.getFeatureFlag('local')?.enabled).toBe(true)
+        requireInstalledExtension(memory.featureFlags).updateFlags({ local: true })
+        expect(requireInstalledExtension(memory.featureFlags).getFeatureFlag('local')?.enabled).toBe(true)
         expect(storage.getItem('custom')).not.toContain('local')
     })
 })

@@ -1,4 +1,5 @@
-import type { Extension } from '@posthog/browser-common'
+import { requireInstalledExtension } from './helpers'
+import type { Extension } from '../src/types'
 
 const options = {
     projectToken: 'test',
@@ -50,7 +51,7 @@ describe('automatic autocapture module loading', () => {
         expect(factory).toHaveBeenCalledWith({ cssSelectorAllowlist: ['.original'] })
         setupFinished()
         const client = await pending
-        expect(client.getExtension('autocapture')).toBeDefined()
+        expect(client.autocapture).toBeDefined()
         await client.dispose()
     })
 
@@ -61,10 +62,10 @@ describe('automatic autocapture module loading', () => {
         })
         const { createPostHog } = await import('../src')
         const client = await createPostHog(options)
-        expect(client.getExtension('autocapture')).toBeUndefined()
+        expect(client.autocapture).toBeUndefined()
         const captured = vi.fn()
-        client.onEvent(captured)
-        client.capture('still usable')
+        requireInstalledExtension(client.analytics).onEvent(captured)
+        requireInstalledExtension(client.analytics).capture('still usable')
         expect(captured).toHaveBeenCalledOnce()
         await client.dispose()
     })
@@ -81,7 +82,7 @@ describe('automatic autocapture module loading', () => {
             ...(mode === 'disabled' ? { autocapture: false as const } : { extensions: [explicit] }),
         })
         expect(imported).not.toHaveBeenCalled()
-        expect(client.getExtension('autocapture')).toBe(mode === 'disabled' ? undefined : explicit)
+        expect(client.autocapture).toBe(mode === 'disabled' ? undefined : explicit)
         await client.dispose()
     })
 })

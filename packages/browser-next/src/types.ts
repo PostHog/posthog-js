@@ -1,5 +1,5 @@
 import type { FlagsConfiguration } from './flags-options'
-import type { BrowserClient } from './browser-client'
+import type { ICoreCapabilities, BrowserExtensionAccess, BrowserExtension as Extension } from './browser-client'
 import type { LogsConfiguration } from './logs-options'
 import type { SurveysConfiguration } from './surveys-options'
 import type { AutocaptureConfiguration } from './autocapture-options'
@@ -14,8 +14,6 @@ import type {
     ApiResponse,
     CaptureOptions,
     Disposable,
-    Extension,
-    ExtensionToken,
     Listener,
     RemoteConfig,
     SendRequestInit,
@@ -121,25 +119,15 @@ export interface CaptureSummary {
     readonly error?: Error
 }
 
-export interface PostHog extends BrowserClient, Disposable {
+/** Consumer-facing SDK contract; product controls use their public interfaces. */
+export interface IPostHog extends ICoreCapabilities, BrowserExtensionAccess, Disposable {
     readonly onNewSession: Listener<NewSessionInfo>
-    /** Sends one finalized event inline. Resolves with an outcome or `summary.error` instead of rejecting. */
-    captureImmediate(
-        event: string,
-        properties?: Record<string, unknown> | null,
-        options?: CaptureOptions
-    ): Promise<CaptureSummary>
-    identify(distinctId: string, set?: Record<string, unknown>, setOnce?: Record<string, unknown>): Promise<void>
-    group(type: string, key: string, properties?: Record<string, unknown>): Promise<void>
-    reset(): void
     flush(): Promise<void>
     shutdown(shutdownTimeoutMs?: number): Promise<void>
     dispose(): Promise<void>
     optIn(): void
     optOut(): void
     hasOptedOut(): boolean
-    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
-    getExtension<T extends Extension = Extension>(name: string): T | undefined
     getRemoteConfig(): Promise<RemoteConfig | undefined>
 }
 

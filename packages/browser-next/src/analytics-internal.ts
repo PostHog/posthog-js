@@ -1,4 +1,8 @@
-import type { Client, Extension, ExtensionToken } from '@posthog/browser-common'
+import type { Client, CapturedEventInfo, ExtensionToken, Listener } from '@posthog/browser-common'
+import type { BrowserExtension, GroupInfo, IdentifyInfo } from './browser-client'
+import type { IAnalytics } from './analytics-api'
+import type { BrowserState } from './state'
+import type { NewSessionInfo } from './types'
 
 import type { AnalyticsOptions } from './analytics-options'
 import type { EventBuffer } from './event-buffer'
@@ -16,7 +20,7 @@ export interface AnalyticsMessage {
 
 export const MAX_ANALYTICS_BYTES = 8 * 1024 * 1024
 export const MAX_ANALYTICS_BATCH_EVENTS = 100
-export const Analytics = 'analytics' as ExtensionToken<AnalyticsExtension>
+export const Analytics = 'analytics' as ExtensionToken<IAnalyticsExtension>
 
 /** Browser capabilities supplied to capture delivery, independent of its queue. */
 export interface CaptureHost {
@@ -48,36 +52,56 @@ export interface AnalyticsDriver {
 
 export type AnalyticsDeliveryFactory = (
     buffer: EventBuffer<AnalyticsMessage>,
-    client: Client,
+    client: Pick<Client, 'library' | 'onRemoteConfig'>,
     host: CaptureHost,
-    options: Readonly<Required<AnalyticsOptions>>,
+    options: Readonly<Required<Pick<AnalyticsOptions, 'flushAt' | 'flushInterval'>>>,
     beforeTeardown?: () => void
 ) => AnalyticsDriver
-
-/** The capture operations required by core, independent of extension setup or loading. */
-export interface CaptureSink {
-    readonly isTearingDown: boolean
-    enqueue(message: AnalyticsMessage, bytes: number): boolean
-    discardQueued(message: AnalyticsMessage): void
-    admitted(): void
-    flush(reason?: 'flush' | 'shutdown'): Promise<void>
-    deliverImmediate(message: AnalyticsMessage, canContinue: () => boolean): Promise<CaptureSummary>
-    deliverUnload(message: AnalyticsMessage, canContinue: () => boolean): void
-    purge(): void
-}
 
 export interface AnalyticsTeardownSubscription {
     readonly deliveryAvailable: boolean
     dispose(): void
 }
 
-/** First-party analytics is both a configured extension and the client's capture sink. */
-export interface AnalyticsExtension extends Extension, CaptureSink {
-    flush: CaptureSink['flush']
+/** Core-owned state and notifications consumed by analytics operation policy. */
+export interface AnalyticsCaptureHost {
+    readonly projectToken: string
+    readonly logger: Client['logger']
+    readonly state: Pick<
+        BrowserState,
+        | 'prepare'
+        | 'distinctId'
+        | 'deviceId'
+        | 'groups'
+        | 'isIdentified'
+        | 'prepareSessionForEvent'
+        | 'sessionAdmitted'
+        | 'identify'
+        | 'group'
+        | 'reset'
+    >
+    readonly onEvent: Listener<CapturedEventInfo>
+    canCapture(): boolean
+    canMutate(): boolean
+    isDisposed(): boolean
+    authority(): object
+    publishEvent(event: CapturedEventInfo): void
+    publishNewSession(session: NewSessionInfo): void
+    publishIdentify(info: IdentifyInfo): void
+    publishGroup(info: GroupInfo): void
+    publishReset(value: void): void
+}
+
+/** First-party analytics is one configured owner of operations, buffering and delivery. */
+export interface IAnalyticsExtension extends IAnalytics {
+    flush(reason?: 'flush' | 'shutdown'): Promise<void>
+    purge(): void
+    bindCaptureHost(host: AnalyticsCaptureHost): void
+    captureInitialPageview(): boolean
     initialize(host: CaptureHost): void
     start(): Promise<void>
     onBeforeTeardown?(callback: () => void): AnalyticsTeardownSubscription
 }
 
-export const isAnalyticsExtension = (extension: Extension): extension is AnalyticsExtension =>
+export const isAnalyticsExtension = (extension: BrowserExtension): extension is IAnalyticsExtension =>
     extension.name === Analytics

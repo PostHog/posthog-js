@@ -1,9 +1,10 @@
+import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { createPostHog as createAutomaticPostHog } from '../src'
 import { analytics } from '../src/analytics'
 import { createAnalyticsExtension } from '../src/analytics-buffer'
 import { createAnalyticsDelivery } from '../src/analytics-delivery'
-import type { AnalyticsDriver, AnalyticsExtension } from '../src/analytics-internal'
+import type { AnalyticsDriver } from '../src/analytics-internal'
 import { EventBuffer } from '../src/event-buffer'
 import { Lane } from '../src/lane'
 import { createPostHog, type BrowserFetch, type CaptureOutcomeStatus, type CaptureSummary } from '../src/core'
@@ -64,8 +65,12 @@ describe('unload delivery', () => {
         const send = responseFetch(requests, () => ({ result: { result: 'ok' } }))
         const fetch = vi.fn(send)
         const posthog = await clientWithAnalytics(fetch)
-        posthog.capture('buffered')
-        posthog.capture('unloading', { answer: 'yes' }, { delivery: 'unload', uuid: 'unload-uuid' })
+        requireInstalledExtension(posthog.analytics).capture('buffered')
+        requireInstalledExtension(posthog.analytics).capture(
+            'unloading',
+            { answer: 'yes' },
+            { delivery: 'unload', uuid: 'unload-uuid' }
+        )
 
         expect(requests.map(({ batch }) => batch.map(({ event }) => event))).toEqual([['unloading']])
         expect(fetch.mock.calls[0]?.[1]).toMatchObject({
@@ -89,10 +94,22 @@ describe('unload delivery', () => {
         fetch.mockImplementation(() => new Promise<Response>(() => {}))
         const posthog = await clientWithAnalytics(fetch)
         try {
-            posthog.capture('first', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
+            requireInstalledExtension(posthog.analytics).capture(
+                'first',
+                { value: 'x'.repeat(40_000) },
+                { delivery: 'unload' }
+            )
             await new Promise((resolve) => setTimeout(resolve, 0))
-            posthog.capture('second', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
-            posthog.capture('third', { value: 'x'.repeat(40_000) }, { delivery: 'unload' })
+            requireInstalledExtension(posthog.analytics).capture(
+                'second',
+                { value: 'x'.repeat(40_000) },
+                { delivery: 'unload' }
+            )
+            requireInstalledExtension(posthog.analytics).capture(
+                'third',
+                { value: 'x'.repeat(40_000) },
+                { delivery: 'unload' }
+            )
             expect(fetch).toHaveBeenCalledTimes(2)
         } finally {
             await posthog.shutdown(0)
@@ -102,11 +119,12 @@ describe('unload delivery', () => {
     it('does not dispatch unload captures after opt-out or disposal', async () => {
         const fetch = vi.fn(responseFetch([], () => ({ result: { result: 'ok' } })))
         const posthog = await clientWithAnalytics(fetch)
+        const installedAnalytics = requireInstalledExtension(posthog.analytics)
         posthog.optOut()
-        posthog.capture('denied', null, { delivery: 'unload' })
+        installedAnalytics.capture('denied', null, { delivery: 'unload' })
         expect(fetch).not.toHaveBeenCalled()
         await posthog.dispose()
-        posthog.capture('disposed', null, { delivery: 'unload' })
+        installedAnalytics.capture('disposed', null, { delivery: 'unload' })
         expect(fetch).not.toHaveBeenCalled()
     })
 })
@@ -116,10 +134,14 @@ describe('captureImmediate', () => {
         const requests: CapturedRequest[] = []
         const posthog = await clientWithAnalytics(responseFetch(requests, () => ({ result: { result: 'ok' } })))
         const observed: string[] = []
-        posthog.onEvent(({ event }) => observed.push(event))
-        posthog.capture('buffered', undefined, { uuid: 'buffered-uuid' })
+        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
+        requireInstalledExtension(posthog.analytics).capture('buffered', undefined, { uuid: 'buffered-uuid' })
 
-        const immediate = posthog.captureImmediate('immediate', { source: 'direct' }, { uuid: 'immediate-uuid' })
+        const immediate = requireInstalledExtension(posthog.analytics).captureImmediate(
+            'immediate',
+            { source: 'direct' },
+            { uuid: 'immediate-uuid' }
+        )
 
         expect(observed).toEqual(['buffered', 'immediate'])
         const summary = await immediate
@@ -146,11 +168,13 @@ describe('captureImmediate', () => {
             fetch: responseFetch(requests, () => ({ result: { result: 'warning', details: 'accepted' } })),
         })
 
-        const summary = await posthog.captureImmediate('lazy', undefined, { uuid: 'lazy-uuid' })
+        const summary = await requireInstalledExtension(posthog.analytics).captureImmediate('lazy', undefined, {
+            uuid: 'lazy-uuid',
+        })
 
         expectSummary(summary, { submitted: 1, notPersisted: 0, allPersisted: true })
         expect(summary.results).toEqual({ 'lazy-uuid': { result: 'warning', details: 'accepted' } })
-        expect(posthog.getExtension('analytics')).toBeDefined()
+        expect(posthog.analytics).toBeDefined()
         expect(requests).toHaveLength(1)
         await posthog.dispose()
     })
@@ -167,7 +191,9 @@ describe('captureImmediate', () => {
             }))
         )
 
-        const summary = await posthog.captureImmediate('outcome', undefined, { uuid: 'outcome-uuid' })
+        const summary = await requireInstalledExtension(posthog.analytics).captureImmediate('outcome', undefined, {
+            uuid: 'outcome-uuid',
+        })
 
         expectSummary(summary, { submitted: 1, notPersisted, allPersisted })
         expect(summary.error).toBeUndefined()
@@ -188,7 +214,9 @@ describe('captureImmediate', () => {
         const requests: CapturedRequest[] = []
         const posthog = await clientWithAnalytics(responseFetch(requests, () => ({ result: { result: 'ok' } })))
 
-        const summary = await posthog.captureImmediate('hostile-uuid', undefined, { uuid: '__proto__' })
+        const summary = await requireInstalledExtension(posthog.analytics).captureImmediate('hostile-uuid', undefined, {
+            uuid: '__proto__',
+        })
 
         expect(Object.hasOwn(summary.results, '__proto__')).toBe(true)
         expect(summary.results['__proto__']).toEqual({ result: 'ok' })
@@ -210,7 +238,11 @@ describe('captureImmediate', () => {
                 })
             const posthog = await clientWithAnalytics(fetch)
 
-            const summary = await posthog.captureImmediate('missing-hostile-uuid', undefined, { uuid: '__proto__' })
+            const summary = await requireInstalledExtension(posthog.analytics).captureImmediate(
+                'missing-hostile-uuid',
+                undefined,
+                { uuid: '__proto__' }
+            )
 
             expectSummary(summary, { submitted: 1, notPersisted: 1, allPersisted: false })
             expect(summary.results).toEqual({})
@@ -288,7 +320,9 @@ describe('captureImmediate', () => {
         const requests: CapturedRequest[] = []
         const posthog = await clientWithAnalytics(responseFetch(requests, () => ({ status: 400 })))
 
-        const capture = posthog.captureImmediate('terminal', undefined, { uuid: 'terminal-uuid' })
+        const capture = requireInstalledExtension(posthog.analytics).captureImmediate('terminal', undefined, {
+            uuid: 'terminal-uuid',
+        })
 
         const summary = await capture
         expectSummary(summary, { submitted: 1, notPersisted: 1, allPersisted: false })
@@ -312,11 +346,11 @@ describe('captureImmediate', () => {
             extensions: [createAnalyticsExtension({ load: 'lazy' }, load)],
         })
 
-        const summary = await posthog.captureImmediate('denied')
+        const summary = await requireInstalledExtension(posthog.analytics).captureImmediate('denied')
 
         expectSummary(summary, { submitted: 0, notPersisted: 0, allPersisted: true })
         expect(summary.results).toEqual({})
-        expect(posthog.getExtension('analytics')).toBeDefined()
+        expect(posthog.analytics).toBeDefined()
         expect(load).not.toHaveBeenCalled()
         expect(requests).toEqual([])
         await posthog.dispose()
@@ -331,9 +365,9 @@ describe('captureImmediate', () => {
             fetch: false,
         })
         const observed: string[] = []
-        posthog.onEvent(({ event }) => observed.push(event))
+        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
 
-        const capture = posthog.captureImmediate('unavailable')
+        const capture = requireInstalledExtension(posthog.analytics).captureImmediate('unavailable')
 
         expect(observed).toEqual(['unavailable'])
         const summary = await capture
@@ -368,12 +402,14 @@ describe('captureImmediate', () => {
             extensions: [legacyAnalytics],
         })
 
-        posthog.capture('ordinary', undefined, { uuid: 'ordinary-uuid' })
+        requireInstalledExtension(posthog.analytics).capture('ordinary', undefined, { uuid: 'ordinary-uuid' })
         await posthog.flush()
-        await expect(posthog.captureImmediate('immediate')).resolves.toMatchObject({
-            allPersisted: false,
-            error: { message: 'Immediate analytics delivery is unavailable' },
-        })
+        await expect(requireInstalledExtension(posthog.analytics).captureImmediate('immediate')).resolves.toMatchObject(
+            {
+                allPersisted: false,
+                error: { message: 'Immediate analytics delivery is unavailable' },
+            }
+        )
 
         expect(delivered.map((batch) => batch.map(({ uuid }) => uuid))).toEqual([['ordinary-uuid']])
         await posthog.dispose()
@@ -388,7 +424,9 @@ describe('captureImmediate', () => {
                     result: attempt === 1 ? { result: 'retry', details: 'try_again' } : { result: 'ok' },
                 }))
             )
-            const capture = posthog.captureImmediate('retry', undefined, { uuid: 'retry-uuid' })
+            const capture = requireInstalledExtension(posthog.analytics).captureImmediate('retry', undefined, {
+                uuid: 'retry-uuid',
+            })
             await vi.runAllTimersAsync()
 
             const summary = await capture
@@ -409,7 +447,9 @@ describe('captureImmediate', () => {
             const posthog = await clientWithAnalytics(
                 responseFetch(requests, () => ({ result: { result: 'retry', details: 'try_again' } }))
             )
-            const capture = posthog.captureImmediate('retry', undefined, { uuid: 'retry-uuid' })
+            const capture = requireInstalledExtension(posthog.analytics).captureImmediate('retry', undefined, {
+                uuid: 'retry-uuid',
+            })
             await vi.runAllTimersAsync()
 
             const summary = await capture
@@ -433,8 +473,10 @@ describe('captureImmediate', () => {
             }
             return Promise.reject(cause)
         })
-        const extension = analytics() as AnalyticsExtension
-        vi.spyOn(extension, 'deliverImmediate').mockImplementation(deliverImmediate)
+        const extension = createAnalyticsExtension({ flushInterval: 0 }, undefined, (...args) => ({
+            ...createAnalyticsDelivery(...args),
+            deliverImmediate,
+        }))
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             capturePageview: false,
@@ -444,7 +486,7 @@ describe('captureImmediate', () => {
             extensions: [extension],
         })
         try {
-            const summary = await posthog.captureImmediate('failed-delivery')
+            const summary = await requireInstalledExtension(posthog.analytics).captureImmediate('failed-delivery')
             expectSummary(summary, { submitted: 0, notPersisted: 0, allPersisted: false })
             expect(summary.error?.cause).toBe(cause)
             expect(deliverImmediate).toHaveBeenCalledOnce()
@@ -460,7 +502,7 @@ describe('captureImmediate', () => {
                 throw new Error('network unavailable')
             })
             const posthog = await clientWithAnalytics(fetch)
-            const capture = posthog.captureImmediate('network-failure')
+            const capture = requireInstalledExtension(posthog.analytics).captureImmediate('network-failure')
             await vi.runAllTimersAsync()
 
             const summary = await capture
@@ -498,7 +540,7 @@ describe('captureImmediate', () => {
             throw cause
         })
         try {
-            const summary = await posthog.captureImmediate('failed-admission')
+            const summary = await requireInstalledExtension(posthog.analytics).captureImmediate('failed-admission')
             expectSummary(summary, { submitted: 0, notPersisted: 0, allPersisted: false })
             expect(summary.error).toBeInstanceOf(Error)
             expect(summary.error?.cause).toBe(cause)
@@ -513,12 +555,14 @@ describe('captureImmediate', () => {
             new Response('not-json', { status: 200, headers: { 'Content-Type': 'text/plain' } })
         const posthog = await clientWithAnalytics(fetch)
 
-        await expect(posthog.captureImmediate('malformed')).resolves.toMatchObject({
-            error: { name: 'PostHogCaptureError' },
-            submitted: 1,
-            notPersisted: 1,
-            allPersisted: false,
-        })
+        await expect(requireInstalledExtension(posthog.analytics).captureImmediate('malformed')).resolves.toMatchObject(
+            {
+                error: { name: 'PostHogCaptureError' },
+                submitted: 1,
+                notPersisted: 1,
+                allPersisted: false,
+            }
+        )
         await posthog.dispose()
     })
 
@@ -529,7 +573,9 @@ describe('captureImmediate', () => {
             const posthog = await clientWithAnalytics(
                 responseFetch(requests, () => ({ result: { result: 'retry', details: 'try_again' } }))
             )
-            const capture = posthog.captureImmediate('retry', undefined, { uuid: 'retry-uuid' })
+            const capture = requireInstalledExtension(posthog.analytics).captureImmediate('retry', undefined, {
+                uuid: 'retry-uuid',
+            })
             const completed = expect(capture).resolves.toMatchObject({
                 allPersisted: false,
                 error: { name: 'PostHogCaptureError' },
@@ -568,9 +614,11 @@ describe('captureImmediate', () => {
             extensions: [createAnalyticsExtension({ load: 'lazy' }, load)],
         })
         let summary: CaptureSummary | undefined
-        void posthog.captureImmediate('pending', undefined, { uuid: 'pending-uuid' }).then((value) => {
-            summary = value
-        })
+        void requireInstalledExtension(posthog.analytics)
+            .captureImmediate('pending', undefined, { uuid: 'pending-uuid' })
+            .then((value) => {
+                summary = value
+            })
         await vi.waitFor(() => expect(load).toHaveBeenCalled())
 
         await posthog.shutdown(5)
@@ -595,7 +643,9 @@ describe('captureImmediate', () => {
                 init.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
             })
         const posthog = await clientWithAnalytics(fetch)
-        const capture = posthog.captureImmediate('pending', undefined, { uuid: 'pending-uuid' })
+        const capture = requireInstalledExtension(posthog.analytics).captureImmediate('pending', undefined, {
+            uuid: 'pending-uuid',
+        })
         const completed = expect(capture).resolves.toMatchObject({
             allPersisted: false,
             error: { name: 'PostHogCaptureError' },
