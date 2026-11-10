@@ -775,7 +775,7 @@ class FeatureFlagsPoller {
 
         try {
           if (propertyType === 'cohort') {
-            const inCohort = await matchCohort(
+            matches = await matchCohort(
               prop,
               properties,
               definitions.cohorts,
@@ -783,11 +783,6 @@ class FeatureFlagsPoller {
               (depProp) => this.evaluateFlagDependency(depProp, properties, evaluationContext),
               definitions.propertyMatchingVersion
             )
-            // A flag-level cohort condition carries a membership operator ('in' | 'not_in').
-            // `matchCohort` only reports raw membership, so the operator must be applied here.
-            // Without this, 'not_in' is silently treated as 'in', inverting any cohort-exclusion
-            // condition (e.g. "enabled for everyone NOT in cohort X").
-            matches = prop.operator === 'not_in' ? !inCohort : inCohort
           } else if (propertyType === 'flag') {
             matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
           } else if (!Object.prototype.hasOwnProperty.call(properties, prop.key)) {
@@ -1483,7 +1478,7 @@ async function matchCohort(
   checkCohortExists(cohortId, cohortProperties)
 
   const propertyGroup = cohortProperties[cohortId]
-  return matchPropertyGroup(
+  const inCohort = await matchPropertyGroup(
     propertyGroup,
     propertyValues,
     cohortProperties,
@@ -1491,6 +1486,7 @@ async function matchCohort(
     flagDependencyEvaluator,
     propertyMatchingVersion
   )
+  return property.operator === 'not_in' ? !inCohort : inCohort
 }
 
 async function matchPropertyGroup(

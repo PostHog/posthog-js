@@ -359,6 +359,9 @@ describe('Lazy SessionRecording', () => {
                     return false
                 },
             } as unknown as ConsentManager,
+            has_opted_out_capturing(): boolean {
+                return this.consent.isOptedOut()
+            },
             register_for_session() {},
             _internalEventEmitter: simpleEventEmitter,
             on: vi.fn().mockImplementation((event, cb) => {

@@ -586,6 +586,15 @@ export function hasShadowRoot<T extends Node | RRNode>(
   return Boolean(dom.shadowRoot(n as unknown as Element));
 }
 
+// Leaf nodes expose appendChild/removeChild too, but those methods throw.
+export function canContainChildren(node: Node | RRNode): boolean {
+  return (
+    node.nodeType === Node.ELEMENT_NODE ||
+    node.nodeType === Node.DOCUMENT_NODE ||
+    node.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+  );
+}
+
 export function getNestedRule(
   rules: CSSRuleList,
   position: number[],

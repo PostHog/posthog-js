@@ -1,5 +1,52 @@
 # posthog-js
 
+## 1.447.9
+
+### Patch Changes
+
+- [#5647](https://github.com/PostHog/posthog-js/pull/5647) [`a95d952`](https://github.com/PostHog/posthog-js/commit/a95d95235af803c2ebabeb69c5e77ec5f1d5c793) Thanks [@zocario](https://github.com/zocario)! - fix(replay): full snapshots no longer force the layout of `content-visibility` content the browser skips
+  (2026-11-10)
+
+## 1.447.8
+
+### Patch Changes
+
+- [#5619](https://github.com/PostHog/posthog-js/pull/5619) [`8006468`](https://github.com/PostHog/posthog-js/commit/80064688f89a6b1a8c729957d4b04dda03b8bdae) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve observed CSS-variable shorthands across full session replay snapshots, including uninterrupted session rotations.
+  (2026-11-10)
+
+- [#5644](https://github.com/PostHog/posthog-js/pull/5644) [`145fb45`](https://github.com/PostHog/posthog-js/commit/145fb457d5fa09aaf819743a85df00159e6d9645) Thanks [@RoderickQiu](https://github.com/RoderickQiu)! - Warn once in debug mode when history-based pageviews are explicitly configured without the required history autocapture extension.
+  (2026-11-10)
+
+## 1.447.7
+
+### Patch Changes
+
+- [#5595](https://github.com/PostHog/posthog-js/pull/5595) [`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Warn once in the console, even outside debug mode, when the bot user agent filter drops events, and document that `captureLog` logs bypass the filter.
+  (2026-11-10)
+- Updated dependencies [[`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - @posthog/types@1.423.0
+  - @posthog/core@1.66.0
+
+## 1.447.6
+
+### Patch Changes
+
+- [#5617](https://github.com/PostHog/posthog-js/pull/5617) [`b20c48d`](https://github.com/PostHog/posthog-js/commit/b20c48d3d157b2384a3258e7406d921440154989) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix session recording errors when adopted stylesheets are locked by another script.
+  (2026-11-09)
+
+## 1.447.5
+
+### Patch Changes
+
+- [#5559](https://github.com/PostHog/posthog-js/pull/5559) [`9fe341d`](https://github.com/PostHog/posthog-js/commit/9fe341d374566bc50275ffae8c7d91a0f1f717d0) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Continue replaying mutation batches when a removal has the wrong parent or an addition targets a leaf node.
+  (2026-11-09)
+
+- [#5610](https://github.com/PostHog/posthog-js/pull/5610) [`eaab1fc`](https://github.com/PostHog/posthog-js/commit/eaab1fc9c1f5762903291d61cd5cd8eb96de5021) Thanks [@posthog](https://github.com/apps/posthog)! - Fix session replay failing to rebuild a snapshot when the replay document already has a root element
+  (2026-11-09)
+
+- [#5546](https://github.com/PostHog/posthog-js/pull/5546) [`21bd08e`](https://github.com/PostHog/posthog-js/commit/21bd08ef2d37e1d1d70c6139aa71f789eea2050f) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Collapse buffered text changes to the final value per node and simplify attribute mutation storage.
+  (2026-11-09)
+
 ## 1.447.4
 
 ### Patch Changes
