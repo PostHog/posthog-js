@@ -425,7 +425,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
   if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
   }
-  const wireCategory = category === undefined ? undefined : categoryOnTheWire(category)
+  const checked = category === undefined ? undefined : checkedCategory(category)
   const sendsReplyTo = replyTo !== undefined && !(Array.isArray(replyTo) && replyTo.length === 0)
   return {
     template_key: templateKey,
@@ -435,12 +435,12 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
     ...(from !== undefined && { from }),
     ...(sendsReplyTo && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
     capture_engagement: captureEngagement ?? true,
-    ...(wireCategory !== undefined && { category: wireCategory }),
+    ...(checked !== undefined && { category: checked }),
     ...(distinctId !== undefined && { distinct_id: distinctId }),
   }
 }
 
-function categoryOnTheWire(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
+function checkedCategory(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
   if (value === TRANSACTIONAL_EMAIL_CATEGORY) {
     return value
   }
@@ -452,7 +452,7 @@ function categoryOnTheWire(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY 
       CATEGORY_TYPES.has(type) &&
       (description === undefined || typeof description === 'string')
     ) {
-      return { key, type: type as MessageCategory['type'], name, description }
+      return value as MessageCategory
     }
   }
   throw invalid(

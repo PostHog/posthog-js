@@ -1,5 +1,6 @@
 import {
   EmailError,
+  MessageCategory,
   PostHog,
   PostHogOptions,
   SendEmailOptions,
@@ -173,65 +174,6 @@ describe('emails', () => {
         html: '<p>Reset</p>',
         text: 'Reset',
         reply_to: ['a@example.com', 'b@example.com'],
-        capture_engagement: true,
-      },
-    ],
-    [
-      'a marketing message category it defines',
-      {
-        templateKey: 'weekly-digest',
-        subject: 'This week',
-        html: '<p>{{ unsubscribe_url }}</p>',
-        category: { key: 'digest', type: 'marketing', name: 'Weekly digest', description: 'News every Monday' },
-      },
-      {
-        template_key: 'weekly-digest',
-        subject: 'This week',
-        html: '<p>{{ unsubscribe_url }}</p>',
-        category: { key: 'digest', type: 'marketing', name: 'Weekly digest', description: 'News every Monday' },
-        capture_engagement: true,
-      },
-    ],
-    [
-      'a transactional message category without a description',
-      {
-        templateKey: 'receipt',
-        subject: 'Your receipt',
-        text: 'Thanks',
-        category: { key: 'receipts', type: 'transactional', name: 'Receipts', description: undefined },
-      },
-      {
-        template_key: 'receipt',
-        subject: 'Your receipt',
-        text: 'Thanks',
-        category: { key: 'receipts', type: 'transactional', name: 'Receipts' },
-        capture_engagement: true,
-      },
-    ],
-    [
-      'a message category whose description it clears',
-      {
-        templateKey: 'receipt',
-        subject: 'Your receipt',
-        text: 'Thanks',
-        category: { key: 'receipts', type: 'transactional', name: 'Receipts', description: '' },
-      },
-      {
-        template_key: 'receipt',
-        subject: 'Your receipt',
-        text: 'Thanks',
-        category: { key: 'receipts', type: 'transactional', name: 'Receipts', description: '' },
-        capture_engagement: true,
-      },
-    ],
-    [
-      'the transactional category named',
-      { templateKey: 'password-reset', subject: 'Reset', text: 'Reset', category: TRANSACTIONAL_EMAIL_CATEGORY },
-      {
-        template_key: 'password-reset',
-        subject: 'Reset',
-        text: 'Reset',
-        category: 'transactional',
         capture_engagement: true,
       },
     ],
@@ -661,14 +603,6 @@ describe('emails', () => {
       expect(fetch).not.toHaveBeenCalled()
     })
 
-    it('sends only the fields of a category', async () => {
-      replies = [accepted()]
-
-      await sendForm({ ...CODE_SEND, category: { ...NEWSLETTER, id: 'cat_1' } })
-
-      expect(JSON.parse(fetch.mock.calls[0][1].body).category).toEqual(NEWSLETTER)
-    })
-
     it.each([
       ["Resend's second options argument", { idempotencyKey: 'welcome:user_123' }, 0],
       ['an undefined second argument from a wrapper', undefined, 1],
@@ -682,6 +616,100 @@ describe('emails', () => {
 
       expect(fetch).toHaveBeenCalledTimes(requests)
       expect(error?.code ?? null).toBe(requests ? null : 'invalid_form')
+    })
+  })
+
+  describe('message categories', () => {
+    // Stands in for PostHog's send route: it reads a category the way the route's serializer does, ignores
+    // fields it doesn't know, and keeps categories by key.
+    let categories: Map<string, { type: string; name: string; description: string }>
+    let filedUnder: string[]
+
+    const answer = (status: number, body: Record<string, unknown>): unknown => ({
+      status,
+      text: async () => JSON.stringify(body),
+      json: async () => body,
+      headers: { get: () => null },
+    })
+
+    const sendRoute = async (_url: string, { body }: { body: string }): Promise<unknown> => {
+      const { category = 'transactional' } = JSON.parse(body)
+      if (category === 'transactional') {
+        filedUnder.push('transactional')
+        return answer(202, { message_id: MESSAGE_ID, replayed: false })
+      }
+      const { key, type, name, description } = category ?? {}
+      const valid =
+        typeof key === 'string' &&
+        typeof name === 'string' &&
+        ['marketing', 'transactional'].includes(type) &&
+        (description === undefined || typeof description === 'string')
+      if (!valid) {
+        return answer(400, { type: 'validation_error', code: 'invalid', detail: 'Invalid category.', attr: 'category' })
+      }
+      const existing = categories.get(key)
+      categories.set(key, { type, name, description: description ?? existing?.description ?? '' })
+      filedUnder.push(key)
+      return answer(202, { message_id: MESSAGE_ID, replayed: false })
+    }
+
+    const sendIn = (
+      category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
+    ): ReturnType<PostHog['emails']['send']> =>
+      posthog.emails.send({
+        to: 'reader@example.com',
+        templateKey: 'monthly-news',
+        subject: 'This month',
+        html: '<a href="{{ unsubscribe_url }}">Unsubscribe</a>',
+        category,
+      })
+
+    const NEWSLETTER: MessageCategory = {
+      key: 'newsletter',
+      type: 'marketing',
+      name: 'Newsletter',
+      description: 'Monthly product news',
+    }
+
+    beforeEach(() => {
+      categories = new Map()
+      filedUnder = []
+      fetch.mockImplementation(sendRoute)
+    })
+
+    it('files the email under a category it defines', async () => {
+      const { error } = await sendIn(NEWSLETTER)
+
+      expect(error).toBeNull()
+      expect(filedUnder).toEqual(['newsletter'])
+      expect(categories.get('newsletter')).toEqual({
+        type: 'marketing',
+        name: 'Newsletter',
+        description: 'Monthly product news',
+      })
+    })
+
+    it.each([
+      ['keeps the description when the send leaves it out', undefined, 'Monthly product news'],
+      ['clears the description with an empty string', '', ''],
+    ])('renames a category and %s', async (_name, description, stored) => {
+      await sendIn(NEWSLETTER)
+
+      const { error } = await sendIn({ ...NEWSLETTER, name: 'Product news', description })
+
+      expect(error).toBeNull()
+      expect(categories.get('newsletter')).toEqual({ type: 'marketing', name: 'Product news', description: stored })
+    })
+
+    it.each([
+      ['the built-in category', TRANSACTIONAL_EMAIL_CATEGORY],
+      ['no category', undefined],
+    ])('files the email as transactional with %s', async (_name, category) => {
+      const { error } = await sendIn(category)
+
+      expect(error).toBeNull()
+      expect(filedUnder).toEqual(['transactional'])
+      expect(categories.size).toBe(0)
     })
   })
 
