@@ -1,0 +1,56 @@
+name: Release failure notification
+
+on:
+    workflow_run:
+        workflows: [Release]
+        types: [completed]
+        branches: [main]
+
+permissions:
+    actions: read
+    contents: read
+
+jobs:
+    notify-failed:
+        name: Notify Slack - Failed
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            # This workflow must survive cancellation or runner startup failure in Release.
+            # Never execute code from the triggering run's head in this privileged workflow.
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.event.repository.default_branch }}
+                  persist-credentials: false
+
+            - name: Download approval thread timestamps
+              continue-on-error: true
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+              with:
+                  pattern: release-slack-thread-*
+                  path: ${{ runner.temp }}/release-slack-threads
+                  github-token: ${{ github.token }}
+                  run-id: ${{ github.event.workflow_run.id }}
+
+            - name: Check release jobs
+              id: release-status
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  SLACK_CHANNEL_ID: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  THREAD_DIRECTORY: ${{ runner.temp }}/release-slack-threads
+              with:
+                  retries: 3
+                  script: |
+                      const notification = require('./scripts/release-failure-notification.cjs');
+                      const payload = await notification({ github, context, channel: process.env.SLACK_CHANNEL_ID, threadDirectory: process.env.THREAD_DIRECTORY });
+                      if (payload) core.setOutput('payload', JSON.stringify(payload));
+
+            - name: Notify Slack - Failed
+              if: steps.release-status.outputs.payload != ''
+              uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
+              with:
+                  method: chat.postMessage
+                  token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  errors: true
+                  retries: 5
+                  payload: ${{ steps.release-status.outputs.payload }}

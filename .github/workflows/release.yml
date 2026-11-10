@@ -233,6 +233,27 @@ jobs:
             slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
             posthog_project_api_key: ${{ secrets.POSTHOG_PROJECT_API_KEY }}
 
+    preserve-slack-thread:
+        permissions: {}
+        name: Preserve Slack thread
+        needs: notify-approval-needed
+        if: needs.notify-approval-needed.outputs.slack_ts != ''
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        continue-on-error: true
+        steps:
+            - name: Save approval thread timestamp
+              env:
+                  THREAD_TS: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+              run: printf '%s' "$THREAD_TS" > thread-ts.txt
+
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: release-slack-thread-${{ github.run_attempt }}
+                  path: thread-ts.txt
+                  retention-days: 30
+                  if-no-files-found: error
+
     version-bump:
         name: Bump versions and commit to ${{ needs.release-context.outputs.branch }}
         needs: [release-context, check-changesets, notify-approval-needed]
