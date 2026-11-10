@@ -5,7 +5,11 @@ export interface ContextLifetime {
   parent?: ContextLifetime
 }
 
-const lifetimes = new WeakMap<ContextData, ContextLifetime>()
+// The CommonJS and ESM builds are separate module copies. An app can create its client with one
+// and load an integration with the other, so both share one registry through a global.
+const REGISTRY_KEY = Symbol.for('posthog-node.context-lifetimes')
+const registryHolder = globalThis as typeof globalThis & { [REGISTRY_KEY]?: WeakMap<ContextData, ContextLifetime> }
+const lifetimes = (registryHolder[REGISTRY_KEY] ??= new WeakMap())
 
 export function inheritContextLifetime(
   parent: ContextData | undefined,

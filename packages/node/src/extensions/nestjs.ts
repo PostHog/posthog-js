@@ -164,7 +164,9 @@ export class PostHogInterceptor implements NestInterceptor {
                 const responseStatus = status ?? response?.statusCode
                 const additionalProperties: Record<string, any> | undefined =
                   responseStatus !== undefined ? { $response_status_code: responseStatus } : undefined
-                this.posthog.captureException(exception, requestDistinctId, additionalProperties)
+                // A copied distinct ID that the app already ended must not label this exception.
+                const exceptionDistinctId = copiesDistinctId && signal?.aborted ? undefined : requestDistinctId
+                this.posthog.captureException(exception, exceptionDistinctId, additionalProperties)
                 return throwError(() => exception)
               })
             )

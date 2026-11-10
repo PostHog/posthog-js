@@ -489,6 +489,31 @@ describe('PostHogInterceptor', () => {
       expect(seen.after).toBeUndefined()
     })
 
+    it('should not label an exception with inherited identity after the context it came from ends', async () => {
+      const interceptor = new PostHogInterceptor(posthog, { captureExceptions: true })
+      const controller = new AbortController()
+      const error = new Error('after abort')
+      const handler = {
+        handle: () =>
+          defer(() => {
+            controller.abort()
+            return throwError(() => error)
+          }),
+      }
+
+      await expect(
+        posthog.withContext(
+          { distinctId: 'middleware-user' },
+          () => lastValueFrom(interceptor.intercept(createMockContext({ headers: {} }), handler)),
+          { signal: controller.signal }
+        )
+      ).rejects.toThrow(error)
+      await waitForFlushTimer(posthog)
+
+      const event = getLastBatchEvents()!.find((e) => e.event === '$exception')
+      expect(event.distinct_id).not.toBe('middleware-user')
+    })
+
     it.each([
       ['returns undefined', () => undefined],
       ['returns an empty string', () => '  '],
