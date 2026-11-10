@@ -63,10 +63,12 @@ interface CodeEmailFields {
    */
   captureEngagement?: boolean
   /**
-   * The email's message category. Without it, or with `TRANSACTIONAL_EMAIL_CATEGORY`, PostHog sends
-   * transactional email. A `MessageCategory` files the email under that category. A marketing email
-   * honors the recipient's opt-outs and gets unsubscribe headers. Its `html`, or its `text` when it
-   * has no `html`, needs the `{{ unsubscribe_url }}` placeholder.
+   * The email's message category. Without it, the email follows the category of the template that
+   * `templateKey` names, or is transactional with no category. `TRANSACTIONAL_EMAIL_CATEGORY` asks for
+   * transactional email with no category, so PostHog refuses it with `category_mismatch` when
+   * `templateKey` names a template in a category. A `MessageCategory` files the email under that
+   * category. A marketing email honors the recipient's opt-outs and gets unsubscribe headers. Its
+   * `html`, or its `text` when it has no `html`, needs the `{{ unsubscribe_url }}` placeholder.
    *
    * The send returns an error with code `category_mismatch` when a category with this key has
    * another type, or when `templateKey` names a template in another category; `too_many_categories`

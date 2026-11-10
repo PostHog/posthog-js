@@ -597,7 +597,9 @@ describe('emails', () => {
   describe('message categories', () => {
     // Stands in for PostHog's send route: it reads a category the way the route's serializer does, ignores
     // fields it doesn't know, keeps categories by key, and applies the route's checks for marketing email.
+    // A templateKey that names a template made in PostHog follows the template's category.
     let categories: Map<string, { type: string; name: string; description: string }>
+    let templates: Map<string, string | null>
     let optedOut: Set<string>
     let filedUnder: string[]
 
@@ -611,13 +613,35 @@ describe('emails', () => {
       headers: { get: () => null },
     })
 
-    const sendRoute = async (_url: string, { body }: { body: string }): Promise<unknown> => {
-      const { to, html, category = 'transactional' } = JSON.parse(body)
-      if (category === 'transactional') {
-        filedUnder.push('transactional')
-        return answer(202, { message_id: MESSAGE_ID, replayed: false })
+    const fileUnder = (key: string): unknown => {
+      filedUnder.push(key)
+      return answer(202, { message_id: MESSAGE_ID, replayed: false })
+    }
+
+    const sendForTemplate = (templateCategory: string | null, category: unknown): unknown => {
+      const followsTemplate =
+        category === undefined ||
+        category === null ||
+        (templateCategory === null
+          ? category === 'transactional'
+          : typeof category === 'object' &&
+            (category as MessageCategory).key === templateCategory &&
+            (category as MessageCategory).type === categories.get(templateCategory)?.type)
+      if (!followsTemplate) {
+        return refusal(400, 'category_mismatch', 'category')
       }
-      const { key, type, name, description } = category ?? {}
+      return fileUnder(templateCategory ?? 'transactional')
+    }
+
+    const sendRoute = async (_url: string, { body }: { body: string }): Promise<unknown> => {
+      const { to, html, template_key: templateKey, category } = JSON.parse(body)
+      if (templates.has(templateKey)) {
+        return sendForTemplate(templates.get(templateKey) ?? null, category)
+      }
+      if (category === undefined || category === null || category === 'transactional') {
+        return fileUnder('transactional')
+      }
+      const { key, type, name, description } = category
       const valid =
         typeof key === 'string' &&
         typeof name === 'string' &&
@@ -637,8 +661,7 @@ describe('emails', () => {
         return refusal(422, 'recipient_opted_out')
       }
       categories.set(key, { type, name, description: description ?? existing?.description ?? '' })
-      filedUnder.push(key)
-      return answer(202, { message_id: MESSAGE_ID, replayed: false })
+      return fileUnder(key)
     }
 
     const CODE_SEND = {
@@ -664,6 +687,7 @@ describe('emails', () => {
 
     beforeEach(() => {
       categories = new Map()
+      templates = new Map()
       optedOut = new Set()
       filedUnder = []
       fetch.mockImplementation(sendRoute)
@@ -779,6 +803,38 @@ describe('emails', () => {
       expect(error).toBeNull()
       expect(filedUnder).toEqual(['transactional'])
       expect(categories.size).toBe(0)
+    })
+
+    describe('with a templateKey that names a template in a category', () => {
+      const sendForDigest = (
+        category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
+      ): ReturnType<PostHog['emails']['send']> =>
+        posthog.emails.send({ ...CODE_SEND, templateKey: 'november-digest', category })
+
+      beforeEach(() => {
+        categories.set('newsletter', { type: 'marketing', name: 'Newsletter', description: '' })
+        templates.set('november-digest', 'newsletter')
+      })
+
+      it("files the email under the template's category when the send names none", async () => {
+        const { error } = await sendForDigest()
+
+        expect(error).toBeNull()
+        expect(filedUnder).toEqual(['newsletter'])
+      })
+
+      it('refuses the built-in category, which asks for transactional email with no category', async () => {
+        const { data, error } = await sendForDigest(TRANSACTIONAL_EMAIL_CATEGORY)
+
+        expect(data).toBeNull()
+        expect(error).toMatchObject({
+          code: 'category_mismatch',
+          name: 'validation_error',
+          statusCode: 400,
+          field: 'category',
+        })
+        expect(filedUnder).toEqual([])
+      })
     })
   })
 

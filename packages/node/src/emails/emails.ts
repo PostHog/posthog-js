@@ -80,7 +80,10 @@ const CODE_FORM: SendForm = {
   howToSend: 'send content from your code with templateKey',
 }
 
-/** The built-in message category of `posthog.emails.send()`. A send without a category is transactional too. */
+/**
+ * The built-in message category of `posthog.emails.send()`: transactional email with no category. Unlike a
+ * send without a category, it doesn't follow the category of the template that `templateKey` names.
+ */
 export const TRANSACTIONAL_EMAIL_CATEGORY = 'transactional'
 
 export const DEFAULT_EMAIL_REQUEST_TIMEOUT_MS = 15_000
