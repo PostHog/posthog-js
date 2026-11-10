@@ -86,7 +86,6 @@ describe('emails', () => {
   it.each([
     ['with a distinct ID', { distinctId: 'user_123' }, { distinct_id: 'user_123' }],
     ['without a distinct ID', {}, {}],
-    ['in a message category', { category: 'product-updates' }, { category: 'product-updates' }],
   ])('posts the template to the app host %s', async (_name, overrides, extraBody) => {
     replies = [accepted()]
 
@@ -178,13 +177,34 @@ describe('emails', () => {
       },
     ],
     [
-      'a marketing message category',
-      { templateKey: 'weekly-digest', subject: 'This week', html: '<p>{{ unsubscribe_url }}</p>', category: 'digest' },
+      'a marketing message category it defines',
+      {
+        templateKey: 'weekly-digest',
+        subject: 'This week',
+        html: '<p>{{ unsubscribe_url }}</p>',
+        category: { key: 'digest', type: 'marketing', name: 'Weekly digest', description: 'News every Monday' },
+      },
       {
         template_key: 'weekly-digest',
         subject: 'This week',
         html: '<p>{{ unsubscribe_url }}</p>',
-        category: 'digest',
+        category: { key: 'digest', type: 'marketing', name: 'Weekly digest', description: 'News every Monday' },
+        capture_engagement: true,
+      },
+    ],
+    [
+      'a transactional message category without a description',
+      {
+        templateKey: 'receipt',
+        subject: 'Your receipt',
+        text: 'Thanks',
+        category: { key: 'receipts', type: 'transactional', name: 'Receipts', description: undefined },
+      },
+      {
+        template_key: 'receipt',
+        subject: 'Your receipt',
+        text: 'Thanks',
+        category: { key: 'receipts', type: 'transactional', name: 'Receipts' },
         capture_engagement: true,
       },
     ],
@@ -304,7 +324,7 @@ describe('emails', () => {
   it.each([
     [400, 'invalid_recipient', 'validation_error'],
     [400, 'recipient_suppressed', 'validation_error'],
-    [400, 'unknown_category', 'validation_error'],
+    [400, 'category_mismatch', 'validation_error'],
     [400, 'unsubscribe_link_required', 'validation_error'],
     [401, 'authentication_failed', 'missing_api_key'],
     [403, 'permission_denied', 'invalid_permission'],
@@ -526,8 +546,6 @@ describe('emails', () => {
     ['a key with a space', { idempotencyKey: 'welcome user' }, 'invalid_idempotency_key'],
     ['a key that is too long', { idempotencyKey: 'k'.repeat(256) }, 'invalid_idempotency_key'],
     ['negative retries', { maxRetries: -1 }, 'invalid_max_retries'],
-    ['an empty category', { category: '' }, 'invalid_category'],
-    ['a category that is not a string', { category: null }, 'invalid_category'],
     ['neither templateId nor templateKey', { templateId: undefined }, 'invalid_form'],
     ['both templateId and templateKey', { templateKey: 'welcome', subject: 'Hi', html: '<p>Hi</p>' }, 'invalid_form'],
     ['a template key with a space', { templateId: undefined, templateKey: 'pass reset' }, 'invalid_template_key'],
@@ -566,6 +584,11 @@ describe('emails', () => {
         'scheduledAt',
       ],
       ["Resend's scheduledAt on a code send", { ...CODE_SEND, scheduledAt: 'in 1 hour' }, 'scheduledAt'],
+      [
+        'category on the template form',
+        { templateId: TEMPLATE_ID, category: TRANSACTIONAL_EMAIL_CATEGORY },
+        'category',
+      ],
     ])('refuses %s before sending', async (_name, form, field) => {
       const { data, error } = await sendForm(form)
 
@@ -578,13 +601,13 @@ describe('emails', () => {
       [
         'a sender on the template form',
         { templateId: TEMPLATE_ID, from: 'Acme <hi@example.com>' },
-        "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
+        "A template made in PostHog sets its own sender, subject, content and category, and follows the project's engagement setting.",
         'Remove from, or send content from your code with templateKey.',
       ],
       [
         'engagement capture on the template form',
         { templateId: TEMPLATE_ID, captureEngagement: true },
-        "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
+        "A template made in PostHog sets its own sender, subject, content and category, and follows the project's engagement setting.",
         'Remove captureEngagement, or send content from your code with templateKey.',
       ],
       [
@@ -603,6 +626,31 @@ describe('emails', () => {
       const { error } = await sendForm(form)
 
       expect({ why: error?.why, fix: error?.fix }).toEqual({ why, fix })
+    })
+
+    const NEWSLETTER = { key: 'newsletter', type: 'marketing', name: 'Newsletter' }
+
+    it.each([
+      ['a category key as a bare string', 'newsletter'],
+      ['null', null],
+      ['a category without a name', { key: 'newsletter', type: 'marketing' }],
+      ['a category with a key that is not a string', { ...NEWSLETTER, key: 7 }],
+      ['a category of a type PostHog does not have', { ...NEWSLETTER, type: 'promotional' }],
+      ['a category with a description that is not a string', { ...NEWSLETTER, description: ['Monthly'] }],
+    ])('refuses %s as the category before sending', async (_name, category) => {
+      const { data, error } = await sendForm({ ...CODE_SEND, category })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_category', name: 'validation_error', field: 'category' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('sends only the fields of a category', async () => {
+      replies = [accepted()]
+
+      await sendForm({ ...CODE_SEND, category: { ...NEWSLETTER, id: 'cat_1' } })
+
+      expect(JSON.parse(fetch.mock.calls[0][1].body).category).toEqual(NEWSLETTER)
     })
 
     it.each([

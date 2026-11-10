@@ -1,3 +1,4 @@
+import type { TRANSACTIONAL_EMAIL_CATEGORY } from './emails'
 import type { EmailError } from './errors'
 
 /** What every send takes, whatever its form. */
@@ -19,17 +20,20 @@ export interface SendEmailBase {
   idempotencyKey?: string
   /** Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. */
   maxRetries?: number
-  /**
-   * The email's message category. Without it, or with `TRANSACTIONAL_EMAIL_CATEGORY`, PostHog sends
-   * transactional email. Any other value is the key of one of the project's marketing message
-   * categories, such as `'product-updates'`. A marketing email honors the recipient's opt-outs, so a
-   * send to a recipient who opted out returns an error with code `recipient_opted_out`. Its `html`, or
-   * its `text` when it has no `html`, needs the `{{ unsubscribe_url }}` placeholder, or the send returns
-   * `unsubscribe_link_required`. A key that names no marketing category returns `unknown_category`. A
-   * template made in PostHog sends in its own category, so a template send that names another one
-   * returns `category_mismatch`.
-   */
-  category?: 'transactional' | (string & {})
+}
+
+/**
+ * A message category that a send defines in code. PostHog creates the category with this key the
+ * first time a send names it, and updates its name and description when they change.
+ */
+export interface MessageCategory {
+  /** Identifies the category in the project, such as `'newsletter'`. Recipients opt out of a category by its key. */
+  key: string
+  /** A marketing category honors the recipient's opt-outs. A transactional one only files the email. */
+  type: 'marketing' | 'transactional'
+  /** The name recipients see on their email preferences page. */
+  name: string
+  description?: string
 }
 
 /** A template made transactional in PostHog, sent by its ID. */
@@ -57,6 +61,19 @@ interface CodeEmailFields {
    * follows the project's setting.
    */
   captureEngagement?: boolean
+  /**
+   * The email's message category. Without it, or with `TRANSACTIONAL_EMAIL_CATEGORY`, PostHog sends
+   * transactional email. A `MessageCategory` files the email under that category. A marketing email
+   * honors the recipient's opt-outs and gets unsubscribe headers. Its `html`, or its `text` when it
+   * has no `html`, needs the `{{ unsubscribe_url }}` placeholder.
+   *
+   * The send returns an error with code `category_mismatch` when a category with this key has
+   * another type, or when `templateKey` names a template in another category; `too_many_categories`
+   * when the project can't take another category; `unsubscribe_link_required` when a marketing email
+   * has no unsubscribe placeholder; `copies_not_allowed` when a marketing email has copies; and
+   * `recipient_opted_out` when the recipient opted out of the category or of all marketing email.
+   */
+  category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
 }
 
 /**

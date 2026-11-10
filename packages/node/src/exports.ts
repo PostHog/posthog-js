@@ -14,6 +14,7 @@ export type {
   EmailStatus,
   EmailWarning,
   GetEmailResponse,
+  MessageCategory,
   SendCodeEmailOptions,
   SendEmailBase,
   SendEmailOptions,
