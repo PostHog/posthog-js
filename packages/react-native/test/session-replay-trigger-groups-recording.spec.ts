@@ -485,4 +485,73 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       expect(requests.some((url) => url.includes('/flags'))).toBe(false)
     }
   )
+
+  it.each([{ preloadFeatureFlags: false }, { disableRemoteFeatureFlags: true }])(
+    'keeps replay off when a fresh /config disables recording for the project (%o)',
+    async (flagsOption) => {
+      currentSessionRecording = v2Config([{ id: 'g1', sampleRate: 0, conditions: {} }])
+      await warmup()
+
+      configOnlyFetch([])
+      posthog = newPostHog({
+        ...flagsOption,
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+        errorTracking: { autocapture: false },
+      })
+      await posthog.ready()
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+      expect(replay.start).not.toHaveBeenCalled()
+
+      // Core drops the cached replay config for an explicit `false`; that must not read as
+      // "no restrictions" and start the native recorder.
+      const requests = configOnlyFetch([{ hasFeatureFlags: true, sessionRecording: false }])
+      await posthog.reloadRemoteConfigAsync()
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+
+      expect(replay.start).not.toHaveBeenCalled()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+      expect(requests.some((url) => url.includes('/flags'))).toBe(false)
+
+      // The groups armed before the disable must not re-evaluate the next session as unrestricted.
+      rotateSession()
+      posthog.capture('ordinary_event_after_inactivity')
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+
+      expect(replay.start).not.toHaveBeenCalled()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      // Nor may a later flags evaluation read the dropped config as unrestricted.
+      posthog.updateFlags({})
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+      expect(replay.start).not.toHaveBeenCalled()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      // Nor an app restart with the disabled /config cached.
+      await posthog.shutdown()
+      configOnlyFetch([{ hasFeatureFlags: true, sessionRecording: false }])
+      posthog = newPostHog({
+        ...flagsOption,
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+        errorTracking: { autocapture: false },
+      })
+      await posthog.ready()
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+      expect(replay.start).not.toHaveBeenCalled()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      // Re-enabling the project with a recording group applies again.
+      configOnlyFetch([
+        { hasFeatureFlags: true, sessionRecording: v2Config([{ id: 'g1', sampleRate: 1, conditions: {} }]) },
+      ])
+      await posthog.reloadRemoteConfigAsync()
+      await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    }
+  )
 })
