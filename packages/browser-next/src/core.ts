@@ -1,7 +1,7 @@
 import type { CorePostHogOptions, IPostHog } from './types'
 import { createPostHogCore } from './posthog'
 
-/** Creates a buffer-only client unless analytics delivery is supplied through `extensions`. */
+/** Creates a host with only explicitly supplied products and no automatic product imports. */
 export const createPostHog = async (options: CorePostHogOptions): Promise<IPostHog> => createPostHogCore(options)
 
 export { version } from './version'

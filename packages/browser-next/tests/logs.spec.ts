@@ -1,6 +1,6 @@
 import { requireInstalledExtension } from './helpers'
 import type { Client } from '@posthog/browser-common'
-import { createPostHog } from '../src'
+import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore } from '../src/core'
 import { logs } from '../src/logs'
 import type { LogsExtension, LogsOptions } from '../src/logs'
@@ -33,6 +33,7 @@ const remoteConfig = {
 const create = async (options: Partial<PostHogOptions> = {}) => {
     const client = await createPostHog({
         ...defaults,
+        logs: {},
         remoteConfig,
         fetch: false,
         ...options,
@@ -144,7 +145,7 @@ describe('logs', () => {
         expect(bodies.flatMap(records).map((record) => record.body)).toEqual([{ stringValue: '"application log"' }])
     })
 
-    it('loads by default but does not enable console capture without local or remote permission', async () => {
+    it('initializes configured logs without enabling console capture without local or remote permission', async () => {
         const { output } = browser()
         const original = output.log
         const client = await create()
@@ -241,7 +242,7 @@ describe('logs', () => {
         }
     )
 
-    it('does not wait for remote config and captures once its enablement arrives', async () => {
+    it('returns before remote config and installs console capture after remote activation', async () => {
         const { output } = browser()
         let resolve!: (value: Response) => void
         const loaded = new Promise<Response>((done) => {
@@ -250,8 +251,10 @@ describe('logs', () => {
         const client = await createPostHog({ ...defaults, fetch: () => loaded })
         clients.push(client)
         const original = output.log
+        expect(client.logs).toBeUndefined()
         resolve(new Response(JSON.stringify({ ...remoteConfig, logs: { captureConsoleLogs: true } })))
         await client.getRemoteConfig()
+        await vi.waitFor(() => expect(client.logs).toBeDefined())
         expect(output.log).not.toBe(original)
     })
 

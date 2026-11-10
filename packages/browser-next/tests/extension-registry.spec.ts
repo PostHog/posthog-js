@@ -5,7 +5,7 @@ import { flags } from '../src/flags'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import type { IPostHogInternal } from '../src/browser-client'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
-import { createPostHog } from '../src/core'
+import { createBufferedPostHog as createPostHog } from './helpers'
 import { createFetch, localRemoteConfig } from './helpers'
 
 const logger = { error: vi.fn() } as unknown as Client['logger']

@@ -1,3 +1,5 @@
+import { acquisitionHarness } from './acquisition-fixture'
+window.acquisitionHarness = acquisitionHarness
 import { requireInstalledExtension } from '../tests/helpers'
 import { autocaptureHarness } from './autocapture-fixture'
 window.autocaptureHarness = autocaptureHarness

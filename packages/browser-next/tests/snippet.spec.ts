@@ -53,6 +53,23 @@ describe('snippet query configuration', () => {
 })
 
 describe('snippet installation', () => {
+    it('explicitly composes full analytics into the installer client', async () => {
+        create.mockResolvedValueOnce(client())
+        await startSnippet(url, target())
+        expect(create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                extensions: [
+                    expect.objectContaining({
+                        name: 'analytics',
+                        capture: expect.any(Function),
+                        captureImmediate: expect.any(Function),
+                        identify: expect.any(Function),
+                    }),
+                ],
+            })
+        )
+    })
+
     it('publishes only after factory readiness, with one winner across concurrent tags', async () => {
         let resolve!: (value: IPostHog) => void
         create.mockImplementationOnce(

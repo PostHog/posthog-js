@@ -1,7 +1,7 @@
+import { createBufferedPostHog as createPostHog } from './helpers'
 import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { analytics } from '../src/analytics'
-import { createPostHog } from '../src/core'
 import type { CaptureV1Event } from '../src/capture-v1'
 
 const nullableProperties = {

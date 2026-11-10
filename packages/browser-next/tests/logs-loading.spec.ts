@@ -1,4 +1,4 @@
-import { requireInstalledExtension } from './helpers'
+import { requireInstalledExtension, withBufferedAnalytics } from './helpers'
 import type { Extension } from '../src/types'
 
 const options = {
@@ -18,6 +18,31 @@ afterEach(() => {
 })
 
 describe('automatic logs module loading', () => {
+    it('constructs the core host before importing an automatic product implementation', async () => {
+        let hostCreated = false
+        const importStates: boolean[] = []
+        const extension = { name: 'logs', setup: vi.fn() }
+        vi.doMock('../src/logs', () => {
+            importStates.push(hostCreated)
+            return { logs: () => extension }
+        })
+        const { createPostHog } = await import('../src')
+        const client = await createPostHog({
+            ...options,
+            logs: {},
+            get storage(): false {
+                hostCreated = true
+                return false
+            },
+        })
+        try {
+            expect(importStates).toEqual([true])
+            expect(client.logs).toBe(extension)
+        } finally {
+            await client.dispose()
+        }
+    })
+
     it('waits for the dynamic module and extension setup before returning the client', async () => {
         let loaded!: (module: { logs: () => Extension }) => void
         let setupFinished!: () => void
@@ -59,7 +84,7 @@ describe('automatic logs module loading', () => {
             throw new Error('chunk unavailable')
         })
         const { createPostHog } = await import('../src')
-        const client = await createPostHog(options)
+        const client = await createPostHog(withBufferedAnalytics({ ...options, logs: {} }))
         expect(client.logs).toBeUndefined()
         const captured = vi.fn()
         requireInstalledExtension(client.analytics).onEvent(captured)

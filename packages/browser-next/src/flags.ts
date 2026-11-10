@@ -41,6 +41,8 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         }),
         setup: async (value: IPostHogInternal) => {
             client = value
+            await value.resolveExtension('analytics')
+            if (disposed) return
             await shared.setup(value.sharedClient)
             if (disposed) return
             subscriptions.push(

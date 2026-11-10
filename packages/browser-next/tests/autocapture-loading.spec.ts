@@ -1,4 +1,4 @@
-import { requireInstalledExtension } from './helpers'
+import { requireInstalledExtension, withBufferedAnalytics } from './helpers'
 import type { Extension } from '../src/types'
 
 const options = {
@@ -61,7 +61,7 @@ describe('automatic autocapture module loading', () => {
             throw new Error('chunk unavailable')
         })
         const { createPostHog } = await import('../src')
-        const client = await createPostHog(options)
+        const client = await createPostHog(withBufferedAnalytics({ ...options, autocapture: {} }))
         expect(client.autocapture).toBeUndefined()
         const captured = vi.fn()
         requireInstalledExtension(client.analytics).onEvent(captured)

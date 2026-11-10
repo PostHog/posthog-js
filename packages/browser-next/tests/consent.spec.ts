@@ -1,3 +1,4 @@
+import { createBufferedPostHog as createPostHog } from './helpers'
 import { requireInstalledExtension } from './helpers'
 import type { Extension } from '../src/types'
 import { createRemoteConfigFetch } from './helpers'
@@ -6,13 +7,7 @@ import type { Disposable } from '@posthog/browser-common'
 import type { IPostHogInternal } from '../src/browser-client'
 
 import { analytics as createAnalytics } from '../src/analytics'
-import {
-    createPostHog,
-    type BrowserFetch,
-    type RemoteConfig,
-    type SendRequestInit,
-    type StorageLike,
-} from '../src/core'
+import type { BrowserFetch, RemoteConfig, SendRequestInit, StorageLike } from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })

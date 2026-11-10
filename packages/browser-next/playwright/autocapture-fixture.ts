@@ -1,6 +1,7 @@
 import { requireInstalledExtension } from '../tests/helpers'
 import { createPostHog } from '../src'
 import { autocapture } from '../src/autocapture'
+import { createAnalyticsExtension } from '../src/analytics-buffer'
 import { surveys } from '../src/surveys'
 import type { IPostHog } from '../src/types'
 import type { Survey } from '../src/surveys-options'
@@ -103,7 +104,7 @@ export const autocaptureHarness = {
             analytics: false,
             surveys: { automaticDisplay: false },
             autocapture: { maskAllText: masked, maskAllElementAttributes: masked },
-            extensions,
+            extensions: [createAnalyticsExtension(), ...extensions],
             remoteConfig: remote,
             fetch: async (input) => {
                 if (String(input).includes('/api/surveys/')) {

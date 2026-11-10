@@ -81,6 +81,7 @@ describe('client creation', () => {
             readonly storage = false
             readonly navigator = false
             readonly fetch = false
+            readonly extensions = [analytics({ flushInterval: 0 })]
         }
         const options = Object.freeze(new Configuration())
         const posthog = await create(options)
@@ -144,7 +145,7 @@ describe('client creation', () => {
         await posthog.shutdown()
     })
 
-    it('constructs automatic analytics from its snapshot before core reads client options', async () => {
+    it('snapshots automatic analytics before core reads client options', async () => {
         const requests: SentRequest[] = []
         const configuration = { load: 'eager' as const, flushAt: 1, flushInterval: 0 }
         const options: PostHogOptions = {

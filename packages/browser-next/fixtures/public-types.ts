@@ -5,7 +5,8 @@ export const sessionReason = (session: NewSessionInfo): NewSessionReason => sess
 
 export const clientExtension: Extension = {
     name: 'client-extension',
-    setup(client) {
+    async setup(client) {
+        await client.resolveExtension('analytics')
         client.analytics?.capture('extension setup')
     },
 }
@@ -35,6 +36,8 @@ interface CustomExtension extends Extension {
 const CustomExtension = 'custom' as ExtensionToken<CustomExtension>
 
 export const publicProductViews = async (posthog: IPostHog, internal: IPostHogInternal): Promise<void> => {
+    const acquired = await posthog.resolveExtension('analytics')
+    acquired?.capture('acquired')
     posthog.analytics?.capture('event')
     posthog.analytics?.captureImmediate('immediate')
     posthog.analytics?.identify('person')

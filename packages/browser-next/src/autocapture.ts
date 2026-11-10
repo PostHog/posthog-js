@@ -46,7 +46,8 @@ export const autocapture = (options: AutocaptureOptions = {}): BrowserProducts['
     const extension: BrowserProducts['autocapture'] = {
         name: 'autocapture',
         bindings: { autocapture: shared },
-        setup(client) {
+        async setup(client) {
+            await client.resolveExtension('analytics')
             if (disposed) return
             const selectors = client.surveys?.getElementSelectors()
             if (selectors) extension.setElementSelectors(selectors)

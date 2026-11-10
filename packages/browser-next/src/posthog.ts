@@ -20,10 +20,9 @@ import {
 } from '@posthog/browser-common'
 import { Publisher } from '@posthog/browser-common/pubsub'
 
-import { createAnalyticsExtension } from './analytics-buffer'
 import { isAnalyticsExtension, type AnalyticsCaptureHost, type IAnalyticsExtension } from './analytics-internal'
 import { isLikelyBot } from './bot-filter'
-import { ExtensionRegistry, type ExtensionLoader } from './extensions/registry'
+import { ExtensionRegistry, type AutomaticExtension, type ExtensionLoader } from './extensions/registry'
 import { deepFreeze } from './immutable'
 import { createLogger } from './logger'
 import { sendRequest, type RequestRuntime } from './request'
@@ -99,7 +98,7 @@ class PostHog implements IPostHog {
     private readonly _resetPublisher: Publisher<void>
     readonly _registry: ExtensionRegistry<IPostHogInternal>
     readonly _requestRuntime: RequestRuntime
-    _analytics: IAnalyticsExtension | undefined
+    private _analytics: IAnalyticsExtension | undefined
     private readonly _state: BrowserState
     private readonly _consentObservation: Disposable
     private readonly _blocked: boolean
@@ -115,19 +114,19 @@ class PostHog implements IPostHog {
     private _disposed = false
     private _shutdownPromise: Promise<void> | undefined
     private _initialPageviewPending = true
+    private _ready = false
+    private _pageviewLoading: Promise<void> | undefined
     private _pageviewListener: [Document, EventListener] | undefined
 
     static create(
         options: CorePostHogOptions,
-        capture: IAnalyticsExtension,
         loaders: Readonly<Record<string, ExtensionLoader<IPostHogInternal>>>
     ): PostHog {
-        return new PostHog(options, capture, loaders)
+        return new PostHog(options, loaders)
     }
 
     private constructor(
         options: CorePostHogOptions,
-        capture: IAnalyticsExtension,
         loaders: Readonly<Record<string, ExtensionLoader<IPostHogInternal>>>
     ) {
         let projectToken = ''
@@ -243,7 +242,6 @@ class PostHog implements IPostHog {
             () => !this._closing && !this._disposed
         )
         this._registry.expose(this)
-        this._analytics = capture
     }
 
     get distinctId(): string {
@@ -490,50 +488,80 @@ class PostHog implements IPostHog {
         }
     }
 
+    async _completeInitialization(): Promise<void> {
+        await this._analytics?.start()
+        this._ready = true
+        this._startInitialPageview()
+        await this._pageviewLoading
+    }
+
     _startInitialPageview(): void {
-        if (!this._capturePageview || !this._initialPageviewPending || this._closing || this._disposed) {
+        if (
+            !this._ready ||
+            !this._capturePageview ||
+            !this._initialPageviewPending ||
+            this._closing ||
+            this._disposed ||
+            !this._pageviewIsVisible()
+        ) {
             return
         }
+        this._removePageviewListener()
+        if (!this._analytics) {
+            this._loadInitialPageviewAnalytics()
+            return
+        }
+        this._initialPageviewPending = false
+        if (!this._analytics.captureInitialPageview()) {
+            this._initialPageviewPending = !this._disposed && !this._blocked
+        }
+    }
 
+    private _pageviewIsVisible(): boolean {
         let document: Document | undefined
         let visibility: DocumentVisibilityState | undefined
         try {
             document = globalThis.document
             visibility = document?.visibilityState
         } catch {
-            this._removePageviewListener()
-            this._initialPageviewPending = false
-            return
+            this._cancelInitialPageview()
+            return false
         }
         if (!document || visibility === undefined) {
-            this._removePageviewListener()
-            this._initialPageviewPending = false
-            return
+            this._cancelInitialPageview()
+            return false
         }
         if (visibility !== 'visible') {
-            if (this._pageviewListener?.[0] !== document) {
-                this._removePageviewListener()
-            }
-            if (!this._pageviewListener) {
-                const listener = (): void => this._startInitialPageview()
-                this._pageviewListener = [document, listener]
-                try {
-                    // oxlint-disable-next-line posthog-js/no-add-event-listener
-                    document.addEventListener('visibilitychange', listener)
-                } catch {
-                    this._removePageviewListener()
-                    this._initialPageviewPending = false
-                    return
-                }
-            }
-            return
+            this._watchPageviewVisibility(document)
+            return false
         }
+        return true
+    }
 
+    private _watchPageviewVisibility(document: Document): void {
+        if (this._pageviewListener?.[0] !== document) this._removePageviewListener()
+        if (this._pageviewListener) return
+        const listener = (): void => this._startInitialPageview()
+        this._pageviewListener = [document, listener]
+        try {
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
+            document.addEventListener('visibilitychange', listener)
+        } catch {
+            this._cancelInitialPageview()
+        }
+    }
+
+    private _cancelInitialPageview(): void {
         this._removePageviewListener()
         this._initialPageviewPending = false
-        if (!this._analytics?.captureInitialPageview()) {
-            this._initialPageviewPending = !this._disposed && !this._blocked
-        }
+    }
+
+    private _loadInitialPageviewAnalytics(): void {
+        if (this._pageviewLoading || this._blocked || this.hasOptedOut()) return
+        this._pageviewLoading = this.resolveExtension('analytics').then(() => {
+            this._pageviewLoading = undefined
+            if (this._analytics) this._startInitialPageview()
+        })
     }
 
     private _removePageviewListener(): void {
@@ -777,38 +805,28 @@ class PostHog implements IPostHog {
     }
 }
 
+const selectConfiguredExtensions = (configured: readonly Extension[]): Map<string, Extension> => {
+    const selected = new Map<string, Extension>()
+    for (const extension of configured) if (!selected.has(extension.name)) selected.set(extension.name, extension)
+    return selected
+}
+
 export const createPostHogCore = async (
     options: CorePostHogOptions,
     configured: readonly Extension[] = options?.extensions ?? [],
-    loaders: Readonly<Record<string, ExtensionLoader<IPostHogInternal>>> = {}
+    automaticLoaders: Readonly<Record<string, ExtensionLoader<IPostHogInternal>>> = {},
+    automatic: readonly AutomaticExtension<IPostHogInternal>[] = []
 ): Promise<IPostHog> => {
-    const analytics = configured.find(isAnalyticsExtension) ?? createAnalyticsExtension()
-    const extensions = configured.filter((extension) => extension !== analytics)
-    const client = PostHog.create(options ?? { projectToken: '' }, analytics, loaders)
+    const selected = selectConfiguredExtensions(configured)
+    const loaders = Object.fromEntries([
+        ...Object.entries(automaticLoaders),
+        ...Array.from(selected, ([name, extension]) => [name, () => extension] as const),
+    ])
+    const client = PostHog.create(options ?? { projectToken: '' }, loaders)
     void client.getRemoteConfig()
-    let analyticsReady = false
-    try {
-        await client._registry.install(analytics)
-        analyticsReady = true
-    } catch (error) {
-        client._analytics = undefined
-        try {
-            await client._registry.rollback(analytics)
-        } catch (cleanupError) {
-            client.logger.error(`Failed to dispose disabled extension "${analytics.name}"`, cleanupError)
-        }
-        client.logger.error(`Failed to install configured extension "${analytics.name}"`, error)
-    }
-    for (const extension of extensions) {
-        try {
-            await client._registry.install(extension)
-        } catch (error) {
-            client.logger.error(`Failed to install configured extension "${extension.name}"`, error)
-        }
-    }
-    if (analyticsReady) {
-        await analytics.start()
-    }
-    client._startInitialPageview()
+    if (selected.has('analytics')) await client.resolveExtension('analytics')
+    for (const name of selected.keys()) if (name !== 'analytics') await client.resolveExtension(name)
+    for (const extension of automatic) await client._registry.activate(extension)
+    await client._completeInitialization()
     return client
 }

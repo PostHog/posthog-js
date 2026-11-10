@@ -242,18 +242,20 @@ describe('@posthog/browser automatic analytics', () => {
         await posthog.shutdown()
     })
 
-    it('loads analytics after the first admitted event and flushes it', async () => {
+    it('acquires full default analytics and flushes its admitted event', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
             remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
+            flags: false,
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
         })
 
-        await requireInstalledExtension(posthog.analytics).capture('automatic')
+        const product = requireInstalledExtension(await posthog.resolveExtension('analytics'))
+        product.capture('automatic')
         await posthog.flush()
 
         expect(requests).toHaveLength(1)
@@ -278,7 +280,8 @@ describe('@posthog/browser automatic analytics', () => {
         configuration.flushAt = 100
         configuration.flushInterval = 60_000
 
-        await requireInstalledExtension(posthog.analytics).capture('snapshotted')
+        const product = requireInstalledExtension(await posthog.resolveExtension('analytics'))
+        product.capture('snapshotted')
         await new Promise((resolve) => globalThis.setTimeout(resolve, 0))
 
         expect(
@@ -338,7 +341,7 @@ describe('@posthog/browser automatic analytics', () => {
         }
     })
 
-    it('retains analytics buffering without delivery when automatic loading is disabled', async () => {
+    it('omits implicit analytics when automatic inclusion is disabled', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
             remoteConfig: localRemoteConfig,
@@ -350,7 +353,8 @@ describe('@posthog/browser automatic analytics', () => {
             analytics: false,
         })
 
-        await requireInstalledExtension(posthog.analytics).capture('buffered')
+        expect(posthog.analytics).toBeUndefined()
+        expect(await posthog.resolveExtension('analytics')).toBeUndefined()
         await posthog.flush()
 
         expect(requests).toHaveLength(0)

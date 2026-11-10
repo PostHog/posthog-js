@@ -142,6 +142,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
         bindings: { surveys: shared },
         setup: async (value: IPostHogInternal) => {
             client = value
+            await value.resolveExtension('analytics')
             if (disposed) return
             await value.kv.initialize()
             if (disposed) return

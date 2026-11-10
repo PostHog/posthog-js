@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { argv, stdout } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { dirname, posix, relative } from 'node:path'
@@ -22,8 +23,21 @@ const surveysInput =
     /(^|\/)(surveys(?:-extension|-renderer|-storage)?|survey-event-receiver(?:-base)?|survey-action-matcher)\.(m?js|tsx?)$/
 const surveyUiInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?(?:preact|dompurify)\//
 const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
-const analyticsInput = /(^|\/)(capture-v1|analytics|analytics-delivery|lane)\.(m?js|ts)$/
-const automaticAnalyticsInput = /(^|\/)automatic-analytics\.(m?js|ts)$/
+const analyticsInput =
+    /(^|\/)(capture-(?:v1|properties)|analytics(?:-buffer|-extension|-delivery)?|event-buffer|rate-limiter|lane)\.(m?js|ts)$/
+const deliveryInputs = [
+    /(^|\/)analytics-delivery\.(m?js|ts)$/,
+    /(^|\/)lane\.(m?js|ts)$/,
+    /(^|\/)capture-v1\.(m?js|ts)$/,
+]
+const assertAutomaticAnalyticsClosure = (inputs) => {
+    const forbidden = inputs.filter((input) => deliveryInputs.some((pattern) => pattern.test(input)))
+    assert.equal(
+        forbidden.length,
+        0,
+        `Automatic analytics product statically includes delivery: ${forbidden.join(', ')}`
+    )
+}
 const buildOptions = {
     absWorkingDir: packageRoot,
     bundle: true,
@@ -93,14 +107,44 @@ const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowF
     }
 }
 
+const assertManualCoreInputs = (inputs) => {
+    const forbidden = inputs.filter(
+        (input) =>
+            analyticsInput.test(input) ||
+            flagsInput.test(input) ||
+            logsInput.test(input) ||
+            surveysInput.test(input) ||
+            autocaptureInput.test(input) ||
+            /(^|\/)root-composition\.(m?js|ts)$/.test(input)
+    )
+    if (forbidden.length) throw new Error(`The manual core bundle references product code: ${forbidden.join(', ')}`)
+}
+
 const measureStatic = async (name, fixture, forbidAnalytics, allowFlags = false, allowSurveys = false) => {
     const result = await build({ ...buildOptions, entryPoints: [fixture] })
     const output = result.outputFiles[0]?.contents
     if (!output) {
         throw new Error(`The ${name} bundle-size fixture did not produce JavaScript`)
     }
-    if (forbidAnalytics && Object.keys(result.metafile.inputs).some((input) => automaticAnalyticsInput.test(input))) {
-        throw new Error('The core bundle references automatic analytics')
+    if (name === 'core') assertManualCoreInputs(Object.keys(result.metafile.inputs))
+    if (name === 'eager analytics') {
+        assert.throws(
+            () => assertManualCoreInputs(Object.keys(result.metafile.inputs)),
+            /manual core bundle references/,
+            'The manual-core guard must reject the real static analytics consumer graph'
+        )
+        const inputs = Object.keys(result.metafile.inputs)
+        for (const pattern of deliveryInputs)
+            assert(
+                inputs.some((input) => pattern.test(input)),
+                `Full analytics must include ${pattern}`
+            )
+        assert.throws(
+            () => assertAutomaticAnalyticsClosure(inputs),
+            /Automatic analytics product statically includes delivery/,
+            'The automatic-product guard must reject the real static-full analytics closure'
+        )
+        stdout.write('Negative control: static-full analytics rejected by automatic-product inner-boundary assertion\n')
     }
     await report(
         name,
@@ -186,13 +230,37 @@ const measureLazy = async (
         })
     const initialKeys = [...initial]
     const totalKeys = Object.keys(result.metafile.outputs)
-    if (
-        automatic &&
-        !initialKeys.some((key) =>
-            Object.keys(result.metafile.outputs[key].inputs).some((input) => automaticAnalyticsInput.test(input))
+    if (automatic) {
+        const products = totalKeys.filter((key) =>
+            /\/automatic-analytics\.mjs$/.test(result.metafile.outputs[key].entryPoint ?? '')
         )
-    ) {
-        throw new Error('The lazy initial bundle must include the automatic analytics factory')
+        assert(products.length > 0, 'The root must reference the deferred automatic analytics product chunk')
+        for (const product of products) {
+            const closure = [...staticClosure(product)]
+            const inputs = closure.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs))
+            assertAutomaticAnalyticsClosure(inputs)
+            const nestedDelivery = closure
+                .flatMap((key) =>
+                    result.metafile.outputs[key].imports
+                        .filter((imported) => !imported.external && imported.kind === 'dynamic-import')
+                        .map((imported) =>
+                            result.metafile.outputs[imported.path]
+                                ? imported.path
+                                : posix.normalize(posix.join(dirname(key), imported.path))
+                        )
+                )
+                .find((key) => /\/analytics-delivery\.mjs$/.test(result.metafile.outputs[key]?.entryPoint ?? ''))
+            assert(nestedDelivery, 'The automatic product must retain its nested dynamic analytics-delivery edge')
+            const deliveredInputs = [...staticClosure(nestedDelivery)].flatMap((key) =>
+                Object.keys(result.metafile.outputs[key].inputs)
+            )
+            for (const pattern of deliveryInputs)
+                assert(
+                    deliveredInputs.some((input) => pattern.test(input)),
+                    `Nested delivery must include ${pattern}`
+                )
+        }
+        stdout.write('Automatic product static closure excludes delivery; nested dynamic delivery edge retained\n')
     }
     const initialInputs = initialKeys.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs))
     if (initialInputs.some((input) => /surveys-renderer|survey-styles/.test(input))) {
@@ -224,6 +292,6 @@ await measureStatic('static logs', 'fixtures/static-logs.ts', true, true)
 await measureLazy('dynamic logs', 'fixtures/dynamic-logs.ts', false)
 await measureLazy('explicit surveys', 'fixtures/static-surveys.ts', false, true, true)
 await measureLazy('dynamic surveys', 'fixtures/dynamic-surveys.ts', false, true)
-await measureStatic('static autocapture', 'fixtures/static-autocapture.ts', true, true)
+await measureStatic('static autocapture with analytics', 'fixtures/static-autocapture.ts', false, true)
 await measureLazy('dynamic autocapture', 'fixtures/dynamic-autocapture.ts', false)
 stdout.write(`Budget status: ${COMPLIANT_BASELINE_PENDING}\n`)

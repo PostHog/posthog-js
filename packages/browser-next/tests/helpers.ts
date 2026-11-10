@@ -1,4 +1,17 @@
-import type { BrowserFetch, RemoteConfig, StorageLike } from '../src/core'
+import { createPostHog as createCorePostHog } from '../src/core'
+import { createPostHog as createRootPostHog } from '../src'
+import { createAnalyticsExtension } from '../src/analytics-buffer'
+import type { BrowserFetch, CorePostHogOptions, PostHogOptions, RemoteConfig, StorageLike } from '../src/types'
+
+/** Explicit buffer-only composition for state tests that do not exercise delivery or product selection. */
+export const withBufferedAnalytics = (options: PostHogOptions): PostHogOptions => {
+    const extensions = [...(options?.extensions ?? [])]
+    if (!extensions.some((extension) => extension.name === 'analytics')) extensions.unshift(createAnalyticsExtension())
+    return { ...options, extensions }
+}
+
+export const createBufferedPostHog = (options: CorePostHogOptions) => createCorePostHog(withBufferedAnalytics(options))
+export const createBufferedRootPostHog = (options: PostHogOptions) => createRootPostHog(withBufferedAnalytics(options))
 
 export const localRemoteConfig: RemoteConfig = {
     supportedCompression: [],

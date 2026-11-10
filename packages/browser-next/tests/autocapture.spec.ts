@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { requireInstalledExtension } from './helpers'
-import { createPostHog } from '../src'
+import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore } from '../src/core'
 import { autocapture } from '../src/autocapture'
 import type { AutocaptureOptions } from '../src/autocapture'

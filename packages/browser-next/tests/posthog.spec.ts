@@ -1,15 +1,10 @@
+import { createBufferedPostHog as createPostHog } from './helpers'
 import { requireInstalledExtension } from './helpers'
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { createPostHog as createAutomaticPostHog } from '../src'
 import { analytics as createAnalytics } from '../src/analytics'
-import {
-    createPostHog,
-    type BrowserFetch,
-    type CaptureOptions,
-    type CorePostHogOptions,
-    type RemoteConfig,
-} from '../src/core'
+import type { BrowserFetch, CaptureOptions, CorePostHogOptions, RemoteConfig } from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig =>
@@ -41,7 +36,7 @@ describe('@posthog/browser core', () => {
         ]
         for (const client of clients) {
             expect(client.canCapture).toBe(false)
-            expect(() => requireInstalledExtension(client.analytics).capture('disabled')).not.toThrow()
+            expect(() => client.analytics?.capture('disabled')).not.toThrow()
             expect(await client.sendRequest('/test')).toMatchObject({ statusCode: 0 })
             client.optIn()
             expect(client.canCapture).toBe(false)

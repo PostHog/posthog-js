@@ -77,23 +77,23 @@ export interface PostHogOptions {
     /** Stop waiting for remote configuration after this duration in milliseconds. Defaults to 10,000. */
     remoteConfigTimeoutMs?: number
     /**
-     * Automatic first-party analytics delivery. Defaults to lazy loading after the first admitted event.
-     * Pass `false` to retain events without automatically loading delivery.
+     * First-party analytics acquisition. Defaults to on-demand loading through resolution, product dependencies,
+     * or the initial pageview. Pass `false` to omit implicit analytics; explicit instances take precedence.
      */
     analytics?: AnalyticsConfiguration
-    /** Automatic DOM autocapture. Pass false to omit it; an explicit extension takes precedence. */
+    /** Acquire DOM autocapture from saved/fresh signals, or during initialization when configured explicitly. */
     autocapture?: AutocaptureConfiguration
     /** Dynamically include flags by default. Explicit extensions take precedence over this option. */
     flags?: FlagsConfiguration
-    /** Load survey orchestration dynamically; renderer waits for remote enablement or a manual call. */
+    /** Acquire surveys from saved/fresh enablement signals, or during initialization when configured explicitly. */
     surveys?: SurveysConfiguration
-    /** Automatically load logs. False disables automatic inclusion; explicit extensions take precedence. */
+    /** Acquire logs from saved/fresh console signals, or during initialization when configured explicitly. */
     logs?: LogsConfiguration
-    /** Install extensions before the factory resolves. A preinstalled analytics extension satisfies delivery. */
+    /** Install extensions before the factory resolves. Explicit instances take precedence over automatic product options. */
     extensions?: readonly Extension[]
 }
 
-/** Options for the delivery-free `@posthog/browser/core` entrypoint. */
+/** Options for the manually composed `@posthog/browser/core` entrypoint. */
 export type CorePostHogOptions = Omit<PostHogOptions, 'analytics' | 'flags' | 'logs' | 'surveys' | 'autocapture'>
 
 /** Capture V1's terminal verdict for one reported event. */

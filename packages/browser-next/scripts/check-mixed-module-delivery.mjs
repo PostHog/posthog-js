@@ -129,6 +129,10 @@ if (
 const automaticRequests = []
 const automatic = await createPostHog({
     projectToken: 'ph_test',
+    flags: false,
+    logs: false,
+    surveys: false,
+    autocapture: false,
     capturePageview: false,
     storage: false,
     navigator: false,
@@ -138,7 +142,9 @@ const automatic = await createPostHog({
         return new Response('{}', { status: 200 })
     },
 })
-automatic.analytics.capture('automatic_cjs_event')
+const automaticAnalytics = await automatic.resolveExtension('analytics')
+if (!automaticAnalytics || automaticAnalytics !== automatic.analytics) throw new Error('Analytics acquisition failed')
+automaticAnalytics.capture('automatic_cjs_event')
 await automatic.flush()
 await automatic.dispose()
 
@@ -157,7 +163,9 @@ const core = await createCorePostHog({
         return new Response('{}', { status: 200 })
     },
 })
-core.analytics.capture('core_buffered_event')
+if (core.analytics || (await core.resolveExtension('analytics'))) {
+    throw new Error('The manual CommonJS host must not construct or acquire implicit analytics')
+}
 await core.flush()
 await core.dispose()
 if (
@@ -239,6 +247,7 @@ for (const create of [createPostHog, createEsmPostHog]) {
         capturePageview: false,
         flags: { featureFlagEvaluation: false, bootstrap: { featureFlags: { lookup: 'shared' } } },
         extensions: [
+            analytics(),
             {
                 name: 'consumer',
                 setup(value) {

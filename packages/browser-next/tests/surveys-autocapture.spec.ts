@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { requireInstalledExtension } from './helpers'
-import { createPostHog } from '../src'
+import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
 import { autocapture } from '../src/autocapture'
 import { surveys } from '../src/surveys'

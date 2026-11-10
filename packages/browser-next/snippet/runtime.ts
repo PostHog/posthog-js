@@ -1,4 +1,5 @@
 import { createPostHog } from '../src/index'
+import { analytics } from '../src/analytics'
 import { createLogger } from '../src/logger'
 import type { PostHogOptions } from '../src/types'
 
@@ -39,7 +40,7 @@ export async function startSnippet(scriptUrl: string, target: SnippetWindow): Pr
     try {
         const options = parseSnippetOptions(scriptUrl)
         target[installation] = reserved = true
-        const client = await createPostHog(options)
+        const client = await createPostHog({ ...options, extensions: [analytics()] })
         // Another installer may claim the global while optional modules initialize.
         if ('posthog' in target) {
             await client.dispose()

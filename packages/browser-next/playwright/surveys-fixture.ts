@@ -78,7 +78,8 @@ export const surveysHarness: Window['surveysHarness'] = {
             analytics: false,
             flags: false,
             logs: false,
-            ...(mode === 'static' ? { surveys: false, extensions: [surveys(options)] } : { surveys: options }),
+            surveys: mode === 'static' ? false : options,
+            extensions: [createAnalyticsExtension(), ...(mode === 'static' ? [surveys(options)] : [])],
             remoteConfig: {
                 toolbarParams: {},
                 toolbarVersion: 'toolbar',
