@@ -1,6 +1,6 @@
 import {
-  type FetchLike,
   type Logger,
+  type PostHogFetchOptions,
   type PostHogFetchResponse,
   parseRetryAfterMs,
   removeTrailingSlash,
@@ -95,8 +95,12 @@ export interface EmailSenderConfig {
   migratedFrom?: string
 }
 
+export interface EmailFetchOptions extends PostHogFetchOptions {
+  redirect?: 'manual'
+}
+
 export interface EmailSenderHooks {
-  fetch: FetchLike
+  fetch: (url: string, options: EmailFetchOptions) => Promise<PostHogFetchResponse>
   isDisabled: () => boolean
   isClosed: () => boolean
   logger: Logger

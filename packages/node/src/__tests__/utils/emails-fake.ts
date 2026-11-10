@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 import type { PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
 
+import type { EmailFetchOptions } from '../../emails/emails'
+
 const APP_HOST = 'https://us.posthog.com'
 const UPLOADS_PATH = '/api/projects/@current/messaging/attachments/uploads/'
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
@@ -158,7 +160,7 @@ export class FakePostHog {
     this.files.set(toHex(digestOf(bytes)), new Uint8Array(bytes))
   }
 
-  readonly fetch = async (url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> => {
+  readonly fetch = async (url: string, options: EmailFetchOptions): Promise<PostHogFetchResponse> => {
     const route = this.routeOf(url)
     const fault = route ? this.faults[route].shift() : undefined
     if (fault === 'network error') {
