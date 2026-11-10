@@ -4,7 +4,7 @@ on:
     workflow_run:
         workflows: [Release]
         types: [completed]
-        branches: [main]
+        branches: [main, posthog-node-5]
 
 permissions:
     actions: read

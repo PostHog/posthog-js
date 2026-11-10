@@ -4,6 +4,7 @@ const { join } = require('node:path')
 
 const unsuccessful = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure', 'stale'])
 const npmPublishJobs = ['Publish packages', 'Publish posthog-js']
+const maintenanceBranchPublishJobs = ['Publish packages']
 
 const isJob = (job, name) => job.name === name || job.name.startsWith(`${name} (`)
 
@@ -73,7 +74,8 @@ module.exports = async function releaseFailureNotification({ github, context, ch
         return null
     }
 
-    const npmPublished = npmPublishJobs.every((name) => {
+    const requiredPublishJobs = run.head_branch === 'main' ? npmPublishJobs : maintenanceBranchPublishJobs
+    const npmPublished = requiredPublishJobs.every((name) => {
         const cells = jobs.filter((job) => isJob(job, name))
         return cells.length > 0 && cells.every((job) => job.conclusion === 'success')
     })
@@ -81,7 +83,7 @@ module.exports = async function releaseFailureNotification({ github, context, ch
     const problems = failedJobs.map((job) => `• <${job.html_url}|${job.name}>: ${job.conclusion}`)
 
     if (run.conclusion !== 'success' && failedJobs.length === 0) {
-        for (const name of npmPublishJobs) {
+        for (const name of requiredPublishJobs) {
             if (!jobs.some((job) => isJob(job, name))) problems.push(`• ${name}: never ran`)
         }
     }
