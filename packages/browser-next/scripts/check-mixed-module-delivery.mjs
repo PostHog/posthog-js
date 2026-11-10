@@ -110,6 +110,7 @@ const posthog = await createCorePostHog({
     },
 })
 
+posthog.analytics.registerForSession({ mixed_session: true })
 posthog.analytics.capture('mixed_module_event')
 await posthog.flush()
 const immediateSummary = await posthog.analytics.captureImmediate('mixed_module_immediate', undefined, {
@@ -121,6 +122,8 @@ if (
     requests.length !== 2 ||
     requests[0].body?.batch?.[0]?.event !== 'mixed_module_event' ||
     requests[1].body?.batch?.[0]?.event !== 'mixed_module_immediate' ||
+    requests[0].body?.batch?.[0]?.properties.mixed_session !== true ||
+    requests[1].body?.batch?.[0]?.properties.mixed_session !== true ||
     !immediateSummary.allPersisted
 ) {
     throw new Error('Mixed CommonJS/ESM analytics delivery did not support queued and immediate events')
@@ -503,6 +506,106 @@ for (const create of [createPostHog, createEsmPostHog]) {
 process.stdout.write(
     'Built CommonJS/ESM acquired persistent analytics properties, snapshots, precedence and reset passed\n'
 )
+
+for (const create of [createPostHog, createEsmPostHog]) {
+    const requests = []
+    const values = new Map()
+    const storage = {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => values.set(key, value),
+        removeItem: (key) => values.delete(key),
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage')
+    const localDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+    const localValues = new Map()
+    Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: storage })
+    Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: {
+            getItem: (key) => localValues.get(key) ?? null,
+            setItem: (key, value) => localValues.set(key, value),
+            removeItem: (key) => localValues.delete(key),
+        },
+    })
+    const options = {
+        projectToken: 'ph_session_properties',
+        navigator: false,
+        capturePageview: false,
+        analytics: { flushInterval: 0 },
+        flags: false,
+        logs: false,
+        surveys: false,
+        autocapture: false,
+        remoteConfig: {
+            supportedCompression: [],
+            toolbarParams: {},
+            toolbarVersion: 'toolbar',
+            isAuthenticated: false,
+            siteApps: [],
+        },
+        fetch: async (_input, init) => {
+            const body = JSON.parse(init.body)
+            requests.push(body)
+            return new Response(
+                JSON.stringify({
+                    results: Object.fromEntries(body.batch.map(({ uuid }) => [uuid, { result: 'ok' }])),
+                })
+            )
+        },
+    }
+    try {
+        const client = await create(options)
+        const product = await client.resolveExtension('analytics')
+        assert.ok(product)
+        const { registerForSession, unregisterForSession, getSessionProperty } = product
+        const copied = { registerForSession, unregisterForSession, getSessionProperty }
+        const input = { count: 1 }
+        product.register({ precedence: 'persistent', fallback: true })
+        registerForSession({ input, precedence: 'session', removed: true, nullable: null })
+        input.count = 2
+        const read = copied.getSessionProperty('input')
+        assert.deepEqual(read, { count: 1 })
+        read.count = 3
+        assert.deepEqual(getSessionProperty('input'), { count: 1 })
+        assert.equal(client.session, undefined)
+        copied.unregisterForSession('removed')
+        product.capture('session_queued')
+        const summary = await product.captureImmediate('session_immediate', { precedence: 'caller' })
+        assert.equal(summary.allPersisted, true)
+        await client.flush()
+        const events = requests.flatMap(({ batch }) => batch)
+        const queued = events.find(({ event }) => event === 'session_queued')
+        const inline = events.find(({ event }) => event === 'session_immediate')
+        assert.ok(queued)
+        assert.ok(inline)
+        assert.equal(queued.properties.precedence, 'session')
+        assert.equal(queued.properties.fallback, true)
+        assert.deepEqual(queued.properties.input, { count: 1 })
+        assert.equal(Object.hasOwn(queued.properties, 'removed'), false)
+        assert.equal(Object.hasOwn(queued.properties, 'nullable'), false)
+        assert.equal(inline.properties.precedence, 'caller')
+        product.resetGroups()
+        assert.deepEqual(getSessionProperty('input'), { count: 1 })
+        product.reset()
+        assert.equal(getSessionProperty('input'), undefined)
+        copied.registerForSession({ reload: true })
+        await client.dispose()
+        copied.registerForSession({ late: true })
+        assert.equal(getSessionProperty('late'), undefined)
+        const fresh = await create(options)
+        const restored = await fresh.resolveExtension('analytics')
+        assert.ok(restored)
+        assert.equal(restored.getSessionProperty('reload'), true)
+        assert.equal(restored.getSessionProperty('late'), undefined)
+        await fresh.dispose()
+    } finally {
+        if (descriptor) Object.defineProperty(globalThis, 'sessionStorage', descriptor)
+        else delete globalThis.sessionStorage
+        if (localDescriptor) Object.defineProperty(globalThis, 'localStorage', localDescriptor)
+        else delete globalThis.localStorage
+    }
+}
+process.stdout.write('Built CommonJS/ESM acquired session properties, snapshots, precedence and reset passed\n')
 
 for (const factory of [surveys, commonJsSurveys]) {
     const client = await createCorePostHog({

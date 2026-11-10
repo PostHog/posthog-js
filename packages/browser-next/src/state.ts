@@ -1,6 +1,7 @@
 import type { KeyValueStore, SessionContext } from '@posthog/browser-common'
 
 import { createId } from './id'
+import { createKeyValueStore, TabValues } from './key-value-store'
 import type { NewSessionReason, StorageLike } from './types'
 
 export type ConsentState = 'implicit' | 'granted' | 'denied'
@@ -40,14 +41,6 @@ interface PreparedSession {
 }
 
 const emptyRecord = <T>(): Record<string, T> => Object.create(null) as Record<string, T>
-
-const cloneJson = <T>(value: T): T => {
-    const json = JSON.stringify(value)
-    if (json === undefined) {
-        throw new TypeError('The value must be JSON-serializable')
-    }
-    return JSON.parse(json) as T
-}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -374,6 +367,10 @@ export class BrowserState {
         return { ...this._state.groups }
     }
 
+    get sessionId(): string | undefined {
+        return this._state.session?.sessionId
+    }
+
     get session(): SessionContext | undefined {
         const session = this._state.session
         if (!session || !this._windowId) return undefined
@@ -540,56 +537,20 @@ export class BrowserState {
     }
 
     keyValueStore(namespace: string, canAccess: () => boolean = () => true): KeyValueStore {
-        const values = (): Record<string, unknown> => (this._state.extensionData[namespace] ??= emptyRecord<unknown>())
-        const read = (key: string): unknown => {
-            if (!canAccess()) {
-                return undefined
-            }
-            const value = values()[key]
-            return value === undefined ? undefined : cloneJson(value)
-        }
+        return createKeyValueStore({
+            values: () => (this._state.extensionData[namespace] ??= emptyRecord<unknown>()),
+            save: () => this._save(),
+            canAccess,
+        })
+    }
 
-        return {
-            initialize(): void {},
-            get: (<T = unknown>(keyOrKeys: string | readonly string[]): T | Partial<T> | undefined => {
-                if (typeof keyOrKeys === 'string') {
-                    return read(keyOrKeys) as T | undefined
-                }
-                const entries = emptyRecord<unknown>()
-                for (const key of keyOrKeys) {
-                    const value = read(key)
-                    if (value !== undefined) {
-                        entries[key] = value
-                    }
-                }
-                return entries as Partial<T>
-            }) as KeyValueStore['get'],
-            set: ((keyOrValues: string | Record<string, unknown>, value?: unknown): void => {
-                if (!canAccess()) {
-                    return
-                }
-                const namespaceValues = values()
-                const entries = typeof keyOrValues === 'string' ? { [keyOrValues]: value } : keyOrValues
-                for (const [key, entry] of Object.entries(entries)) {
-                    if (entry === undefined) {
-                        delete namespaceValues[key]
-                    } else {
-                        namespaceValues[key] = cloneJson(entry)
-                    }
-                }
-                this._save()
-            }) as KeyValueStore['set'],
-            remove: (keyOrKeys: string | readonly string[]): void => {
-                if (!canAccess()) {
-                    return
-                }
-                const namespaceValues = values()
-                for (const key of typeof keyOrKeys === 'string' ? [keyOrKeys] : keyOrKeys) {
-                    delete namespaceValues[key]
-                }
-                this._save()
-            },
-        }
+    tabKeyValueStore(namespace: string, canAccess: () => boolean): KeyValueStore {
+        const values = new TabValues(`${this._stateKey}_tab_${namespace}`, () => this._tabStorage())
+        return createKeyValueStore({ values: () => values.values(), save: () => values.save(), canAccess })
+    }
+
+    private _tabStorage(): StorageLike | undefined {
+        return this._windowStorage ?? this._windowStorageFactory?.()
     }
 
     private _readPersistedState(): [read: boolean, state?: PersistedState] {

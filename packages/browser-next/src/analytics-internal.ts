@@ -67,12 +67,14 @@ export interface AnalyticsTeardownSubscription {
 export interface AnalyticsCaptureHost {
     readonly projectToken: string
     readonly logger: Client['logger']
+    readonly sessionKv: Client['kv']
     readonly state: Pick<
         BrowserState,
         | 'prepare'
         | 'distinctId'
         | 'deviceId'
         | 'groups'
+        | 'sessionId'
         | 'isIdentified'
         | 'prepareSessionForEvent'
         | 'sessionAdmitted'

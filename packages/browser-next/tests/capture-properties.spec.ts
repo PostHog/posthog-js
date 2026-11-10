@@ -3,6 +3,7 @@ import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { analytics } from '../src/analytics'
 import type { CaptureV1Event } from '../src/capture-v1'
+import { applySessionProperties, snapshotCaptureProperties, unavoidableProperties } from '../src/capture-properties'
 
 const nullableProperties = {
     test: null,
@@ -116,5 +117,47 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
         } finally {
             await posthog.dispose()
         }
+    })
+})
+
+describe('session layering measurements', () => {
+    it('retains caller and protected metadata in the minimum measurement while allowing persistent defaults to shrink', () => {
+        const snapshot = snapshotCaptureProperties(
+            { fallback: 'large persistent default', explicit: 'persistent' },
+            { dynamic: 'dynamic' },
+            { explicit: 'caller' },
+            {}
+        )
+        const metadata = { token: 'project', distinct_id: 'authoritative', $session_id: 'session' }
+        expect(unavoidableProperties(snapshot, metadata)).toEqual({
+            explicit: 'caller',
+            dynamic: 'dynamic',
+            ...metadata,
+        })
+        expect(
+            applySessionProperties(snapshot, {
+                fallback: 'small',
+                explicit: 'session',
+                dynamic: 'session',
+                distinct_id: 'wrong',
+            })
+        ).toBe(true)
+        expect({ ...snapshot.message, ...metadata }).toEqual({
+            fallback: 'small',
+            explicit: 'caller',
+            dynamic: 'dynamic',
+            ...metadata,
+        })
+    })
+
+    it('keeps root-serialized properties indivisible for session layering and minimum measurement', () => {
+        const serialize = vi.fn(() => ({ entire: 'caller context' }))
+        const snapshot = snapshotCaptureProperties({ fallback: true }, {}, { toJSON: serialize }, {})
+        expect(applySessionProperties(snapshot, { entire: 'session', fallback: false })).toBe(false)
+        expect(unavoidableProperties(snapshot, { token: 'project' })).toEqual({
+            entire: 'caller context',
+            token: 'project',
+        })
+        expect(serialize).toHaveBeenCalledTimes(1)
     })
 })
