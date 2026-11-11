@@ -161,6 +161,8 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike, logger: 
  * `conversation_id` arguments are stripped before the tool sees them, and any
  * thrown error is stashed on `extra` for the request-handler wrapper to capture
  * (the high-level SDK turns thrown errors into `isError` results otherwise).
+ * MCP SDK v2 dispatches through an `executor` it built from the original
+ * callback at registration, so that executor is wrapped to stash as well.
  *
  * This is purely the tool-facing concern; event capture lives in
  * {@link captureToolCall} via {@link handleToolCallRequest}.
@@ -202,32 +204,39 @@ function addTracingToToolCallbackInternal(
       conversationId: options?.enableConversationId === true && analyticsOwnsParameter(inputSchema, 'conversation_id'),
       llmModel: isCaptureModelEnabled(options?.captureModel) && analyticsOwnsParameter(inputSchema, 'llm_model'),
     })
-    try {
+    return await stashThrownError(extra, () => {
       if (cleanedArgs === undefined) {
         const handler = originalCallback as (extra: CompatibleRequestHandlerExtra) => Promise<CompatibleToolResultLike>
-        return await handler(extra)
+        return handler(extra)
       }
       const handler = originalCallback as (
         args: unknown,
         extra: CompatibleRequestHandlerExtra
       ) => Promise<CompatibleToolResultLike>
-      return await handler(cleanedArgs, extra)
-    } catch (error) {
-      if (error instanceof Error) {
-        extra.__mcp_analytics_error = error
-      }
-      throw error
-    }
+      return handler(cleanedArgs, extra)
+    })
   }
 
-  wrappedCallbacks.set(originalCallback, true)
   wrappedCallbacks.set(wrappedCallback, true)
 
   const wrappedTool = createWrappedTool(tool, wrappedCallback)
+  const originalExecutor = tool.executor
+  if (originalExecutor) {
+    wrappedTool.executor = (args, extra) => stashThrownError(extra, () => originalExecutor(args, extra))
+  }
 
   ;(wrappedTool as ProcessedRegisteredTool)[MCP_ANALYTICS_PROCESSED] = true
 
   return wrappedTool
+}
+
+async function stashThrownError<T>(extra: CompatibleRequestHandlerExtra, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    extra.__mcp_analytics_error = error
+    throw error
+  }
 }
 
 async function handleToolCallRequest(
