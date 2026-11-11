@@ -6,6 +6,10 @@ import type { CaptureSummary } from './types'
 export interface IAnalytics extends BrowserExtension {
     readonly isRateLimited: boolean
     readonly onEvent: Listener<CapturedEventInfo>
+    /**
+     * Synchronous capture. False signals rate-limit backpressure; true does not acknowledge admission or delivery.
+     * Consent, filtering, invalid properties and queue limits can suppress an event while returning true.
+     */
     capture(event: string, properties?: Record<string, unknown> | null, options?: CaptureOptions): boolean
     captureImmediate(
         event: string,

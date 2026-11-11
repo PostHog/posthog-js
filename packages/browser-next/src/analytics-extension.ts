@@ -562,7 +562,11 @@ export class Analytics implements IAnalyticsExtension {
         if (this._disposed || !host?.canMutate()) return
         host.state.prepare()
         const properties = snapshotPersonProperties(host.state.distinctId, set, setOnce)
-        if (!properties || !(Object.keys(properties.set).length || Object.keys(properties.setOnce).length)) return
+        if (!properties) {
+            host.logger.warn('Person properties must be JSON-serializable objects')
+            return
+        }
+        if (!(Object.keys(properties.set).length || Object.keys(properties.setOnce).length)) return
         this._setPersonProperties(properties)
     }
 
@@ -612,6 +616,7 @@ export class Analytics implements IAnalyticsExtension {
         if (distinctId !== previousDistinctId || !wasIdentified) host.state.identify(distinctId)
         const properties = snapshotPersonProperties(distinctId, set, setOnce)
         if (!properties) {
+            host.logger.warn('Person properties must be JSON-serializable objects')
             if (distinctId !== previousDistinctId || !wasIdentified || hasProperties) {
                 host.publishIdentify({ distinctId, previousDistinctId, wasIdentified, set, setOnce })
             }
