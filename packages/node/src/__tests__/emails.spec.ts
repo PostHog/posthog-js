@@ -522,8 +522,6 @@ describe('emails', () => {
         { templateId: TEMPLATE_ID, captureEngagement: false },
         'captureEngagement',
       ],
-      ['tracking on the template form', { templateId: TEMPLATE_ID, tracking: false }, 'tracking'],
-      ['sensitive on the template form', { templateId: TEMPLATE_ID, sensitive: false }, 'sensitive'],
       ['a code send without a subject', { templateKey: 'welcome', html: '<p>Hi</p>' }, 'subject'],
       ['a code send without html or text', { templateKey: 'welcome', subject: 'Hi' }, 'html'],
       ['a code send with html that is not a string', { ...CODE_SEND, html: 1 }, 'html'],
@@ -723,5 +721,18 @@ describe('emails over HTTP', () => {
     expect(error).toBeNull()
     expect(data?.id).toBe('msg_1')
     expect(received).toEqual([{ ...CODE_SEND_BODY, ...body }])
+  })
+
+  it.each([
+    ['tracking', { tracking: false }],
+    ['sensitive', { sensitive: false }],
+  ])('refuses %s on the template form without sending', async (field, option) => {
+    const send = { to: 'user@example.com', templateId: TEMPLATE_ID, ...option } as unknown as SendEmailOptions
+
+    const { data, error } = await posthog.emails.send(send)
+
+    expect(data).toBeNull()
+    expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
+    expect(received).toEqual([])
   })
 })
