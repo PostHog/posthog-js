@@ -17,6 +17,9 @@ tableOfContents:
   - value: "Identify"
     url: identify
     depth: 0
+  - value: "Logs"
+    url: logs
+    depth: 0
   - value: "Traces"
     url: traces
     depth: 0
@@ -332,6 +335,49 @@ await client.identifyImmediate({
 })
 ```
 
+## Logs
+
+### `PostHog.logger`
+
+> **get** **logger**(): `Logger`
+
+Per-level logger: `client.logger.info('message', { attributes })`. Equivalent to
+`captureLog` at the matching severity.
+
+##### Example
+
+```ts
+client.logger.info('checkout completed', { order_id: 'ord_789' })
+client.logger.error('payment failed', { code: 'E001' })
+```
+
+##### Returns
+
+`Logger`
+
+### `PostHog.captureLog`
+
+> **captureLog**(`options`): `void`
+
+Captures one structured log record to PostHog Logs. Attaches the active span's
+ids and the `withContext` person and session unless the options set their own.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | `CaptureLogOptions` |
+
+#### Returns
+
+`void`
+
+#### Example
+
+```ts
+client.captureLog({ body: 'payment failed', level: 'error', attributes: { code: 'E001' } })
+```
+
 ## Traces
 
 ### `PostHog.getActiveSpan`
@@ -511,6 +557,77 @@ This entry point does not load OpenTelemetry; without a processor it does nothin
 #### Returns
 
 `void`
+
+### `instrumentRequest`
+
+> **instrumentRequest**(`posthog`, `request`, `handler`, `options?`): `Promise`\<`Response`\>
+
+**`Experimental`**
+
+Instruments one request on the fetch API (`Request` in, `Response` out): Hono, Bun, Deno, Next route
+handlers, Cloudflare Workers, and anything else that works that way.
+
+- reads `x-posthog-session-id` / `x-posthog-distinct-id` (or the posthog-js cookie when `readPostHogCookie` is on)
+  and runs the handler inside `withContext`, so events and spans carry the person and the replay
+- opens a `server` span continuing an inbound `traceparent`, named `METHOD route` once the route is known
+- marks 5xx responses and thrown errors as span errors (the error is rethrown)
+- records `http.server.request.duration` (seconds histogram) and `http.server.request.count`,
+  by method, route and status code, and hands their flush to the `waitUntil` client option when set
+
+The request context (session and distinct ID on events and spans) needs `withContext`, which the edge
+entrypoint (Cloudflare Workers, Vercel Edge) does not support: there the span and metrics are still recorded,
+but captures inside the handler do not pick up the request's IDs. Pass them explicitly on that runtime.
+
+ Subject to change in a minor release.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `posthog` | `PostHogForRequests` |
+| `request` | `Request` |
+| `handler` | () => `Response` \| `Promise`\<`Response`\> |
+| `options?` | `InstrumentRequestOptions` |
+
+#### Returns
+
+`Promise`\<`Response`\>
+
+#### Example
+
+```ts
+export default {
+  fetch: (request: Request) => instrumentRequest(posthog, request, () => app.fetch(request)),
+}
+```
+
+### `posthogHonoMiddleware`
+
+> **posthogHonoMiddleware**(`posthog`, `options?`): (`c`, `next`) => `Promise`\<`void`\>
+
+**`Experimental`**
+
+Hono middleware that instruments every request. See instrumentRequest. The span is named after
+the matched route (`GET /api/users/:id`), and a thrown error is recorded as a 500.
+
+ Subject to change in a minor release.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `posthog` | `PostHogForRequests` |
+| `options?` | `Omit`\<`InstrumentRequestOptions`, `"getRoute"`\> |
+
+#### Returns
+
+(`c`, `next`) => `Promise`\<`void`\>
+
+#### Example
+
+```ts
+app.use('*', posthogHonoMiddleware(posthog))
+```
 
 ## Alias
 
@@ -2282,6 +2399,18 @@ Error values:
 | <a id="property-timeout"></a> `TIMEOUT` | `"timeout"` |
 | <a id="property-unknown_error"></a> `UNKNOWN_ERROR` | `"unknown_error"` |
 
+### `HTTP_SERVER_REQUEST_COUNT_METRIC`
+
+> `const` **HTTP\_SERVER\_REQUEST\_COUNT\_METRIC**: `"http.server.request.count"` = `'http.server.request.count'`
+
+Counter of requests served.
+
+### `HTTP_SERVER_REQUEST_DURATION_METRIC`
+
+> `const` **HTTP\_SERVER\_REQUEST\_DURATION\_METRIC**: `"http.server.request.duration"` = `'http.server.request.duration'`
+
+Duration histogram, in seconds, using the OpenTelemetry HTTP semantic convention name.
+
 ### `uuidv7`
 
 > `const` **uuidv7**: () => `string`
@@ -2537,6 +2666,37 @@ Receives an event and can return a modified event or null to drop the event.
 
 `CaptureEvent` \| `null`
 
+### `BeforeSendLogFn`
+
+> **BeforeSendLogFn** = (`record`) => `CaptureLogOptions` \| `null`
+
+Pre-send filter. Inspect, mutate, or drop a captured log record before it
+enters the rate cap or the buffer. Return the (possibly transformed) record
+to keep it; return `null` to drop it.
+
+Configure as a single function or an array. Arrays form a left-to-right
+chain: each function receives the previous function's return value, and a
+`null` from any link short-circuits the chain and drops the record. A
+function that throws also drops the record (the error is logged).
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `record` | `CaptureLogOptions` |
+
+#### Returns
+
+`CaptureLogOptions` \| `null`
+
+#### Example
+
+**Redact secrets from log bodies**
+
+```ts
+logs: { beforeSend: (record) => ({ ...record, body: record.body.replace(/token=\S+/g, 'token=[REDACTED]') }) }
+```
+
 ### `BeforeSendMetricFn`
 
 > **BeforeSendMetricFn** = (`sample`) => `MetricSample` \| `null`
@@ -2604,6 +2764,17 @@ This is the interface exposed to the `before_send` hook, matching the web SDK's 
 | <a id="properties"></a> `properties?` | `PostHogEventProperties` | Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage) |
 | <a id="timestamp"></a> `timestamp?` | `Date` | Timestamp for the event |
 | <a id="uuid"></a> `uuid?` | `string` | UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID. |
+
+### `CaptureLogOptions`
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-attributes"></a> `attributes?` | `LogAttributes` | Per-log attributes (request-specific context like order_id, duration_ms) |
+| <a id="property-body"></a> `body` | `string` | The log message body (required) |
+| <a id="property-level"></a> `level?` | `LogSeverityLevel` | Log severity level (default: 'info') |
+| <a id="property-span_id"></a> `span_id?` | `string` | Span ID for correlation — 16 hex chars |
+| <a id="property-trace_flags"></a> `trace_flags?` | `number` | W3C trace flags (default: 0) |
+| <a id="property-trace_id"></a> `trace_id?` | `string` | Trace ID for correlation — 32 hex chars |
 
 ### `CaptureMetricOptions`
 
@@ -3203,6 +3374,20 @@ Options accepted by `posthog.metrics.histogram`.
 | <a id="property-bounds"></a> `bounds?` | `number`[] | Upper bucket boundaries, finite and strictly increasing. A value lands in the first bucket whose boundary is greater than or equal to it, and values above the last boundary land in an overflow bucket. Defaults to the OpenTelemetry defaults `[0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000]`. The first sample of a histogram (name and unit) fixes its bounds until the client resets. A later sample that passes different bounds is recorded in the fixed buckets and logs a warning, once per flush window. A sample with invalid bounds is dropped with a warning. The client fixes the bounds of at most `maxSeriesPerFlush` histograms. Past that limit, the client drops samples of a new histogram that pass bounds other than the defaults, and logs one warning. Each client fixes bounds on its own. PostHog stores one set of bounds per histogram series and reads every client's counts against it. Every client must therefore pass the same bounds for the same histogram. | - |
 | <a id="property-unit-1"></a> `unit?` | `string` | Unit of the value (e.g. 'ms', 'byte'). Displayed in the Metrics UI and part of the series identity — the same name with two units is two series. | `CaptureMetricOptions`.`unit` |
 
+### `HonoContextLike`
+
+The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-error"></a> `error?` | `unknown` | Set by Hono when a handler threw and its error handler produced the response. |
+| <a id="property-req"></a> `req` | `object` | - |
+| `req.raw` | `Request` | - |
+| `req.routePath` | `string` | - |
+| <a id="property-res"></a> `res` | `Response` | - |
+
 ### `IdentifyMessage`
 
 > **IdentifyMessage** = `object`
@@ -3214,6 +3399,13 @@ Options accepted by `posthog.metrics.histogram`.
 | <a id="disablegeoip-2"></a> `disableGeoip?` | `boolean` |
 | <a id="distinctid-1"></a> `distinctId` | `string` |
 | <a id="properties-2"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> |
+
+### `InstrumentRequestOptions`
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-getroute"></a> `getRoute?` | (`request`, `response`) => `string` \| `undefined` | The matched route pattern (`/users/:id`), once the handler has run. Used to name the span and as the `http.route` metric attribute. Without it the span is named after the method only, so raw paths never become high-cardinality span names or metric series. |
+| <a id="property-ignore"></a> `ignore?` | (`request`) => `boolean` | Skip instrumentation (health checks, for example). The handler still runs, with no span or metrics. |
 
 ### `IPostHog`
 
@@ -4092,6 +4284,137 @@ recorded on the span and rethrown unchanged.
 | `link?` | `string` \| `null` |
 | `type` | *typeof* `SurveyQuestionType.Link` |
 
+### `LogAttributes`
+
+> **LogAttributes** = `Record`\<`string`, `LogAttributeValue`\>
+
+### `LogAttributeValue`
+
+> **LogAttributeValue** = `string` \| `number` \| `boolean` \| `null` \| `undefined` \| `unknown`[] \| `Record`\<`string`, `unknown`\>
+
+### `Logger`
+
+Per-level convenience logger. Each method captures a structured log record
+at the corresponding severity, equivalent to
+`posthog.captureLog({ body, level, attributes })`.
+
+#### Example
+
+```ts
+posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+posthog.logger.error('payment failed', { code: 'E001' })
+```
+
+#### Methods
+
+##### debug()
+
+> **debug**(`body`, `attributes?`): `void`
+
+Debug-level detail. Verbose, only useful while diagnosing.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+##### error()
+
+> **error**(`body`, `attributes?`): `void`
+
+Error. Operation failed; the app may continue.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+##### fatal()
+
+> **fatal**(`body`, `attributes?`): `void`
+
+Fatal. Operation failed; the app likely cannot continue.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+##### info()
+
+> **info**(`body`, `attributes?`): `void`
+
+Informational. Normal app events worth recording.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+##### trace()
+
+> **trace**(`body`, `attributes?`): `void`
+
+Lowest severity. Trace-level diagnostic detail.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+##### warn()
+
+> **warn**(`body`, `attributes?`): `void`
+
+Warning. Something unexpected but non-fatal.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `body` | `string` |
+| `attributes?` | `LogAttributes` |
+
+###### Returns
+
+`void`
+
+### `LogSeverityLevel`
+
+> **LogSeverityLevel** = `"trace"` \| `"debug"` \| `"info"` \| `"warn"` \| `"error"` \| `"fatal"`
+
+Log capture types
+
 ### `MetricAttributes`
 
 > **MetricAttributes** = `Record`\<`string`, `MetricAttributeValue`\>
@@ -4193,7 +4516,7 @@ returning `null` drops the sample.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-attributes"></a> `attributes?` | `MetricAttributes` | - |
+| <a id="property-attributes-1"></a> `attributes?` | `MetricAttributes` | - |
 | <a id="property-bounds"></a> `bounds?` | `number`[] | Histogram bucket boundaries. See HistogramOptions.bounds. Only histograms use them. |
 | <a id="property-name-2"></a> `name` | `string` | - |
 | <a id="property-type-4"></a> `type` | `MetricType` | - |
@@ -4420,6 +4743,32 @@ Supports multiple formats:
 | `requestId?` | `string` | - |
 | `sessionRecording?` | `boolean` \| \{\[`key`: `string`\]: `JsonType`; \} | - |
 
+### `PostHogForRequests`
+
+> **PostHogForRequests** = `Pick`\<`PostHogBackendClient`, `"withContext"` \| `"withSpan"` \| `"getContext"` \| `"metrics"` \| `"apiKey"` \| `"options"` \| `"_flushMetricsWithinInvocation"`\>
+
+### `PostHogLogsConfig`
+
+Configuration for the logs feature on `new PostHog(key, { logs: ... })`.
+All fields are optional; per-SDK defaults apply (mobile vs browser tune
+differently for cellular cost vs tab-suspension behavior).
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-beforesend"></a> `beforeSend?` | `BeforeSendLogFn` \| `BeforeSendLogFn`[] | Pre-send filter. See BeforeSendLogFn for shape and examples. Configure as a single function or a chain. |
+| <a id="property-environment"></a> `environment?` | `string` | Deployment environment attached as OTLP `deployment.environment` (e.g. `'production'`, `'staging'`, `'dev'`). |
+| <a id="property-flushintervalms"></a> `flushIntervalMs?` | `number` | How often the periodic background flush fires (ms). Records also flush eagerly when the buffer fills, on AppState changes (RN), and on `shutdown()`. Lower values trade battery/bandwidth for fresher data. Default: 10000 (RN) / 3000 (browser). |
+| <a id="property-maxbatchrecordsperpost"></a> `maxBatchRecordsPerPost?` | `number` | Max records per outbound POST. Keeps each request under the server's request body cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser). |
+| <a id="property-maxbuffersize"></a> `maxBufferSize?` | `number` | Number of buffered records that triggers an immediate flush. Records also flush on the periodic interval and on `shutdown()`. The queue can grow past this while an async flush is in flight (e.g. during a synchronous burst); a separate, larger memory backstop evicts the oldest only once the queue exceeds the per-interval rate cap. Default: 100. |
+| <a id="property-ratecap"></a> `rateCap?` | `object` | Tumbling-window rate cap. Bounds how many records can be captured within a sliding (technically tumbling) time window. Records exceeding the cap are dropped synchronously at `captureLog()` (they never enter the buffer or consume bandwidth). A single warn line is logged per window when the cap is hit. Defaults are per-SDK; on RN the default is `{ maxLogs: 500, windowMs: 10000 }` (≈50 logs/sec ceiling, tuned for cellular bandwidth). **Examples** **Allow brief bursts up to 1000/min** `logs: { rateCap: { maxLogs: 1000, windowMs: 60000 } }` **Disable the cap entirely (unbounded)** `logs: { rateCap: { maxLogs: undefined } }` |
+| `rateCap.maxLogs?` | `number` | Max records accepted per `windowMs` window. `undefined` = unbounded. |
+| `rateCap.windowMs?` | `number` | Window length in ms. Tumbling, not sliding — the counter resets the first time a capture fires after the window expires. |
+| <a id="property-resourceattributes"></a> `resourceAttributes?` | `Record`\<`string`, `LogAttributeValue`\> | Extra OTLP resource attributes attached to every record. Spread first; SDK-controlled keys (`service.name`, `telemetry.sdk.*`, RN's `os.*`) are layered on top so users cannot accidentally clobber them. Use the dedicated `serviceName` / `environment` / `serviceVersion` fields to override those keys. |
+| <a id="property-servicename"></a> `serviceName?` | `string` | Service name attached to every record as the OTLP `service.name` resource attribute. Used by the Logs UI for filtering / grouping. Defaults to `'unknown_service'` when unset. |
+| <a id="property-serviceversion"></a> `serviceVersion?` | `string` | Service version attached as OTLP `service.version`. Useful for correlating regressions to specific app releases. |
+
 ### `PostHogOptions`
 
 > **PostHogOptions** = `Omit`\<`PostHogCoreOptions`, `"before_send"` \| `"flushInterval"` \| `"maxQueueSize"`\> & `object` & `ExceptionRateLimiterConfig`
@@ -4445,6 +4794,7 @@ Supports multiple formats:
 | `flagDefinitionCacheProvider?` | `FlagDefinitionCacheProvider`\<`FlagDefinitionCacheInput`\> | Optional cache provider for feature flag definitions. Allows custom caching strategies (Redis, database, etc.) for flag definitions in multi-worker environments. If not provided, defaults to in-memory cache. Without a secretKey or personalApiKey, this instance only reads cached definitions on each refresh; it does not call shouldFetchFlagDefinitions or publish definitions. With a credential, it uses the provider's fetch decision to coordinate fetching fresh definitions from PostHog and publishing them to the cache. This enables distributed coordination where only one worker fetches flags while others use cached data, reducing API calls and improving performance. **Example** `import type { FlagDefinitionCacheProvider } from 'posthog-node' class RedisCacheProvider implements FlagDefinitionCacheProvider { // ... implementation } const client = new PostHog('api-key', { flagDefinitionCacheProvider: new RedisCacheProvider(redis) })` |
 | `flushInterval?` | `number` | The interval in milliseconds between periodic flushes **Default** `5000` |
 | `isServer?` | `boolean` | Whether to attach the `$is_server: true` property to every captured event. **Remarks** Defaults to `true` because this SDK is intended for server-side use, where the property lets PostHog distinguish server events from browser and react-native events. Set this to `false` when running the SDK as a client/CLI so the event is attributed to the device OS normally instead of being marked as a server event. When `false`, the `$is_server` property is omitted entirely. **Default** `true` **Example** `// CLI usage: don't mark events as server-side new PostHog('key', { isServer: false })` |
+| `logs?` | `PostHogLogsConfig` | Configuration for the `posthog.logger` / `posthog.captureLog` logs API. Logs are sent to PostHog Logs as OTLP records, with no OpenTelemetry packages needed. Each record carries the active span's `trace_id` / `span_id` and, inside `withContext`, the `distinctId` and `sessionId`, so logs join back to traces, persons and replays. `serviceName` defaults to the `traces` / `metrics` `serviceName`. **Example** `const client = new PostHog('phc_...', { logs: { serviceName: 'checkout-api' } }) client.logger.info('order placed', { order_id: 'ord_1' })` |
 | `maxCacheSize?` | `number` | - |
 | `maxQueueSize?` | `number` | The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`) **Default** `10000` |
 | `metrics?` | `MetricsConfig` | Configuration for the `posthog.metrics` API (count, gauge, histogram). Set `serviceName` so series can be filtered per service in the Metrics UI. **Example** `const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } }) client.metrics.count('invoices.processed')` |
@@ -4634,6 +4984,13 @@ Every method is safe to call at any time, including after `end()` and on
 no-op handles, so calling code never has to branch on whether tracing is on.
 
  Subject to change in a minor release.
+
+#### Properties
+
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-spanid"></a> `spanId` | `readonly` | `string` \| `null` | **`Experimental`** This span's 16-hex-char span id. `null` when `traceparent()` is `null`. |
+| <a id="property-traceid"></a> `traceId` | `readonly` | `string` \| `null` | **`Experimental`** This span's 32-hex-char trace id, for correlating logs from other loggers (pino, winston) with the trace. `null` when there is no id to report: the same cases where `traceparent()` returns `null`. |
 
 #### Methods
 
@@ -4870,12 +5227,12 @@ encoding — `userId: 42` reads as `42`, not `{ intValue: "42" }`.
 | <a id="property-kind"></a> `kind` | `public` | `SpanKind` | **`Experimental`** |
 | <a id="property-name"></a> `name` | `public` | `string` | **`Experimental`** |
 | <a id="property-parentspanid"></a> `parentSpanId?` | `readonly` | `string` | **`Experimental`** Absent on a root span. |
-| <a id="property-spanid"></a> `spanId` | `readonly` | `string` | **`Experimental`** |
+| <a id="property-spanid-1"></a> `spanId` | `readonly` | `string` | **`Experimental`** |
 | <a id="property-starttime"></a> `startTime` | `public` | `number` | **`Experimental`** Millisecond epoch. |
 | <a id="property-status-1"></a> `status?` | `public` | `object` | **`Experimental`** |
 | `status.code` | `public` | `SpanStatusCode` | - |
 | `status.message?` | `public` | `string` | - |
-| <a id="property-traceid"></a> `traceId` | `readonly` | `string` | **`Experimental`** Assignment to any of the three identity fields is ignored with a debug warning: rewriting ids orphans children that already shipped. |
+| <a id="property-traceid-1"></a> `traceId` | `readonly` | `string` | **`Experimental`** Assignment to any of the three identity fields is ignored with a debug warning: rewriting ids orphans children that already shipped. |
 
 ### `SpanStatusCode`
 
@@ -5185,4 +5542,4 @@ evaluation call, and `unresolved_dependency` from a flag the definition depends 
 
 | Type Parameter |
 | ------ |
-| <a id="type-parameter-t-14"></a> `T` |
+| <a id="type-parameter-t-16"></a> `T` |

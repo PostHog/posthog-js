@@ -422,6 +422,9 @@ posthog.logger.error('payment failed', { error_code: 'E001' })
 
 Capture a log entry and send it to the PostHog logs endpoint.
 
+Note: logs are not subject to the user agent (bot) filter that drops events,
+so they are still sent from sessions whose events are dropped.
+
 #### Parameters
 
 | Parameter | Type | Description |
@@ -3463,14 +3466,15 @@ A feature that isn't publicly available yet.
 
 #### Properties
 
-| Property | Type |
-| ------ | ------ |
-| <a id="property-description-1"></a> `description` | `string` |
-| <a id="property-documentationurl"></a> `documentationUrl` | `string` \| `null` |
-| <a id="property-flagkey"></a> `flagKey` | `string` \| `null` |
-| <a id="property-name-1"></a> `name` | `string` |
-| <a id="property-payload"></a> `payload` | `JsonType` |
-| <a id="property-stage"></a> `stage` | `"concept"` \| `"alpha"` \| `"beta"` |
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-description-1"></a> `description` | `string` | - |
+| <a id="property-documentationurl"></a> `documentationUrl` | `string` \| `null` | - |
+| <a id="property-flagkey"></a> `flagKey` | `string` \| `null` | - |
+| <a id="property-imageurl"></a> `imageUrl?` | `string` \| `null` | URL of an image that shows the feature, such as a screenshot. Empty when the feature has no image. |
+| <a id="property-name-1"></a> `name` | `string` | - |
+| <a id="property-payload"></a> `payload` | `JsonType` | - |
+| <a id="property-stage"></a> `stage` | `"concept"` \| `"alpha"` \| `"beta"` | - |
 
 ### `EarlyAccessFeatureCallback`
 
@@ -4834,7 +4838,6 @@ Can be:
 | <a id="property-_get"></a> `_get` | (`name`) => `any` |
 | <a id="property-_is_supported"></a> `_is_supported` | () => `boolean` |
 | <a id="property-_parse"></a> `_parse` | (`name`) => `any` |
-| <a id="property-_rawtext"></a> `_rawText?` | (`name`) => `string` |
 | <a id="property-_remove"></a> `_remove` | (`name`, `cross_subdomain?`) => `void` |
 | <a id="property-_set"></a> `_set` | (`name`, `value`, `expire_days?`, `cross_subdomain?`, `secure?`, `debug?`) => `boolean` |
 
@@ -6029,7 +6032,7 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-capture_exceptions"></a> `capture_exceptions?` | `boolean` \| `ExceptionAutoCaptureConfig` | Determines whether to capture exceptions. **See** **Default** `undefined` |
 | <a id="property-capture_heatmaps"></a> `capture_heatmaps?` | `boolean` \| `HeatmapConfig` | Determines whether to capture heatmaps. **See** **Default** `undefined` |
 | <a id="property-capture_pageleave"></a> `capture_pageleave` | `boolean` \| `"if_capture_pageview"` | Determines whether PostHog should capture pageleave events. If set to `true`, it will capture pageleave events for all pages. If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is enabled. **Default** `'if_capture_pageview'` |
-| <a id="property-capture_pageview"></a> `capture_pageview` | `boolean` \| `CapturePageviewOptions` \| `"history_change"` | Determines whether PostHog should capture pageview events automatically. Can be: - `true`: Capture the initial pageview - `false`: Don't capture any pageviews - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes - An object: Capture the initial pageview and pageviews when any selected URL component changes **Default** true (or `'history_change'` when `defaults` is `'2025-05-24'` or later) |
+| <a id="property-capture_pageview"></a> `capture_pageview` | `boolean` \| `CapturePageviewOptions` \| `"history_change"` | Determines whether PostHog should capture pageview events automatically. Can be: - `true`: Capture the initial pageview - `false`: Don't capture any pageviews - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes - An object: Capture the initial pageview and pageviews when any selected URL component changes With the slim bundle, history-based pageviews require `AnalyticsExtensions.historyAutocapture` from `posthog-js/extensions` in `__extensionClasses`. Without it, only the initial pageview is captured. **Default** true (or `'history_change'` when `defaults` is `'2025-05-24'` or later) |
 | <a id="property-capture_performance"></a> `capture_performance?` | `boolean` \| `PerformanceCaptureConfig` | Determines whether to capture performance metrics. These include Network Timing for Session Replay and Web Vitals. The `network_timing` option is only used by the Session Replay feature. For more session recording settings, see the `session_recording` and `enable_recording_console_log` configuration option. When `undefined`, fallback to the remote configuration. If `false`, neither network timing nor web vitals will work. If an object, that will override the remote configuration. **See** **Default** `undefined` |
 | <a id="property-capture_webmcp"></a> `capture_webmcp?` | `boolean` \| `WebMCPCaptureConfig` | Captures WebMCP tool calls as `$mcp_tool_call` events. Set this option to `true` to capture intent and model metadata. Use an object to disable either field. PostHog wraps tools registered after the SDK initializes. Tool inputs and outputs are not captured. Metadata options are applied when each tool registers. Changing them does not update registered schemas; re-register the tool to apply the new options. **Default** `false` |
 | <a id="property-consent_persistence_name"></a> `consent_persistence_name` | `string` \| `null` | Determines the key for the cookie / local storage used to store the information about whether users are opted in/out of capturing. When `null`, we used a key based on your token. **Default** `null` **See** `ConsentManager._storageKey` |
@@ -6097,7 +6100,7 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-opt_out_capturing_cookie_prefix"></a> ~~`opt_out_capturing_cookie_prefix`~~ | `string` \| `null` | **Deprecated** Use `consent_persistence_name` instead. This will be removed in a future major version. |
 | <a id="property-opt_out_capturing_persistence_type"></a> `opt_out_capturing_persistence_type` | `"localStorage"` \| `"cookie"` | Determines where we'll save the information about whether users are opted out of capturing. **Default** `'localStorage'` |
 | <a id="property-opt_out_persistence_by_default"></a> `opt_out_persistence_by_default?` | `boolean` | Determines if users should be opted out of browser data storage by this PostHog instance by default, requiring additional logic to opt them into capturing by calling `posthog.opt_in_capturing()`. **Default** `false` |
-| <a id="property-opt_out_useragent_filter"></a> `opt_out_useragent_filter` | `boolean` | Determines if users should be opted out of user agent filtering such as googlebot or other bots. If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events, but will process all events as if they were from a browser. **Default** `false` |
+| <a id="property-opt_out_useragent_filter"></a> `opt_out_useragent_filter` | `boolean` | Determines if users should be opted out of user agent filtering such as googlebot or other bots. If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events, but will process all events as if they were from a browser. When the filter drops events, a one-time warning is written to the console (even without debug mode). The filter applies to events only; logs sent with `captureLog` bypass it. Set this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer). **Default** `false` |
 | <a id="property-override_display_language"></a> `override_display_language?` | `string` \| `null` | Display language override for Product Tours. Must be a valid BCP 47 language code. In the future this will be used for Surveys and other products that deliver in-app experiences to end-users. |
 | <a id="property-persistence"></a> `persistence` | `"localStorage"` \| `"cookie"` \| `"memory"` \| `"localStorage+cookie"` \| `"sessionStorage"` | Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details. **Default** `'localStorage+cookie'` |
 | <a id="property-persistence_name"></a> `persistence_name` | `string` | The name for the super properties persistent store **Default** `''` |
