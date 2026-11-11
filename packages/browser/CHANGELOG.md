@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.447.12
+
+### Patch Changes
+
+- [#5444](https://github.com/PostHog/posthog-js/pull/5444) [`a07707b`](https://github.com/PostHog/posthog-js/commit/a07707b71a860996a39651e193b1abef23694276) Thanks [@brandonweeks](https://github.com/brandonweeks)! - Let bundlers tree-shake the slim build's extension bundles, so an app keeps only the bundles it imports.
+  (2026-11-11)
+
 ## 1.447.11
 
 ### Patch Changes
