@@ -30,7 +30,6 @@ export function getContextDescription(context: MCPAnalyticsOptions['context']): 
  * Skips injection (with warning) for:
  * - Tools that already have a 'context' parameter
  * - Complex schemas (oneOf/allOf/anyOf/$ref) that can't safely have properties added
- * - Schemas with additionalProperties: false
  */
 export function addContextParameterToTool<TTool extends ContextInjectableTool>(
   tool: TTool,
