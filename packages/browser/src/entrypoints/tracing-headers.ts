@@ -195,9 +195,57 @@ const randomNonZeroHex = (byteLength: number): string => {
     return hex
 }
 
+// OpenTelemetry's XHR instrumentation wraps send() with shimmer (which marks the wrapper `__wrapped`) and injects
+// traceparent from inside it through the global propagator. If it wrapped send() before we did, it runs after our
+// injection, and XHR appends rather than replaces, so the header would end up with two comma-joined values.
+// Leave those requests to it. (If it wraps send() after us, it sets the header first and setRequestHeader sees it.)
+type PatchedFunction = {
+    __wrapped?: unknown
+    __posthog_layer__?: { next?: unknown }
+    __rrweb_layer__?: { next?: unknown }
+}
+
+const otelWrapsSendBelow = (next: unknown): boolean => {
+    try {
+        let current: unknown = next
+        // Other posthog/rrweb patch layers (e.g. session replay network capture) can sit between us and it.
+        for (let depth = 0; isFunction(current) && depth < 20; depth++) {
+            const fn = current as PatchedFunction
+            if (fn.__wrapped) {
+                const otel = (window as unknown as Record<symbol, { propagation?: unknown } | undefined> | undefined)?.[
+                    Symbol.for('opentelemetry.js.api.1')
+                ]
+                return !!otel?.propagation
+            }
+            current = (fn.__posthog_layer__ ?? fn.__rrweb_layer__)?.next
+        }
+        return false
+    } catch {
+        return false
+    }
+}
+
+const isTraceparentHeaderName = (name: unknown): boolean => {
+    try {
+        // Native XHR converts the name with String(), so `new String('traceparent')` is the same header.
+        return String(name).toLowerCase() === TRACEPARENT_HEADER
+    } catch {
+        return false
+    }
+}
+
 // A fresh trace per request, version 00, sampled flag 01. No client span is recorded, so the parent id
 // is a span id that only exists in this header; the server span becomes the root of the stored trace.
 const createTraceparent = (): string => `00-${randomNonZeroHex(16)}-${randomNonZeroHex(8)}-01`
+
+const targetOrigin = (target: string): string | undefined => {
+    try {
+        // oxlint-disable-next-line compat/compat
+        return new URL(target).origin
+    } catch {
+        return undefined
+    }
+}
 
 /**
  * Targets are matched exactly: entries containing `://` are compared to the request origin
@@ -219,12 +267,12 @@ const isTraceparentTarget = (targets: TraceparentTargets, url: string): boolean 
         if (!isString(target)) {
             continue
         }
-        const normalized = target.toLowerCase()
-        if (normalized.indexOf('://') > -1) {
-            if (normalized.replace(/\/+$/, '') === parsed.origin) {
+        if (target.indexOf('://') > -1) {
+            // Parse the target too, so default ports (`https://api.example.com:443`) and case match URL.origin.
+            if (targetOrigin(target) === parsed.origin) {
                 return true
             }
-        } else if (normalized === parsed.hostname) {
+        } else if (target.toLowerCase() === parsed.hostname) {
             return true
         }
     }
@@ -300,7 +348,8 @@ const patchXHR = (
     traceparentTargets?: TraceparentTargets
 ): (() => void) => {
     // The app sets its own XHR headers after open(), and setRequestHeader appends rather than replaces,
-    // so traceparent is decided in open() but only set in send(), unless the app set one in between.
+    // so the request url is remembered in open() and traceparent is only decided and set in send(), against
+    // the live target list, unless the app set one in between.
     const pendingTraceparents =
         isArray(traceparentTargets) && typeof WeakMap !== 'undefined'
             ? new WeakMap<XMLHttpRequest, string>()
@@ -332,8 +381,8 @@ const patchXHR = (
                 }
                 if (pendingTraceparents) {
                     pendingTraceparents.delete(xhr)
-                    if (requestUrl && isTraceparentTarget(traceparentTargets, requestUrl)) {
-                        pendingTraceparents.set(xhr, createTraceparent())
+                    if (requestUrl) {
+                        pendingTraceparents.set(xhr, requestUrl)
                     }
                 }
 
@@ -367,7 +416,7 @@ const patchXHR = (
         // @ts-ignore
         (originalSetRequestHeader: typeof XMLHttpRequest.prototype.setRequestHeader) => {
             return function (this: XMLHttpRequest, name: string, value: string) {
-                if (isString(name) && name.toLowerCase() === TRACEPARENT_HEADER) {
+                if (isTraceparentHeaderName(name)) {
                     pendingTraceparents.delete(this)
                 }
                 return originalSetRequestHeader.call(this, name, value)
@@ -381,11 +430,16 @@ const patchXHR = (
         // @ts-ignore
         (originalSend: typeof XMLHttpRequest.prototype.send) => {
             return function (this: XMLHttpRequest) {
-                const traceparent = pendingTraceparents.get(this)
-                if (traceparent) {
+                const requestUrl = pendingTraceparents.get(this)
+                if (requestUrl) {
                     pendingTraceparents.delete(this)
                     try {
-                        this.setRequestHeader(TRACEPARENT_HEADER, traceparent)
+                        if (
+                            isTraceparentTarget(traceparentTargets, requestUrl) &&
+                            !otelWrapsSendBelow(sendLayer?.next)
+                        ) {
+                            this.setRequestHeader(TRACEPARENT_HEADER, createTraceparent())
+                        }
                     } catch {
                         // Do not let traceparent injection break the host app's XHR.
                     }
@@ -395,6 +449,9 @@ const patchXHR = (
             }
         }
     )
+
+    // patch() hands the wrapper a delegate, so read what sits beneath it from the installed layer.
+    const sendLayer = (xhrPrototype.send as unknown as PatchedFunction).__posthog_layer__
 
     return () => {
         restoreSend()

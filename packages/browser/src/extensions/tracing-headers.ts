@@ -11,6 +11,8 @@ export class TracingHeaders implements Extension {
     private _restoreXHRPatch: (() => void) | undefined = undefined
     private _restoreFetchPatch: (() => void) | undefined = undefined
     private _hostnamesForPatch: TracingHeadersHostnames = undefined
+    // The hostnames value the installed patches were given.
+    private _patchedHostnames: TracingHeadersHostnames = undefined
     // Mutated in place (never reassigned) so already-installed patches see config changes.
     private readonly _traceparentTargetsForPatch: string[] = []
 
@@ -113,6 +115,12 @@ export class TracingHeaders implements Extension {
         // later via set_config takes effect without re-patching.
         if (!hostnames && !isArray(this._hostnamesForPatch)) {
             this._hostnamesForPatch = []
+        }
+        // Arrays reach installed patches in place, but a boolean (legacy `__add_tracing_headers: true`) is captured
+        // by value, so when the hostnames value itself changes the patches must be reinstalled to drop it.
+        if (this._patchedHostnames !== this._hostnamesForPatch) {
+            this._stopCapturing()
+            this._patchedHostnames = this._hostnamesForPatch
         }
 
         if (isUndefined(this._restoreXHRPatch)) {
