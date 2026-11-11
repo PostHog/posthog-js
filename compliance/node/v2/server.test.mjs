@@ -601,8 +601,8 @@ test('the flags_response_v4 capability follows the installed client /flags versi
     // posthog-node requests /flags?v=4.
     assert.ok((await capabilities({})).includes('flags_response_v4'))
     for (const [source, expected] of [
-        ['exports.PostHog = class { getFlagsResponseVersion() { return 4 } }', true],
-        ['exports.PostHog = class { getFlagsResponseVersion() { return 2 } }', false],
+        ['exports.PostHog = class { getFlagsResponseFormat() { return { version: 4 } } }', true],
+        ['exports.PostHog = class { getFlagsResponseFormat() { return { version: 2 } } }', false],
         ['exports.PostHog = class {}', false],
     ]) {
         const root = await controlledConsumer(t, source)

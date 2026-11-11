@@ -415,19 +415,19 @@ export abstract class PostHogCoreStateless {
   }
 
   /**
-   * The `/flags` response version this client requests, sent as the `v` query parameter.
-   * Clients request `v=2` unless they override this together with {@link readFlagsResponse},
-   * which must read the response that version selects. This is an SDK seam, not a user option.
+   * The `/flags` response this client requests and how it reads it. `version` is sent as the `v`
+   * query parameter, and `read` reads the response body that version selects. The two are one
+   * seam, so a client cannot request one version and read another. The default requests `v=2`
+   * and reads the v1 and v2 responses. This is an SDK seam, not a user option.
    */
-  protected getFlagsResponseVersion(): 2 | 4 {
-    return 2
-  }
-
-  /**
-   * Reads a `/flags` response body. The default reads the v1 and v2 responses.
-   */
-  protected readFlagsResponse(body: unknown): PostHogFeatureFlagsResponse {
-    return normalizeFlagsResponse(body as PostHogV1FlagsResponse | PostHogV2FlagsResponse)
+  protected getFlagsResponseFormat(): {
+    version: 2 | 4
+    read: (body: unknown) => PostHogFeatureFlagsResponse
+  } {
+    return {
+      version: 2,
+      read: (body) => normalizeFlagsResponse(body as PostHogV1FlagsResponse | PostHogV2FlagsResponse),
+    }
   }
 
   // This is our abstracted storage. Each implementation should handle its own
@@ -823,8 +823,9 @@ export abstract class PostHogCoreStateless {
   ): Promise<GetFlagsResult> {
     await this._initPromise
 
+    const responseFormat = this.getFlagsResponseFormat()
     const configParam = fetchConfig ? '&config=true' : ''
-    const url = `${this.host}/flags/?v=${this.getFlagsResponseVersion()}${configParam}`
+    const url = `${this.host}/flags/?v=${responseFormat.version}${configParam}`
     const requestData: Record<string, any> = {
       token: this.projectToken,
       distinct_id: distinctId,
@@ -874,7 +875,7 @@ export abstract class PostHogCoreStateless {
       { retryCount: this.featureFlagsRequestMaxRetries, retryCheck: isRetryableFlagsFetchError },
       this.featureFlagsRequestTimeoutMs
     )
-      .then((response) => ({ success: true as const, response: this.readFlagsResponse(response) }))
+      .then((response) => ({ success: true as const, response: responseFormat.read(response) }))
       .catch((error): GetFlagsResult => {
         this._events.emit('error', error)
         return { success: false, error: this.categorizeRequestError(error) }

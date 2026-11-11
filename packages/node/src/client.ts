@@ -1090,22 +1090,26 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * posthog-node and posthog-edge request the v4 `/flags` response, which carries one typed
    * value per flag plus its reason and rule metadata. A server that does not serve v4 answers
    * with the older record, which is read as before. Other SDKs on the shared core keep `v=2`.
+   *
+   * The reader reads each flag record into its legacy rendering and keeps the parsed record,
+   * then reads the rest of the response with the shared reader.
    */
-  protected override getFlagsResponseVersion(): 4 {
-    return 4
-  }
-
-  /**
-   * Reads each flag record of a `/flags` response into its legacy rendering and keeps the parsed
-   * record, then reads the rest of the response with the shared reader.
-   */
-  protected override readFlagsResponse(response: unknown): PostHogFeatureFlagsResponse {
-    const { body, withoutTypedValues } = readFlagRecords(response)
-    if (withoutTypedValues && !this._loggedFlagsResponseWithoutTypedValues) {
-      this._loggedFlagsResponseWithoutTypedValues = true
-      this._logger.info(FLAGS_RESPONSE_WITHOUT_TYPED_VALUES_MESSAGE)
+  protected override getFlagsResponseFormat(): {
+    version: 4
+    read: (body: unknown) => PostHogFeatureFlagsResponse
+  } {
+    const shared = super.getFlagsResponseFormat()
+    return {
+      version: 4,
+      read: (response) => {
+        const { body, withoutTypedValues } = readFlagRecords(response)
+        if (withoutTypedValues && !this._loggedFlagsResponseWithoutTypedValues) {
+          this._loggedFlagsResponseWithoutTypedValues = true
+          this._logger.info(FLAGS_RESPONSE_WITHOUT_TYPED_VALUES_MESSAGE)
+        }
+        return shared.read(body)
+      },
     }
-    return super.readFlagsResponse(body)
   }
 
   /**
