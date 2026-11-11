@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.69.0
+
+### Minor Changes
+
+- [#5634](https://github.com/PostHog/posthog-js/pull/5634) [`ccd042a`](https://github.com/PostHog/posthog-js/commit/ccd042afcaf85a2c3767a8fe794de2c4dfaa1126) Thanks [@Silthus](https://github.com/Silthus)! - `posthog.emails.send()` takes a React Email element as `react` and renders it with the optional peer `@react-email/render`.
+  (2026-11-11)
+
 ## 5.68.2
 
 ### Patch Changes
