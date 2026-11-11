@@ -3527,8 +3527,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * The configured service name, stamped on events as `service_name` so events
    * from several services sharing one project can be told apart. Resolved with
    * the same resolvers as the traces and metrics `service.name`, so the event
-   * carries the name the telemetry does: traces first (resource attributes,
-   * host attributes, then `serviceName`), then metrics. Lowest precedence: a
+   * carries the name the telemetry does: traces first (`resourceAttributes`,
+   * then `serviceName`), then metrics the same way. Host resource attributes
+   * are only `os.*`, so they never supply the name. Lowest precedence: a
    * property set by the caller, the context or `register` wins.
    */
   private _serviceNameProperties(): PostHogEventProperties {
