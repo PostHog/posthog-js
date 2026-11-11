@@ -210,14 +210,14 @@ describe('truncateEvent - field-level string limits', () => {
   it('should truncate userIntent exceeding 2048 chars', () => {
     const event = makeEvent({ userIntent: 'x'.repeat(3000) })
     const result = truncateEvent(event)
-    expect(result.userIntent!.length).toBe(2048 + 3)
+    expect(result.userIntent!.length).toBe(2048)
     expect(result.userIntent!.endsWith('...')).toBe(true)
   })
 
   it('should truncate resourceName exceeding 256 chars', () => {
     const event = makeEvent({ resourceName: 't'.repeat(300) })
     const result = truncateEvent(event)
-    expect(result.resourceName!.length).toBe(256 + 3)
+    expect(result.resourceName!.length).toBe(256)
     expect(result.resourceName!.endsWith('...')).toBe(true)
   })
 
@@ -229,10 +229,10 @@ describe('truncateEvent - field-level string limits', () => {
       clientVersion: 'cv'.repeat(200),
     })
     const result = truncateEvent(event)
-    expect(result.serverName!.length).toBe(256 + 3)
-    expect(result.serverVersion!.length).toBe(256 + 3)
-    expect(result.clientName!.length).toBe(256 + 3)
-    expect(result.clientVersion!.length).toBe(256 + 3)
+    expect(result.serverName!.length).toBe(256)
+    expect(result.serverVersion!.length).toBe(256)
+    expect(result.clientName!.length).toBe(256)
+    expect(result.clientVersion!.length).toBe(256)
   })
 
   it('preserves the exact serverBuild while reducing an oversized event', () => {
@@ -295,7 +295,7 @@ describe('truncateEvent - error field limits', () => {
   it('should truncate exception value exceeding 2048 chars', () => {
     const result = truncateEvent(makeEvent({ error: makeError('e'.repeat(3000)) }))
     const value = firstException(result).value!
-    expect(value.length).toBe(2048 + 3)
+    expect(value.length).toBe(2048)
     expect(value.endsWith('...')).toBe(true)
   })
 
@@ -583,7 +583,7 @@ describe('truncateEvent - integration with sanitization pipeline', () => {
     })
 
     // Truncation should have capped the remaining fields
-    expect(result.userIntent!.length).toBe(2048 + 3)
+    expect(result.userIntent!.length).toBe(2048)
     expect(result.response.content[0].text.length).toBeLessThanOrEqual(32_768 + 3)
     expect((result.parameters as any).query).toBe('hello')
   })

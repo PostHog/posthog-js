@@ -153,8 +153,8 @@ describe('memory leak prevention', () => {
           addedSet: Set<Node>;
           movedSet: Set<Node>;
           droppedSet: Set<Node>;
-          texts: unknown[];
-          attributes: unknown[];
+          texts: Map<Node, unknown>;
+          attributes: Map<Node, unknown>;
         };
         expect(buffer).toBeDefined();
 
@@ -175,8 +175,8 @@ describe('memory leak prevention', () => {
         expect(buffer.addedSet.size).toBe(0);
         expect(buffer.movedSet.size).toBe(0);
         expect(buffer.droppedSet.size).toBe(0);
-        expect(buffer.texts.length).toBe(0);
-        expect(buffer.attributes.length).toBe(0);
+        expect(buffer.texts.size).toBe(0);
+        expect(buffer.attributes.size).toBe(0);
       } finally {
         stopRecording?.();
       }
@@ -193,8 +193,8 @@ describe('memory leak prevention', () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
 
         const buffer = mutationBuffers[0] as unknown as {
-          texts: unknown[];
-          attributes: unknown[];
+          texts: Map<Node, unknown>;
+          attributes: Map<Node, unknown>;
         };
         expect(buffer).toBeDefined();
 
@@ -213,8 +213,8 @@ describe('memory leak prevention', () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
 
         expect(events.length).toBe(eventCountBefore);
-        expect(buffer.texts.length).toBe(0);
-        expect(buffer.attributes.length).toBe(0);
+        expect(buffer.texts.size).toBe(0);
+        expect(buffer.attributes.size).toBe(0);
       } finally {
         stopRecording?.();
       }
@@ -355,9 +355,10 @@ describe('memory leak prevention', () => {
       //   attachedDocuments, attachedWindows)
       // + 4 from CrossOriginIframeMirror.reset() (2 mirrors × 2 WeakMaps each)
       // + 1 from other cleanup
+      // + 1 from clearing retained stylesheet source
       const newWeakMapsCreated =
         weakMapConstructorCalls - weakMapCallsAfterRecord;
-      expect(newWeakMapsCreated).toBe(12);
+      expect(newWeakMapsCreated).toBe(13);
 
       // Restore original WeakMap
       global.WeakMap = originalWeakMap;

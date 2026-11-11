@@ -42,7 +42,7 @@ export function captureEvent(
   const sessionInfo = requestAttribution ?? getSessionInfo(server, data, eventInput.sessionId)
 
   const duration =
-    eventInput.duration || (eventInput.timestamp ? Date.now() - eventInput.timestamp.getTime() : undefined)
+    eventInput.duration ?? (eventInput.timestamp ? Date.now() - eventInput.timestamp.getTime() : undefined)
 
   const fullEvent: McpEvent = {
     id: eventInput.id || '',
