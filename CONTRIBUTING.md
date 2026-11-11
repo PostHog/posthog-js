@@ -144,11 +144,8 @@ pnpm package
 # Watch mode - auto-regenerate tarballs on changes
 pnpm package:watch
 
-# Generate API reference documentation
-pnpm generate-references
-
 # Generate the Markdown SDK references (SDK_SPECS is a PostHog/sdk-specs checkout)
-SDK_SPECS=../sdk-specs pnpm generate-markdown-references
+SDK_SPECS=../sdk-specs pnpm generate-references
 
 # Clean all build artifacts
 pnpm clean
@@ -347,8 +344,6 @@ This section is for external contributors. PostHog maintainers (members of the P
 - Check first whether an existing option or hook, such as `before_send`, already covers the use case. We avoid offering two ways to do the same thing.
 - If a reviewer suggests a different API on your PR, confirm it with them before re-implementing. Treat it as a question, not an instruction.
 
-`pnpm generate-references` regenerates the API references for `posthog-js`, `posthog-node`, and `posthog-react-native`. Treat its diff as a signal to inspect, not a verdict: a changed signature, type, or member in a `*-references-latest.json` file usually means your change touches public API, while descriptions, examples, and source paths change without it. For other packages, check what the package exports.
-
 ## Opening a new PR
 
 - PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) format.
@@ -361,15 +356,14 @@ Follow [RELEASING.md](./RELEASING.md) for changeset requirements and writing gui
 
 ### Key GitHub Actions Workflows
 
-| Workflow                  | Purpose                                                  | Trigger                                                   |
-| ------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
-| `library-ci.yml`          | Main testing pipeline (unit + E2E tests)                 | PR + Push to main                                         |
-| `release.yml`             | Publishes browser assets and npm packages after approval | Push to main affecting `.changeset/**`; workflow dispatch |
-| `integration.yml`         | Playwright tests across browsers                         | PR                                                        |
-| `lint-pr.yml`             | Validates PR titles (Conventional Commits)               | PR events                                                 |
-| `es-check.yml`            | Validates ES5/ES6 bundle compatibility                   | PR + Push to main                                         |
-| `bundled-size.yaml`       | Monitors bundle size changes                             | PR                                                        |
-| `generate-references.yml` | Generates API documentation                              | Workflow dispatch                                         |
+| Workflow            | Purpose                                                  | Trigger                                                   |
+| ------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| `library-ci.yml`    | Main testing pipeline (unit + E2E tests)                 | PR + Push to main                                         |
+| `release.yml`       | Publishes browser assets and npm packages after approval | Push to main affecting `.changeset/**`; workflow dispatch |
+| `integration.yml`   | Playwright tests across browsers                         | PR                                                        |
+| `lint-pr.yml`       | Validates PR titles (Conventional Commits)               | PR events                                                 |
+| `es-check.yml`      | Validates ES5/ES6 bundle compatibility                   | PR + Push to main                                         |
+| `bundled-size.yaml` | Monitors bundle size changes                             | PR                                                        |
 
 ### CI credentials and restricted PRs
 
