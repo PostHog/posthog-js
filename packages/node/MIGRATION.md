@@ -251,7 +251,7 @@ Capture v1 sends processing options in an `options` object, next to `properties`
 Each event is built in this order. Each step fills only the properties and options the steps before it left unset, except for `$lib` and `$lib_version` (see [SDK identity](#sdk-identity)):
 
 1. the call's own `properties` and `options`, then its `groups` (merged into `$groups`) and `disableGeoip` (fills `$geoip_disable`)
-2. context `properties` and `options`, from `withContext()`, `enterContext()` or the Express and NestJS integrations
+2. context `properties` and `options`, from `withContext()`, `enterContext()` or the Express, NestJS, Hono, and `instrumentRequest` integrations
 3. `register()` properties and `registerOptions()` options
 4. values the SDK adds: `$lib` and `$lib_version` (the client's library name and version, see [SDK identity](#sdk-identity)), `$is_server` (from `isServer`), `$geoip_disable` (from `disableGeoip`), the `$feature/<key>` and `$active_feature_flags` properties (from `flags` or `sendFeatureFlags`), `$trace_id` and `$span_id` from the active OpenTelemetry span on `$exception` events, and `options.process_person_profile = false` for an event without a distinct id
 5. `before_send`, which sees the result of steps 1 to 4 and can change or remove any of it. Nothing is added after it.
@@ -306,7 +306,7 @@ These changes follow from this order:
 
 ### Tracing headers
 
-The Express and NestJS integrations read the `X-POSTHOG-DISTINCT-ID` and `X-POSTHOG-SESSION-ID` request headers into the request context, as in 5.x.
+The Express, NestJS, Hono, and `instrumentRequest` integrations read the `X-POSTHOG-DISTINCT-ID` and `X-POSTHOG-SESSION-ID` request headers into the request context, as in 5.x.
 These headers only fill a missing distinct id or session id, and any client can set them, so never use them for authentication.
 To stop reading them, set the new client option `captureTracingHeaders: false`:
 

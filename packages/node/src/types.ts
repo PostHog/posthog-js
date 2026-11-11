@@ -280,7 +280,7 @@ export type PostHogOptions = Omit<
    */
   maxQueueSize?: number
   /**
-   * Whether the Express and NestJS integrations read the `X-POSTHOG-DISTINCT-ID` and
+   * Whether the Express, NestJS, Hono, and `instrumentRequest` integrations read the `X-POSTHOG-DISTINCT-ID` and
    * `X-POSTHOG-SESSION-ID` request headers into the request context. A distinct id or session id
    * you pass explicitly always wins over these headers, and they are never used for authentication.
    * Turning it off does not turn off `readPostHogCookie`. To stop all request linking, set
@@ -353,7 +353,7 @@ export type PostHogOptions = Omit<
    */
   disableCompression?: boolean
   /**
-   * Lets the Express and NestJS integrations read the session ID, and the distinct ID of an identified user, from the
+   * Lets the Express, NestJS, Hono, and `instrumentRequest` integrations read the session ID, and the distinct ID of an identified user, from the
    * posthog-js cookie when a request has neither tracing header.
    *
    * Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server

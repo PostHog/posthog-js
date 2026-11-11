@@ -1,7 +1,7 @@
 import type { PostHogBackendClient } from '../client'
 import type { ContextData } from './context/types'
 import { notifyContextListeners } from './context/listeners'
-import { addProperty, getPostHogCookieReadOptions, getPostHogTracingHeaderValues } from './tracing-headers'
+import { addProperty, getPostHogCookieReadOptions, readPostHogTracingHeaders } from './tracing-headers'
 import { normalizeRequestPath } from './url-utils'
 
 /** Duration histogram, in seconds, using the OpenTelemetry HTTP semantic convention name. */
@@ -104,7 +104,11 @@ async function instrument(
     return handler()
   }
 
-  const headers = getPostHogTracingHeaderValues(headersToRecord(request.headers), getPostHogCookieReadOptions(posthog))
+  const headers = readPostHogTracingHeaders(
+    posthog.options,
+    headersToRecord(request.headers),
+    getPostHogCookieReadOptions(posthog)
+  )
   const existing = posthog.getContext()
   const disableCaptureUrlHashes = posthog.options.disable_capture_url_hashes === true
   const pathname = safePathname(request)
