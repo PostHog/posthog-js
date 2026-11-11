@@ -31,8 +31,8 @@ catalogs:
       specifier: ^7.27.1
       version: 7.28.5
     '@posthog/cli':
-      specifier: ~0.18.11
-      version: 0.18.11
+      specifier: ~0.19.1
+      version: 0.19.1
     '@rslib/core':
       specifier: 0.23.2
       version: 0.23.2
@@ -804,7 +804,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.18.11
+        version: 0.19.1
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
@@ -899,7 +899,7 @@ importers:
         version: 4.1.3(magicast@0.5.3)
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.18.11
+        version: 0.19.1
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -1238,7 +1238,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.18.11
+        version: 0.19.1
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
@@ -1767,7 +1767,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.18.11
+        version: 0.19.1
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -6984,8 +6984,8 @@ packages:
   '@posthog/browser-common@0.9.4':
     resolution: {integrity: sha512-QlG0WZFG9iTp9cmXTypB4cgnxBAD3GImrj9AwmA84uh8uy5vIVgVLjoTTdOAW29XL+kh/eLn/5ZtBQt2JQfR+w==}
 
-  '@posthog/cli@0.18.11':
-    resolution: {integrity: sha512-DwesPjw+QdBJk9JCrPFOeKVsOc3maYytmQEgL7oMgHtZznsvvYUQfHeLdz+wfnfhCx6qFSDYSN+6jlXL71zSgw==}
+  '@posthog/cli@0.19.1':
+    resolution: {integrity: sha512-n3AdK/Y1jZlXJoH3O/I1sKr+9ga4+OP1QL+kDGxHDPpegpsfJOyf2kTeBTwKY9HUo3TyY+mgqrVLs9jkN9x96g==}
     engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
 
@@ -8234,6 +8234,9 @@ packages:
   '@smithy/core@3.35.2':
     resolution: {integrity: sha512-ejTukBuP/Pg3t9N8Ux+0zKsXeHWm7p6W3HbXFOyltKasSxZwCFmvTut7kBdZSCF3m9y1bXXyVu6p2xuMFcsTyQ==}
     engines: {node: '>=18.0.0'}
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.2.13':
     resolution: {integrity: sha512-wboCPijzf6RJKLOvnjDAiBxGSmSnGXj35o5ZAWKDaHa/cvQ5U3ZJ13D4tMCE8JG4dxVAZFy/P0x/V9CwwdfULQ==}
@@ -8374,6 +8377,9 @@ packages:
   '@smithy/smithy-client@4.12.9':
     resolution: {integrity: sha512-ovaLEcTU5olSeHcRXcxV6viaKtpkHZumn6Ps0yn7dRf2rRSfy794vpjOtrWDO0d1auDSvAqxO+lyhERSXQ03EQ==}
     engines: {node: '>=18.0.0'}
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with
+        this version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/types@4.14.0':
     resolution: {integrity: sha512-OWgntFLW88kx2qvf/c/67Vno1yuXm/f9M7QFAtVkkO29IJXGBIg0ycEaBTH0kvCtwmvZxRujrgP5a86RvsXJAQ==}
@@ -12782,6 +12788,7 @@ packages:
   image-size@0.6.3:
     resolution: {integrity: sha512-47xSUiQioGaB96nqtp5/q55m0aBQSQdyIloMOc/x+QVTDZLNmXE892IIDrJ0hM1A5vcNUDD5tDffkSP5lCaIIA==}
     engines: {node: '>=4.0'}
+    deprecated: Please migrate to image-size@2.x
     hasBin: true
 
   image-size@1.2.1:
@@ -26130,7 +26137,7 @@ snapshots:
       '@posthog/core': 1.58.0
       '@posthog/types': 1.415.2
 
-  '@posthog/cli@0.18.11':
+  '@posthog/cli@0.19.1':
     dependencies:
       detect-libc: 2.1.2
 
