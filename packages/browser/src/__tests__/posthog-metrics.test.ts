@@ -167,6 +167,14 @@ describe('posthog-metrics', () => {
             // Not sendBeacon: the default transport carries request_headers.
             expect(requests[0].transport).toBeUndefined()
             expect(requests[0].data.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].asDouble).toBe(2)
+            // A frozen tab may never finish async CompressionStream work.
+            expect(requests[0].preferSyncCompression).toBe(true)
+        })
+
+        it('keeps async compression for sends while the page is visible', async () => {
+            metrics.count('orders_created', 1)
+            await metrics.flush()
+            expect(sentRequests()[0].preferSyncCompression).toBeUndefined()
         })
 
         it('keeps the window for retry when the hidden-page flush fails transiently', async () => {

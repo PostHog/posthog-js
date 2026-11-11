@@ -211,6 +211,10 @@ export class PostHogMetrics implements Extension {
                 compression: 'best-available',
                 batchKey: 'metrics',
                 ...(transport && { transport }),
+                // A hidden tab can be frozen before async CompressionStream
+                // finishes, so the request would never reach fetch. Metrics
+                // payloads are small, so synchronous gzip is cheap.
+                ...(document?.visibilityState === 'hidden' && { preferSyncCompression: true }),
                 // Notify on the drop paths (not loaded, rate limited) so they retry, not stall.
                 fireCallbackOnDrop: true,
                 callback: (response) => {
