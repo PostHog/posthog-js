@@ -1,6 +1,6 @@
-import { analytics } from '../src/analytics'
-import { createPostHog } from '../src/core'
-import { flags } from '../src/flags'
+import { analytics } from '../src/products/analytics/analytics'
+import { createPostHog } from '../src/composition/npm/core'
+import { flags } from '../src/products/flags/flags'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { createFetch, localRemoteConfig, requireInstalledExtension, type SentRequest } from './helpers'
 

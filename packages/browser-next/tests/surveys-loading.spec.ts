@@ -1,5 +1,5 @@
 import { requireInstalledExtension, withBufferedAnalytics } from './helpers'
-import type { Extension } from '../src/types'
+import type { Extension } from '../src/core/types'
 
 const options = {
     projectToken: 'test',
@@ -13,7 +13,7 @@ const options = {
 } as const
 
 afterEach(() => {
-    vi.doUnmock('../src/automatic-surveys')
+    vi.doUnmock('../src/products/surveys/automatic-surveys')
     vi.doUnmock('@posthog/browser-common/surveys-renderer')
     vi.resetModules()
     vi.restoreAllMocks()
@@ -24,7 +24,7 @@ describe('automatic surveys module loading', () => {
         const imported = vi.fn(() => ({ generateSurveys: vi.fn() }))
         vi.doMock('@posthog/browser-common/surveys-renderer', imported)
 
-        const { surveys } = await import('../src/surveys')
+        const { surveys } = await import('../src/products/surveys/surveys')
         expect(imported).not.toHaveBeenCalled()
         expect(surveys().name).toBe('surveys')
         expect(imported).not.toHaveBeenCalled()
@@ -38,13 +38,13 @@ describe('automatic surveys module loading', () => {
         })
         const setup = vi.fn(() => setupGate)
         vi.doMock(
-            '../src/automatic-surveys',
+            '../src/products/surveys/automatic-surveys',
             () =>
                 new Promise((resolve) => {
                     loaded = resolve
                 })
         )
-        const { createPostHog } = await import('../src')
+        const { createPostHog } = await import('../src/composition/npm')
         const finished = vi.fn()
         const configuration = { overrideDisplayLanguage: 'en' }
         const pending = createPostHog({ ...options, surveys: configuration }).then((client) => {
@@ -67,10 +67,10 @@ describe('automatic surveys module loading', () => {
 
     it('contains a rejected chunk load and returns a usable capture client', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {})
-        vi.doMock('../src/automatic-surveys', () => {
+        vi.doMock('../src/products/surveys/automatic-surveys', () => {
             throw new Error('chunk unavailable')
         })
-        const { createPostHog } = await import('../src')
+        const { createPostHog } = await import('../src/composition/npm')
         const client = await createPostHog(withBufferedAnalytics({ ...options, surveys: {} }))
         expect(client.surveys).toBeUndefined()
         const captured = vi.fn()
@@ -84,8 +84,8 @@ describe('automatic surveys module loading', () => {
         const imported = vi.fn(() => {
             throw new Error('must not load')
         })
-        vi.doMock('../src/automatic-surveys', imported)
-        const { createPostHog } = await import('../src')
+        vi.doMock('../src/products/surveys/automatic-surveys', imported)
+        const { createPostHog } = await import('../src/composition/npm')
         const explicit: Extension = { name: 'surveys', setup() {} }
         const client = await createPostHog({
             ...options,

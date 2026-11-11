@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { requireInstalledExtension } from './helpers'
 import { createBufferedRootPostHog as createPostHog } from './helpers'
-import { createPostHog as createCore } from '../src/core'
-import { autocapture } from '../src/autocapture'
-import type { AutocaptureOptions } from '../src/autocapture'
-import type { IPostHog, PostHogOptions } from '../src/types'
+import { createPostHog as createCore } from '../src/composition/npm/core'
+import { autocapture } from '../src/products/autocapture/autocapture'
+import type { AutocaptureOptions } from '../src/products/autocapture/autocapture'
+import type { IPostHog, PostHogOptions } from '../src/core/types'
 import { MemoryStorage } from './helpers'
 
 const base = {
@@ -275,7 +275,7 @@ describe('autocapture', () => {
                     name: 'surveys',
                     setup() {},
                     getElementSelectors: () => selectors,
-                } as import('../src/types').Extension,
+                } as import('../src/core/types').Extension,
             ],
         })
         selectors.clear()

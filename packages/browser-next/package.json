@@ -14,44 +14,44 @@
         "ARCHITECTURE.md",
         "README.md"
     ],
-    "main": "dist/index.js",
-    "module": "dist/index.mjs",
-    "types": "dist/index.d.ts",
+    "main": "dist/composition/npm/index.js",
+    "module": "dist/composition/npm/index.mjs",
+    "types": "dist/composition/npm/index.d.ts",
     "exports": {
         ".": {
-            "types": "./dist/index.d.ts",
-            "require": "./dist/index.js",
-            "import": "./dist/index.mjs"
+            "types": "./dist/composition/npm/index.d.ts",
+            "require": "./dist/composition/npm/index.js",
+            "import": "./dist/composition/npm/index.mjs"
         },
         "./core": {
-            "types": "./dist/core.d.ts",
-            "require": "./dist/core.js",
-            "import": "./dist/core.mjs"
+            "types": "./dist/composition/npm/core.d.ts",
+            "require": "./dist/composition/npm/core.js",
+            "import": "./dist/composition/npm/core.mjs"
         },
         "./flags": {
-            "types": "./dist/flags.d.ts",
-            "require": "./dist/flags.js",
-            "import": "./dist/flags.mjs"
+            "types": "./dist/products/flags/flags.d.ts",
+            "require": "./dist/products/flags/flags.js",
+            "import": "./dist/products/flags/flags.mjs"
         },
         "./analytics": {
-            "types": "./dist/analytics.d.ts",
-            "require": "./dist/analytics.js",
-            "import": "./dist/analytics.mjs"
+            "types": "./dist/products/analytics/analytics.d.ts",
+            "require": "./dist/products/analytics/analytics.js",
+            "import": "./dist/products/analytics/analytics.mjs"
         },
         "./logs": {
-            "types": "./dist/logs.d.ts",
-            "import": "./dist/logs.mjs",
-            "require": "./dist/logs.js"
+            "types": "./dist/products/logs/logs.d.ts",
+            "import": "./dist/products/logs/logs.mjs",
+            "require": "./dist/products/logs/logs.js"
         },
         "./surveys": {
-            "types": "./dist/surveys.d.ts",
-            "require": "./dist/surveys.js",
-            "import": "./dist/surveys.mjs"
+            "types": "./dist/products/surveys/surveys.d.ts",
+            "require": "./dist/products/surveys/surveys.js",
+            "import": "./dist/products/surveys/surveys.mjs"
         },
         "./autocapture": {
-            "types": "./dist/autocapture.d.ts",
-            "require": "./dist/autocapture.js",
-            "import": "./dist/autocapture.mjs"
+            "types": "./dist/products/autocapture/autocapture.d.ts",
+            "require": "./dist/products/autocapture/autocapture.js",
+            "import": "./dist/products/autocapture/autocapture.mjs"
         }
     },
     "scripts": {

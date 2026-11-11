@@ -43,6 +43,22 @@ A minifier cannot correct a bad package boundary. An automatic dynamic import do
 
 ## 4. Package layers
 
+Source files are grouped by responsibility:
+
+| Directory                            | Responsibility                                                                           |
+| ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `src/composition/npm/`               | Default and manual SDK compositions and product selection                                |
+| `src/composition/script/`            | Self-initializing classic-script composition                                             |
+| `src/core/`                          | Client lifecycle, shared contracts, scoped views, extension registry and state authority |
+| `src/products/`                      | Product factories, operations and implementations                                        |
+| `src/products/analytics/admission/`  | Analytics event construction, buffering and admission                                    |
+| `src/products/analytics/properties/` | Registered context and person-processing policy                                          |
+| `src/products/analytics/delivery/`   | Capture V1 encoding, scheduling, transport and retries                                   |
+| `src/platform/`                      | Browser request and console mechanisms                                                   |
+| `src/primitives/`                    | Independent identifiers, immutable snapshots, errors, UTF-8 and version utilities        |
+
+Product factories remain with their products. Supported package import paths are defined by the `exports` map, independently of the internal source and emitted-file layout.
+
 Use these layers:
 
 ```text
@@ -462,7 +478,7 @@ The package needs preserved ES module boundaries for consumer tree shaking.
 
 ### CDN-only classic entry
 
-The standalone classic-script installer lives in `snippet/`, outside Rslib's `src` glob and the npm `files` allowlist. `build:cdn` emits `dist-cdn/script.js` with the complete initial core graph embedded, plus optional asynchronous chunks and source maps. Rspack's automatic public path captures the executing external script's directory synchronously and removes its query and fragment before loading chunks. There is no separate client download between the initial response and core construction.
+The standalone classic-script installer lives in `src/composition/script/`, explicitly excluded from Rslib's npm entry glob and declaration build. Its generated CDN artifacts remain outside the npm `files` allowlist. `build:cdn` emits `dist-cdn/script.js` with the complete initial core graph embedded, plus optional asynchronous chunks and source maps. Rspack's automatic public path captures the executing external script's directory synchronously and removes its query and fragment before loading chunks. There is no separate client download between the initial response and core construction.
 
 This deployment artifact intentionally initializes a client; it is not an npm export and does not change the import-purity contract or `sideEffects: false`. Keep the root factory's extension setup order, override precedence, snapshots, consent, and failure isolation unchanged. The installer delegates readiness to that factory. See the [script installation guide](./README.md#classic-script-installation-draft-cdn-distribution) for query configuration, global ownership, and ready-event semantics. `bundle-size:cdn` checks the generated initial graph and reports initial/deferred artifact sizes and module attribution; `test:snippet` runs the generated classic artifacts in plain HTML against the SDK mock server.
 

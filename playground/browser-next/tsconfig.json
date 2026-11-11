@@ -18,8 +18,8 @@
         "noUncheckedSideEffectImports": true,
         "baseUrl": ".",
         "paths": {
-            "@posthog/browser": ["../../packages/browser-next/src/index.ts"],
-            "@posthog/browser/analytics": ["../../packages/browser-next/src/analytics.ts"]
+            "@posthog/browser": ["../../packages/browser-next/src/composition/npm/index.ts"],
+            "@posthog/browser/analytics": ["../../packages/browser-next/src/products/analytics/analytics.ts"]
         }
     },
     "include": ["src", "vite.config.ts"]

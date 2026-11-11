@@ -1,6 +1,6 @@
 import { requireInstalledExtension } from './helpers'
-import { createPostHog as createRoot } from '../src'
-import { createPostHog as createCore, type BrowserFetch, type CorePostHogOptions } from '../src/core'
+import { createPostHog as createRoot } from '../src/composition/npm'
+import { createPostHog as createCore, type BrowserFetch, type CorePostHogOptions } from '../src/composition/npm/core'
 import { localRemoteConfig, withBufferedAnalytics } from './helpers'
 
 const options: CorePostHogOptions = {

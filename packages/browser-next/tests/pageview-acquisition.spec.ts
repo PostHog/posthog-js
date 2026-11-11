@@ -1,6 +1,6 @@
-import { createPostHog } from '../src/index'
-import { analytics } from '../src/analytics'
-import type { IPostHog } from '../src/types'
+import { createPostHog } from '../src/composition/npm/index'
+import { analytics } from '../src/products/analytics/analytics'
+import type { IPostHog } from '../src/core/types'
 import { localRemoteConfig } from './helpers'
 
 class TestDocument extends EventTarget {

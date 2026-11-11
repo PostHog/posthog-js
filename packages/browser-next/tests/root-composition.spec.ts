@@ -1,7 +1,7 @@
-import { createPostHog } from '../src/index'
-import { createPostHog as createCore } from '../src/core'
-import type { IPostHog } from '../src/types'
-import type { Survey } from '../src/surveys-options'
+import { createPostHog } from '../src/composition/npm/index'
+import { createPostHog as createCore } from '../src/composition/npm/core'
+import type { IPostHog } from '../src/core/types'
+import type { Survey } from '../src/products/surveys/surveys-options'
 import { SURVEYS } from '@posthog/browser-common/surveys-config'
 import { localRemoteConfig, MemoryStorage } from './helpers'
 

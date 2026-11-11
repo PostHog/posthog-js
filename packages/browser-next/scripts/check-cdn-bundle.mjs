@@ -12,15 +12,15 @@ const modules = (entries) =>
     entries.flatMap((entry) => (entry.modules ? modules(entry.modules) : entry.name ? [entry] : []))
 const initialModules = modules(initial[0].modules)
 const requiredInitial = [
-    './src/posthog.ts',
-    './src/analytics.ts',
-    './src/analytics-buffer.ts',
-    './src/analytics-extension.ts',
-    './src/capture-properties.ts',
-    './src/analytics-delivery.ts',
-    './src/capture-v1.ts',
-    './src/lane.ts',
-    './snippet/entry.ts',
+    './src/core/posthog.ts',
+    './src/products/analytics/analytics.ts',
+    './src/products/analytics/analytics-buffer.ts',
+    './src/products/analytics/analytics-extension.ts',
+    './src/products/analytics/admission/capture-properties.ts',
+    './src/products/analytics/delivery/analytics-delivery.ts',
+    './src/products/analytics/delivery/capture-v1.ts',
+    './src/products/analytics/delivery/lane.ts',
+    './src/composition/script/entry.ts',
 ]
 const assertInitialModules = (entries) => {
     for (const required of requiredInitial) {
@@ -43,12 +43,15 @@ const forbiddenInitial = [
 ]
 assertInitialModules(initialModules)
 assert.throws(
-    () => assertInitialModules(initialModules.filter((module) => module.name !== './src/analytics-delivery.ts')),
+    () =>
+        assertInitialModules(
+            initialModules.filter((module) => module.name !== './src/products/analytics/delivery/analytics-delivery.ts')
+        ),
     /Initial core must contain/,
     'The CDN guard must require embedded analytics delivery'
 )
 assert.throws(
-    () => assertInitialModules([...initialModules, { name: './src/logs.ts' }]),
+    () => assertInitialModules([...initialModules, { name: './src/products/logs/logs.ts' }]),
     /Forbidden initial module/,
     'The CDN guard must reject eager optional product code'
 )
