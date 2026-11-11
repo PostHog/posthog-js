@@ -145,6 +145,41 @@ describe('posthog-metrics', () => {
         expect(metric.histogram.dataPoints[0].count).toBe(1)
     })
 
+    describe('hidden-page drain', () => {
+        const setVisibility = (state: DocumentVisibilityState): void => {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+            document.dispatchEvent(new Event('visibilitychange'))
+        }
+
+        afterEach(() => {
+            metrics.dispose()
+            setVisibility('visible')
+        })
+
+        it('drains the pending window over sendBeacon when the page becomes hidden', () => {
+            metrics.initialize()
+            metrics.count('orders_created', 2)
+
+            setVisibility('hidden')
+
+            const requests = sentRequests()
+            expect(requests).toHaveLength(1)
+            expect(requests[0].transport).toBe('sendBeacon')
+            expect(requests[0].data.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].asDouble).toBe(2)
+        })
+
+        it('does not send when the page becomes visible, or after dispose', () => {
+            metrics.initialize()
+            metrics.count('orders_created', 1)
+            setVisibility('visible')
+            expect(sentRequests()).toHaveLength(0)
+
+            metrics.dispose()
+            setVisibility('hidden')
+            expect(sentRequests()).toHaveLength(0)
+        })
+    })
+
     it('sends a histogram in the bounds its caller passes', async () => {
         metrics.histogram('api_latency', 120, { unit: 'ms', bounds: [100, 200] })
         await metrics.flush()

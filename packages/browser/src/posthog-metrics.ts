@@ -4,6 +4,8 @@ import type { CaptureMetricOptions, HistogramOptions, OtlpMetricsPayload } from 
 import { PostHogMetrics as CorePostHogMetrics, isUndefined, resolveMetricsConfig } from '@posthog/core'
 import type { SendMetricsBatchOutcome } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document } from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { Extension } from './extensions/types'
 import { startNetworkMetrics } from './extensions/network-metrics'
 
@@ -15,8 +17,10 @@ const METRICS_SEND_TIMEOUT_MS = 90000
 // Every tab of an app writes to the same series, and the backend keeps a
 // bounded number of points per series per hour. One export a minute per tab,
 // instead of core's 10s, gives six times the headroom with no extra series, and
-// folds more requests into each histogram point. The pagehide `sendBeacon`
-// drain still sends a closing tab's partial window.
+// folds more requests into each histogram point. A closing tab's partial window
+// still goes out through the pagehide `sendBeacon` drain, and a backgrounded
+// tab's through the `visibilitychange` drain below, since mobile browsers can
+// kill a hidden tab without firing `pagehide`.
 const BROWSER_DEFAULT_FLUSH_INTERVAL_MS = 60000
 
 /**
@@ -39,13 +43,27 @@ export class PostHogMetrics implements Extension {
     private _resolvedFrom: PostHog['config']['metrics']
     private _stopNetworkMetrics: (() => void) | undefined
     private _disposed = false
+    private _visibilityListening = false
 
     constructor(private readonly _instance: PostHog) {}
 
     // The aggregator builds lazily on the first capture so it sees post-init
-    // config; only the network wrappers need to be installed eagerly.
+    // config; only the network wrappers and the hidden-page drain need to be
+    // installed eagerly.
     initialize(): void {
         this.onConfigChange()
+        if (!this._disposed && !this._visibilityListening && document?.addEventListener) {
+            addEventListener(document, 'visibilitychange', this._onVisibilityChange)
+            this._visibilityListening = true
+        }
+    }
+
+    // A hidden page may never come back or fire `pagehide` (mobile tab
+    // switches, app backgrounding), so send the pending window while we can.
+    private _onVisibilityChange = (): void => {
+        if (document?.visibilityState === 'hidden') {
+            void this.flush('sendBeacon')
+        }
     }
 
     onConfigChange(): void {
@@ -133,6 +151,8 @@ export class PostHogMetrics implements Extension {
      */
     dispose(): void {
         this._disposed = true
+        document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
+        this._visibilityListening = false
         this._stopNetworkMetrics?.()
         this._stopNetworkMetrics = undefined
         this._core?.reset()
