@@ -19,6 +19,8 @@ import {
   getWindowHeight,
   getWindowWidth,
   isBlocked,
+  isBlockedIncludingShadowHosts,
+  inDom,
   legacy_isTouchEvent,
   StyleSheetMirror,
   nowTimestamp,
@@ -55,7 +57,7 @@ import type {
   selectionCallback,
   customElementCallback,
 } from '@posthog/rrweb-types';
-import MutationBuffer from './mutation';
+import MutationBuffer, { registerSelectMutationObserver } from './mutation';
 import { callbackWrapper } from './error-handler';
 import dom, { mutationObserverCtor } from '@posthog/rrweb-utils';
 
@@ -446,8 +448,13 @@ function initInputObserver({
   userTriggeredOnInput,
 }: observerParam): listenerHandler {
   function eventHandler(event: Event) {
-    let target = getEventTarget(event) as HTMLElement | null;
-    const userTriggered = event.isTrusted;
+    processInput(getEventTarget(event) as HTMLElement | null, event.isTrusted);
+  }
+  function processInput(
+    target: HTMLElement | null,
+    userTriggered: boolean,
+    selectedValue?: string,
+  ) {
     // Reading a native accessor (tagName/value/checked/type) on a non-native
     // `this` — e.g. a proxy, custom element, or cross-realm object reaching us
     // through the hooked setter's mock event — throws 'Illegal invocation'.
@@ -480,7 +487,7 @@ function initInputObserver({
     ) {
       return;
     }
-    let text = (target as HTMLInputElement).value;
+    let text = selectedValue ?? (target as HTMLInputElement).value;
     let isChecked = false;
     const type: Lowercase<string> = getInputType(target) || '';
 
@@ -583,6 +590,24 @@ function initInputObserver({
       ),
     );
   }
+  handlers.unshift(
+    registerSelectMutationObserver(
+      doc,
+      callbackWrapper((select) => {
+        if (
+          mirror.getId(select) <= 0 ||
+          !inDom(select) ||
+          isBlockedIncludingShadowHosts(select, blockClass, blockSelector)
+        )
+          return;
+        const option = Array.from(select.selectedOptions).find(
+          (option) =>
+            !isBlockedIncludingShadowHosts(option, blockClass, blockSelector),
+        );
+        processInput(select, false, option?.value || '');
+      }),
+    ),
+  );
   return callbackWrapper(() => {
     // the hook resetters below restore shared DOM prototype accessors through a
     // bare `Object.defineProperty`, which throws if the page made one of them
