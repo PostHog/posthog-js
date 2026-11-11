@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 8.19.2
+
+### Patch Changes
+
+- [#5604](https://github.com/PostHog/posthog-js/pull/5604) [`a516cf3`](https://github.com/PostHog/posthog-js/commit/a516cf35e2d038dde186c3302c0a72c3252f5c4d) Thanks [@smitp1402](https://github.com/smitp1402)! - Capture reasoning tokens from OpenAI Agents SDK Responses API spans in `$ai_reasoning_tokens`
+  (2026-11-10)
+
+- [#5622](https://github.com/PostHog/posthog-js/pull/5622) [`7d96fa3`](https://github.com/PostHog/posthog-js/commit/7d96fa3c69247dc7e7cfc9969099864a2ac17451) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture custom tool calls in OpenAI Responses API output.
+  (2026-11-10)
+
 ## 8.19.1
 
 ### Patch Changes

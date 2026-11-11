@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.424.0
+
+### Minor Changes
+
+- [#5663](https://github.com/PostHog/posthog-js/pull/5663) [`d6dbd3a`](https://github.com/PostHog/posthog-js/commit/d6dbd3a6f7aa9ac91f7c5ed6217c45768604bae9) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Add `imageUrl` to the `EarlyAccessFeature` type
+  (2026-11-11)
+
 ## 1.423.0
 
 ### Minor Changes

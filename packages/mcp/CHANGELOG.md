@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 1.1.1
+
+### Patch Changes
+
+- [#5654](https://github.com/PostHog/posthog-js/pull/5654) [`a7c8003`](https://github.com/PostHog/posthog-js/commit/a7c800393b8ac7c198676b8d57a2f587d9cc36a5) Thanks [@mkushner](https://github.com/mkushner)! - fix(mcp): keep `additionalProperties: false` on tool schemas when injecting `context`, `llm_model` and `conversation_id`. The injected keys are declared properties, so the schema stays valid and keeps the strictness the host advertised.
+  (2026-11-11)
+
 ## 1.1.0
 
 ### Minor Changes

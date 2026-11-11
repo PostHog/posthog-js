@@ -233,6 +233,27 @@ jobs:
             slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
             posthog_project_api_key: ${{ secrets.POSTHOG_PROJECT_API_KEY }}
 
+    preserve-slack-thread:
+        permissions: {}
+        name: Preserve Slack thread
+        needs: notify-approval-needed
+        if: needs.notify-approval-needed.outputs.slack_ts != ''
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        continue-on-error: true
+        steps:
+            - name: Save approval thread timestamp
+              env:
+                  THREAD_TS: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+              run: printf '%s' "$THREAD_TS" > thread-ts.txt
+
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: release-slack-thread-${{ github.run_attempt }}
+                  path: thread-ts.txt
+                  retention-days: 30
+                  if-no-files-found: error
+
     version-bump:
         name: Bump versions and commit to ${{ needs.release-context.outputs.branch }}
         needs: [release-context, check-changesets, notify-approval-needed]
@@ -406,16 +427,6 @@ jobs:
                         "alertText": ":rotating_light: Failed to prepare release ${{ steps.release-failure-metadata.outputs.package_ref }} :rotating_light:",
                         "alertContext": "The version bump/changelog step failed before packages were published."
                       }
-
-            - name: Notify Slack - Failed
-              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
-              with:
-                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
-                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to bump versions for `${{ steps.release-failure-metadata.outputs.package_ref }}`! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
-                  emoji_reaction: 'x'
 
     notify-rejected:
         permissions:
@@ -712,17 +723,6 @@ jobs:
                         "alertContext": "The package publish step in the posthog-js release workflow failed."
                       }
 
-            - name: Notify Slack - Failed
-              continue-on-error: true # Slack failure shouldn't mark release as failed
-              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
-              with:
-                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
-                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to release `${{ steps.release-failure-metadata.outputs.package_ref }}`! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
-                  emoji_reaction: 'x'
-
     gate-posthog-js-publish:
         permissions: {}
         name: Gate npm publishing on posthog-js S3
@@ -821,17 +821,6 @@ jobs:
                         "alertText": ":rotating_light: Blocked npm publishing for ${{ steps.release-failure-metadata.outputs.package_ref }} :rotating_light:",
                         "alertContext": "The browser version check, S3 artifact build, or regional S3 upload did not succeed."
                       }
-
-            - name: Notify Slack - Failed
-              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              continue-on-error: true
-              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
-              with:
-                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
-                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Blocked npm publishing for this release because the `${{ steps.release-failure-metadata.outputs.package_ref }}` S3/CDN release did not succeed. <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
-                  emoji_reaction: 'x'
 
     publish-posthog-js:
         name: Publish posthog-js
@@ -1245,37 +1234,6 @@ jobs:
                   VERSION: ${{ needs.check-posthog-browser-version.outputs.committed-version }}
               run: node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --aliases-only
 
-    notify-posthog-browser-s3-failed:
-        name: Notify @posthog/browser S3 failure
-        needs:
-            [
-                notify-approval-needed,
-                check-posthog-browser-version,
-                build-posthog-browser-s3-artifacts,
-                upload-posthog-browser-s3-immutable,
-                upload-posthog-browser-s3,
-            ]
-        runs-on: ubuntu-latest
-        if: >-
-            always() &&
-            (
-                needs.check-posthog-browser-version.result == 'failure' ||
-                needs.build-posthog-browser-s3-artifacts.result == 'failure' ||
-                needs.upload-posthog-browser-s3-immutable.result == 'failure' ||
-                needs.upload-posthog-browser-s3.result == 'failure'
-            )
-        permissions: {}
-        steps:
-            - name: Notify Slack - @posthog/browser S3 failed
-              continue-on-error: true
-              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
-              with:
-                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
-                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ `@posthog/browser` S3 release failed. <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>'
-                  emoji_reaction: 'x'
-
     check-browser-version:
         name: Check posthog-js version for S3
         needs: [release-context, version-bump, notify-approval-needed]
@@ -1454,7 +1412,7 @@ jobs:
             # posthog/posthog pins (currently 10.x), because that is the
             # checkout above. pnpm/setup only installs v11 and newer.
             - name: Setup pnpm
-              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+              uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
               with:
                   cache: false
                   run_install: false
@@ -1763,17 +1721,6 @@ jobs:
                         "alertContext": "The S3/CDN artifact upload failed, so npm publishing is blocked for this release."
                       }
 
-            - name: Notify Slack - S3 Upload Failed
-              continue-on-error: true
-              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
-              with:
-                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
-                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to upload ${{ steps.release-failure-metadata.outputs.package_ref }} dist to ${{ matrix.region.bucket }}! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
-                  emoji_reaction: 'x'
-
     # Matrix result is a barrier: no aliases until BOTH regions verified immutable assets.
     upload-s3:
         # Matrixed per region so each cell downloads only the toolbar artifact
@@ -1921,17 +1868,6 @@ jobs:
                         "alertText": ":rotating_light: Failed to upload ${{ steps.release-failure-metadata.outputs.package_ref }} dist to ${{ matrix.region.bucket }} :rotating_light:",
                         "alertContext": "The S3/CDN artifact upload failed, so npm publishing is blocked for this release."
                       }
-
-            - name: Notify Slack - S3 Upload Failed
-              continue-on-error: true
-              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
-              with:
-                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
-                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to upload ${{ steps.release-failure-metadata.outputs.package_ref }} dist to ${{ matrix.region.bucket }}! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
-                  emoji_reaction: 'x'
 
     notify-released:
         permissions:

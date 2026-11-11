@@ -8,6 +8,10 @@ import test from 'node:test'
 
 const release = readFileSync(new URL('../../../.github/workflows/release.yml', import.meta.url), 'utf8')
 const recovery = readFileSync(new URL('../../../.github/workflows/recover-s3-release.yml', import.meta.url), 'utf8')
+const notification = readFileSync(
+    new URL('../../../.github/workflows/release-failure-notification.yml', import.meta.url),
+    'utf8'
+)
 
 // Small structural assertions complement actionlint without adding a YAML runtime
 // dependency to the privileged uploader. Job blocks use the repository's indentation.
@@ -237,22 +241,19 @@ test('@posthog/browser stable aliases require the current main version', () => {
     }
 })
 
-test('@posthog/browser reports S3 failures to the release approval thread', () => {
-    const notify = job(release, 'notify-posthog-browser-s3-failed')
-    for (const id of [
-        'check-posthog-browser-version',
-        'build-posthog-browser-s3-artifacts',
-        'upload-posthog-browser-s3-immutable',
-        'upload-posthog-browser-s3',
-    ]) {
-        assert.ok(dependencies(notify).includes(id))
-        assert.ok(notify.includes(`needs.${id}.result == 'failure'`))
-    }
-    assert.ok(dependencies(notify).includes('notify-approval-needed'))
-    assert.match(notify, /continue-on-error: true/)
-    assert.match(notify, /actions\/slack-thread-reply@/)
-    assert.match(notify, /thread_ts: \$\{\{ needs.notify-approval-needed.outputs.slack_ts \}\}/)
-    assert.match(notify, /message: '❌ `@posthog\/browser` S3 release failed/)
+test('release failures are reported by the failure notification workflow, not in-job Slack replies', () => {
+    assert.equal(release.indexOf('    notify-posthog-browser-s3-failed:\n'), -1)
+    assert.doesNotMatch(release, /name: Notify Slack - (S3 Upload )?Failed/)
+    assert.match(release, /name: Send failure event to PostHog/)
+    const preserve = job(release, 'preserve-slack-thread')
+    assert.match(preserve, /^ {8}needs: notify-approval-needed$/m)
+    assert.match(preserve, /name: release-slack-thread-\$\{\{ github.run_attempt \}\}/)
+    assert.match(
+        notification,
+        /workflow_run:\n {8}workflows: \[Release\]\n {8}types: \[completed\]\n {8}branches: \[main, posthog-node-5\]/
+    )
+    assert.match(notification, /pattern: release-slack-thread-\*/)
+    assert.match(notification, /scripts\/release-failure-notification\.cjs/)
 })
 
 test('release context allows main and listed maintenance branches only', () => {

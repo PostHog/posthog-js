@@ -1,5 +1,12 @@
 # @posthog/nuxt
 
+## 1.9.1
+
+### Patch Changes
+
+- [#5664](https://github.com/PostHog/posthog-js/pull/5664) [`a7485da`](https://github.com/PostHog/posthog-js/commit/a7485da691c5eaaa1e318c04b781a1394a0835f1) Thanks [@ioannisj](https://github.com/ioannisj)! - Bump `@posthog/cli` to 0.19.1 so builds outside a git checkout that set only a release version upload source maps with a warning instead of failing with "Release fields are incomplete".
+  (2026-11-11)
+
 ## 1.9.0
 
 ### Minor Changes
