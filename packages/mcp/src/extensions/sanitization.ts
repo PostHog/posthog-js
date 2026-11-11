@@ -71,7 +71,7 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
 }
 
 /**
- * Sanitizes exception types and messages before they fan out to both the primary MCP
+ * Sanitizes exception types, messages and stack frames before they fan out to both the primary MCP
  * event's error properties and the `$exception` sibling.
  */
 function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
@@ -85,6 +85,7 @@ function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
       ...exception,
       type: sanitizeCapturedValue(exception.type) as string,
       value: sanitizeCapturedValue(exception.value) as string,
+      stacktrace: sanitizeCapturedValue(exception.stacktrace) as typeof exception.stacktrace,
     })),
   }
 }
