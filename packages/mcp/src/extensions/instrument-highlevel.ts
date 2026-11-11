@@ -234,7 +234,9 @@ async function stashThrownError<T>(extra: CompatibleRequestHandlerExtra, run: ()
   try {
     return await run()
   } catch (error) {
-    extra.__mcp_analytics_error = error
+    if (extra) {
+      Reflect.set(extra, '__mcp_analytics_error', error)
+    }
     throw error
   }
 }

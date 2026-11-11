@@ -47,8 +47,13 @@ export function captureException(error: unknown): CoreErrorTracking.ErrorPropert
   // MCP SDK 1.21.0+ converts tool errors to CallToolResult, which the core
   // coercers don't recognize. Extract the human-readable message first so the
   // exception still carries something useful.
-  const normalized = isCallToolResult(error) ? extractCallToolResultMessage(error) : error
-  return errorPropertiesBuilder.buildFromUnknown(normalized)
+  try {
+    const normalized = isCallToolResult(error) ? extractCallToolResultMessage(error) : error
+    return errorPropertiesBuilder.buildFromUnknown(normalized)
+  } catch {
+    // A thrown value can carry getters that throw; the failure still gets recorded.
+    return errorPropertiesBuilder.buildFromUnknown('Unknown error')
+  }
 }
 
 const STATUS_FIELDS = ['status_code', 'statusCode', 'status']
