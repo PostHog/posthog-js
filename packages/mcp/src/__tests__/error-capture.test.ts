@@ -89,6 +89,27 @@ describe('error capture on the tool-call path', () => {
     expect(exceptionList?.[0].value).toBe(expected)
   })
 
+  it('carries the HTTP status of the error a thrown tool error wraps', async () => {
+    instrument(server, fakePostHog())
+
+    server.tool!('fetch_invoice', 'fetches an invoice', {}, async () => {
+      const upstream = Object.assign(new Error('503 from upstream'), { response: new Response(null, { status: 503 }) })
+      throw new Error('invoice lookup failed', { cause: upstream })
+    })
+
+    await client.request(
+      { method: 'tools/call', params: { name: 'fetch_invoice', arguments: {} } },
+      CallToolResultSchema
+    )
+    await new Promise((r) => setTimeout(r, 50))
+
+    const toolCall = capture
+      .findCapturesByEvent('$mcp_tool_call')
+      .find((event) => event.properties.$mcp_tool_name === 'fetch_invoice')
+    expect(toolCall?.properties.$mcp_error_message).toBe('invoice lookup failed')
+    expect(toolCall?.properties.$mcp_error_status).toBe(503)
+  })
+
   it('still propagates the error result to the MCP client (does not swallow it)', async () => {
     instrument(server, fakePostHog())
 
