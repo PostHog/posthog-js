@@ -59,6 +59,20 @@ const networkConfig = (instance: PostHog): NetworkMetricsConfig | undefined => {
 
 type Observed = { method: string; url: string }
 
+// A server-sent event stream stays open for as long as the page listens, so its
+// duration measures the subscription, not a request. Recording it would pin the
+// percentiles of any app with a stream open to the top bucket.
+const isEventStream = (contentType: string | null | undefined): boolean =>
+    isString(contentType) && contentType.toLowerCase().indexOf('text/event-stream') === 0
+
+const safeContentType = (read: () => string | null | undefined): string | null | undefined => {
+    try {
+        return read()
+    } catch {
+        return undefined
+    }
+}
+
 const observe = (method: unknown, url: unknown): Observed => {
     const observedUrl = String(url)
     return {
@@ -136,7 +150,9 @@ const patchFetch = (instance: PostHog, enabled: Enabled): (() => void) => {
                 )
                 return result.then(
                     (response: Response) => {
-                        record(instance, observed, response?.status, start, enabled, undefined, true)
+                        if (!isEventStream(safeContentType(() => response?.headers?.get('content-type')))) {
+                            record(instance, observed, response?.status, start, enabled, undefined, true)
+                        }
                         return response
                     },
                     (error: unknown) => {
@@ -180,7 +196,9 @@ const patchXHR = (instance: PostHog, enabled: Enabled): (() => void) => {
                     const start = now()
                     onLoadEnd = () => {
                         this.removeEventListener('loadend', onLoadEnd!)
-                        record(instance, observed, this.status, start, enabled)
+                        if (!isEventStream(safeContentType(() => this.getResponseHeader('content-type')))) {
+                            record(instance, observed, this.status, start, enabled)
+                        }
                     }
                     addEventListener(this as unknown as Element, 'loadend', onLoadEnd)
                 }
@@ -206,7 +224,8 @@ const patchXHR = (instance: PostHog, enabled: Enabled): (() => void) => {
 
 /**
  * Records a duration histogram for every HTTP or HTTPS `fetch` and
- * `XMLHttpRequest` the page makes, except the SDK's own. Observation only: the
+ * `XMLHttpRequest` the page makes, except the SDK's own and server-sent event
+ * streams (`text/event-stream` responses). Observation only: the
  * wrappers never change the request arguments or its settlement. Fetch returns
  * a derived promise so rejected requests remain observable to the caller and to
  * the browser's unhandled-rejection handling.

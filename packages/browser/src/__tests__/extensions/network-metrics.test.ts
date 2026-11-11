@@ -12,11 +12,16 @@ vi.mock('@posthog/browser-common/utils/logger', () => ({
 
 class FakeXHR extends EventTarget {
     status = 0
+    contentType: string | null = null
     open(..._args: unknown[]): void {}
     send(_body?: unknown): void {}
+    getResponseHeader(name: string): string | null {
+        return name.toLowerCase() === 'content-type' ? this.contentType : null
+    }
 
-    respond(status: number): void {
+    respond(status: number, contentType: string | null = null): void {
         this.status = status
+        this.contentType = contentType
         this.dispatchEvent(new Event('loadend'))
     }
 }
@@ -209,6 +214,37 @@ describe('network metrics', () => {
             expect('error.type' in attributes).toBe('error.type' in expected)
         })
 
+        it.each([
+            ['text/event-stream', false],
+            ['text/event-stream; charset=utf-8', false],
+            ['Text/Event-Stream', false],
+            ['application/json', true],
+        ])('records a %s response: %s', async (contentType, shouldRecord) => {
+            const response = { status: 200, headers: new Headers({ 'content-type': contentType }) }
+            fetchMock.mockResolvedValue(response)
+            start()
+
+            await expect(window.fetch('https://api.example.com/stream')).resolves.toBe(response)
+
+            expect(recorded()).toHaveLength(shouldRecord ? 1 : 0)
+        })
+
+        it('records a response whose headers cannot be read', async () => {
+            fetchMock.mockResolvedValue({
+                status: 200,
+                headers: {
+                    get: () => {
+                        throw new Error('nope')
+                    },
+                },
+            })
+            start()
+
+            await window.fetch('https://api.example.com/things')
+
+            expect(recorded()).toHaveLength(1)
+        })
+
         it('does not record an error type for a fulfilled opaque response', async () => {
             fetchMock.mockResolvedValue({ status: 0 })
             start()
@@ -340,6 +376,19 @@ describe('network metrics', () => {
                     },
                 ],
             ])
+        })
+
+        it('does not record a server-sent event stream', () => {
+            start()
+            const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
+            xhr.open('GET', 'https://api.example.com/notifications')
+            xhr.send()
+            xhr.respond(200, 'text/event-stream')
+
+            sendXHR('GET', 'https://api.example.com/things', 200)
+
+            expect(recorded()).toHaveLength(1)
+            expect(recorded()[0][2].attributes['url.template']).toBe('/things')
         })
 
         it('still calls the original open and send', () => {
