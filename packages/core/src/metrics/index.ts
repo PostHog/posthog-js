@@ -90,6 +90,8 @@ export class PostHogMetrics {
   // Serializes flushes — a manual flush() during an in-flight timer flush
   // queues behind it instead of racing it for the same window.
   private _flushPromise: Promise<void> | null = null
+  // The one flush `flushCoalesced()` has queued but not yet started.
+  private _queuedFlush: Promise<void> | null = null
   // One cardinality warning per window, however many series get dropped.
   private _seriesCapWarned = false
   // Type seen per metric name this window; reusing a name with a different
@@ -158,6 +160,33 @@ export class PostHogMetrics {
   }
 
   /**
+   * A flush for callers that ask once per unit of work (a served request, say) rather than once per window.
+   * Callers share one queued flush, so at most one send is in flight and one waits behind it however often
+   * this is called, and every sample captured before the call is in one of them. While a failed send is
+   * backing off it starts nothing and the retry timer owns the next send.
+   */
+  flushCoalesced(): Promise<void> {
+    if (this._isBackingOff()) {
+      return this._flushPromise ?? Promise.resolve()
+    }
+    if (!this._queuedFlush) {
+      // Starts after any send in flight, so samples captured while it runs are in this one.
+      this._queuedFlush = (this._flushPromise ?? Promise.resolve())
+        .catch(() => {})
+        .then(() => {
+          this._queuedFlush = null
+          // The send it waited behind may have failed and started a backoff.
+          return this._isBackingOff() ? undefined : this.flush()
+        })
+    }
+    return this._queuedFlush
+  }
+
+  private _isBackingOff(): boolean {
+    return this._consecutiveFlushFailures > 0 || this._retryAfter.remainingMs() > 0
+  }
+
+  /**
    * Synchronously snapshots the current window into an OTLP payload and
    * resets it, bypassing the flush serializer entirely — for unload-time
    * drains where the host must hand the payload to a synchronous transport
@@ -181,6 +210,7 @@ export class PostHogMetrics {
     this._flushJitter = NO_JITTER
     this._flushTimer.clear()
     this._flushPromise = null
+    this._queuedFlush = null
     this._startWindow()
     this._boundsByHistogram = new Map()
     this._boundsCapWarned = false
