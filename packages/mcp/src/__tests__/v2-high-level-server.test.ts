@@ -1,3 +1,5 @@
+import { runInThisContext } from 'node:vm'
+
 import { instrument, getRequestHeaders } from '../index'
 import type {
   CompatibleRequestHandlerExtra,
@@ -290,6 +292,34 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
 
     const executor = (server._registeredTools.fail_always as V2RegisteredTool).executor
     await expect(executor({}, ctx)).rejects.toThrow('intentional failure')
+  })
+
+  it('redacts a credential in the stack frames of the error the tool threw', async () => {
+    const server = makeV2Server()
+    ;(server as unknown as V2McpServerDouble).registerTool(
+      'run_script',
+      { description: 'Runs a remote script.' },
+      async () =>
+        runInThisContext('(() => { throw new Error("script failed") })()', {
+          filename: 'https://tools.example.test/run.js?token=frame-secret-marker',
+        })
+    )
+    instrument(server, fakePostHog(), { context: false })
+
+    const result = await dispatch(
+      server,
+      { method: 'tools/call', params: { name: 'run_script', arguments: {} } },
+      v2Ctx()
+    )
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(result.content[0].text).toBe('script failed')
+    const exceptionList = eventCapture.findCapturesByEvent('$exception')[0].properties.$exception_list as {
+      stacktrace: { frames: { filename?: string }[] }
+    }[]
+    const filenames = exceptionList[0].stacktrace.frames.map((frame) => frame.filename)
+    expect(filenames).toContainEqual(expect.stringContaining('https://tools.example.test/run.js'))
+    expect(JSON.stringify(exceptionList)).not.toContain('frame-secret-marker')
   })
 
   it('captures the failed call when the request context is frozen', async () => {
