@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { captureFailure } from '../src/capture-summary'
-import { defineErrorName } from '../src/named-error'
+import { captureFailure } from '../src/products/analytics/admission/capture-summary'
+import { defineErrorName } from '../src/primitives/named-error'
 
 const withFrozenErrorName = (run: () => void): void => {
     const descriptor = Object.getOwnPropertyDescriptor(Error.prototype, 'name') ?? {

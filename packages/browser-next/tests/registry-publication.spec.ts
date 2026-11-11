@@ -1,5 +1,5 @@
 import type { Client } from '@posthog/browser-common'
-import { ExtensionRegistry } from '../src/extensions/registry'
+import { ExtensionRegistry } from '../src/core/extensions/registry'
 
 const logger = { error: vi.fn() } as unknown as Client['logger']
 const create = () => new ExtensionRegistry(() => ({}) as Client, logger)

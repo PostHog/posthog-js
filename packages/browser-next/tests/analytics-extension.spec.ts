@@ -1,6 +1,6 @@
 import type { CaptureOptions } from '@posthog/browser-common'
-import { analytics } from '../src/analytics'
-import { createPostHog } from '../src/core'
+import { analytics } from '../src/products/analytics/analytics'
+import { createPostHog } from '../src/composition/npm/core'
 import { createFetch, localRemoteConfig, type SentRequest } from './helpers'
 
 const clients: Array<Awaited<ReturnType<typeof createPostHog>>> = []

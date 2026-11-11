@@ -1,4 +1,4 @@
-import { createPostHog } from '../../../../browser-next/src'
+import { createPostHog } from '../../../../browser-next/src/composition/npm'
 
 import {
     type BehaviorAdapter,

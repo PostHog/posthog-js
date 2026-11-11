@@ -1,6 +1,11 @@
-import { buildCaptureV1Event, sendCaptureV1Batch, sendCaptureV1Batches, type CaptureV1Message } from '../src/capture-v1'
-import type { RequestRuntime } from '../src/request'
-import type { BrowserFetch } from '../src/types'
+import {
+    buildCaptureV1Event,
+    sendCaptureV1Batch,
+    sendCaptureV1Batches,
+    type CaptureV1Message,
+} from '../src/products/analytics/delivery/capture-v1'
+import type { RequestRuntime } from '../src/platform/request'
+import type { BrowserFetch } from '../src/core/types'
 
 const message = (overrides: Partial<CaptureV1Message> = {}): CaptureV1Message => ({
     event: 'signed_up',

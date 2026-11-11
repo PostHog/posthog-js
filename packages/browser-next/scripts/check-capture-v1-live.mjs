@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { env, stdout } from 'node:process'
 
-import { sendCaptureV1Batch } from '../dist/capture-v1.mjs'
+import { sendCaptureV1Batch } from '../dist/products/analytics/delivery/capture-v1.mjs'
 
 const host = env.POSTHOG_TEST_HOST?.replace(/\/$/, '')
 const projectToken = env.POSTHOG_TEST_PROJECT_TOKEN

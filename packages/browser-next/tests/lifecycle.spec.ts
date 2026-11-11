@@ -2,10 +2,10 @@ import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import type { Mock } from 'vitest'
 
-import { analytics } from '../src/analytics'
-import { Analytics, type AnalyticsMessage } from '../src/analytics-internal'
-import { CAPTURE_V1_TEARDOWN_BUDGET_BYTES } from '../src/capture-v1'
-import { createPostHog, type BrowserFetch } from '../src/core'
+import { analytics } from '../src/products/analytics/analytics'
+import { Analytics, type AnalyticsMessage } from '../src/products/analytics/analytics-internal'
+import { CAPTURE_V1_TEARDOWN_BUDGET_BYTES } from '../src/products/analytics/delivery/capture-v1'
+import { createPostHog, type BrowserFetch } from '../src/composition/npm/core'
 
 interface MutableNavigator {
     onLine: boolean
