@@ -484,3 +484,58 @@ describe('image-bitmap-data-url-worker', () => {
     }
   });
 });
+
+describe('image-bitmap-data-url-worker without a WebP encoder', () => {
+  // what Safari does: asked for WebP, it returns lossless PNG
+  const noWebp = (options?: { type?: string; quality?: number }) =>
+    Promise.resolve({
+      type: options?.type === 'image/webp' ? 'image/png' : options?.type ?? 'image/png',
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)),
+    });
+  const opaque = (seed: number) =>
+    Uint8ClampedArray.from({ length: BYTES }, (_, i) => (i % 4 === 3 ? 255 : seed + i));
+
+  beforeEach(() => {
+    convertToBlob.mockReset();
+    convertToBlob.mockImplementation(noWebp);
+    postMessage.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete (globalThis as { onmessage?: MessageHandler }).onmessage;
+  });
+
+  it('sends opaque frames as JPEG at the requested quality', async () => {
+    const onmessage = await loadWorker();
+
+    await onmessage(frame(1, opaque(1)));
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 1, type: 'image/jpeg' }),
+    );
+
+    await onmessage(frame(1, opaque(2)));
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 1, type: 'image/jpeg' }),
+    );
+    expect(convertToBlob.mock.calls.map(([o]) => o)).toEqual([
+      { type: 'image/webp', quality: 0.4 },
+      { type: 'image/jpeg', quality: 0.4 },
+      { type: 'image/jpeg', quality: 0.4 },
+    ]);
+  });
+
+  it('keeps frames with see-through pixels lossless, never JPEG', async () => {
+    const onmessage = await loadWorker();
+
+    await onmessage(frame(1, CONTENT_A));
+    await onmessage(frame(1, CONTENT_B));
+
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 1, type: 'image/png' }),
+    );
+    expect(convertToBlob.mock.calls.map(([o]) => o?.type)).not.toContain(
+      'image/jpeg',
+    );
+  });
+});

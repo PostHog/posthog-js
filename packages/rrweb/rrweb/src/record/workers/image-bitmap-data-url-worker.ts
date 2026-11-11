@@ -1,5 +1,6 @@
 import { encode } from 'base64-arraybuffer';
 import type {
+  DataURLOptions,
   ImageBitmapDataURLWorkerMessage,
   ImageBitmapDataURLWorkerResponse,
 } from '@posthog/rrweb-types';
@@ -75,6 +76,36 @@ interface ImageBitmapDataURLResponseWorker {
 }
 
 // `as any` because: https://github.com/Microsoft/TypeScript/issues/20595
+// some browsers (Safari) cannot encode WebP: convertToBlob silently returns lossless PNG,
+// many times larger than the lossy WebP asked for. once that is seen, opaque frames go as
+// JPEG at the same quality; frames with see-through pixels stay PNG, as JPEG would replay
+// them on black
+let noWebpEncoder = false;
+
+function isOpaque(pixels: Uint8ClampedArray): boolean {
+  for (let i = 3; i < pixels.length; i += 4) {
+    if (pixels[i] !== 255) return false;
+  }
+  return true;
+}
+
+async function encodeFrame(
+  canvas: OffscreenCanvas,
+  options: DataURLOptions,
+  pixels: Uint8ClampedArray,
+): Promise<Blob> {
+  const wantsWebp = options.type === 'image/webp';
+  if (wantsWebp && noWebpEncoder && isOpaque(pixels)) {
+    return canvas.convertToBlob({ ...options, type: 'image/jpeg' });
+  }
+  const blob = await canvas.convertToBlob(options);
+  if (!wantsWebp || blob.type === 'image/webp' || noWebpEncoder) return blob;
+  noWebpEncoder = true;
+  return isOpaque(pixels)
+    ? canvas.convertToBlob({ ...options, type: 'image/jpeg' })
+    : blob;
+}
+
 const worker: ImageBitmapDataURLResponseWorker = self;
 
 let reusableCanvas: OffscreenCanvas | null = null;
@@ -129,11 +160,8 @@ worker.onmessage = async function (e) {
       // encode below entirely, instead of encoding first and deduping after.
       // an unseen canvas is compared against the transparent fingerprint, so
       // one that starts out blank is skipped like an unchanged frame
-      const fingerprint = frameFingerprint(
-        width,
-        height,
-        ctx.getImageData(0, 0, width, height).data,
-      );
+      const pixels = ctx.getImageData(0, 0, width, height).data;
+      const fingerprint = frameFingerprint(width, height, pixels);
       const lastFingerprint =
         lastFingerprintMap.get(id) ?? transparentFingerprint(width, height);
 
@@ -151,7 +179,7 @@ worker.onmessage = async function (e) {
         }
       }
 
-      const blob = await reusableCanvas.convertToBlob(dataURLOptions); // takes a while
+      const blob = await encodeFrame(reusableCanvas, dataURLOptions, pixels); // takes a while
       const arrayBuffer = await blob.arrayBuffer();
       worker.postMessage({
         id,
