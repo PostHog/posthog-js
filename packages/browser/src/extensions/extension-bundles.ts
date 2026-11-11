@@ -42,16 +42,10 @@ import { PostHogConversations } from './conversations/posthog-conversations'
 import { PostHogLogs } from '../posthog-logs'
 import { PostHogMetrics } from '../posthog-metrics'
 import { WebMCP } from './webmcp'
-import { extend } from '@posthog/browser-common/utils/general-utils'
 
 type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
-type UnionToIntersection<U> = (U extends unknown ? (union: U) => void : never) extends (intersection: infer I) => void
-    ? I
-    : never
 
-// Avoid object spreads: their compiled helper calls retain unselected extensions in consumer bundles.
-const mergeExtensionGroups = <T extends ExtensionClasses[]>(...groups: T): UnionToIntersection<T[number]> =>
-    extend({}, ...groups) as UnionToIntersection<T[number]>
+// Don't spread bundles into each other: the build lowers spread to a helper call that blocks tree-shaking.
 
 /** Feature flags. */
 export const FeatureFlagsExtensions = {
@@ -132,19 +126,24 @@ export const WebMCPExtensions = {
 } as const satisfies ExtensionClasses
 
 /** All extensions — equivalent to the default `posthog-js` bundle. */
-export const AllExtensions = /* @__PURE__ */ mergeExtensionGroups(
-    FeatureFlagsExtensions,
-    SessionReplayExtensions,
-    AnalyticsExtensions,
-    ErrorTrackingExtensions,
-    ProductToursExtensions,
-    SiteAppsExtensions,
-    SurveysExtensions,
-    TracingExtensions,
-    ToolbarExtensions,
-    ExperimentsExtensions,
-    ConversationsExtensions,
-    LogsExtensions,
-    MetricsExtensions,
-    WebMCPExtensions
-) satisfies ExtensionClasses
+export const AllExtensions = {
+    featureFlags: PostHogFeatureFlags,
+    sessionRecording: SessionRecording,
+    autocapture: BrowserAutocapture,
+    historyAutocapture: HistoryAutocapture,
+    heatmaps: Heatmaps,
+    deadClicksAutocapture: DeadClicksAutocapture,
+    webVitalsAutocapture: WebVitalsAutocapture,
+    exceptionObserver: ExceptionObserver,
+    exceptions: PostHogExceptions,
+    productTours: PostHogProductTours,
+    siteApps: SiteApps,
+    surveys: BrowserSurveys,
+    tracingHeaders: TracingHeaders,
+    toolbar: Toolbar,
+    experiments: WebExperiments,
+    conversations: PostHogConversations,
+    logs: PostHogLogs,
+    metrics: PostHogMetrics,
+    webMCP: WebMCP,
+} as const satisfies ExtensionClasses

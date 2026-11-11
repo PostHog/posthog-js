@@ -716,6 +716,32 @@ describe('the /flags?v=4 response', () => {
       await client.shutdown()
     })
 
+    it('keeps no parsed record of a flag with a value override', async () => {
+      const body = envelope({ 'object-flag': v4Record({ key: 'object-flag', value: { layout: 'compact' } }) })
+      const { client } = createClient([body])
+      client.overrideFeatureFlags({ flags: { 'object-flag': true } })
+
+      const snapshot = await client.evaluateFlags('user-1')
+
+      expect((snapshot as any)._flags['object-flag'].parsed).toBeUndefined()
+      await client.shutdown()
+    })
+
+    it('keeps the parsed record of a flag with a payload override, whose value the record still supplied', async () => {
+      const body = envelope({ 'object-flag': v4Record({ key: 'object-flag', value: { layout: 'compact' } }) })
+      const { client } = createClient([body])
+      client.overrideFeatureFlags({ payloads: { 'object-flag': { layout: 'wide' } } })
+
+      const snapshot = await client.evaluateFlags('user-1')
+
+      expect((snapshot as any)._flags['object-flag'].parsed).toMatchObject({
+        value: { layout: 'compact' },
+        failed: false,
+      })
+      expect(snapshot.getFlagPayload('object-flag')).toEqual({ layout: 'wide' })
+      await client.shutdown()
+    })
+
     it.each([
       ['v4', () => v4Record()],
       ['older', () => olderRecord()],
