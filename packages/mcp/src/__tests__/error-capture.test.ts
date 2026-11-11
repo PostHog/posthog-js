@@ -7,6 +7,8 @@
  * errors onto the published event, plus a few integration-only behaviors
  * the unit tests can't reach.
  */
+import { runInNewContext } from 'node:vm'
+
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { instrument } from '../index'
@@ -89,12 +91,30 @@ describe('error capture on the tool-call path', () => {
     expect(exceptionList?.[0].value).toBe(expected)
   })
 
-  it('carries the HTTP status of the error a thrown tool error wraps', async () => {
+  it.each([
+    [
+      'an error wrapping a failed fetch',
+      () =>
+        new Error('invoice lookup failed', {
+          cause: Object.assign(new Error('503 from upstream'), { response: new Response(null, { status: 503 }) }),
+        }),
+      'Error',
+    ],
+    [
+      'an error from another realm',
+      () =>
+        runInNewContext(
+          'class UpstreamError extends Error { name = "UpstreamError" }; Object.assign(new UpstreamError("down"), { status: 503 })'
+        ),
+      'UpstreamError',
+    ],
+    ['a fetch Response', () => new Response(null, { status: 503 }), 'Error'],
+    ['a plain object', () => ({ name: 'UpstreamError', message: 'down', status: 503 }), 'UpstreamError'],
+  ])('carries the HTTP status and type when the tool throws %s', async (_case, thrown, errorType) => {
     instrument(server, fakePostHog())
 
     server.tool!('fetch_invoice', 'fetches an invoice', {}, async () => {
-      const upstream = Object.assign(new Error('503 from upstream'), { response: new Response(null, { status: 503 }) })
-      throw new Error('invoice lookup failed', { cause: upstream })
+      throw thrown()
     })
 
     await client.request(
@@ -106,8 +126,34 @@ describe('error capture on the tool-call path', () => {
     const toolCall = capture
       .findCapturesByEvent('$mcp_tool_call')
       .find((event) => event.properties.$mcp_tool_name === 'fetch_invoice')
-    expect(toolCall?.properties.$mcp_error_message).toBe('invoice lookup failed')
     expect(toolCall?.properties.$mcp_error_status).toBe(503)
+    expect(toolCall?.properties.$mcp_error_type).toBe(errorType)
+  })
+
+  it('carries the HTTP status on every server that registers the same tool function', async () => {
+    const failing = async () => {
+      throw Object.assign(new Error('down'), { status: 503 })
+    }
+    const second = await setupTestServerAndClient()
+    try {
+      for (const target of [server, second.server]) {
+        instrument(target, fakePostHog())
+        target.tool('fetch_invoice', 'fetches an invoice', {}, failing)
+      }
+
+      await second.client.request(
+        { method: 'tools/call', params: { name: 'fetch_invoice', arguments: {} } },
+        CallToolResultSchema
+      )
+      await new Promise((r) => setTimeout(r, 50))
+
+      const toolCall = capture
+        .findCapturesByEvent('$mcp_tool_call')
+        .find((event) => event.properties.$mcp_tool_name === 'fetch_invoice')
+      expect(toolCall?.properties.$mcp_error_status).toBe(503)
+    } finally {
+      await second.cleanup()
+    }
   })
 
   it('still propagates the error result to the MCP client (does not swallow it)', async () => {
