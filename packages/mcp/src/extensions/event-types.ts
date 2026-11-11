@@ -21,6 +21,7 @@ export const MCPAnalyticsEventType = {
   mcpResourcesRead: 'mcp:resources/read',
   mcpToolsCall: 'mcp:tools/call',
   mcpToolsList: 'mcp:tools/list',
+  mcpUnknownTool: 'mcp:unknown_tool',
 } as const
 
 export type MCPAnalyticsEventType = (typeof MCPAnalyticsEventType)[keyof typeof MCPAnalyticsEventType]

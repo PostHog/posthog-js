@@ -17,6 +17,7 @@ import type {
   PrepareToolListOptions,
   ToolCallCaptureData,
   ToolsListCaptureData,
+  UnknownToolCaptureData,
 } from '../types'
 import {
   buildFeedbackEventProperties,
@@ -54,7 +55,7 @@ import {
 } from './model-parameters'
 import { McpEventSink } from './sink'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
-import { deriveSessionIdFromConversation } from './session'
+import { deriveSessionIdFromConversation, newSessionId } from './session'
 import { validateServerBuild } from './server-build'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
 
@@ -480,6 +481,21 @@ export class PostHogMCP extends PostHog {
   }
 
   /**
+   * Capture a call to a tool your server does not have. Emits
+   * `$mcp_unknown_tool`. Use it instead of {@link captureToolCall} when your
+   * dispatcher rejects the name, so the call is not counted as a tool call. A
+   * call that names no tool emits nothing.
+   */
+  captureUnknownTool(data: UnknownToolCaptureData): void {
+    if (!data.toolName) {
+      return
+    }
+    const event = baseEvent(MCPAnalyticsEventType.mcpUnknownTool, data)
+    event.resourceName = data.toolName
+    this.#emit(event)
+  }
+
+  /**
    * Capture a `send_feedback` call as an agent-feedback report. Emits
    * `$mcp_feedback` with the report's `$mcp_feedback_*` properties and its
    * summary/details as `$mcp_intent`. Reply to the agent with
@@ -534,7 +550,7 @@ export class PostHogMCP extends PostHog {
 function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): McpEvent {
   const event: McpEvent = {
     eventType,
-    sessionId: common.sessionId,
+    sessionId: common.sessionId || newSessionId(),
     conversationId: common.conversationId,
     protocolVersion: common.protocolVersion,
     // There is no `extra` on this path, so the host reads the request headers and

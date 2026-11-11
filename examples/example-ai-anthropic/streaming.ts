@@ -29,7 +29,7 @@ async function main() {
     })
 
     const stream = await client.messages.create({
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-sonnet-5-5',
         max_tokens: 1024,
         stream: true,
         messages: [{ role: 'user', content: 'Explain observability in three sentences.' }],
