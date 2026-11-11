@@ -59,6 +59,10 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
     result.llmModel = sanitizeCapturedValue(result.llmModel) as string
   }
 
+  if (result.errorType != null) {
+    result.errorType = sanitizeCapturedValue(result.errorType) as string
+  }
+
   if (result.error != null) {
     result.error = sanitizeExceptionValues(result.error)
   }

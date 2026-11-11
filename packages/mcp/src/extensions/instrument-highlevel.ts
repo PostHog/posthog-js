@@ -318,7 +318,7 @@ async function handleToolCallRequest(
     takeCapturedError: () => {
       const captured = extra?.__mcp_analytics_error
       if (extra) {
-        extra.__mcp_analytics_error = undefined
+        Reflect.set(extra, '__mcp_analytics_error', undefined)
       }
       return captured
     },

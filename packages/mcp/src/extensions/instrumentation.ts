@@ -470,7 +470,8 @@ function publishSuccessfulToolEvent(
     if (isToolResultError(result)) {
       event.isError = true
       const capturedError = takeCapturedError?.()
-      event.error = captureException(capturedError ?? resultBeforeInstructions ?? result)
+      const resultError = resultBeforeInstructions ?? result
+      event.error = captureException(capturedError ?? resultError, resultError)
       event.errorStatus = httpStatus(capturedError)
     } else {
       event.isError = false
