@@ -406,6 +406,8 @@ export interface Event {
   conversationId?: string
   duration?: number
   error?: ErrorProperties | null
+  /** HTTP status behind the failure → `$mcp_error_status`, read off the thrown error's `cause` chain. */
+  errorStatus?: number
   /**
    * Coarse failure category → `$mcp_error_type`. An explicit, low-cardinality
    * label the host can supply (e.g. `validation`, `permission`, `timeout`).

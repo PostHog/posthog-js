@@ -51,6 +51,43 @@ export function captureException(error: unknown): CoreErrorTracking.ErrorPropert
   return errorPropertiesBuilder.buildFromUnknown(normalized)
 }
 
+const STATUS_FIELDS = ['status_code', 'statusCode', 'status']
+
+/**
+ * The HTTP status behind a failure, for `$mcp_error_status`: the first one found
+ * walking the thrown error's `cause` chain inward, so a status the tool threw
+ * itself beats the one on the error it wrapped. Reads each link and its
+ * `response` (a fetch `Response`, an axios or got response).
+ */
+export function httpStatus(error: unknown): number | undefined {
+  const visited = new Set<unknown>()
+  for (let link = error; isObject(link) && !visited.has(link); link = readField(link, 'cause')) {
+    visited.add(link)
+    for (const holder of [link, readField(link, 'response')]) {
+      for (const field of STATUS_FIELDS) {
+        const status = readField(holder, field)
+        if (typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599) {
+          return status
+        }
+      }
+    }
+  }
+  return undefined
+}
+
+function isObject(value: unknown): value is object {
+  return value !== null && typeof value === 'object'
+}
+
+function readField(value: unknown, field: string): unknown {
+  // A third-party getter can throw; a failed probe must not drop the event.
+  try {
+    return isObject(value) ? (value as Record<string, unknown>)[field] : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Detects a CallToolResult error object (SDK 1.21.0+ format):
  * `{ content: [{ type: "text", text: "..." }], isError: true }`.
