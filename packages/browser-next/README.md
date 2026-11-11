@@ -41,13 +41,13 @@ Use `analytics: false` to block implicit analytics acquisition, including reques
 
 Product namespaces expose owners only after successful setup. Reading a namespace never initiates loading. Use `await posthog.resolveExtension(token)` for typed custom-extension access; resolution waits for readiness and returns `undefined` when the extension is unavailable. Shared implementations receive a separate `Client` adapter with shared binding lookup.
 
-Analytics owns person-profile policy through `personProfiles: 'always' | 'never' | 'identified_only'`, defaulting to `identified_only`. Anonymous events carry `process_person_profile: false` in Capture V1 options until identification, group registration or explicit profile enablement. Configure it through `analytics: { personProfiles: 'always' }` or an explicit `analytics({ personProfiles: 'always' })` instance.
+Analytics owns person-profile policy through `personProfiles: 'always' | 'never' | 'identified_only'`, defaulting to `identified_only`. Anonymous events carry `process_person_profile: false` in Capture V1 options until identification, group registration or explicit profile enablement. Configure it through `analytics: { personProfiles: 'always' }` or an explicit `analytics({ personProfiles: 'always' })` instance. SDK-computed processing metadata takes precedence over caller properties; `$process_person_profile` does not change the SDK's underlying processing state.
 
 Use the analytics product's `createPersonProfile()`, `setPersonProperties(set?, setOnce?)`, `unsetPersonProperties(names)` and `setInternalOrTestUser()` controls for explicit person updates. Profile creation and property updates preserve the current anonymous identity; they do not identify the user. Set, set-once and unset also update local feature-flag person context. Exact repeated property updates are deduplicated only after local event admission. Reset clears explicit profile enablement and deduplication, without rewriting queued events. In `never` mode, person helpers, identify and group registration are no-ops; ordinary capture continues without person processing.
 
 Resolve or explicitly compose analytics before using its identity controls. `alias(targetId)` links the current ID without changing the current identity or marking it identified; it enables person processing unless disabled by policy. Use `identify()` to switch the ambient identity.
 
-`group(type, key, properties?)` persists ambient membership. `groupIdentify(type, key, properties?, options?)` sends a group-profile update without changing membership or local flag-evaluation context; its key can be a string or finite number, and its options use the ordinary capture pipeline. Alias and group-profile events require capture consent and are suppressed in `never` mode. `resetGroups()` clears memberships and group properties used for flags and requests a flag reload, retaining identity, sessions, person properties and other stored state. It remains available for cleanup when capture is denied or person processing is disabled. Previously queued events retain their captured group context.
+`group(type, key, properties?)` persists ambient membership. `groupIdentify(type, key, properties?, options?)` sends a group-profile update without changing membership or local flag-evaluation context; its key can be a string or finite number, and its options use the ordinary capture pipeline. Alias and group-profile events require capture consent and are suppressed in `never` mode. `resetGroups()` clears memberships, retaining identity, sessions, person properties and other stored state. When flags is installed it also clears group properties used for evaluation and requests a reload. Persisted group flag properties can remain when flags is absent ([tracked in #5673](https://github.com/PostHog/posthog-js/issues/5673)). It remains available for cleanup when capture is denied or person processing is disabled. Previously queued events retain their captured group context.
 
 ```ts
 const analytics = await posthog.resolveExtension('analytics')
@@ -73,6 +73,22 @@ analytics?.unregister('region')
 `register(properties)` merges JSON-serializable properties into analytics' Core-owned persistent storage. `registerOnce(properties, defaultValue = 'None')` adds missing keys or replaces existing values strictly equal to the sentinel; other existing values, including `false`, `0`, `''` and `null`, are retained. `getProperty(key)` returns an isolated stored value, or `undefined` for a missing key. Registration inputs and captured events are snapshotted, so later input or stored-property changes do not rewrite queued events.
 
 Persistent properties are overridden by dynamic event-property producers, then caller properties and capture options. SDK identity, group, session, library and person-processing metadata remains authoritative. Registration and removal only change local context, do not emit events, and remain available when capture consent is denied or person processing is disabled. Properties survive reload with persistent storage, until overwritten, unregistered or cleared by full `reset()`; `resetGroups()` retains them.
+
+## Migrating to analytics-owned operations
+
+Analytics operations now belong to `posthog.analytics`, not the Core client:
+
+| Previous client API                | Replacement                                                             |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| `capture()`, `captureImmediate()`  | `posthog.analytics?.capture()`, `posthog.analytics?.captureImmediate()` |
+| `identify()`, `group()`, `reset()` | The corresponding method on `posthog.analytics`                         |
+| `onEvent`, `isRateLimited`         | The corresponding member on `posthog.analytics`                         |
+| `registerDynamicEventProperties()` | `posthog.analytics?.registerDynamicEventProperties()`                   |
+| Synchronous `getExtension(token)`  | `await posthog.resolveExtension(token)`                                 |
+
+Product namespaces are optional: they expose successfully initialized owners, not availability of network delivery. Resolve a product before using it when initialization may still be pending, and handle `undefined` when it is unavailable. `flush()` and `dispose()` remain on the client, alongside consent, identity/session getters, remote configuration and scoped key-value storage.
+
+Replace the removed application type export `PostHog` with `IPostHog`. For extension authors, replace the removed `BrowserClient` type export with `IPostHogInternal`. `BrowserExtension` (also exported as `Extension`) is the browser-next extension contract; shared implementations continue using `Client` from `@posthog/browser-common`. The setup host exposes browser product owners directly. Its `sharedClient` adapter supplies shared implementations with their binding lookup and capture surface; it is not the application client.
 
 ## Classic script installation (draft CDN distribution)
 
@@ -299,7 +315,7 @@ Definitions and event activation state use the host-provided surveys KV namespac
 
 ## Capture and delivery
 
-`capture()` admits an event to the queue synchronously and does not wait for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
+`analytics.capture()` runs synchronously. Its `false` result is a rate-limit backpressure signal, not a general rejection signal. `true` is neither an admission nor a delivery acknowledgement: consent, lifecycle, filtering, invalid properties or queue limits can suppress an event while it still returns `true`. Use `captureImmediate()` and check its summary when persistence matters. Capture never waits for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
 
 Queued and immediate capture omit null or undefined object properties from delivered events, including nested objects and objects inside arrays. Array positions are preserved; null and undefined array entries are sent as JSON `null`. Events with no remaining custom properties are still delivered with their SDK metadata.
 
