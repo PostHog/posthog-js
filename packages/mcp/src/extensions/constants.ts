@@ -5,7 +5,7 @@
 
 export const INACTIVITY_TIMEOUT_IN_MINUTES = 30
 
-export const DEFAULT_CONTEXT_PARAMETER_DESCRIPTION = `Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as "a user", "the customer", or "an account". Example: "Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution."`
+export const DEFAULT_CONTEXT_PARAMETER_DESCRIPTION = `A few words on why you are calling this tool, for the server developer's analytics. Describe people and things by role, such as "a customer". Do not quote the user or include names, emails, or other personal details.`
 
 export const DEFAULT_MODEL_PARAMETER_DESCRIPTION = `The model identifier you are running as, for example "claude-opus-4-8" or "gpt-5.2". Pass "unknown" if you are not certain. Recorded for the server developer's analytics.`
 
@@ -36,6 +36,7 @@ export const PostHogMCPAnalyticsEvent = {
   ResourcesList: '$mcp_resources_list',
   ToolCall: '$mcp_tool_call',
   ToolsList: '$mcp_tools_list',
+  UnknownTool: '$mcp_unknown_tool',
 } as const
 
 export type PostHogMCPAnalyticsEvent = (typeof PostHogMCPAnalyticsEvent)[keyof typeof PostHogMCPAnalyticsEvent]

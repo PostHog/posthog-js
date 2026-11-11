@@ -2109,6 +2109,107 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
+  it.each([
+    { groupType: 'AND', operator: 'not_in', negation: false, cohortId: 2, memberMatches: false },
+    { groupType: 'OR', operator: 'not_in', negation: false, cohortId: 2, memberMatches: false },
+    { groupType: 'AND', operator: 'not_in', negation: true, cohortId: 2, memberMatches: true },
+    { groupType: 'OR', operator: 'not_in', negation: true, cohortId: 2, memberMatches: true },
+    { groupType: 'AND', operator: 'not_in', negation: false, cohortId: 1, memberMatches: true },
+    { groupType: 'AND', operator: 'in', negation: false, cohortId: 2, memberMatches: true },
+    { groupType: 'AND', operator: undefined, negation: false, cohortId: 2, memberMatches: true },
+  ])(
+    'matches nested cohort $operator in $groupType with negation=$negation referencing cohort $cohortId',
+    async ({ groupType, operator, negation, cohortId, memberMatches }) => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              {
+                id: 1,
+                key: 'nested-cohort',
+                active: true,
+                filters: { groups: [{ properties: [{ key: 'id', value: 98, type: 'cohort' }] }] },
+              },
+            ],
+            cohorts: {
+              '98': {
+                type: groupType,
+                values: [{ key: 'id', value: cohortId, type: 'cohort', operator, negation }],
+              },
+              '1': { type: 'AND', values: [{ key: 'id', value: 2, type: 'cohort', operator: 'not_in' }] },
+              '2': { type: 'AND', values: [{ key: 'plan', value: 'pro', type: 'person', operator: 'exact' }] },
+            },
+          },
+        })
+      )
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      for (const [plan, expected] of [
+        ['pro', memberMatches],
+        ['free', !memberMatches],
+      ] as const) {
+        expect(
+          await posthog.getFeatureFlag('nested-cohort', 'some-distinct-id', {
+            personProperties: { plan },
+            onlyEvaluateLocally: true,
+          })
+        ).toBe(expected)
+      }
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+    }
+  )
+
+  it.each([
+    { missingDefinition: true, negation: false },
+    { missingDefinition: true, negation: true },
+    { missingDefinition: false, negation: false },
+    { missingDefinition: false, negation: true },
+  ])(
+    'keeps nested not_in unresolved with missingDefinition=$missingDefinition and negation=$negation',
+    async ({ missingDefinition, negation }) => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              {
+                id: 1,
+                key: 'nested-cohort',
+                active: true,
+                filters: { groups: [{ properties: [{ key: 'id', value: 98, type: 'cohort' }] }] },
+              },
+            ],
+            cohorts: {
+              '98': {
+                type: 'AND',
+                values: [{ key: 'id', value: 1, type: 'cohort', operator: 'not_in', negation }],
+              },
+              ...(missingDefinition
+                ? {}
+                : { '1': { type: 'AND', values: [{ key: 'plan', value: 'pro', type: 'person', operator: 'exact' }] } }),
+            },
+          },
+          decideFlags: { 'nested-cohort': 'server-fallback' },
+        })
+      )
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      expect(
+        await posthog.getFeatureFlag('nested-cohort', 'some-distinct-id', { onlyEvaluateLocally: true })
+      ).toBeUndefined()
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+      expect(await posthog.getFeatureFlag('nested-cohort', 'some-distinct-id')).toBe('server-fallback')
+      expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+    }
+  )
+
   it('gets feature flag with variant overrides', async () => {
     const flags = {
       flags: [

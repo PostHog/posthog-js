@@ -1389,6 +1389,43 @@ posthog.register({
 
 `void`
 
+### `PostHog.setAppLanguage`
+
+> **setAppLanguage**(`language`): `void`
+
+Sets the `$app_language` property: the language your app displays, sent with every event.
+
+Default: not set, so events carry no `$app_language`. React Native apps usually translate in
+JavaScript (for example with i18next), which the SDK can't see, so call this at startup and
+whenever the language changes. Compare `$locale`, which is the device language.
+
+The value is kept in memory only and survives `reset()`. A `$app_language` you `register()`
+wins over it. With `@posthog/react-native-plugin` 3.0 or later, events the native SDK
+captures itself, such as crashes and push opens, carry it too. Call it right after creating
+the client so a push open that launched the app carries it as well.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `language` | `string` \| `null` | A BCP 47 language tag, such as `de` or `pt-BR`. `_` is replaced with `-`. Pass `null` or an empty string to stop sending it. |
+
+#### Returns
+
+`void`
+
+#### Example
+
+```js
+// With i18next or react-i18next
+posthog.setAppLanguage(i18n.resolvedLanguage)
+i18n.on('languageChanged', (language) => posthog.setAppLanguage(language))
+
+// Your own language setting
+posthog.setAppLanguage(settings.language) // at startup
+posthog.setAppLanguage('de') // when the user picks German
+```
+
 ## Reload feature flags
 
 ### `PostHog.reloadFeatureFlags`

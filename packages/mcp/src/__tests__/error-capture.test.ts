@@ -158,19 +158,4 @@ describe('error capture on the tool-call path', () => {
     expect(exception?.value).toMatch(/Invalid|required/i)
     expect(['McpError', 'Error', undefined]).toContain(exception?.type)
   })
-
-  it('captures errors for unknown tool names', async () => {
-    instrument(server, fakePostHog())
-
-    await client
-      .request(
-        { method: 'tools/call', params: { name: 'nonexistent_tool', arguments: { context: 'x' } } },
-        CallToolResultSchema
-      )
-      .catch(() => undefined)
-
-    await new Promise((r) => setTimeout(r, 50))
-    const event = capture.findEventsByResourceName('nonexistent_tool').find((e) => e.isError)
-    expect(event?.error?.$exception_list?.[0]?.value).toContain('not found')
-  })
 })

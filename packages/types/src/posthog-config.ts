@@ -1604,6 +1604,9 @@ export interface PostHogConfig {
      * - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes
      * - An object: Capture the initial pageview and pageviews when any selected URL component changes
      *
+     * With the slim bundle, history-based pageviews require `AnalyticsExtensions.historyAutocapture`
+     * from `posthog-js/extensions` in `__extensionClasses`. Without it, only the initial pageview is captured.
+     *
      * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
     capture_pageview: boolean | 'history_change' | CapturePageviewOptions
@@ -1906,6 +1909,10 @@ export interface PostHogConfig {
      * Determines if users should be opted out of user agent filtering such as googlebot or other bots.
      * If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,
      * but will process all events as if they were from a browser.
+     *
+     * When the filter drops events, a one-time warning is written to the console (even without debug mode).
+     * The filter applies to events only; logs sent with `captureLog` bypass it.
+     * Set this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer).
      *
      * @default false
      */
