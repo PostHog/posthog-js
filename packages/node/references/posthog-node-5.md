@@ -2803,11 +2803,11 @@ Options accepted by `posthog.metrics.count/gauge/histogram`.
 
 ### `CodeEmailForm`
 
-> **CodeEmailForm** = `CodeEmailFields` & (\{ `html`: `string`; `text?`: `string`; \} \| \{ `html?`: `string`; `text`: `string`; \})
+> **CodeEmailForm** = `CodeEmailFields` & (\{ `html`: `string`; `react?`: `never`; `text?`: `string`; \} \| \{ `html?`: `string`; `react?`: `never`; `text`: `string`; \} \| \{ `html?`: `never`; `react`: `EmailReactElement`; `text?`: `string`; \})
 
-Email content your code rendered, such as React Email output, named by a key. PostHog sends it
-as is and never stores it. Needs `html`, `text` or both. PostHog derives a missing `text` from
-the `html`.
+Email content from your code, named by a key: `html`, `text` or both, or a `react` element
+the client renders. PostHog sends it as is and never stores it. PostHog derives a missing
+`text` from the `html`.
 
 ### `Compression`
 
@@ -2883,6 +2883,18 @@ A coarse category of the failure, for code that branches on the kind of failure 
 | <a id="property-retryafterms"></a> `retryAfterMs?` | `number` |
 | <a id="property-statuscode"></a> `statusCode?` | `number` |
 | <a id="property-why"></a> `why?` | `string` |
+
+### `EmailReactElement`
+
+A React element, such as `<WelcomeEmail firstName="Ada" />`. Typed by its shape, so
+posthog-node needs no React types.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-props"></a> `props` | `unknown` |
+| <a id="property-type"></a> `type` | `unknown` |
 
 ### `Emails`
 
