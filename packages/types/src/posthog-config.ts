@@ -2634,7 +2634,8 @@ export interface PostHogConfig {
      * CORS preflight, and fails if the server's `Access-Control-Allow-Headers` doesn't include `traceparent`.
      *
      * A `traceparent` header already set by your app or by OpenTelemetry's instrumentation is never overwritten
-     * or duplicated.
+     * or duplicated. If OpenTelemetry's XHR instrumentation also propagates to a cross-origin host (its
+     * `propagateTraceHeaderCorsUrls`), list that host in only one of the two.
      *
      * @example
      * ```js

@@ -593,27 +593,51 @@ describe('tracing headers', () => {
                 }
                 Object.defineProperty(otelSend, '__wrapped', { value: true })
 
-                it('leaves the header to it when it wrapped send before PostHog', () => {
-                    const setRequestHeaderSpy = vi
-                        .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
-                        .mockImplementation(() => {})
+                const withOtelBelow = (wrapper: typeof otelSend, run: () => void) => {
                     const nativeSend = XMLHttpRequest.prototype.send
-                    XMLHttpRequest.prototype.send = otelSend as typeof nativeSend
+                    XMLHttpRequest.prototype.send = wrapper as typeof nativeSend
                     try {
                         restoreXHRPatch = patchFns._patchXHR(undefined, 'distinct-id', sessionManager as any, [
+                            window.location.hostname,
                             'api.example.com',
                         ])
-
-                        const xhr = new XMLHttpRequest()
-                        xhr.open('GET', 'https://api.example.com/path')
-                        xhr.send()
-
-                        expect(sentTraceparents(setRequestHeaderSpy)).toEqual([otelTraceparent])
+                        run()
                     } finally {
                         restoreXHRPatch?.()
                         restoreXHRPatch = undefined
                         XMLHttpRequest.prototype.send = nativeSend
                     }
+                }
+
+                it('leaves same-origin requests to it when it wrapped send before PostHog', () => {
+                    const setRequestHeaderSpy = vi
+                        .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
+                        .mockImplementation(() => {})
+                    withOtelBelow(otelSend, () => {
+                        const xhr = new XMLHttpRequest()
+                        xhr.open('GET', `${window.location.origin}/path`)
+                        xhr.send()
+
+                        expect(sentTraceparents(setRequestHeaderSpy)).toEqual([otelTraceparent])
+                    })
+                })
+
+                it('still sets traceparent on cross-origin targets it skips by default', () => {
+                    const setRequestHeaderSpy = vi
+                        .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
+                        .mockImplementation(() => {})
+                    // OpenTelemetry's default: no propagation to cross-origin URLs.
+                    const otelSendSkippingCrossOrigin = function (this: XMLHttpRequest) {}
+                    Object.defineProperty(otelSendSkippingCrossOrigin, '__wrapped', { value: true })
+                    withOtelBelow(otelSendSkippingCrossOrigin as typeof otelSend, () => {
+                        const xhr = new XMLHttpRequest()
+                        xhr.open('GET', 'https://api.example.com/path')
+                        xhr.send()
+
+                        const sent = sentTraceparents(setRequestHeaderSpy)
+                        expect(sent).toHaveLength(1)
+                        expect(sent[0]).toMatch(TRACEPARENT_PATTERN)
+                    })
                 })
 
                 it('still sets traceparent when OpenTelemetry has not wrapped send underneath PostHog', () => {

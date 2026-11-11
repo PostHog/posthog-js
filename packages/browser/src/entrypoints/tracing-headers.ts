@@ -198,7 +198,19 @@ const randomNonZeroHex = (byteLength: number): string => {
 // OpenTelemetry's XHR instrumentation wraps send() with shimmer (which marks the wrapper `__wrapped`) and injects
 // traceparent from inside it through the global propagator. If it wrapped send() before we did, it runs after our
 // injection, and XHR appends rather than replaces, so the header would end up with two comma-joined values.
-// Leave those requests to it. (If it wraps send() after us, it sets the header first and setRequestHeader sees it.)
+// Leave those requests to it. Its default only propagates to same-origin URLs (cross-origin needs its
+// `propagateTraceHeaderCorsUrls`, which we can't read), so we only step aside for same-origin requests and still
+// set the header for cross-origin targets it would skip. (If it wraps send() after us, it sets the header first
+// and setRequestHeader sees it.)
+const isSameOrigin = (url: string): boolean => {
+    try {
+        // oxlint-disable-next-line compat/compat
+        return !!window && new URL(url, window.location.href).origin === window.location.origin
+    } catch {
+        return false
+    }
+}
+
 type PatchedFunction = {
     __wrapped?: unknown
     __posthog_layer__?: { next?: unknown }
@@ -436,7 +448,7 @@ const patchXHR = (
                     try {
                         if (
                             isTraceparentTarget(traceparentTargets, requestUrl) &&
-                            !otelWrapsSendBelow(sendLayer?.next)
+                            !(isSameOrigin(requestUrl) && otelWrapsSendBelow(sendLayer?.next))
                         ) {
                             this.setRequestHeader(TRACEPARENT_HEADER, createTraceparent())
                         }
