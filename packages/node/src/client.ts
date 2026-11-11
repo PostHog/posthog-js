@@ -2739,9 +2739,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       for (const [key, payload] of Object.entries(this._payloadOverrides)) {
         const existing = records[key]
         if (existing) {
-          // Like a value override, a payload override means the record is no longer the one
-          // the server sent, so it keeps no parsed record.
-          records[key] = { ...existing, payload, parsed: undefined }
+          // A payload override keeps the parsed record, because the record still supplied the
+          // flag's value. A value override, above, drops it.
+          records[key] = { ...existing, payload }
         }
       }
     }

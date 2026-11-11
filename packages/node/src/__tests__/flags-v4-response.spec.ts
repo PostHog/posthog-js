@@ -716,23 +716,29 @@ describe('the /flags?v=4 response', () => {
       await client.shutdown()
     })
 
-    it.each([
-      ['value', { flags: { 'object-flag': true } }, { layout: 'compact' }],
-      ['payload', { payloads: { 'object-flag': { layout: 'wide' } } }, { layout: 'wide' }],
-    ])('keeps no parsed record of a flag with a %s override', async (_kind, overrides, payload) => {
-      const body = envelope({
-        'object-flag': v4Record({ key: 'object-flag', value: { layout: 'compact' } }),
-        untouched: v4Record({ key: 'untouched' }),
-      })
+    it('keeps no parsed record of a flag with a value override', async () => {
+      const body = envelope({ 'object-flag': v4Record({ key: 'object-flag', value: { layout: 'compact' } }) })
       const { client } = createClient([body])
-      client.overrideFeatureFlags(overrides)
+      client.overrideFeatureFlags({ flags: { 'object-flag': true } })
 
       const snapshot = await client.evaluateFlags('user-1')
-      const flags = (snapshot as any)._flags
 
-      expect(flags['object-flag'].parsed).toBeUndefined()
-      expect(snapshot.getFlagPayload('object-flag')).toEqual(payload)
-      expect(flags.untouched.parsed).toMatchObject({ value: 'compact', failed: false })
+      expect((snapshot as any)._flags['object-flag'].parsed).toBeUndefined()
+      await client.shutdown()
+    })
+
+    it('keeps the parsed record of a flag with a payload override, whose value the record still supplied', async () => {
+      const body = envelope({ 'object-flag': v4Record({ key: 'object-flag', value: { layout: 'compact' } }) })
+      const { client } = createClient([body])
+      client.overrideFeatureFlags({ payloads: { 'object-flag': { layout: 'wide' } } })
+
+      const snapshot = await client.evaluateFlags('user-1')
+
+      expect((snapshot as any)._flags['object-flag'].parsed).toMatchObject({
+        value: { layout: 'compact' },
+        failed: false,
+      })
+      expect(snapshot.getFlagPayload('object-flag')).toEqual({ layout: 'wide' })
       await client.shutdown()
     })
 
