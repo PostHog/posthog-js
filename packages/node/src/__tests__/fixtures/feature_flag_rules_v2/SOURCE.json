@@ -1,9 +1,8 @@
 {
-  "description": "Copied unchanged from the feature flag rules v2 contract in PostHog/posthog-sdk-test-harness at the revision below. Do not edit these files; copy a newer release instead. The revision is the head of an unreleased pull request, so release is null until these files are copied again from its release.",
+  "description": "Copied unchanged from the released feature flag rules v2 contract in PostHog/posthog-sdk-test-harness. Do not edit these files; copy a newer release instead.",
   "repository": "https://github.com/PostHog/posthog-sdk-test-harness",
-  "release": null,
-  "pull_request": "https://github.com/PostHog/posthog-sdk-test-harness/pull/105",
-  "revision": "b0a7bc55a3141260b6556820471186105de5f4bd",
+  "release": "1.30.0",
+  "revision": "6414114501396d96aadf2412fdd8054a03076782",
   "contract_directory": "contracts/feature_flag_rules_v2",
   "contract_version": "10.0.0",
   "files": {

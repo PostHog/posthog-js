@@ -6,9 +6,10 @@ import type { FeatureFlagDetail, PostHogFeatureFlagsResponse, PostHogFetchOption
 import { PostHog } from '@/entrypoints/index.node'
 import { FLAGS_RESPONSE_WITHOUT_TYPED_VALUES_MESSAGE, ParsedFlagRecord, parsedFlagRecordOf } from '@/flags-response'
 
-// Reading the /flags?v=4 response, checked against the harness wire contract. The files in
-// `fixtures/feature_flag_rules_v2` are copied unchanged from a PostHog/posthog-sdk-test-harness
-// contract; `SOURCE.json` records the revision, its release and the digest of each file.
+// Reading the /flags?v=4 response, checked against the released wire contract. The files in
+// `fixtures/feature_flag_rules_v2` are copied unchanged from a released
+// PostHog/posthog-sdk-test-harness contract; `SOURCE.json` records the release and the digest
+// of each file.
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/feature_flag_rules_v2/', import.meta.url))
 const load = (name: string): any => JSON.parse(readFileSync(FIXTURES + name, 'utf8'))
@@ -134,9 +135,7 @@ describe('the /flags?v=4 response', () => {
 
   it('vendors the contract fixtures unchanged from the recorded release', () => {
     const source = load('SOURCE.json')
-    // Unreleased harness pull request head; copy the files again from its release.
-    expect(source.release).toBeNull()
-    expect(source.revision).toBe('b0a7bc55a3141260b6556820471186105de5f4bd')
+    expect(source.release).toBe('1.30.0')
     expect(source.contract_version).toBe('10.0.0')
     for (const [name, entry] of Object.entries<any>(source.files)) {
       const digest = createHash('sha256')
