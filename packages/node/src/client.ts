@@ -3167,11 +3167,26 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Logs drain alongside the other pipelines rather than ahead of them, so a stalled
     // logs endpoint can't spend the budget traces and events need.
     const logs = this._logs
+    let logsDrainStopped = false
+    const oldestQueuedLog = (): unknown =>
+      (this.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as unknown[] | undefined)?.[0]
+    // One flush only sends what was queued when it started, so records logged while it was in
+    // flight (a SIGTERM handler logging after calling shutdown) need another pass. Stops once a
+    // pass leaves the oldest record in place (the endpoint is down) or the race below has ended.
+    const drainLogs = async (pipeline: PostHogLogs): Promise<void> => {
+      let oldest = oldestQueuedLog()
+      while (oldest !== undefined && !logsDrainStopped) {
+        await pipeline.flush().catch(() => {})
+        const next = oldestQueuedLog()
+        if (next === oldest) {
+          return
+        }
+        oldest = next
+      }
+    }
     const logsDrained = logs
-      ? raceWithTimeout(
-          logs.flush().catch(() => {}),
-          Math.max(0, shutdownDeadlineMs - Date.now())
-        ).then(() => {
+      ? raceWithTimeout(drainLogs(logs), Math.max(0, shutdownDeadlineMs - Date.now())).then(() => {
+          logsDrainStopped = true
           logs.reset()
           // Retire a flush that lost the race: otherwise, when it settles with records
           // left, its background retry re-arms the timer and keeps sending after shutdown.
