@@ -19,7 +19,7 @@ const METRICS_SEND_TIMEOUT_MS = 90000
 // instead of core's 10s, gives six times the headroom with no extra series, and
 // folds more requests into each histogram point. A closing tab's partial window
 // still goes out through the pagehide `sendBeacon` drain, and a backgrounded
-// tab's through the `visibilitychange` drain below, since mobile browsers can
+// tab's through the `visibilitychange` flush below, since mobile browsers can
 // kill a hidden tab without firing `pagehide`.
 const BROWSER_DEFAULT_FLUSH_INTERVAL_MS = 60000
 
@@ -60,9 +60,13 @@ export class PostHogMetrics implements Extension {
 
     // A hidden page may never come back or fire `pagehide` (mobile tab
     // switches, app backgrounding), so send the pending window while we can.
+    // This is the normal retryable flush, not the unload drain: the page is
+    // usually still alive, so a transient failure keeps the window for the
+    // next attempt, and the request carries `request_headers`, which
+    // `sendBeacon` cannot.
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState === 'hidden') {
-            void this.flush('sendBeacon')
+            void this.flush()
         }
     }
 
