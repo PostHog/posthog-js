@@ -10,6 +10,7 @@ export type { EmailErrorName } from './emails/errors'
 export type {
   CodeEmailForm,
   EmailDeliveryStatus,
+  EmailReactElement,
   Emails,
   EmailStatus,
   EmailWarning,
