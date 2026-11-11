@@ -67,7 +67,7 @@ function createClient(responses: unknown[] = []) {
 // record kept beside it.
 function read(body: unknown): PostHogFeatureFlagsResponse {
   const { client } = createClient()
-  return (client as any).readFlagsResponse(structuredClone(body))
+  return (client as any).getFlagsResponseFormat().read(structuredClone(body))
 }
 
 const recordOf = (body: unknown, key: string): ParsedFlagRecord => parsedFlagRecordOf(read(body).flags[key])
@@ -394,7 +394,7 @@ describe('the /flags?v=4 response', () => {
       const { client } = createClient()
       const body = envelope({ 'garden-layout': v4Record({ value: deep }), sibling: v4Record({ key: 'sibling' }) })
 
-      expectOnlyThisRecordUnreadable((client as any).readFlagsResponse(body), 'value')
+      expectOnlyThisRecordUnreadable((client as any).getFlagsResponseFormat().read(body), 'value')
     })
 
     it('a server-failed record is not marked unreadable', () => {

@@ -130,11 +130,11 @@ class Fixture {
 }
 
 // The installed client's own /flags version decides the capability. Clients without the
-// version method, and consumers that cannot load, send the default v=2.
+// response format method, and consumers that cannot load, send the default v=2.
 function requestsFlagsV4(consumer) {
     try {
         const { PostHog } = createRequire(resolve(consumer, 'package.json'))('posthog-node')
-        return PostHog.prototype.getFlagsResponseVersion?.() === 4
+        return PostHog.prototype.getFlagsResponseFormat?.().version === 4
     } catch {
         return false
     }
