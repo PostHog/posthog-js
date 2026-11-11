@@ -44,6 +44,7 @@
   "PostHog.resetGroupPropertiesForFlags": "reset-group-properties-for-flags",
   "PostHog.resetPersonPropertiesForFlags": "reset-person-properties-for-flags",
   "PostHog.screen": "screen",
+  "PostHog.setAppLanguage": "register",
   "PostHog.setGroupPropertiesForFlags": "set-group-properties-for-flags",
   "PostHog.setPersonProperties": "set-person-properties",
   "PostHog.setPersonPropertiesForFlags": "set-person-properties-for-flags",
