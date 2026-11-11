@@ -52,6 +52,7 @@ export function captureException(error: unknown): CoreErrorTracking.ErrorPropert
 }
 
 const STATUS_FIELDS = ['status_code', 'statusCode', 'status']
+const MAX_CHAIN_LINKS = 50
 
 /**
  * The HTTP status behind a failure, for `$mcp_error_status`: the first one found
@@ -61,7 +62,11 @@ const STATUS_FIELDS = ['status_code', 'statusCode', 'status']
  */
 export function httpStatus(error: unknown): number | undefined {
   const visited = new Set<unknown>()
-  for (let link = error; isObject(link) && !visited.has(link); link = readField(link, 'cause')) {
+  for (
+    let link = error;
+    isObject(link) && !visited.has(link) && visited.size < MAX_CHAIN_LINKS;
+    link = readField(link, 'cause')
+  ) {
     visited.add(link)
     for (const holder of [link, readField(link, 'response')]) {
       for (const field of STATUS_FIELDS) {

@@ -21,6 +21,14 @@ function cycle(): Error {
   return first
 }
 
+function chainOf(length: number, status: number): Error {
+  let error = failure('innermost', { status })
+  for (let link = 1; link < length; link++) {
+    error = failure('wrapper', {}, error)
+  }
+  return error
+}
+
 function unreadableResponse(): Error {
   const error = failure('failed')
   Object.defineProperty(error, 'response', {
@@ -72,6 +80,8 @@ describe('$mcp_error_status', () => {
     ['nothing from a numeric string', failure('failed', { status: '503' }), undefined],
     ['nothing from a fraction', failure('failed', { status: 503.5 }), undefined],
     ['nothing from an error without one', failure('no status here'), undefined],
+    ['the 50th error in the chain', chainOf(50, 503), 503],
+    ['nothing past the 50th error', chainOf(51, 503), undefined],
     ['nothing from a cause cycle', cycle(), undefined],
     ['nothing from a response that throws when read', unreadableResponse(), undefined],
     ['nothing from a thrown string', 'upstream returned 503', undefined],
