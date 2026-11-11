@@ -69,6 +69,14 @@ export const publicProductViews = async (posthog: IPostHog, internal: IPostHogIn
     const internalGroupsReset = internal.onGroupsReset(() => {})
     groupsReset.dispose()
     internalGroupsReset.dispose()
+    const propertiesChanged = internal.onChangeProperties(({ set, setOnce, unset }) => {
+        const name: unknown = set?.name ?? setOnce?.name
+        const removed: readonly string[] | undefined = unset
+        void [name, removed]
+    })
+    propertiesChanged.dispose()
+    // @ts-expect-error Property notifications belong to the scoped product host.
+    posthog.onChangeProperties(() => {})
     // @ts-expect-error Alias targets are strings.
     posthog.analytics?.alias(42)
     // @ts-expect-error Group keys are strings or numbers.

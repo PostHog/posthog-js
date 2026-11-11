@@ -1,5 +1,5 @@
 import type { Client, CapturedEventInfo, ExtensionToken, Listener } from '@posthog/browser-common'
-import type { BrowserExtension, GroupInfo, IdentifyInfo } from './browser-client'
+import type { BrowserExtension, ChangePropertiesInfo, GroupInfo, IdentifyInfo } from './browser-client'
 import type { IAnalytics } from './analytics-api'
 import type { BrowserState } from './state'
 import type { NewSessionInfo } from './types'
@@ -91,6 +91,7 @@ export interface AnalyticsCaptureHost {
     publishEvent(event: CapturedEventInfo): void
     publishNewSession(session: NewSessionInfo): void
     publishIdentify(info: IdentifyInfo): void
+    publishChangeProperties(info: ChangePropertiesInfo): void
     publishGroup(info: GroupInfo): void
     publishReset(value: void): void
     publishGroupsReset(): void

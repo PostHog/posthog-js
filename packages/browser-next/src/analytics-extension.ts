@@ -17,7 +17,7 @@ import {
     type AnalyticsMessage,
     type CaptureHost,
 } from './analytics-internal'
-import type { IPostHogInternal } from './browser-client'
+import type { IdentifyInfo, IPostHogInternal } from './browser-client'
 import type { AnalyticsOptions, AutomaticAnalyticsOptions, PersonProfileMode } from './analytics-options'
 import { EventBuffer } from './event-buffer'
 import { captureFailure, EMPTY_CAPTURE_SUMMARY } from './capture-summary'
@@ -542,6 +542,12 @@ export class Analytics implements IAnalyticsExtension {
         }
         // Commit in admission order before session/event observers can admit another person operation.
         if (personProperties) this._lastPersonProperties = personProperties.signature
+        else if (
+            Object.hasOwn(candidate.message.properties, '$set') ||
+            Object.hasOwn(candidate.message.properties, '$set_once') ||
+            Object.hasOwn(candidate.message.properties, '$unset')
+        )
+            this._lastPersonProperties = undefined
         this._sessionProperties?.admitted(candidate.preparedSession.context.sessionId)
         this._publishCapture(candidate, host)
         if (!immediate) void this._ensureDelivery('capture')
@@ -598,18 +604,15 @@ export class Analytics implements IAnalyticsExtension {
 
     private _setPersonProperties(
         properties: PersonProperties,
-        options: CaptureOptions = { set: properties.set, setOnce: properties.setOnce }
+        options: CaptureOptions = { set: properties.set, setOnce: properties.setOnce },
+        identification?: IdentifyInfo
     ): void {
         const host = this._host
         if (!host || !this._requirePersonProcessing() || this._lastPersonProperties === properties.signature) return
-        const distinctId = host.state.distinctId
-        host.publishIdentify({
-            distinctId,
-            previousDistinctId: distinctId,
-            wasIdentified: host.state.isIdentified,
-            set: options.set,
-            setOnce: options.setOnce,
-        })
+        // A different local update invalidates the old signature even if its event is rejected.
+        this._lastPersonProperties = undefined
+        host.publishChangeProperties({ set: options.set, setOnce: options.setOnce })
+        if (identification) host.publishIdentify(identification)
         this._capture('$set', null, options, false, { signature: properties.signature })
     }
 
@@ -621,15 +624,7 @@ export class Analytics implements IAnalyticsExtension {
         host.state.prepare()
         // Local flag removal invalidates repeats even when the analytics event is rejected.
         this._lastPersonProperties = undefined
-        const distinctId = host.state.distinctId
-        host.publishIdentify({
-            distinctId,
-            previousDistinctId: distinctId,
-            wasIdentified: host.state.isIdentified,
-            set: undefined,
-            setOnce: undefined,
-            unset: properties,
-        })
+        host.publishChangeProperties({ unset: properties })
         this._capture('$set', { $unset: properties }, {}, false, { signature: undefined })
     }
 
@@ -660,9 +655,19 @@ export class Analytics implements IAnalyticsExtension {
         }
         const options = this._identifyOptions(properties, !!set, !!setOnce)
         if (distinctId === previousDistinctId && wasIdentified) {
-            if (hasProperties) this._setPersonProperties(properties, options)
+            if (hasProperties) {
+                this._setPersonProperties(properties, options, {
+                    distinctId,
+                    previousDistinctId,
+                    wasIdentified,
+                    set: options.set,
+                    setOnce: options.setOnce,
+                })
+            }
             return
         }
+        this._lastPersonProperties = undefined
+        if (hasProperties) host.publishChangeProperties({ set: options.set, setOnce: options.setOnce })
         host.publishIdentify({
             distinctId,
             previousDistinctId,
