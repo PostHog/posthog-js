@@ -40,6 +40,22 @@ Use `analytics: false` to keep the default entrypoint buffer-only, or import `cr
 
 Product namespaces expose owners only after successful setup. Reading a namespace never initiates loading. Use `await posthog.resolveExtension(token)` for typed custom-extension access; resolution waits for readiness and returns `undefined` when the extension is unavailable. Shared implementations receive a separate `Client` adapter with shared binding lookup.
 
+## Migrating to analytics-owned operations
+
+Analytics operations now belong to `posthog.analytics`, not the Core client:
+
+| Previous client API                | Replacement                                                             |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| `capture()`, `captureImmediate()`  | `posthog.analytics?.capture()`, `posthog.analytics?.captureImmediate()` |
+| `identify()`, `group()`, `reset()` | The corresponding method on `posthog.analytics`                         |
+| `onEvent`, `isRateLimited`         | The corresponding member on `posthog.analytics`                         |
+| `registerDynamicEventProperties()` | `posthog.analytics?.registerDynamicEventProperties()`                   |
+| Synchronous `getExtension(token)`  | `await posthog.resolveExtension(token)`                                 |
+
+Product namespaces are optional: they expose successfully initialized owners, not availability of network delivery. Resolve a product before using it when initialization may still be pending, and handle `undefined` when it is unavailable. `flush()` and `dispose()` remain on the client, alongside consent, identity/session getters, remote configuration and scoped key-value storage.
+
+Replace the removed application type export `PostHog` with `IPostHog`. For extension authors, replace the removed `BrowserClient` type export with `IPostHogInternal`. `BrowserExtension` (also exported as `Extension`) is the browser-next extension contract; shared implementations continue using `Client` from `@posthog/browser-common`. The setup host exposes browser product owners directly. Its `sharedClient` adapter supplies shared implementations with their binding lookup and capture surface; it is not the application client.
+
 ## Classic script installation (draft CDN distribution)
 
 The CDN build supports a plain external classic script in ordinary, `async`, or `defer` placement. The proposed asset namespace is `/static/browser/<exact-version-or-major>/`; availability depends on CDN deployment. For example, once deployed:
@@ -174,15 +190,15 @@ Creating an extension does not initialize it. Pass it in the `extensions` option
 
 ### Lifecycle notifications
 
-Browser-next supplies a `BrowserClient` to extension setup. It extends the shared client with `onIdentify`, `onGroup`, and `onReset` listeners. These fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
+Browser-next supplies a scoped `IPostHogInternal` to extension setup. It extends the shared client with `onIdentify`, `onGroup`, and `onReset` listeners. These fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
 
 ```ts
-import type { BrowserClient, Disposable } from '@posthog/browser'
+import type { IPostHogInternal, Disposable } from '@posthog/browser'
 
 let subscription: Disposable | undefined
 const extension = {
     name: 'identity-observer',
-    setup(client: BrowserClient) {
+    setup(client: IPostHogInternal) {
         subscription = client.onIdentify(({ distinctId, previousDistinctId }) => {
             console.log(previousDistinctId, distinctId)
         })
@@ -265,7 +281,7 @@ Definitions and event activation state use the host-provided surveys KV namespac
 
 ## Capture and delivery
 
-`capture()` admits an event to the queue synchronously and does not wait for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
+`analytics.capture()` runs synchronously. Its `false` result is a rate-limit backpressure signal, not a general rejection signal. `true` is neither an admission nor a delivery acknowledgement: consent, lifecycle, filtering, invalid properties or queue limits can suppress an event while it still returns `true`. Use `captureImmediate()` and check its summary when persistence matters. Capture never waits for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
 
 Queued and immediate capture omit null or undefined object properties from delivered events, including nested objects and objects inside arrays. Array positions are preserved; null and undefined array entries are sent as JSON `null`. Events with no remaining custom properties are still delivered with their SDK metadata.
 

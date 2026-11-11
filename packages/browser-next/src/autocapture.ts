@@ -48,7 +48,7 @@ export const autocapture = (options: AutocaptureOptions = {}): BrowserProducts['
         bindings: { autocapture: shared },
         setup(client) {
             if (disposed) return
-            const selectors = client.surveys?.getElementSelectors()
+            const selectors = client.surveys?.getElementSelectors?.()
             if (selectors) extension.setElementSelectors(selectors)
             shared.setup(client.sharedClient)
         },
