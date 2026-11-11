@@ -524,7 +524,7 @@ describe('analytics person profiles', () => {
         }
     )
 
-    it('does not let a rejected nested setter replace the admitted outer signature', async () => {
+    it('invalidates the outer signature when a nested setter changes local context but is rejected', async () => {
         const { client, product, requests } = await create({ flushAt: 100 })
         let nested = false
         product.onEvent(() => {
@@ -537,18 +537,21 @@ describe('analytics person profiles', () => {
         product.setPersonProperties({ plan: 'paid' })
         product.setPersonProperties({ plan: 'free' })
         await client.flush()
-        expect(events(requests).map(({ properties }) => properties.$set)).toEqual([{ plan: 'paid' }, { plan: 'free' }])
+        expect(events(requests).map(({ properties }) => properties.$set)).toEqual([
+            { plan: 'paid' },
+            { plan: 'paid' },
+            { plan: 'free' },
+        ])
     })
 
-    it('retains an admitted notification-time setter when the outer unset is rejected', async () => {
+    it('permits a later setter after a rejected unset without publishing identification', async () => {
         const { client, product, requests } = await create({ flushAt: 100 })
+        const identified = vi.fn()
+        client.onIdentify(identified)
         product.setPersonProperties({ plan: 'paid' })
-        client.onIdentify(({ unset }) => {
-            if (!unset) return
-            product.setPersonProperties({ plan: 'free' })
-            vi.spyOn(EventBuffer.prototype, 'enqueue').mockReturnValueOnce(false)
-        })
+        vi.spyOn(EventBuffer.prototype, 'enqueue').mockReturnValueOnce(false)
         product.unsetPersonProperties('plan')
+        expect(identified).not.toHaveBeenCalled()
         product.setPersonProperties({ plan: 'free' })
         await client.flush()
         expect(events(requests).map(({ properties }) => properties.$set)).toEqual([{ plan: 'paid' }, { plan: 'free' }])
@@ -575,20 +578,22 @@ describe('analytics person profiles', () => {
         expect(events(requests).map(({ event }) => event)).toEqual(['$identify', '$set'])
     })
 
-    it('snapshots person values before local notifications and before later caller mutations', async () => {
+    it('snapshots person values for event observers and delivery before later caller mutations', async () => {
         const { client, product, requests } = await create()
         const set = { plan: { name: 'paid' } }
         const setOnce = { first: { source: 'docs' } }
-        const identified = vi.fn()
-        client.onIdentify(identified)
+        const captured = vi.fn()
+        product.onEvent(captured)
         product.setPersonProperties(set, setOnce)
         set.plan.name = 'changed'
         setOnce.first.source = 'changed'
         await client.flush()
-        expect(identified).toHaveBeenCalledWith(
+        expect(captured).toHaveBeenCalledWith(
             expect.objectContaining({
-                set: { plan: { name: 'paid' } },
-                setOnce: { first: { source: 'docs' } },
+                properties: expect.objectContaining({
+                    $set: { plan: { name: 'paid' } },
+                    $set_once: { first: { source: 'docs' } },
+                }),
             })
         )
         expect(events(requests)).toMatchObject([
