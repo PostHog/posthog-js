@@ -190,16 +190,29 @@ const patchXHR = (instance: PostHog, enabled: Enabled): (() => void) => {
     const restoreSend = patch(prototype, 'send', (originalSend: any) => {
         return function (this: XMLHttpRequest, ...args: unknown[]) {
             let onLoadEnd: (() => void) | undefined
+            let onReadyStateChange: (() => void) | undefined
             try {
                 const observed = requests.get(this)
                 if (observed && enabled()) {
                     const start = now()
+                    const readIsEventStream = (): boolean =>
+                        isEventStream(safeContentType(() => this.getResponseHeader('content-type')))
+                    // An aborted, timed-out or failed XHR has its response headers cleared
+                    // before loadend, so classify the stream when the headers arrive.
+                    let eventStream = false
+                    onReadyStateChange = () => {
+                        if (this.readyState === 2) {
+                            eventStream = readIsEventStream()
+                        }
+                    }
                     onLoadEnd = () => {
                         this.removeEventListener('loadend', onLoadEnd!)
-                        if (!isEventStream(safeContentType(() => this.getResponseHeader('content-type')))) {
+                        this.removeEventListener('readystatechange', onReadyStateChange!)
+                        if (!eventStream && !readIsEventStream()) {
                             record(instance, observed, this.status, start, enabled)
                         }
                     }
+                    addEventListener(this as unknown as Element, 'readystatechange', onReadyStateChange)
                     addEventListener(this as unknown as Element, 'loadend', onLoadEnd)
                 }
             } catch (e) {
@@ -210,6 +223,9 @@ const patchXHR = (instance: PostHog, enabled: Enabled): (() => void) => {
             } catch (e) {
                 if (onLoadEnd) {
                     this.removeEventListener('loadend', onLoadEnd)
+                }
+                if (onReadyStateChange) {
+                    this.removeEventListener('readystatechange', onReadyStateChange)
                 }
                 throw e
             }

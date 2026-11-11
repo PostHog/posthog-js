@@ -12,6 +12,7 @@ vi.mock('@posthog/browser-common/utils/logger', () => ({
 
 class FakeXHR extends EventTarget {
     status = 0
+    readyState = 0
     contentType: string | null = null
     open(..._args: unknown[]): void {}
     send(_body?: unknown): void {}
@@ -22,6 +23,21 @@ class FakeXHR extends EventTarget {
     respond(status: number, contentType: string | null = null): void {
         this.status = status
         this.contentType = contentType
+        this.dispatchEvent(new Event('loadend'))
+    }
+
+    receiveHeaders(status: number, contentType: string | null): void {
+        this.status = status
+        this.contentType = contentType
+        this.readyState = 2
+        this.dispatchEvent(new Event('readystatechange'))
+    }
+
+    abort(): void {
+        // Like a browser, an aborted request loses its status and response headers before loadend.
+        this.status = 0
+        this.contentType = null
+        this.readyState = 4
         this.dispatchEvent(new Event('loadend'))
     }
 }
@@ -389,6 +405,28 @@ describe('network metrics', () => {
 
             expect(recorded()).toHaveLength(1)
             expect(recorded()[0][2].attributes['url.template']).toBe('/things')
+        })
+
+        it('does not record a server-sent event stream that is aborted after its headers arrive', () => {
+            start()
+            const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
+            xhr.open('GET', 'https://api.example.com/notifications')
+            xhr.send()
+            xhr.receiveHeaders(200, 'text/event-stream')
+            xhr.abort()
+
+            expect(recorded()).toHaveLength(0)
+        })
+
+        it('records an aborted request that was not a stream', () => {
+            start()
+            const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
+            xhr.open('GET', 'https://api.example.com/things')
+            xhr.send()
+            xhr.receiveHeaders(200, 'application/json')
+            xhr.abort()
+
+            expect(recorded()).toHaveLength(1)
         })
 
         it('still calls the original open and send', () => {
