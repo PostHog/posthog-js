@@ -1298,7 +1298,11 @@ export interface MetricsConfig {
      * are folded into per-series aggregates in memory between flushes — one
      * data point per series per window, no matter how many calls.
      *
-     * @default 10000
+     * The browser SDK defaults to 60000: every tab of an app writes to the
+     * same series, so a longer window keeps busy series under the backend's
+     * per-series point limit.
+     *
+     * @default 10000 (60000 in the browser)
      */
     flushIntervalMs?: number
     /**
