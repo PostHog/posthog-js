@@ -717,6 +717,26 @@ describe('the /flags?v=4 response', () => {
     })
 
     it.each([
+      ['value', { flags: { 'object-flag': true } }, { layout: 'compact' }],
+      ['payload', { payloads: { 'object-flag': { layout: 'wide' } } }, { layout: 'wide' }],
+    ])('keeps no parsed record of a flag with a %s override', async (_kind, overrides, payload) => {
+      const body = envelope({
+        'object-flag': v4Record({ key: 'object-flag', value: { layout: 'compact' } }),
+        untouched: v4Record({ key: 'untouched' }),
+      })
+      const { client } = createClient([body])
+      client.overrideFeatureFlags(overrides)
+
+      const snapshot = await client.evaluateFlags('user-1')
+      const flags = (snapshot as any)._flags
+
+      expect(flags['object-flag'].parsed).toBeUndefined()
+      expect(snapshot.getFlagPayload('object-flag')).toEqual(payload)
+      expect(flags.untouched.parsed).toMatchObject({ value: 'compact', failed: false })
+      await client.shutdown()
+    })
+
+    it.each([
       ['v4', () => v4Record()],
       ['older', () => olderRecord()],
     ])('leaves an absent flag ID and version out of events (%s record)', async (_shape, makeRecord) => {

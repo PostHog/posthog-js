@@ -23,7 +23,8 @@ export type EvaluatedFlagRecord = {
   /**
    * The parsed `/flags` record of a remotely evaluated flag, with its typed value, failure
    * state, reason and rule metadata, for the typed flag API. Absent for locally evaluated flags
-   * and flags with a value override.
+   * and flags with a value or payload override, so a record that has one is the server's record
+   * unchanged.
    */
   parsed?: ParsedFlagRecord
 }

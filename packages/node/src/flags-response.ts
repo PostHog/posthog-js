@@ -78,6 +78,8 @@ type ReadRecord = { detail: FeatureFlagDetail; record: ParsedFlagRecord }
 
 // The parsed record of each legacy rendering this module created, so the public detail type
 // stays unchanged. Details that were not read here, such as those of a v1 response, have none.
+// The lookup is by object identity, so a copy of a detail has none either: look up the detail
+// the reader returned, not a clone of it.
 const parsedRecords = new WeakMap<FeatureFlagDetail, ParsedFlagRecord>()
 
 class UnreadableField extends Error {
