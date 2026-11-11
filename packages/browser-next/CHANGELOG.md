@@ -1,5 +1,14 @@
 # @posthog/browser
 
+## 0.1.1
+
+### Patch Changes
+
+- [#5488](https://github.com/PostHog/posthog-js/pull/5488) [`358a77e`](https://github.com/PostHog/posthog-js/commit/358a77e55f9a5597d2ec36e2fc61442d580110e6) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - A `$feature_flag_called` event that the client rate limit drops is now sent again at the next capture. Before, the flag was marked as reported and its exposure was lost.
+  (2026-11-04)
+- Updated dependencies [[`358a77e`](https://github.com/PostHog/posthog-js/commit/358a77e55f9a5597d2ec36e2fc61442d580110e6)]:
+  - @posthog/browser-common@0.10.6
+
 ## 0.1.0
 
 ### Minor Changes

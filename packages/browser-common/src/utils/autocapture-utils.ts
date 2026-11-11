@@ -189,10 +189,16 @@ const DEFAULT_CONTENT_IGNORELIST = [
     '❮',
 ]
 // +/- steppers are built to be clicked repeatedly; enabled from the 2026-05-30 config defaults
-export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = [...DEFAULT_CONTENT_IGNORELIST, '+', '-', '−', '–']
+export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = /* @__PURE__ */ (() => [
+    ...DEFAULT_CONTENT_IGNORELIST,
+    '+',
+    '-',
+    '−',
+    '–',
+])()
 // the cap guards against over-long user lists. it clears our own longest default list with room
 // to spare, so copying the defaults and adding a few keywords of your own still works
-const MAX_CONTENT_IGNORELIST_ENTRIES = DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS.length + 10
+const MAX_CONTENT_IGNORELIST_ENTRIES = /* @__PURE__ */ (() => DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS.length + 10)()
 
 interface ElementWithText {
     safeText: string

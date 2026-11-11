@@ -1,5 +1,6 @@
 export * from './extensions/sentry-integration'
 export * from './extensions/express'
+export * from './extensions/fetch-request'
 export * from './types'
 export { enrichCurrentSpan } from './extensions/context/listeners'
 
@@ -10,14 +11,20 @@ export type { CaptureEndpoint } from './capture-v1/types'
 export { EmailError } from './emails/errors'
 export type { EmailErrorName } from './emails/errors'
 export type {
+  CodeEmailForm,
   EmailDeliveryStatus,
+  EmailReactElement,
   Emails,
   EmailStatus,
   EmailWarning,
   GetEmailResponse,
+  SendCodeEmailOptions,
+  SendEmailBase,
   SendEmailOptions,
   SendEmailResponse,
   SendEmailResult,
+  SendTemplateEmailOptions,
+  TemplateEmailForm,
 } from './emails/types'
 export type {
   FlagDefinitionCacheData,
@@ -32,7 +39,7 @@ export type { FeatureFlagErrorType, UnresolvedFlagReason } from '@posthog/core'
 
 // Metrics types re-exported so consumers can name the `metrics` client option
 // and API surface without a direct @posthog/core dependency.
-export type { CaptureMetricOptions, Metrics, MetricsConfig } from '@posthog/core'
+export type { CaptureMetricOptions, HistogramOptions, Metrics, MetricsConfig } from '@posthog/core'
 
 // Tracing types re-exported so consumers can name the `traces` client option and
 // the span API without a direct @posthog/core dependency.

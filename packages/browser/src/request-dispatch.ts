@@ -72,6 +72,7 @@ export function sendRequest(
     // Users must be careful when tweaking `cache` because they might get out-of-date feature flags
     options.fetchOptions = options.fetchOptions || instance.config.fetch_options
 
+    options.onDispatch?.()
     request(options, (response, retryAfterMs) => {
         instance.rateLimiter.checkForLimiting(response)
 

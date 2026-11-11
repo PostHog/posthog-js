@@ -235,6 +235,85 @@ describe('uuidv7 polyfills', () => {
 })
 
 describe('Slim runtime bundles', () => {
+    const bundleEntry = (entry: string): string =>
+        execFileSync(
+            process.execPath,
+            [
+                '--eval',
+                `
+const { buildSync } = require(${JSON.stringify(require.resolve('esbuild'))})
+const result = buildSync({
+    stdin: {
+        contents: ${JSON.stringify(entry)},
+        resolveDir: ${JSON.stringify(path.resolve(__dirname, '../../../dist'))},
+    },
+    bundle: true,
+    format: 'iife',
+    minify: true,
+    write: false,
+})
+process.stdout.write(result.outputFiles[0].text)
+`,
+            ],
+            { encoding: 'utf8' }
+        )
+
+    it('preserves HTML sanitization when web experiments are selected', () => {
+        const entry = `
+import { ExperimentsExtensions } from './extension-bundles.js'
+document.body.innerHTML = '<div id="experiment-target"></div>'
+const experiments = new ExperimentsExtensions.experiments({
+    config: {},
+    onFeatureFlags() {},
+    getFeatureFlag() { return 'test' },
+    get_property() {
+        return [{
+            name: 'HTML sanitization',
+            feature_flag_key: 'experiment',
+            variants: {
+                test: {
+                    transforms: [{
+                        selector: '#experiment-target',
+                        html: '<script>alert(1)</script><b onclick="alert(1)">Safe</b><img src="x" onerror="alert(1)">',
+                    }],
+                },
+            },
+        }]
+    },
+})
+experiments.getWebExperimentsAndEvaluateDisplayLogic()
+`
+        const { frameWindow, iframe } = evaluateBundle(bundleEntry(entry))
+        try {
+            expect(frameWindow.document.querySelector('#experiment-target')?.innerHTML).toBe('<b>Safe</b><img src="x">')
+        } finally {
+            iframe.remove()
+        }
+    })
+
+    it.each(['__posthog', 'state'])('captures toolbar %s before a router clears the hash', (key) => {
+        const state = { action: 'ph_authorize', token: 'test_token', desiredHash: '#restored' }
+        const hash = `#${key}=${encodeURIComponent(JSON.stringify(state))}`
+        const bundle = bundleEntry(`
+import { ToolbarExtensions } from './extension-bundles.js'
+window.location.hash = '#routed'
+const toolbar = new ToolbarExtensions.toolbar({ config: { token: 'test_token' } })
+toolbar.loadToolbar = (params) => {
+    document.body.textContent = JSON.stringify(params)
+    return true
+}
+document.body.dataset.loaded = String(toolbar.maybeLoadToolbar())
+`)
+        const { frameWindow, iframe } = evaluateBundle(`window.location.hash = ${JSON.stringify(hash)};\n${bundle}`)
+        try {
+            expect(frameWindow.document.body.dataset.loaded).toBe('true')
+            expect(JSON.parse(frameWindow.document.body.textContent || '{}')).toMatchObject({ ...state, source: 'url' })
+            expect(frameWindow.location.hash).toBe('#restored')
+        } finally {
+            iframe.remove()
+        }
+    })
+
     it('does not retain request transport or compression code in the extension bundle', () => {
         const map = JSON.parse(
             fs.readFileSync(path.resolve(__dirname, '../../../dist/extension-bundles.js.map'), 'utf-8')

@@ -8,6 +8,7 @@ import path from 'path'
 import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
 import { modernTransformOptions } from './oxc.config.mjs'
 import { loaderMethods } from './scripts/loader-methods.mjs'
+import { treeShakeableDOMPurify } from './scripts/tree-shakeable-dompurify.mjs'
 
 const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
@@ -70,6 +71,7 @@ const finalTerser = (options) => ({
 })
 
 const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
+    ...(preserveCrossBundleProperties ? [treeShakeableDOMPurify()] : []),
     {
         name: 'lightningcss',
         transform(code, id) {
@@ -154,6 +156,7 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
         },
         format: {
             comments: false,
+            preserve_annotations: preserveCrossBundleProperties,
         },
         mangle:
             noExternal || es5

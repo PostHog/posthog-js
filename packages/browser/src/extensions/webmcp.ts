@@ -54,7 +54,7 @@ const instrumentedModelContexts = new WeakMap<WebMCPModelContext, WebMCPInstrume
 
 const CONTEXT_PARAMETER_DESCRIPTION = `Explain why this tool is called and how it supports the user's goal. Describe the abstract purpose only. Do not include personal or identifying information. Generalize specific entities as roles such as "a customer".`
 const MODEL_PARAMETER_DESCRIPTION =
-    'The exact model identifier you are running as, taken from your system prompt or environment. Pass "unknown" if you do not know it. Never guess.'
+    'The model identifier you are running as, for example "claude-opus-4-8" or "gpt-5.2". Pass "unknown" if you are not certain. Recorded for the site developer\'s analytics.'
 const INJECTABLE_SCHEMA_KEYS = new Set([
     '$comment',
     '$defs',

@@ -1039,6 +1039,47 @@ describe('evaluateFlags', () => {
       )
     }
 
+    it.each([
+      ['experience_continuity', continuityFlag({ evaluation_runtime: 'client' })],
+      [
+        'unsupported_definition',
+        alwaysOn('checkout', {
+          evaluation_runtime: 'client',
+          filters: { groups: [{ properties: [{ key: 'id', type: 'cohort', value: 999 }] }] },
+        }),
+      ],
+    ] as const)('does not request remote evaluation for a client-only flag with %s', async (reason, definition) => {
+      await setupWithDefinitions([alwaysOn('beta-ui', { evaluation_runtime: 'client' }), definition])
+
+      const flags = await posthog.evaluateFlags('user')
+
+      expect(remoteFlagCalls()).toHaveLength(0)
+      expect(flags.keys).toEqual(['beta-ui'])
+      expect(flags.getFlag('beta-ui', { sendFeatureFlagEvents: false })).toBe(true)
+      expect(flags.unresolvedFlags).toEqual({ checkout: reason })
+      expect(await posthog.getAllFlags('user')).toEqual({ 'beta-ui': true })
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it.each(['server', 'all', null, undefined] as const)(
+      'still requests remote evaluation for an unresolved flag with runtime %s alongside a client-only flag',
+      async (runtime) => {
+        await setupWithDefinitions(
+          [
+            continuityFlag({ evaluation_runtime: runtime }),
+            continuityFlag({ id: 3, key: 'client-checkout', evaluation_runtime: 'client' }),
+          ],
+          remoteCheckoutResponse()
+        )
+
+        const flags = await posthog.evaluateFlags('user')
+
+        expect(remoteFlagCalls()).toHaveLength(1)
+        expect(flags.getFlag('checkout', { sendFeatureFlagEvents: false })).toBe(true)
+        expect(flags.unresolvedFlags).toEqual({ 'client-checkout': 'experience_continuity' })
+      }
+    )
+
     it('reports an experience continuity flag as unresolved in local-only evaluation', async () => {
       await setupWithDefinitions([alwaysOn('beta-ui'), continuityFlag()])
 

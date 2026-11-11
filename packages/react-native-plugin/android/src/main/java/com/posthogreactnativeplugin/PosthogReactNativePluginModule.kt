@@ -460,7 +460,8 @@ class PosthogReactNativePluginModule(
       // capture() returns silently when the SDK was never set up. JS gives up its own copy of
       // the event before calling this, so a false success would lose the crash without a
       // trace; report it instead.
-      if (PostHog.getConfig<PostHogConfig>() == null) {
+      val config = PostHog.getConfig<PostHogConfig>()
+      if (config == null) {
         promise.reject(FATAL_CAPTURE_ERROR_CODE, "captureFatalException: the native SDK is not set up")
         return
       }
@@ -472,7 +473,12 @@ class PosthogReactNativePluginModule(
           event = "\$exception",
           distinctId = distinctId.takeIf { it.isNotEmpty() },
           properties = nativeProperties,
-          timestamp = parsedTimestamp,
+          timestamp =
+            toSdkClock(
+              timestamp = parsedTimestamp,
+              deviceNowMs = System.currentTimeMillis(),
+              sdkNowMs = config.dateProvider.currentTimeMillis(),
+            ),
         )
       }
       promise.resolve(null)
@@ -852,6 +858,18 @@ private fun javascriptException(properties: Map<String, Any>?): Map<*, *>? {
     if (className == JavascriptException::class.java.name) exception else null
   }
 }
+
+/**
+ * Moves [timestamp], which JS read from the device clock, onto the native SDK's clock. On Android 13
+ * and later the SDK stamps each request's send time with network time, and PostHog corrects event
+ * timestamps by the gap between that send time and when it receives the request, so a device-clock
+ * timestamp would be shifted by however far the device clock is from network time.
+ */
+internal fun toSdkClock(
+  timestamp: Date,
+  deviceNowMs: Long,
+  sdkNowMs: Long,
+): Date = Date(timestamp.time + (sdkNowMs - deviceNowMs))
 
 // The JS layer sends an ISO-8601 UTC timestamp (`Date#toISOString`). Parse it explicitly
 // rather than trusting a locale-dependent default, and treat anything unparseable as a

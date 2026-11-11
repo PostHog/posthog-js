@@ -345,7 +345,9 @@ class FeatureFlagsPoller {
           } else if (e instanceof Error) {
             this.onError?.(new Error(`Error computing flag locally: ${flag.key}: ${e}`))
           }
-          fallbackToFlags = true
+          if (evaluationRuntimesMatch(normalizeEvaluationRuntime(flag.evaluation_runtime), 'server')) {
+            fallbackToFlags = true
+          }
         }
       })
     )
@@ -773,7 +775,7 @@ class FeatureFlagsPoller {
 
         try {
           if (propertyType === 'cohort') {
-            const inCohort = await matchCohort(
+            matches = await matchCohort(
               prop,
               properties,
               definitions.cohorts,
@@ -781,11 +783,6 @@ class FeatureFlagsPoller {
               (depProp) => this.evaluateFlagDependency(depProp, properties, evaluationContext),
               definitions.propertyMatchingVersion
             )
-            // A flag-level cohort condition carries a membership operator ('in' | 'not_in').
-            // `matchCohort` only reports raw membership, so the operator must be applied here.
-            // Without this, 'not_in' is silently treated as 'in', inverting any cohort-exclusion
-            // condition (e.g. "enabled for everyone NOT in cohort X").
-            matches = prop.operator === 'not_in' ? !inCohort : inCohort
           } else if (propertyType === 'flag') {
             matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
           } else if (!Object.prototype.hasOwnProperty.call(properties, prop.key)) {
@@ -925,7 +922,7 @@ class FeatureFlagsPoller {
   }
 
   /**
-   * Warn about flags whose definition local evaluation cannot resolve.
+   * Warn about server-applicable flags whose definition local evaluation cannot resolve.
    * Called after loading flag definitions when local evaluation is enabled. Each flag is
    * warned about once until its definition changes.
    */
@@ -937,6 +934,10 @@ class FeatureFlagsPoller {
     const warnedFlags = new Map<string, string>()
     const definitions = this.currentDefinitions()
     for (const flag of flags) {
+      // Client-only definitions are retained for server-side bootstrapping.
+      if (!evaluationRuntimesMatch(normalizeEvaluationRuntime(flag.evaluation_runtime), 'server')) {
+        continue
+      }
       const reason = getDefinitionUnresolvedReason(flag, definitions)
       if (!reason) {
         continue
@@ -1477,7 +1478,7 @@ async function matchCohort(
   checkCohortExists(cohortId, cohortProperties)
 
   const propertyGroup = cohortProperties[cohortId]
-  return matchPropertyGroup(
+  const inCohort = await matchPropertyGroup(
     propertyGroup,
     propertyValues,
     cohortProperties,
@@ -1485,6 +1486,7 @@ async function matchCohort(
     flagDependencyEvaluator,
     propertyMatchingVersion
   )
+  return property.operator === 'not_in' ? !inCohort : inCohort
 }
 
 async function matchPropertyGroup(
@@ -1495,16 +1497,19 @@ async function matchPropertyGroup(
   flagDependencyEvaluator?: FlagDependencyEvaluator,
   propertyMatchingVersion?: number
 ): Promise<boolean> {
-  if (!propertyGroup) {
+  // The backend's canonical empty PropertyGroup is {}.
+  if (!propertyGroup || Object.keys(propertyGroup).length === 0) {
     return true
   }
 
-  const propertyGroupType = propertyGroup.type
+  const propertyGroupType = (propertyGroup.type as string) === 'property' ? 'AND' : propertyGroup.type
+  if (propertyGroupType !== 'AND' && propertyGroupType !== 'OR') {
+    throw new RequiresServerEvaluation(`Unsupported cohort property group type: ${propertyGroup.type}`)
+  }
   const properties = propertyGroup.values
 
   if (!properties || properties.length === 0) {
-    // empty groups are no-ops, always match
-    return true
+    return propertyGroupType === 'AND'
   }
 
   let inconclusiveReason: UnresolvedFlagReason | undefined = undefined

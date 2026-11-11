@@ -6,7 +6,7 @@ import { createLogger } from './logger'
 
 export { doesSurveyActivateByEvent, getSurveyInteractionProperty, isSurveyIterationBased } from '@posthog/core/surveys'
 
-export const SURVEY_LOGGER = createLogger('[Surveys]')
+export const SURVEY_LOGGER = /* @__PURE__ */ createLogger('[Surveys]')
 
 // Covers every state in which `capture()` drops events, not only an explicit opt-out: with
 // `opt_out_capturing_by_default` a visitor who has not answered the consent banner yet is also

@@ -123,6 +123,15 @@ describe('posthog-metrics', () => {
         expect(metric.histogram.dataPoints[0].count).toBe(1)
     })
 
+    it('sends a histogram in the bounds its caller passes', async () => {
+        metrics.histogram('api_latency', 120, { unit: 'ms', bounds: [100, 200] })
+        await metrics.flush()
+
+        const dp = sentRequests()[0].data.resourceMetrics[0].scopeMetrics[0].metrics[0].histogram.dataPoints[0]
+        expect(dp.explicitBounds).toEqual([100, 200])
+        expect(dp.bucketCounts).toEqual([0, 1, 0])
+    })
+
     it('drains synchronously over the given transport even while another flush is in flight', () => {
         // First request hangs: its callback is never invoked, so the core's
         // flush serializer keeps a pending promise (the pagehide race).
@@ -149,6 +158,20 @@ describe('posthog-metrics', () => {
 
         const resourceAttrs = sentRequests()[1].data.resourceMetrics[0].resource.attributes
         expect(resourceAttrs).toContainEqual({ key: 'service.name', value: { stringValue: 'renamed-service' } })
+    })
+
+    it.each([
+        ['count', (m: PostHogMetrics) => m.count('orders_created')],
+        ['gauge', (m: PostHogMetrics) => m.gauge('queue_depth', 3)],
+        ['histogram', (m: PostHogMetrics) => m.histogram('posthog.flags.request.duration', 42, { unit: 'ms' })],
+    ])('drops a %s captured after dispose without starting a flush timer', async (_name, capture) => {
+        metrics.dispose()
+
+        capture(metrics)
+
+        expect(vi.getTimerCount()).toBe(0)
+        await metrics.flush()
+        expect(sentRequests()).toHaveLength(0)
     })
 
     describe('network metrics', () => {
