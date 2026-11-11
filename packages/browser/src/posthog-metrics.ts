@@ -1,7 +1,7 @@
 import Config from './config'
 import { PostHog } from './posthog-core'
 import type { CaptureMetricOptions, HistogramOptions, OtlpMetricsPayload } from './types'
-import { PostHogMetrics as CorePostHogMetrics, resolveMetricsConfig } from '@posthog/core'
+import { PostHogMetrics as CorePostHogMetrics, isUndefined, resolveMetricsConfig } from '@posthog/core'
 import type { SendMetricsBatchOutcome } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { Extension } from './extensions/types'
@@ -12,6 +12,12 @@ const METRICS_ENDPOINT = '/i/v1/metrics'
 // as logs: above the request layer's own 60s timeout so a real request
 // always settles via its callback first.
 const METRICS_SEND_TIMEOUT_MS = 90000
+// Every tab of an app writes to the same series, and the backend keeps a
+// bounded number of points per series per hour. One export a minute per tab,
+// instead of core's 10s, gives six times the headroom with no extra series, and
+// folds more requests into each histogram point. The pagehide `sendBeacon`
+// drain still sends a closing tab's partial window.
+const BROWSER_DEFAULT_FLUSH_INTERVAL_MS = 60000
 
 /**
  * The `posthog.metrics` extension: a statsd-style pre-aggregating client.
@@ -68,7 +74,11 @@ export class PostHogMetrics implements Extension {
         if (!this._core || this._resolvedFrom !== metricsConfig) {
             this._core?.reset()
             this._resolvedFrom = metricsConfig
-            this._core = new CorePostHogMetrics(this._createHost(), resolveMetricsConfig(metricsConfig), this._logger)
+            const resolved = resolveMetricsConfig(metricsConfig)
+            if (isUndefined(metricsConfig?.flushIntervalMs)) {
+                resolved.flushIntervalMs = BROWSER_DEFAULT_FLUSH_INTERVAL_MS
+            }
+            this._core = new CorePostHogMetrics(this._createHost(), resolved, this._logger)
         }
         return this._core
     }

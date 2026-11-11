@@ -65,12 +65,34 @@ describe('posthog-metrics', () => {
         expect(resourceAttrs).toContainEqual({ key: 'service.name', value: { stringValue: 'checkout-web' } })
     })
 
-    it('flushes automatically on the interval', () => {
+    it('flushes automatically once a minute by default', () => {
         metrics.gauge('active_connections', 42)
         expect(mockPostHog._send_request).not.toHaveBeenCalled()
 
+        vi.advanceTimersByTime(59999)
+        expect(mockPostHog._send_request).not.toHaveBeenCalled()
+        vi.advanceTimersByTime(1)
+        expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+    })
+
+    it('honours an explicit flushIntervalMs', () => {
+        mockPostHog.config.metrics = { serviceName: 'checkout-web', flushIntervalMs: 10000 }
+        metrics.gauge('active_connections', 42)
+
         vi.advanceTimersByTime(10000)
         expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+    })
+
+    it('folds samples from one minute into one data point per series', () => {
+        for (let i = 0; i < 6; i++) {
+            metrics.histogram('http.client.request.duration', 100, { unit: 'ms' })
+            vi.advanceTimersByTime(10000)
+        }
+        const requests = sentRequests()
+        expect(requests).toHaveLength(1)
+        const point = requests[0].data.resourceMetrics[0].scopeMetrics[0].metrics[0].histogram.dataPoints
+        expect(point).toHaveLength(1)
+        expect(point[0].count).toBe(6)
     })
 
     it('retains the window on transient failures and drops it on client errors', async () => {
