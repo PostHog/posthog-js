@@ -523,6 +523,7 @@ describe('emails', () => {
         'captureEngagement',
       ],
       ['tracking on the template form', { templateId: TEMPLATE_ID, tracking: false }, 'tracking'],
+      ['sensitive on the template form', { templateId: TEMPLATE_ID, sensitive: false }, 'sensitive'],
       ['a code send without a subject', { templateKey: 'welcome', html: '<p>Hi</p>' }, 'subject'],
       ['a code send without html or text', { templateKey: 'welcome', subject: 'Hi' }, 'html'],
       ['a code send with html that is not a string', { ...CODE_SEND, html: 1 }, 'html'],
@@ -705,7 +706,9 @@ describe('emails over HTTP', () => {
   })
 
   it.each([
-    ['no tracking choice, which leaves tracking and capture_engagement out', {}, {}],
+    ['no tracking or sensitive choice, which leaves them and capture_engagement out', {}, {}],
+    ['the email marked sensitive', { sensitive: true }, { sensitive: true }],
+    ['the email marked not sensitive', { sensitive: false }, { sensitive: false }],
     ['all tracking turned off', { tracking: false }, { tracking: false }],
     ['all tracking turned on', { tracking: true }, { tracking: true }],
     [

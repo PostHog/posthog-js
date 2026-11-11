@@ -9,6 +9,7 @@ export const forms: SendEmailOptions[] = [
   { to, templateKey: 'reset', subject: 'Reset', text: 'Reset', from: 'security@example.com', captureEngagement: false },
   { to, templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', tracking: false },
   { to, templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', tracking: { clicks: true } },
+  { to, templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', sensitive: false },
 ]
 
 export const wrongCombinations: SendEmailOptions[] = [
@@ -18,6 +19,8 @@ export const wrongCombinations: SendEmailOptions[] = [
   { to, templateId, captureEngagement: false },
   // @ts-expect-error a template made in PostHog keeps its own tracking
   { to, templateId, tracking: false },
+  // @ts-expect-error a template made in PostHog keeps its own sensitive setting
+  { to, templateId, sensitive: false },
   // @ts-expect-error tracking takes only opens, clicks and engagement
   { to, templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', tracking: { open: false } },
   // @ts-expect-error a template made in PostHog keeps its own sender
