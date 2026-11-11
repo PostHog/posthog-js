@@ -5,10 +5,11 @@ import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { createFetch, localRemoteConfig, requireInstalledExtension, type SentRequest } from './helpers'
 
 const clients: Array<Awaited<ReturnType<typeof createPostHog>>> = []
-const create = async () => {
+const create = async (debug = false) => {
     const requests: SentRequest[] = []
     const client = await createPostHog({
         projectToken: 'ph_identify_serialization',
+        debug,
         storage: false,
         navigator: false,
         capturePageview: false,
@@ -27,6 +28,27 @@ afterEach(async () => {
 })
 
 describe('identify person-property serialization', () => {
+    it.each(['identify', 'setPersonProperties'] as const)(
+        'reports rejected %s properties without logging their values or exceptions',
+        async (method) => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const { client, product, requests } = await create(true)
+            const properties = {
+                get privateValue(): unknown {
+                    throw new Error('private-value')
+                },
+            }
+            if (method === 'identify') await product.identify('new-id', properties)
+            else product.setPersonProperties(properties)
+            expect(warn).toHaveBeenCalledOnce()
+            expect(warn).toHaveBeenCalledWith(expect.any(String), 'Person properties must be JSON-serializable objects')
+            expect(JSON.stringify(warn.mock.calls)).not.toContain('private-value')
+            expect(client.session).toBeUndefined()
+            await client.flush()
+            expect(events(requests)).toEqual([])
+        }
+    )
+
     it('retains a valid identity transition when person properties cannot be serialized', async () => {
         const { client, product, requests } = await create()
         const anonymousId = client.anonymousId
