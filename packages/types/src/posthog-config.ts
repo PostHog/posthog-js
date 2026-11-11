@@ -1324,8 +1324,10 @@ export interface MetricsConfig {
 export interface BrowserMetricsConfig extends MetricsConfig {
     /**
      * Record the duration of every HTTP or HTTPS `fetch` and `XMLHttpRequest` as
-     * a histogram. `true` uses the defaults. Requests to PostHog itself and URLs
-     * with other protocols are not recorded. Each transport is measured to the
+     * a histogram. `true` uses the defaults. Requests to PostHog itself, URLs
+     * with other protocols, and server-sent event streams (`text/event-stream`
+     * responses) are not recorded. Long-polling requests look like ordinary
+     * requests; skip them with a `name` function that returns `null`. Each transport is measured to the
      * boundary its API exposes: a `fetch` to its response headers, an
      * `XMLHttpRequest` to the end of its response body.
      *
