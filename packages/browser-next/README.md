@@ -191,7 +191,7 @@ Creating an extension does not initialize it. Pass it in the `extensions` option
 
 ### Lifecycle notifications
 
-Browser-next supplies a scoped `IPostHogInternal` to extension setup. It extends the shared client with `onIdentify`, `onGroup`, and `onReset` listeners. These fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
+Browser-next supplies a scoped `IPostHogInternal` to extension setup. It exposes `onIdentify`, `onGroup`, and `onReset` listeners alongside Core capabilities, with a separate `sharedClient` adapter for shared implementations. These fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
 
 ```ts
 import type { IPostHogInternal, Disposable } from '@posthog/browser'
