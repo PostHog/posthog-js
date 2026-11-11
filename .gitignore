@@ -39,7 +39,7 @@ cypress/downloads/downloads.html
 /packages/browser-next/.playwright/
 /packages/browser-next/test-results/
 /stats
-packages/browser/docs
+packages/browser/docs/*.api.*
 
 dist
 tsconfig.tsbuildinfo

@@ -1,2 +1,2 @@
 src/version.ts
-docs/
+docs/*.api.*
