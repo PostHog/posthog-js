@@ -56,6 +56,14 @@ export const publicProductViews = async (posthog: IPostHog, internal: IPostHogIn
     posthog.analytics?.captureImmediate('immediate')
     posthog.analytics?.identify('person')
     posthog.analytics?.group('company', 'company-123')
+    const propertiesChanged = internal.onChangeProperties(({ set, setOnce, unset }) => {
+        const name: unknown = set?.name ?? setOnce?.name
+        const removed: readonly string[] | undefined = unset
+        void [name, removed]
+    })
+    propertiesChanged.dispose()
+    // @ts-expect-error Property notifications belong to the scoped product host.
+    posthog.onChangeProperties(() => {})
     posthog.analytics?.createPersonProfile()
     posthog.analytics?.setPersonProperties({ plan: 'paid' }, { initial: true })
     posthog.analytics?.setPersonProperties(undefined, { initial: true })

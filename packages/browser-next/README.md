@@ -179,15 +179,15 @@ Creating an extension does not initialize it. Pass it in the `extensions` option
 
 ### Lifecycle notifications
 
-Browser-next supplies a `BrowserClient` to extension setup. It extends the shared client with `onIdentify`, `onGroup`, and `onReset` listeners. These fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
+Browser-next supplies an `IPostHogInternal` scoped host to extension setup. It exposes browser namespaces, asynchronous dependency resolution, and `onIdentify`, `onGroup` and `onReset` listeners. Identification uses `onIdentify`; person-property setters use the separate product-host `onChangeProperties` notification with `set`, `setOnce` and `unset` fields. Identification with properties publishes both kinds of notification. Full identity reset uses `onReset`. These notifications fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
 
 ```ts
-import type { BrowserClient, Disposable } from '@posthog/browser'
+import type { IPostHogInternal, Disposable } from '@posthog/browser'
 
 let subscription: Disposable | undefined
 const extension = {
     name: 'identity-observer',
-    setup(client: BrowserClient) {
+    setup(client: IPostHogInternal) {
         subscription = client.onIdentify(({ distinctId, previousDistinctId }) => {
             console.log(previousDistinctId, distinctId)
         })
