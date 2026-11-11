@@ -10,3 +10,9 @@ export type TracingHeadersHostnames = string[] | boolean | undefined
  * identify(), reset(), or other identity changes without re-patching fetch/XHR.
  */
 export type TracingHeadersDistinctId = string | (() => string | undefined)
+
+/**
+ * Hostnames or origins that may receive a W3C `traceparent` header. The array is
+ * mutated in place on config changes so installed fetch/XHR patches see updates.
+ */
+export type TraceparentTargets = string[] | undefined

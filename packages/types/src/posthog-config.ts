@@ -2618,6 +2618,30 @@ export interface PostHogConfig {
      */
     addTracingHeaders?: string[]
 
+    /**
+     * Hosts that should receive a W3C Trace Context `traceparent` header on `fetch` and `XMLHttpRequest`
+     * requests, so your backend can continue the trace started in the browser.
+     *
+     * Each request gets a new trace id and span id, with the sampled flag set (`00-<trace-id>-<span-id>-01`).
+     * The browser does not record a span of its own, so the span id in the header is the parent of your
+     * server's root span.
+     *
+     * Matching is exact and nothing is sent to unlisted hosts:
+     * - an entry with a scheme (`https://api.example.com`, `http://localhost:8000`) matches that origin only
+     * - any other entry (`api.example.com`) matches that hostname on any scheme or port
+     *
+     * Only list hosts that accept the header. A cross-origin request with a `traceparent` header triggers a
+     * CORS preflight, and fails if the server's `Access-Control-Allow-Headers` doesn't include `traceparent`.
+     *
+     * A `traceparent` header already set by your app is never overwritten.
+     *
+     * @example
+     * ```js
+     * posthog.init('<token>', { trace_propagation_targets: ['https://api.example.com', 'internal.example.com'] })
+     * ```
+     */
+    trace_propagation_targets?: string[]
+
     // ------- PREVIEW CONFIGS -------
 
     /**

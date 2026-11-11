@@ -1,8 +1,8 @@
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { isArray, isUndefined } from '@posthog/core'
-import type { TracingHeadersHostnames } from './tracing-headers-types'
+import { isArray, isString, isUndefined } from '@posthog/core'
+import type { TraceparentTargets, TracingHeadersHostnames } from './tracing-headers-types'
 import type { Extension } from './types'
 
 const logger = /* @__PURE__ */ createLogger('[TracingHeaders]')
@@ -11,6 +11,8 @@ export class TracingHeaders implements Extension {
     private _restoreXHRPatch: (() => void) | undefined = undefined
     private _restoreFetchPatch: (() => void) | undefined = undefined
     private _hostnamesForPatch: TracingHeadersHostnames = undefined
+    // Mutated in place (never reassigned) so already-installed patches see config changes.
+    private readonly _traceparentTargetsForPatch: string[] = []
 
     constructor(private readonly _instance: PostHog) {}
 
@@ -59,10 +61,29 @@ export class TracingHeaders implements Extension {
             // we're reapplying a patch and it fails for any reason, we've at least
             // avoided sending headers to stale hostnames.
             this._hostnamesForPatch.splice(0)
+            if (!hostnames) {
+                // keep the (now empty) array instance: installed patches may still be reading it for
+                // trace_propagation_targets, and re-enabling tracing_headers later must reach them
+                return undefined
+            }
         }
 
         this._hostnamesForPatch = hostnames || undefined
         return this._hostnamesForPatch
+    }
+
+    private _syncTraceparentTargetsForPatch(): TraceparentTargets {
+        const configured = this._instance.config.trace_propagation_targets
+        const targets = isArray(configured) ? configured.filter((target) => isString(target) && !!target) : []
+        this._traceparentTargetsForPatch.splice(0, this._traceparentTargetsForPatch.length, ...targets)
+        return targets.length > 0 ? this._traceparentTargetsForPatch : undefined
+    }
+
+    private _syncForPatch(): { hostnames: TracingHeadersHostnames; traceparentTargets: TraceparentTargets } {
+        return {
+            hostnames: this._syncHostnamesForPatch(),
+            traceparentTargets: this._syncTraceparentTargetsForPatch(),
+        }
     }
 
     private _stopCapturing(): void {
@@ -74,7 +95,8 @@ export class TracingHeaders implements Extension {
     }
 
     public startIfEnabledOrStop() {
-        if (this._syncHostnamesForPatch()) {
+        const { hostnames, traceparentTargets } = this._syncForPatch()
+        if (hostnames || traceparentTargets) {
             this._loadScript(this._startCapturing)
         } else {
             this._stopCapturing()
@@ -82,24 +104,31 @@ export class TracingHeaders implements Extension {
     }
 
     private _startCapturing = () => {
-        const hostnames = this._syncHostnamesForPatch()
-        if (!hostnames) {
+        const { hostnames, traceparentTargets } = this._syncForPatch()
+        if (!hostnames && !traceparentTargets) {
             this._stopCapturing()
             return
+        }
+        // Always hand the patches the live arrays, even when one feature is currently empty, so enabling it
+        // later via set_config takes effect without re-patching.
+        if (!hostnames && !isArray(this._hostnamesForPatch)) {
+            this._hostnamesForPatch = []
         }
 
         if (isUndefined(this._restoreXHRPatch)) {
             this._restoreXHRPatch = assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
-                hostnames,
+                this._hostnamesForPatch,
                 () => this._instance.get_distinct_id(),
-                this._instance.sessionManager
+                this._instance.sessionManager,
+                this._traceparentTargetsForPatch
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
             this._restoreFetchPatch = assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
-                hostnames,
+                this._hostnamesForPatch,
                 () => this._instance.get_distinct_id(),
-                this._instance.sessionManager
+                this._instance.sessionManager,
+                this._traceparentTargetsForPatch
             )
         }
     }
