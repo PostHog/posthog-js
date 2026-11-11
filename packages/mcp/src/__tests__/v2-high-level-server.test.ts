@@ -292,6 +292,22 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
     await expect(executor({}, ctx)).rejects.toThrow('intentional failure')
   })
 
+  it('captures the failed call when the request context is frozen', async () => {
+    const server = makeV2Server()
+    instrument(server, fakePostHog(), { context: false })
+
+    await dispatch(
+      server,
+      { method: 'tools/call', params: { name: 'fail_always', arguments: {} } },
+      Object.freeze(v2Ctx())
+    )
+    await new Promise((r) => setTimeout(r, 20))
+
+    const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0].properties.$mcp_is_error).toBe(true)
+  })
+
   /**
    * v2 builds a tool's `executor` from its `handler` **once at registration**,
    * and dispatch calls the executor — so our callback wrapper, installed after

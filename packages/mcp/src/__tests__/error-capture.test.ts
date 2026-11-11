@@ -144,6 +144,32 @@ describe('error capture on the tool-call path', () => {
     expect(toolCall?.properties.$mcp_error_type).toBe(errorType)
   })
 
+  it('keeps the message the tool result carries when reading the error name throws', async () => {
+    instrument(server, fakePostHog())
+
+    server.tool!('fetch_invoice', 'fetches an invoice', {}, async () => {
+      const error = Object.assign(new Error('invoice service down'), { status: 503 })
+      Object.defineProperty(error, 'name', {
+        get() {
+          throw new Error('not loaded')
+        },
+      })
+      throw error
+    })
+
+    await client.request(
+      { method: 'tools/call', params: { name: 'fetch_invoice', arguments: {} } },
+      CallToolResultSchema
+    )
+    await new Promise((r) => setTimeout(r, 50))
+
+    const toolCall = capture
+      .findCapturesByEvent('$mcp_tool_call')
+      .find((event) => event.properties.$mcp_tool_name === 'fetch_invoice')
+    expect(toolCall?.properties.$mcp_error_message).toBe('invoice service down')
+    expect(toolCall?.properties.$mcp_error_status).toBe(503)
+  })
+
   it('carries the HTTP status on every server that registers the same tool function', async () => {
     const failing = async () => {
       throw Object.assign(new Error('down'), { status: 503 })
