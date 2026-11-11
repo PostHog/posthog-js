@@ -57,13 +57,15 @@ describe('error capture on the tool-call path', () => {
     expect(exception?.stacktrace?.frames?.length).toBeGreaterThan(0)
   })
 
-  it('redacts PostHog tokens from both emitted error-message properties', async () => {
+  it('redacts PostHog tokens from the emitted error message and type', async () => {
     instrument(server, fakePostHog())
     const projectToken = 'phc_123456789012345678901234567890'
     const personalToken = 'phx_abcdefghijklmnopqrstuvwxyz1234'
 
     server.tool!('secret_error', 'throws a sensitive error', {}, async () => {
-      throw new Error(`Project token ${projectToken} and personal token ${personalToken}`)
+      throw Object.assign(new Error(`Project token ${projectToken} and personal token ${personalToken}`), {
+        name: `UpstreamError ${projectToken}`,
+      })
     })
 
     const result = await client.request(
@@ -85,10 +87,12 @@ describe('error capture on the tool-call path', () => {
       .findCapturesByEvent('$exception')
       .find((event) => event.properties.$mcp_tool_name === 'secret_error')
     const expected = 'Project token [redacted] and personal token [redacted]'
-    const exceptionList = exception?.properties.$exception_list as Array<{ value: string }> | undefined
+    const exceptionList = exception?.properties.$exception_list as Array<{ type: string; value: string }> | undefined
 
     expect(toolCall?.properties.$mcp_error_message).toBe(expected)
     expect(exceptionList?.[0].value).toBe(expected)
+    expect(toolCall?.properties.$mcp_error_type).toBe('UpstreamError [redacted]')
+    expect(exceptionList?.[0].type).toBe('UpstreamError [redacted]')
   })
 
   it.each([
@@ -110,6 +114,16 @@ describe('error capture on the tool-call path', () => {
     ],
     ['a fetch Response', () => new Response(null, { status: 503 }), 'Error'],
     ['a plain object', () => ({ name: 'UpstreamError', message: 'down', status: 503 }), 'UpstreamError'],
+    [
+      'an object whose message getter throws',
+      () => ({
+        status: 503,
+        get message() {
+          throw new Error('not loaded')
+        },
+      }),
+      'Error',
+    ],
   ])('carries the HTTP status and type when the tool throws %s', async (_case, thrown, errorType) => {
     instrument(server, fakePostHog())
 

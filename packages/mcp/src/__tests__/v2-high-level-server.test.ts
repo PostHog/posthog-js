@@ -281,6 +281,17 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
     expect(exceptionList[0]).toEqual(expect.objectContaining({ type: 'RateLimitError', value: 'rate limited' }))
   })
 
+  it.each([
+    ['no context', undefined],
+    ['a frozen context', Object.freeze(v2Ctx())],
+  ])('rethrows the tool error unchanged when the executor runs with %s', async (_case, ctx) => {
+    const server = makeV2Server()
+    instrument(server, fakePostHog(), { context: false })
+
+    const executor = (server._registeredTools.fail_always as V2RegisteredTool).executor
+    await expect(executor({}, ctx)).rejects.toThrow('intentional failure')
+  })
+
   /**
    * v2 builds a tool's `executor` from its `handler` **once at registration**,
    * and dispatch calls the executor — so our callback wrapper, installed after
