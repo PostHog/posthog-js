@@ -267,6 +267,15 @@ describe('autocapture', () => {
         click()
         expect(captured.mock.calls.some(([event]) => event.event === '$rageclick')).toBe(true)
     })
+    it('captures with a custom surveys owner that does not expose selector lookup', async () => {
+        const client = await create({ extensions: [{ name: 'surveys', setup() {} }] })
+        const captured = vi.fn()
+        requireInstalledExtension(client.analytics).onEvent(captured)
+        expect(client.autocapture).toBeDefined()
+        click()
+        expect(captured).toHaveBeenCalledOnce()
+        expect(captured).toHaveBeenCalledWith(expect.objectContaining({ event: '$autocapture' }))
+    })
     it('picks up selectors from an already installed surveys capability without sharing mutable sets', async () => {
         const selectors = new Set(['button'])
         const client = await create({

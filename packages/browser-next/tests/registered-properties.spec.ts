@@ -109,6 +109,21 @@ describe('registered analytics properties', () => {
         }
     )
 
+    it('stamps identified processing policy over a registered false value', async () => {
+        const { client, product, requests } = await create()
+        const observed: Record<string, unknown>[] = []
+        product.onEvent(({ properties }) => observed.push(properties))
+        product.register({ $process_person_profile: false })
+        await product.identify('user-123')
+        product.capture('identified', { $process_person_profile: false })
+        await client.flush()
+        expect(events(requests)).toMatchObject([
+            { event: '$identify', options: { process_person_profile: true } },
+            { event: 'identified', options: { process_person_profile: true } },
+        ])
+        expect(observed).toMatchObject([{ $process_person_profile: true }, { $process_person_profile: true }])
+    })
+
     it('registers first values once and retains existing falsy values', async () => {
         const { product, client, requests } = await create()
         product.register({ zero: 0, empty: '', disabled: false, nullable: null })
