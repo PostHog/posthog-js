@@ -304,38 +304,43 @@ describe('select review regressions', () => {
   }
 
   for (const blocked of ['option', 'optgroup']) {
-    it.each(['class', 'selector'])(
-      `does not capture a blocked ${blocked} (%s)`,
-      async (rule) => {
-        await page.evaluate(
-          ({ blocked, rule }) => {
-            const win = window as unknown as TestWindow;
-            document.querySelector('#fixture')!.innerHTML =
-              '<select id="privacy"><option value="public">Public</option>' +
-              '<optgroup label="Choices"><option value="blocked-option-secret">Hidden</option></optgroup></select>';
-            const select = document.querySelector('select')!;
-            const target =
-              blocked === 'option'
-                ? select.options[1]
-                : select.querySelector('optgroup')!;
-            if (rule === 'class') target.className = 'rr-block';
-            else target.setAttribute('data-private', '');
-            win.events = [];
-            win.stop = win.rrweb.record({
-              maskAllInputs: false,
-              blockSelector: '[data-private]',
-              emit: (event) => win.events.push(event),
-            })!;
-            select.options[1].selected = true;
-          },
-          { blocked, rule },
-        );
-        const result = await finishReplay(page, 'seek');
-        expect(result.liveIndices).toEqual([1]);
-        expect(result.inputs).toEqual([]);
-        expect(result.payload).not.toContain('blocked-option-secret');
-      },
-    );
+    for (const mode of ['play', 'seek', 'seek-real'] as const) {
+      it.each(['class', 'selector'])(
+        `clears a blocked ${blocked} selection (${mode}, %s)`,
+        async (rule) => {
+          await page.evaluate(
+            ({ blocked, rule }) => {
+              const win = window as unknown as TestWindow;
+              document.querySelector('#fixture')!.innerHTML =
+                '<select id="privacy"><option value="public">Public</option>' +
+                '<optgroup label="Choices"><option value="blocked-option-secret">Hidden</option></optgroup></select>';
+              const select = document.querySelector('select')!;
+              const target =
+                blocked === 'option'
+                  ? select.options[1]
+                  : select.querySelector('optgroup')!;
+              if (rule === 'class') target.className = 'rr-block';
+              else target.setAttribute('data-private', '');
+              win.events = [];
+              win.stop = win.rrweb.record({
+                maskAllInputs: false,
+                blockSelector: '[data-private]',
+                emit: (event) => win.events.push(event),
+              })!;
+              select.options[1].selected = true;
+            },
+            { blocked, rule },
+          );
+          const result = await finishReplay(page, mode);
+          expect(result.liveIndices).toEqual([1]);
+          expect(result.inputs).toHaveLength(1);
+          expect(result.inputs[0].text).toBe('');
+          expect(result.inputs[0].selectedOptionIds).toEqual([]);
+          expect(result.replayIndices).toEqual([]);
+          expect(result.payload).not.toContain('blocked-option-secret');
+        },
+      );
+    }
   }
 
   for (const blocked of ['option', 'optgroup']) {
@@ -589,43 +594,124 @@ describe('select review regressions', () => {
     expect(result.inputs).toEqual([]);
   });
 
-  it('does not retry indefinitely or emit empty input when options remain unmirrored', async () => {
-    const result = await page.evaluate(async () => {
-      const win = window as unknown as TestWindow;
-      document.querySelector('#fixture')!.innerHTML =
-        '<select><option value="public">Public</option></select>';
-      const select = document.querySelector('select')!;
-      const descriptor = Object.getOwnPropertyDescriptor(
-        HTMLSelectElement.prototype,
-        'selectedOptions',
-      )!;
-      let scans = 0;
-      Object.defineProperty(select, 'selectedOptions', {
-        get() {
-          scans++;
-          return descriptor.get!.call(this);
-        },
-      });
-      const events: eventWithTime[] = [];
-      const stop = win.rrweb.record({
-        recordDOM: false,
-        maskAllInputs: false,
-        emit: (event) => events.push(event),
-      })!;
-      scans = 0;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      stop();
-      return {
-        scans,
-        inputs: events.filter(
-          (event) => event.type === 3 && event.data.source === 5,
-        ),
-      };
-    });
-    expect(result.inputs).toEqual([]);
-    expect(result.scans).toBeLessThanOrEqual(2);
-  });
+  it.each(['default', 'passthrough', 'redactor', 'unmasked'])(
+    'requires option IDs only for unmasked selects (%s)',
+    async (masker) => {
+      const result = await page.evaluate(async (masker) => {
+        const win = window as unknown as TestWindow;
+        document.querySelector('#fixture')!.innerHTML =
+          '<select multiple><option value="old" selected>Old</option></select>';
+        const select = document.querySelector('select')!;
+        const errors: string[] = [];
+        const events: eventWithTime[] = [];
+        const observe = MutationObserver.prototype.observe;
+        let stop: () => void;
+        try {
+          MutationObserver.prototype.observe = function (target, options) {
+            if (target === document)
+              throw new Error('dom-observation-unavailable');
+            observe.call(this, target, options);
+          };
+          stop = win.rrweb.record({
+            maskAllInputs: masker !== 'unmasked',
+            maskInputFn:
+              masker === 'passthrough'
+                ? (text) => text
+                : masker === 'redactor'
+                  ? (text) => '#'.repeat(text.length)
+                  : undefined,
+            errorHandler: (error) => {
+              errors.push(String(error));
+              return true;
+            },
+            emit: (event) => events.push(event),
+          })!;
+        } finally {
+          MutationObserver.prototype.observe = observe;
+        }
+        const ownerId = win.rrweb.record.mirror.getId(select);
+        const active = win.rrweb.record.isRecording();
+        select.innerHTML =
+          '<optgroup class="rr-block"><option value="missing-id-secret" selected>Hidden</option></optgroup>' +
+          '<option value="allowed" selected>Allowed</option>';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const optionId = win.rrweb.record.mirror.getId(select.options[1]);
+        const liveValue = select.value;
+        stop();
+        return {
+          ownerId,
+          optionId,
+          active,
+          errors,
+          liveValue,
+          inputs: events.flatMap((event) =>
+            event.type === 3 && event.data.source === 5 ? [event.data] : [],
+          ),
+        };
+      }, masker);
+      expect(result.active).toBe(true);
+      expect(result.ownerId).toBeGreaterThan(0);
+      expect(result.optionId).toBe(-1);
+      expect(result.liveValue).toBe('missing-id-secret');
+      expect(result.errors).toEqual(['Error: dom-observation-unavailable']);
+      if (masker === 'unmasked') {
+        expect(result.inputs).toEqual([]);
+      } else {
+        expect(result.inputs).toHaveLength(1);
+        expect(result.inputs[0].id).toBe(result.ownerId);
+        expect(result.inputs[0].text).toBe(
+          masker === 'passthrough'
+            ? 'allowed'
+            : masker === 'redactor'
+              ? '#######'
+              : '*******',
+        );
+        expect(result.inputs[0]).not.toHaveProperty('selectedOptionIds');
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'does not emit input for an unmirrored owner (masked=%s)',
+    async (masked) => {
+      const result = await page.evaluate(async (masked) => {
+        const win = window as unknown as TestWindow;
+        document.querySelector('#fixture')!.innerHTML =
+          '<select><option value="public">Public</option></select>';
+        const select = document.querySelector('select')!;
+        const descriptor = Object.getOwnPropertyDescriptor(
+          HTMLSelectElement.prototype,
+          'selectedOptions',
+        )!;
+        let scans = 0;
+        Object.defineProperty(select, 'selectedOptions', {
+          get() {
+            scans++;
+            return descriptor.get!.call(this);
+          },
+        });
+        const events: eventWithTime[] = [];
+        const stop = win.rrweb.record({
+          recordDOM: false,
+          maskAllInputs: masked,
+          emit: (event) => events.push(event),
+        })!;
+        scans = 0;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        stop();
+        return {
+          scans,
+          inputs: events.filter(
+            (event) => event.type === 3 && event.data.source === 5,
+          ),
+        };
+      }, masked);
+      expect(result.inputs).toEqual([]);
+      expect(result.scans).toBeLessThanOrEqual(2);
+    },
+  );
 
   it('reads each selected set once during a burst of option writes', async () => {
     const scans = await page.evaluate(async () => {
@@ -1051,11 +1137,17 @@ describe('select review regressions', () => {
       const result = await finishReplay(page, 'seek');
       expect(result.liveIndices).toEqual([0, 1, 2]);
       expect(result.replayValues).toEqual(['b', 'c']);
-      expect(result.inputs).toHaveLength(1);
-      expect(result.inputs[0].text).toBe('b');
-      expect(result.inputs[0].selectedOptionIds).toEqual([
-        result.optionIds[1],
-        result.optionIds[2],
+      expect(
+        result.inputs.map(({ text, selectedOptionIds }) => ({
+          text,
+          selectedOptionIds,
+        })),
+      ).toEqual([
+        { text: 'b', selectedOptionIds: [result.optionIds[1]] },
+        {
+          text: 'b',
+          selectedOptionIds: [result.optionIds[1], result.optionIds[2]],
+        },
       ]);
       expect(result.payload).not.toContain('blocked-selection-secret');
     },

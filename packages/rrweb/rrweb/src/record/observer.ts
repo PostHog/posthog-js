@@ -457,7 +457,6 @@ function initInputObserver({
       return null;
     }
     if (target && target.tagName === 'OPTION') {
-      if (isBlocked(target, blockClass, blockSelector, true)) return null;
       target = dom.parentElement(target);
       if (target && target.tagName === 'OPTGROUP') {
         target = dom.parentElement(target);
@@ -500,12 +499,20 @@ function initInputObserver({
     ) {
       return;
     }
+    const type: Lowercase<string> = getInputType(target) || '';
+    const shouldMaskInput =
+      maskInputOptions[tagName.toLowerCase() as keyof MaskInputOptions] ||
+      maskInputOptions[type as keyof MaskInputOptions];
     let selectedOptions =
       tagName === 'SELECT'
         ? getSelectedOptions(target as HTMLSelectElement)
         : undefined;
-    if (selectedOptions?.some((option) => mirror.getId(option) <= 0)) {
-      // Input normally unfreezes mutations at emission; IDs are needed before that.
+    if (
+      selectedOptions &&
+      (mirror.getId(target) <= 0 ||
+        selectedOptions.some((option) => mirror.getId(option) <= 0))
+    ) {
+      // Input normally unfreezes mutations at emission, too late for ID lookup.
       if (mutationBuffers[0]?.isFrozen()) {
         mutationBuffers.forEach((buffer) => buffer.unfreeze());
         if (!active) return;
@@ -516,22 +523,23 @@ function initInputObserver({
         queueSelect(target, userTriggered);
         return;
       }
-      // Never retry indefinitely or emit a partial selection without node IDs.
-      if (selectedOptions.some((option) => mirror.getId(option) <= 0)) return;
+      // Scalar masked events need the select ID, but do not transmit option IDs.
+      if (
+        mirror.getId(target) <= 0 ||
+        (!shouldMaskInput &&
+          selectedOptions.some((option) => mirror.getId(option) <= 0))
+      )
+        return;
     }
     let text = selectedOptions
       ? selectedOptions[0]?.value || ''
       : (target as HTMLInputElement).value;
     let isChecked = false;
     let selectedOptionIds: number[] | undefined;
-    const type: Lowercase<string> = getInputType(target) || '';
 
     if (type === 'radio' || type === 'checkbox') {
       isChecked = (target as HTMLInputElement).checked;
-    } else if (
-      maskInputOptions[tagName.toLowerCase() as keyof MaskInputOptions] ||
-      maskInputOptions[type as keyof MaskInputOptions]
-    ) {
+    } else if (shouldMaskInput) {
       text = maskInputValue({
         element: target,
         maskInputOptions,
