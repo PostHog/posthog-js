@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Capture startup errors and unhandled rejections without waiting for the exception autocapture script to load.
+Capture startup errors and unhandled rejections, buffering them until remote exception capture is enabled.

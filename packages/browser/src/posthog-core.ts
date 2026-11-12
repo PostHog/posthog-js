@@ -1013,6 +1013,15 @@ export class PostHog implements PostHogInterface {
             })
         }
 
+        // Exception hooks must be ready before init returns, even when other extensions are deferred.
+        const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
+        if (ext.exceptions) {
+            this._extensions.push((this.exceptions = this.exceptions ?? new ext.exceptions(this)))
+        }
+        if (ext.exceptionObserver) {
+            this._extensions.push((this.exceptionObserver = new ext.exceptionObserver(this)))
+        }
+
         this._enrollFeatureFlags()
 
         // Conditionally defer extension initialization based on config
@@ -1267,9 +1276,6 @@ export class PostHog implements PostHogInterface {
 
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
-        if (ext.exceptions) {
-            this._extensions.push((this.exceptions = this.exceptions ?? new ext.exceptions(this)))
-        }
         if (ext.historyAutocapture) {
             this._extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
         }
@@ -1311,9 +1317,6 @@ export class PostHog implements PostHogInterface {
         }
         if (ext.webVitalsAutocapture) {
             this._extensions.push((this.webVitalsAutocapture = new ext.webVitalsAutocapture(this)))
-        }
-        if (ext.exceptionObserver) {
-            this._extensions.push((this.exceptionObserver = new ext.exceptionObserver(this)))
         }
         if (ext.deadClicksAutocapture) {
             this._extensions.push(
@@ -3946,6 +3949,7 @@ export class PostHog implements PostHogInterface {
         // opted out by default that flips capturing back off, and nothing else surfaces it: events
         // are dropped with no error. Warn instead of failing silently.
         const wasCapturing = this.is_capturing()
+        this.exceptionObserver?.reset()
 
         if (!isConsentTransition) {
             this.consent.reset()
@@ -4103,6 +4107,7 @@ export class PostHog implements PostHogInterface {
             () => this.metrics?.flush('sendBeacon'),
             () => this.metrics?.dispose(),
             () => this.logs?.dispose(),
+            () => this.exceptionObserver?.dispose(),
             () => this.surveys?.dispose(),
             () => this.autocapture?.dispose(),
             () => unsubscribe?.(),
@@ -4913,6 +4918,7 @@ export class PostHog implements PostHogInterface {
         // than at the next console write.
         if (!this.is_capturing()) {
             this.logs?._onOptOut()
+            this.exceptionObserver?.reset()
         }
 
         if (this.persistence?._disabled !== persistenceDisabled) {
@@ -5067,6 +5073,7 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        this.exceptionObserver?.reset()
         this.consent.optInOut(false)
         this._sync_opt_out_with_persistence()
 

@@ -45,7 +45,8 @@ describe('Exception Observer', () => {
     }
 
     beforeEach(async () => {
-        posthog = await createPosthogInstance(uuidv7(), { before_send: beforeSendMock })
+        posthog = await createPosthogInstance(uuidv7(), { before_send: beforeSendMock, capture_exceptions: false })
+        posthog.config.capture_exceptions = undefined
         assignableWindow.__PosthogExtensions__ = {
             loadExternalDependency: loadScriptMock,
         }
@@ -260,9 +261,11 @@ describe('Exception Observer', () => {
         const originalOnUnhandledRejection = vi.fn()
 
         beforeEach(() => {
+            exceptionObserver['_stopCapturing']()
             vi.clearAllMocks()
             window!.onerror = originalOnError
             window!.onunhandledrejection = originalOnUnhandledRejection
+            exceptionObserver.startIfEnabledOrStop()
 
             exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: true } as FlagsResponse })
         })
@@ -313,11 +316,11 @@ describe('Exception Observer', () => {
     })
 
     describe('when no flags response', () => {
-        it('cannot be started', () => {
-            expect(exceptionObserver.isEnabled).toBe(false)
-            expectNoHandlers()
-            exceptionObserver['_startCapturing']()
-            expectNoHandlers()
+        it('installs handlers but buffers captures', () => {
+            expect(exceptionObserver.isEnabled).toBe(true)
+            expect((window!.onerror as any).__POSTHOG_INSTRUMENTED__).toBe(true)
+            window!.onerror?.call(window, 'startup error', 'app.js', 1, 1, new Error('startup error'))
+            expect(beforeSendMock).not.toHaveBeenCalled()
         })
     })
 

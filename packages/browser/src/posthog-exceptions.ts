@@ -143,7 +143,7 @@ export class PostHogExceptions implements Extension {
         }
     }
 
-    sendExceptionEvent(properties: Properties): CaptureResult | undefined {
+    sendExceptionEvent(properties: Properties, timestamp?: Date): CaptureResult | undefined {
         try {
             const exceptionList = properties.$exception_list
 
@@ -191,6 +191,7 @@ export class PostHogExceptions implements Extension {
                     _noTruncate: true,
                     _batchKey: 'exceptionEvent',
                     _originatedFromCaptureException: true,
+                    timestamp,
                 })
 
                 if (result) {

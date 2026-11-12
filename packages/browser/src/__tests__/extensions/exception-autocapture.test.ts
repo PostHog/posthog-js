@@ -14,8 +14,11 @@ describe('ExceptionObserver', () => {
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
+            capture_exceptions: true,
         })
     })
+
+    afterEach(() => instance.exceptionObserver?.dispose())
 
     describe('captureException', () => {
         const errorProperties = { $exception_list: [{ type: 'TypeError' }] } as any

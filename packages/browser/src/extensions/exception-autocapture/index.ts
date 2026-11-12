@@ -10,19 +10,27 @@ import { ErrorTracking } from '@posthog/core'
 import { ExceptionAutoCaptureConfig } from '../../types'
 
 const logger = /* @__PURE__ */ createLogger('[ExceptionAutocapture]')
+const MAX_BUFFERED_EXCEPTIONS = 100
+
+type ExceptionCaptureType = keyof ExceptionAutoCaptureConfig
 
 export class ExceptionObserver {
     private _instance: PostHog
     private _rateLimiter: BucketedRateLimiter<string>
     private _remoteEnabled: boolean | undefined
     private _config: Required<ExceptionAutoCaptureConfig>
+    private _buffer: {
+        properties: ErrorTracking.ErrorProperties
+        timestamp: Date
+        captureType: ExceptionCaptureType
+    }[] = []
+    private _disposed = false
     private _unwrapOnError: (() => void) | undefined
     private _unwrapUnhandledRejection: (() => void) | undefined
     private _unwrapConsoleError: (() => void) | undefined
 
     constructor(instance: PostHog) {
         this._instance = instance
-        this._remoteEnabled = !!this._instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
 
         // Burst protection is scoped per exception type: captures ten exceptions before rate
         // limiting, then refills at a rate of one token / 10 second period (e.g. captures 1
@@ -49,7 +57,7 @@ export class ExceptionObserver {
 
         if (isObject(providedConfig)) {
             config = { ...config, ...providedConfig }
-        } else if (isUndefined(providedConfig) ? this._remoteEnabled : providedConfig) {
+        } else if (isUndefined(providedConfig) ? this._remoteEnabled !== false : providedConfig) {
             config = { ...config, capture_unhandled_errors: true, capture_unhandled_rejections: true }
         }
 
@@ -58,20 +66,39 @@ export class ExceptionObserver {
 
     public get isEnabled(): boolean {
         return (
-            this._config.capture_console_errors ||
-            this._config.capture_unhandled_errors ||
-            this._config.capture_unhandled_rejections
+            !this._disposed &&
+            (this._config.capture_console_errors ||
+                this._config.capture_unhandled_errors ||
+                this._config.capture_unhandled_rejections)
         )
     }
 
     startIfEnabledOrStop(): void {
         if (this.isEnabled) {
             logger.info('enabled')
-            this._stopCapturing()
             this._startCapturing()
+            while (this._buffer.length && this.isEnabled && !this._isWaitingForRemoteConfig()) {
+                const pending = this._buffer.shift()!
+                this.captureException(pending.properties, pending.captureType, pending.timestamp)
+            }
         } else {
             this._stopCapturing()
+            this.reset()
         }
+    }
+
+    private _isWaitingForRemoteConfig(): boolean {
+        return isUndefined(this._instance.config.capture_exceptions) && isUndefined(this._remoteEnabled)
+    }
+
+    reset(): void {
+        this._buffer = []
+    }
+
+    dispose(): void {
+        this._disposed = true
+        this._stopCapturing()
+        this.reset()
     }
 
     private _startCapturing = () => {
@@ -82,14 +109,29 @@ export class ExceptionObserver {
         const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWrappingFunctions
 
         try {
-            if (!this._unwrapOnError && this._config.capture_unhandled_errors) {
-                this._unwrapOnError = wrapOnError(this.captureException.bind(this))
+            if (!this._config.capture_unhandled_errors) {
+                this._unwrapOnError?.()
+                this._unwrapOnError = undefined
+            } else if (!this._unwrapOnError) {
+                this._unwrapOnError = wrapOnError((properties) =>
+                    this.captureException(properties, 'capture_unhandled_errors')
+                )
             }
-            if (!this._unwrapUnhandledRejection && this._config.capture_unhandled_rejections) {
-                this._unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException.bind(this))
+            if (!this._config.capture_unhandled_rejections) {
+                this._unwrapUnhandledRejection?.()
+                this._unwrapUnhandledRejection = undefined
+            } else if (!this._unwrapUnhandledRejection) {
+                this._unwrapUnhandledRejection = wrapUnhandledRejection((properties) =>
+                    this.captureException(properties, 'capture_unhandled_rejections')
+                )
             }
-            if (!this._unwrapConsoleError && this._config.capture_console_errors) {
-                this._unwrapConsoleError = wrapConsoleError(this.captureException.bind(this))
+            if (!this._config.capture_console_errors) {
+                this._unwrapConsoleError?.()
+                this._unwrapConsoleError = undefined
+            } else if (!this._unwrapConsoleError) {
+                this._unwrapConsoleError = wrapConsoleError((properties) =>
+                    this.captureException(properties, 'capture_console_errors')
+                )
             }
         } catch (e) {
             logger.error('failed to start', e)
@@ -138,8 +180,26 @@ export class ExceptionObserver {
         this._config = this._requiredConfig()
     }
 
-    captureException(errorProperties: ErrorTracking.ErrorProperties) {
+    captureException(
+        errorProperties: ErrorTracking.ErrorProperties,
+        captureType: ExceptionCaptureType = 'capture_unhandled_errors',
+        timestamp?: Date
+    ) {
         try {
+            if (!this._instance.is_capturing()) {
+                this.reset()
+                return
+            }
+            if (!this.isEnabled || !this._config[captureType]) {
+                return
+            }
+            if (this._isWaitingForRemoteConfig()) {
+                if (this._buffer.length < MAX_BUFFERED_EXCEPTIONS) {
+                    this._buffer.push({ properties: errorProperties, timestamp: timestamp ?? new Date(), captureType })
+                }
+                return
+            }
+
             const exceptionType = errorProperties?.$exception_list?.[0]?.type ?? 'Exception'
             const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 
@@ -150,7 +210,7 @@ export class ExceptionObserver {
                 return
             }
 
-            this._instance.exceptions?.sendExceptionEvent(errorProperties)
+            this._instance.exceptions?.sendExceptionEvent(errorProperties, timestamp)
         } catch {
             // Exception autocapture must never throw into customer code. Do not log here because
             // console.error may be instrumented and would re-enter this method.
