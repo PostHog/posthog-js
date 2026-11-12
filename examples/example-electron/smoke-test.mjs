@@ -29,6 +29,7 @@ try {
             'dist',
             'mock-server.mjs',
             'smoke-driver.mjs',
+            'fixtures',
         ]) {
             await cp(join(directory, name), join(source, name), { recursive: true, dereference: true })
         }
@@ -59,11 +60,17 @@ try {
     delete env.POSTHOG_PROJECT_TOKEN
     delete env.POSTHOG_HOST
     await new Promise((resolve, reject) => {
-        const child = spawn(process.env.ELECTRON_BINARY ?? electron, [application, '--smoke-test'], {
-            cwd: directory,
-            env,
-            stdio: 'inherit',
-        })
+        const packagedBinary = process.argv.find((argument) => argument.startsWith('--packaged='))?.slice(11)
+        const fixture = process.argv.find((argument) => argument.startsWith('--fixture='))
+        const child = spawn(
+            packagedBinary ?? process.env.ELECTRON_BINARY ?? electron,
+            [...(packagedBinary ? [] : [application]), '--smoke-test', ...(fixture ? [fixture] : [])],
+            {
+                cwd: directory,
+                env,
+                stdio: 'inherit',
+            }
+        )
         let timedOut = false
         let forceKill
         const timeout = setTimeout(() => {

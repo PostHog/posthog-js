@@ -13,6 +13,7 @@ const run = (command, args, cwd) => execFileSync(command, args, { cwd, stdio: 'i
 for (const [name, path] of [
     ['types', 'types'],
     ['core', 'core'],
+    ['browser-common', 'browser-common'],
     ['electron', 'electron'],
 ]) {
     run('pnpm', ['pack', '--out', join(directory, `${name}.tgz`)], join(root, 'packages', path))
@@ -28,7 +29,7 @@ await writeFile(
 )
 await writeFile(
     join(directory, 'pnpm-workspace.yaml'),
-    `minimumReleaseAge: 10080\nautoInstallPeers: false\noverrides:\n  '@posthog/core': file:./core.tgz\n  '@posthog/types': file:./types.tgz\n`
+    `minimumReleaseAge: 10080\nautoInstallPeers: false\noverrides:\n  '@posthog/core': file:./core.tgz\n  '@posthog/types': file:./types.tgz\n  '@posthog/browser-common': file:./browser-common.tgz\n`
 )
 await cp(new URL('main.cjs', import.meta.url), join(directory, 'main.cjs'))
 await cp(new URL('child.cjs', import.meta.url), join(directory, 'child.cjs'))

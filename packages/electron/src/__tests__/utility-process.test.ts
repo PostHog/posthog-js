@@ -61,6 +61,17 @@ function harness(execute?: (command: Command, authorize: () => void) => Promise<
 }
 
 describe('utilityProcess transport', () => {
+    it('requires a new main registration rather than restarting a disposed facade in the same child', async () => {
+        const h = harness()
+        await h.client.ready()
+        await h.client.capture('before-dispose')
+        h.client.dispose()
+        const replacement = new PostHog(createUtilityBridge(h.port as unknown as ParentPort))
+        await expect(replacement.ready()).rejects.toThrow('Out-of-order')
+        replacement.dispose()
+        h.registration.dispose()
+    })
+
     it('uses parent raw messages and child event.data, coordinated state and a stable owner-assigned context', async () => {
         const h = harness()
         await h.client.ready()

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { promises as fs } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { tmpdir, hostname } from 'node:os'
 import { join } from 'node:path'
 import { ElectronStorage } from '../main/storage'
 
@@ -23,9 +23,10 @@ describe('ElectronStorage', () => {
     let directory: string
     const stores: ElectronStorage[] = []
 
-    function storage(options?: ConstructorParameters<typeof ElectronStorage>[1]) {
+    async function storage(options?: ConstructorParameters<typeof ElectronStorage>[1]) {
         const store = new ElectronStorage(directory, options)
         stores.push(store)
+        await store.load()
         return store
     }
 
@@ -40,13 +41,18 @@ describe('ElectronStorage', () => {
 
     afterEach(async () => {
         // Drain background writes before restoring filesystem spies or removing fixtures.
-        await Promise.all(stores.splice(0).map((store) => store.flush().catch(() => {})))
+        await Promise.all(
+            stores.splice(0).map(async (store) => {
+                await store.flush().catch(() => {})
+                await store.stop()
+            })
+        )
         vi.restoreAllMocks()
         await fs.rm(directory, { recursive: true, force: true })
     })
 
     it('loads an absent file without opting out and persists identity and properties across restart', async () => {
-        const store = storage()
+        const store = await storage()
         await store.load()
         expect(store.get('opted_out')).toBeUndefined()
         store.set('anonymous_id', 'anon')
@@ -59,7 +65,8 @@ describe('ElectronStorage', () => {
             version: 1,
             values: { anonymous_id: 'anon', distinct_id: 'identified', props: { plan: 'pro' }, opted_out: false },
         })
-        const restarted = storage()
+        await store.stop()
+        const restarted = await storage()
         await restarted.load()
         expect(restarted.get('anonymous_id')).toBe('anon')
         expect(restarted.get('props')).toEqual({ plan: 'pro' })
@@ -67,7 +74,7 @@ describe('ElectronStorage', () => {
     })
 
     it('removes null values rather than persisting null', async () => {
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'old')
         store.set('distinct_id', null)
         expect(store.get('distinct_id')).toBeUndefined()
@@ -77,14 +84,14 @@ describe('ElectronStorage', () => {
 
     it('coalesces synchronous changes into one atomic write and leaves no temporary files', async () => {
         const rename = vi.spyOn(fs, 'rename')
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'first')
         store.set('distinct_id', 'second')
         store.set('props', { a: 1 })
         await store.flush()
         expect(rename).toHaveBeenCalledTimes(1)
         expect((await diskState()).values.distinct_id).toBe('second')
-        expect(await fs.readdir(directory)).toEqual(['state.json'])
+        expect(await fs.readdir(directory)).toEqual(['.owner', 'state.json'])
     })
 
     it('serializes a newer write arriving during flush and waits for it', async () => {
@@ -96,7 +103,7 @@ describe('ElectronStorage', () => {
             await releaseRename.promise
             await rename(from, to)
         })
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'old')
         const flushing = store.flush()
         await reachedRename.promise
@@ -112,7 +119,7 @@ describe('ElectronStorage', () => {
         const unlink = fs.unlink.bind(fs)
         // Exercise both sides of promise settlement without timers or scheduler sleeps.
         for (let depth = 0; depth < 10; depth++) {
-            const store = storage()
+            const store = await storage()
             const changed = deferred()
             vi.spyOn(fs, 'unlink').mockImplementationOnce(async (path) => {
                 await unlink(path).catch(() => {})
@@ -132,11 +139,12 @@ describe('ElectronStorage', () => {
             await store.flush()
             expect((await diskState()).values.distinct_id).toBe(`new-${depth}`)
             vi.mocked(fs.unlink).mockRestore()
+            await store.stop()
         }
     })
 
     it('keeps the previous complete file visible until rename', async () => {
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'old')
         await store.flush()
         const reachedRename = deferred()
@@ -160,7 +168,7 @@ describe('ElectronStorage', () => {
             return
         }
         await fs.chmod(directory, 0o777)
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'private')
         await store.flush()
         expect((await fs.stat(directory)).mode & 0o777).toBe(0o700)
@@ -168,7 +176,7 @@ describe('ElectronStorage', () => {
     })
 
     it('prunes seven-day-old events using Date and ISO timestamps and preserves the boundary', async () => {
-        const store = storage()
+        const store = await storage()
         store.set('queue', [
             event('expired', new Date(NOW - 7 * DAY - 1)),
             event('boundary', new Date(NOW - 7 * DAY).toISOString()),
@@ -176,7 +184,8 @@ describe('ElectronStorage', () => {
         ])
         expect(store.get('queue')).toEqual([event('boundary', new Date(NOW - 7 * DAY).toISOString()), event('recent')])
         await store.flush()
-        const restarted = storage()
+        await store.stop()
+        const restarted = await storage()
         await restarted.load()
         expect(restarted.get('queue')).toEqual((await diskState()).values.queue)
     })
@@ -186,7 +195,7 @@ describe('ElectronStorage', () => {
             join(directory, 'state.json'),
             JSON.stringify({ version: 1, values: { queue: [event('old', new Date(NOW - 101)), event('recent')] } })
         )
-        const store = storage({ maxQueueAgeMs: 100 })
+        const store = await storage({ maxQueueAgeMs: 100 })
         await store.load()
         expect(store.get('queue')).toEqual([event('recent', new Date(NOW).toISOString())])
         vi.mocked(Date.now).mockReturnValue(NOW + 101)
@@ -201,7 +210,7 @@ describe('ElectronStorage', () => {
         const maxStorageBytes = Buffer.byteLength(
             JSON.stringify({ version: 1, values: { distinct_id: 'person', queue: [newest, middle] } })
         )
-        const store = storage({ maxStorageBytes })
+        const store = await storage({ maxStorageBytes })
         store.set('distinct_id', 'person')
         store.set('queue', [newest, oldest, middle])
         expect(store.get('queue')).toEqual([newest, middle])
@@ -211,7 +220,7 @@ describe('ElectronStorage', () => {
     })
 
     it('enforces the default 5 MiB bound and counts multibyte strings in bytes', async () => {
-        const store = storage()
+        const store = await storage()
         const large = event('large')
         large.message.properties = { text: '雪'.repeat(2 * 1024 * 1024) }
         store.set('queue', [large, event('small')])
@@ -224,7 +233,7 @@ describe('ElectronStorage', () => {
 
     it('rejects oversized nonqueue state synchronously without changing the previous state', async () => {
         const onError = vi.fn()
-        const store = storage({ maxStorageBytes: 100, onError })
+        const store = await storage({ maxStorageBytes: 100, onError })
         store.set('distinct_id', 'person')
         expect(() => store.set('props', { text: 'x'.repeat(200) })).toThrow(RangeError)
         expect(store.get('props')).toBeUndefined()
@@ -236,7 +245,7 @@ describe('ElectronStorage', () => {
 
     it('does not silently reject an oversized consent change', async () => {
         const maxStorageBytes = Buffer.byteLength(JSON.stringify({ version: 1, values: { props: '1234567890' } }))
-        const store = storage({ maxStorageBytes })
+        const store = await storage({ maxStorageBytes })
         store.set('props', '1234567890')
         expect(() => store.set('opted_out', true)).toThrow(RangeError)
         await store.flush()
@@ -255,7 +264,7 @@ describe('ElectronStorage', () => {
     ])('fails closed and clears analytics for corrupt state: %s', async (contents) => {
         await fs.writeFile(join(directory, 'state.json'), contents)
         const onError = vi.fn()
-        const store = storage({ onError })
+        const store = await storage({ onError })
         await expect(store.load()).resolves.toBeUndefined()
         expect(store.get('opted_out')).toBe(true)
         expect(store.get('distinct_id')).toBeUndefined()
@@ -268,7 +277,7 @@ describe('ElectronStorage', () => {
     it('fails closed for unreadable state and tolerates a throwing error handler', async () => {
         // A directory at the file path produces a real read error, even when tests run as root.
         await fs.mkdir(join(directory, 'state.json'))
-        const store = storage({
+        const store = await storage({
             onError: () => {
                 throw new Error('handler failed')
             },
@@ -279,15 +288,15 @@ describe('ElectronStorage', () => {
     })
 
     it('reports write failures, rejects durability acknowledgments and retries on a later set', async () => {
-        await fs.mkdir(join(directory, 'state.json'))
         const onError = vi.fn()
-        const store = storage({ onError })
+        const store = await storage({ onError })
+        await fs.mkdir(join(directory, 'state.json'))
         store.set('distinct_id', 'in-memory')
         await expect(store.flush()).rejects.toBeDefined()
         expect(store.get('distinct_id')).toBe('in-memory')
         expect(onError).toHaveBeenCalledTimes(1)
         await expect(store.flush()).rejects.toBeDefined()
-        expect(await fs.readdir(directory)).toEqual(['state.json'])
+        expect(await fs.readdir(directory)).toEqual(['.owner', 'state.json'])
         await fs.rm(join(directory, 'state.json'), { recursive: true })
         store.set('props', { recovered: true })
         await store.flush()
@@ -296,7 +305,7 @@ describe('ElectronStorage', () => {
 
     it('reports temporary-file write failures and leaves the old file intact', async () => {
         const onError = vi.fn()
-        const store = storage({ onError })
+        const store = await storage({ onError })
         store.set('distinct_id', 'old')
         await store.flush()
         vi.spyOn(fs, 'writeFile').mockRejectedValueOnce(new Error('disk full'))
@@ -304,13 +313,13 @@ describe('ElectronStorage', () => {
         await expect(store.flush()).rejects.toThrow('disk full')
         expect(onError).toHaveBeenCalledTimes(1)
         expect((await diskState()).values.distinct_id).toBe('old')
-        expect(await fs.readdir(directory)).toEqual(['state.json'])
+        expect(await fs.readdir(directory)).toEqual(['.owner', 'state.json'])
     })
 
     it('handles a background write failure even when flush was not called at the time', async () => {
         const failed = deferred()
+        const store = await storage({ onError: failed.resolve })
         await fs.mkdir(join(directory, 'state.json'))
-        const store = storage({ onError: failed.resolve })
         store.set('opted_out', true)
         await failed.promise
         await expect(store.flush()).rejects.toBeDefined()
@@ -318,25 +327,26 @@ describe('ElectronStorage', () => {
     })
 
     it('keeps the previous disk state intact after a failed rename and cleans its temporary file', async () => {
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'old')
         await store.flush()
         vi.spyOn(fs, 'rename').mockRejectedValueOnce(new Error('disk failure'))
         store.set('distinct_id', 'new')
         await expect(store.flush()).rejects.toThrow('disk failure')
         expect((await diskState()).values.distinct_id).toBe('old')
-        expect(await fs.readdir(directory)).toEqual(['state.json'])
+        expect(await fs.readdir(directory)).toEqual(['.owner', 'state.json'])
     })
 
     it('does not expose inherited keys or invoke prototype setters on set or load', async () => {
-        const store = storage()
+        const store = await storage()
         expect(store.get('constructor')).toBeUndefined()
         expect(store.get('__proto__')).toBeUndefined()
         store.set('__proto__', { polluted: true })
         store.set('constructor', 'own constructor')
         store.set('props', JSON.parse('{"__proto__":{"polluted":true},"constructor":{"prototype":{"polluted":true}}}'))
         await store.flush()
-        const restarted = storage()
+        await store.stop()
+        const restarted = await storage()
         await restarted.load()
         expect(restarted.get('__proto__')).toEqual({ polluted: true })
         expect(restarted.get('constructor')).toBe('own constructor')
@@ -346,7 +356,7 @@ describe('ElectronStorage', () => {
     })
 
     it('rejects nonserializable changes without corrupting memory or disk', async () => {
-        const store = storage()
+        const store = await storage()
         const circular: Record<string, unknown> = {}
         circular.self = circular
         expect(() => store.set('props', circular)).toThrow()
@@ -354,5 +364,84 @@ describe('ElectronStorage', () => {
         store.set('distinct_id', 'valid')
         await store.flush()
         expect((await diskState()).values).toEqual({ distinct_id: 'valid' })
+    })
+    it('refuses a live owner without reading or changing its analytics, even after attempted writes', async () => {
+        const owner = await storage()
+        owner.set('distinct_id', 'owner')
+        owner.set('queue', [event('owned')])
+        await owner.flush()
+        const before = await fs.readFile(join(directory, 'state.json'), 'utf8')
+        const onError = vi.fn()
+        const denied = await storage({ onError })
+        expect(denied.isOwned).toBe(false)
+        expect(denied.get('opted_out')).toBe(true)
+        expect(denied.get('queue')).toBeUndefined()
+        denied.set('opted_out', false)
+        denied.set('distinct_id', 'intruder')
+        await denied.flush()
+        await denied.stop()
+        expect(onError).toHaveBeenCalledTimes(1)
+        expect(await fs.readFile(join(directory, 'state.json'), 'utf8')).toBe(before)
+        expect(owner.isOwned).toBe(true)
+    })
+
+    it.each([
+        'partial json',
+        JSON.stringify({ host: 'another-host', pid: 123, token: 'a'.repeat(36) }),
+        JSON.stringify({ host: hostname(), pid: -1, token: 'a'.repeat(36) }),
+        JSON.stringify({ host: hostname(), pid: 123, token: '../outside' }),
+    ])('never steals unverifiable ownership: %s', async (contents) => {
+        await fs.writeFile(join(directory, '.owner'), contents)
+        const onError = vi.fn()
+        const store = await storage({ onError })
+        expect(store.isOwned).toBe(false)
+        expect(onError).toHaveBeenCalledTimes(1)
+        expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toBe(contents)
+    })
+
+    it('never steals ownership when the process probe is denied', async () => {
+        const contents = JSON.stringify({ host: hostname(), pid: 123, token: 'a'.repeat(36) })
+        await fs.writeFile(join(directory, '.owner'), contents)
+        vi.spyOn(process, 'kill').mockImplementation(() => {
+            throw Object.assign(new Error('denied'), { code: 'EPERM' })
+        })
+        const store = await storage()
+        expect(store.isOwned).toBe(false)
+        expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toBe(contents)
+    })
+
+    it('fails closed if a dead owner already has a reclamation tombstone', async () => {
+        const token = 'a'.repeat(36)
+        const contents = JSON.stringify({ host: hostname(), pid: 123, token })
+        await fs.writeFile(join(directory, '.owner'), contents)
+        await fs.writeFile(join(directory, `.reclaim-${token}`), '')
+        vi.spyOn(process, 'kill').mockImplementation(() => {
+            throw Object.assign(new Error('dead'), { code: 'ESRCH' })
+        })
+        const store = await storage()
+        expect(store.isOwned).toBe(false)
+        expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toBe(contents)
+    })
+
+    it('stops before a pending rename and retains ownership until that writer settles', async () => {
+        const store = await storage()
+        store.set('distinct_id', 'old')
+        await store.flush()
+        const reachedWrite = deferred(),
+            releaseWrite = deferred()
+        const write = fs.writeFile.bind(fs)
+        vi.spyOn(fs, 'writeFile').mockImplementationOnce(async (...args) => {
+            reachedWrite.resolve()
+            await releaseWrite.promise
+            await write(...args)
+        })
+        store.set('distinct_id', 'new')
+        await reachedWrite.promise
+        const stopping = store.stop()
+        expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
+        releaseWrite.resolve()
+        await stopping
+        expect((await diskState()).values.distinct_id).toBe('old')
+        expect(await fs.readdir(directory)).toEqual(['state.json'])
     })
 })
