@@ -1,0 +1,70 @@
+{
+    "name": "@posthog/electron",
+    "version": "0.1.0-alpha.0",
+    "description": "PostHog analytics and feature flags for Electron applications",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/electron"
+    },
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "main": "dist/main.cjs",
+    "module": "dist/main.mjs",
+    "types": "dist/main.d.ts",
+    "exports": {
+        "./main": {
+            "types": "./dist/main.d.ts",
+            "import": "./dist/main.mjs",
+            "require": "./dist/main.cjs"
+        },
+        "./renderer": {
+            "types": "./dist/renderer.d.ts",
+            "import": "./dist/renderer.mjs",
+            "require": "./dist/renderer.cjs"
+        },
+        "./preload": {
+            "types": "./dist/preload.d.ts",
+            "default": "./dist/preload.cjs"
+        },
+        "./preload/helper": {
+            "types": "./dist/preload-helper.d.ts",
+            "import": "./dist/preload-helper.mjs",
+            "require": "./dist/preload-helper.cjs"
+        }
+    },
+    "scripts": {
+        "prebuild": "node ../../tooling/write-version.mjs",
+        "build": "tsdown",
+        "dev": "tsdown --watch",
+        "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.json",
+        "test:unit": "vitest run",
+        "test:built": "node --test test/exports.test.mjs",
+        "lint": "oxlint --report-unused-disable-directives-severity error src",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
+        "clean": "rimraf dist coverage",
+        "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "dependencies": {
+        "@posthog/core": "workspace:^"
+    },
+    "peerDependencies": {
+        "electron": ">=41"
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@types/node": "^22.19.1",
+        "electron": "42.4.0",
+        "tsdown": "catalog:",
+        "typescript": "catalog:native",
+        "vitest": "catalog:"
+    }
+}

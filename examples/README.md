@@ -1,3 +1,7 @@
+## Electron
+
+[Electron example](./example-electron) demonstrates `@posthog/electron` with sandboxed windows, shared identity/consent/feature flags, persistent delivery and handled JavaScript errors. It includes a credential-free mock receiver and a real two-window Electron smoke test. Replay and native crashes are not supported.
+
 ## Edge runtime examples
 
 All four use the explicit `posthog-node/edge` import and request-scoped clients:
