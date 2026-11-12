@@ -609,6 +609,7 @@ export type viewportResizeCallback = (d: viewportResizeDimension) => void;
 export type inputValue = {
   text: string;
   isChecked: boolean;
+  selectedOptionIds?: number[];
 
   // `userTriggered` indicates if this event was triggered directly by user (userTriggered: true)
   // or was triggered indirectly (userTriggered: false)

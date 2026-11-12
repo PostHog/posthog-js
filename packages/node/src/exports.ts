@@ -11,6 +11,7 @@ export type {
   CodeEmailForm,
   EmailAttachment,
   EmailDeliveryStatus,
+  EmailPreferences,
   EmailReactElement,
   Emails,
   EmailStatus,
@@ -22,6 +23,8 @@ export type {
   SendEmailResponse,
   SendEmailResult,
   SendTemplateEmailOptions,
+  SetEmailPreferencesOptions,
+  SetEmailPreferencesResponse,
   TemplateEmailForm,
 } from './emails/types'
 export type {

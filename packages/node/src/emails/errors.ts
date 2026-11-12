@@ -26,7 +26,7 @@ export interface EmailErrorParams {
 }
 
 /**
- * PostHog did not queue the email, or the client could not tell whether it did.
+ * PostHog refused an email call, or the client could not tell whether it succeeded.
  *
  * Branch on `code`, PostHog's stable error code, or on `name`, a coarse category of the
  * failure. The message never contains the secret key or the request body.
