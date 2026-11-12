@@ -10,6 +10,7 @@ import {
 import { EmailError } from './errors'
 import type {
   CodeEmailForm,
+  EmailReactElement,
   EmailStatus,
   EmailWarning,
   Emails,
@@ -41,6 +42,10 @@ const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 const CATEGORY_TYPES: ReadonlySet<unknown> = new Set<MessageCategory['type']>(['marketing', 'transactional'])
 
 type EveryField<Form> = Record<keyof Form, true>
+interface ReactRenderer {
+  render(element: EmailReactElement): Promise<string>
+  toPlainText(html: string): string
+}
 type UncheckedSend = { [Field in keyof SendTemplateEmailOptions]?: unknown }
 
 interface SendForm {
@@ -66,6 +71,7 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   category: true,
   html: true,
   text: true,
+  react: true,
 }
 const TEMPLATE_FORM: SendForm = {
   name: 'templateId',
@@ -108,8 +114,8 @@ export interface EmailSenderHooks {
 }
 
 interface PreparedSend {
-  path: string
   body: string
+  react?: EmailReactElement
   idempotencyKey: string
   maxRetries: number
 }
@@ -167,12 +173,16 @@ export class EmailSender implements Emails {
         'no email was sent',
         'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.'
       )
+      const body =
+        prepared.react === undefined
+          ? prepared.body
+          : await withRenderedReact(prepared.body, prepared.react, this.config.requestTimeoutMs)
       const headers = this.headers(secretKey, {
         'Content-Type': 'application/json',
         'Idempotency-Key': prepared.idempotencyKey,
       })
       const result = await this.withRetries(prepared.maxRetries, async () =>
-        parseSendReply(await this.request(appHost + prepared.path, 'POST', headers, prepared.body))
+        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, body))
       )
       for (const warning of result.warnings) {
         this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
@@ -366,8 +376,8 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 
   return {
-    path: SEND_PATH,
     body: safeJsonStringify({ ...content, to }),
+    react: isReactElement(send.react) ? send.react : undefined,
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
@@ -381,7 +391,7 @@ function contentOf(send: UncheckedSend, distinctId: string | undefined): Record<
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
       code: 'invalid_form',
-      message: 'Send either templateId, or templateKey with subject and html or text.',
+      message: 'Send either templateId, or templateKey with subject and html, text or react.',
     })
   }
   return send.templateKey === undefined ? templateContent(send, distinctId) : codeContent(send, distinctId)
@@ -407,7 +417,7 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
 }
 
 function codeContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
-  const { templateKey, subject, html, text, from, replyTo, captureEngagement, category } = send
+  const { templateKey, subject, html, text, react, from, replyTo, captureEngagement, category } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -425,8 +435,10 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
   if (text !== undefined && typeof text !== 'string') {
     throw invalid('invalid_form', 'text must be a string.', 'text')
   }
-  if (html === undefined && text === undefined) {
-    throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
+  if (react !== undefined) {
+    checkReactContent(react, html)
+  } else if (html === undefined && text === undefined) {
+    throw invalid('invalid_form', 'A send with templateKey needs html, text or react.', 'html')
   }
   const checked = category === undefined ? undefined : checkedCategory(category)
   const sendsReplyTo = replyTo !== undefined && !(Array.isArray(replyTo) && replyTo.length === 0)
@@ -463,6 +475,77 @@ function checkedCategory(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | 
     "category must be TRANSACTIONAL_EMAIL_CATEGORY or a MessageCategory with a string key and name, a type of 'marketing' or 'transactional', and an optional string description.",
     'category'
   )
+}
+
+function checkReactContent(react: unknown, html: unknown): void {
+  if (!isReactElement(react)) {
+    throw invalid('invalid_form', 'react must be a React element, such as <WelcomeEmail />.', 'react')
+  }
+  if (html !== undefined) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: 'A send with react renders its own html, so it takes no html. No email was sent.',
+      field: 'html',
+      fix: 'Remove html to send the rendered react element, or remove react to send your html.',
+    })
+  }
+}
+
+const REACT_18_AND_19_ELEMENT_MARKERS: unknown[] = [
+  Symbol.for('react.element'),
+  Symbol.for('react.transitional.element'),
+]
+
+function isReactElement(value: unknown): value is EmailReactElement {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '$$typeof' in value &&
+    REACT_18_AND_19_ELEMENT_MARKERS.includes(value.$$typeof) &&
+    'type' in value &&
+    'props' in value
+  )
+}
+
+async function withRenderedReact(body: string, react: EmailReactElement, timeoutMs: number): Promise<string> {
+  const { render, toPlainText } = await loadReactRenderer()
+  const fields: Record<string, unknown> = JSON.parse(body)
+  try {
+    const html = await settleWithin(render(react), timeoutMs, 'Rendering the react element')
+    return safeJsonStringify({ ...fields, html, ...(fields.text === undefined && { text: toPlainText(html) }) })
+  } catch (cause) {
+    throw new EmailError({
+      code: 'react_render_failed',
+      message: 'Rendering the react element failed, so no email was sent.',
+      cause,
+    })
+  }
+}
+
+async function settleWithin<T>(work: Promise<T>, timeoutMs: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} took longer than ${timeoutMs}ms.`)), timeoutMs)
+  })
+  try {
+    return await Promise.race([work, deadline])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function loadReactRenderer(): Promise<ReactRenderer> {
+  try {
+    return await import('@react-email/render')
+  } catch (cause) {
+    throw new EmailError({
+      code: 'missing_react_renderer',
+      message:
+        "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
+      fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
+      cause,
+    })
+  }
 }
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {

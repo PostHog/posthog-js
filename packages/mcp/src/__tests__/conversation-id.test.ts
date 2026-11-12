@@ -56,7 +56,7 @@ describe('conversation-id', () => {
       expect(schema.properties.conversation_id).toBeDefined()
     })
 
-    it('strips additionalProperties:false so the new property is valid', () => {
+    it('keeps additionalProperties:false, since the new property is declared', () => {
       const result = addConversationIdToTool({
         name: 'tool',
         inputSchema: {
@@ -65,8 +65,9 @@ describe('conversation-id', () => {
           additionalProperties: false,
         },
       })
-      const schema = result.inputSchema as { additionalProperties?: boolean }
-      expect(schema.additionalProperties).toBeUndefined()
+      const schema = result.inputSchema as { additionalProperties?: boolean; properties: Record<string, unknown> }
+      expect(schema.properties.conversation_id).toBeDefined()
+      expect(schema.additionalProperties).toBe(false)
     })
 
     it('skips tools that already define conversation_id', () => {

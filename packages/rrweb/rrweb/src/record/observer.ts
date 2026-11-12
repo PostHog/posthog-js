@@ -4,6 +4,9 @@ import {
   Mirror,
   getInputType,
   stringifyStylesheet,
+  rememberStyleRuleSource,
+  rememberStylesheetSource,
+  invalidateStyleRuleSource,
   toLowerCase,
 } from '@posthog/rrweb-snapshot';
 import type { FontFaceSet } from 'css-font-loading-module';
@@ -785,6 +788,7 @@ function initStyleSheetObserver(
         const [rule] = argumentsList;
 
         const insertedIndex = target.apply(thisArg, argumentsList);
+        rememberStyleRuleSource(thisArg.cssRules[insertedIndex], rule);
 
         // A pending budget-deferred inlining of this sheet must not emit its
         // defer-time text over the successful mutation.
@@ -889,46 +893,52 @@ function initStyleSheetObserver(
               return result;
             }
 
-            stylesheetManager.onCssomSheetMutation(thisArg);
+            const revision = stylesheetManager.onCssomSheetMutation(thisArg);
             const { id, styleId } = getIdAndStyleId(
               thisArg,
               mirror,
               stylesheetManager.styleMirror,
             );
-            if (!((id && id !== -1) || (styleId && styleId !== -1))) {
-              return result;
-            }
-
-            const completeMutation = mutationQueue.queuePendingMutation(
-              thisArg,
-              () =>
-                styleSheetRuleCb({
-                  id,
-                  styleId,
-                  replace: text,
-                }),
-              () => {
-                const lateStyleSheetText = stringifyStylesheet(thisArg);
-                if (lateStyleSheetText !== null) {
-                  styleSheetRuleCb({
-                    id,
-                    styleId,
-                    replace: lateStyleSheetText,
-                  });
-                }
-              },
-            );
+            const tracked = (id && id !== -1) || (styleId && styleId !== -1);
+            const completeMutation = tracked
+              ? mutationQueue.queuePendingMutation(
+                  thisArg,
+                  () =>
+                    styleSheetRuleCb({
+                      id,
+                      styleId,
+                      replace: text,
+                    }),
+                  () => {
+                    const lateStyleSheetText = stringifyStylesheet(thisArg);
+                    if (lateStyleSheetText !== null) {
+                      styleSheetRuleCb({
+                        id,
+                        styleId,
+                        replace: lateStyleSheetText,
+                      });
+                    }
+                  },
+                )
+              : undefined;
             try {
               // Observing fulfillment requires a rejection handler; omitting it
               // creates a second unhandled rejection even when the caller handles
               // the original promise. Prefer not to introduce a new host error.
               void then.call(
                 result,
-                () => completeMutation(true),
-                () => completeMutation(false),
+                () => {
+                  if (
+                    stylesheetManager.isCurrentCssomMutation(thisArg, revision)
+                  ) {
+                    rememberStylesheetSource(thisArg, text);
+                  }
+                  completeMutation?.(true);
+                },
+                () => completeMutation?.(false),
               );
             } catch {
-              completeMutation(false);
+              completeMutation?.(false);
             }
           } catch {
             // Recorder errors must not affect the native promise result.
@@ -952,6 +962,7 @@ function initStyleSheetObserver(
         ) => {
           const [text] = argumentsList;
           const result = target.apply(thisArg, argumentsList);
+          rememberStylesheetSource(thisArg, text);
 
           stylesheetManager.onCssomSheetMutation(thisArg);
           const { id, styleId } = getIdAndStyleId(
@@ -1022,6 +1033,10 @@ function initStyleSheetObserver(
             const [rule] = argumentsList;
 
             const insertedIndex = target.apply(thisArg, argumentsList);
+            rememberStyleRuleSource(
+              (thisArg as CSSGroupingRule).cssRules[insertedIndex],
+              rule,
+            );
 
             stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
@@ -1066,6 +1081,7 @@ function initStyleSheetObserver(
             const [index] = argumentsList;
 
             const result = target.apply(thisArg, argumentsList);
+            invalidateStyleRuleSource(thisArg);
 
             stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
@@ -1291,6 +1307,7 @@ function initStyleDeclarationObserver(
         const [property, value, priority] = argumentsList;
 
         const result = target.apply(thisArg, argumentsList);
+        invalidateStyleRuleSource(thisArg.parentRule);
 
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {
@@ -1335,6 +1352,7 @@ function initStyleDeclarationObserver(
         const [property] = argumentsList;
 
         const result = target.apply(thisArg, argumentsList);
+        invalidateStyleRuleSource(thisArg.parentRule);
 
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {

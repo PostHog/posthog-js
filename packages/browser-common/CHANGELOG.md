@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.10.8
+
+### Patch Changes
+
+- [#5635](https://github.com/PostHog/posthog-js/pull/5635) [`fc00120`](https://github.com/PostHog/posthog-js/commit/fc0012058241622dcc8bbb0978087ff9a2ea5fce) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Use the gradient PostHog logo in the survey and product tour footer branding, and the one-color (mono) logo on dark backgrounds
+  (2026-11-10)
+
 ## 0.10.7
 
 ### Patch Changes

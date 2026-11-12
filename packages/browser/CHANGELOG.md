@@ -1,5 +1,57 @@
 # posthog-js
 
+## 1.447.12
+
+### Patch Changes
+
+- [#5444](https://github.com/PostHog/posthog-js/pull/5444) [`a07707b`](https://github.com/PostHog/posthog-js/commit/a07707b71a860996a39651e193b1abef23694276) Thanks [@brandonweeks](https://github.com/brandonweeks)! - Let bundlers tree-shake the slim build's extension bundles, so an app keeps only the bundles it imports.
+  (2026-11-11)
+
+## 1.447.11
+
+### Patch Changes
+
+- [#5663](https://github.com/PostHog/posthog-js/pull/5663) [`d6dbd3a`](https://github.com/PostHog/posthog-js/commit/d6dbd3a6f7aa9ac91f7c5ed6217c45768604bae9) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Add `imageUrl` to the `EarlyAccessFeature` type
+  (2026-11-11)
+- Updated dependencies [[`d6dbd3a`](https://github.com/PostHog/posthog-js/commit/d6dbd3a6f7aa9ac91f7c5ed6217c45768604bae9)]:
+  - @posthog/types@1.424.0
+
+## 1.447.10
+
+### Patch Changes
+
+- [#5635](https://github.com/PostHog/posthog-js/pull/5635) [`fc00120`](https://github.com/PostHog/posthog-js/commit/fc0012058241622dcc8bbb0978087ff9a2ea5fce) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Use the gradient PostHog logo in the survey and product tour footer branding, and the one-color (mono) logo on dark backgrounds
+  (2026-11-10)
+- Updated dependencies [[`fc00120`](https://github.com/PostHog/posthog-js/commit/fc0012058241622dcc8bbb0978087ff9a2ea5fce)]:
+  - @posthog/browser-common@0.10.8
+
+## 1.447.9
+
+### Patch Changes
+
+- [#5647](https://github.com/PostHog/posthog-js/pull/5647) [`a95d952`](https://github.com/PostHog/posthog-js/commit/a95d95235af803c2ebabeb69c5e77ec5f1d5c793) Thanks [@zocario](https://github.com/zocario)! - fix(replay): full snapshots no longer force the layout of `content-visibility` content the browser skips
+  (2026-11-10)
+
+## 1.447.8
+
+### Patch Changes
+
+- [#5619](https://github.com/PostHog/posthog-js/pull/5619) [`8006468`](https://github.com/PostHog/posthog-js/commit/80064688f89a6b1a8c729957d4b04dda03b8bdae) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve observed CSS-variable shorthands across full session replay snapshots, including uninterrupted session rotations.
+  (2026-11-10)
+
+- [#5644](https://github.com/PostHog/posthog-js/pull/5644) [`145fb45`](https://github.com/PostHog/posthog-js/commit/145fb457d5fa09aaf819743a85df00159e6d9645) Thanks [@RoderickQiu](https://github.com/RoderickQiu)! - Warn once in debug mode when history-based pageviews are explicitly configured without the required history autocapture extension.
+  (2026-11-10)
+
+## 1.447.7
+
+### Patch Changes
+
+- [#5595](https://github.com/PostHog/posthog-js/pull/5595) [`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Warn once in the console, even outside debug mode, when the bot user agent filter drops events, and document that `captureLog` logs bypass the filter.
+  (2026-11-10)
+- Updated dependencies [[`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - @posthog/types@1.423.0
+  - @posthog/core@1.66.0
+
 ## 1.447.6
 
 ### Patch Changes

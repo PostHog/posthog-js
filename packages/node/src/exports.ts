@@ -1,5 +1,6 @@
 export * from './extensions/sentry-integration'
 export * from './extensions/express'
+export * from './extensions/fetch-request'
 export * from './types'
 export { enrichCurrentSpan } from './extensions/context/listeners'
 
@@ -10,6 +11,7 @@ export type { EmailErrorName } from './emails/errors'
 export type {
   CodeEmailForm,
   EmailDeliveryStatus,
+  EmailReactElement,
   Emails,
   EmailStatus,
   EmailWarning,
