@@ -353,6 +353,7 @@ With person processing off, PostHog drops `$identify`, `$create_alias`, `$merge_
 - **`before_send`.** `before_send` sees the option and can change it.
 - **Event names.** The SDK checks the event name the call used. A `before_send` hook that builds an identify-style event, or renames an event to one, gets no default and must set `options.process_person_profile` itself.
 - **Other methods.** `setPersonProperties`, `unsetPersonProperties`, and `capture()` with one of these event names get the same default. In 5.x.x they took a `$process_person_profile` property from `register()` or a context.
+- **Keeping one personless.** To send an identify-style event without person processing, set `process_person_profile: false` on the call or in `before_send`, or turn off person processing for the project in PostHog.
 
 ### Check tracing headers
 
