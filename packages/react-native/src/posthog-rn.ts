@@ -368,6 +368,9 @@ export interface PostHogOptions extends PostHogCoreOptions {
   pushIdentityProvider?: PostHogPushIdentityProvider
 }
 
+// sdk-specs event-batcher: capture v1 requests carry at most 5 MiB of event bytes.
+const CAPTURE_V1_BATCH_BYTE_TARGET = 5 * 1024 * 1024
+
 export class PostHog extends PostHogCore {
   private _persistence: PostHogOptions['persistence']
   private _eventsStorage: PostHogRNStorage
@@ -845,6 +848,12 @@ export class PostHog extends PostHogCore {
       const logsBudgetMs = Math.min(remainingMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
       await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(remainingMs)])
     } finally {
+      // The final flush can schedule another resend; nothing may send after shutdown.
+      if (this._captureResendTimer) {
+        clearTimeout(this._captureResendTimer)
+        this._captureResendTimer = undefined
+      }
+      this._captureResendAt = 0
       this._replayDebugBundleAcceptedAt = undefined
       this._replayDebugBundleClaimed = false
       this._errorTracking.shutdown()
@@ -919,6 +928,21 @@ export class PostHog extends PostHogCore {
     return { keepUuids, tooLarge: deferral.tooLarge }
   }
 
+  protected batchByteTarget(): number {
+    return CAPTURE_V1_BATCH_BYTE_TARGET
+  }
+
+  protected batchEventBytes(message: PostHogEventProperties): number {
+    if (wireProblem(message)) {
+      return 0
+    }
+    try {
+      return serializeV1Event(message).bytes
+    } catch {
+      return 0
+    }
+  }
+
   protected flushAutomatic(): Promise<void> {
     // Holds the timer and flushAt flushes while capture waits; flush() and shutdown() still send.
     if (Date.now() < this._captureResendAt) {
@@ -939,6 +963,8 @@ export class PostHog extends PostHogCore {
     }
     this._captureResendTimer = safeSetTimeout(() => {
       this._captureResendTimer = undefined
+      // Timers can fire a little early, which would otherwise leave the hold in place with nothing rescheduled.
+      this._captureResendAt = 0
       void this.flushAutomatic().catch(logFlushError)
     }, waitMs)
   }

@@ -106,4 +106,94 @@ describe('React Native capture v1 delivery', () => {
       expect.objectContaining({ drops: [{ uuid: uuid.toLowerCase(), details: 'invalid_options' }] }),
     ])
   })
+
+  const waitForResend = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 1500))
+  const queuedEvents = (): string[] =>
+    ((posthog as any).getPersistedProperty((posthog as any).persistedQueueKeyForRoute('default')) ?? []).map(
+      (item: any) => item.message?.event
+    )
+
+  it('resends automatically even when the resend timer fires before the wait ends', async () => {
+    respond = () => ({ status: 503 })
+    posthog.capture('kept')
+    await posthog.flush()
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    const realNow = Date.now
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => realNow() - 5000)
+    try {
+      await waitForResend()
+    } finally {
+      nowSpy.mockRestore()
+    }
+
+    expect(sentEvents()).toEqual([['kept'], ['kept']])
+  })
+
+  it('sends nothing after shutdown when the final flush is deferred', async () => {
+    respond = () => ({ status: 503 })
+    posthog.capture('kept')
+    await posthog.shutdown()
+    const requestsAtShutdown = requests.length
+
+    await waitForResend()
+
+    expect(requests.length).toBe(requestsAtShutdown)
+  })
+
+  it('keeps a stored event whose uuid is not a valid UUID when capture asks to retry it', async () => {
+    ;(posthog as any).setPersistedProperty((posthog as any).persistedQueueKeyForRoute('default'), [
+      { message: { event: 'legacy', distinct_id: 'user', uuid: 'legacy-not-a-uuid', properties: {} } },
+    ])
+    respond = (request) => ({
+      status: 200,
+      body: { results: Object.fromEntries(request.body.batch.map((event) => [event.uuid, { result: 'retry' }])) },
+    })
+
+    await posthog.flush()
+
+    expect(queuedEvents()).toEqual(['legacy'])
+  })
+
+  it('keeps only the retried event and a newer capture, and sends exactly those next', async () => {
+    let capturedDuringRequest = false
+    respond = (request) => {
+      if (!capturedDuringRequest) {
+        capturedDuringRequest = true
+        posthog.capture('d')
+      }
+      return {
+        status: 200,
+        body: {
+          results: Object.fromEntries(
+            request.body.batch.map((event) => [event.uuid, { result: event.event === 'b' ? 'retry' : 'ok' }])
+          ),
+        },
+      }
+    }
+    posthog.capture('a')
+    posthog.capture('b')
+    posthog.capture('c')
+    await posthog.flush()
+    expect(queuedEvents()).toEqual(['b', 'd'])
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    await posthog.flush()
+
+    expect(sentEvents()).toEqual([
+      ['a', 'b', 'c'],
+      ['b', 'd'],
+    ])
+  })
+
+  it('starts a new request before a batch would pass 5 MiB of event bytes', async () => {
+    const twoMiB = 'x'.repeat(2 * 1024 * 1024)
+    posthog.capture('first', { blob: twoMiB })
+    posthog.capture('second', { blob: twoMiB })
+    posthog.capture('third', { blob: twoMiB })
+
+    await posthog.flush()
+
+    expect(sentEvents()).toEqual([['first', 'second'], ['third']])
+  })
 })

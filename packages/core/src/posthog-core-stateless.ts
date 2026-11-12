@@ -1367,6 +1367,34 @@ export abstract class PostHogCoreStateless {
     }
   }
 
+  /** The most event bytes one batch may carry, or undefined to batch by count only. */
+  protected batchByteTarget(): number | undefined {
+    return undefined
+  }
+
+  /** The bytes an event adds to a batch, used when `batchByteTarget()` is set. */
+  protected batchEventBytes(_message: PostHogEventProperties): number {
+    return 0
+  }
+
+  /** How many leading messages fit the byte target; the first always does, so an oversize event goes alone. */
+  private countWithinBatchByteTarget(messages: (PostHogEventProperties | undefined)[]): number {
+    const target = this.batchByteTarget()
+    if (target === undefined) {
+      return messages.length
+    }
+    let total = 0
+    for (let index = 0; index < messages.length; index++) {
+      const message = messages[index]
+      const bytes = message === undefined ? 0 : this.batchEventBytes(message)
+      if (index > 0 && total + bytes > target) {
+        return index
+      }
+      total += bytes
+    }
+    return messages.length
+  }
+
   protected normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
     // Top-level `type` is deprecated and a no-op for batch ingestion.
     // Top-level `library` and `library_version` are deprecated; `$lib` and
@@ -1695,10 +1723,13 @@ export abstract class PostHogCoreStateless {
     let sentFromRoute = 0
 
     while (queue.length > 0 && sentFromRoute < originalQueueLength) {
-      const batchItems = queue.slice(0, this.maxBatchSize)
-      const batchMessages = batchItems.map((item) =>
+      const countItems = queue.slice(0, this.maxBatchSize)
+      const countMessages = countItems.map((item) =>
         item.message === undefined ? item.message : this.normalizeMessage(item.message)
       )
+      const batchSize = this.countWithinBatchByteTarget(countMessages)
+      const batchItems = countItems.slice(0, batchSize)
+      const batchMessages = countMessages.slice(0, batchSize)
 
       const persistQueueChange = async (keepUuids?: ReadonlySet<string>): Promise<void> => {
         const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
@@ -1706,7 +1737,11 @@ export abstract class PostHogCoreStateless {
         // snapshotted items: UUID survives persistence, while reference identity supports
         // legacy queue items without a UUID.
         const removedBatchItems = keepUuids
-          ? batchItems.filter((item) => !(typeof item.message?.uuid === 'string' && keepUuids.has(item.message.uuid)))
+          ? batchItems.filter((_, index) => {
+              // Match by position: normalizing can replace a stored uuid that isn't a valid UUID.
+              const uuid = batchMessages[index]?.uuid
+              return !(typeof uuid === 'string' && keepUuids.has(uuid))
+            })
           : batchItems
         const remainingBatchItems = [...removedBatchItems]
         const newQueue = refreshedQueue.filter((item) => {
