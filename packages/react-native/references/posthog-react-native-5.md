@@ -50,6 +50,9 @@ tableOfContents:
   - value: "Get feature flag"
     url: get-feature-flag
     depth: 0
+  - value: "Get feature flag payload"
+    url: get-feature-flag-payload
+    depth: 0
   - value: "Get feature flag result"
     url: get-feature-flag-result
     depth: 0
@@ -900,20 +903,44 @@ The current feature flag value, or undefined if flags are unavailable
 const value = posthog.getFeatureFlag('key-for-your-boolean-flag')
 ```
 
-### `useFeatureFlag`
+### `useFeatureFlagVariantKey`
 
-> **useFeatureFlag**(`flag`, `client?`): `FeatureFlagValue` \| `undefined`
+> **useFeatureFlagVariantKey**(`flag`, `client?`): `string` \| `boolean` \| `undefined`
+
+A feature flag's value for the current user, updated when flags load: the variant key for a
+multivariate flag, or `true`/`false` for a boolean flag. `undefined` while flags are loading or when
+the flag doesn't exist.
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `flag` | `string` |
-| `client?` | `PostHog` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `flag` | `string` | Key of the feature flag |
+| `client?` | `PostHog` | A PostHog client to use instead of the one from `PostHogProvider` |
 
 #### Returns
 
-`FeatureFlagValue` \| `undefined`
+`string` \| `boolean` \| `undefined`
+
+## Get feature flag payload
+
+### `useFeatureFlagPayload`
+
+> **useFeatureFlagPayload**(`flag`, `client?`): `JsonType` \| `undefined`
+
+A feature flag's payload for the current user, updated when flags load. Reading it doesn't send a
+`$feature_flag_called` event.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `flag` | `string` | Key of the feature flag |
+| `client?` | `PostHog` | A PostHog client to use instead of the one from `PostHogProvider` |
+
+#### Returns
+
+`JsonType` \| `undefined`
 
 ## Get feature flag result
 
@@ -973,19 +1000,21 @@ the flags from the last load (no network request) and does not send a `$feature_
 
 `FeatureFlagResult`[]
 
-### `useFeatureFlags`
+### `useActiveFeatureFlags`
 
-> **useFeatureFlags**(`client?`): \{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `undefined`
+> **useActiveFeatureFlags**(`client?`): `string`[]
+
+The keys of the feature flags enabled for the current user, updated when flags load.
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `client?` | `PostHog` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `client?` | `PostHog` | A PostHog client to use instead of the one from `PostHogProvider` |
 
 #### Returns
 
-\{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `undefined`
+`string`[]
 
 ## Get session ID
 
@@ -1160,6 +1189,67 @@ const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')
 const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })
 ```
 
+### `useFeatureFlagEnabled`
+
+> **useFeatureFlagEnabled**(`flag`): `boolean` \| `undefined`
+
+Whether a feature flag is enabled for the current user, updated when flags load.
+
+Returns `false` when the flag evaluates off, and `undefined` while flags are loading or when the flag
+doesn't exist, so a conclusive "off" can be told apart from "no value yet".
+
+##### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `flag` | `string` | Key of the feature flag |
+
+##### Returns
+
+`boolean` \| `undefined`
+
+#### Call Signature
+
+> **useFeatureFlagEnabled**(`flag`, `defaultValue`, `client?`): `boolean`
+
+Whether a feature flag is enabled for the current user, updated when flags load.
+
+Returns `false` when the flag evaluates off, and `undefined` while flags are loading or when the flag
+doesn't exist, so a conclusive "off" can be told apart from "no value yet".
+
+##### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `flag` | `string` | Key of the feature flag |
+| `defaultValue` | `boolean` | Returned instead of `undefined` while the value is unknown |
+| `client?` | `PostHog` | A PostHog client to use instead of the one from `PostHogProvider` |
+
+##### Returns
+
+`boolean`
+
+#### Call Signature
+
+> **useFeatureFlagEnabled**(`flag`, `defaultValue?`, `client?`): `boolean` \| `undefined`
+
+Whether a feature flag is enabled for the current user, updated when flags load.
+
+Returns `false` when the flag evaluates off, and `undefined` while flags are loading or when the flag
+doesn't exist, so a conclusive "off" can be told apart from "no value yet".
+
+##### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `flag` | `string` | Key of the feature flag |
+| `defaultValue?` | `boolean` | Returned instead of `undefined` while the value is unknown |
+| `client?` | `PostHog` | A PostHog client to use instead of the one from `PostHogProvider` |
+
+##### Returns
+
+`boolean` \| `undefined`
+
 ## Is opt out
 
 ### `PostHog.isDisabled`
@@ -1208,14 +1298,15 @@ const isActive = await posthog.isSessionReplayActive()
 
 Calls `callback` whenever feature flags load, including when a load fails.
 
-The callback receives the current flag values, keyed by flag key, and whether the latest
-load failed. After a failed load the values are the last known ones, which can be empty.
+The callback receives the enabled flags, their values, and whether the latest load failed. After a
+failed load the values are the last known ones, which can be empty. If flags have already loaded
+when you register, it's also called with the current values shortly afterwards.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `callback` | (`flags`, `context`) => `void` | Called with the flag values and the load context |
+| `callback` | (`loaded`) => `void` | Called with the enabled flags, their values, and whether the latest load failed |
 
 #### Returns
 
@@ -1226,9 +1317,12 @@ A function that stops further calls
 #### Example
 
 ```js
-const unsubscribe = posthog.onFeatureFlags((flags, { errorsLoading }) => {
+const unsubscribe = posthog.onFeatureFlags(({ flags, variants, errorsLoading }) => {
   if (errorsLoading) {
-    // flags hold the last known values
+    // flags and variants hold the last known values
+  }
+  if (variants['new-checkout'] === 'test') {
+    // show the test variant
   }
 })
 ```
@@ -2799,17 +2893,19 @@ Per-call settings for reading a feature flag.
 | ------ | ------ | ------ |
 | <a id="sendfeatureflagevent"></a> `sendFeatureFlagEvent?` | `boolean` | Whether this read sends a `$feature_flag_called` event. Defaults to the `sendFeatureFlagEvent` client option. |
 
-### `PostHogFeatureFlagsLoadContext`
+### `PostHogFeatureFlagsLoaded`
 
-> **PostHogFeatureFlagsLoadContext** = `object`
+> **PostHogFeatureFlagsLoaded** = `object`
 
-Passed to `onFeatureFlags` listeners with each feature flag load.
+The feature flags passed to an `onFeatureFlags` callback. Disabled flags are left out.
 
 #### Properties
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="errorsloading"></a> `errorsLoading` | `boolean` | `true` if the latest feature flag load failed. A quota-limited response is not a failure. |
+| <a id="errorsloading"></a> `errorsLoading` | `boolean` | `true` if the latest attempt to load feature flags failed. `flags` and `variants` then hold the last known values, which can be empty. A quota-limited response is not a failure. |
+| <a id="flags"></a> `flags` | `string`[] | The keys of the enabled feature flags. |
+| <a id="variants"></a> `variants` | `Record`\<`string`, `string` \| `boolean`\> | The values of the enabled feature flags: `true` for a boolean flag, or the variant for a multivariate flag. |
 
 ### `PostHogFlagsResponse`
 
