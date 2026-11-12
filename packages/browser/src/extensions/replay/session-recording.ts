@@ -152,7 +152,7 @@ export class SessionRecording implements Extension {
 
         if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
             if (!this._checkSelectMaskingSupport()) {
-                this.stopRecording()
+                this._discardRecording(true)
                 return
             }
             if (this._selectMaskingFn === this._config.session_recording?.selectMaskingFn) {

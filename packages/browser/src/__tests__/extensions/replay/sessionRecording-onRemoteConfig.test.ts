@@ -290,29 +290,38 @@ describe('SessionRecording', () => {
             expect(sessionRecording.started).toBe(true)
         })
 
-        it.each([false, true])('discards buffered public selections only on policy replacement (%s)', (replace) => {
-            addRRwebToWindow()
-            assignableWindow.__PosthogExtensions__.rrweb!.record.supportsSelectMasking = true
-            config.session_recording.selectMaskingFn = () => 'unmasked'
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-            const data = { source: 5 as const, id: 1, text: 'redacted', isChecked: false, selectedOptionIds: [2] }
-            sessionRecording.onRRwebEmit({ type: 3, data, timestamp: Date.now() })
+        it.each([
+            { replace: false, supportsPolicy: true },
+            { replace: true, supportsPolicy: true },
+            { replace: true, supportsPolicy: false },
+        ])(
+            'discards buffered public selections (replace=$replace, supportsPolicy=$supportsPolicy)',
+            ({ replace, supportsPolicy }) => {
+                addRRwebToWindow()
+                assignableWindow.__PosthogExtensions__.rrweb!.record.supportsSelectMasking = supportsPolicy
+                if (supportsPolicy) config.session_recording.selectMaskingFn = () => 'unmasked'
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                const data = { source: 5 as const, id: 1, text: 'redacted', isChecked: false, selectedOptionIds: [2] }
+                sessionRecording.onRRwebEmit({ type: 3, data, timestamp: Date.now() })
 
-            if (replace) {
-                config.session_recording.selectMaskingFn = () => 'masked'
-                sessionRecording.startIfEnabledOrStop()
+                if (replace) {
+                    config.session_recording.selectMaskingFn = () => 'masked'
+                    sessionRecording.startIfEnabledOrStop()
+                }
+                sessionRecording.stopRecording()
+
+                const inputs = vi
+                    .mocked(posthog.capture)
+                    .mock.calls.filter(([name]) => name === '$snapshot')
+                    .flatMap(([, properties]) => properties?.$snapshot_data ?? [])
+                    .filter((event) => event.type === 3 && event.data.source === 5)
+                expect(inputs).toEqual(
+                    replace
+                        ? []
+                        : [expect.objectContaining({ data: expect.objectContaining({ selectedOptionIds: [2] }) })]
+                )
             }
-            sessionRecording.stopRecording()
-
-            const inputs = vi
-                .mocked(posthog.capture)
-                .mock.calls.filter(([name]) => name === '$snapshot')
-                .flatMap(([, properties]) => properties?.$snapshot_data ?? [])
-                .filter((event) => event.type === 3 && event.data.source === 5)
-            expect(inputs).toEqual(
-                replace ? [] : [expect.objectContaining({ data: expect.objectContaining({ selectedOptionIds: [2] }) })]
-            )
-        })
+        )
 
         it('restarts when an installed policy is removed', () => {
             addRRwebToWindow()
