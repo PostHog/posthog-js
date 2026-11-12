@@ -23,17 +23,18 @@ export interface SendEmailBase {
 }
 
 /**
- * A message category that a send defines in code. PostHog creates the category with this key the
- * first time a send names it, and updates its name and description when they change.
+ * A message category that a send defines in code. PostHog creates the category when the project has
+ * none with this key, and restores it when it was deleted. Otherwise the send leaves the category as it
+ * is: a send never renames a category or changes its description. Change those in PostHog.
  */
 export interface MessageCategory {
   /** Identifies the category in the project, such as `'newsletter'`. Recipients opt out of a category by its key. */
   key: string
   /** A marketing category honors the recipient's opt-outs. A transactional one only files the email. */
   type: 'marketing' | 'transactional'
-  /** The category's name, shown in PostHog. */
+  /** The category's name, shown in PostHog. Used only when the send creates the category. */
   name: string
-  /** Notes about which emails belong to the category. Without it, an existing category keeps its description, and an empty string clears it. */
+  /** Notes about which emails belong to the category. Used only when the send creates the category. */
   description?: string
 }
 

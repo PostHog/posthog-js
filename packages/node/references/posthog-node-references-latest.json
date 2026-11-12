@@ -2982,7 +2982,7 @@
       "name": "MessageCategory",
       "properties": [
         {
-          "description": "Notes about which emails belong to the category. Without it, an existing category keeps its description, and an empty string clears it.",
+          "description": "Notes about which emails belong to the category. Used only when the send creates the category.",
           "type": "string",
           "name": "description"
         },
@@ -2992,7 +2992,7 @@
           "name": "key"
         },
         {
-          "description": "The category's name, shown in PostHog.",
+          "description": "The category's name, shown in PostHog. Used only when the send creates the category.",
           "type": "string",
           "name": "name"
         },

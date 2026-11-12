@@ -660,7 +660,9 @@ describe('emails', () => {
       if (type === 'marketing' && optedOut.has(`${to}:${key}`)) {
         return refusal(422, 'recipient_opted_out')
       }
-      categories.set(key, { type, name, description: description ?? existing?.description ?? '' })
+      if (!existing) {
+        categories.set(key, { type, name, description: description ?? '' })
+      }
       return fileUnder(key)
     }
 
@@ -741,16 +743,18 @@ describe('emails', () => {
       expect(filedUnder).toEqual([])
     })
 
-    it.each([
-      ['keeps the description when the send leaves it out', undefined, 'Monthly product news'],
-      ['clears the description with an empty string', '', ''],
-    ])('renames a category and %s', async (_name, description, stored) => {
+    it('leaves a category it created as it is when a later send names it differently', async () => {
       await sendIn(NEWSLETTER)
 
-      const { error } = await sendIn({ ...NEWSLETTER, name: 'Product news', description })
+      const { error } = await sendIn({ ...NEWSLETTER, name: 'Product news', description: 'Weekly tips' })
 
       expect(error).toBeNull()
-      expect(categories.get('newsletter')).toEqual({ type: 'marketing', name: 'Product news', description: stored })
+      expect(filedUnder).toEqual(['newsletter', 'newsletter'])
+      expect(categories.get('newsletter')).toEqual({
+        type: 'marketing',
+        name: 'Newsletter',
+        description: 'Monthly product news',
+      })
     })
 
     it.each([
