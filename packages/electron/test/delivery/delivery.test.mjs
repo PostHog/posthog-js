@@ -76,6 +76,7 @@ async function setup(t) {
         assert.equal(initial.fatal, undefined)
         return {
             initial,
+            exited,
             kill,
             async command(command, ...args) {
                 const id = ++sequence
@@ -122,6 +123,51 @@ async function ingestion(t, status = 200) {
     })
     return { server, port, received, requests: () => requests, host: `http://127.0.0.1:${port}` }
 }
+
+test(
+    'idle native app.quit releases ownership without SDK shutdown or reclaim tombstones',
+    { timeout: 30000 },
+    async (t) => {
+        const { launch, storage } = await setup(t)
+        const target = await ingestion(t)
+        const first = await launch(target.host)
+        assert.deepEqual(first.initial.errors, [])
+        const identity = first.initial.state.distinctId
+        const [namespace] = await readdir(storage)
+        const files = () => readdir(join(storage, namespace))
+        assert.ok((await files()).includes('.owner'))
+        await first.command('quit')
+        assert.equal(await first.exited, 0)
+        assert.deepEqual(await files(), ['state.json'])
+        const next = await launch(target.host)
+        assert.deepEqual(next.initial.errors, [])
+        assert.equal(next.initial.state.distinctId, identity)
+        assert.deepEqual((await files()).sort(), ['.owner', 'state.json'])
+        await next.command('quit')
+        assert.equal(await next.exited, 0)
+        assert.deepEqual(await files(), ['state.json'])
+    }
+)
+
+test('native cancelled quit retains ownership and a usable client', { timeout: 30000 }, async (t) => {
+    const { launch, storage } = await setup(t)
+    const target = await ingestion(t)
+    const owner = await launch(target.host)
+    const [namespace] = await readdir(storage)
+    const lock = join(storage, namespace, '.owner')
+    const before = await readFile(lock, 'utf8')
+    await owner.command('cancelQuit')
+    const captured = await owner.command('capture', 'after-native-cancel')
+    assert.equal(captured.error, undefined)
+    assert.equal(await readFile(lock, 'utf8'), before)
+    assert.equal((await owner.command('flush')).error, undefined)
+    assert.deepEqual(
+        target.received.map(({ event }) => event),
+        ['after-native-cancel']
+    )
+    await owner.command('quit')
+    assert.equal(await owner.exited, 0)
+})
 
 test(
     'offline -> forced exit -> restart recovers persisted UUID and original identities',
