@@ -370,8 +370,8 @@ export class PostHog extends PostHogCore {
   private _nativeErrorTrackingInitialized: boolean = false
   private _androidNdkCrashesUnsupportedWarned: boolean = false
   // Initialized: setup() ran carrying push config, so a live native instance exists.
-  // Unsupported: this plugin can never do push — latched so the enable check stops
-  // recomputing, without claiming an instance that isn't there.
+  // Unsupported: no native plugin is installed, so push can never start — latched so the
+  // enable check stops recomputing, without claiming an instance that isn't there.
   private _pushNativeInitialized: boolean = false
   private _fatalJsCaptureNativeInitialized: boolean = false
   private _pushNativeUnsupported: boolean = false
