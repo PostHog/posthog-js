@@ -20,6 +20,8 @@ import {
   getWindowHeight,
   getWindowWidth,
   isBlocked,
+  isBlockedIncludingShadowHosts,
+  inDom,
   legacy_isTouchEvent,
   StyleSheetMirror,
   nowTimestamp,
@@ -56,7 +58,7 @@ import type {
   selectionCallback,
   customElementCallback,
 } from '@posthog/rrweb-types';
-import MutationBuffer from './mutation';
+import MutationBuffer, { registerSelectMutationObserver } from './mutation';
 import { callbackWrapper } from './error-handler';
 import dom, { mutationObserverCtor } from '@posthog/rrweb-utils';
 
@@ -433,6 +435,12 @@ export function findAndRemoveIframeBuffer(
 
 export const INPUT_TAGS: string[] = ['INPUT', 'TEXTAREA', 'SELECT'];
 const lastInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
+let lastSelectInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
+
+export function resetSelectInputDeduplication(): void {
+  lastSelectInputValueMap = new WeakMap();
+}
+
 function initInputObserver({
   inputCb,
   doc,
@@ -601,7 +609,11 @@ function initInputObserver({
   }
 
   function cbWithDedup(target: EventTarget, v: inputValue) {
-    const lastInputValue = lastInputValueMap.get(target);
+    const values =
+      (target as HTMLElement).tagName === 'SELECT'
+        ? lastSelectInputValueMap
+        : lastInputValueMap;
+    const lastInputValue = values.get(target);
     if (
       !lastInputValue ||
       lastInputValue.text !== v.text ||
@@ -611,7 +623,7 @@ function initInputObserver({
         (id, index) => id !== lastInputValue.selectedOptionIds?.[index],
       )
     ) {
-      lastInputValueMap.set(target, v);
+      values.set(target, v);
       const id = mirror.getId(target as Node);
       callbackWrapper(inputCb)({
         ...v,
@@ -667,6 +679,20 @@ function initInputObserver({
       ),
     );
   }
+  handlers.unshift(
+    registerSelectMutationObserver(
+      doc,
+      callbackWrapper((select) => {
+        if (
+          mirror.getId(select) <= 0 ||
+          !inDom(select) ||
+          isBlockedIncludingShadowHosts(select, blockClass, blockSelector)
+        )
+          return;
+        processInput(select, false);
+      }),
+    ),
+  );
   return callbackWrapper(() => {
     // Flush while the select and option IDs are still in the mirror.
     callAllSafely([flushPendingSelects]);
