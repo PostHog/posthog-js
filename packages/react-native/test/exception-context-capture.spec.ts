@@ -21,7 +21,6 @@ const newPostHog = (options: PostHogOptions = {}): PostHog => {
     flushInterval: 0,
     captureAppLifecycleEvents: false,
     preloadFeatureFlags: false,
-    disableRemoteConfig: true,
     ...options,
   })
   clients.push(client)

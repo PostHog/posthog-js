@@ -63,7 +63,6 @@ describe('PostHog RN session replay request headers', () => {
       captureAppLifecycleEvents: false,
       capturePushNotificationSubscriptions: false,
       capturePushNotificationOpened: false,
-      disableRemoteConfig: true,
       enableSessionReplay: true,
       flushInterval: 0,
       requestHeaders: { Authorization: 'Bearer test-jwt' },
@@ -73,7 +72,6 @@ describe('PostHog RN session replay request headers', () => {
         maskAllImages: false,
         maskAllTextInputs: true,
         verifyScreenshotMaskAlignment: true,
-        screenshotModeBackgroundCapture: true,
         throttleDelayMs: 250,
       },
     })

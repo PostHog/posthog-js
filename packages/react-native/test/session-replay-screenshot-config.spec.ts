@@ -37,7 +37,6 @@ describe('screenshot configuration through native setup', () => {
   async function initialize(sessionReplayConfig?: PostHogSessionReplayConfig) {
     posthog = new PostHog('test-token', {
       persistence: 'memory',
-      disableRemoteConfig: true,
       enableSessionReplay: true,
       flushInterval: 0,
       sessionReplayConfig,
@@ -98,7 +97,6 @@ describe('screenshot configuration before replay starts', () => {
   it('configures screenshots when native error tracking initializes the plugin first', async () => {
     posthog = new PostHog('test-token', {
       persistence: 'memory',
-      disableRemoteConfig: true,
       enableSessionReplay: false,
       errorTracking: { autocapture: { nativeCrashes: true } },
       flushInterval: 0,

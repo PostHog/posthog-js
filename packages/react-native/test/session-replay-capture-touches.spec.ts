@@ -43,7 +43,6 @@ describe('replay touch configuration through native setup', () => {
     async (captureTouches) => {
       posthog = new PostHog('test-token', {
         persistence: 'memory',
-        disableRemoteConfig: true,
         enableSessionReplay: true,
         flushInterval: 0,
         sessionReplayConfig: captureTouches === undefined ? undefined : { captureTouches },
@@ -68,7 +67,6 @@ describe('replay touch configuration through native setup', () => {
     const sessionReplayConfig: PostHogSessionReplayConfig = { captureTouches: false }
     posthog = new PostHog('test-token', {
       persistence: 'memory',
-      disableRemoteConfig: true,
       enableSessionReplay: true,
       flushInterval: 0,
       sessionReplayConfig,
@@ -115,7 +113,6 @@ describe('replay touch compatibility warnings through native setup', () => {
     pluginVersion.value = version
     posthog = new PostHog('test-token', {
       persistence: 'memory',
-      disableRemoteConfig: true,
       enableSessionReplay: true,
       flushInterval: 0,
       sessionReplayConfig: { captureTouches },
@@ -165,7 +162,6 @@ describe('replay touch configuration before recording starts', () => {
     vi.clearAllMocks()
     posthog = new PostHog('test-token', {
       persistence: 'memory',
-      disableRemoteConfig: true,
       enableSessionReplay: false,
       errorTracking: { autocapture: { nativeCrashes: true } },
       flushInterval: 0,

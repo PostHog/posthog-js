@@ -1820,7 +1820,7 @@ cancel pending starts. Use `isSessionReplayActive()` to check the current record
 
 Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
 
-Requires `@posthog/react-native-plugin`.
+Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
 
 #### Parameters
 
@@ -1854,7 +1854,7 @@ Stops the current session recording if one is in progress.
 
 Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
 
-Requires `@posthog/react-native-plugin`.
+Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
 
 #### Returns
 
@@ -3144,7 +3144,7 @@ Called by the native SDK with the current `distinctId` and `appId`. Return
 | <a id="androiddebouncerdelayms"></a> ~~`androidDebouncerDelayMs?`~~ | `number` | Deboucer delay used to reduce the number of snapshots captured and reduce performance impact This is used for capturing the view as a screenshot The lower the number more snapshots will be captured but higher the performance impact Ps: it was 500ms (0.5s) by default until version 3.3.7 **Default** `1000` **Deprecated** please use throttleDelayMs instead |
 | <a id="capturelog-1"></a> `captureLog?` | `boolean` | Enable capturing of logs as console events **Default** `true` |
 | <a id="capturenetworktelemetry"></a> `captureNetworkTelemetry?` | `boolean` | Enable capturing network telemetry iOS only **Default** `true` |
-| <a id="capturetouches-1"></a> `captureTouches?` | `boolean` | Capture touch coordinates in session replay. Set to false to keep screenshots without recording taps that could reveal sensitive input on a known keypad layout. Does not change masking or `PostHogProvider` touch autocapture. Android and iOS only. Requires `@posthog/react-native-plugin`. Set before constructing PostHog. Changes after initialization do not update native state. **Default** `true` |
+| <a id="capturetouches-1"></a> `captureTouches?` | `boolean` | Capture touch coordinates in session replay. Set to false to keep screenshots without recording taps that could reveal sensitive input on a known keypad layout. Does not change masking or `PostHogProvider` touch autocapture. Android and iOS only. Requires `@posthog/react-native-plugin` 2.9.0 or later; older plugins and `posthog-react-native-session-replay` ignore this option. Set before constructing PostHog. Changes after initialization do not update native state. **Default** `true` |
 | <a id="iosdebouncerdelayms"></a> ~~`iOSdebouncerDelayMs?`~~ | `number` | Deboucer delay used to reduce the number of snapshots captured and reduce performance impact This is used for capturing the view as a screenshot The lower the number more snapshots will be captured but higher the performance impact **Default** `1000` **Deprecated** please use throttleDelayMs instead |
 | <a id="maskallimages"></a> `maskAllImages?` | `boolean` | Enable masking of all images to a placeholder **Default** `true` |
 | <a id="maskallsandboxedviews"></a> `maskAllSandboxedViews?` | `boolean` | Enable masking of all sandboxed system views These may include UIImagePickerController, PHPickerViewController and CNContactPickerViewController iOS only **Default** `true` |

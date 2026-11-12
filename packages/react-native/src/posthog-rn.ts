@@ -159,7 +159,7 @@ type ManualRecordingStartRequest = {
   awaitEventTrigger?: boolean
 }
 
-export interface PostHogOptions extends PostHogCoreOptions {
+export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvironments' | 'disableRemoteConfig'> {
   /**
    * Allows you to provide the storage type.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
@@ -3224,10 +3224,7 @@ export class PostHog extends PostHogCore {
       screenshotScale,
       screenshotCompressionQuality,
       screenshotColorMode,
-      screenshotModeBackgroundCapture = false,
       sampleRate: localSampleRate,
-      iOSdebouncerDelayMs = defaultThrottleDelayMs,
-      androidDebouncerDelayMs = defaultThrottleDelayMs,
     } = options?.sessionReplayConfig ?? {}
 
     if (captureTouches === false && !isMacOS()) {
@@ -3240,15 +3237,7 @@ export class PostHog extends PostHogCore {
       }
     }
 
-    let throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
-
-    // if deprecated values are set, we use the higher one for back compatibility
-    if (
-      throttleDelayMs === defaultThrottleDelayMs &&
-      (iOSdebouncerDelayMs !== defaultThrottleDelayMs || androidDebouncerDelayMs !== defaultThrottleDelayMs)
-    ) {
-      throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
-    }
+    const throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
 
     // Gate captureLog and captureNetworkTelemetry using cached remote config.
     // The effective state is: localEnabled AND remoteEnabled.
@@ -3322,10 +3311,7 @@ export class PostHog extends PostHogCore {
       ...(Number.isFinite(screenshotScale) ? { screenshotScale } : {}),
       ...(Number.isFinite(screenshotCompressionQuality) ? { screenshotCompressionQuality } : {}),
       ...(screenshotColorMode !== undefined ? { screenshotColorMode } : {}),
-      screenshotModeBackgroundCapture,
       sampleRate,
-      iOSdebouncerDelayMs,
-      androidDebouncerDelayMs,
       throttleDelayMs,
     }
 
