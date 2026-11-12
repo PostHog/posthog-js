@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.20.0
+
+### Minor Changes
+
+- [#5678](https://github.com/PostHog/posthog-js/pull/5678) [`22d5e11`](https://github.com/PostHog/posthog-js/commit/22d5e11dd3703428407dec60d7ff47c33e93c43f) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Support versioned composite scorers, formula validation, and dependency-safe offline evaluation uploads.
+  (2026-11-12)
+
 ## 8.19.3
 
 ### Patch Changes
