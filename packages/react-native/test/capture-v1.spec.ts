@@ -107,13 +107,15 @@ describe('React Native capture v1 delivery', () => {
     ])
   })
 
-  const waitForResend = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 1500))
+  // With Math.random stubbed to 0 the first resend waits 750 ms.
+  const stubJitter = () => vi.spyOn(Math, 'random').mockReturnValue(0)
   const queuedEvents = (): string[] =>
     ((posthog as any).getPersistedProperty((posthog as any).persistedQueueKeyForRoute('default')) ?? []).map(
       (item: any) => item.message?.event
     )
 
   it('resends automatically even when the resend timer fires before the wait ends', async () => {
+    const randomSpy = stubJitter()
     respond = () => ({ status: 503 })
     posthog.capture('kept')
     await posthog.flush()
@@ -122,21 +124,22 @@ describe('React Native capture v1 delivery', () => {
     const realNow = Date.now
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => realNow() - 5000)
     try {
-      await waitForResend()
+      await vi.waitFor(() => expect(sentEvents()).toEqual([['kept'], ['kept']]), { timeout: 3000 })
     } finally {
       nowSpy.mockRestore()
+      randomSpy.mockRestore()
     }
-
-    expect(sentEvents()).toEqual([['kept'], ['kept']])
   })
 
   it('sends nothing after shutdown when the final flush is deferred', async () => {
+    const randomSpy = stubJitter()
     respond = () => ({ status: 503 })
     posthog.capture('kept')
     await posthog.shutdown()
+    randomSpy.mockRestore()
     const requestsAtShutdown = requests.length
 
-    await waitForResend()
+    await new Promise((resolve) => setTimeout(resolve, 1000))
 
     expect(requests.length).toBe(requestsAtShutdown)
   })

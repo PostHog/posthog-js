@@ -905,8 +905,7 @@ export class PostHog extends PostHogCore {
         continue
       }
       const queuedUuid = typeof message.uuid === 'string' ? message.uuid : undefined
-      const uuid = (queuedUuid !== undefined ? canonicalizeUuid(queuedUuid) : undefined) ?? uuidv7()
-      queuedUuids.set(serializeV1Event({ ...message, uuid }), queuedUuid)
+      queuedUuids.set(this._serializeForCapture(message), queuedUuid)
     }
 
     let deferral: V1SendDeferral | undefined
@@ -937,10 +936,24 @@ export class PostHog extends PostHogCore {
       return 0
     }
     try {
-      return serializeV1Event(message).bytes
+      return this._serializeForCapture(message).bytes
     } catch {
       return 0
     }
+  }
+
+  // batchEventBytes() and sendBatch() see the same message objects in one flush, so each is serialized once.
+  private _serializedForCapture = new WeakMap<PostHogEventProperties, SerializedV1Event>()
+
+  private _serializeForCapture(message: PostHogEventProperties): SerializedV1Event {
+    let serialized = this._serializedForCapture.get(message)
+    if (!serialized) {
+      const queuedUuid = typeof message.uuid === 'string' ? message.uuid : undefined
+      const uuid = (queuedUuid !== undefined ? canonicalizeUuid(queuedUuid) : undefined) ?? uuidv7()
+      serialized = serializeV1Event({ ...message, uuid })
+      this._serializedForCapture.set(message, serialized)
+    }
+    return serialized
   }
 
   protected flushAutomatic(): Promise<void> {
