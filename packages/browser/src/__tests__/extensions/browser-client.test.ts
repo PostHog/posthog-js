@@ -663,6 +663,7 @@ describe('BrowserClientAdapter', () => {
     describe('flags request duration metric', () => {
         const METRIC = 'posthog.flags.request.duration'
         const BASE_ATTRIBUTES = { 'server.address': 'flags.example.com', 'client.timezone': 'Europe/Berlin' }
+        const BOUNDS = [50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]
         const histogram = vi.fn()
 
         beforeEach(() => {
@@ -707,10 +708,12 @@ describe('BrowserClientAdapter', () => {
             expect(histogram).toHaveBeenCalledTimes(2)
             expect(histogram).toHaveBeenNthCalledWith(1, METRIC, expect.any(Number), {
                 unit: 'ms',
+                bounds: BOUNDS,
                 attributes: { ...BASE_ATTRIBUTES, 'http.response.status_code': 503, 'error.type': '503' },
             })
             expect(histogram).toHaveBeenNthCalledWith(2, METRIC, expect.any(Number), {
                 unit: 'ms',
+                bounds: BOUNDS,
                 attributes: { ...BASE_ATTRIBUTES, 'http.response.status_code': 200 },
             })
             expect(histogram.mock.calls[0][1]).toBeGreaterThanOrEqual(0)
@@ -727,6 +730,7 @@ describe('BrowserClientAdapter', () => {
 
             expect(histogram).toHaveBeenCalledWith(METRIC, expect.any(Number), {
                 unit: 'ms',
+                bounds: BOUNDS,
                 attributes: { ...BASE_ATTRIBUTES, 'error.type': errorType },
             })
         })

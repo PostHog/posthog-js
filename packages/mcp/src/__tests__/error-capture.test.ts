@@ -89,6 +89,27 @@ describe('error capture on the tool-call path', () => {
     expect(exceptionList?.[0].value).toBe(expected)
   })
 
+  it('carries the HTTP status of the error a thrown tool error wraps', async () => {
+    instrument(server, fakePostHog())
+
+    server.tool!('fetch_invoice', 'fetches an invoice', {}, async () => {
+      const upstream = Object.assign(new Error('503 from upstream'), { response: new Response(null, { status: 503 }) })
+      throw new Error('invoice lookup failed', { cause: upstream })
+    })
+
+    await client.request(
+      { method: 'tools/call', params: { name: 'fetch_invoice', arguments: {} } },
+      CallToolResultSchema
+    )
+    await new Promise((r) => setTimeout(r, 50))
+
+    const toolCall = capture
+      .findCapturesByEvent('$mcp_tool_call')
+      .find((event) => event.properties.$mcp_tool_name === 'fetch_invoice')
+    expect(toolCall?.properties.$mcp_error_message).toBe('invoice lookup failed')
+    expect(toolCall?.properties.$mcp_error_status).toBe(503)
+  })
+
   it('still propagates the error result to the MCP client (does not swallow it)', async () => {
     instrument(server, fakePostHog())
 
@@ -157,20 +178,5 @@ describe('error capture on the tool-call path', () => {
     expect(event?.properties?.$mcp_input_keys).toEqual(toolName === 'calculate' ? ['a', 'b', 'op', '[redacted]'] : [])
     expect(exception?.value).toMatch(/Invalid|required/i)
     expect(['McpError', 'Error', undefined]).toContain(exception?.type)
-  })
-
-  it('captures errors for unknown tool names', async () => {
-    instrument(server, fakePostHog())
-
-    await client
-      .request(
-        { method: 'tools/call', params: { name: 'nonexistent_tool', arguments: { context: 'x' } } },
-        CallToolResultSchema
-      )
-      .catch(() => undefined)
-
-    await new Promise((r) => setTimeout(r, 50))
-    const event = capture.findEventsByResourceName('nonexistent_tool').find((e) => e.isError)
-    expect(event?.error?.$exception_list?.[0]?.value).toContain('not found')
   })
 })

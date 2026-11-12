@@ -11,6 +11,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Date
 
 class PosthogReactNativePluginModuleTest {
 
@@ -160,6 +161,23 @@ class PosthogReactNativePluginModuleTest {
     for (value in listOf("", "not-a-date", "2026-09-22", "2026-09-22T10:11:12Z", "2026-13-45T99:99:99.999Z")) {
       assertNull("expected $value to be rejected", parseIso8601(value))
     }
+  }
+
+  @Test
+  fun `a JS timestamp keeps its age when moved onto the SDK clock`() {
+    val crashedAt = Date(1_000_000L)
+
+    // The device clock reads 2 s after the crash; network time is 90 s behind the device clock.
+    val moved = toSdkClock(crashedAt, deviceNowMs = 1_002_000L, sdkNowMs = 912_000L)
+
+    assertEquals(910_000L, moved.time)
+  }
+
+  @Test
+  fun `a JS timestamp is unchanged when both clocks agree`() {
+    val crashedAt = Date(1_000_000L)
+
+    assertEquals(crashedAt.time, toSdkClock(crashedAt, deviceNowMs = 1_000_500L, sdkNowMs = 1_000_500L).time)
   }
 
   private fun nativeExceptionEvent(name: String = "\$exception") =

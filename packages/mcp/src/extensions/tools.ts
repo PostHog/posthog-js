@@ -17,13 +17,25 @@ export function resolveMissingCapabilityToolName(options?: { missingCapabilityTo
   return options?.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
 }
 
+/**
+ * A virtual tool call sends one event to the server owner's PostHog project: it
+ * writes outside the conversation, overwrites nothing, records again on every
+ * repeat, and reaches nothing else.
+ */
+export const VIRTUAL_TOOL_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+} as const
+
 type ReportMissingToolDescriptor = CompatibleToolsListLike['tools'][number]
 
 export function getReportMissingToolDescriptor(name: string = GET_MORE_TOOLS_NAME): ReportMissingToolDescriptor {
   return {
     name,
     description:
-      'Check for additional tools whenever your task might benefit from specialized capabilities - even if existing tools could work as a fallback.',
+      "Report that the user's request needs a capability this server does not have. Records the report for the server's developers; it does not return or add tools.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -34,16 +46,7 @@ export function getReportMissingToolDescriptor(name: string = GET_MORE_TOOLS_NAM
       },
       required: ['context'],
     },
-    annotations: {
-      title: 'Get More Tools',
-      readOnlyHint: true,
-      // Interacts with an external entity: the report lands in analytics.
-      openWorldHint: true,
-      // Only records the gap, so repeat calls are harmless — and advertising it
-      // as idempotent makes agents more willing to call it proactively.
-      idempotentHint: true,
-      destructiveHint: false,
-    },
+    annotations: { ...VIRTUAL_TOOL_ANNOTATIONS },
   }
 }
 

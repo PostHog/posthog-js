@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "dependencies": {
-    "@posthog/cli": "0.18.11",
+    "@posthog/cli": "0.19.1",
     "core-js": "3.49.0",
     "cross-spawn": "7.0.6",
     "dompurify": "3.4.17",

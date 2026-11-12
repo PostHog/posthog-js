@@ -145,6 +145,25 @@ export interface MCPAnalyticsOptions {
    */
   enableConversationId?: boolean
   /**
+   * Resolve the session id for each request yourself. For stateless per-request servers
+   * that already carry their own session header (or any host-side session id), so every
+   * request does not become its own `$session_id`. Return a non-empty string to use it,
+   * or `null`/`undefined` to fall back to the SDK's resolution. The value is hashed into
+   * a `ses_` id, never used verbatim. Takes precedence over `conversation_id` and any
+   * transport session. A throwing callback is ignored.
+   */
+  sessionId?: (request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => string | null | undefined
+  /**
+   * Resolve the calling client's name and version for each request, for servers that
+   * never see `initialize` on the instance handling a tool call. Fields returned win
+   * over everything the SDK resolved itself (`_meta`, session token, handshake) →
+   * `$mcp_client_name` / `$mcp_client_version`. A throwing callback is ignored.
+   */
+  clientInfo?: (
+    request: MCPRequestLike,
+    extra?: CompatibleRequestHandlerExtra
+  ) => { name?: string; version?: string } | null | undefined
+  /**
    * Emit a `$exception` event alongside any failed tool call. Defaults to `true`.
    * Set to `false` if you handle error tracking elsewhere and don't want MCP errors
    * fanning out into PostHog error tracking.
@@ -224,8 +243,9 @@ export interface MCPAnalyticsOptions {
    * fresh instance per request strips them before the handler runs. Ownership
    * follows the same rule as a served listing: a Zod schema is read the way the
    * MCP SDK advertises it, and a host that lists its own JSON Schema returns that.
-   * Ownership learned from a listing on the instance wins. Ignored on a
-   * high-level `McpServer`, which reads its tool registry.
+   * Ownership learned from a listing on the instance wins. A rejected call to a
+   * tool this returns `undefined` for is recorded as `$mcp_unknown_tool`, not as
+   * a tool call. Ignored on a high-level `McpServer`, which reads its tool registry.
    */
   resolveOriginalTool?: (toolName: string) => { inputSchema?: unknown } | undefined
   /**
@@ -386,6 +406,8 @@ export interface Event {
   conversationId?: string
   duration?: number
   error?: ErrorProperties | null
+  /** HTTP status behind the failure → `$mcp_error_status`, read off the thrown error's `cause` chain. */
+  errorStatus?: number
   /**
    * Coarse failure category → `$mcp_error_type`. An explicit, low-cardinality
    * label the host can supply (e.g. `validation`, `permission`, `timeout`).
@@ -494,6 +516,8 @@ export interface ServerClientInfoLike {
 
 export interface HighLevelMCPServerLike {
   _registeredTools: { [name: string]: RegisteredTool }
+  /** Set once the MCP SDK has installed its own `tools/list` and `tools/call` handlers. */
+  _toolHandlersInitialized?: boolean
   registerTool?(name: string, config: { description?: string; inputSchema?: unknown }, handler: ToolCallback): void
   server: MCPServerLike
   tool?(name: string, cb: ToolCallback): void
@@ -846,6 +870,12 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
   llmModelSource?: MCPAnalyticsModelSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
+}
+
+/** Payload for {@link PostHogMCP.captureUnknownTool}. Emits `$mcp_unknown_tool`. */
+export interface UnknownToolCaptureData extends McpCaptureCommon {
+  /** The tool name the agent asked for → `$mcp_tool_name`, sanitized as free text. */
+  toolName: string
 }
 
 /** Payload for {@link PostHogMCP.captureFeedback}. Emits `$mcp_feedback`. */

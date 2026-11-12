@@ -36,6 +36,9 @@ import type {
 } from '../types'
 
 const FLAGS_REQUEST_DURATION_METRIC = 'posthog.flags.request.duration'
+// Finer than the default bounds between 50ms and 5s, where most browser round trips land.
+// The edges include 150, 300, 500 and 1000 so p95 can be compared with the status page thresholds.
+const FLAGS_REQUEST_DURATION_BOUNDS = [50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]
 
 // OTel: a 4xx or 5xx response reports its status as the error type. Without a response,
 // the request timed out (an AbortError) or failed for another reason.
@@ -307,7 +310,11 @@ export class BrowserClientAdapter implements Client {
             if (timezone) {
                 attributes['client.timezone'] = timezone
             }
-            this.instance.metrics?.histogram(FLAGS_REQUEST_DURATION_METRIC, durationMs, { unit: 'ms', attributes })
+            this.instance.metrics?.histogram(FLAGS_REQUEST_DURATION_METRIC, durationMs, {
+                unit: 'ms',
+                attributes,
+                bounds: FLAGS_REQUEST_DURATION_BOUNDS,
+            })
         } catch (e) {
             logger.error('Failed to record the /flags request duration', e)
         }

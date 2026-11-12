@@ -1,5 +1,120 @@
 # posthog-js
 
+## 1.447.12
+
+### Patch Changes
+
+- [#5444](https://github.com/PostHog/posthog-js/pull/5444) [`a07707b`](https://github.com/PostHog/posthog-js/commit/a07707b71a860996a39651e193b1abef23694276) Thanks [@brandonweeks](https://github.com/brandonweeks)! - Let bundlers tree-shake the slim build's extension bundles, so an app keeps only the bundles it imports.
+  (2026-11-11)
+
+## 1.447.11
+
+### Patch Changes
+
+- [#5663](https://github.com/PostHog/posthog-js/pull/5663) [`d6dbd3a`](https://github.com/PostHog/posthog-js/commit/d6dbd3a6f7aa9ac91f7c5ed6217c45768604bae9) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Add `imageUrl` to the `EarlyAccessFeature` type
+  (2026-11-11)
+- Updated dependencies [[`d6dbd3a`](https://github.com/PostHog/posthog-js/commit/d6dbd3a6f7aa9ac91f7c5ed6217c45768604bae9)]:
+  - @posthog/types@1.424.0
+
+## 1.447.10
+
+### Patch Changes
+
+- [#5635](https://github.com/PostHog/posthog-js/pull/5635) [`fc00120`](https://github.com/PostHog/posthog-js/commit/fc0012058241622dcc8bbb0978087ff9a2ea5fce) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Use the gradient PostHog logo in the survey and product tour footer branding, and the one-color (mono) logo on dark backgrounds
+  (2026-11-10)
+- Updated dependencies [[`fc00120`](https://github.com/PostHog/posthog-js/commit/fc0012058241622dcc8bbb0978087ff9a2ea5fce)]:
+  - @posthog/browser-common@0.10.8
+
+## 1.447.9
+
+### Patch Changes
+
+- [#5647](https://github.com/PostHog/posthog-js/pull/5647) [`a95d952`](https://github.com/PostHog/posthog-js/commit/a95d95235af803c2ebabeb69c5e77ec5f1d5c793) Thanks [@zocario](https://github.com/zocario)! - fix(replay): full snapshots no longer force the layout of `content-visibility` content the browser skips
+  (2026-11-10)
+
+## 1.447.8
+
+### Patch Changes
+
+- [#5619](https://github.com/PostHog/posthog-js/pull/5619) [`8006468`](https://github.com/PostHog/posthog-js/commit/80064688f89a6b1a8c729957d4b04dda03b8bdae) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve observed CSS-variable shorthands across full session replay snapshots, including uninterrupted session rotations.
+  (2026-11-10)
+
+- [#5644](https://github.com/PostHog/posthog-js/pull/5644) [`145fb45`](https://github.com/PostHog/posthog-js/commit/145fb457d5fa09aaf819743a85df00159e6d9645) Thanks [@RoderickQiu](https://github.com/RoderickQiu)! - Warn once in debug mode when history-based pageviews are explicitly configured without the required history autocapture extension.
+  (2026-11-10)
+
+## 1.447.7
+
+### Patch Changes
+
+- [#5595](https://github.com/PostHog/posthog-js/pull/5595) [`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Warn once in the console, even outside debug mode, when the bot user agent filter drops events, and document that `captureLog` logs bypass the filter.
+  (2026-11-10)
+- Updated dependencies [[`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - @posthog/types@1.423.0
+  - @posthog/core@1.66.0
+
+## 1.447.6
+
+### Patch Changes
+
+- [#5617](https://github.com/PostHog/posthog-js/pull/5617) [`b20c48d`](https://github.com/PostHog/posthog-js/commit/b20c48d3d157b2384a3258e7406d921440154989) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix session recording errors when adopted stylesheets are locked by another script.
+  (2026-11-09)
+
+## 1.447.5
+
+### Patch Changes
+
+- [#5559](https://github.com/PostHog/posthog-js/pull/5559) [`9fe341d`](https://github.com/PostHog/posthog-js/commit/9fe341d374566bc50275ffae8c7d91a0f1f717d0) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Continue replaying mutation batches when a removal has the wrong parent or an addition targets a leaf node.
+  (2026-11-09)
+
+- [#5610](https://github.com/PostHog/posthog-js/pull/5610) [`eaab1fc`](https://github.com/PostHog/posthog-js/commit/eaab1fc9c1f5762903291d61cd5cd8eb96de5021) Thanks [@posthog](https://github.com/apps/posthog)! - Fix session replay failing to rebuild a snapshot when the replay document already has a root element
+  (2026-11-09)
+
+- [#5546](https://github.com/PostHog/posthog-js/pull/5546) [`21bd08e`](https://github.com/PostHog/posthog-js/commit/21bd08ef2d37e1d1d70c6139aa71f789eea2050f) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Collapse buffered text changes to the final value per node and simplify attribute mutation storage.
+  (2026-11-09)
+
+## 1.447.4
+
+### Patch Changes
+
+- [#5433](https://github.com/PostHog/posthog-js/pull/5433) [`7ceaa14`](https://github.com/PostHog/posthog-js/commit/7ceaa141efb9b5b5d036621eaff537ccef7da915) Thanks [@ioannisj](https://github.com/ioannisj)! - Stop parsing the persistence entry on every capture() to refresh the Meta $fbc and $fbp identifiers; capture() now compares the stored text and only parses it when a sibling tab or subdomain changed it.
+  (2026-11-09)
+
+## 1.447.3
+
+### Patch Changes
+
+- [#5562](https://github.com/PostHog/posthog-js/pull/5562) [`8e042cb`](https://github.com/PostHog/posthog-js/commit/8e042cba3dbb63e861f2aaea8612bceea298a1c6) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Preserve non-empty CDATA content with text masking and rebuild it as text in HTML documents.
+  (2026-11-06)
+
+## 1.447.2
+
+### Patch Changes
+
+- [#5561](https://github.com/PostHog/posthog-js/pull/5561) [`ab49034`](https://github.com/PostHog/posthog-js/commit/ab49034bb69cdf840318c6ab824492e76a72751d) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Mask hidden input values in session replay when `maskAllInputs` is enabled, and accept `hidden` in `maskInputOptions`.
+  (2026-11-06)
+- Updated dependencies [[`ab49034`](https://github.com/PostHog/posthog-js/commit/ab49034bb69cdf840318c6ab824492e76a72751d)]:
+  - @posthog/types@1.421.1
+
+## 1.447.1
+
+### Patch Changes
+
+- [#5576](https://github.com/PostHog/posthog-js/pull/5576) [`9ee327d`](https://github.com/PostHog/posthog-js/commit/9ee327d090bffbb564627404b9819994c1327dda) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Reworded the description of the `llm_model` argument that `capture_webmcp` adds to WebMCP tools, so it no longer points the model at its system prompt.
+  (2026-11-05)
+
+## 1.447.0
+
+### Minor Changes
+
+- [#5580](https://github.com/PostHog/posthog-js/pull/5580) [`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f) Thanks [@haacked](https://github.com/haacked)! - `metrics.histogram()` accepts a `bounds` option that sets the histogram's bucket boundaries, and `beforeSend` sees and can change them. The first sample of a histogram (name and unit) fixes its bounds until the client resets. A later sample with different bounds is recorded in the fixed buckets and logs a warning, and a sample with invalid bounds is dropped. The experimental `posthog.flags.request.duration` histogram now uses the bounds `[50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]` ms, so its p50 and p95 resolve between 50ms and 5s. This changes the metric's buckets, which its experimental status allows.
+  (2026-11-05)
+
+### Patch Changes
+
+- Updated dependencies [[`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f)]:
+  - @posthog/core@1.64.0
+  - @posthog/types@1.421.0
+
 ## 1.446.3
 
 ### Patch Changes

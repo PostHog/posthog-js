@@ -1,5 +1,12 @@
 # @posthog/openfeature-web-provider
 
+## 0.1.2
+
+### Patch Changes
+
+- [#5621](https://github.com/PostHog/posthog-js/pull/5621) [`3fb819f`](https://github.com/PostHog/posthog-js/commit/3fb819f2d09ef7388189eabb7faa7aa2dff8ba55) Thanks [@peterolkhov](https://github.com/peterolkhov)! - Reject blank numeric flag variants so OpenFeature returns the caller's default.
+  (2026-11-10)
+
 ## 0.1.1
 
 ### Patch Changes
