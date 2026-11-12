@@ -2,7 +2,9 @@ import { app, ipcMain, type BrowserWindow, type IpcMainInvokeEvent, type WebCont
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { PostHogPersistedProperty, type PostHogCoreOptions, type FeatureFlagValue, type JsonType } from '@posthog/core'
+import type { EventHint } from '@posthog/core/error-tracking'
 import { ElectronCore } from './client'
+import { startProcessExceptionAutocapture } from './exception-autocapture'
 import { ElectronStorage } from './storage'
 import {
     COMMAND_CHANNEL,
@@ -45,6 +47,7 @@ export interface PostHogOptions extends Pick<
     maxStorageBytes?: number
     maxQueueAgeMs?: number
     captureAppLifecycleEvents?: boolean
+    enableExceptionAutocapture?: boolean
     appBuild?: string
     onError?: (error: unknown) => void
 }
@@ -78,6 +81,7 @@ export class PostHog {
     private _focusTimer?: ReturnType<typeof setTimeout>
     private _timer?: ReturnType<typeof setInterval>
     private _foreground = false
+    private _stopExceptionAutocapture?: () => void
     private _cleanups: (() => void)[] = []
     private _tail: Promise<unknown> = Promise.resolve()
 
@@ -128,6 +132,12 @@ export class PostHog {
         if (this._closed) return
         await app.whenReady()
         if (this._closed) return
+        if (!this._closing && this._options.enableExceptionAutocapture === true) {
+            this._stopExceptionAutocapture = startProcessExceptionAutocapture(
+                () => !this._closing && !this._core.isDisabled && !this._core.optedOut,
+                (error, properties, hint) => this._captureException(error, properties, hint)
+            )
+        }
         if (!this._core.isDisabled && this._options.captureAppLifecycleEvents !== false) {
             const previous = this._core.getPersistedProperty<string>(PostHogPersistedProperty.InstalledAppVersion)
             const previousBuild = this._core.getPersistedProperty<string>(PostHogPersistedProperty.InstalledAppBuild)
@@ -179,7 +189,8 @@ export class PostHog {
     private async _run(
         operation: () => void | Promise<unknown>,
         generation?: number,
-        authorize?: () => void
+        authorize?: () => void,
+        shouldRun?: () => boolean
     ): Promise<void> {
         if (this._closing) throw new Error('PostHog is shut down')
         const pending = this._tail.then(async () => {
@@ -187,6 +198,7 @@ export class PostHog {
             if (this._closed) throw new Error('PostHog is shut down')
             if (generation !== undefined && generation !== this._generation) throw new Error('Stale PostHog identity')
             authorize?.()
+            if (shouldRun && !shouldRun()) return
             await operation()
             await this._core.persist()
             this._scheduleState()
@@ -246,16 +258,26 @@ export class PostHog {
         await this._core.optOut()
     }
     captureException(error: unknown, properties?: Properties): Promise<void> {
-        return this._run(() => {
-            try {
-                const exception = this._core.getErrorPropertiesBuilder().buildFromUnknown(error)
-                this._core.capture('$exception', { ...properties, ...exception } as unknown as Properties, {
-                    _originatedFromCaptureException: true,
-                })
-            } catch (captureError) {
-                this._report(captureError)
-            }
-        })
+        return this._captureException(error, properties)
+    }
+    protected _captureException(error: unknown, properties?: Properties, hint?: EventHint): Promise<void> {
+        const canCapture = (): boolean => !this._core.isDisabled && !this._core.optedOut
+        if (!canCapture()) return Promise.resolve()
+        return this._run(
+            () => {
+                try {
+                    const exception = this._core.getErrorPropertiesBuilder().buildFromUnknown(error, hint)
+                    this._core.capture('$exception', { ...properties, ...exception } as unknown as Properties, {
+                        _originatedFromCaptureException: true,
+                    })
+                } catch (captureError) {
+                    this._report(captureError)
+                }
+            },
+            this._generation,
+            undefined,
+            canCapture
+        )
     }
     getDistinctId(): string {
         return this._core.getDistinctId()
@@ -506,6 +528,8 @@ export class PostHog {
     shutdown(timeoutMs = 2000): Promise<void> {
         if (this._shutdownPromise) return this._shutdownPromise
         this._closing = true
+        this._stopExceptionAutocapture?.()
+        this._stopExceptionAutocapture = undefined
         clearInterval(this._timer)
         clearTimeout(this._focusTimer)
         let timer: ReturnType<typeof setTimeout> | undefined

@@ -45,6 +45,23 @@ function harness() {
 }
 
 describe('renderer facade', () => {
+    it('retains the stable bridge sequence across disposal and failed requests, isolating independent bridges', async () => {
+        const { client, bridge } = harness()
+        await client.ready()
+        vi.mocked(bridge.request).mockResolvedValueOnce({ ok: false, error: 'rejected by owner' })
+        await expect(client.capture('rejected')).rejects.toThrow('rejected by owner')
+        client.dispose()
+        const replacement = new PostHog(bridge)
+        await replacement.ready()
+        await replacement.capture('after reinit')
+        expect(vi.mocked(bridge.request).mock.calls.map(([request]) => request.sequence)).toEqual([1, 2, 3, 4])
+        const independent = harness()
+        await independent.client.ready()
+        expect(vi.mocked(independent.bridge.request).mock.calls[0][0].sequence).toBe(1)
+        replacement.dispose()
+        independent.client.dispose()
+    })
+
     it('does not create a flag-exposure/state-subscription feedback loop', async () => {
         const { client, bridge } = harness()
         await client.ready()

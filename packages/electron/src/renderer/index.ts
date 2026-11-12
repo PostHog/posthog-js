@@ -1,11 +1,15 @@
 import {
     ErrorPropertiesBuilder,
     ErrorCoercer,
+    ErrorEventCoercer,
+    PromiseRejectionEventCoercer,
+    type EventHint,
     ObjectCoercer,
     StringCoercer,
     PrimitiveCoercer,
     createDefaultStackParser,
 } from '@posthog/core/error-tracking'
+import { startRendererExceptionAutocapture } from './exception-autocapture'
 import {
     BRIDGE_KEY,
     PROTOCOL_VERSION,
@@ -19,19 +23,36 @@ import {
 
 export type { State, Properties, FeatureFlagValue, JsonType }
 
+export interface RendererOptions {
+    enableExceptionAutocapture?: boolean
+}
+
+// Keep the main frame's high-water mark across dispose/init on the same preload bridge.
+const bridgeSequences = new WeakMap<Bridge, number>()
+
 export class PostHog {
     private _state?: State
-    private _sequence = 0
     private _tail: Promise<unknown> = Promise.resolve()
     private _listeners = new Set<(state: State) => void>()
     private _unsubscribe: () => void
     private _disposed = false
+    private _stopExceptionAutocapture?: () => void
     private _builder = new ErrorPropertiesBuilder(
-        [new ErrorCoercer(), new ObjectCoercer(), new StringCoercer(), new PrimitiveCoercer()],
+        [
+            new ErrorEventCoercer(),
+            new PromiseRejectionEventCoercer(),
+            new ErrorCoercer(),
+            new ObjectCoercer(),
+            new StringCoercer(),
+            new PrimitiveCoercer(),
+        ],
         createDefaultStackParser()
     )
 
-    constructor(private _bridge: Bridge) {
+    constructor(
+        private _bridge: Bridge,
+        private _options: RendererOptions = {}
+    ) {
         this._unsubscribe = this._bridge.subscribe((state) => this._update(state))
     }
 
@@ -49,9 +70,12 @@ export class PostHog {
         const generation = this._state?.generation ?? 0
         const operation = this._tail.then(async () => {
             if (this._disposed) throw new Error('PostHog renderer has been disposed')
+            if (command.type === 'exception' && this.hasOptedOutCapturing()) return
+            const sequence = (bridgeSequences.get(this._bridge) ?? 0) + 1
+            bridgeSequences.set(this._bridge, sequence)
             const response = await this._bridge.request({
                 version: PROTOCOL_VERSION,
-                sequence: ++this._sequence,
+                sequence,
                 generation,
                 command,
             })
@@ -64,6 +88,17 @@ export class PostHog {
 
     async ready(): Promise<void> {
         await this._send({ type: 'hello' })
+        if (
+            !this._disposed &&
+            !this._stopExceptionAutocapture &&
+            this._options.enableExceptionAutocapture === true &&
+            typeof window !== 'undefined'
+        ) {
+            this._stopExceptionAutocapture = startRendererExceptionAutocapture(
+                () => !this._disposed && !this.hasOptedOutCapturing(),
+                (error, properties, hint) => this._captureException(error, properties, hint)
+            )
+        }
     }
 
     capture(event: string, properties?: Properties): Promise<void> {
@@ -99,9 +134,19 @@ export class PostHog {
     }
 
     captureException(error: unknown, properties?: Properties): Promise<void> {
-        if (this.hasOptedOutCapturing()) return Promise.resolve()
-        const exception = this._builder.buildFromUnknown(error)
-        return this._send({ type: 'exception', properties: { ...properties, ...exception } as unknown as Properties })
+        return this._captureException(error, properties)
+    }
+    protected _captureException(error: unknown, properties?: Properties, hint?: EventHint): Promise<void> {
+        if (this._disposed || this.hasOptedOutCapturing()) return Promise.resolve()
+        try {
+            const exception = this._builder.buildFromUnknown(error, hint)
+            return this._send({
+                type: 'exception',
+                properties: { ...properties, ...exception } as unknown as Properties,
+            })
+        } catch {
+            return Promise.resolve()
+        }
     }
 
     getDistinctId(): string {
@@ -145,6 +190,8 @@ export class PostHog {
     dispose(): void {
         if (this._disposed) return
         this._disposed = true
+        this._stopExceptionAutocapture?.()
+        this._stopExceptionAutocapture = undefined
         this._unsubscribe()
         this._listeners.clear()
         if (singleton === this) singleton = undefined
@@ -154,12 +201,12 @@ export class PostHog {
 let singleton: PostHog | undefined
 let initializing: Promise<PostHog> | undefined
 
-export function init(): Promise<PostHog> {
+export function init(options: RendererOptions = {}): Promise<PostHog> {
     if (initializing) return initializing
     if (singleton) return Promise.resolve(singleton)
     const bridge = (globalThis as typeof globalThis & { [BRIDGE_KEY]?: Bridge })[BRIDGE_KEY]
     if (!bridge) return Promise.reject(new Error('PostHog preload bridge is missing; configure your Electron preload'))
-    const client = new PostHog(bridge)
+    const client = new PostHog(bridge, options)
     initializing = client
         .ready()
         .then(() => {

@@ -106,6 +106,104 @@ function renderer(owner: PostHog, id: number) {
 }
 
 describe('main Electron client', () => {
+    it('opts in to monitor-only exception capture without changing host error handlers', async () => {
+        const monitors = process.rawListeners('uncaughtExceptionMonitor')
+        const uncaught = process.rawListeners('uncaughtException')
+        const rejections = process.rawListeners('unhandledRejection')
+        const owner = await start({ enableExceptionAutocapture: true })
+        await owner.ready()
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toHaveLength(monitors.length + 1)
+        expect(process.rawListeners('uncaughtException')).toEqual(uncaught)
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+        // Unit dispatch only; the installed-package fixture raises real asynchronous throws/rejections.
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            new TypeError('main throw'),
+            'uncaughtException'
+        )
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            new RangeError('main rejection'),
+            'unhandledRejection'
+        )
+        await owner.captureException(new Error('manual'))
+        await owner.flush()
+        expect(batches).toHaveLength(3)
+        expect(batches[0]).toMatchObject({
+            event: '$exception',
+            properties: {
+                $electron_process: 'main',
+                $exception_source: 'node.process_uncaught_exception',
+                $exception_list: [
+                    {
+                        type: 'TypeError',
+                        value: 'main throw',
+                        mechanism: { type: 'onuncaughtexception', handled: false },
+                    },
+                ],
+            },
+        })
+        expect(batches[0].properties.$exception_list[0].stacktrace.frames.length).toBeGreaterThan(0)
+        expect(batches[1]).toMatchObject({
+            properties: {
+                $exception_source: 'node.process_unhandled_rejection',
+                $exception_list: [{ mechanism: { type: 'onunhandledrejection', handled: false } }],
+            },
+        })
+        expect(batches[2]).toMatchObject({
+            properties: { $exception_list: [{ mechanism: { type: 'generic', handled: true } }] },
+        })
+        expect(batches[2].properties).not.toHaveProperty('$exception_source')
+        await owner.shutdown(100)
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+        expect(process.rawListeners('uncaughtException')).toEqual(uncaught)
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+        const replacement = await start({ enableExceptionAutocapture: true })
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toHaveLength(monitors.length + 1)
+        await replacement.shutdown(100)
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+    })
+
+    it('defaults to no global listeners and gates error getters and persistence before opt-out capture', async () => {
+        const monitors = process.rawListeners('uncaughtExceptionMonitor')
+        const owner = await start()
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+        await owner.shutdown(100)
+        const optedOut = await start({ enableExceptionAutocapture: true, defaultOptIn: false })
+        await optedOut.optOut()
+        const getter = vi.fn(() => {
+            throw new Error('private getter')
+        })
+        const secret = Object.defineProperty(new Error(), 'message', { get: getter })
+        const persist = vi.spyOn(ElectronStorage.prototype, 'flush')
+        persist.mockClear()
+        EventEmitter.prototype.emit.call(process, 'uncaughtExceptionMonitor', secret, 'uncaughtException')
+        await optedOut.captureException(secret)
+        await Promise.resolve()
+        expect(getter).not.toHaveBeenCalled()
+        expect(persist).not.toHaveBeenCalled()
+        expect(batches).toEqual([])
+        await optedOut.optIn()
+        EventEmitter.prototype.emit.call(process, 'uncaughtExceptionMonitor', new Error('allowed'), 'uncaughtException')
+        await optedOut.flush()
+        expect(batches).toHaveLength(1)
+    })
+
+    it('checks consent again when queued exception work executes', async () => {
+        const owner = await start({ enableExceptionAutocapture: true })
+        const getter = vi.fn(() => {
+            throw new Error('must not inspect')
+        })
+        const optOut = owner.optOut()
+        const capture = owner.captureException(Object.defineProperty({}, 'message', { get: getter }))
+        await optOut
+        await expect(capture).rejects.toThrow('Stale PostHog identity')
+        expect(getter).not.toHaveBeenCalled()
+        expect(batches).toEqual([])
+    })
+
     it('counts cold start and aggregate focus transitions once across windows', async () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
         const owner = await start({ captureAppLifecycleEvents: true })
