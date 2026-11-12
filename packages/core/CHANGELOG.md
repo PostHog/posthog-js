@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.67.2
+
+### Patch Changes
+
+- [#5672](https://github.com/PostHog/posthog-js/pull/5672) [`22f3f71`](https://github.com/PostHog/posthog-js/commit/22f3f7136f9f8296a86de248ad285a77fccaeadc) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix(core): summarize the keys of a non-`Error` exception in one pass, so capturing a very wide thrown object no longer takes quadratic time.
+  (2026-11-12)
+
 ## 1.67.1
 
 ### Patch Changes

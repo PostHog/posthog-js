@@ -358,6 +358,8 @@ export type RegisteredTool = {
   /** Present when the tool was registered with a declared output schema. */
   outputSchema?: unknown
   update?: (...args: unknown[]) => unknown
+  /** MCP SDK v2 builds this from the handler at registration and dispatches through it. */
+  executor?: (args: unknown, extra: CompatibleRequestHandlerExtra) => Promise<unknown>
 } & ({ callback: ToolCallback; handler?: never } | { handler: ToolCallback; callback?: never })
 
 /**
@@ -406,6 +408,8 @@ export interface Event {
   conversationId?: string
   duration?: number
   error?: ErrorProperties | null
+  /** HTTP status behind the failure → `$mcp_error_status`, read off the thrown error's `cause` chain. */
+  errorStatus?: number
   /**
    * Coarse failure category → `$mcp_error_type`. An explicit, low-cardinality
    * label the host can supply (e.g. `validation`, `permission`, `timeout`).

@@ -1,5 +1,15 @@
 # @posthog/types
 
+## 1.424.1
+
+### Patch Changes
+
+- [#5685](https://github.com/PostHog/posthog-js/pull/5685) [`d669687`](https://github.com/PostHog/posthog-js/commit/d6696875ef18c1fe64e79938a23d2a37dc2e7dee) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(metrics): export browser metrics once a minute by default instead of every 10 seconds. Every tab of an app writes to the same series, so busy series exceeded the backend's per-series point limit and were undercounted. An explicit `metrics.flushIntervalMs` still wins.
+  (2026-11-12)
+
+- [#5686](https://github.com/PostHog/posthog-js/pull/5686) [`9e97237`](https://github.com/PostHog/posthog-js/commit/9e97237013bbc6ab00f8d5389521c19234344b8b) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(metrics): `metrics.network` no longer records server-sent event streams. A `text/event-stream` response stays open for as long as the page listens, so it was timed as a request lasting minutes and pinned the duration percentiles to the top bucket.
+  (2026-11-12)
+
 ## 1.424.0
 
 ### Minor Changes

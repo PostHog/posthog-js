@@ -360,9 +360,12 @@ export class IframeManager {
           case IncrementalSource.MediaInteraction:
           case IncrementalSource.MouseInteraction:
           case IncrementalSource.Scroll:
-          case IncrementalSource.CanvasMutation:
-          case IncrementalSource.Input: {
+          case IncrementalSource.CanvasMutation: {
             this.replaceIds(e.data, iframeEl, ['id']);
+            return e;
+          }
+          case IncrementalSource.Input: {
+            this.replaceIds(e.data, iframeEl, ['id', 'selectedOptionIds']);
             return e;
           }
           case IncrementalSource.StyleSheetRule:
