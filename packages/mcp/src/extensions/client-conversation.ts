@@ -118,10 +118,15 @@ export function readRequestClientSignals(
   extra?: CompatibleRequestHandlerExtra,
   server?: unknown
 ): RequestClientSignals {
+  const headers = getRequestHeaders(extra)
+  // A session-scoped instance or a one-client connection (no HTTP request) only
+  // ever handshook with this request's client. A shared HTTP instance's last
+  // handshake may be another client's.
+  const handshakeBound = extra?.sessionId !== undefined || headers === undefined
   return readClientSignals(
-    getRequestHeaders(extra),
+    headers,
     resolveClientIdentity({ request, extra })?.clientName,
-    resolveClientIdentity({ request, extra, server })?.clientName
+    handshakeBound ? resolveClientIdentity({ request, extra, server })?.clientName : undefined
   )
 }
 
@@ -150,6 +155,17 @@ export function readClientConversation(
   }
   const id = row.readValue((meta as Record<string, unknown>)[row.key])
   return id === undefined ? undefined : { key: row.key, id }
+}
+
+/** The request without the client's conversation id, which the SDK hashes into `$session_id` but never sends. */
+export function omitClientConversation(request: MCPRequestLike, conversation?: ClientConversation): MCPRequestLike {
+  const meta = request.params?._meta
+  if (!conversation || !meta || !request.params) {
+    return request
+  }
+  const kept = { ...meta }
+  delete kept[conversation.key]
+  return { ...request, params: { ...request.params, _meta: kept } }
 }
 
 /**

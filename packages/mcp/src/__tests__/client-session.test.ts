@@ -62,7 +62,10 @@ function requestExtra({ userAgent, headers, extra }: CallInput): CompatibleReque
 }
 
 async function callOnFreshPod(input: CallInput): Promise<{ content: unknown[] }> {
-  const pod = createPod(input.options)
+  return callOn(createPod(input.options), input)
+}
+
+async function callOn(pod: MCPServerLike, input: CallInput): Promise<{ content: unknown[] }> {
   const result = await pod._requestHandlers.get('tools/call')!(
     {
       method: 'tools/call',
@@ -220,6 +223,63 @@ describe('client conversation ids', () => {
     const [first, second] = toolCalls()
     expect(first.$session_id).not.toBe(second.$session_id)
     expect(first.$mcp_session_source).toBe('generated')
+  })
+
+  it.each([
+    { name: 'absent', meta: undefined },
+    { name: 'empty', meta: { 'openai/session': '' } },
+  ])('gives each handle-free call on a shared HTTP pod its own session when its id is $name', async ({ meta }) => {
+    const pod = createPod()
+    await callOn(pod, { userAgent: CHATGPT, meta })
+    await callOn(pod, { userAgent: CHATGPT, meta })
+
+    const [first, second] = toolCalls()
+    expect(first.$session_id).not.toBe(second.$session_id)
+    expect([first.$mcp_session_source, second.$mcp_session_source]).toEqual(['generated', 'generated'])
+  })
+
+  it.each([
+    { name: 'a shared HTTP pod', extra: requestExtra({}), session: HANDLE_SESSION },
+    {
+      name: 'a session-scoped pod',
+      extra: requestExtra({ extra: { sessionId: 'transport-session' } as never }),
+      session: CODEX_SESSION,
+    },
+    { name: 'a stdio connection', extra: undefined, session: CODEX_SESSION },
+  ])('recognizes a client from its handshake only when bound to the request on $name', async ({ extra, session }) => {
+    const pod = createPod()
+    await pod._requestHandlers.get('initialize')!(
+      {
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'codex-mcp-client', version: '0.50.0' },
+        },
+      },
+      extra
+    )
+    await pod._requestHandlers.get('tools/call')!(
+      {
+        method: 'tools/call',
+        params: { name: 'search_docs', arguments: { conversation_id: HANDLE }, _meta: { sessionId: CODEX_ID } },
+      },
+      extra
+    )
+    await new Promise((resolve) => setTimeout(resolve, 25))
+
+    expect(toolCalls()[0].$session_id).toBe(session)
+  })
+
+  it.each([
+    { name: 'ChatGPT', input: { userAgent: CHATGPT, meta: { 'openai/session': CHATGPT_ID } }, id: CHATGPT_ID },
+    { name: 'Codex', input: { userAgent: CODEX, meta: { sessionId: CODEX_ID } }, id: CODEX_ID },
+  ])('sends no $name conversation id in the captured parameters', async ({ input, id }) => {
+    await callOnFreshPod({ ...input, args: { query: 'flags' } })
+
+    const parameters = JSON.stringify(toolCalls()[0].$mcp_parameters)
+    expect(parameters).toContain('flags')
+    expect(parameters).not.toContain(id)
   })
 
   it('still counts a valid handle a handle-free client echoes', async () => {

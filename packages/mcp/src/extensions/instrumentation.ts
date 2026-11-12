@@ -51,8 +51,13 @@ import {
   newSessionId,
   resolveSession,
 } from './session'
-import { recognizeClient, readRequestClientSignals, resolveRequestClient } from './client-conversation'
-import type { ClientConversation, RequestClient } from './client-conversation'
+import {
+  omitClientConversation,
+  recognizeClient,
+  readRequestClientSignals,
+  resolveRequestClient,
+} from './client-conversation'
+import type { RequestClient } from './client-conversation'
 import { decodeSessionId, encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
@@ -196,7 +201,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     extra,
     startTime,
     conversation,
-    client.conversation,
+    client,
     ownership,
     resolvedEventType,
     canCaptureContextIntent
@@ -358,7 +363,7 @@ async function prepareToolCallEvent(
   extra: CompatibleRequestHandlerExtra | undefined,
   startTime: Date,
   conversation: ConversationIdResolution,
-  clientConversation: ClientConversation | undefined,
+  client: RequestClient,
   ownership: ActiveAnalyticsParameterOwnership,
   eventType: MCPAnalyticsEventType,
   canCaptureContextIntent: boolean
@@ -369,7 +374,7 @@ async function prepareToolCallEvent(
       extra,
       conversation.conversationId,
       request,
-      clientConversation
+      client
     )
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
@@ -381,7 +386,7 @@ async function prepareToolCallEvent(
       sessionSource,
       conversationId: conversation.conversationId,
       resourceName: toolName || 'Unknown Tool Name',
-      parameters: buildCapturedMcpParameters(downstreamRequest),
+      parameters: buildCapturedMcpParameters(omitClientConversation(downstreamRequest, client.conversation)),
       eventType,
       timestamp: startTime,
       toolCategory: toolName ? data.toolCategories.get(toolName) : undefined,
@@ -550,6 +555,7 @@ function publishUnknownToolEvent(
         timestamp: event.timestamp,
         resourceName: event.resourceName,
         sessionId: event.sessionId,
+        sessionSource: event.sessionSource,
         conversationId: event.conversationId,
         clientName: event.clientName,
         clientVersion: event.clientVersion,

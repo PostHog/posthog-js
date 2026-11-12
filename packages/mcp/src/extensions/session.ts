@@ -16,7 +16,7 @@ import type {
 import { INACTIVITY_TIMEOUT_IN_MINUTES } from './constants'
 import { deterministicPrefixedId, newPrefixedId } from './ids'
 import { deriveSessionIdFromClientConversation } from './client-conversation'
-import type { ClientConversation } from './client-conversation'
+import type { RequestClient } from './client-conversation'
 import { resolveClientIdentity } from './client-identity'
 import { getServerTrackingData, setServerTrackingData } from './internal'
 import { getRequestHeaders } from './request-headers'
@@ -137,7 +137,8 @@ function readHostSessionId(
  *   1. the client named the conversation in `_meta`          — a tool call
  *   2. the agent carried a `conversation_id` tool argument   — 2026-07-28
  *   3. the request carried a session id                      — 2025-11-25
- *   4. nothing was carried, so reuse this instance's own id  — stdio
+ *   4. nothing was carried, so reuse this instance's own id  — stdio;
+ *      a handle-free client's HTTP call gets a fresh id of its own instead
  *
  * A client that names its conversation (1) sends that id on every call, while a
  * handle (2) groups calls only while the agent copies it into each one, so the
@@ -151,7 +152,7 @@ export function resolveSession(
   extra?: CompatibleRequestHandlerExtra,
   conversationId?: string,
   request?: MCPRequestLike,
-  clientConversation?: ClientConversation
+  client?: RequestClient
 ): ResolvedSession {
   const data = getServerTrackingData(server)
   if (!data) {
@@ -166,6 +167,7 @@ export function resolveSession(
     return { sessionId: deriveSessionIdFromConversation(hostSessionId), source: 'transport' }
   }
 
+  const clientConversation = client?.conversation
   // 0, 1 and 2 belong to this one request, so they are never persisted: that would
   // leak one chat's session onto a concurrent chat's `tools/list`. 1 and 2 still
   // count as activity on the connection (see `touchConnectionSession`). On an
@@ -184,7 +186,14 @@ export function resolveSession(
   }
 
   // 3, else 4.
-  const sessionId = readSessionIdFromRequest(data, extra) ?? getSessionIdFromMemory(data)
+  const carriedSessionId = readSessionIdFromRequest(data, extra)
+  // 4 on a shared HTTP instance: its own id would group every client it serves.
+  // A handle-free client was minted no handle to group it, so the call stands alone.
+  if (!carriedSessionId && client?.row?.handleFree && getRequestHeaders(extra)) {
+    return { sessionId: newSessionId(), source: 'generated' }
+  }
+
+  const sessionId = carriedSessionId ?? getSessionIdFromMemory(data)
 
   // 3 and 4 are connection-scoped, so their result is remembered for the next
   // request on this instance.
