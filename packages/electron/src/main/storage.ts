@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs'
+import { promises as fs, readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { hostname } from 'node:os'
@@ -54,6 +54,7 @@ export class ElectronStorage {
     private pending?: Promise<void>
     private failure?: { error: unknown }
     private loading?: Promise<void>
+    private loaded = false
     private readonly maxStorageBytes: number
     private readonly maxQueueAgeMs: number
     private readonly file: string
@@ -74,7 +75,9 @@ export class ElectronStorage {
     }
 
     async load(): Promise<void> {
-        this.loading ??= this.loadState()
+        this.loading ??= this.loadState().finally(() => {
+            this.loaded = true
+        })
         await this.loading
     }
 
@@ -260,6 +263,20 @@ export class ElectronStorage {
             throw new RangeError('Electron storage exceeds maxStorageBytes after removing queued events')
         }
         return { values, serialized }
+    }
+
+    /** Final process-exit only: never race asynchronous loading, writing or ownership release. */
+    releaseOnExit(): void {
+        if (!this.owned || !this.loaded || this.pending || this.stopping || this.stopped) return
+        this.stopped = true
+        const lock = join(this.directory, '.owner')
+        try {
+            if (readFileSync(lock, 'utf8') === this.owner) unlinkSync(lock)
+        } catch (error) {
+            this.report(error)
+        } finally {
+            this.owned = false
+        }
     }
 
     stop(): Promise<void> {
