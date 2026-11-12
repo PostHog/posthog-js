@@ -6,12 +6,34 @@ import {
   ExperimentCreationAbortedError,
   BulkUploadError,
   type Scorer,
+  type ScorerComposition,
+  type ScorerCompositionInput,
+  type ScorerInput,
+  type ScorerCalculation,
+  type ValidateCompositionOptions,
   type JSONValue,
 } from '@posthog/ai/evaluations'
 
 const client = new OfflineEvaluations({ projectId: 123, secretKey: 'secret', timeoutMs: 15000 })
 const item = new EvaluationItem({ input: { question: 'Hello' }, output: null })
 const result = new EvaluationResult({ item, scorerVersionId: 'uuid', value: false })
+const calculation: ScorerCalculation = 'composite'
+const input: ScorerCompositionInput = { alias: 'quality', scorerVersionId: 'uuid' }
+const composition: ScorerComposition = { expression: 'quality * 2', inputs: [input] }
+const validation: ValidateCompositionOptions = { kind: 'numeric', composition, config: { max: 2 } }
+client.scorers.validateComposition(validation)
+const calculated = new EvaluationResult({ item, scorerVersionId: 'uuid', calculate: true })
+new EvaluationResult({ item, scorerVersionId: 'uuid', calculate: true, value: null, evaluatorTraceId: null })
+// @ts-expect-error Calculations cannot include reported values.
+new EvaluationResult({ item, scorerVersionId: 'uuid', calculate: true, value: false })
+// @ts-expect-error Calculations cannot include payloads.
+new EvaluationResult({ item, scorerVersionId: 'uuid', calculate: true, payload: {} })
+// @ts-expect-error Calculations cannot include evaluator traces.
+new EvaluationResult({ item, scorerVersionId: 'uuid', calculate: true, evaluatorTraceId: 'trace' })
+// @ts-expect-error Calculations cannot specify error outcomes.
+new EvaluationResult({ item, scorerVersionId: 'uuid', calculate: true, status: 'error' })
+// @ts-expect-error Validation config must match its output kind.
+client.scorers.validateComposition({ kind: 'boolean', composition, config: { min: 1 } })
 const savedItem: string = item.toJSONString()
 const savedResult: string = result.toJSONString()
 EvaluationResult.fromJSON(JSON.parse(savedResult), { item: EvaluationItem.fromJSON(JSON.parse(savedItem)) })
@@ -48,7 +70,23 @@ async function examples(scorer: Scorer, error: unknown): Promise<void> {
     config: { passingRule: { operator: 'gte', threshold: 0 } },
   })
   numeric.config.passingRule?.threshold
+  const composite = await client.scorers.create({
+    name: 'Combined',
+    kind: 'numeric',
+    config: {},
+    calculation,
+    composition,
+  })
+  await client.scorers.createVersion(composite.id, { config: {}, composition, baseVersion: composite.currentVersion })
+  const inputs: ScorerInput[] = composite.inputScorers
+  for (const input of inputs) if (input.kind === 'numeric') input.config.passingRule?.threshold
   const run = await client.createExperiment({ name: 'test', expectedItemCount: 9223372036854775807n })
+  const receipt = await run.uploadResults([result, calculated])
+  for (const chunk of receipt.chunks)
+    for (const result of chunk.results) {
+      if (result.status === 'error') result.errorCode?.toUpperCase()
+    }
+  await run.uploadResult({ item, scorerVersionId: composite.currentVersionId, calculate: true })
   const snapshot = await client.datasets.snapshot('uuid')
   for await (const row of snapshot) {
     await run.uploadResult({
