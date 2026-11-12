@@ -23,6 +23,9 @@ export type {
   SendTemplateEmailOptions,
   TemplateEmailForm,
 } from './emails/types'
+export { PushError } from './push/errors'
+export type { PushErrorName } from './push/errors'
+export type { Push, SendPushOptions, SendPushResponse, SendPushResult } from './push/types'
 export type {
   FlagDefinitionCacheData,
   FlagDefinitionCacheInput,

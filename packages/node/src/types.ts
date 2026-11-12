@@ -17,6 +17,7 @@ import type {
 import { ContextData, ContextOptions } from './extensions/context/types'
 
 import type { Emails } from './emails/types'
+import type { Push } from './push/types'
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
 import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
@@ -268,7 +269,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   personalApiKey?: string
   /**
-   * Your PostHog app host, such as `https://posthog.example.com`. `emails.send` sends there.
+   * Your PostHog app host, such as `https://posthog.example.com`. `emails.send` and `push.send` send there.
    *
    * Needed only when `host` is not PostHog Cloud, for example a reverse proxy, which must not
    * receive the secret key. On PostHog Cloud, the client derives `https://us.posthog.com` or
@@ -276,13 +277,13 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   appHost?: string
   /**
-   * Timeout in milliseconds for each `emails.send` request.
+   * Timeout in milliseconds for each `emails.send` and `push.send` request.
    *
    * @default 15000
    */
   emailRequestTimeoutMs?: number
   /**
-   * Number of retries for an `emails.send` after a network error, a rate limit, or an
+   * Number of retries for an `emails.send` or `push.send` after a network error, a rate limit, or an
    * unavailable service. Every retry sends the same idempotency key. Set to 0 when a job
    * runner already retries the send.
    *
@@ -971,6 +972,12 @@ export interface IPostHog {
    * Needs `secretKey`, a project secret API key with the `transactional_email:write` scope.
    */
   readonly emails: Emails
+
+  /**
+   * @description The `posthog.push` API: sends transactional push notifications from PostHog push templates.
+   * Needs `secretKey`, a project secret API key with the `transactional_push:write` scope.
+   */
+  readonly push: Push
 
   /**
    * @description Starts a span without making it active, for work that can't wrap a callback.
