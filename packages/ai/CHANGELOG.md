@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.19.3
+
+### Patch Changes
+
+- [#5691](https://github.com/PostHog/posthog-js/pull/5691) [`3e62421`](https://github.com/PostHog/posthog-js/commit/3e62421400861f2b5a60718bc67c542bd2ffccfd) Thanks [@shehjaddev](https://github.com/shehjaddev)! - Streamed OpenAI chat completions now keep custom tool calls in `$ai_output_choices`, the same way non-streaming completions do.
+  (2026-11-12)
+
 ## 8.19.2
 
 ### Patch Changes

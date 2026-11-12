@@ -11,7 +11,7 @@ import rebuild, {
 } from '../src/rebuild';
 import { NodeType } from '@posthog/rrweb-types';
 import { createMirror, Mirror, normalizeCssString } from '../src/utils';
-import snapshot from '../src/snapshot';
+import snapshot, { visitSnapshot } from '../src/snapshot';
 
 const expect = _expect as unknown as {
   <T = unknown>(actual: T): {
@@ -87,6 +87,84 @@ describe('rebuild', function () {
     );
     expect(doc.querySelector('#literal')?.childElementCount).toBe(0);
     expect(doc.querySelector('#after')?.textContent).toBe('after');
+  });
+
+  describe('selects', () => {
+    it.each(['private', ''])(
+      'clears a masked selection with value %j',
+      (value) => {
+        const source = document.implementation.createHTMLDocument();
+        source.body.innerHTML =
+          '<select><option value="" disabled>Choose</option>' +
+          '<option value="public">Public</option>' +
+          '<option value="*******">Stars</option>' +
+          '<option value="private">Private</option></select>';
+        source.querySelector('select')!.value = value;
+        const serialized = snapshot(source, { maskAllInputs: true })!;
+        const doc = document.implementation.createHTMLDocument();
+        rebuild(serialized, { doc, mirror, cache });
+        const select = doc.querySelector('select')!;
+        expect(select.selectedIndex).toBe(-1);
+        expect(select.value).toBe('');
+      },
+    );
+
+    it.each(['public', 'private', '*'])(
+      'preserves a custom-mask passthrough first option %j',
+      (value) => {
+        const source = document.implementation.createHTMLDocument();
+        source.body.innerHTML =
+          `<select><option value="${value}">Allowed</option>` +
+          '<option value="other">Other</option></select>';
+        const serialized = snapshot(source, {
+          maskAllInputs: true,
+          maskInputFn: (text) => text,
+        })!;
+        const doc = document.implementation.createHTMLDocument();
+        rebuild(serialized, { doc, mirror, cache });
+        expect(doc.querySelector('select')!.value).toBe(value);
+        visitSnapshot(serialized, (node) => {
+          if (node.type !== NodeType.Element) return;
+          if (node.tagName === 'select')
+            expect(node.attributes.rr_maskedSelect).toBeUndefined();
+          if (node.tagName === 'option')
+            expect(node.attributes.selected).toBeUndefined();
+        });
+      },
+    );
+
+    it('does not infer masking from a literal asterisk in a legacy snapshot', () => {
+      const source = document.implementation.createHTMLDocument();
+      source.body.innerHTML =
+        '<select><option value="*">All</option>' +
+        '<option value="private">Private</option></select>';
+      const serialized = snapshot(source)!;
+      visitSnapshot(serialized, (node) => {
+        if (node.type === NodeType.Element && node.tagName === 'option') {
+          delete node.attributes.selected;
+        }
+      });
+      const doc = document.implementation.createHTMLDocument();
+      rebuild(serialized, { doc, mirror, cache });
+      const select = doc.querySelector('select')!;
+      expect(select.value).toBe('*');
+      expect(select.selectedIndex).toBe(0);
+    });
+
+    it('preserves multiple unmasked selections', () => {
+      const source = document.implementation.createHTMLDocument();
+      source.body.innerHTML =
+        '<select multiple><option value="a" selected>A</option>' +
+        '<option value="b">B</option><option value="c" selected>C</option></select>';
+      const doc = document.implementation.createHTMLDocument();
+      rebuild(snapshot(source)!, { doc, mirror, cache });
+      expect(
+        Array.from(
+          doc.querySelector('select')!.selectedOptions,
+          (option) => option.value,
+        ),
+      ).toEqual(['a', 'c']);
+    });
   });
 
   describe('rr_dataURL', function () {

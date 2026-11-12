@@ -69,7 +69,7 @@ describe('addContextParameterToTool', () => {
       expect(result.inputSchema?.required).toEqual(expect.arrayContaining(['text', 'context']))
     })
 
-    it('removes additionalProperties:false (would otherwise reject the injected param)', () => {
+    it('keeps additionalProperties:false, since the injected param is a declared property', () => {
       const result = addContextParameterToTool({
         name: 'strict-tool',
         inputSchema: {
@@ -80,7 +80,7 @@ describe('addContextParameterToTool', () => {
       })
 
       expect(result.inputSchema?.properties?.context).toBeDefined()
-      expect(result.inputSchema?.additionalProperties).toBeUndefined()
+      expect(result.inputSchema?.additionalProperties).toBe(false)
     })
 
     it('leaves additionalProperties:true alone', () => {
