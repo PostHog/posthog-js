@@ -159,6 +159,32 @@ it('invalidates before a full-snapshot emit callback restores and stops', async 
   expect(result.replayIndex).toBe(1);
 });
 
+it('does not duplicate unrelated text inputs after an automatic checkout', async () => {
+  const result = await page.evaluate(() => {
+    const { record } = (window as unknown as TestWindow).rrweb;
+    const input = document.createElement('input');
+    input.value = 'public';
+    document.body.appendChild(input);
+    const events: eventWithTime[] = [];
+    const stop = record({
+      maskAllInputs: false,
+      checkoutEveryNth: 1,
+      emit: (event) => events.push(event),
+    })!;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    stop();
+    return {
+      snapshots: events.filter((event) => event.type === 2).length,
+      inputs: events.flatMap((event) =>
+        event.type === 3 && event.data.source === 5 ? [event.data.text] : [],
+      ),
+    };
+  });
+  expect(result.snapshots).toBeGreaterThan(1);
+  expect(result.inputs).toEqual(['public']);
+});
+
 it('still deduplicates repeated inputs without another snapshot', async () => {
   const inputs = await page.evaluate(async () => {
     const { record } = (window as unknown as TestWindow).rrweb;

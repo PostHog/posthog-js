@@ -434,10 +434,11 @@ export function findAndRemoveIframeBuffer(
 }
 
 export const INPUT_TAGS: string[] = ['INPUT', 'TEXTAREA', 'SELECT'];
-let lastInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
+const lastInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
+let lastSelectInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
 
-export function resetInputDeduplication(): void {
-  lastInputValueMap = new WeakMap();
+export function resetSelectInputDeduplication(): void {
+  lastSelectInputValueMap = new WeakMap();
 }
 
 function initInputObserver({
@@ -608,7 +609,11 @@ function initInputObserver({
   }
 
   function cbWithDedup(target: EventTarget, v: inputValue) {
-    const lastInputValue = lastInputValueMap.get(target);
+    const values =
+      (target as HTMLElement).tagName === 'SELECT'
+        ? lastSelectInputValueMap
+        : lastInputValueMap;
+    const lastInputValue = values.get(target);
     if (
       !lastInputValue ||
       lastInputValue.text !== v.text ||
@@ -618,7 +623,7 @@ function initInputObserver({
         (id, index) => id !== lastInputValue.selectedOptionIds?.[index],
       )
     ) {
-      lastInputValueMap.set(target, v);
+      values.set(target, v);
       const id = mirror.getId(target as Node);
       callbackWrapper(inputCb)({
         ...v,
