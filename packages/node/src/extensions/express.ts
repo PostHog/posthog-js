@@ -67,7 +67,7 @@ function buildRequestContextData(posthog: PostHogBackendClient, req: Request): P
 /**
  * Adds request context to events captured during an Express request. Call it before your routes.
  * Events then include `$current_url`, `$request_method`, `$request_path`, `$user_agent`, and `$ip`.
- * The IP comes from `x-forwarded-for` when the app runs behind a proxy.
+ * `$ip` is the first `x-forwarded-for` value when the request has that header, otherwise the socket's remote address.
  */
 export function setupExpressRequestContext(
   _posthog: PostHogBackendClient,
