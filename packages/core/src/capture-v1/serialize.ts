@@ -42,10 +42,11 @@ export interface SerializedV1Event {
   propertiesBytes: number
 }
 
-const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+// No lookbehind: JavaScriptCore before iOS 16.4, and the jsc-android build React Native ships, can't parse it.
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/
 // JSON.stringify writes a lone surrogate as a `\udXXX` escape (a valid pair stays raw), which capture rejects for the whole
-// request. The lookbehind skips an escaped backslash followed by literal "udXXX" text.
-const LONE_SURROGATE_ESCAPE = /(?<!\\)((?:\\\\)*)\\u[dD][89a-fA-F][0-9a-fA-F]{2}/g
+// request. Escaped backslashes are matched too and kept, so literal "\\udXXX" text is left alone.
+const LONE_SURROGATE_ESCAPE = /\\\\|\\u[dD][89a-fA-F][0-9a-fA-F]{2}/g
 
 /**
  * Why capture would reject this event, or undefined when it can be sent. A name must be a non-empty string, the
@@ -76,7 +77,7 @@ export function serializeV1Event(message: PostHogEventProperties): SerializedV1E
   // Property strings are repaired to U+FFFD rather than dropping the event.
   const propertiesJson =
     rawPropertiesJson.includes('\\ud') || rawPropertiesJson.includes('\\uD')
-      ? rawPropertiesJson.replace(LONE_SURROGATE_ESCAPE, '$1\\ufffd')
+      ? rawPropertiesJson.replace(LONE_SURROGATE_ESCAPE, (match) => (match.length === 2 ? match : '\\ufffd'))
       : rawPropertiesJson
   const propertiesBytes = utf8Length(propertiesJson)
   return {

@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 describe('capture v1 serialization without TextEncoder', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -35,5 +38,12 @@ describe('capture v1 serialization without TextEncoder', () => {
       -1
     )
     expect(serialized.propertiesBytes).toBe(Buffer.byteLength(propertiesJson))
+  })
+
+  it('uses no regex lookbehind, which older JavaScriptCore builds cannot parse', () => {
+    const dir = join(__dirname, '..', 'capture-v1')
+    for (const file of readdirSync(dir).filter((name) => name.endsWith('.ts'))) {
+      expect(readFileSync(join(dir, file), 'utf8')).not.toMatch(/\(\?<[=!]/)
+    }
   })
 })
