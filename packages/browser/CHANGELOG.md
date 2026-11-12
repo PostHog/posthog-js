@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.447.14
+
+### Patch Changes
+
+- [#5618](https://github.com/PostHog/posthog-js/pull/5618) [`f2af66f`](https://github.com/PostHog/posthog-js/commit/f2af66f094f748ba20fe3c60f20f588290ba1171) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dropdown replay updates and blocked-value leaks, and preserve custom mask passthrough.
+  (2026-11-12)
+
 ## 1.447.13
 
 ### Patch Changes
