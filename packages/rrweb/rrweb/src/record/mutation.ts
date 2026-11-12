@@ -1046,8 +1046,7 @@ export default class MutationBuffer {
     // if this node is blocked `serializeNode` will turn it into a placeholder element
     // but we have to remove it's children otherwise they will be added as placeholders too
     if (!isBlocked(n, this.blockClass, this.blockSelector, false)) {
-      // Text nodes cannot have children or a shadow root. Keep the blocking
-      // check above: skipping it can change stateful RegExp behavior.
+      // Text nodes cannot have children or a shadow root.
       if (n.nodeType === n.TEXT_NODE) return;
       // Avoid a callback per node on repeated subtree walks. Like forEach,
       // capture the initial length but read each child from the live list.
