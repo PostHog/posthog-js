@@ -327,7 +327,7 @@ export interface Emails {
 
   /**
    * Stop a scheduled email before PostHog starts sending it. Its result reads `canceled` at once;
-   * `emails.get()` and `emails.list()` can take a few seconds to show it.
+   * `emails.get()` can take a few seconds to show it, and `emails.list()` up to a minute.
    *
    * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` while
    * PostHog sends the email, and `not_found` a few seconds after it went out. A second cancel
@@ -338,8 +338,8 @@ export interface Emails {
 
   /**
    * List the project's scheduled emails that wait to go out, in send-time order, one page per call.
-   * A move or a cancel can take a few seconds to show here: `emails.update()` returns the new
-   * time, and `emails.cancel()` returns `canceled`.
+   * A new email, a cancel or a move can take up to a minute to show here: `emails.update()`
+   * returns the new time, and `emails.cancel()` returns `canceled`.
    *
    * Resolves to `{ data, error }` and does not reject. Never retried: call it again to read the
    * page again.
