@@ -434,7 +434,12 @@ export function findAndRemoveIframeBuffer(
 }
 
 export const INPUT_TAGS: string[] = ['INPUT', 'TEXTAREA', 'SELECT'];
-const lastInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
+let lastInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
+
+export function resetInputDeduplication(): void {
+  lastInputValueMap = new WeakMap();
+}
+
 function initInputObserver({
   inputCb,
   doc,
