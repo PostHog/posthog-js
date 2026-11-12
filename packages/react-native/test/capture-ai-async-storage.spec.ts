@@ -28,26 +28,34 @@ describe('captureAi with AsyncStorage', () => {
     vi.useFakeTimers()
   })
 
-  it('keeps the AI queue out of AsyncStorage, whose Android rows and database are size-limited', async () => {
-    ;(globalThis as any).window.fetch = vi.fn(async () => ({
-      status: 503,
-      headers: { get: () => null },
-      json: async () => ({}),
-      text: async () => '{}',
-    }))
-    const posthog = new PostHog('test-token', {
-      flushInterval: 0,
-      preloadFeatureFlags: false,
-      captureAppLifecycleEvents: false,
-      captureAiCompression: 'none',
-    })
-    await posthog.ready()
+  it.each([
+    ['detected', {}],
+    ['passed as customStorage', { customStorage: asyncStorage }],
+  ])(
+    'keeps the AI queue out of AsyncStorage %s, whose Android rows and database are size-limited',
+    async (_case, storageOptions) => {
+      asyncStorage.setItem.mockClear()
+      ;(globalThis as any).window.fetch = vi.fn(async () => ({
+        status: 503,
+        headers: { get: () => null },
+        json: async () => ({}),
+        text: async () => '{}',
+      }))
+      const posthog = new PostHog('test-token', {
+        flushInterval: 0,
+        preloadFeatureFlags: false,
+        captureAppLifecycleEvents: false,
+        captureAiCompression: 'none',
+        ...storageOptions,
+      })
+      await posthog.ready()
 
-    posthog.captureAi('$ai_generation', { $ai_input: 'x'.repeat(1024) })
-    await posthog.flush()
-    await posthog.shutdown()
+      posthog.captureAi('$ai_generation', { $ai_input: 'x'.repeat(1024) })
+      await posthog.flush()
+      await posthog.shutdown()
 
-    expect(asyncStorage.setItem).toHaveBeenCalled()
-    expect(asyncStorage.setItem.mock.calls.map(([key]) => key)).not.toContain('.posthog-rn-ai.json')
-  })
+      expect(asyncStorage.setItem).toHaveBeenCalled()
+      expect(asyncStorage.setItem.mock.calls.map(([key]) => key)).not.toContain('.posthog-rn-ai.json')
+    }
+  )
 })

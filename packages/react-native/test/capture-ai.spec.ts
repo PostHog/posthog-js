@@ -267,7 +267,7 @@ describe('React Native captureAi', () => {
     requests = []
     respond = () => ({ status: 200, body: { results: {} } })
 
-    const disabled = await newPostHog({ disabled: true })
+    const disabled = await newPostHog({ disabled: true, flushInterval: 20 })
     await disabled.flush()
     await new Promise((resolve) => setTimeout(resolve, 50))
 
