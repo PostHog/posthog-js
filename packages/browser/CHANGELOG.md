@@ -1,5 +1,62 @@
 # posthog-js
 
+## 1.447.15
+
+### Patch Changes
+
+- [#5670](https://github.com/PostHog/posthog-js/pull/5670) [`753e5bf`](https://github.com/PostHog/posthog-js/commit/753e5bfda9aa216337f6b59a806666cf43f861a7) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dropdown selection masking without changing custom multiselect behavior.
+  (2026-11-12)
+
+## 1.447.14
+
+### Patch Changes
+
+- [#5618](https://github.com/PostHog/posthog-js/pull/5618) [`f2af66f`](https://github.com/PostHog/posthog-js/commit/f2af66f094f748ba20fe3c60f20f588290ba1171) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dropdown replay updates and blocked-value leaks, and preserve custom mask passthrough.
+  (2026-11-12)
+
+## 1.447.13
+
+### Patch Changes
+
+- [#5685](https://github.com/PostHog/posthog-js/pull/5685) [`d669687`](https://github.com/PostHog/posthog-js/commit/d6696875ef18c1fe64e79938a23d2a37dc2e7dee) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(metrics): export browser metrics once a minute by default instead of every 10 seconds. Every tab of an app writes to the same series, so busy series exceeded the backend's per-series point limit and were undercounted. An explicit `metrics.flushIntervalMs` still wins.
+  (2026-11-12)
+
+- [#5686](https://github.com/PostHog/posthog-js/pull/5686) [`9e97237`](https://github.com/PostHog/posthog-js/commit/9e97237013bbc6ab00f8d5389521c19234344b8b) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(metrics): `metrics.network` no longer records server-sent event streams. A `text/event-stream` response stays open for as long as the page listens, so it was timed as a request lasting minutes and pinned the duration percentiles to the top bucket.
+  (2026-11-12)
+
+- [#5687](https://github.com/PostHog/posthog-js/pull/5687) [`fbadce0`](https://github.com/PostHog/posthog-js/commit/fbadce05632fef7574a39994ab2cb9e5d06823a3) Thanks [@miguel-heygen](https://github.com/miguel-heygen)! - Session replay: in browsers that cannot encode WebP (Safari), send opaque canvas frames as JPEG at the configured quality instead of the lossless PNG the browser falls back to
+  (2026-11-12)
+
+- [#5677](https://github.com/PostHog/posthog-js/pull/5677) [`14e5893`](https://github.com/PostHog/posthog-js/commit/14e589340b6b20306d9082aad3e823ce10c8fd4e) Thanks [@DanielVisca](https://github.com/DanielVisca)! - chore(browser): remove an unused `_botFilterWarned` field that was declared on the internal `DeprecatedWebPerformanceObserver` class
+  (2026-11-12)
+- Updated dependencies [[`d669687`](https://github.com/PostHog/posthog-js/commit/d6696875ef18c1fe64e79938a23d2a37dc2e7dee), [`9e97237`](https://github.com/PostHog/posthog-js/commit/9e97237013bbc6ab00f8d5389521c19234344b8b)]:
+  - @posthog/types@1.424.1
+
+## 1.447.12
+
+### Patch Changes
+
+- [#5444](https://github.com/PostHog/posthog-js/pull/5444) [`a07707b`](https://github.com/PostHog/posthog-js/commit/a07707b71a860996a39651e193b1abef23694276) Thanks [@brandonweeks](https://github.com/brandonweeks)! - Let bundlers tree-shake the slim build's extension bundles, so an app keeps only the bundles it imports.
+  (2026-11-11)
+
+## 1.447.11
+
+### Patch Changes
+
+- [#5663](https://github.com/PostHog/posthog-js/pull/5663) [`d6dbd3a`](https://github.com/PostHog/posthog-js/commit/d6dbd3a6f7aa9ac91f7c5ed6217c45768604bae9) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Add `imageUrl` to the `EarlyAccessFeature` type
+  (2026-11-11)
+- Updated dependencies [[`d6dbd3a`](https://github.com/PostHog/posthog-js/commit/d6dbd3a6f7aa9ac91f7c5ed6217c45768604bae9)]:
+  - @posthog/types@1.424.0
+
+## 1.447.10
+
+### Patch Changes
+
+- [#5635](https://github.com/PostHog/posthog-js/pull/5635) [`fc00120`](https://github.com/PostHog/posthog-js/commit/fc0012058241622dcc8bbb0978087ff9a2ea5fce) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Use the gradient PostHog logo in the survey and product tour footer branding, and the one-color (mono) logo on dark backgrounds
+  (2026-11-10)
+- Updated dependencies [[`fc00120`](https://github.com/PostHog/posthog-js/commit/fc0012058241622dcc8bbb0978087ff9a2ea5fce)]:
+  - @posthog/browser-common@0.10.8
+
 ## 1.447.9
 
 ### Patch Changes

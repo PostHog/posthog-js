@@ -41,14 +41,64 @@ interface CallToolResult {
  * as exceptions from any other PostHog SDK.
  *
  * @param error - The thrown value (Error, string, object, CallToolResult, or anything).
+ * @param fallback - Captured instead when reading `error` throws.
  * @returns Core `ErrorProperties` ready to spread onto a `$exception` event.
  */
-export function captureException(error: unknown): CoreErrorTracking.ErrorProperties {
+export function captureException(error: unknown, fallback?: unknown): CoreErrorTracking.ErrorProperties {
   // MCP SDK 1.21.0+ converts tool errors to CallToolResult, which the core
   // coercers don't recognize. Extract the human-readable message first so the
   // exception still carries something useful.
-  const normalized = isCallToolResult(error) ? extractCallToolResultMessage(error) : error
-  return errorPropertiesBuilder.buildFromUnknown(normalized)
+  try {
+    const normalized = isCallToolResult(error) ? extractCallToolResultMessage(error) : error
+    return errorPropertiesBuilder.buildFromUnknown(normalized)
+  } catch {
+    // A thrown value can carry getters that throw; the failure still gets recorded.
+    return fallback === undefined
+      ? errorPropertiesBuilder.buildFromUnknown('Unknown error')
+      : captureException(fallback)
+  }
+}
+
+const STATUS_FIELDS = ['status_code', 'statusCode', 'status']
+const MAX_CHAIN_LINKS = 50
+
+/**
+ * The HTTP status behind a failure, for `$mcp_error_status`: the first one found
+ * walking the thrown error's `cause` chain inward, so a status the tool threw
+ * itself beats the one on the error it wrapped. Reads each link and its
+ * `response` (a fetch `Response`, an axios or got response).
+ */
+export function httpStatus(error: unknown): number | undefined {
+  const visited = new Set<unknown>()
+  for (
+    let link = error;
+    isObject(link) && !visited.has(link) && visited.size < MAX_CHAIN_LINKS;
+    link = readField(link, 'cause')
+  ) {
+    visited.add(link)
+    for (const holder of [link, readField(link, 'response')]) {
+      for (const field of STATUS_FIELDS) {
+        const status = readField(holder, field)
+        if (typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599) {
+          return status
+        }
+      }
+    }
+  }
+  return undefined
+}
+
+function isObject(value: unknown): value is object {
+  return value !== null && typeof value === 'object'
+}
+
+function readField(value: unknown, field: string): unknown {
+  // A third-party getter can throw; a failed probe must not drop the event.
+  try {
+    return isObject(value) ? (value as Record<string, unknown>)[field] : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**

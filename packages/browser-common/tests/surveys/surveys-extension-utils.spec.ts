@@ -565,6 +565,21 @@ describe('addSurveyCSSVariablesToElement', () => {
         })
     })
 
+    describe('branding logo', () => {
+        it('should use the mono logo only on dark backgrounds', () => {
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, { backgroundColor: '#1d1f27' })
+            expect(element.style.getPropertyValue('--ph-logo-mono')).toBe('1')
+
+            // Re-applying a light appearance to the same element removes it
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, { backgroundColor: '#ffffff' })
+            expect(element.style.getPropertyValue('--ph-logo-mono')).toBe('')
+
+            element = document.createElement('div')
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover)
+            expect(element.style.getPropertyValue('--ph-logo-mono')).toBe('')
+        })
+    })
+
     describe('text colors', () => {
         it('should use textColor override for primary text, with auto-contrast fallback', () => {
             // Override works

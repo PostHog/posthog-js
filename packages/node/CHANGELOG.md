@@ -1,5 +1,33 @@
 # posthog-node
 
+## 5.70.0
+
+### Minor Changes
+
+- [#5511](https://github.com/PostHog/posthog-js/pull/5511) [`b64482a`](https://github.com/PostHog/posthog-js/commit/b64482a18cb26d29b7e2b760f344d7af2ad9823a) Thanks [@Silthus](https://github.com/Silthus)! - Opt a recipient out of email topics, or back in, with `posthog.emails.setPreferences({ to, topics, allMarketing })`. One call sends the whole change in one request, using the client's `secretKey`.
+  (2026-11-12)
+
+## 5.69.0
+
+### Minor Changes
+
+- [#5634](https://github.com/PostHog/posthog-js/pull/5634) [`ccd042a`](https://github.com/PostHog/posthog-js/commit/ccd042afcaf85a2c3767a8fe794de2c4dfaa1126) Thanks [@Silthus](https://github.com/Silthus)! - `posthog.emails.send()` takes a React Email element as `react` and renders it with the optional peer `@react-email/render`.
+  (2026-11-11)
+
+## 5.68.2
+
+### Patch Changes
+
+- [#5637](https://github.com/PostHog/posthog-js/pull/5637) [`5fc2aab`](https://github.com/PostHog/posthog-js/commit/5fc2aabfda1ddd494f520f2f69e0ddf8bbedea4b) Thanks [@andehen](https://github.com/andehen)! - With `POSTHOG_CAPTURE_MODE=v1`, capture now retries `404` and `429` responses like `408` and `5xx` instead of failing the batch at once.
+  (2026-11-10)
+
+## 5.68.1
+
+### Patch Changes
+
+- [#5649](https://github.com/PostHog/posthog-js/pull/5649) [`69b3cb8`](https://github.com/PostHog/posthog-js/commit/69b3cb8a72ff1c56fd53f922961b8fe9607d99b4) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix empty OR and legacy cohort group matching, and fall back to the server for unsupported group types.
+  (2026-11-10)
+
 ## 5.68.0
 
 ### Minor Changes

@@ -7,6 +7,7 @@ import {
   createMirror,
   toLowerCase,
   attachShadowRootSafely,
+  restoreSelectState,
 } from '@posthog/rrweb-snapshot';
 import {
   RRDocument,
@@ -1863,6 +1864,12 @@ export class Replayer {
     }
     const mirror = this.usingVirtualDom ? this.virtualDom.mirror : this.mirror;
     type TNode = typeof mirror extends Mirror ? Node : RRNode;
+    const selectsToRestore = new Set<Node>();
+    const queueSelectRestore = (parent: Node | RRNode) => {
+      if (this.usingVirtualDom) return;
+      const select = parent.nodeName === 'OPTGROUP' ? parent.parentNode : parent;
+      if (select?.nodeName === 'SELECT') selectsToRestore.add(select as Node);
+    };
 
     // filter into a local copy — never mutate the event data itself, as the
     // caller's events array must stay intact for later seeks (a rebuild from
@@ -1905,6 +1912,7 @@ export class Replayer {
         );
       }
       parent.removeChild(target as Node & RRNode);
+      queueSelectRestore(parent);
       /**
        * https://github.com/rrweb-io/rrweb/pull/887
        * Remove any virtual style rules for stylesheets if a child text node is removed.
@@ -2143,6 +2151,7 @@ export class Replayer {
        * target was added, execute plugin hooks
        */
       afterAppend(target, mutation.node.id);
+      queueSelectRestore(parent);
 
       /**
        * https://github.com/rrweb-io/rrweb/pull/887
@@ -2240,6 +2249,9 @@ export class Replayer {
         );
         restoreStyleRules(detachedRoot.styleRules);
       }
+      selectsToRestore.forEach((select) =>
+        restoreSelectState(select, this.mirror),
+      );
       pendingDialogs.forEach((dialog) => {
         applyDialogToTopLevel(dialog);
       });
@@ -2479,7 +2491,22 @@ export class Replayer {
     }
     try {
       (target as HTMLInputElement).checked = d.isChecked;
-      (target as HTMLInputElement).value = d.text;
+      if (target.nodeName === 'SELECT' && d.selectedOptionIds) {
+        const select = target as HTMLSelectElement;
+        const selectedOptionIds = new Set(d.selectedOptionIds);
+        if (selectedOptionIds.size <= 1) {
+          select.selectedIndex = Array.from(select.options).findIndex((option) =>
+            selectedOptionIds.has(this.mirror.getId(option)),
+          );
+        } else {
+          Array.from(select.options).forEach((option) => {
+            option.selected = selectedOptionIds.has(this.mirror.getId(option));
+          });
+        }
+      } else {
+        (target as HTMLInputElement).value = d.text;
+      }
+      restoreSelectState(target, this.mirror);
     } catch (error) {
       // for safe
     }
