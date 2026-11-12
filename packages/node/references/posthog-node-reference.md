@@ -3064,8 +3064,10 @@ recipient or the sender, cancel the email and send it again.
 
 Resolves to `{ data, error }` and does not reject. The error code is `already_sending` once
 PostHog has started sending the email, `canceled` after a cancel, and `invalid_scheduled_at`
-for a time more than 30 days after the first send call. Network errors, rate limits and an
-unavailable service are retried, because the same move twice ends the same.
+for a time more than 30 days after the first send call. A time at or before now sends the
+email at once. Network errors, rate limits and an unavailable service are retried, because
+the same move twice ends the same; after a move to now, the retry can answer `already_sending`,
+which means the email is going out.
 
 ###### Parameters
 
@@ -5089,7 +5091,7 @@ What every send takes, whatever its form.
 | <a id="property-distinctid-1"></a> `distinctId?` | `string` | The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address. |
 | <a id="property-idempotencykey"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too. |
 | <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
-| <a id="property-scheduledat-1"></a> `scheduledAt?` | `string` \| `Date` | Send the email later, at most 30 days after this call: a `Date`, or an ISO 8601 string with an offset, such as `'2026-12-01T09:00:00Z'` or `'2026-12-01T10:00:00+01:00'`. A string without an offset fails before any request, so the email never goes out in a timezone you didn't pick. A time at or before now sends at once. The idempotency key covers the time, so the same key with another time sends nothing and returns `idempotency_key_reused`. Move the email with `emails.update()`, or stop it with `emails.cancel()`, until PostHog starts sending it. posthog-node releases from before this option don't take it: from 5.62.0 they refuse it before any request, and before 5.62.0 they drop it and send the email at once. |
+| <a id="property-scheduledat-1"></a> `scheduledAt?` | `string` \| `Date` | Send the email later, at most 30 days after this call: a `Date`, or an ISO 8601 string with an offset, such as `'2026-12-01T09:00:00Z'` or `'2026-12-01T10:00:00+01:00'`. A string without an offset fails before any request, so the email never goes out in a timezone you didn't pick. A time at or before now sends at once. The idempotency key covers the time, so the same key with another time sends nothing and returns `idempotency_key_reused`. Move the email with `emails.update()`, or stop it with `emails.cancel()`, until PostHog starts sending it. posthog-node releases from before this option don't take it: from 5.62.0 they refuse it before any request, and before 5.62.0 they drop it and send the email at once. A self-hosted PostHog from before scheduled sends also sends it at once, and the result carries the warning `scheduling_unsupported`. |
 | <a id="property-to-2"></a> `to` | `string` | One recipient email address. |
 
 ### `SendEmailOptions`

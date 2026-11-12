@@ -886,14 +886,36 @@ describe('emails', () => {
 
       const { data } = await send({ scheduledAt: '2020-01-01T00:00:00Z' })
 
-      expect(data).toMatchObject({ status: 'queued', scheduledAt: null })
+      expect(data).toMatchObject({ status: 'queued', scheduledAt: null, warnings: [] })
+    })
+
+    it('warns when a PostHog from before scheduled sends sent the email now', async () => {
+      replies = [accepted()]
+
+      const { data, error } = await send({ scheduledAt: '2026-12-01T09:00:00Z' })
+
+      expect(error).toBeNull()
+      expect(data).toMatchObject({
+        status: 'queued',
+        scheduledAt: null,
+        warnings: [expect.objectContaining({ code: 'scheduling_unsupported' })],
+      })
+    })
+
+    it('does not warn about scheduling a send that had no time', async () => {
+      replies = [accepted()]
+
+      const { data } = await send()
+
+      expect(data?.warnings).toEqual([])
     })
 
     it.each([
       ['a time without an offset', '2026-12-01T09:00:00'],
       ['a date without a time', '2026-12-01'],
       ["a time in words, as Resend's API takes", 'in 1 hour'],
-      ['a time that does not exist', '2026-13-01T09:00:00Z'],
+      ['a month that does not exist', '2026-13-01T09:00:00Z'],
+      ['a day that does not exist', '2026-02-30T09:00:00Z'],
       ['an invalid Date', new Date('nope')],
       ['a timestamp in milliseconds', 1_796_115_600_000],
       ['null', null],
@@ -902,6 +924,7 @@ describe('emails', () => {
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_scheduled_at', name: 'validation_error', field: 'scheduledAt' })
+      expect(error?.message).toContain('Nothing was sent.')
       expect(fetch).not.toHaveBeenCalled()
     })
 
@@ -970,6 +993,25 @@ describe('emails', () => {
 
       expect(data?.status).toBe('scheduled')
       expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('reports already_sending when the retry of a move to now finds the email going out', async () => {
+      replies = [new TypeError('fetch failed'), rejected(409, 'already_sending')]
+
+      const pending = update({ id: MESSAGE_ID, scheduledAt: new Date() })
+      await vi.runAllTimersAsync()
+      const { data, error } = await pending
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'already_sending', statusCode: 409 })
+      expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('refuses a time without an offset without saying an email was sent', async () => {
+      const { error } = await update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00' })
+
+      expect(error?.message).toContain('Nothing was changed.')
+      expect(error?.message).not.toContain('sent')
     })
 
     it.each([

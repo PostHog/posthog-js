@@ -28,7 +28,9 @@ export interface SendEmailBase {
    *
    * Move the email with `emails.update()`, or stop it with `emails.cancel()`, until PostHog starts
    * sending it. posthog-node releases from before this option don't take it: from 5.62.0 they
-   * refuse it before any request, and before 5.62.0 they drop it and send the email at once.
+   * refuse it before any request, and before 5.62.0 they drop it and send the email at once. A
+   * self-hosted PostHog from before scheduled sends also sends it at once, and the result carries
+   * the warning `scheduling_unsupported`.
    */
   scheduledAt?: Date | string
 }
@@ -314,8 +316,10 @@ export interface Emails {
    *
    * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` once
    * PostHog has started sending the email, `canceled` after a cancel, and `invalid_scheduled_at`
-   * for a time more than 30 days after the first send call. Network errors, rate limits and an
-   * unavailable service are retried, because the same move twice ends the same.
+   * for a time more than 30 days after the first send call. A time at or before now sends the
+   * email at once. Network errors, rate limits and an unavailable service are retried, because
+   * the same move twice ends the same; after a move to now, the retry can answer `already_sending`,
+   * which means the email is going out.
    */
   update(options: UpdateEmailOptions): Promise<UpdateEmailResponse>
 

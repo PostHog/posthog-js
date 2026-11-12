@@ -54,7 +54,11 @@ const MAX_RETRY_DELAY_MS = 30_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
-// ISO 8601 with an explicit offset. A time without one would go out in a timezone nobody picked.
+const SCHEDULING_UNSUPPORTED: EmailWarning = {
+  code: 'scheduling_unsupported',
+  message: 'This PostHog predates scheduled sends, so it ignored scheduledAt and sent the email now.',
+  fix: 'Update PostHog before you schedule emails with it.',
+}
 const OFFSET_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/
 
 type EveryField<Form> = Record<keyof Form, true>
@@ -128,6 +132,7 @@ interface PreparedSend {
   react?: EmailReactElement
   idempotencyKey: string
   maxRetries: number
+  scheduled: boolean
 }
 
 interface Reply {
@@ -209,7 +214,7 @@ export class EmailSender implements Emails {
         'Idempotency-Key': prepared.idempotencyKey,
       })
       const result = await this.withRetries(prepared.maxRetries, async () =>
-        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, body))
+        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, body), prepared.scheduled)
       )
       for (const warning of result.warnings) {
         this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
@@ -242,7 +247,7 @@ export class EmailSender implements Emails {
     try {
       const update: { [Field in keyof UpdateEmailOptions]?: unknown } = options ?? {}
       const messageId = messageIdOf(update.id)
-      const body = safeJsonStringify({ scheduled_at: scheduledTime(update.scheduledAt) })
+      const body = safeJsonStringify({ scheduled_at: scheduledTime(update.scheduledAt, 'Nothing was changed.') })
       const otherChange = Object.entries(update).find(
         ([name, value]) => value !== undefined && name !== 'id' && name !== 'scheduledAt'
       )?.[0]
@@ -260,7 +265,6 @@ export class EmailSender implements Emails {
       )
       const url = appHost + STATUS_PATH.replace('{messageId}', messageId)
       const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
-      // The move sets the time to a value, so a retry after a lost answer ends the same.
       const result = await this.withRetries(this.config.maxRetries, async () =>
         parseUpdateReply(await this.request(url, 'PATCH', headers, body))
       )
@@ -279,7 +283,6 @@ export class EmailSender implements Emails {
       )
       const url = appHost + CANCEL_PATH.replace('{messageId}', messageId)
       const headers = this.headers(secretKey, {})
-      // A second cancel of a canceled email answers the same, so a retry after a lost answer is safe.
       const result = await this.withRetries(this.config.maxRetries, async () =>
         parseCancelReply(await this.request(url, 'POST', headers))
       )
@@ -483,31 +486,36 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   if (maxRetries !== undefined && !isRetryCount(maxRetries)) {
     throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
   }
-  const scheduledAt = send.scheduledAt === undefined ? undefined : scheduledTime(send.scheduledAt)
+  const scheduledAt = send.scheduledAt === undefined ? undefined : scheduledTime(send.scheduledAt, 'Nothing was sent.')
 
   return {
     body: safeJsonStringify({ ...content, to, ...(scheduledAt !== undefined && { scheduled_at: scheduledAt }) }),
     react: isReactElement(send.react) ? send.react : undefined,
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
+    scheduled: scheduledAt !== undefined,
   }
 }
 
-/** A send time as PostHog takes it: a `Date` in UTC, or the caller's string when it has an offset. */
-function scheduledTime(value: unknown): string {
+function scheduledTime(value: unknown, nothingDone: string): string {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString()
   }
-  if (typeof value === 'string' && OFFSET_TIME_PATTERN.test(value) && !Number.isNaN(Date.parse(value))) {
+  if (typeof value === 'string' && OFFSET_TIME_PATTERN.test(value) && isCalendarDate(value.slice(0, 10))) {
     return value
   }
   throw new EmailError({
     code: 'invalid_scheduled_at',
-    message:
-      'scheduledAt must be a Date, or an ISO 8601 string with an offset, such as 2026-12-01T09:00:00Z. Nothing was sent.',
+    message: `scheduledAt must be a Date, or an ISO 8601 string with an offset, such as 2026-12-01T09:00:00Z. ${nothingDone}`,
     field: 'scheduledAt',
     fix: 'Pass a Date, or add an offset such as Z or +02:00 to the time.',
   })
+}
+
+function isCalendarDate(isoDate: string): boolean {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }
 
 function messageIdOf(id: unknown): string {
@@ -526,7 +534,10 @@ function listQuery(options: ListEmailsOptions): string {
   if (cursor !== undefined && (typeof cursor !== 'string' || !cursor)) {
     throw invalid('invalid_list_options', 'cursor must be the next cursor of the page before.', 'cursor')
   }
-  if (limit !== undefined && !(isRetryCount(limit) && limit >= 1 && limit <= MAX_LIST_LIMIT)) {
+  if (
+    limit !== undefined &&
+    !(typeof limit === 'number' && Number.isInteger(limit) && limit >= 1 && limit <= MAX_LIST_LIMIT)
+  ) {
     throw invalid('invalid_list_options', `limit must be a whole number from 1 to ${MAX_LIST_LIMIT}.`, 'limit')
   }
   const query = new URLSearchParams({ status })
@@ -776,7 +787,7 @@ function replyFields(payload: unknown): Record<string, unknown> {
   >
 }
 
-function parseSendReply({ status, payload, retryAfterMs }: Reply): SendEmailResult {
+function parseSendReply({ status, payload, retryAfterMs }: Reply, scheduled: boolean): SendEmailResult {
   const fields = replyFields(payload)
   if (status >= 200 && status < 300) {
     const id = text(fields.message_id)
@@ -799,11 +810,13 @@ function parseSendReply({ status, payload, retryAfterMs }: Reply): SendEmailResu
         }
       }
     }
+    if (scheduled && fields.status === undefined) {
+      warnings.push(SCHEDULING_UNSUPPORTED)
+    }
     return {
       id,
       replayed: fields.replayed === true,
       warnings,
-      // A server from before scheduled sends answers without a status, and sends every email now.
       status: text(fields.status) ?? 'queued',
       scheduledAt: text(fields.scheduled_at) ?? null,
     }
@@ -850,25 +863,24 @@ function parseListReply({ status, payload, retryAfterMs }: Reply): ListEmailsRes
   if (status < 200 || status >= 300) {
     throw replyError(fields, status, retryAfterMs)
   }
+  const noPage = (): EmailError =>
+    new EmailError({ code: 'api_error', message: 'PostHog answered without a page of emails.', statusCode: status })
   const next = fields.next === null ? null : text(fields.next)
-  const results = Array.isArray(fields.results) ? fields.results.map(scheduledEmailOf) : undefined
-  if (next === undefined || results === undefined || results.includes(undefined)) {
-    throw new EmailError({
-      code: 'api_error',
-      message: 'PostHog answered without a page of emails.',
-      statusCode: status,
-    })
+  if (next === undefined || !Array.isArray(fields.results)) {
+    throw noPage()
   }
-  return { results: results as ScheduledEmail[], next }
-}
-
-function scheduledEmailOf(row: unknown): ScheduledEmail | undefined {
-  const fields = replyFields(row)
-  const id = text(fields.id)
-  const to = text(fields.to)
-  const scheduledAt = text(fields.scheduled_at)
-  const createdAt = text(fields.created_at)
-  return id && to && scheduledAt && createdAt ? { id, to, scheduledAt, createdAt } : undefined
+  const results = fields.results.map((row: unknown): ScheduledEmail => {
+    const email = replyFields(row)
+    const id = text(email.id)
+    const to = text(email.to)
+    const scheduledAt = text(email.scheduled_at)
+    const createdAt = text(email.created_at)
+    if (!id || !to || !scheduledAt || !createdAt) {
+      throw noPage()
+    }
+    return { id, to, scheduledAt, createdAt }
+  })
+  return { results, next }
 }
 
 function parseStatusReply({ status, payload, retryAfterMs }: Reply): EmailStatus {
@@ -934,8 +946,7 @@ function asEmailError(error: unknown, message: string): EmailError {
 
 function isRetryable(error: EmailError): boolean {
   // A send carries an idempotency key, so a retry can't queue a second email. A status read changes nothing.
-  // A preferences change and a move set a value, and a second cancel answers the same, so repeating them ends the
-  // same. A list is never retried.
+  // A preferences change sets each named choice to a value, so repeating it ends the same.
   if (error.statusCode === undefined) {
     return error.code === 'network_error'
   }
