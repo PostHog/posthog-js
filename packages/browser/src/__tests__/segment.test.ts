@@ -259,6 +259,7 @@ describe(`Segment integration`, () => {
         } as unknown as SegmentContext
 
         expect((await segmentIntegration.track!(context)).event.properties).toEqual({
+            $segment_integration: true,
             $session_id: 'session-id',
             added_by_first_filter: true,
             customer_metadata: customerMetadata,
@@ -380,6 +381,69 @@ describe(`Segment integration`, () => {
                 $timezone_offset: '<runtime-timezone-offset>',
             },
         }).toMatchSnapshot()
+    })
+
+    it.each(['track', 'page', 'identify', 'screen'] as const)(
+        'marks Segment %s events without marking direct PostHog captures',
+        async (method) => {
+            const posthog = await initPostHogInAPromise(segment, posthogName)
+            const context = {
+                event: {
+                    event: 'Segment Event',
+                    userId: 'test-id',
+                    anonymousId: 'test-anonymous-id',
+                    properties: { order_id: 'order-123' },
+                },
+            } as unknown as SegmentContext
+
+            const enrichedContext = await segmentIntegration[method]!(context)
+
+            expect(enrichedContext.event.properties).toMatchObject({
+                $segment_integration: true,
+                order_id: 'order-123',
+            })
+            const beforeSend = vi.fn((event) => event)
+            posthog.set_config({ before_send: beforeSend })
+            posthog.capture('Direct Event')
+            expect(beforeSend).toHaveBeenCalled()
+            expect(beforeSend.mock.calls[0][0].properties).not.toHaveProperty('$segment_integration')
+        }
+    )
+
+    it('omits the Segment marker when the integration is not configured', async () => {
+        const beforeSend = vi.fn((event) => event)
+        const posthog = await initPostHogInAPromise(undefined, posthogName, { before_send: beforeSend })
+        beforeSend.mockClear()
+
+        posthog.capture('Direct Event')
+
+        expect(beforeSend).toHaveBeenCalled()
+        expect(beforeSend.mock.calls[0][0].properties).not.toHaveProperty('$segment_integration')
+    })
+
+    it('allows the Segment marker to be removed by filterProperties', async () => {
+        const filterProperties = vi.fn((properties: Record<string, any>) => {
+            const filtered = { ...properties }
+            delete filtered.$segment_integration
+            return filtered
+        })
+        await initPostHogInAPromise(segment, posthogName, {
+            segment: { analytics: segment, filterProperties },
+        })
+        const context = {
+            event: {
+                event: 'Segment Event',
+                userId: 'test-id',
+                anonymousId: 'test-anonymous-id',
+                properties: {},
+            },
+        } as unknown as SegmentContext
+
+        const enrichedContext = await segmentIntegration.track!(context)
+
+        expect(filterProperties).toHaveBeenCalledWith(expect.objectContaining({ $segment_integration: true }))
+        expect(enrichedContext.event.properties).not.toHaveProperty('$segment_integration')
+        expect(enrichedContext.event.properties).toHaveProperty('$session_id')
     })
 
     it('should handle the segment user being a promise', async () => {

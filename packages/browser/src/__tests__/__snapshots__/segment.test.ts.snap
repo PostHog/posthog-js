@@ -32,6 +32,7 @@ exports[`Segment integration > enriches Segment track events with PostHog proper
     "$sdk_debug_extensions_init_time_ms": "<extension-init-time>",
     "$sdk_debug_retry_queue_size": 0,
     "$sdk_dist_channel": "npm",
+    "$segment_integration": true,
     "$session_entry_host": "localhost",
     "$session_entry_pathname": "/",
     "$session_entry_referrer": "$direct",

@@ -110,7 +110,10 @@ const createSegmentIntegration = (
             posthog.identify(ctx.event.userId)
         }
 
-        let additionalProperties = posthog.calculateEventProperties(eventName, ctx.event.properties)
+        let additionalProperties: Properties = {
+            ...posthog.calculateEventProperties(eventName, ctx.event.properties),
+            $segment_integration: true,
+        }
         if (!isNullish(filterProperties)) {
             const originalProperties = ctx.event.properties || {}
             const enrichmentProperties: Properties = {}
