@@ -86,6 +86,7 @@ import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './ca
 import { canonicalizeUuid, eventUuidv7 } from './capture-v1/uuid'
 import { readEventOptions } from './capture-v1/transform'
 import {
+  dropIdentifyStyleLegacyPersonProfile,
   fillIdentifyStylePersonProfile,
   fillLibraryProperties,
   fillOptions,
@@ -3398,6 +3399,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * properties, then these, then the values the SDK adds (such as `$is_server` and
    * `$geoip_disable`). `before_send` sees the result and can change it.
    *
+   * A `$process_person_profile` registered here never reaches `$identify`, `$create_alias`,
+   * `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events (see `registerOptions()`).
+   *
    * @example
    * ```ts
    * await client.register({ service: 'billing' })
@@ -3479,6 +3483,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * Context `properties` and `options` fill only what an event left unset: the event's own values
    * win, and context values beat `register()` and `registerOptions()` values and the values the SDK
    * adds. `before_send` sees the result and can change it.
+   *
+   * On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once`
+   * events, a context `process_person_profile` option applies only when the distinct id is
+   * generated, and a `$process_person_profile` property never applies (see `registerOptions()`).
    *
    * @example
    * ```ts
@@ -4063,18 +4071,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     fillLibraryProperties(eventProperties, libraryId, libraryVersion)
 
     const filledOptions: Record<string, JsonType> = { ...callOptions }
-    fillIdentifyStylePersonProfile(
-      event,
-      filledOptions,
-      eventProperties,
-      callerPersonProfile,
-      resolvedDistinctId !== undefined
-    )
+    fillIdentifyStylePersonProfile(event, filledOptions, callerPersonProfile, resolvedDistinctId !== undefined)
     fillOptions(filledOptions, [
       contextOptions,
       globalOptions,
       resolvedDistinctId !== undefined ? undefined : { process_person_profile: false },
     ])
+    dropIdentifyStyleLegacyPersonProfile(event, filledOptions, eventProperties)
     const eventOptions = callOptions !== undefined || Object.keys(filledOptions).length > 0 ? filledOptions : undefined
 
     // Runs after every fill and before before_send, so no default can re-add a stripped property

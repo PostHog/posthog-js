@@ -386,6 +386,7 @@ describe('per-event capture options', () => {
         const { event, hookSaw } = await sendWithLayers((client) => emit(client, call), layers, path)
 
         expect(hookSaw.options!.process_person_profile).toBe(expected)
+        expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
         expect(event.options.process_person_profile).toBe(expected)
         expect(event.properties).not.toHaveProperty('$process_person_profile')
       })
@@ -426,43 +427,95 @@ describe('per-event capture options', () => {
         expect(event.properties).not.toHaveProperty('$process_person_profile')
       })
 
-      it('a call option beats the call legacy property, which is still removed', async () => {
-        const { event } = await sendWithLayers(
+      it('a call option beats the call legacy property, which is removed before before_send', async () => {
+        const { event, hookSaw } = await sendWithLayers(
           (client) =>
             emit(client, { options: { process_person_profile: false }, properties: { $process_person_profile: true } }),
           {},
           path
         )
 
+        expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
         expect(event.options.process_person_profile).toBe(false)
         expect(event.properties).not.toHaveProperty('$process_person_profile')
       })
 
-      it('treats a null call property as unset, and the property is not sent', async () => {
+      it('treats a null call property as unset, and removes it before before_send', async () => {
         const { event, hookSaw } = await sendWithLayers(
           (client) => emit(client, { properties: { $process_person_profile: null } }),
           LAYERED_FALSE,
           path
         )
 
-        expect(hookSaw.properties.$process_person_profile).toBeNull()
+        expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
         expect(hookSaw.options!.process_person_profile).toBe(true)
         expect(event.options.process_person_profile).toBe(true)
         expect(event.properties).not.toHaveProperty('$process_person_profile')
       })
     })
 
-    it('before_send sees a layered legacy false next to the true option, and the option is sent', async () => {
-      const { event, hookSaw } = await sendWithLayers(
-        (client) => client.identify({ distinctId: 'u' }),
-        { register: { $process_person_profile: false } },
-        ANALYTICS_CAPTURE_PATH
+    describe('a layered legacy false', () => {
+      const LAYERED_LEGACY_FALSE: [string, Layers][] = [
+        ['register()', { register: { $process_person_profile: false } }],
+        ['context', { contextProperties: { $process_person_profile: false } }],
+      ]
+      const dropOptions = ({ options: _options, ...message }: EventMessage): EventMessage => message
+
+      it.each(LAYERED_LEGACY_FALSE)(
+        'from %s is removed before before_send sees the option',
+        async (_source, layers) => {
+          const { event, hookSaw } = await sendWithLayers(
+            (client) => client.identify({ distinctId: 'u' }),
+            layers,
+            ANALYTICS_CAPTURE_PATH
+          )
+
+          expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
+          expect(hookSaw.options).toStrictEqual({ process_person_profile: true })
+          expect(event.options).toStrictEqual({ process_person_profile: true })
+          expect(event.properties).not.toHaveProperty('$process_person_profile')
+        }
       )
 
-      expect(hookSaw.properties!.$process_person_profile).toBe(false)
-      expect(hookSaw.options).toStrictEqual({ process_person_profile: true })
-      expect(event.options).toStrictEqual({ process_person_profile: true })
-      expect(event.properties).not.toHaveProperty('$process_person_profile')
+      it.each(LAYERED_LEGACY_FALSE)(
+        'from %s is not sent when before_send drops the options',
+        async (_source, layers) => {
+          const { event } = await sendWithLayers(
+            (client) => client.identify({ distinctId: 'u' }),
+            layers,
+            ANALYTICS_CAPTURE_PATH,
+            dropOptions
+          )
+
+          expect(event.options).toStrictEqual({})
+          expect(event.properties).not.toHaveProperty('$process_person_profile')
+        }
+      )
+
+      it.each(LAYERED_LEGACY_FALSE)('from %s stays on other events and is sent', async (_source, layers) => {
+        const { event, hookSaw } = await sendWithLayers(
+          (client) => client.capture({ distinctId: 'u', event: 'signed_up' }),
+          layers,
+          ANALYTICS_CAPTURE_PATH,
+          dropOptions
+        )
+
+        expect(hookSaw.properties!.$process_person_profile).toBe(false)
+        expect(event.options).toStrictEqual({ process_person_profile: false })
+        expect(event.properties).not.toHaveProperty('$process_person_profile')
+      })
+      it('stays on other events whose option is set, and the option is sent', async () => {
+        const { event, hookSaw } = await sendWithLayers(
+          (client) => client.capture({ distinctId: 'u', event: 'signed_up' }),
+          { registerOptions: { process_person_profile: true }, register: { $process_person_profile: false } },
+          ANALYTICS_CAPTURE_PATH
+        )
+
+        expect(hookSaw.properties!.$process_person_profile).toBe(false)
+        expect(hookSaw.options).toStrictEqual({ process_person_profile: true })
+        expect(event.options).toStrictEqual({ process_person_profile: true })
+        expect(event.properties).not.toHaveProperty('$process_person_profile')
+      })
     })
 
     describe('an SDK-generated distinct id', () => {
