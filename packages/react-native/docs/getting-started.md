@@ -59,27 +59,9 @@ The full path uses React Native's experimental integration without CocoaPods. Ev
 
 The CocoaPods and hybrid paths keep the plugin's iOS 13 minimum.
 
-## Offline behavior
-
-The SDK keeps capturing events when the device is offline. With `persistence: 'file'`, the queue is stored on the device and survives an app restart. The SDK flushes the queue only when the device is online. When the queue reaches `maxQueueSize`, the SDK deletes the oldest event first.
-
-## Tracing header hostnames
-
-`addTracingHeaders` matches hostnames exactly. Pass hostnames only, without a protocol or path.
-
-## Error boundaries and console capture
-
-React logs render errors to the console. If you use `PostHogErrorBoundary` with console capture enabled, each render error is captured twice. Set `errorTracking: { autocapture: { console: [] } }` to avoid this.
-
-## Survey targeting
-
-Surveys in React Native don't support URL or CSS selector targeting. Surveys that rely on these conditions don't appear.
-
 ## Minimum versions
 
-- `captureAppLifecycleEvents` is on by default from 4.39.0.
 - `disableRemoteFeatureFlags` needs 4.49.0 or later.
-- `androidNdkCrashes` needs `posthog-react-native` 4.78.0 or later.
 
 ## Upgrade from an older major
 

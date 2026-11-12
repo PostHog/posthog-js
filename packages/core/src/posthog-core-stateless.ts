@@ -511,6 +511,17 @@ export abstract class PostHogCoreStateless {
     })
   }
 
+  /**
+   * Listens for an SDK event and returns a function that removes the listener.
+   * The SDK does not throw for failures in background work, so listen for them on the `'error'` event.
+   *
+   * @example
+   * ```js
+   * posthog.on('error', (err) => {
+   *   console.error('PostHog had an error', err)
+   * })
+   * ```
+   */
   on(event: string, cb: (...args: any[]) => void): () => void {
     return this._events.on(event, cb)
   }

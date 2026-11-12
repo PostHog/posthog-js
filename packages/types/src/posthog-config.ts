@@ -239,6 +239,8 @@ export interface PerformanceCaptureConfig {
      * When `cookieless_mode` is active, there is no client-side SessionIdManager; vitals are still
      * captured. Nested `$web_vitals_*_event` payloads omit `$session_id` / `$window_id`; PostHog ingestion assigns
      * `$session_id` server-side for cookieless traffic when project cookieless settings are enabled (same as other events).
+     *
+     * A boolean here overrides the project setting. When unset, the project setting applies.
      */
     web_vitals?: boolean
 
@@ -1202,6 +1204,8 @@ export interface LogsConfig extends LogCaptureOptions {
      * Review console output before enabling, as messages can include sensitive values
      * written by your code or by third-party libraries.
      *
+     * The project setting can also turn this on. Console logs are captured when either one enables them.
+     *
      * @default undefined
      */
     captureConsoleLogs?: boolean
@@ -1461,6 +1465,8 @@ export interface PostHogConfig {
      * This setting does not affect capturing pageview events (see `capture_pageview`).
      *
      * by default autocapture is ignored on elements that match a `ph-no-capture` css class on the element or a parent
+     *
+     * The project setting can also turn autocapture off. Events are autocaptured only when both allow it.
      * @default true
      */
     autocapture: boolean | AutocaptureConfig
@@ -1493,6 +1499,16 @@ export interface PostHogConfig {
     /**
      * Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details.
      *
+     * PostHog stores the distinct ID, session ID, device ID, feature flags, super properties, and some config in the browser.
+     *
+     * - `'localStorage+cookie'` stores the distinct ID and session ID in a cookie, and the rest in `localStorage`.
+     * - `'cookie'` stores everything in a cookie. Cookies hold about 4KB, so many feature flags can cause `431 Request Header Fields Too Large` errors.
+     * - `'localStorage'` stores everything in `localStorage`.
+     * - `'sessionStorage'` stores everything in `sessionStorage`.
+     * - `'memory'` stores everything in page memory, so it lasts for one pageview.
+     *
+     * Call `set_config` to change the mode after `init`, for example when a user accepts cookies.
+     *
      * @default 'localStorage+cookie'
      */
     persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'
@@ -1511,6 +1527,8 @@ export interface PostHogConfig {
      * List of custom property names that should be stored in cookies (in addition to the default ones)
      * when using 'localStorage+cookie' persistence mode. This allows these properties to be shared
      * across subdomains when cross_subdomain_cookie is enabled.
+     *
+     * Cookies hold about 4KB, so large values can cause `431 Request Header Fields Too Large` errors.
      *
      * @default []
      */
@@ -1638,6 +1656,7 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should disable session recording.
+     * Recording starts only when this option and the project setting both allow it.
      *
      * @default false
      */
@@ -2034,6 +2053,8 @@ export interface PostHogConfig {
      * subdomains adopt identity changes made by `identify()` or `reset()`.
      *
      * When `defaults` is `'2026-08-29'` or later, this defaults to `true`.
+     *
+     * Requires `posthog-js` 1.418.0 or later.
      *
      * @default false
      */
@@ -2434,6 +2455,7 @@ export interface PostHogConfig {
 
     /**
      * Determines whether to capture heatmaps.
+     * When set, this overrides the project setting. When unset, the project setting applies.
      *
      * @see {HeatmapConfig}
      * @default undefined
@@ -2466,6 +2488,7 @@ export interface PostHogConfig {
 
     /**
      * Determines whether to capture exceptions.
+     * When set, this overrides the project setting. When unset, the project setting applies.
      *
      * @see {ExceptionAutoCaptureConfig}
      * @default undefined

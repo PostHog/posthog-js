@@ -84,40 +84,9 @@ The loader reads its options from these attributes:
 
 The hashes cover only `loader.js` and `array.js`. They don't cover the recorder, surveys, toolbar, or `config.js` scripts. Use the manifest from the regional asset host you serve, because toolbar assets differ between regions.
 
-## Persistence
+## Cookies in iframes
 
-PostHog stores the distinct ID, session ID, device ID, feature flags, super properties, and some config in the browser. The `persistence` option sets where:
-
-- `localStorage+cookie` (default) stores the distinct ID and session ID in a cookie, and the rest in `localStorage`.
-- `cookie` stores everything in a cookie.
-- `localStorage` stores everything in `localStorage`.
-- `sessionStorage` stores everything in `sessionStorage`.
-- `memory` stores everything in page memory, so it lasts for one pageview.
-
-Call `set_config` to change the mode after `init`, for example when a user accepts cookies.
-
-```ts
-posthog.set_config({ persistence: consent === 'yes' ? 'localStorage+cookie' : 'memory' })
-```
-
-Keep in mind:
-
-- `cookieWinsOnConflict` requires `posthog-js` 1.418.0 or later. An open tab picks up cookie changes on its next capture or persistence write, not immediately.
-- Cookies hold about 4KB. Large `cookie_persisted_properties` values or `cookie` persistence with many feature flags can cause `431 Request Header Fields Too Large` errors.
-- In an iframe on another site, browsers treat PostHog cookies as third-party cookies and can block them. Pass an ID from the parent page and call `identify` inside the iframe.
-
-## Init options and project settings
-
-Some features have both an `init` option and a project setting. The winner depends on the feature.
-
-| Feature               | Init option                      | Result                                                           |
-| --------------------- | -------------------------------- | ---------------------------------------------------------------- |
-| Exception autocapture | `capture_exceptions`             | The init option wins when set. Otherwise the project setting.    |
-| Heatmaps              | `capture_heatmaps`               | The init option wins when set. Otherwise the project setting.    |
-| Web vitals            | `capture_performance.web_vitals` | The init option wins when it's a boolean. Otherwise the setting. |
-| Session replay        | `disable_session_recording`      | Both must allow it.                                              |
-| Autocapture           | `autocapture`                    | Either can turn it off.                                          |
-| Console logs          | `logs.captureConsoleLogs`        | Either can turn it on.                                           |
+In an iframe on another site, browsers treat PostHog cookies as third-party cookies and can block them. Pass an ID from the parent page and call `identify` inside the iframe.
 
 ## Enriched flag analytics
 
@@ -129,18 +98,6 @@ posthog.capture('$feature_view', { feature_flag: flag })
 posthog.capture('$feature_interaction', {
     feature_flag: flag,
     $set: { [`$feature_interaction/${flag}`]: true },
-})
-```
-
-## Sample by person or session
-
-`posthog-js/customizations` also exports `sampleByDistinctId` and `sampleBySessionId` for `before_send`. Each one keeps all events or no events for a given ID.
-
-```ts
-import { sampleByDistinctId, sampleBySessionId } from 'posthog-js/customizations'
-
-posthog.init('<ph_project_api_key>', {
-    before_send: [sampleByDistinctId(0.4), sampleBySessionId(0.25)],
 })
 ```
 

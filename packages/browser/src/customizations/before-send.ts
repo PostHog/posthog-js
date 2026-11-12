@@ -11,6 +11,8 @@ import { logger } from '@posthog/browser-common/utils/logger'
  * Setting 0.5 will cause roughly 50% of distinct ids to have events sent.
  * Not 50% of events for each distinct id.
  *
+ * Import it from `posthog-js/customizations` and pass it to `before_send`.
+ *
  * @param percent a number from 0 to 1, 1 means always send and, 0 means never send the event
  */
 export function sampleByDistinctId(percent: number): BeforeSendFn {
@@ -35,6 +37,8 @@ export function sampleByDistinctId(percent: number): BeforeSendFn {
  *
  * Setting 0.5 will cause roughly 50% of sessions to have events sent.
  * Not 50% of events for each session.
+ *
+ * Import it from `posthog-js/customizations` and pass it to `before_send`.
  *
  * @param percent a number from 0 to 1, 1 means always send and, 0 means never send the event
  */

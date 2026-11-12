@@ -651,6 +651,27 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Sends all queued events and spans, and resolves when every send has finished.
    * It does not reject when delivery fails: those failures arrive on the `'error'` event.
+   *
+   * It has no overall timeout. In an AWS Lambda handler, race it against the time the invocation
+   * has left, and keep 100 ms to return. The race limits the wait. It does not cancel the flush.
+   *
+   * @example
+   * ```ts
+   * const remainingMs = Math.max(0, context.getRemainingTimeInMillis() - 100)
+   * let timer: ReturnType<typeof setTimeout> | undefined
+   * try {
+   *   await Promise.race([
+   *     client.flush(),
+   *     new Promise((_, reject) => {
+   *       timer = setTimeout(() => reject(new Error('PostHog flush timed out')), remainingMs)
+   *     }),
+   *   ])
+   * } catch (err) {
+   *   console.error('PostHog flush failed', err)
+   * } finally {
+   *   clearTimeout(timer)
+   * }
+   * ```
    */
   override async flush(): Promise<void> {
     // An app's crash handler often flushes and exits before the end of the turn, when autocapture would capture.
