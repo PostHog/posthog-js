@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import dom from '@posthog/rrweb-utils';
 import record from '../../src/record';
 import { mutationBuffers } from '../../src/record/observer';
+import type { eventWithTime } from '@posthog/rrweb-types';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 let stop: (() => void) | undefined;
@@ -13,28 +14,37 @@ afterEach(() => {
 });
 
 it.each([
-  { blockClass: /blocked/g, initialIndex: 2, finalIndex: 0 },
-  { blockClass: /isibl/g, initialIndex: 1, finalIndex: 6 },
+  { blockClass: /blocked/g, initialIndex: 2, blocked: false },
+  { blockClass: /isibl/g, initialIndex: 1, blocked: true },
 ])(
-  'still evaluates the blocking regexp $blockClass for a text leaf',
-  async ({ blockClass, initialIndex, finalIndex }) => {
+  'filters text-leaf additions without advancing $blockClass',
+  async ({ blockClass, initialIndex, blocked }) => {
     // Record the text before adding a class that the matching case would block.
     document.body.innerHTML = '<span>value</span>';
     const span = document.querySelector('span')!;
     const text = span.firstChild!;
-    stop = record({ emit: () => {}, blockClass });
+    const events: eventWithTime[] = [];
+    stop = record({ emit: (event) => events.push(event), blockClass });
     await settle();
     const buffer = mutationBuffers.find((b) => b.bufferDoc() === document)!;
     expect(buffer['mirror'].hasNode(text)).toBe(true);
     buffer.lock();
     span.className = 'visible';
-    const test = vi.spyOn(blockClass, 'test');
+    events.length = 0;
     blockClass.lastIndex = initialIndex;
     buffer['genAdds'](text);
-    expect(blockClass.lastIndex).toBe(finalIndex);
-    expect(test).toHaveBeenCalledTimes(1);
-    expect(test).toHaveBeenCalledWith('visible');
+    expect(blockClass.lastIndex).toBe(initialIndex);
     expect(buffer['movedSet'].has(text)).toBe(true);
+    buffer.unlock();
+    await settle();
+    const additions = events.flatMap((event) =>
+      event.type === 3 && event.data.source === 0 ? event.data.adds : [],
+    );
+    expect(
+      additions.some(
+        ({ node }) => node.type === 3 && node.textContent === 'value',
+      ),
+    ).toBe(!blocked);
   },
 );
 
