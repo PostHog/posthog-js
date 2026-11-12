@@ -1,3 +1,4 @@
+import type { Route } from '@playwright/test'
 import { expect } from '../utils/posthog-playwright-test-base'
 import { EventsPage, test } from '../../fixtures'
 import { BasePage } from 'fixtures/page'
@@ -53,6 +54,34 @@ test.describe('ErrorTracking autocapture', () => {
             await network.waitForFlags()
             await page.click('[data-cy-button-throws-error]')
             await checkException(events, browserName)
+        })
+
+        test('should capture errors thrown before exception-autocapture.js loads', async ({
+            posthog,
+            page,
+            events,
+        }) => {
+            // hold the script back until both errors have fired
+            let holdScript!: (route: Route) => void
+            const scriptRoute = new Promise<Route>((resolve) => (holdScript = resolve))
+            await page.route('**/exception-autocapture.js*', (route) => holdScript(route))
+            const initialized = posthog.init({ capture_exceptions: true })
+            const route = await scriptRoute
+            await page.evaluate(() => {
+                Promise.reject(new Error('rejection before load'))
+            })
+            await page.addScriptTag({ content: "throw new Error('error before load')" })
+            await route.fallback()
+            await initialized
+
+            await expect
+                .poll(() =>
+                    events
+                        .filterByName('$exception')
+                        .map((e) => e.properties.$exception_list[0].value)
+                        .sort()
+                )
+                .toEqual(['error before load', 'rejection before load'])
         })
 
         test('should not capture when remote disabled', async ({ posthog, page, network, events }) => {

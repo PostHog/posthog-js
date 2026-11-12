@@ -4,12 +4,17 @@ import { PostHog } from '../../posthog-core'
 import { RemoteConfigResult } from '../../types'
 
 import { createLogger } from '@posthog/browser-common/utils/logger'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject, resolveExceptionRateLimiterConfig } from '@posthog/core'
 import { ErrorTracking } from '@posthog/core'
 import { ExceptionAutoCaptureConfig } from '../../types'
 
 const logger = /* @__PURE__ */ createLogger('[ExceptionAutocapture]')
+
+// Errors are held until exception-autocapture.js loads, capped in case the page throws in a loop.
+const MAX_EARLY_EVENTS = 20
+const EARLY_EVENT_TYPES = ['error', 'unhandledrejection']
 
 export class ExceptionObserver {
     private _instance: PostHog
@@ -19,6 +24,7 @@ export class ExceptionObserver {
     private _unwrapOnError: (() => void) | undefined
     private _unwrapUnhandledRejection: (() => void) | undefined
     private _unwrapConsoleError: (() => void) | undefined
+    private _earlyEvents: Event[] = []
 
     constructor(instance: PostHog) {
         this._instance = instance
@@ -68,9 +74,21 @@ export class ExceptionObserver {
         if (this.isEnabled) {
             logger.info('enabled')
             this._stopCapturing()
+            // Adding the same listener again is a no-op, so a mid-load restart keeps the buffer.
+            EARLY_EVENT_TYPES.forEach((type) => {
+                addEventListener(window, type, this._bufferEarlyEvent)
+            })
             this._loadScript(this._startCapturing)
         } else {
             this._stopCapturing()
+        }
+    }
+
+    private _bufferEarlyEvent = (event: Event) => {
+        const enabled =
+            event.type === 'error' ? this._config.capture_unhandled_errors : this._config.capture_unhandled_rejections
+        if (enabled && this._earlyEvents.length < MAX_EARLY_EVENTS) {
+            this._earlyEvents.push(event)
         }
     }
 
@@ -94,6 +112,13 @@ export class ExceptionObserver {
     }
 
     private _startCapturing = () => {
+        // Stop buffering before wrapping, otherwise later errors would be captured twice.
+        const earlyEvents = this._earlyEvents
+        this._earlyEvents = []
+        EARLY_EVENT_TYPES.forEach((type) => {
+            window?.removeEventListener(type, this._bufferEarlyEvent)
+        })
+
         if (!window || !this.isEnabled || !assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
             return
         }
@@ -117,6 +142,18 @@ export class ExceptionObserver {
             logger.error('failed to start', e)
             this._stopCapturing()
         }
+
+        const exceptions = this._instance.exceptions
+        if (!exceptions) {
+            return
+        }
+        earlyEvents.forEach((event) => {
+            try {
+                this.captureException(exceptions.buildProperties(event, { handled: false }))
+            } catch {
+                // Exception autocapture must never throw into customer code.
+            }
+        })
     }
 
     private _stopCapturing() {

@@ -328,6 +328,34 @@ describe('Exception Observer', () => {
         })
     })
 
+    it('captures errors from before the script loaded, across a mid-load restart, and later errors once', () => {
+        let finishLoading = () => {}
+        loadScriptMock.mockImplementation((_ph, _path, callback) => {
+            finishLoading = () => {
+                addErrorWrappingFlagToWindow()
+                callback()
+            }
+        })
+        exceptionObserver['_stopCapturing']()
+        beforeSendMock.mockClear()
+        posthog.config.capture_exceptions = true
+        exceptionObserver = new ExceptionObserver(posthog)
+        const throwEarly = (message: string) =>
+            window!.dispatchEvent(new ErrorEvent('error', { error: new Error(message) }))
+
+        throwEarly('before config')
+        exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: true } as FlagsResponse })
+        throwEarly('after config')
+        expect(beforeSendMock).not.toHaveBeenCalled()
+
+        finishLoading()
+        window!.onerror?.call(window, 'message', 'source', 0, 0, new Error('after load'))
+
+        const exceptions = beforeSendMock.mock.calls.map(([event]: any) => event.properties.$exception_list[0])
+        expect(exceptions.map((e: any) => e.value)).toEqual(['before config', 'after config', 'after load'])
+        expect(exceptions[0].mechanism.handled).toBe(false)
+    })
+
     describe('when no flags response', () => {
         it('cannot be started', () => {
             expect(exceptionObserver.isEnabled).toBe(false)
