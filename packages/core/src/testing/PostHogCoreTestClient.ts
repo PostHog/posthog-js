@@ -1,4 +1,4 @@
-import { PostHogCore } from '@/posthog-core'
+import { PostHogCoreWithLegacyFeatureFlags } from '@/posthog-core'
 import type { GetFlagsResult, JsonType, PostHogCoreOptions, PostHogFetchOptions, PostHogFetchResponse } from '@/types'
 
 const version = '2.0.0-alpha'
@@ -11,7 +11,7 @@ export interface PostHogCoreTestClientMocks {
   }
 }
 
-export class PostHogCoreTestClient extends PostHogCore {
+export class PostHogCoreTestClient extends PostHogCoreWithLegacyFeatureFlags {
   public _cachedDistinctId?: string
 
   constructor(

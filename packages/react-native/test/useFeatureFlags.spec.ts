@@ -7,16 +7,16 @@ import type { PostHog } from '../src/posthog-rn'
 describe('feature flag hooks', () => {
   it('does not reread all feature flags on an unrelated rerender', () => {
     const posthog = {
-      getFeatureFlags: vi.fn(() => ({ 'test-flag': true })),
+      getFeatureFlagDetails: vi.fn(() => ({ featureFlags: { 'test-flag': true } })),
       onFeatureFlags: vi.fn(() => vi.fn()),
     } as unknown as PostHog
 
     const { rerender } = renderHook(() => useFeatureFlags(posthog))
-    ;(posthog.getFeatureFlags as vi.Mock).mockClear()
+    ;(posthog.getFeatureFlagDetails as vi.Mock).mockClear()
 
     rerender()
 
-    expect(posthog.getFeatureFlags).not.toHaveBeenCalled()
+    expect(posthog.getFeatureFlagDetails).not.toHaveBeenCalled()
   })
 
   it('does not reread a feature flag on an unrelated rerender', () => {

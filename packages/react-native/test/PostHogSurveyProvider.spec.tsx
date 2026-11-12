@@ -93,7 +93,7 @@ const makeClient = (surveys: Survey[] = [popoverSurvey]) => {
     ready: vi.fn(() => Promise.resolve()),
     _onSurveysReady: vi.fn(() => Promise.resolve()),
     getSurveys: vi.fn(() => Promise.resolve(surveys)),
-    getFeatureFlags: vi.fn(() => ({})),
+    getFeatureFlagDetails: vi.fn(() => ({ featureFlags: {} })),
     onFeatureFlags: vi.fn(() => () => {}),
     getPersistedProperty: vi.fn((key: string) => storage.get(key)),
     setPersistedProperty: vi.fn((key: string, value: unknown) => storage.set(key, value)),
@@ -205,7 +205,7 @@ describe('PostHogSurveyProvider — autoPresentSurveys gating', () => {
     } as unknown as Survey
     mockClient = {
       ...makeClient([flaggedSurvey]),
-      getFeatureFlags: vi.fn(() => flags),
+      getFeatureFlagDetails: vi.fn(() => ({ featureFlags: flags })),
       onFeatureFlags: vi.fn((cb: any) => {
         flagCb = cb
         return () => {}
@@ -520,7 +520,7 @@ describe('PostHogSurveyProvider — popup delay', () => {
 
   it('starts a new delay after the pending survey loses and regains eligibility', async () => {
     mockClient = makeClient([{ ...delayedSurvey('pending', 10), targeting_flag_key: 'eligible' }])
-    mockClient.getFeatureFlags.mockReturnValue({ eligible: true })
+    mockClient.getFeatureFlagDetails.mockReturnValue({ featureFlags: { eligible: true } })
     const view = renderProvider()
     await loadSurveys()
     await advance(4000)
@@ -596,7 +596,7 @@ describe('PostHogSurveyProvider — popup delay', () => {
 
   it('cancels a pending survey when its targeting flag turns off', async () => {
     mockClient = makeClient([{ ...delayedSurvey('flagged', 5), targeting_flag_key: 'eligible' }])
-    mockClient.getFeatureFlags.mockReturnValue({ eligible: true })
+    mockClient.getFeatureFlagDetails.mockReturnValue({ featureFlags: { eligible: true } })
     const view = renderProvider()
     await loadSurveys()
     await advance(2000)
@@ -611,7 +611,7 @@ describe('PostHogSurveyProvider — popup delay', () => {
       { ...delayedSurvey('old', 1), targeting_flag_key: 'old-eligible' },
       delayedSurvey('replacement', 5),
     ])
-    mockClient.getFeatureFlags.mockReturnValue({ 'old-eligible': true })
+    mockClient.getFeatureFlagDetails.mockReturnValue({ featureFlags: { 'old-eligible': true } })
     const view = renderProvider(false)
     await loadSurveys()
     await advance(1000)
@@ -654,7 +654,7 @@ describe('PostHogSurveyProvider — popup delay', () => {
       { ...delayedSurvey('shown', 1), targeting_flag_key: 'eligible' },
       delayedSurvey('replacement', 5),
     ])
-    mockClient.getFeatureFlags.mockReturnValue({ eligible: true })
+    mockClient.getFeatureFlagDetails.mockReturnValue({ featureFlags: { eligible: true } })
     const view = renderProvider()
     await loadSurveys()
     await advance(1000)

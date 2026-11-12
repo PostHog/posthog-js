@@ -49,7 +49,7 @@ describe('survey open text placeholder', () => {
       ready: vi.fn(() => Promise.resolve()),
       _onSurveysReady: vi.fn(() => Promise.resolve()),
       getSurveys: vi.fn(),
-      getFeatureFlags: vi.fn(() => ({})),
+      getFeatureFlagDetails: vi.fn(() => ({ featureFlags: {} })),
       onFeatureFlags: vi.fn(() => () => {}),
       getSurveyDisplayLanguageOverride: vi.fn(),
       getCommonEventProperties: vi.fn(() => ({})),

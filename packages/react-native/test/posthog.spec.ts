@@ -683,9 +683,7 @@ describe('PostHog React Native', () => {
       // awaiting any preload. Specific storage.getItem call count is an
       // implementation detail and not asserted — only that sync behavior holds.
       expect(posthog.getFeatureFlag('flag')).toEqual(undefined)
-      posthog.overrideFeatureFlag({
-        flag: true,
-      })
+      posthog.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, { flag: true })
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
 
       // Shut down the first instance to persist the override and clear its
@@ -1538,7 +1536,7 @@ describe('PostHog React Native', () => {
         })
         await posthog.ready()
 
-        posthog.overrideFeatureFlag({ testFlag: true })
+        posthog.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, { testFlag: true })
         posthog.register({ customProp: 'value' })
 
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
@@ -2273,7 +2271,7 @@ describe('PostHog React Native', () => {
       expect(attrs['screen.name']).toEqual({ stringValue: 'checkout' })
     })
 
-    it('captureLog tags records with feature_flags from getFeatureFlags()', async () => {
+    it('captureLog tags records with feature_flags from the loaded flag values', async () => {
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
@@ -2282,9 +2280,9 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      // Stub the flag store directly — `getFeatureFlags()` is the same
+      // Stub the flag store directly — `getFeatureFlagValues()` is the same
       // primitive logs reads at capture time.
-      vi.spyOn(posthog, 'getFeatureFlags').mockReturnValue({
+      vi.spyOn(posthog as any, 'getFeatureFlagValues').mockReturnValue({
         'new-checkout': true,
         'experiment-ab': 'variant-a',
       } as any)
@@ -2311,7 +2309,7 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      vi.spyOn(posthog, 'getFeatureFlags').mockReturnValue(undefined)
+      vi.spyOn(posthog as any, 'getFeatureFlagValues').mockReturnValue(undefined)
 
       posthog.captureLog({ body: 'no-flags' })
 
@@ -2335,7 +2333,7 @@ describe('PostHog React Native', () => {
       // events, which emit `$active_feature_flags: []` for back-compat (the
       // shared helper preserves the empty array; only the caller's gate
       // differs).
-      vi.spyOn(posthog, 'getFeatureFlags').mockReturnValue({} as any)
+      vi.spyOn(posthog as any, 'getFeatureFlagValues').mockReturnValue({} as any)
 
       posthog.captureLog({ body: 'empty-flags' })
 

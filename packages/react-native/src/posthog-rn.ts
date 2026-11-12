@@ -45,6 +45,7 @@ import {
   PostHogAutocaptureOptions,
   PostHogCustomAppProperties,
   PostHogCustomStorage,
+  PostHogFeatureFlagsLoadContext,
   PostHogPushIdentityProvider,
   PostHogRageClickConfig,
   PostHogSessionReplayConfig,
@@ -576,7 +577,7 @@ export class PostHog extends PostHogCore {
       () => {
         // Pulled at capture time so each tag reflects state at the moment
         // the log was fired, not at flush.
-        const flags = this.getFeatureFlags()
+        const flags = this.getFeatureFlagValues()
         const flagKeys = flags ? Object.keys(flags) : undefined
         return {
           distinctId: this.getDistinctId() || undefined,
@@ -1642,30 +1643,6 @@ export class PostHog extends PostHogCore {
   }
 
   /**
-   * Gets the payload of a feature flag for the current user.
-   *
-   * Returns JsonType or undefined if not loaded yet or if there was a problem loading.
-   *
-   * {@label Feature flags}
-   *
-   * @deprecated Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
-   *
-   * @example
-   * ```js
-   * // get feature flag payload
-   * const payload = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')?.payload
-   * ```
-   *
-   * @public
-   *
-   * @param key The feature flag key
-   * @returns The feature flag payload or undefined if not loaded
-   */
-  getFeatureFlagPayload(key: string): JsonType | undefined {
-    return super.getFeatureFlagPayload(key)
-  }
-
-  /**
    * Reloads feature flags from the server.
    *
    * PostHog loads feature flags when instantiated and refreshes whenever methods are called that affect the flag.
@@ -1715,10 +1692,55 @@ export class PostHog extends PostHogCore {
     return super.reloadFeatureFlagsAsync()
   }
 
+  // A payload that isn't valid JSON reads as null rather than as its raw string.
+  protected decodeFeatureFlagPayload(payload: any): JsonType {
+    if (typeof payload !== 'string') {
+      return payload
+    }
+    try {
+      return JSON.parse(payload)
+    } catch {
+      this._logger.warn('Feature flag payload is not valid JSON; reading it as null.')
+      return null
+    }
+  }
+
+  /**
+   * Calls `callback` whenever feature flags load, including when a load fails.
+   *
+   * The callback receives the current flag values, keyed by flag key, and whether the latest
+   * load failed. After a failed load the values are the last known ones, which can be empty.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * const unsubscribe = posthog.onFeatureFlags((flags, { errorsLoading }) => {
+   *   if (errorsLoading) {
+   *     // flags hold the last known values
+   *   }
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param callback Called with the flag values and the load context
+   * @returns A function that stops further calls
+   */
+  onFeatureFlags(
+    callback: (flags: Record<string, boolean | string>, context: PostHogFeatureFlagsLoadContext) => void
+  ): () => void {
+    return this.on('featureflags', () => {
+      callback(this.getFeatureFlagDetails()?.featureFlags ?? {}, {
+        errorsLoading: this.didLatestFeatureFlagsLoadFail(),
+      })
+    })
+  }
+
   /**
    * Replaces (or merges into) the stored feature flags and payloads with locally supplied
    * values, exactly as if they had been returned by the flags endpoint: the values are
-   * persisted, `getFeatureFlag()`/`getFeatureFlagPayload()` read them back, and
+   * persisted, `getFeatureFlag()`/`getFeatureFlagResult()` read them back, and
    * `onFeatureFlags` listeners fire. Makes no network request.
    *
    * Intended for apps that evaluate flags outside the SDK (e.g. server-side local

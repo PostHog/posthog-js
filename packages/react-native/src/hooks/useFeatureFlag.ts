@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useOverridablePostHog } from './utils'
-import { JsonType, FeatureFlagValue } from '@posthog/core'
+import { FeatureFlagValue } from '@posthog/core'
 import { PostHog } from '../posthog-rn'
 
 export function useFeatureFlag(flag: string, client?: PostHog): FeatureFlagValue | undefined {
@@ -11,27 +11,6 @@ export function useFeatureFlag(flag: string, client?: PostHog): FeatureFlagValue
     setFeatureFlag(posthog?.getFeatureFlag(flag))
     return posthog?.onFeatureFlags(() => {
       setFeatureFlag(posthog.getFeatureFlag(flag))
-    })
-  }, [posthog, flag])
-
-  return featureFlag
-}
-
-export type FeatureFlagWithPayload = [FeatureFlagValue | undefined, JsonType | undefined]
-
-/**
- * Returns a flag's value and payload, and updates when flags reload.
- *
- * @deprecated Use `useFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
- */
-export function useFeatureFlagWithPayload(flag: string, client?: PostHog): FeatureFlagWithPayload {
-  const posthog = useOverridablePostHog(client, 'useFeatureFlagWithPayload')
-  const [featureFlag, setFeatureFlag] = useState<FeatureFlagWithPayload>([undefined, undefined])
-
-  useEffect(() => {
-    setFeatureFlag([posthog?.getFeatureFlag(flag), posthog?.getFeatureFlagResult(flag, { sendEvent: false })?.payload])
-    return posthog?.onFeatureFlags(() => {
-      setFeatureFlag([posthog.getFeatureFlag(flag), posthog.getFeatureFlagResult(flag, { sendEvent: false })?.payload])
     })
   }, [posthog, flag])
 

@@ -228,7 +228,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   protected getCommonEventProperties(): PostHogEventProperties {
-    const featureFlags = this.getFeatureFlags()
+    const featureFlags = this.getFeatureFlagValues()
 
     const featureVariantProperties: Record<string, FeatureFlagValue> = {}
     if (featureFlags) {
@@ -983,6 +983,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this.getPersistedProperty<PostHogFlagsStorageFormat>(PostHogPersistedProperty.FeatureFlagDetails)
   }
 
+  /** Whether the latest feature flag load failed. A quota-limited response is not a failure. */
+  protected didLatestFeatureFlagsLoadFail(): boolean {
+    return this.getStoredFlagDetails()?.requestError !== undefined
+  }
+
   protected isMinimalFlagCalledEventsEnabled(): boolean {
     return this.getStoredFlagDetails()?.minimalFlagCalledEvents === true
   }
@@ -1037,8 +1042,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
    * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
    */
+  /** Decodes a flag's stored payload for flag results. */
+  protected decodeFeatureFlagPayload(payload: any): JsonType {
+    return parsePayload(payload)
+  }
+
   getAllFeatureFlags(): FeatureFlagResult[] {
-    return flagDetailsToResults(this.getFeatureFlagDetails()?.flags ?? {})
+    return flagDetailsToResults(this.getFeatureFlagDetails()?.flags ?? {}, (payload) =>
+      this.decodeFeatureFlagPayload(payload)
+    )
   }
 
   protected _getFeatureFlagResult(
@@ -1138,7 +1150,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
 
     const rawPayload = featureFlag?.metadata?.payload
-    const payload = rawPayload !== undefined ? parsePayload(rawPayload) : null
+    const payload = rawPayload !== undefined ? this.decodeFeatureFlagPayload(rawPayload) : null
     return {
       key,
       enabled: getEnabledFromValue(flagValue),
@@ -1160,31 +1172,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return result?.variant ?? result?.enabled
   }
 
-  /**
-   * @deprecated Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
-   */
-  getFeatureFlagPayload(key: string): JsonType | undefined {
-    const result = this._getFeatureFlagResult(key, { missingFlagBehavior: 'getFeatureFlagPayload', sendEvent: false })
-    return result?.payload
-  }
-
-  /**
-   * Returns the payload of every loaded flag, keyed by flag key.
-   *
-   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
-   */
-  getFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
-    return this.getFeatureFlagDetails()?.featureFlagPayloads
-  }
-
-  /**
-   * Returns the value of every loaded flag, keyed by flag key.
-   *
-   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
-   */
-  getFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
-    // NOTE: We don't check for _initPromise here as the function is designed to be
-    // callable before the state being loaded anyways
+  /** The value of every loaded flag, keyed by flag key, with local overrides applied. */
+  protected getFeatureFlagValues(): PostHogFlagsResponse['featureFlags'] | undefined {
     return this.getFeatureFlagDetails()?.featureFlags
   }
 
@@ -1222,24 +1211,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   /**
-   * Returns the values and payloads of every loaded flag, as two maps keyed by flag key.
-   *
-   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
-   */
-  getFeatureFlagsAndPayloads(): {
-    flags: PostHogFlagsResponse['featureFlags'] | undefined
-    payloads: PostHogFlagsResponse['featureFlagPayloads'] | undefined
-  } {
-    const flags = this.getFeatureFlags()
-    const payloads = this.getFeatureFlagPayloads()
-
-    return {
-      flags,
-      payloads,
-    }
-  }
-
-  /**
    * Returns whether the current feature flag value is enabled. When no evaluation is available,
    * `defaultValue` is returned if provided; without one, the legacy missing-key behavior of
    * `getFeatureFlag()` applies.
@@ -1266,7 +1237,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     cb?: (err?: Error, flags?: PostHogFlagsResponse['featureFlags']) => void
   }): void {
     if (this.disableRemoteFeatureFlags && !this.disabled) {
-      this._initPromise.then(() => options?.cb?.(undefined, this.getFeatureFlags()))
+      this._initPromise.then(() => options?.cb?.(undefined, this.getFeatureFlagValues()))
       return
     }
     this.flagsAsync({ sendAnonDistinctId: true })
@@ -1290,45 +1261,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
     if (this.disableRemoteFeatureFlags && !this.disabled) {
       await this._initPromise
-      return this.getFeatureFlags()
+      return this.getFeatureFlagValues()
     }
     return (await this.flagsAsync({ sendAnonDistinctId: sendAnonDistinctId }))?.featureFlags
   }
 
   onFeatureFlags(cb: (flags: PostHogFlagsResponse['featureFlags']) => void): () => void {
     return this.on('featureflags', async () => {
-      const flags = this.getFeatureFlags()
+      const flags = this.getFeatureFlagValues()
       if (flags) {
         cb(flags)
       }
-    })
-  }
-
-  /**
-   * Calls `cb` with the flag's value whenever flags load.
-   *
-   * @deprecated Use `onFeatureFlags()` and read the flag with `getFeatureFlagResult()` in the callback.
-   */
-  onFeatureFlag(key: string, cb: (value: FeatureFlagValue) => void): () => void {
-    return this.on('featureflags', async () => {
-      const flagResponse = this.getFeatureFlag(key)
-      if (flagResponse !== undefined) {
-        cb(flagResponse)
-      }
-    })
-  }
-
-  /**
-   * Overrides the values of the given flags locally until cleared with `null`.
-   *
-   * @deprecated Use `updateFlags()` instead. To keep the values from being replaced by the next flags load, also set `disableRemoteFeatureFlags`.
-   */
-  async overrideFeatureFlag(flags: PostHogFlagsResponse['featureFlags'] | null): Promise<void> {
-    this.wrap(() => {
-      if (flags === null) {
-        return this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, null)
-      }
-      return this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, flags)
     })
   }
 
@@ -1823,5 +1766,85 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
 
     return result
+  }
+}
+
+/**
+ * `PostHogCore` plus the feature flag getters that `getFeatureFlagResult()`,
+ * `getAllFeatureFlags()` and `updateFlags()` replace. SDKs that still ship them extend this class.
+ */
+export abstract class PostHogCoreWithLegacyFeatureFlags extends PostHogCore {
+  /**
+   * @deprecated Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
+   */
+  getFeatureFlagPayload(key: string): JsonType | undefined {
+    const result = this._getFeatureFlagResult(key, { missingFlagBehavior: 'getFeatureFlagPayload', sendEvent: false })
+    return result?.payload
+  }
+
+  /**
+   * Returns the payload of every loaded flag, keyed by flag key.
+   *
+   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
+   */
+  getFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
+    return this.getFeatureFlagDetails()?.featureFlagPayloads
+  }
+
+  /**
+   * Returns the value of every loaded flag, keyed by flag key.
+   *
+   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
+   */
+  getFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
+    // NOTE: We don't check for _initPromise here as the function is designed to be
+    // callable before the state being loaded anyways
+    return this.getFeatureFlagDetails()?.featureFlags
+  }
+
+  /**
+   * Returns the values and payloads of every loaded flag, as two maps keyed by flag key.
+   *
+   * @deprecated Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
+   */
+  getFeatureFlagsAndPayloads(): {
+    flags: PostHogFlagsResponse['featureFlags'] | undefined
+    payloads: PostHogFlagsResponse['featureFlagPayloads'] | undefined
+  } {
+    const flags = this.getFeatureFlags()
+    const payloads = this.getFeatureFlagPayloads()
+
+    return {
+      flags,
+      payloads,
+    }
+  }
+
+  /**
+   * Calls `cb` with the flag's value whenever flags load.
+   *
+   * @deprecated Use `onFeatureFlags()` and read the flag with `getFeatureFlagResult()` in the callback.
+   */
+  onFeatureFlag(key: string, cb: (value: FeatureFlagValue) => void): () => void {
+    return this.on('featureflags', async () => {
+      const flagResponse = this.getFeatureFlag(key)
+      if (flagResponse !== undefined) {
+        cb(flagResponse)
+      }
+    })
+  }
+
+  /**
+   * Overrides the values of the given flags locally until cleared with `null`.
+   *
+   * @deprecated Use `updateFlags()` instead. To keep the values from being replaced by the next flags load, also set `disableRemoteFeatureFlags`.
+   */
+  async overrideFeatureFlag(flags: PostHogFlagsResponse['featureFlags'] | null): Promise<void> {
+    this.wrap(() => {
+      if (flags === null) {
+        return this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, null)
+      }
+      return this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, flags)
+    })
   }
 }

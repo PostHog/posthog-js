@@ -3,6 +3,12 @@ export type PostHogAutocaptureNavigationTrackerOptions = {
   routeToProperties?: (name: string, params: any) => Record<string, any>
 }
 
+/** Passed to `onFeatureFlags` listeners with each feature flag load. */
+export type PostHogFeatureFlagsLoadContext = {
+  /** `true` if the latest feature flag load failed. A quota-limited response is not a failure. */
+  errorsLoading: boolean
+}
+
 export type PostHogRageClickConfig = {
   /**
    * Enable or disable rage click (rage tap) detection.

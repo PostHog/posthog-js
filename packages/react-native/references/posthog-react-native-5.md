@@ -50,17 +50,11 @@ tableOfContents:
   - value: "Get feature flag"
     url: get-feature-flag
     depth: 0
-  - value: "Get feature flag payload"
-    url: get-feature-flag-payload
-    depth: 0
   - value: "Get feature flag result"
     url: get-feature-flag-result
     depth: 0
   - value: "Get feature flags"
     url: get-feature-flags
-    depth: 0
-  - value: "Get feature flags and payloads"
-    url: get-feature-flags-and-payloads
     depth: 0
   - value: "Get session ID"
     url: get-session-id
@@ -169,7 +163,7 @@ import { PostHogProvider } from 'posthog-react-native'
 
 export default function App() {
   return (
-    <PostHogProvider projectToken="<ph_project_token>" options={{ host: 'https://us.i.posthog.com' }}>
+    <PostHogProvider apiKey="<ph_project_api_key>" options={{ host: 'https://us.i.posthog.com' }}>
       <YourApp />
     </PostHogProvider>
   )
@@ -921,60 +915,6 @@ const value = posthog.getFeatureFlag('key-for-your-boolean-flag')
 
 `FeatureFlagValue` \| `undefined`
 
-## Get feature flag payload
-
-### `PostHog.getFeatureFlagPayload`
-
-> **getFeatureFlagPayload**(`key`): `JsonType` \| `undefined`
-
-Gets the payload of a feature flag for the current user.
-
-Returns JsonType or undefined if not loaded yet or if there was a problem loading.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `key` | `string` | The feature flag key |
-
-#### Returns
-
-`JsonType` \| `undefined`
-
-The feature flag payload or undefined if not loaded
-
-#### Deprecated
-
-Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
-
-#### Example
-
-```js
-// get feature flag payload
-const payload = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')?.payload
-```
-
-### `useFeatureFlagWithPayload`
-
-> **useFeatureFlagWithPayload**(`flag`, `client?`): `FeatureFlagWithPayload`
-
-Returns a flag's value and payload, and updates when flags reload.
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `flag` | `string` |
-| `client?` | `PostHog` |
-
-#### Returns
-
-`FeatureFlagWithPayload`
-
-#### Deprecated
-
-Use `useFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
-
 ## Get feature flag result
 
 ### `PostHog.getFeatureFlagResult`
@@ -1016,26 +956,9 @@ off result; `undefined` means no evaluation is available for the key.
 
 > **getAllFeatureFlags**(): `FeatureFlagResult`[]
 
-Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
-the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
-
 #### Returns
 
 `FeatureFlagResult`[]
-
-### `PostHog.getFeatureFlags`
-
-> **getFeatureFlags**(): \{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `undefined`
-
-Returns the value of every loaded flag, keyed by flag key.
-
-#### Returns
-
-\{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `undefined`
-
-#### Deprecated
-
-Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
 
 ### `useFeatureFlags`
 
@@ -1050,27 +973,6 @@ Use `getAllFeatureFlags()` instead, which returns each flag's value and payload 
 #### Returns
 
 \{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `undefined`
-
-## Get feature flags and payloads
-
-### `PostHog.getFeatureFlagsAndPayloads`
-
-> **getFeatureFlagsAndPayloads**(): `object`
-
-Returns the values and payloads of every loaded flag, as two maps keyed by flag key.
-
-#### Returns
-
-`object`
-
-| Name | Type |
-| ------ | ------ |
-| `flags` | \{\[`key`: `string`\]: `FeatureFlagValue`; \} \| `undefined` |
-| `payloads` | \{\[`key`: `string`\]: `JsonType`; \} \| `undefined` |
-
-#### Deprecated
-
-Use `getAllFeatureFlags()` instead, which returns each flag's value and payload together.
 
 ## Get session ID
 
@@ -1289,17 +1191,34 @@ const isActive = await posthog.isSessionReplayActive()
 
 ### `PostHog.onFeatureFlags`
 
-> **onFeatureFlags**(`cb`): () => `void`
+> **onFeatureFlags**(`callback`): () => `void`
+
+Calls `callback` whenever feature flags load, including when a load fails.
+
+The callback receives the current flag values, keyed by flag key, and whether the latest
+load failed. After a failed load the values are the last known ones, which can be empty.
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `cb` | (`flags`) => `void` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `callback` | (`flags`, `context`) => `void` | Called with the flag values and the load context |
 
 #### Returns
 
+A function that stops further calls
+
 () => `void`
+
+#### Example
+
+```js
+const unsubscribe = posthog.onFeatureFlags((flags, { errorsLoading }) => {
+  if (errorsLoading) {
+    // flags hold the last known values
+  }
+})
+```
 
 ## Opt in
 
@@ -1629,13 +1548,14 @@ posthog.screen('dashboard', {
 
 ### `useNavigationTracker`
 
-> `const` **useNavigationTracker**: (`options?`, `client?`) => `void`
+> `const` **useNavigationTracker**: (`options?`, `navigationRef?`, `client?`) => `void`
 
 #### Parameters
 
 | Parameter | Type |
 | ------ | ------ |
 | `options?` | `PostHogAutocaptureNavigationTrackerOptions` |
+| `navigationRef?` | `PostHogNavigationRef` |
 | `client?` | `PostHog` |
 
 #### Returns
@@ -1819,7 +1739,7 @@ cancel pending starts. Use `isSessionReplayActive()` to check the current record
 
 Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
 
-Requires `@posthog/react-native-plugin`.
+Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
 
 #### Parameters
 
@@ -1853,7 +1773,7 @@ Stops the current session recording if one is in progress.
 
 Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
 
-Requires `@posthog/react-native-plugin`.
+Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
 
 #### Returns
 
@@ -2188,7 +2108,7 @@ Not supported on web or macOS.
 
 Replaces (or merges into) the stored feature flags and payloads with locally supplied
 values, exactly as if they had been returned by the flags endpoint: the values are
-persisted, `getFeatureFlag()`/`getFeatureFlagPayload()` read them back, and
+persisted, `getFeatureFlag()`/`getFeatureFlagResult()` read them back, and
 `onFeatureFlags` listeners fire. Makes no network request.
 
 Intended for apps that evaluate flags outside the SDK (e.g. server-side local
@@ -2473,10 +2393,6 @@ Result of evaluating a feature flag, including both the flag value and its paylo
 
 > **FeatureFlagValue** = `string` \| `boolean`
 
-### `FeatureFlagWithPayload`
-
-> **FeatureFlagWithPayload** = \[`FeatureFlagValue` \| `undefined`, `JsonType` \| `undefined`\]
-
 ### `IsFeatureEnabledOptions`
 
 > **IsFeatureEnabledOptions** = `FeatureFlagResultOptions` & `object`
@@ -2739,12 +2655,13 @@ const user: RequiredUser = {
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="capturescreens"></a> `captureScreens?` | `boolean` | Capture the screen name (or route name) and properties Only used for expo-router, @react-navigation/native and react-native-navigation For react-native-navigation, you need to call initReactNativeNavigation before using this option See example: https://posthog.com/docs/libraries/react-native#with-react-native-navigation-and-autocapture For @react-navigation/native v6 and below, you need to wrap the PostHogProvider within the NavigationContainer See example: https://posthog.com/docs/libraries/react-native#with-react-navigationnative-and-autocapture For @react-navigation/native v7 and above, because of a library change, you'll need to capture the screens manually and disable this option You can use the onStateChange callback from the NavigationContainer to capture the screens automatically using the screen capture method You can use the 'usePostHog()' hook or your own posthog instance to capture the screens Since captureScreens is disabled, the navigation mutation object is also ignored See example: https://reactnavigation.org/docs/screen-tracking/ and https://posthog.com/docs/libraries/react-native#manually-capturing-screen-capture-events For expo-router, expo-router uses @react-navigation/native, but does not expose the NavigationContainer, you'll need to capture the screens manually and disable this option expo-router always has access to a URL, you can use the URL to capture the screens automatically using the screen capture method You can use the 'usePostHog()' hook or your own posthog instance to capture the screens Since captureScreens is disabled, the navigation mutation object is also ignored See example: https://docs.expo.dev/router/reference/screen-tracking/ and https://posthog.com/docs/libraries/react-native#manually-capturing-screen-capture-events **Default** `true` |
+| <a id="capturescreens"></a> `captureScreens?` | `boolean` | Capture the screen name (or route name) and properties Only used for expo-router, @react-navigation/native and react-native-navigation For react-native-navigation, you need to call initReactNativeNavigation before using this option See example: https://posthog.com/docs/libraries/react-native#with-react-native-navigation-and-autocapture For @react-navigation/native v6 and below, you need to wrap the PostHogProvider within the NavigationContainer See example: https://posthog.com/docs/libraries/react-native#with-react-navigationnative-and-autocapture For @react-navigation/native v7 and above, because of a library change, you'll need to capture the screens manually and disable this option You can use the onStateChange callback from the NavigationContainer to capture the screens automatically using the screen capture method You can use the 'usePostHog()' hook or your own posthog instance to capture the screens Since captureScreens is disabled, you don't need to pass the navigationRef, the navigation mutation object is also ignored See example: https://reactnavigation.org/docs/screen-tracking/ and https://posthog.com/docs/libraries/react-native#manually-capturing-screen-capture-events For expo-router, expo-router uses @react-navigation/native, but does not expose the NavigationContainer, you'll need to capture the screens manually and disable this option expo-router always has access to a URL, you can use the URL to capture the screens automatically using the screen capture method You can use the 'usePostHog()' hook or your own posthog instance to capture the screens Since captureScreens is disabled, you don't need to pass the navigationRef, the navigation mutation object is also ignored See example: https://docs.expo.dev/router/reference/screen-tracking/ and https://posthog.com/docs/libraries/react-native#manually-capturing-screen-capture-events **Default** `true` |
 | <a id="capturetouches"></a> `captureTouches?` | `boolean` | Enable autocapture of touch events. On React Native Web this also captures `click` events — mouse, trackpad, keyboard activation and programmatic clicks — emitted with `$event_type: 'click'`, since browsers fire `touchend` only for touch input. **Default** `false` |
 | <a id="customlabelprop"></a> `customLabelProp?` | `string` | Custom prop name used to label elements for autocapture **Default** `'ph-label'` |
 | <a id="ignorelabels"></a> `ignoreLabels?` | `string`[] | List of element labels to ignore during autocapture **Default** `[]` |
 | <a id="maxelementscaptured"></a> `maxElementsCaptured?` | `number` | Maximum number of elements to capture in the component tree hierarchy **Default** `20` |
 | <a id="navigation"></a> `navigation?` | `PostHogAutocaptureNavigationTrackerOptions` | Used for mutating the screen name and properties Only used if captureScreens is true **Default** `Default to the route name and params` |
+| <a id="navigationref"></a> ~~`navigationRef?`~~ | `PostHogNavigationRef` | If you create a navigation ref with createNavigationContainerRef, you need to pass the navigation ref Only used for expo-router and @react-navigation/native if captureScreens is true **Deprecated** this is deprecated since it didn't work as expected, check out the `captureScreens` comments for capturing screen views semi-automatically |
 | <a id="nocaptureprop"></a> `noCaptureProp?` | `string` | Prop name used to prevent autocapture on an element and its children **Default** `'ph-no-capture'` |
 | <a id="propstocapture"></a> `propsToCapture?` | `string`[] | List of prop names to capture from elements **Default** `['style', 'testID', 'accessibilityLabel', 'ph-label', 'children']` |
 
@@ -2764,6 +2681,10 @@ const user: RequiredUser = {
 ### `PostHogCoreOptions`
 
 > **PostHogCoreOptions** = `object`
+
+#### Extended by
+
+- `PostHogOptions`
 
 #### Properties
 
@@ -2879,6 +2800,18 @@ const user: RequiredUser = {
 
 These are the fields we care about from PostHogFlagsResponse for feature flags.
 
+### `PostHogFeatureFlagsLoadContext`
+
+> **PostHogFeatureFlagsLoadContext** = `object`
+
+Passed to `onFeatureFlags` listeners with each feature flag load.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="errorsloading"></a> `errorsLoading` | `boolean` | `true` if the latest feature flag load failed. A quota-limited response is not a failure. |
+
 ### `PostHogFlagsResponse`
 
 > **PostHogFlagsResponse** = `Omit`\<`PostHogRemoteConfig`, `"hasFeatureFlags"`\> & `object`
@@ -2941,17 +2874,40 @@ Props for the PostHogMaskView component.
 | ------ | ------ | ------ | ------ |
 | <a id="property-children"></a> `children` | `ReactNode` | The child components to mask from PostHog capture | `ViewProps.children` |
 
+### `PostHogNavigationRef`
+
+> **PostHogNavigationRef** = `object`
+
+#### Deprecated
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="current"></a> ~~`current?`~~ | `PostHogNavigationRef` \| `any` |
+| <a id="isready"></a> ~~`isReady`~~ | () => `boolean` |
+
+#### Methods
+
+##### ~~getCurrentRoute()~~
+
+> **getCurrentRoute**(): `any`
+
+###### Returns
+
+`any`
+
 ### `PostHogOptions`
 
-- `Omit`\<`PostHogCoreOptions`, `"evaluationEnvironments"` \| `"disableRemoteConfig"`\>
+- `PostHogCoreOptions`
 
 #### Properties
 
 | Property | Type | Description | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-addtracingheaders"></a> `addTracingHeaders?` | `string`[] | A list of hostnames for which to inject PostHog tracing headers (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests. Use this to link requests made from your app to session replays and LLM traces in PostHog. When set, the global `fetch` is patched on initialization and the headers are added to requests whose hostname matches one of the entries. Requires the SDK to wire up `patchFetchForTracingHeaders` against this option (currently supported in posthog-react-native). | `Omit.addTracingHeaders` |
-| <a id="property-before_send"></a> `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. | `Omit.before_send` |
-| <a id="property-bootstrap"></a> `bootstrap?` | `object` | Option to bootstrap the library with given distinctId and feature flags | `Omit.bootstrap` |
+| <a id="property-addtracingheaders"></a> `addTracingHeaders?` | `string`[] | A list of hostnames for which to inject PostHog tracing headers (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests. Use this to link requests made from your app to session replays and LLM traces in PostHog. When set, the global `fetch` is patched on initialization and the headers are added to requests whose hostname matches one of the entries. Requires the SDK to wire up `patchFetchForTracingHeaders` against this option (currently supported in posthog-react-native). | `PostHogCoreOptions.addTracingHeaders` |
+| <a id="property-before_send"></a> `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. | `PostHogCoreOptions.before_send` |
+| <a id="property-bootstrap"></a> `bootstrap?` | `object` | Option to bootstrap the library with given distinctId and feature flags | `PostHogCoreOptions.bootstrap` |
 | `bootstrap.distinctId?` | `string` | - | - |
 | `bootstrap.featureFlagPayloads?` | `Record`\<`string`, `JsonType`\> | - | - |
 | `bootstrap.featureFlags?` | `Record`\<`string`, `FeatureFlagValue`\> | - | - |
@@ -2961,39 +2917,41 @@ Props for the PostHogMaskView component.
 | <a id="property-capturepushnotificationsubscriptions"></a> `capturePushNotificationSubscriptions?` | `boolean` | Whether to automatically register this device's push token so PostHog Workflows can target it. Requires `@posthog/react-native-plugin`. Your app still owns permission — PostHog only observes the token the OS hands back, and never sees later refreshes. Forward those to PostHog.registerPushNotificationToken yourself. Not supported on web or macOS. **Default** `true` | - |
 | <a id="property-customappproperties"></a> `customAppProperties?` | `PostHogCustomAppProperties` \| ((`properties`) => `PostHogCustomAppProperties`) | Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated | - |
 | <a id="property-customstorage"></a> `customStorage?` | `PostHogCustomStorage` | Allows you to provide a custom asynchronous storage such as async-storage, expo-file-system or a synchronous storage such as mmkv. If not provided, PostHog will attempt to use the best available storage via optional peer dependencies (async-storage, expo-file-system). If `persistence` is set to 'memory', this option will be ignored. | - |
-| <a id="property-defaultoptin"></a> `defaultOptIn?` | `boolean` | If set to false the SDK will not track until the `optIn` function is called. **Default** `true` | `Omit.defaultOptIn` |
-| <a id="property-disable_capture_url_hashes"></a> `disable_capture_url_hashes?` | `boolean` | Whether to strip URL fragments (`#...`) from automatically captured URL fields. Disabled by default for backwards compatibility. Set to `true` to strip hashes from: - `$current_url` on automatically captured browser events, including `$pageview` - `$initial_current_url` - `$session_entry_url` - `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture - Next.js Pages Router `$pageview` `$current_url` - web vitals `$current_url` - logs `url.full` - conversations `current_url` and `request_url` - session replay rrweb meta/custom-event `href` URLs - heatmap data URLs If your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change. If you want to capture hashes selectively, leave this as `false` and use `before_send` to remove sensitive hash values before events are sent. **Default** `false` | `Omit.disable_capture_url_hashes` |
-| <a id="property-disablecompression"></a> `disableCompression?` | `boolean` | Whether to disable GZIP compression **Default** `false` | `Omit.disableCompression` |
-| <a id="property-disabled"></a> `disabled?` | `boolean` | If set to true the SDK is essentially disabled (useful for local environments where you don't want to track anything) **Default** `false` | `Omit.disabled` |
-| <a id="property-disablegeoip"></a> `disableGeoip?` | `boolean` | Whether to disable GeoIP lookups **Default** `false` | `Omit.disableGeoip` |
-| <a id="property-disableremotefeatureflags"></a> `disableRemoteFeatureFlags?` | `boolean` | Advanced: whether to disable fetching and evaluating feature flags from PostHog entirely. When set to true, `reloadFeatureFlags()` and the reloads triggered by `identify()`, `group()`, `setPersonPropertiesForFlags()` and `reset()` become no-ops, and any request to the flags endpoint that still goes out (e.g. to fetch remote config or surveys) carries `disable_flags: true` so the server skips flag evaluation. Flag values must be supplied via the `bootstrap` option or `updateFlags()` instead; `getFeatureFlag()` and related methods keep working against those values. Until `updateFlags()` runs, reads return their not-loaded defaults, so use `bootstrap` for any flags needed at startup. Equivalent to the web SDK's `advanced_disable_feature_flags`. Note: surveys gated on feature flags will not evaluate unless the survey targeting flags are also provided via `updateFlags()`. This option cannot be toggled at runtime. `posthog-node` inherits this option but does not implement it (no-op). **Default** `false` | `Omit.disableRemoteFeatureFlags` |
-| <a id="property-disablesurveys"></a> `disableSurveys?` | `boolean` | Whether to load surveys when initialized or not Requires the `PostHogSurveyProvider` to be used **Default** `false` | `Omit.disableSurveys` |
+| <a id="property-defaultoptin"></a> `defaultOptIn?` | `boolean` | If set to false the SDK will not track until the `optIn` function is called. **Default** `true` | `PostHogCoreOptions.defaultOptIn` |
+| <a id="property-disable_capture_url_hashes"></a> `disable_capture_url_hashes?` | `boolean` | Whether to strip URL fragments (`#...`) from automatically captured URL fields. Disabled by default for backwards compatibility. Set to `true` to strip hashes from: - `$current_url` on automatically captured browser events, including `$pageview` - `$initial_current_url` - `$session_entry_url` - `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture - Next.js Pages Router `$pageview` `$current_url` - web vitals `$current_url` - logs `url.full` - conversations `current_url` and `request_url` - session replay rrweb meta/custom-event `href` URLs - heatmap data URLs If your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change. If you want to capture hashes selectively, leave this as `false` and use `before_send` to remove sensitive hash values before events are sent. **Default** `false` | `PostHogCoreOptions.disable_capture_url_hashes` |
+| <a id="property-disablecompression"></a> `disableCompression?` | `boolean` | Whether to disable GZIP compression **Default** `false` | `PostHogCoreOptions.disableCompression` |
+| <a id="property-disabled"></a> `disabled?` | `boolean` | If set to true the SDK is essentially disabled (useful for local environments where you don't want to track anything) **Default** `false` | `PostHogCoreOptions.disabled` |
+| <a id="property-disablegeoip"></a> `disableGeoip?` | `boolean` | Whether to disable GeoIP lookups **Default** `false` | `PostHogCoreOptions.disableGeoip` |
+| <a id="property-disableremoteconfig"></a> ~~`disableRemoteConfig?`~~ | `boolean` | Whether to load remote config when initialized or not **Deprecated** Remote config is now always loaded and this option is a no-op. It will be removed in a future version. **Default** `false` | `PostHogCoreOptions.disableRemoteConfig` |
+| <a id="property-disableremotefeatureflags"></a> `disableRemoteFeatureFlags?` | `boolean` | Advanced: whether to disable fetching and evaluating feature flags from PostHog entirely. When set to true, `reloadFeatureFlags()` and the reloads triggered by `identify()`, `group()`, `setPersonPropertiesForFlags()` and `reset()` become no-ops, and any request to the flags endpoint that still goes out (e.g. to fetch remote config or surveys) carries `disable_flags: true` so the server skips flag evaluation. Flag values must be supplied via the `bootstrap` option or `updateFlags()` instead; `getFeatureFlag()` and related methods keep working against those values. Until `updateFlags()` runs, reads return their not-loaded defaults, so use `bootstrap` for any flags needed at startup. Equivalent to the web SDK's `advanced_disable_feature_flags`. Note: surveys gated on feature flags will not evaluate unless the survey targeting flags are also provided via `updateFlags()`. This option cannot be toggled at runtime. `posthog-node` inherits this option but does not implement it (no-op). **Default** `false` | `PostHogCoreOptions.disableRemoteFeatureFlags` |
+| <a id="property-disablesurveys"></a> `disableSurveys?` | `boolean` | Whether to load surveys when initialized or not Requires the `PostHogSurveyProvider` to be used **Default** `false` | `PostHogCoreOptions.disableSurveys` |
 | <a id="property-enablepersistsessionidacrossrestart"></a> `enablePersistSessionIdAcrossRestart?` | `boolean` | If enabled, the session id ($session_id) will be persisted across app restarts. This is an option for back compatibility, so your current data isn't skewed with the new version of the SDK. If this is false, the session id will be always reset on app restart. **Default** `false` | - |
 | <a id="property-enablesessionreplay"></a> `enableSessionReplay?` | `boolean` | Enable Recording of Session Replays for Android and iOS Requires Record user sessions to be enabled in the PostHog Project Settings This option is read once, at setup. To record only some sessions, either gate recording from your project settings (sampling, a linked flag, or event triggers), or leave this option off and drive the recorder from your app with `startSessionRecording()` and `stopSessionRecording()`. **Default** `false` | - |
 | <a id="property-errortracking"></a> `errorTracking?` | `ErrorTrackingOptions` | Error Tracking Configuration | - |
-| <a id="property-evaluationcontexts"></a> `evaluationContexts?` | readonly `string`[] | Evaluation contexts for feature flags. When set, only feature flags that have at least one matching evaluation tag will be evaluated for this SDK instance. Feature flags with no evaluation tags will always be evaluated. Examples: ['production', 'web', 'mobile'] **Default** `undefined` | `Omit.evaluationContexts` |
-| <a id="property-featureflagsrequestmaxretries"></a> `featureFlagsRequestMaxRetries?` | `number` | How many times feature flag requests retry after a transient network error. Set to 0 to disable feature flag request retries. **Default** `1` | `Omit.featureFlagsRequestMaxRetries` |
-| <a id="property-featureflagsrequesttimeoutms"></a> `featureFlagsRequestTimeoutMs?` | `number` | Timeout in milliseconds for feature flag calls **Default** `10000 for stateful clients, 3000 for stateless` | `Omit.featureFlagsRequestTimeoutMs` |
-| <a id="property-fetchretrycount"></a> `fetchRetryCount?` | `number` | How many times we will retry HTTP requests **Default** `3` | `Omit.fetchRetryCount` |
-| <a id="property-fetchretrydelay"></a> `fetchRetryDelay?` | `number` | The delay between HTTP request retries in milliseconds **Default** `3000` | `Omit.fetchRetryDelay` |
-| <a id="property-flushat"></a> `flushAt?` | `number` | The number of events to queue before sending to PostHog (flushing) **Default** `20` | `Omit.flushAt` |
-| <a id="property-flushinterval"></a> `flushInterval?` | `number` | The interval in milliseconds between periodic flushes **Default** `10000` | `Omit.flushInterval` |
-| <a id="property-historicalmigration"></a> `historicalMigration?` | `boolean` | Special flag to indicate ingested data is for a historical migration **Default** `false` | `Omit.historicalMigration` |
-| <a id="property-host"></a> `host?` | `string` | PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com' **Default** `'https://us.i.posthog.com'` | `Omit.host` |
+| <a id="property-evaluationcontexts"></a> `evaluationContexts?` | readonly `string`[] | Evaluation contexts for feature flags. When set, only feature flags that have at least one matching evaluation tag will be evaluated for this SDK instance. Feature flags with no evaluation tags will always be evaluated. Examples: ['production', 'web', 'mobile'] **Default** `undefined` | `PostHogCoreOptions.evaluationContexts` |
+| <a id="property-evaluationenvironments"></a> ~~`evaluationEnvironments?`~~ | readonly `string`[] | Evaluation environments for feature flags. **Deprecated** Use evaluationContexts instead. This property will be removed in a future version. | `PostHogCoreOptions.evaluationEnvironments` |
+| <a id="property-featureflagsrequestmaxretries"></a> `featureFlagsRequestMaxRetries?` | `number` | How many times feature flag requests retry after a transient network error. Set to 0 to disable feature flag request retries. **Default** `1` | `PostHogCoreOptions.featureFlagsRequestMaxRetries` |
+| <a id="property-featureflagsrequesttimeoutms"></a> `featureFlagsRequestTimeoutMs?` | `number` | Timeout in milliseconds for feature flag calls **Default** `10000 for stateful clients, 3000 for stateless` | `PostHogCoreOptions.featureFlagsRequestTimeoutMs` |
+| <a id="property-fetchretrycount"></a> `fetchRetryCount?` | `number` | How many times we will retry HTTP requests **Default** `3` | `PostHogCoreOptions.fetchRetryCount` |
+| <a id="property-fetchretrydelay"></a> `fetchRetryDelay?` | `number` | The delay between HTTP request retries in milliseconds **Default** `3000` | `PostHogCoreOptions.fetchRetryDelay` |
+| <a id="property-flushat"></a> `flushAt?` | `number` | The number of events to queue before sending to PostHog (flushing) **Default** `20` | `PostHogCoreOptions.flushAt` |
+| <a id="property-flushinterval"></a> `flushInterval?` | `number` | The interval in milliseconds between periodic flushes **Default** `10000` | `PostHogCoreOptions.flushInterval` |
+| <a id="property-historicalmigration"></a> `historicalMigration?` | `boolean` | Special flag to indicate ingested data is for a historical migration **Default** `false` | `PostHogCoreOptions.historicalMigration` |
+| <a id="property-host"></a> `host?` | `string` | PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com' **Default** `'https://us.i.posthog.com'` | `PostHogCoreOptions.host` |
 | <a id="property-logs"></a> `logs?` | `PostHogLogsConfig` | Logs feature configuration. Enables structured log capture via `posthog.captureLog(...)` or `posthog.logger.info(...)`. Records ship to PostHog's logs product (`/i/v1/logs`) in OTLP format, batched on a timer, AppState change, buffer fill, or manual `flushLogs()`. Capture is **unconditional** — calling the API ships records as long as the SDK is initialized and the user hasn't opted out. The only blockers are `optedOut`, missing/empty `body`, and missing API key. All fields below are optional; per-SDK defaults apply (mobile defaults are tuned for cellular bandwidth and battery, ~50 logs/sec ceiling). **Examples** **Minimal — just service tagging, defaults for everything else** `new PostHog(key, { logs: { serviceName: 'my-app', environment: 'production' } })` **Tune for higher-volume logging** `new PostHog(key, { logs: { serviceName: 'my-app', rateCap: { maxLogs: 5000, windowMs: 60000 }, maxBufferSize: 500, beforeSend: (r) => r.body.includes('secret') ? null : r, } })` | - |
-| <a id="property-maxbatchsize"></a> `maxBatchSize?` | `number` | The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`) **Default** `100` | `Omit.maxBatchSize` |
-| <a id="property-maxqueuesize"></a> `maxQueueSize?` | `number` | The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`) **Default** `1000` | `Omit.maxQueueSize` |
+| <a id="property-maxbatchsize"></a> `maxBatchSize?` | `number` | The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`) **Default** `100` | `PostHogCoreOptions.maxBatchSize` |
+| <a id="property-maxqueuesize"></a> `maxQueueSize?` | `number` | The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`) **Default** `1000` | `PostHogCoreOptions.maxQueueSize` |
 | <a id="property-overridedisplaylanguage"></a> `overrideDisplayLanguage?` | `string` \| `null` | Overrides the language used when rendering translated survey copy. When unset, the SDK falls back to the persisted person property `language` and then the device locale. | - |
 | <a id="property-persistence"></a> `persistence?` | `"memory"` \| `"file"` | Allows you to provide the storage type. 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage. **Default** `'file'` | - |
-| <a id="property-personprofiles"></a> `personProfiles?` | `"always"` \| `"identified_only"` \| `"never"` | Determines when to create Person Profiles for users. - 'always': Always create a person profile for every user (anonymous and identified). - 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group(). Events captured before identification will NOT have person profiles and will be anonymous events. - 'never': Never create person profiles. identify(), alias(), and group() will be no-ops. **Default** `'identified_only'` **Examples** `// Only create profiles when users are identified (recommended for most apps) const posthog = new PostHog('<api_key>', { personProfiles: 'identified_only', }) // Later when user logs in: posthog.identify('user-123', { email: 'user@example.com' })` `// Always create profiles (for apps where you want to track all users) const posthog = new PostHog('<api_key>', { personProfiles: 'always', })` `// Never create profiles (anonymous analytics only) const posthog = new PostHog('<api_key>', { personProfiles: 'never', })` | `Omit.personProfiles` |
-| <a id="property-preloadfeatureflags"></a> `preloadFeatureFlags?` | `boolean` | Whether to load feature flags when initialized or not **Default** `true` | `Omit.preloadFeatureFlags` |
+| <a id="property-personprofiles"></a> `personProfiles?` | `"always"` \| `"identified_only"` \| `"never"` | Determines when to create Person Profiles for users. - 'always': Always create a person profile for every user (anonymous and identified). - 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group(). Events captured before identification will NOT have person profiles and will be anonymous events. - 'never': Never create person profiles. identify(), alias(), and group() will be no-ops. **Default** `'identified_only'` **Examples** `// Only create profiles when users are identified (recommended for most apps) const posthog = new PostHog('<api_key>', { personProfiles: 'identified_only', }) // Later when user logs in: posthog.identify('user-123', { email: 'user@example.com' })` `// Always create profiles (for apps where you want to track all users) const posthog = new PostHog('<api_key>', { personProfiles: 'always', })` `// Never create profiles (anonymous analytics only) const posthog = new PostHog('<api_key>', { personProfiles: 'never', })` | `PostHogCoreOptions.personProfiles` |
+| <a id="property-preloadfeatureflags"></a> `preloadFeatureFlags?` | `boolean` | Whether to load feature flags when initialized or not **Default** `true` | `PostHogCoreOptions.preloadFeatureFlags` |
 | <a id="property-pushidentityprovider"></a> `pushIdentityProvider?` | `PostHogPushIdentityProvider` | Mints a signed identity-verification token for push subscription requests. Only needed when your PostHog project requires identity verification for push. Requires `@posthog/react-native-plugin`. Called with the current `distinctId` and `appId`. Mint on your backend (HS256, `sub` = distinctId, an `app_id` claim, `aud` = `posthog:push_identity`), never in the app. Return `null` to send the request unauthenticated; a slow or throwing implementation does the same after 10 seconds. | - |
 | <a id="property-rageclickconfig"></a> `rageClickConfig?` | `PostHogRageClickConfig` | Configure rage click (rage tap) detection on iOS. The native iOS SDK fires a `$rageclick` event when a user taps the same area repeatedly in quick succession. The default thresholds (3 taps, 30 points, 1 second) were tuned for web and frequently produce false positives on mobile. Raise the thresholds or set `enabled: false` to suppress them. Android is unaffected — posthog-android does not have native rage click detection. Requires `@posthog/react-native-plugin` version 2.7.0 or newer. | - |
-| <a id="property-remoteconfigrequesttimeoutms"></a> `remoteConfigRequestTimeoutMs?` | `number` | Timeout in milliseconds for remote config calls **Default** `3000` | `Omit.remoteConfigRequestTimeoutMs` |
+| <a id="property-remoteconfigrequesttimeoutms"></a> `remoteConfigRequestTimeoutMs?` | `number` | Timeout in milliseconds for remote config calls **Default** `3000` | `PostHogCoreOptions.remoteConfigRequestTimeoutMs` |
 | <a id="property-requestheaders"></a> `requestHeaders?` | `object` | A list of headers that should be sent with requests to the PostHog API. | - |
-| <a id="property-requesttimeout"></a> `requestTimeout?` | `number` | Timeout in milliseconds for any calls **Default** `10000` | `Omit.requestTimeout` |
-| <a id="property-sendfeatureflagevent"></a> `sendFeatureFlagEvent?` | `boolean` | Whether to track that `getFeatureFlag` was called (used by Experiments) In posthog-node this is also the default for reads from an `evaluateFlags()` snapshot (`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a single-flag getter, to override it for that call. **Default** `true` | `Omit.sendFeatureFlagEvent` |
-| <a id="property-sessionexpirationtimeseconds"></a> `sessionExpirationTimeSeconds?` | `number` | For Session Analysis how long before we expire a session in seconds **Default** `1800` | `Omit.sessionExpirationTimeSeconds` |
+| <a id="property-requesttimeout"></a> `requestTimeout?` | `number` | Timeout in milliseconds for any calls **Default** `10000` | `PostHogCoreOptions.requestTimeout` |
+| <a id="property-sendfeatureflagevent"></a> `sendFeatureFlagEvent?` | `boolean` | Whether to track that `getFeatureFlag` was called (used by Experiments) In posthog-node this is also the default for reads from an `evaluateFlags()` snapshot (`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a single-flag getter, to override it for that call. **Default** `true` | `PostHogCoreOptions.sendFeatureFlagEvent` |
+| <a id="property-sessionexpirationtimeseconds"></a> `sessionExpirationTimeSeconds?` | `number` | For Session Analysis how long before we expire a session in seconds **Default** `1800` | `PostHogCoreOptions.sessionExpirationTimeSeconds` |
 | <a id="property-sessionreplayconfig"></a> `sessionReplayConfig?` | `PostHogSessionReplayConfig` | Configuration for Session Replay | - |
 | <a id="property-setdefaultpersonproperties"></a> `setDefaultPersonProperties?` | `boolean` | Automatically include common device and app properties in feature flag evaluation. When enabled, the following properties are sent with every /flags request: - $app_version: App version - $app_build: App build number - $app_namespace: App bundle identifier / namespace - $os_name: Operating system name - $os_version: Operating system version - $device_type: Device type (Mobile, Desktop) - $lib: Name of the SDK library - $lib_version: Version of the SDK library This ensures feature flags that rely on these properties work correctly without waiting for server-side processing of identify() calls. **Default** `true` | - |
 
@@ -3044,6 +3002,7 @@ Props for the PostHogProvider component.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
+| <a id="property-apikey"></a> ~~`apiKey?`~~ | `string` | Your PostHog project token. Ignored when `projectToken` is set. **Deprecated** Use `projectToken` instead. This will be removed in the next major version. |
 | <a id="property-autocapture"></a> `autocapture?` | `boolean` \| `PostHogAutocaptureOptions` | Autocapture configuration - can be a boolean or detailed options. When not set, the default behavior is: - `captureScreens`: true - `captureTouches`: false - `captureAppLifecycleEvents`: true Set to `true` to enable all autocapture features (including touches). Set to `false` to disable all autocapture features. |
 | <a id="property-children-1"></a> `children` | `ReactNode` | The child components to render within the PostHog context |
 | <a id="property-client"></a> `client?` | `PostHog` | An existing PostHog client instance |
@@ -3109,9 +3068,11 @@ Called by the native SDK with the current `distinctId` and `appId`. Return
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
+| <a id="androiddebouncerdelayms"></a> ~~`androidDebouncerDelayMs?`~~ | `number` | Deboucer delay used to reduce the number of snapshots captured and reduce performance impact This is used for capturing the view as a screenshot The lower the number more snapshots will be captured but higher the performance impact Ps: it was 500ms (0.5s) by default until version 3.3.7 **Default** `1000` **Deprecated** please use throttleDelayMs instead |
 | <a id="capturelog-1"></a> `captureLog?` | `boolean` | Enable capturing of logs as console events **Default** `true` |
 | <a id="capturenetworktelemetry"></a> `captureNetworkTelemetry?` | `boolean` | Enable capturing network telemetry iOS only **Default** `true` |
-| <a id="capturetouches-1"></a> `captureTouches?` | `boolean` | Capture touch coordinates in session replay. Set to false to keep screenshots without recording taps that could reveal sensitive input on a known keypad layout. Does not change masking or `PostHogProvider` touch autocapture. Android and iOS only. Requires `@posthog/react-native-plugin`. Set before constructing PostHog. Changes after initialization do not update native state. **Default** `true` |
+| <a id="capturetouches-1"></a> `captureTouches?` | `boolean` | Capture touch coordinates in session replay. Set to false to keep screenshots without recording taps that could reveal sensitive input on a known keypad layout. Does not change masking or `PostHogProvider` touch autocapture. Android and iOS only. Requires `@posthog/react-native-plugin` 2.9.0 or later; older plugins and `posthog-react-native-session-replay` ignore this option. Set before constructing PostHog. Changes after initialization do not update native state. **Default** `true` |
+| <a id="iosdebouncerdelayms"></a> ~~`iOSdebouncerDelayMs?`~~ | `number` | Deboucer delay used to reduce the number of snapshots captured and reduce performance impact This is used for capturing the view as a screenshot The lower the number more snapshots will be captured but higher the performance impact **Default** `1000` **Deprecated** please use throttleDelayMs instead |
 | <a id="maskallimages"></a> `maskAllImages?` | `boolean` | Enable masking of all images to a placeholder **Default** `true` |
 | <a id="maskallsandboxedviews"></a> `maskAllSandboxedViews?` | `boolean` | Enable masking of all sandboxed system views These may include UIImagePickerController, PHPickerViewController and CNContactPickerViewController iOS only **Default** `true` |
 | <a id="maskalltextinputs"></a> `maskAllTextInputs?` | `boolean` | Enable masking of all text and text input fields **Default** `true` |
@@ -3120,7 +3081,7 @@ Called by the native SDK with the current `distinctId` and `appId`. Return
 | <a id="screenshotcompressionquality"></a> `screenshotCompressionQuality?` | `number` | **`Experimental`** Experimental. WebP compression quality, clamped to 0–100. Fractional values are truncated. Higher values generally retain more detail and produce larger payloads. Compression is lossy, except at quality 100 on Android 10, which uses lossless WebP. Non-finite values use the native default. Does not change screenshot resolution. Android only. Requires `@posthog/react-native-plugin` 2.8.0 or later. **Default** `30` |
 | <a id="screenshotmodebackgroundcapture"></a> `screenshotModeBackgroundCapture?` | `boolean` | Schedule screenshot image capture on a background queue. iOS only Experimental support Warning: Enabling this option will trigger Main Thread Checker warnings and may briefly freeze the app the first time a screenshot is captured. Consider disabling Main Thread Checker in your scheme's run diagnostics when enabling this. **Default** `false` |
 | <a id="screenshotscale"></a> `screenshotScale?` | `number` | **`Experimental`** Experimental. Multiplier for the physical width and height of screenshots, clamped to 0.1–1.0. For example, 0.5 captures half the width and height, or one quarter of the pixels. The logical replay viewport is unchanged. Non-finite values use the native default. Android only. Requires `@posthog/react-native-plugin` 2.8.0 or later. Does not enable session replay or change compression quality or color mode. **Default** `undefined, which uses the native default: one pixel per dp with posthog-android 3.74.0 or later, native resolution with older versions.` |
-| <a id="throttledelayms"></a> `throttleDelayMs?` | `number` | Throttling delay used to reduce the number of snapshots captured and reduce performance impact This is used for capturing the view as a wireframe or screenshot The lower the number more snapshots will be captured but higher the performance impact **Default** `1000` |
+| <a id="throttledelayms"></a> `throttleDelayMs?` | `number` | Throttling delay used to reduce the number of snapshots captured and reduce performance impact This is used for capturing the view as a wireframe or screenshot The lower the number more snapshots will be captured but higher the performance impact This value has precedence over iOSdebouncerDelayMs and androidDebouncerDelayMs If this is not set, we will take the max number between iOSdebouncerDelayMs and androidDebouncerDelayMs for back compatibility **Default** `1000` |
 | <a id="verifyscreenshotmaskalignment"></a> `verifyScreenshotMaskAlignment?` | `boolean` | Verify that masks remain aligned while capturing session replay screenshots. Android only. Requires `@posthog/react-native-plugin`. Enabling this can preserve screenshots during pixel-only redraws, including continuously animated content, but performs additional view hierarchy walks while a screenshot is captured. **Default** `false` |
 
 ### `PostHogSurveyProviderProps`
