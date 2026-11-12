@@ -37,6 +37,7 @@
   },
   "files": [
     "dist",
+    "capture-v1",
     "surveys",
     "src",
     "!src/__tests__",
