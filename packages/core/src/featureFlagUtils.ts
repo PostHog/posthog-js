@@ -94,7 +94,7 @@ export const getPayloadsFromFlags = (
     Object.keys(safeFlags)
       .filter((flag) => {
         const details = safeFlags[flag]
-        return details.enabled && details.metadata && details.metadata.payload !== undefined
+        return !details.failed && details.enabled && details.metadata && details.metadata.payload !== undefined
       })
       .map((flag) => {
         const payload = safeFlags[flag].metadata?.payload as string
@@ -104,7 +104,7 @@ export const getPayloadsFromFlags = (
 }
 
 export const getFeatureFlagValue = (detail: FeatureFlagDetail | undefined): FeatureFlagValue | undefined => {
-  return detail === undefined ? undefined : (detail.variant ?? detail.enabled)
+  return detail === undefined || detail.failed === true ? undefined : (detail.variant ?? detail.enabled)
 }
 
 export const parsePayload = (response: any): any => {
@@ -150,6 +150,9 @@ export const createFlagsResponseFromFlagsAndPayloads = (
 export const updateFlagValue = (flag: FeatureFlagDetail, value: FeatureFlagValue): FeatureFlagDetail => {
   return {
     ...flag,
+    ...(flag?.failed
+      ? { failed: false, metadata: flag.metadata ? { ...flag.metadata, payload: undefined } : undefined }
+      : {}),
     enabled: getEnabledFromValue(value),
     variant: getVariantFromValue(value),
   }
@@ -164,16 +167,18 @@ export function getVariantFromValue(value: FeatureFlagValue): string | undefined
 }
 
 export const flagDetailsToResults = (flagDetails: Record<string, FeatureFlagDetail>): FeatureFlagResult[] => {
-  return Object.values(flagDetails).map((detail) => {
-    const value = detail.variant ?? detail.enabled
-    const rawPayload = detail.metadata?.payload
-    return {
-      key: detail.key,
-      enabled: getEnabledFromValue(value),
-      variant: getVariantFromValue(value),
-      payload: rawPayload !== undefined ? parsePayload(rawPayload) : null,
-    }
-  })
+  return Object.values(flagDetails)
+    .filter((detail) => !detail.failed)
+    .map((detail) => {
+      const value = detail.variant ?? detail.enabled
+      const rawPayload = detail.metadata?.payload
+      return {
+        key: detail.key,
+        enabled: getEnabledFromValue(value),
+        variant: getVariantFromValue(value),
+        payload: rawPayload !== undefined ? parsePayload(rawPayload) : null,
+      }
+    })
 }
 
 /**

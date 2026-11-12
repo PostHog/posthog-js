@@ -134,9 +134,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         const currentFeatureFlagDetails = this.getKnownFeatureFlagDetails() || { flags: {}, requestId: undefined }
         const newFeatureFlagDetails = {
+          ...this.getStoredFlagDetails(),
           flags: {
             ...normalizedBootstrapFeatureFlagDetails.flags,
-            ...currentFeatureFlagDetails.flags,
+            ...Object.fromEntries(
+              Object.entries(currentFeatureFlagDetails.flags).filter(
+                ([key, detail]) => !detail.failed || !normalizedBootstrapFeatureFlagDetails.flags[key]
+              )
+            ),
           },
           requestId: normalizedBootstrapFeatureFlagDetails.requestId,
         }
@@ -895,7 +900,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
             const filteredFlags: Record<string, FeatureFlagDetail> = {}
             for (const key in res.flags) {
-              if (!res.flags[key].failed) {
+              // A failed record carries diagnostics, but cannot replace a successful cached value.
+              if (!res.flags[key].failed || getFeatureFlagValue(currentFlagDetails?.flags[key]) === undefined) {
                 filteredFlags[key] = res.flags[key]
               }
             }
@@ -1090,6 +1096,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         }
         if (isQuotaLimited) {
           errors.push(FeatureFlagError.QUOTA_LIMITED)
+        } else if (flagValue === undefined && featureFlag?.failed) {
+          errors.push(FeatureFlagError.EVALUATION_FAILED)
         } else if (flagValue === undefined && !featureFlag) {
           // Track missing flags only when we had a successful, non-limited request.
           // When quota limited or request failed, we cannot determine if the flag is truly missing.
@@ -1360,7 +1368,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const existingPayloads: Record<string, JsonType> = {}
       for (const key in existingDetails) {
         const storedPayload = existingDetails[key].metadata?.payload
-        if (storedPayload !== undefined) {
+        if (!existingDetails[key].failed && storedPayload !== undefined) {
           existingPayloads[key] = parsePayload(storedPayload)
         }
       }

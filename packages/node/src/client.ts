@@ -1845,25 +1845,29 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           flagReason = flagDetail.reason?.description ?? flagDetail.reason?.code
           flagHasExperiment = flagDetail.metadata?.has_experiment
 
-          // Parse payload once from the API response
-          let parsedPayload: JsonType | undefined = undefined
-          if (flagDetail.metadata?.payload !== undefined) {
-            try {
-              parsedPayload = JSON.parse(flagDetail.metadata.payload)
-            } catch {
-              // If parsing fails, return the raw string (matches parsePayload behavior)
-              parsedPayload = flagDetail.metadata.payload
+          if (flagDetail.failed) {
+            errors.push(FeatureFlagError.EVALUATION_FAILED)
+          } else {
+            // Parse payload once from the API response
+            let parsedPayload: JsonType | undefined = undefined
+            if (flagDetail.metadata?.payload !== undefined) {
+              try {
+                parsedPayload = JSON.parse(flagDetail.metadata.payload)
+              } catch {
+                // If parsing fails, return the raw string (matches parsePayload behavior)
+                parsedPayload = flagDetail.metadata.payload
+              }
             }
-          }
 
-          result = {
-            key,
-            enabled: flagDetail.enabled,
-            // The flags API serializes missing variants as null
-            variant: flagDetail.variant ?? undefined,
-            payload: parsedPayload,
-            reason: flagReason,
-            reasonCode: flagDetail.reason?.code,
+            result = {
+              key,
+              enabled: flagDetail.enabled,
+              // The flags API serializes missing variants as null
+              variant: flagDetail.variant ?? undefined,
+              payload: parsedPayload,
+              reason: flagReason,
+              reasonCode: flagDetail.reason?.code,
+            }
           }
         }
 

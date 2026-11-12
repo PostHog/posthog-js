@@ -116,12 +116,26 @@ type FeatureFlagsState = {
 export const FeatureFlagError = {
     ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
     FLAG_MISSING: 'flag_missing',
+    EVALUATION_FAILED: 'evaluation_failed',
     QUOTA_LIMITED: 'quota_limited',
     TIMEOUT: 'timeout',
     CONNECTION_ERROR: 'connection_error',
     UNKNOWN_ERROR: 'unknown_error',
     apiError: (status: number | string) => `api_error_${status}`,
 } as const
+
+const filterFailedFlagValues = <T>(
+    values: Record<string, T> | undefined,
+    details: Record<string, FeatureFlagDetail> | undefined
+): Record<string, T> => {
+    const failedKeys = Object.keys(details || {}).filter((key) => details?.[key]?.failed)
+    if (!failedKeys.length) {
+        return values || {}
+    }
+    const filtered = { ...values }
+    failedKeys.forEach((key) => delete filtered[key])
+    return filtered
+}
 
 /** Converts an array of flag names to a Record where each flag is set to true. */
 const arrayToFlagsRecord = (flags: string[]): Record<string, true> => {
@@ -183,54 +197,34 @@ export const parseFlagsResponse = (
     let newFeatureFlags = featureFlags
     let newFeatureFlagPayloads = flagPayloads
     let newFeatureFlagDetails = flagDetails
-    if (options?.partialResponse) {
-        // The response is intentionally partial (e.g., only survey flags were requested via
-        // advanced_only_evaluate_survey_feature_flags). Merge with existing flags so that
-        // bootstrapped or previously loaded non-survey flags are preserved.
+    if (options?.partialResponse || response.errorsWhileComputingFlags) {
+        // Only partial or response-wide errored refreshes retain prior successful values.
+        // Normalization has already removed failed values and payloads from the incoming maps.
         const evaluatedFlagKeys = Object.keys(newFeatureFlags)
         const evaluatedPayloads = newFeatureFlagPayloads || {}
         newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
         newFeatureFlagPayloads = { ...currentFlagPayloads, ...evaluatedPayloads }
-        evaluatedFlagKeys.forEach((key) => {
-            if (!(key in evaluatedPayloads)) {
-                delete newFeatureFlagPayloads?.[key]
-            }
-        })
-        newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
-    } else if (response.errorsWhileComputingFlags) {
-        // if not all flags were computed, we upsert flags instead of replacing them
-        // but filter out flags that failed to evaluate so they don't overwrite cached values
-        if (flagDetails) {
-            const successfulKeys = new Set(Object.keys(flagDetails).filter((key) => !flagDetails[key]?.failed))
-
-            newFeatureFlags = {
-                ...currentFlags,
-                ...Object.fromEntries(Object.entries(newFeatureFlags).filter(([key]) => successfulKeys.has(key))),
-            }
-            const successfulPayloads = Object.fromEntries(
-                Object.entries(newFeatureFlagPayloads || {}).filter(([key]) => successfulKeys.has(key))
-            )
-            newFeatureFlagPayloads = {
-                ...currentFlagPayloads,
-                ...successfulPayloads,
-            }
-            successfulKeys.forEach((key) => {
-                if (!(key in successfulPayloads)) {
+        if (options?.partialResponse || flagDetails) {
+            evaluatedFlagKeys.forEach((key) => {
+                if (!(key in evaluatedPayloads)) {
                     delete newFeatureFlagPayloads?.[key]
                 }
             })
-            newFeatureFlagDetails = {
-                ...currentFlagDetails,
-                ...Object.fromEntries(
-                    Object.entries(newFeatureFlagDetails || {}).filter(([key]) => successfulKeys.has(key))
-                ),
-            }
-        } else {
-            // v1 responses don't have flagDetails, so we can't filter by failed field
-            // Fall back to the original merge behavior
-            newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
-            newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
-            newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
+        }
+        newFeatureFlagDetails = {
+            ...currentFlagDetails,
+            ...Object.fromEntries(
+                Object.entries(flagDetails || {}).filter(
+                    ([key, detail]) => !detail.failed || isUndefined(currentFlags[key])
+                )
+            ),
+        }
+        if (!flagDetails) {
+            evaluatedFlagKeys.forEach((key) => {
+                if (newFeatureFlagDetails?.[key]?.failed) {
+                    delete newFeatureFlagDetails[key]
+                }
+            })
         }
     }
 
@@ -255,12 +249,14 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>, responseLogger
 
         // Map of flag keys to flag values: Record<string, string | boolean>
         const featureFlags = Object.fromEntries(
-            Object.keys(flagDetails).map((flag) => [flag, flagDetails[flag]!.variant ?? flagDetails[flag]!.enabled])
+            Object.keys(flagDetails)
+                .filter((flag) => !flagDetails[flag]!.failed)
+                .map((flag) => [flag, flagDetails[flag]!.variant ?? flagDetails[flag]!.enabled])
         )
         // Map of flag keys to flag payloads: Record<string, JsonType>
         const featureFlagPayloads = Object.fromEntries(
             Object.keys(flagDetails)
-                .filter((flag) => flagDetails[flag]!.enabled)
+                .filter((flag) => !flagDetails[flag]!.failed && flagDetails[flag]!.enabled)
                 .filter((flag) => !isUndefined(flagDetails[flag]!.metadata?.payload))
                 .map((flag) => [flag, flagDetails[flag]!.metadata?.payload])
         )
@@ -359,6 +355,7 @@ export class PostHogFeatureFlags implements Extension {
         | {
               onCrossTabFeatureFlagChange(handler: () => void): () => void
               markCrossTabFeatureFlagChanges(changes: Record<string, readonly string[] | true>): void
+              reconcileFeatureFlagsBeforeMerge?(): boolean
           }
         | undefined {
         return undefined
@@ -598,11 +595,12 @@ export class PostHogFeatureFlags implements Extension {
                   .map(([key]) => key)
             : []
         const isIncompleteResponse = !!response.errorsWhileComputingFlags && !!response.flags
-        const ownedFlagKeys = isIncompleteResponse
-            ? successfulResponseFlagKeys
-            : partialResponse && !isArray(responseFlags)
-              ? Object.keys(responseFlags || {})
-              : Array.from(new Set([...Object.keys(previousFlags), ...Object.keys(nextFlags)]))
+        const ownedFlagKeys =
+            isIncompleteResponse || (partialResponse && !!response.flags)
+                ? successfulResponseFlagKeys
+                : partialResponse && !isArray(responseFlags)
+                  ? Object.keys(responseFlags || {})
+                  : Array.from(new Set([...Object.keys(previousFlags), ...Object.keys(nextFlags)]))
         const previousPayloads = this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) || {}
         const nextPayloads = statePatch[PERSISTENCE_FEATURE_FLAG_PAYLOADS] || {}
         const ownedPayloadKeys =
@@ -647,20 +645,24 @@ export class PostHogFeatureFlags implements Extension {
 
     private _rebuildEventProperties(): void {
         const common: Record<string, unknown> = {}
-        for (const key of [
-            PERSISTENCE_ACTIVE_FEATURE_FLAGS,
-            PERSISTENCE_FEATURE_FLAG_PAYLOADS,
-            PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
-            PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
-        ] as const) {
+        const flagDetails = this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
+        for (const key of [PERSISTENCE_FEATURE_FLAG_REQUEST_ID, PERSISTENCE_OVERRIDE_FEATURE_FLAGS] as const) {
             const value = this._prop(key)
             if (!isUndefined(value)) {
                 common[key] = value
             }
         }
+        const activeFlags = this._prop(PERSISTENCE_ACTIVE_FEATURE_FLAGS)
+        if (activeFlags) {
+            common[PERSISTENCE_ACTIVE_FEATURE_FLAGS] = activeFlags.filter((key) => !flagDetails?.[key]?.failed)
+        }
+        const payloads = this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+        if (payloads) {
+            common[PERSISTENCE_FEATURE_FLAG_PAYLOADS] = filterFailedFlagValues(payloads, flagDetails)
+        }
         this._baseEventProperties = common
         const withFlagValues = { ...common }
-        const flags = this._prop(ENABLED_FEATURE_FLAGS)
+        const flags = filterFailedFlagValues(this._prop(ENABLED_FEATURE_FLAGS), flagDetails)
         if (flags) {
             for (const [key, value] of Object.entries(flags)) {
                 withFlagValues[`$feature/${key}`] = value
@@ -763,10 +765,13 @@ export class PostHogFeatureFlags implements Extension {
     ): void {
         // Merge against the raw stored flags/payloads, not the override-applied getters.
         const existingFlags: Record<string, boolean | string> = options?.merge
-            ? (this._prop(ENABLED_FEATURE_FLAGS) ?? {})
+            ? filterFailedFlagValues(this._prop(ENABLED_FEATURE_FLAGS), this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS))
             : {}
         const existingPayloads: Record<string, JsonType> = options?.merge
-            ? (this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) ?? {})
+            ? filterFailedFlagValues(
+                  this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS),
+                  this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
+              )
             : {}
         const finalFlags: Record<string, boolean | string> = { ...existingFlags, ...flags }
         const finalPayloads: Record<string, JsonType> = { ...existingPayloads, ...payloads }
@@ -883,7 +888,10 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     getFlagVariants(): Record<string, string | boolean> {
-        const enabledFlags = this._prop(ENABLED_FEATURE_FLAGS)
+        const enabledFlags = filterFailedFlagValues(
+            this._prop(ENABLED_FEATURE_FLAGS),
+            this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
+        )
         const overriddenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         if (!overriddenFlags) {
             return enabledFlags || {}
@@ -906,7 +914,10 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     getFlagPayloads(): Record<string, JsonType> {
-        const flagPayloads = this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+        const flagPayloads = filterFailedFlagValues(
+            this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS),
+            this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
+        )
         const overriddenPayloads = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
 
         if (!overriddenPayloads) {
@@ -1313,7 +1324,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
-        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (!this._hasLoadedFlags && !this.getFlags().length && !this.getFeatureFlagDetails(key)?.failed) {
             this._logger.warn('getFeatureFlag for key "' + key + FLAG_TIMEOUT_MSG)
             return undefined
         }
@@ -1386,7 +1397,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
-        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (!this._hasLoadedFlags && !this.getFlags().length && !this.getFeatureFlagDetails(key)?.failed) {
             this._logger.warn('getFeatureFlagResult for key "' + key + FLAG_TIMEOUT_MSG)
             return undefined
         }
@@ -1453,7 +1464,9 @@ export class PostHogFeatureFlags implements Extension {
                 const flagDetails = this.getFeatureFlagDetails(key)
                 const errors: string[] = [...(this._prop(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
                 if (isUndefined(flagValue)) {
-                    errors.push(FeatureFlagError.FLAG_MISSING)
+                    errors.push(
+                        flagDetails?.failed ? FeatureFlagError.EVALUATION_FAILED : FeatureFlagError.FLAG_MISSING
+                    )
                 }
 
                 const properties: Record<string, any | undefined> = {
@@ -1696,6 +1709,13 @@ export class PostHogFeatureFlags implements Extension {
         }
         this._hasLoadedFlags = true
 
+        if (options?.persist !== false && (options?.partialResponse || response.errorsWhileComputingFlags)) {
+            // Reconcile before deriving writes: failed diagnostics or placeholder cleanup must not
+            // claim ownership over an unobserved successful sibling value.
+            if (this._crossTabPersistence?.reconcileFeatureFlagsBeforeMerge?.()) {
+                this._clearBootstrapState()
+            }
+        }
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         const currentFlagDetails = this.getFlagsWithDetails()
@@ -1895,14 +1915,27 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
+        const flagDetails = { ...this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS) }
+        const replacesFailure = flagDetails[key]?.failed
+        const payloads = { ...this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) }
+        if (replacesFailure) {
+            delete flagDetails[key]
+            delete payloads[key]
+        }
         this._crossTabPersistence?.markCrossTabFeatureFlagChanges({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: [key],
             [ENABLED_FEATURE_FLAGS]: [key],
+            ...(replacesFailure
+                ? { [PERSISTENCE_FEATURE_FLAG_DETAILS]: [key], [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: [key] }
+                : {}),
             [STORED_PERSON_PROPERTIES_KEY]: Object.keys(enrollmentPersonProp),
         })
         this._set({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,
+            ...(replacesFailure
+                ? { [PERSISTENCE_FEATURE_FLAG_DETAILS]: flagDetails, [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: payloads }
+                : {}),
             [STORED_PERSON_PROPERTIES_KEY]: {
                 ...(this._prop(STORED_PERSON_PROPERTIES_KEY) || {}),
                 ...enrollmentPersonProp,
