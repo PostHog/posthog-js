@@ -204,6 +204,9 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
       // Already bounded to MAX_ERROR_MESSAGE_LENGTH by `truncateExceptionList`.
       properties[PostHogMCPAnalyticsProperty.ErrorMessage] = firstException.value
     }
+    if (event.errorStatus !== undefined) {
+      properties[PostHogMCPAnalyticsProperty.ErrorStatus] = event.errorStatus
+    }
   }
 
   if (event.parameters !== undefined) {

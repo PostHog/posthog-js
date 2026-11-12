@@ -1,5 +1,37 @@
 # @posthog/mcp
 
+## 1.2.0
+
+### Minor Changes
+
+- [#5671](https://github.com/PostHog/posthog-js/pull/5671) [`4a30932`](https://github.com/PostHog/posthog-js/commit/4a309320e3c2c1fb643bfe8070975c2068db3918) Thanks [@lucasheriques](https://github.com/lucasheriques)! - A failed tool call now sets `$mcp_error_status` to the HTTP status behind it, read from the thrown error or its `cause` chain (`status_code`, `statusCode` or `status`, on the error or its `response`, as a fetch `Response`, axios and got carry it). Failures from an upstream API now group by status in MCP Analytics instead of landing in "unknown".
+  (2026-11-12)
+
+### Patch Changes
+
+- [#5682](https://github.com/PostHog/posthog-js/pull/5682) [`8f5e876`](https://github.com/PostHog/posthog-js/commit/8f5e87698d2591f846403790d09fca0f194945b6) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Ignore non-string `name`/`version` values returned by the `clientInfo` option instead of recording them as the MCP client.
+  (2026-11-12)
+
+## 1.1.1
+
+### Patch Changes
+
+- [#5654](https://github.com/PostHog/posthog-js/pull/5654) [`a7c8003`](https://github.com/PostHog/posthog-js/commit/a7c800393b8ac7c198676b8d57a2f587d9cc36a5) Thanks [@mkushner](https://github.com/mkushner)! - fix(mcp): keep `additionalProperties: false` on tool schemas when injecting `context`, `llm_model` and `conversation_id`. The injected keys are declared properties, so the schema stays valid and keeps the strictness the host advertised.
+  (2026-11-11)
+
+## 1.1.0
+
+### Minor Changes
+
+- [#5597](https://github.com/PostHog/posthog-js/pull/5597) [`4d0681f`](https://github.com/PostHog/posthog-js/commit/4d0681fc2843c1299bf3955884dbcb4944518f74) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat: add `sessionId` and `clientInfo` options so stateless per-request servers can supply the session id and client name for each request
+  (2026-11-10)
+
+### Patch Changes
+
+- Updated dependencies [[`fb313fe`](https://github.com/PostHog/posthog-js/commit/fb313fe7f5259fc104cff213aa07c24d03fbfd23), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - posthog-node@5.65.0
+  - @posthog/core@1.66.0
+
 ## 1.0.1
 
 ### Patch Changes

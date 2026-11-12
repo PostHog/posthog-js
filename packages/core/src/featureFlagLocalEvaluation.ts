@@ -478,11 +478,32 @@ export function relativeDateParseForFeatureFlagMatching(value: string): Date | n
   if (interval === 'h') parsedDt.setUTCHours(parsedDt.getUTCHours() - number)
   else if (interval === 'd') parsedDt.setUTCDate(parsedDt.getUTCDate() - number)
   else if (interval === 'w') parsedDt.setUTCDate(parsedDt.getUTCDate() - number * 7)
-  else if (interval === 'm') parsedDt.setUTCMonth(parsedDt.getUTCMonth() - number)
-  else if (interval === 'y') parsedDt.setUTCFullYear(parsedDt.getUTCFullYear() - number)
+  else if (interval === 'm') subtractUTCMonths(parsedDt, number)
+  else if (interval === 'y') subtractUTCYears(parsedDt, number)
   else return null
 
   return parsedDt
+}
+
+// The SDK spec subtracts months one at a time and clamps the day after every step, so
+// March 31 minus one month is February 28 and minus two months is January 28.
+function subtractUTCMonths(date: Date, months: number): void {
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  let day = date.getUTCDate()
+  // Every month has at least 28 days, so nothing can clamp further after that.
+  for (let step = 1; step <= months && day > 28; step++) {
+    const lastDayOfMonth = new Date(Date.UTC(year, month - step + 1, 0)).getUTCDate()
+    day = Math.min(day, lastDayOfMonth)
+  }
+  date.setUTCFullYear(year, month - months, day)
+}
+
+function subtractUTCYears(date: Date, years: number): void {
+  const month = date.getUTCMonth()
+  // The year before a leap year is never a leap year, so February 29 clamps on the first step.
+  const day = years > 0 && month === 1 && date.getUTCDate() === 29 ? 28 : date.getUTCDate()
+  date.setUTCFullYear(date.getUTCFullYear() - years, month, day)
 }
 
 function parseDateFilter(value: FeatureFlagPropertyValue): Date {

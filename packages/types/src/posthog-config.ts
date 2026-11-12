@@ -1298,7 +1298,11 @@ export interface MetricsConfig {
      * are folded into per-series aggregates in memory between flushes — one
      * data point per series per window, no matter how many calls.
      *
-     * @default 10000
+     * The browser SDK defaults to 60000: every tab of an app writes to the
+     * same series, so a longer window keeps busy series under the backend's
+     * per-series point limit.
+     *
+     * @default 10000 (60000 in the browser)
      */
     flushIntervalMs?: number
     /**
@@ -1324,8 +1328,10 @@ export interface MetricsConfig {
 export interface BrowserMetricsConfig extends MetricsConfig {
     /**
      * Record the duration of every HTTP or HTTPS `fetch` and `XMLHttpRequest` as
-     * a histogram. `true` uses the defaults. Requests to PostHog itself and URLs
-     * with other protocols are not recorded. Each transport is measured to the
+     * a histogram. `true` uses the defaults. Requests to PostHog itself, URLs
+     * with other protocols, and server-sent event streams (`text/event-stream`
+     * responses) are not recorded. Long-polling requests look like ordinary
+     * requests; skip them with a `name` function that returns `null`. Each transport is measured to the
      * boundary its API exposes: a `fetch` to its response headers, an
      * `XMLHttpRequest` to the end of its response body.
      *
@@ -1603,6 +1609,9 @@ export interface PostHogConfig {
      * - `false`: Don't capture any pageviews
      * - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes
      * - An object: Capture the initial pageview and pageviews when any selected URL component changes
+     *
+     * With the slim bundle, history-based pageviews require `AnalyticsExtensions.historyAutocapture`
+     * from `posthog-js/extensions` in `__extensionClasses`. Without it, only the initial pageview is captured.
      *
      * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
@@ -1906,6 +1915,10 @@ export interface PostHogConfig {
      * Determines if users should be opted out of user agent filtering such as googlebot or other bots.
      * If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,
      * but will process all events as if they were from a browser.
+     *
+     * When the filter drops events, a one-time warning is written to the console (even without debug mode).
+     * The filter applies to events only; logs sent with `captureLog` bypass it.
+     * Set this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer).
      *
      * @default false
      */

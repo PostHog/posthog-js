@@ -1,5 +1,32 @@
 # posthog-ai
 
+## 8.19.3
+
+### Patch Changes
+
+- [#5691](https://github.com/PostHog/posthog-js/pull/5691) [`3e62421`](https://github.com/PostHog/posthog-js/commit/3e62421400861f2b5a60718bc67c542bd2ffccfd) Thanks [@shehjaddev](https://github.com/shehjaddev)! - Streamed OpenAI chat completions now keep custom tool calls in `$ai_output_choices`, the same way non-streaming completions do.
+  (2026-11-12)
+
+## 8.19.2
+
+### Patch Changes
+
+- [#5604](https://github.com/PostHog/posthog-js/pull/5604) [`a516cf3`](https://github.com/PostHog/posthog-js/commit/a516cf35e2d038dde186c3302c0a72c3252f5c4d) Thanks [@smitp1402](https://github.com/smitp1402)! - Capture reasoning tokens from OpenAI Agents SDK Responses API spans in `$ai_reasoning_tokens`
+  (2026-11-10)
+
+- [#5622](https://github.com/PostHog/posthog-js/pull/5622) [`7d96fa3`](https://github.com/PostHog/posthog-js/commit/7d96fa3c69247dc7e7cfc9969099864a2ac17451) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture custom tool calls in OpenAI Responses API output.
+  (2026-11-10)
+
+## 8.19.1
+
+### Patch Changes
+
+- [#5624](https://github.com/PostHog/posthog-js/pull/5624) [`567c5b7`](https://github.com/PostHog/posthog-js/commit/567c5b73c8125bad4baf69549ea3387b604e9190) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - OpenAI Agents `instrument()` now passes `onError` to the tracing processor it registers. It was accepted but ignored, so processor failures stayed silent.
+  (2026-11-10)
+- Updated dependencies [[`fb313fe`](https://github.com/PostHog/posthog-js/commit/fb313fe7f5259fc104cff213aa07c24d03fbfd23), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - posthog-node@5.65.0
+  - @posthog/core@1.66.0
+
 ## 8.19.0
 
 ### Minor Changes

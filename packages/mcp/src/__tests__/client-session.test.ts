@@ -135,6 +135,18 @@ describe('client conversation ids', () => {
     expect(call).not.toHaveProperty('$mcp_conversation_id')
   })
 
+  it('lets the host sessionId option win over a client conversation id', async () => {
+    await callOnFreshPod({
+      userAgent: CHATGPT,
+      meta: { 'openai/session': CHATGPT_ID },
+      options: { sessionId: () => 'host-session' },
+    })
+
+    const [call] = toolCalls()
+    expect(call.$session_id).not.toBe(CHATGPT_SESSION)
+    expect(call.$mcp_session_source).toBe('transport')
+  })
+
   it('strips the handle it ignores before the handler runs', async () => {
     // Listing first proves the SDK owns `conversation_id` on this low-level server.
     const pod = createPod()

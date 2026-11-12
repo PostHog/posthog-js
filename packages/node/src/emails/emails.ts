@@ -10,6 +10,8 @@ import {
 import { EmailError } from './errors'
 import type {
   CodeEmailForm,
+  EmailPreferences,
+  EmailReactElement,
   EmailStatus,
   EmailWarning,
   Emails,
@@ -19,11 +21,14 @@ import type {
   SendEmailResponse,
   SendEmailResult,
   SendTemplateEmailOptions,
+  SetEmailPreferencesOptions,
+  SetEmailPreferencesResponse,
   TemplateEmailForm,
 } from './types'
 
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const STATUS_PATH = '/api/projects/@current/messaging/emails/{messageId}/'
+const PREFERENCES_PATH = '/api/projects/@current/messaging/preferences/'
 const US_APP_HOST = 'https://us.posthog.com'
 const EU_APP_HOST = 'https://eu.posthog.com'
 const CLOUD_APP_HOSTS: Record<string, string> = {
@@ -39,6 +44,10 @@ const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 
 type EveryField<Form> = Record<keyof Form, true>
+interface ReactRenderer {
+  render(element: EmailReactElement): Promise<string>
+  toPlainText(html: string): string
+}
 type UncheckedSend = { [Field in keyof SendTemplateEmailOptions]?: unknown }
 
 interface SendForm {
@@ -63,6 +72,7 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   captureEngagement: true,
   html: true,
   text: true,
+  react: true,
 }
 const TEMPLATE_FORM: SendForm = {
   name: 'templateId',
@@ -99,8 +109,8 @@ export interface EmailSenderHooks {
 }
 
 interface PreparedSend {
-  path: string
   body: string
+  react?: EmailReactElement
   idempotencyKey: string
   maxRetries: number
 }
@@ -112,9 +122,9 @@ interface Reply {
 }
 
 /**
- * Sends one transactional email per call to the messaging send API on the app host, and reads
- * the status of a sent email. Owns the attempt loop, so every attempt of a send carries the same
- * idempotency key.
+ * Sends one transactional email per call to the messaging send API on the app host, reads the
+ * status of a sent email, and sets a recipient's topic preferences. Owns the attempt loop, so every
+ * attempt of a send carries the same idempotency key.
  */
 export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
@@ -134,6 +144,10 @@ export class EmailSender implements Emails {
     return this.track(this.getUntracked(id))
   }
 
+  setPreferences(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse> {
+    return this.track(this.setPreferencesUntracked(options))
+  }
+
   private track<T>(pending: Promise<T>): Promise<T> {
     this.inFlight.add(pending)
     void pending.finally(() => this.inFlight.delete(pending))
@@ -141,7 +155,7 @@ export class EmailSender implements Emails {
   }
 
   /**
-   * Resolves when every send and status read in flight, retries included, has settled.
+   * Resolves when every send, status read and preferences change in flight, retries included, has settled.
    * Kept apart from the client's pending-promise queue, so a send in its retry backoff does not hold back `flush()`.
    */
   async drain(): Promise<void> {
@@ -158,12 +172,16 @@ export class EmailSender implements Emails {
         'no email was sent',
         'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.'
       )
+      const body =
+        prepared.react === undefined
+          ? prepared.body
+          : await withRenderedReact(prepared.body, prepared.react, this.config.requestTimeoutMs)
       const headers = this.headers(secretKey, {
         'Content-Type': 'application/json',
         'Idempotency-Key': prepared.idempotencyKey,
       })
       const result = await this.withRetries(prepared.maxRetries, async () =>
-        parseSendReply(await this.request(appHost + prepared.path, 'POST', headers, prepared.body))
+        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, body))
       )
       for (const warning of result.warnings) {
         this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
@@ -191,6 +209,23 @@ export class EmailSender implements Emails {
       return { data: status, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Reading the email status failed unexpectedly.') }
+    }
+  }
+
+  private async setPreferencesUntracked(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse> {
+    try {
+      const body = preparePreferences(options)
+      const { appHost, secretKey } = this.connect(
+        'no preferences changed',
+        'Setting email preferences needs secretKey, a project secret API key with the messaging_preference:write scope.'
+      )
+      const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
+      const preferences = await this.withRetries(this.config.maxRetries, async () =>
+        parsePreferencesReply(await this.request(appHost + PREFERENCES_PATH, 'POST', headers, body))
+      )
+      return { data: preferences, error: null }
+    } catch (error) {
+      return { data: null, error: asEmailError(error, 'Setting the email preferences failed unexpectedly.') }
     }
   }
 
@@ -357,11 +392,40 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 
   return {
-    path: SEND_PATH,
     body: safeJsonStringify({ ...content, to }),
+    react: isReactElement(send.react) ? send.react : undefined,
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
+}
+
+function preparePreferences(options: SetEmailPreferencesOptions): string {
+  const fallback: Partial<SetEmailPreferencesOptions> = {}
+  const { to, allMarketing, topics } = options ?? fallback
+  if (typeof to !== 'string' || !to.trim()) {
+    throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
+  }
+  if (allMarketing !== undefined && typeof allMarketing !== 'boolean') {
+    throw invalid('invalid_preferences', 'allMarketing must be true or false.', 'allMarketing')
+  }
+  if (
+    topics !== undefined &&
+    (typeof topics !== 'object' ||
+      topics === null ||
+      Array.isArray(topics) ||
+      !Object.values(topics).every((value) => typeof value === 'boolean'))
+  ) {
+    throw invalid('invalid_preferences', 'topics must map each topic key to true or false.', 'topics')
+  }
+  const hasTopics = topics !== undefined && Object.keys(topics).length > 0
+  if (allMarketing === undefined && !hasTopics) {
+    throw invalid('invalid_preferences', 'Set allMarketing, topics, or both.', 'topics')
+  }
+  return safeJsonStringify({
+    identifier: to,
+    ...(allMarketing === undefined ? {} : { all_marketing: allMarketing }),
+    ...(hasTopics ? { topics } : {}),
+  })
 }
 
 function isRetryCount(value: unknown): value is number {
@@ -372,7 +436,7 @@ function contentOf(send: UncheckedSend, distinctId: string | undefined): Record<
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
       code: 'invalid_form',
-      message: 'Send either templateId, or templateKey with subject and html or text.',
+      message: 'Send either templateId, or templateKey with subject and html, text or react.',
     })
   }
   return send.templateKey === undefined ? templateContent(send, distinctId) : codeContent(send, distinctId)
@@ -398,7 +462,7 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
 }
 
 function codeContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
-  const { templateKey, subject, html, text, from, replyTo, captureEngagement } = send
+  const { templateKey, subject, html, text, react, from, replyTo, captureEngagement } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -416,8 +480,10 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
   if (text !== undefined && typeof text !== 'string') {
     throw invalid('invalid_form', 'text must be a string.', 'text')
   }
-  if (html === undefined && text === undefined) {
-    throw invalid('invalid_form', 'A send with templateKey needs html, text or both.', 'html')
+  if (react !== undefined) {
+    checkReactContent(react, html)
+  } else if (html === undefined && text === undefined) {
+    throw invalid('invalid_form', 'A send with templateKey needs html, text or react.', 'html')
   }
   const sendsReplyTo = replyTo !== undefined && !(Array.isArray(replyTo) && replyTo.length === 0)
   return {
@@ -429,6 +495,77 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
     ...(sendsReplyTo && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
     capture_engagement: captureEngagement ?? true,
     ...(distinctId !== undefined && { distinct_id: distinctId }),
+  }
+}
+
+function checkReactContent(react: unknown, html: unknown): void {
+  if (!isReactElement(react)) {
+    throw invalid('invalid_form', 'react must be a React element, such as <WelcomeEmail />.', 'react')
+  }
+  if (html !== undefined) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: 'A send with react renders its own html, so it takes no html. No email was sent.',
+      field: 'html',
+      fix: 'Remove html to send the rendered react element, or remove react to send your html.',
+    })
+  }
+}
+
+const REACT_18_AND_19_ELEMENT_MARKERS: unknown[] = [
+  Symbol.for('react.element'),
+  Symbol.for('react.transitional.element'),
+]
+
+function isReactElement(value: unknown): value is EmailReactElement {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '$$typeof' in value &&
+    REACT_18_AND_19_ELEMENT_MARKERS.includes(value.$$typeof) &&
+    'type' in value &&
+    'props' in value
+  )
+}
+
+async function withRenderedReact(body: string, react: EmailReactElement, timeoutMs: number): Promise<string> {
+  const { render, toPlainText } = await loadReactRenderer()
+  const fields: Record<string, unknown> = JSON.parse(body)
+  try {
+    const html = await settleWithin(render(react), timeoutMs, 'Rendering the react element')
+    return safeJsonStringify({ ...fields, html, ...(fields.text === undefined && { text: toPlainText(html) }) })
+  } catch (cause) {
+    throw new EmailError({
+      code: 'react_render_failed',
+      message: 'Rendering the react element failed, so no email was sent.',
+      cause,
+    })
+  }
+}
+
+async function settleWithin<T>(work: Promise<T>, timeoutMs: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} took longer than ${timeoutMs}ms.`)), timeoutMs)
+  })
+  try {
+    return await Promise.race([work, deadline])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function loadReactRenderer(): Promise<ReactRenderer> {
+  try {
+    return await import('@react-email/render')
+  } catch (cause) {
+    throw new EmailError({
+      code: 'missing_react_renderer',
+      message:
+        "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
+      fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
+      cause,
+    })
   }
 }
 
@@ -546,6 +683,31 @@ function parseStatusReply({ status, payload, retryAfterMs }: Reply): EmailStatus
   return { id, status: deliveryStatus, createdAt, statusAt, reason: text(fields.reason) ?? null }
 }
 
+function parsePreferencesReply({ status, payload, retryAfterMs }: Reply): EmailPreferences {
+  const fields = replyFields(payload)
+  if (status < 200 || status >= 300) {
+    throw replyError(fields, status, retryAfterMs)
+  }
+  const to = text(fields.identifier)
+  const allMarketing = fields.all_marketing
+  const topics = fields.topics
+  if (
+    !to ||
+    !(allMarketing === null || typeof allMarketing === 'boolean') ||
+    topics === null ||
+    typeof topics !== 'object' ||
+    Array.isArray(topics) ||
+    !Object.values(topics).every((value) => typeof value === 'boolean')
+  ) {
+    throw new EmailError({
+      code: 'api_error',
+      message: 'PostHog answered without the preferences.',
+      statusCode: status,
+    })
+  }
+  return { to, allMarketing, topics: topics as Record<string, boolean> }
+}
+
 function replyError(fields: Record<string, unknown>, status: number, retryAfterMs: number | undefined): EmailError {
   return new EmailError({
     code: text(fields.code) ?? 'api_error',
@@ -565,6 +727,7 @@ function asEmailError(error: unknown, message: string): EmailError {
 
 function isRetryable(error: EmailError): boolean {
   // A send carries an idempotency key, so a retry can't queue a second email. A status read changes nothing.
+  // A preferences change sets each named choice to a value, so repeating it ends the same.
   if (error.statusCode === undefined) {
     return error.code === 'network_error'
   }

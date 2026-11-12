@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.13.1
+
+### Patch Changes
+
+- [#5605](https://github.com/PostHog/posthog-js/pull/5605) [`1ae99e2`](https://github.com/PostHog/posthog-js/commit/1ae99e2909dbbf5b21b374a850c56bbf2fbee52b) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix Android fatal JavaScript crash timestamps being shifted when the device clock differs from network time
+  (2026-11-10)
+
 ## 2.13.0
 
 ### Minor Changes

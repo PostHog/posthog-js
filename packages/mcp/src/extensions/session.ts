@@ -112,9 +112,28 @@ export interface ResolvedSession {
   source: MCPAnalyticsSessionSource
 }
 
+function readHostSessionId(
+  data: MCPAnalyticsData,
+  request: MCPRequestLike,
+  extra?: CompatibleRequestHandlerExtra
+): string | undefined {
+  const resolver = data.options.sessionId
+  if (typeof resolver !== 'function') {
+    return undefined
+  }
+  try {
+    const value = resolver(request, extra)
+    return typeof value === 'string' && value.length > 0 ? value : undefined
+  } catch {
+    // a host callback must never fail the tool call
+    return undefined
+  }
+}
+
 /**
- * Resolves the session for a request. Four steps, first match wins:
+ * Resolves the session for a request. Five steps, first match wins:
  *
+ *   0. the host's `options.sessionId` callback returned one
  *   1. the client named the conversation in `_meta`          — a tool call
  *   2. the agent carried a `conversation_id` tool argument   — 2026-07-28
  *   3. the request carried a session id                      — 2025-11-25
@@ -131,6 +150,7 @@ export function resolveSession(
   server: MCPServerLike,
   extra?: CompatibleRequestHandlerExtra,
   conversationId?: string,
+  request?: MCPRequestLike,
   clientConversation?: ClientConversation
 ): ResolvedSession {
   const data = getServerTrackingData(server)
@@ -138,8 +158,16 @@ export function resolveSession(
     throw new Error('Server tracking data not found')
   }
 
-  // 1 and 2 belong to this one request, so they are never persisted: that would
-  // leak one chat's session onto a concurrent chat's `tools/list`. They still
+  // 0. The host said which session this request belongs to (`options.sessionId`).
+  // It is a host-side session id, so its source is `transport`.
+  const hostSessionId = request ? readHostSessionId(data, request, extra) : undefined
+  if (hostSessionId) {
+    applyTokenClientIdentity(data, extra)
+    return { sessionId: deriveSessionIdFromConversation(hostSessionId), source: 'transport' }
+  }
+
+  // 0, 1 and 2 belong to this one request, so they are never persisted: that would
+  // leak one chat's session onto a concurrent chat's `tools/list`. 1 and 2 still
   // count as activity on the connection (see `touchConnectionSession`). On an
   // instance that never processed `initialize`, the request's token is still the
   // only source of client identity, so it is applied either way.
