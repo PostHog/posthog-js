@@ -1,5 +1,5 @@
 import { window } from '@posthog/browser-common/utils/globals'
-import { assignableWindow } from '../../utils/globals'
+import posthogErrorWrappingFunctions from './error-wrapping-functions'
 import { PostHog } from '../../posthog-core'
 import { RemoteConfigResult } from '../../types'
 
@@ -68,40 +68,18 @@ export class ExceptionObserver {
         if (this.isEnabled) {
             logger.info('enabled')
             this._stopCapturing()
-            this._loadScript(this._startCapturing)
+            this._startCapturing()
         } else {
             this._stopCapturing()
         }
     }
 
-    private _loadScript(cb: () => void): void {
-        if (assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
-            // already loaded
-            cb()
-            return
-        }
-
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-            this._instance,
-            'exception-autocapture',
-            (err) => {
-                if (err) {
-                    return logger.error('failed to load script', err)
-                }
-                cb()
-            }
-        )
-    }
-
     private _startCapturing = () => {
-        if (!window || !this.isEnabled || !assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
+        if (!window || !this.isEnabled) {
             return
         }
 
-        const wrapOnError = assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapOnError
-        const wrapUnhandledRejection =
-            assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapUnhandledRejection
-        const wrapConsoleError = assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapConsoleError
+        const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWrappingFunctions
 
         try {
             if (!this._unwrapOnError && this._config.capture_unhandled_errors) {
