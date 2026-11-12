@@ -44,8 +44,52 @@ interface CodeEmailFields {
    * bounced) as events of the recipient. Defaults to `true`. A project whose admin turned
    * engagement capture off captures nothing, whatever the send asks. A template made in PostHog
    * follows the project's setting.
+   *
+   * @deprecated Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a
+   * send that sets both `captureEngagement` and `tracking`.
    */
   captureEngagement?: boolean
+  /**
+   * Marks the email as sensitive, such as one that carries login links, reset tokens or codes.
+   * A sensitive email keeps its links as they are unless `tracking` turns clicks on, leaves its
+   * subject off engagement events, and keeps its content out of PostHog's logs.
+   *
+   * Without it, a send whose `templateKey` matches a template saved in PostHog follows that
+   * template's setting, and any other send is sensitive. PostHog refuses `sensitive: false` when
+   * the matching template is sensitive.
+   */
+  sensitive?: boolean
+  /**
+   * What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel,
+   * captures engagement events, and counts clicks only when the email isn't sensitive.
+   *
+   * - `true` turns on opens, clicks and engagement events.
+   * - `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the
+   *   email's opens or clicks, and captures no engagement events.
+   * - An object turns each kind on or off. A key you leave out keeps its default.
+   *
+   * Turn clicks on for a sensitive email only when its links are safe to send through PostHog's
+   * click tracking.
+   */
+  tracking?: boolean | EmailTracking
+}
+
+/** Which kinds of tracking a send with `templateKey` turns on. */
+export interface EmailTracking {
+  /** Counts opens with PostHog's open pixel. Defaults to `true`. */
+  opens?: boolean
+  /**
+   * Counts clicks by sending the email's links through PostHog's click tracking. Defaults to
+   * `false` for a sensitive email and `true` for any other. Needs `opens`: PostHog refuses a send
+   * with `opens: false` and `clicks: true`.
+   */
+  clicks?: boolean
+  /**
+   * Captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events
+   * of the recipient. Defaults to `true`. A project whose admin turned engagement capture off
+   * captures nothing, whatever the send asks.
+   */
+  engagement?: boolean
 }
 
 /**
