@@ -18,7 +18,7 @@ If you only use the plugin through `posthog-react-native`, you don't need any Ja
 
 Android `minSdk` stays at 23. `posthog-react-native` still accepts this plugin through its optional `>= 2.12.7` peer range, and 4.47.0 is the first version that loads the plugin.
 
-Expo SDK 52 is the first Expo SDK that meets the React Native and iOS requirements. The Expo config plugin needs no changes.
+Expo SDK 52 is the first Expo SDK that meets the React Native and iOS requirements. PostHog's Expo config plugin needs no changes.
 
 ### Build changes
 
@@ -143,19 +143,15 @@ sdkReplayConfig: { throttleDelayMs: 500 }
 
 **If ignored:** replay silently uses the 1000 ms default.
 
-#### Android session replay records only masked screenshots
-
-`posthog-android` 4.0 removes wireframe capture. The plugin already forced screenshot mode, so your recordings don't change. If native code in your app sets `sessionReplayConfig.screenshot`, remove it, because it no longer compiles.
-
 #### `screenshotModeBackgroundCapture` is ignored on iOS
 
 This experimental option no longer has any effect, and screenshots are captured on the main thread. `posthog-react-native` still accepts the option, so nothing warns you. You can remove it from `sessionReplayConfig`.
 
-#### iOS session replay records only masked screenshots
+#### Session replay records only masked screenshots
 
-`posthog-ios` 4.0 removes wireframe capture. The plugin already forced screenshot mode, so your recordings don't change. If native code in your app sets `sessionReplayConfig.screenshotMode`, remove it, because it no longer compiles.
+`posthog-ios` 4.0 and `posthog-android` 4.0 remove wireframe capture. The plugin already forced screenshot mode, so your recordings don't change. If native code in your app sets `sessionReplayConfig.screenshotMode` (iOS) or `sessionReplayConfig.screenshot` (Android), remove it, because it no longer compiles.
 
-Masking changes with `posthog-ios` 4.0: secure text inputs stay masked inside a `ph-no-mask` view, and if a masked view sits inside a view backed by its own `CALayer` subclass, such as a `lottie-react-native` animation, the SDK masks the whole window for that frame. Fast scrolling on such a screen may also drop replay frames. See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md).
+Masking changes on iOS with `posthog-ios` 4.0: secure text inputs stay masked inside a `ph-no-mask` view, and if a masked view sits inside a view backed by its own `CALayer` subclass, such as a `lottie-react-native` animation, the SDK masks the whole window for that frame. Fast scrolling on such a screen may also drop replay frames. See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md).
 
 #### iOS uploads pause while cellular data is off
 
@@ -183,7 +179,7 @@ See [Capture v1](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#c
 The plugin turns off the language detection in `posthog-ios` 4.0 and `posthog-android` 4.0, because React Native apps usually translate in JavaScript and the native SDKs can't see that language. Native events carry `$app_language` only after you call `posthog.setAppLanguage()` from `posthog-react-native` 4.86.0 or later. Call it at startup and whenever the language changes. The value also goes on JavaScript events.
 
 ```ts
-posthog.setAppLanguage(i18n.language)
+posthog.setAppLanguage(i18n.resolvedLanguage)
 ```
 
 If your app creates PostHog clients for more than one project, native events take the language only from clients of the project the native SDK was set up for. The other clients still add it to their own JavaScript events.
