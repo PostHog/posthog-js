@@ -81,6 +81,15 @@ describe('React Native capture v1 delivery', () => {
     expect(sentEvents()).toEqual([['kept'], ['kept']])
   })
 
+  it('logs why events are kept, so a proxy without the capture route shows up in debug mode', async () => {
+    const info = vi.spyOn((posthog as any)._logger, 'info')
+    respond = () => ({ status: 404 })
+    posthog.capture('kept')
+    await posthog.flush()
+
+    expect(info).toHaveBeenCalledWith('Keeping 1 events to send again: HTTP 404.')
+  })
+
   it('halves a batch that got a 413 and sends the same events', async () => {
     respond = (request) => (request.body.batch.length > 1 ? { status: 413 } : { status: 200, body: { results: {} } })
     posthog.capture('first')

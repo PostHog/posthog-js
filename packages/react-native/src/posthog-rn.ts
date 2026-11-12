@@ -189,7 +189,8 @@ export interface PostHogOptions extends PostHogCoreOptions {
   customStorage?: PostHogCustomStorage
 
   /**
-   * A list of headers that should be sent with requests to the PostHog API.
+   * Headers sent with requests to the PostHog API. On capture requests, headers the SDK sets
+   * itself, such as `Authorization` and `User-Agent`, replace yours.
    */
   requestHeaders?: { [header_name: string]: string }
 
@@ -923,6 +924,7 @@ export class PostHog extends PostHogCore {
     if (!deferral.tooLarge) {
       this._scheduleCaptureResend(deferral.retryAfterMs)
     }
+    this._logger.info(`Keeping ${kept.length} events to send again: ${deferral.reason}.`)
     const keepUuids = kept.map((event) => queuedUuids.get(event)).filter((uuid): uuid is string => uuid !== undefined)
     return { keepUuids, tooLarge: deferral.tooLarge }
   }
@@ -1497,7 +1499,9 @@ export class PostHog extends PostHogCore {
    * @see flushLogs
    * @public
    *
-   * @returns Promise that resolves when the flush is complete
+   * @returns Promise that resolves when the flush is complete. Events PostHog didn't accept for now,
+   * such as after a network error or a `503`, stay queued and are sent again later; the promise
+   * still resolves.
    */
   flush(): Promise<void> {
     return super.flush()

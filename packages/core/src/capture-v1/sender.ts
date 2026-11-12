@@ -130,6 +130,8 @@ export interface V1SendOptions {
 }
 
 export interface V1SendDeferral {
+  /** Why the events were kept, such as `HTTP 404`, for logs. */
+  reason: string
   /** The server's `Retry-After`, when the last response carried one. */
   retryAfterMs?: number
   /** The batch got a `413` and should be resent in smaller batches. */
@@ -201,7 +203,7 @@ export class V1CaptureSender {
     const unsent = (cause: unknown, failure: string): T[] => {
       if (keepUnsent) {
         this.surfacePartialDrops(requestId, drops, loss)
-        onDeferred?.({ tooLarge: false })
+        onDeferred?.({ reason: failure, tooLarge: false })
         return pending
       }
       this.surfaceBatchFailure(requestId, drops, pending, cause, loss, failure)
@@ -240,7 +242,7 @@ export class V1CaptureSender {
           if (onDeferred && (tooLarge || (isLastAttempt && RETRYABLE_STATUSES.has(status)))) {
             const retryAfterMs = this.parseRetryAfter(response)
             await captureAttempt.waitFor(captureAttempt.cancelBody()).catch(() => {})
-            return deferred(pending, { retryAfterMs, tooLarge })
+            return deferred(pending, { reason: `HTTP ${status}`, retryAfterMs, tooLarge })
           }
           if (!isLastAttempt && RETRYABLE_STATUSES.has(status)) {
             const retryAfterMs = this.parseRetryAfter(response)
@@ -282,7 +284,11 @@ export class V1CaptureSender {
             return []
           }
           if (isLastAttempt && onDeferred) {
-            return deferred(retryable, { retryAfterMs: this.parseRetryAfter(response), tooLarge: false })
+            return deferred(retryable, {
+              reason: 'the server asked to retry them',
+              retryAfterMs: this.parseRetryAfter(response),
+              tooLarge: false,
+            })
           }
           if (isLastAttempt) {
             loss.add(`still marked for retry after ${maxAttempts} attempt(s) (HTTP ${status})`, retryable.length)

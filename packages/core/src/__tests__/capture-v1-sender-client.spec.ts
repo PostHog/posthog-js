@@ -70,7 +70,7 @@ describe('V1CaptureSender durable-queue options', () => {
       const kept = await sender.send(events, { onDeferred: (deferral) => deferrals.push(deferral) })
 
       expect(kept).toEqual(events)
-      expect(deferrals).toEqual([{ retryAfterMs: 7000, tooLarge: false }])
+      expect(deferrals).toEqual([{ reason: `HTTP ${status}`, retryAfterMs: 7000, tooLarge: false }])
       expect(errors).toEqual([])
     }
   )
@@ -86,7 +86,7 @@ describe('V1CaptureSender durable-queue options', () => {
     const kept = await sender.send([a, event(UUID_B)], { onDeferred: (deferral) => deferrals.push(deferral) })
 
     expect(kept).toEqual([a])
-    expect(deferrals).toEqual([{ retryAfterMs: undefined, tooLarge: false }])
+    expect(deferrals).toEqual([{ reason: 'the server asked to retry them', retryAfterMs: undefined, tooLarge: false }])
     expect(errors).toEqual([
       expect.objectContaining({ drops: [{ uuid: UUID_B, details: undefined }], retryExhausted: [] }),
     ])
@@ -99,7 +99,7 @@ describe('V1CaptureSender durable-queue options', () => {
     const events = [event(UUID_A), event(UUID_B)]
 
     expect(await sender.send(events, { onDeferred: (deferral) => deferrals.push(deferral) })).toEqual(events)
-    expect(deferrals).toEqual([{ retryAfterMs: undefined, tooLarge: true }])
+    expect(deferrals).toEqual([{ reason: 'HTTP 413', retryAfterMs: undefined, tooLarge: true }])
 
     expect(await sender.send([event(UUID_A)], { onDeferred: (deferral) => deferrals.push(deferral) })).toEqual([])
     expect(errors).toEqual([expect.objectContaining({ retryExhausted: [UUID_A] })])
