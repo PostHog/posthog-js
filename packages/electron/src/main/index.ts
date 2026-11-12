@@ -29,6 +29,8 @@ export interface PostHogOptions extends Pick<
     | 'fetchRetryDelay'
     | 'preloadFeatureFlags'
     | 'disableRemoteFeatureFlags'
+    | 'disableRemoteConfig'
+    | 'remoteConfigRequestTimeoutMs'
     | 'defaultOptIn'
     | 'disabled'
     | 'bootstrap'
@@ -219,6 +221,7 @@ export class PostHog {
         const optedOut = this._core.optedOut
         this._core.reset([
             PostHogPersistedProperty.OptedOut,
+            PostHogPersistedProperty.RemoteConfig,
             PostHogPersistedProperty.InstalledAppVersion,
             PostHogPersistedProperty.InstalledAppBuild,
         ])
@@ -301,6 +304,7 @@ export class PostHog {
             anonymousId: this._core.getAnonymousId(),
             sessionId: this.getSessionId(),
             optedOut: this._core.optedOut,
+            autocapture: this._core.getAutocaptureState(),
             featureFlags: flags,
             flagsLoaded: this._core.getFeatureFlags() !== undefined,
             flagRevision: this._flagRevision,
@@ -460,6 +464,12 @@ export class PostHog {
         if (command.type === 'hello') return
         if (command.type === 'flush') return this.flush()
         if (command.type === 'reloadFeatureFlags') return this.reloadFeatureFlagsAsync()
+        if (command.type === 'loadAutocaptureConfig') {
+            await this._core.loadAutocaptureConfig()
+            if (!this._closing) await this._core.persist()
+            this._scheduleState()
+            return
+        }
         return this._run(
             () =>
                 this._core.withContext(context, () => {

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { EventEmitter } from 'node:events'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -31,6 +32,7 @@ vi.mock('electron', async () => {
 })
 import { init, type PostHog } from '../main'
 import { ElectronStorage } from '../main/storage'
+import { PostHog as RendererPostHog } from '../renderer'
 
 let directory: string
 let client: PostHog | undefined
@@ -352,5 +354,210 @@ describe('main Electron client', () => {
         expect(owner.shutdown()).toBe(shutdown)
         expect(mock.handlers.has(COMMAND_CHANNEL)).toBe(false)
         await expect(owner.capture('after-shutdown')).rejects.toThrow('shut down')
+    })
+})
+
+describe('main-routed autocapture config', () => {
+    async function load(owner: PostHog, id = 91) {
+        const window = renderer(owner, id)
+        await window.send({ type: 'hello' })
+        return window.send({ type: 'loadAutocaptureConfig' })
+    }
+
+    it('fetches core remote config on demand, mirrors and persists only autocapture fields', async () => {
+        const owner = await start()
+        expect(mock.fetch).not.toHaveBeenCalled()
+        mock.fetch.mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    autocapture_opt_out: false,
+                    elementsChainAsString: true,
+                    sessionRecording: { endpoint: 'UNSUPPORTED_CONFIG_CANARY' },
+                    surveys: [{ id: 'UNSUPPORTED_CONFIG_CANARY' }],
+                    productTours: true,
+                    logs: { captureConsoleLogs: true },
+                    hasFeatureFlags: true,
+                })
+            )
+        )
+        expect(await load(owner)).toMatchObject({
+            ok: true,
+            state: {
+                autocapture: {
+                    status: 'loaded',
+                    autocapture_opt_out: false,
+                    elementsChainAsString: true,
+                },
+            },
+        })
+        expect(mock.fetch).toHaveBeenCalledTimes(1)
+        expect(mock.fetch.mock.calls[0][0]).toBe('https://us-assets.i.posthog.com/array/test-token/config')
+        expect(mock.fetch.mock.calls[0][1]?.method).toBe('GET')
+        const { readdir, readFile } = await import('node:fs/promises')
+        const files = await readdir(directory, { recursive: true })
+        const text = await readFile(
+            join(
+                directory,
+                files.find((file) => file.endsWith('state.json'))!
+            ),
+            'utf8'
+        )
+        expect(JSON.parse(text).values.remote_config).toEqual({
+            autocapture_opt_out: false,
+            elementsChainAsString: true,
+        })
+        expect(text).not.toContain('UNSUPPORTED_CONFIG_CANARY')
+        expect(JSON.stringify(owner.getState())).not.toMatch(/sessionRecording|surveys|productTours|captureConsoleLogs/)
+        expect(owner.getState().flagsLoaded).toBe(false)
+    })
+
+    it('keeps a persisted project kill switch through reset, restart, malformed response and fetch failure', async () => {
+        let owner = await start()
+        mock.fetch.mockResolvedValue(new Response(JSON.stringify({ autocapture_opt_out: true })))
+        await load(owner)
+        await owner.reset()
+        expect(owner.getState().autocapture?.autocapture_opt_out).toBe(true)
+        await owner.shutdown(50)
+        owner = await start()
+        expect(owner.getState().autocapture).toEqual({ status: 'pending', autocapture_opt_out: true })
+        mock.fetch.mockResolvedValue(
+            new Response(JSON.stringify({ autocapture_opt_out: 'false', elementsChainAsString: 'true' }))
+        )
+        await load(owner)
+        expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: true })
+        mock.fetch.mockRejectedValue(new Error('offline'))
+        await load(owner, 92)
+        expect(owner.getState().autocapture).toEqual({ status: 'failed', autocapture_opt_out: true })
+    })
+
+    it.each([{ defaultOptIn: false }, { disabled: true }, { disableRemoteConfig: true }])(
+        'does not fetch when gated by %j',
+        async (options) => {
+            const owner = await start(options)
+            await load(owner)
+            expect(mock.fetch).not.toHaveBeenCalled()
+            if ('disabled' in options) expect(owner.getState().autocapture?.autocapture_opt_out).toBe(true)
+            if ('disableRemoteConfig' in options) expect(owner.getState().autocapture?.status).toBe('disabled')
+        }
+    )
+
+    it('does not treat disabled feature flags as disabling the authoritative config request', async () => {
+        const owner = await start({ disableRemoteFeatureFlags: true })
+        mock.fetch.mockResolvedValue(new Response(JSON.stringify({ autocapture_opt_out: true })))
+        await load(owner)
+        expect(mock.fetch).toHaveBeenCalledOnce()
+        expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: true })
+    })
+
+    it.each(['identify', 'reset'] as const)(
+        'enables cold-start autocapture after %s during a pending project config load',
+        async (change) => {
+            const owner = await start({ disableRemoteFeatureFlags: true })
+            const page = renderer(owner, 95)
+            let resolve!: (response: Response) => void
+            mock.fetch.mockImplementation(async (_url, options) => {
+                if (options?.method === 'GET')
+                    return new Promise((done) => {
+                        resolve = done
+                    })
+                const body = JSON.parse(options?.body as string)
+                if (body.batch) batches.push(...body.batch)
+                return new Response('{}')
+            })
+            const first = load(owner, 94)
+            await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
+            if (change === 'identify') await owner.identify('new-account')
+            else await owner.reset()
+            const facade = new RendererPostHog(
+                {
+                    request: (request) => mock.handlers.get(COMMAND_CHANNEL)!(page.event, request),
+                    subscribe: (listener) => {
+                        page.contents.mainFrame.send.mockImplementation((_channel, state) => listener(state))
+                        return () => page.contents.mainFrame.send.mockReset()
+                    },
+                },
+                { autocapture: true }
+            )
+            try {
+                await facade.ready()
+                await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
+                await vi.waitFor(() => expect(facade.getState().generation).toBe(owner.getState().generation))
+                resolve(new Response(JSON.stringify({ autocapture_opt_out: false, elementsChainAsString: true })))
+                await first
+                await facade.flush()
+                expect(facade.getState().autocapture).toEqual({
+                    status: 'loaded',
+                    autocapture_opt_out: false,
+                    elementsChainAsString: true,
+                })
+                expect(mock.fetch.mock.calls.filter(([, options]) => options?.method === 'GET')).toHaveLength(1)
+                mock.fetch.mockImplementation(async (_url, options) => {
+                    const body = JSON.parse(options?.body as string)
+                    if (body.batch) batches.push(...body.batch)
+                    return new Response('{}')
+                })
+                document.body.innerHTML = '<button>Save</button>'
+                document.querySelector('button')!.click()
+                await facade.flush()
+                expect(batches.filter(({ event }) => event === '$autocapture')).toHaveLength(1)
+                expect(batches.find(({ event }) => event === '$autocapture')?.distinct_id).toBe(owner.getDistinctId())
+            } finally {
+                facade.dispose()
+                document.body.innerHTML = ''
+            }
+        }
+    )
+
+    it('deduplicates concurrent project config loads across identity changes', async () => {
+        const owner = await start({ disableRemoteFeatureFlags: true })
+        let resolve!: (response: Response) => void
+        mock.fetch.mockImplementation(
+            () =>
+                new Promise((done) => {
+                    resolve = done
+                })
+        )
+        const first = load(owner, 93)
+        const second = load(owner, 94)
+        await vi.waitFor(() => expect(mock.fetch).toHaveBeenCalledOnce())
+        await owner.identify('new-account')
+        resolve(new Response(JSON.stringify({ autocapture_opt_out: false })))
+        await Promise.all([first, second])
+        mock.fetch.mockImplementation(async () => new Response('{}'))
+        expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: false })
+    })
+
+    it('does not persist project config returned after opt-out', async () => {
+        const owner = await start()
+        let resolve!: (response: Response) => void
+        mock.fetch.mockImplementation(
+            () =>
+                new Promise((done) => {
+                    resolve = done
+                })
+        )
+        const pending = load(owner)
+        await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
+        await owner.optOut()
+        resolve(new Response(JSON.stringify({ autocapture_opt_out: false })))
+        await pending
+        expect(owner.getState().autocapture).toEqual({ status: 'failed' })
+    })
+
+    it('ignores a delayed config response after shutdown', async () => {
+        const owner = await start()
+        let resolve!: (response: Response) => void
+        mock.fetch.mockImplementation(
+            () =>
+                new Promise((done) => {
+                    resolve = done
+                })
+        )
+        const pending = load(owner)
+        await vi.waitFor(() => expect(mock.fetch).toHaveBeenCalledOnce())
+        await owner.shutdown(1)
+        resolve(new Response(JSON.stringify({ autocapture_opt_out: false })))
+        await pending
+        expect(owner.getState().autocapture?.autocapture_opt_out).toBe(true)
     })
 })
