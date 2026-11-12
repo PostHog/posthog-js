@@ -9,4 +9,4 @@
 - **Breaking:** remove `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` — use `getAllFeatureFlags()`
 - **Breaking:** remove `onFeatureFlag()` — use `onFeatureFlags()` and read the flag with `getFeatureFlagResult()`
 - **Breaking:** remove `overrideFeatureFlag()` — use `updateFlags()`, and set `disableRemoteFeatureFlags` to keep the values from being replaced by the next load
-- **Breaking:** remove the `useFeatureFlagWithPayload()` hook — use `useFeatureFlagResult()`
+- **Breaking:** remove the `useFeatureFlagWithPayload()` hook and its `FeatureFlagWithPayload` type — use `useFeatureFlagResult()`

@@ -1045,7 +1045,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     return this._getFeatureFlagResult(key, { sendEvent: resolveSendFeatureFlagEvent(options) })
   }
 
-  /** Decodes a flag's stored payload for flag results. */
+  /** Decodes a flag's stored serialized payload. */
   protected decodeFeatureFlagPayload(payload: any): JsonType {
     return parsePayload(payload)
   }
@@ -1287,7 +1287,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   /**
    * Replaces (or merges into) the stored feature flags and payloads with locally supplied
    * values, exactly as if they had been returned by the flags endpoint: the values are
-   * persisted, `getFeatureFlag()`/`getFeatureFlagPayload()` read them back, and
+   * persisted, `getFeatureFlag()`/`getFeatureFlagResult()` read them back, and
    * `onFeatureFlags` listeners fire. Makes no network request.
    *
    * Intended for apps that evaluate flags outside the SDK (e.g. server-side local
