@@ -277,6 +277,14 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
 }
 
 /**
+ * What a `sendBatch()` override can resolve with when the transport keeps some events for a later
+ * flush. The flush removes the rest of the batch from the queue, keeps the events whose `uuid` is in
+ * `keepUuids`, and stops draining that route until the next flush. `tooLarge` halves the batch size
+ * and resends the same events instead.
+ */
+export type SendBatchOutcome = { keepUuids: readonly string[]; tooLarge?: boolean }
+
+/**
  * Outcome of a logs batch send. Keeps HTTP error classification inside core so
  * PostHogLogs doesn't need to know about specific error types.
  *
@@ -1601,7 +1609,7 @@ export abstract class PostHogCoreStateless {
     batchMessages: (PostHogEventProperties | undefined)[],
     retryOptions?: Partial<RetriableOptions>,
     route: string = DEFAULT_QUEUE_ROUTE
-  ): Promise<void> {
+  ): Promise<void | SendBatchOutcome> {
     const data: Record<string, any> = {
       api_key: this.projectToken,
       batch: batchMessages.map((message) => {
@@ -1692,12 +1700,15 @@ export abstract class PostHogCoreStateless {
         item.message === undefined ? item.message : this.normalizeMessage(item.message)
       )
 
-      const persistQueueChange = async (): Promise<void> => {
+      const persistQueueChange = async (keepUuids?: ReadonlySet<string>): Promise<void> => {
         const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
         // The live queue may have overflowed while this batch was in flight. Remove only
         // snapshotted items: UUID survives persistence, while reference identity supports
         // legacy queue items without a UUID.
-        const remainingBatchItems = [...batchItems]
+        const removedBatchItems = keepUuids
+          ? batchItems.filter((item) => !(typeof item.message?.uuid === 'string' && keepUuids.has(item.message.uuid)))
+          : batchItems
+        const remainingBatchItems = [...removedBatchItems]
         const newQueue = refreshedQueue.filter((item) => {
           const itemUuid = item.message?.uuid
           const batchItemIndex = remainingBatchItems.findIndex(
@@ -1715,7 +1726,7 @@ export abstract class PostHogCoreStateless {
         })
         this.setPersistedProperty<PostHogQueueItem[]>(queueKey, newQueue)
         queue = newQueue
-        this._dequeuedMessagesCount += batchItems.length
+        this._dequeuedMessagesCount += removedBatchItems.length
         // Wait for storage to complete to prevent duplicate events on app crash
         await this.flushStorage()
       }
@@ -1731,8 +1742,9 @@ export abstract class PostHogCoreStateless {
         },
       }
 
+      let outcome: void | SendBatchOutcome
       try {
-        await this.sendBatch(batchMessages, retryOptions, route)
+        outcome = await this.sendBatch(batchMessages, retryOptions, route)
       } catch (err) {
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
@@ -1752,6 +1764,24 @@ export abstract class PostHogCoreStateless {
         this._events.emit('error', err)
 
         throw err
+      }
+
+      if (outcome?.tooLarge && batchMessages.length > 1) {
+        this.maxBatchSize = Math.max(1, Math.floor(batchMessages.length / 2))
+        this._logger.warn(
+          `Received 413 when sending batch of size ${batchMessages.length}, reducing batch size to ${this.maxBatchSize}`
+        )
+        continue
+      }
+
+      if (outcome && outcome.keepUuids.length > 0) {
+        const keepUuids = new Set(outcome.keepUuids)
+        await persistQueueChange(keepUuids)
+        sentMessages.push(
+          ...batchMessages.filter((message) => !(typeof message?.uuid === 'string' && keepUuids.has(message.uuid)))
+        )
+        // The transport asked to wait before sending the kept events again.
+        return
       }
 
       await persistQueueChange()
