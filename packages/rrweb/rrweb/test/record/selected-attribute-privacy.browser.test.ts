@@ -156,8 +156,9 @@ async function capture(masking: Masking, shape: Shape, change: Change) {
 
 for (const masking of ['default', 'redactor'] as const) {
   for (const shape of ['direct', 'optgroup', 'multiple'] as const) {
+    const legacyMultiselect = masking === 'redactor' && shape === 'multiple';
     it.each<Change>(['setAttribute', 'defaultSelected', 'removeAttribute'])(
-      `does not expose selected identity (${masking}, ${shape}, %s)`,
+      `${legacyMultiselect ? 'retains custom multiselect attributes' : 'does not expose selected identity'} (${masking}, ${shape}, %s)`,
       async (change) => {
         const result = await capture(masking, shape, change);
         expect(result.optionId).toBeGreaterThan(0);
@@ -169,6 +170,20 @@ for (const masking of ['default', 'redactor'] as const) {
               ? [0, 1]
               : [1],
         );
+        if (legacyMultiselect) {
+          expect(result.selectedMutations).toEqual([
+            {
+              id: result.optionId,
+              attributes: {
+                selected: change === 'removeAttribute' ? null : '',
+              },
+            },
+          ]);
+          expect(result.inputs).toEqual([]);
+          expect(result.callbackValues).toEqual([]);
+          expect(result.callbackElements).toEqual([]);
+          return;
+        }
         expect(result.selectedMutations).toEqual([]);
         const value =
           change === 'removeAttribute' || shape === 'multiple'

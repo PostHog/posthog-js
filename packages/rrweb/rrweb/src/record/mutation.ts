@@ -795,15 +795,20 @@ export default class MutationBuffer {
           attributeName === 'selected' &&
           this.maskInputOptions.select
         ) {
-          if (value !== m.oldValue) {
-            let parent = dom.parentElement(target);
-            if (parent?.tagName === 'OPTGROUP')
-              parent = dom.parentElement(parent);
-            if (parent?.tagName === 'SELECT') {
+          let parent = dom.parentElement(target);
+          if (parent?.tagName === 'OPTGROUP')
+            parent = dom.parentElement(parent);
+          // A scalar loses choices; custom multiselects keep their legacy attributes.
+          const customMultiselect =
+            this.maskInputFn &&
+            parent?.tagName === 'SELECT' &&
+            (parent as HTMLSelectElement).multiple;
+          if (!customMultiselect) {
+            if (value !== m.oldValue && parent?.tagName === 'SELECT') {
               this.selectedAttributeChanges.add(parent as HTMLSelectElement);
             }
+            return;
           }
-          return;
         }
 
         if (attributeName === 'value') {
