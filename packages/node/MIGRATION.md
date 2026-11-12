@@ -278,7 +278,7 @@ These changes follow from this order:
 ### Identify-style events
 
 `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once` events create, merge or update persons and groups.
-With person processing off, PostHog drops `$identify`, `$create_alias` and `$groupidentify` events and ignores the person update of a `$set` event, so these events default to `process_person_profile: true`, whichever method sends them:
+With person processing off, PostHog drops `$identify`, `$create_alias`, `$merge_dangerously` and `$groupidentify` events and ignores the person update of a `$set` or `$set_once` event, so these events default to `process_person_profile: true`, whichever method sends them:
 
 - The call's own `process_person_profile` option wins. If the call has none, its `$process_person_profile` property becomes the option and is removed from the properties.
 - Otherwise the option is `true`, so person processing turned off with `registerOptions()`, context options, or a `$process_person_profile: false` property in `register()` or a context does not reach these events. `identify`, `alias` and `groupIdentify` keep creating and updating persons and groups, as in 5.x.
