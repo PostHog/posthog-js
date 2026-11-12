@@ -106,6 +106,20 @@ function renderer(owner: PostHog, id: number) {
 }
 
 describe('main Electron client', () => {
+    it('keeps the existing bridge authorized when a navigation never commits', async () => {
+        const owner = await start()
+        const page = renderer(owner, 1)
+        await page.send({ type: 'hello' })
+        page.contents.emit('did-start-navigation', {}, 'https://example.invalid/download', false, true)
+        expect(await page.send({ type: 'capture', event: 'after-aborted-navigation' })).toMatchObject({ ok: true })
+        await owner.flush()
+        expect(batches.map((event) => event.event)).toEqual(['after-aborted-navigation'])
+        page.contents.emit('did-navigate', {}, 'file:///app/index.html', 200, 'OK')
+        expect(await page.send({ type: 'capture', event: 'before-new-handshake' })).toMatchObject({ ok: false })
+        expect(await page.send({ type: 'hello' })).toMatchObject({ ok: true })
+        expect(await page.send({ type: 'capture', event: 'after-new-handshake' })).toMatchObject({ ok: true })
+    })
+
     it('counts cold start and aggregate focus transitions once across windows', async () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
         const owner = await start({ captureAppLifecycleEvents: true })

@@ -53,7 +53,7 @@ export class PostHog {
                 version: PROTOCOL_VERSION,
                 sequence: ++this._sequence,
                 generation,
-                command,
+                command: JSON.parse(JSON.stringify(command)),
             })
             if (!response.ok) throw new Error(response.error)
             this._update(response.state)
