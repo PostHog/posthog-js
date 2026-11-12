@@ -22,9 +22,8 @@ import {
   patchFetchForTracingHeaders,
   raceWithTimeout,
   safeSetTimeout,
+  FeatureFlagResult,
   FeatureFlagValue,
-  FeatureFlagResultOptions,
-  IsFeatureEnabledOptions,
   ErrorTracking as CoreErrorTracking,
   isObject,
   uuidv7,
@@ -45,7 +44,9 @@ import {
   PostHogAutocaptureOptions,
   PostHogCustomAppProperties,
   PostHogCustomStorage,
+  PostHogFeatureFlagOptions,
   PostHogFeatureFlagsLoadContext,
+  PostHogIsFeatureEnabledOptions,
   PostHogPushIdentityProvider,
   PostHogRageClickConfig,
   PostHogSessionReplayConfig,
@@ -1607,9 +1608,9 @@ export class PostHog extends PostHogCore {
    * @param options Optional per-call settings
    * @returns True if the flag evaluates on, false if it evaluates off, or the missing-value fallback described above
    */
-  isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
-  isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
-  isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
+  isFeatureEnabled(key: string, options: PostHogIsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+  isFeatureEnabled(key: string, options?: PostHogIsFeatureEnabledOptions): boolean | undefined
+  isFeatureEnabled(key: string, options?: PostHogIsFeatureEnabledOptions): boolean | undefined {
     return super.isFeatureEnabled(key, options)
   }
 
@@ -1638,8 +1639,31 @@ export class PostHog extends PostHogCore {
    * @param options Optional per-call settings
    * @returns The current feature flag value, or undefined if flags are unavailable
    */
-  getFeatureFlag(key: string, options?: FeatureFlagResultOptions): boolean | string | undefined {
+  getFeatureFlag(key: string, options?: PostHogFeatureFlagOptions): boolean | string | undefined {
     return super.getFeatureFlag(key, options)
+  }
+
+  /**
+   * Gets the evaluation result for a feature flag: whether it's enabled, its variant, and its payload.
+   *
+   * `enabled: false` is a conclusive off result; `undefined` means no evaluation is available for the key.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * const result = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')
+   * const payload = result?.payload
+   * ```
+   *
+   * @public
+   *
+   * @param key The feature flag key
+   * @param options Optional per-call settings
+   * @returns The flag's evaluation result, or undefined if none is available
+   */
+  getFeatureFlagResult(key: string, options?: PostHogFeatureFlagOptions): FeatureFlagResult | undefined {
+    return super.getFeatureFlagResult(key, options)
   }
 
   /**

@@ -2674,9 +2674,13 @@ describe('Feature flag error tracking', () => {
   })
 
   it.each([
-    ['getFeatureFlag', (client: PostHog) => client.getFeatureFlag('my-flag', { sendEvent: false })],
-    ['isFeatureEnabled', (client: PostHog) => client.isFeatureEnabled('my-flag', { sendEvent: false })],
-  ] as const)('should not send $feature_flag_called from %s when sendEvent is false', async (_, callFn) => {
+    ['getFeatureFlag', (client: PostHog) => client.getFeatureFlag('my-flag', { sendFeatureFlagEvent: false })],
+    ['isFeatureEnabled', (client: PostHog) => client.isFeatureEnabled('my-flag', { sendFeatureFlagEvent: false })],
+    [
+      'getFeatureFlagResult',
+      (client: PostHog) => client.getFeatureFlagResult('my-flag', { sendFeatureFlagEvent: false })?.enabled,
+    ],
+  ] as const)('should not send $feature_flag_called from %s when sendFeatureFlagEvent is false', async (_, callFn) => {
     ;(globalThis as any).window.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
         return Promise.resolve({

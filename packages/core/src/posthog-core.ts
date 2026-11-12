@@ -55,6 +55,9 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
   }[]
 }
 
+const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolean | undefined =>
+  options?.sendFeatureFlagEvent ?? options?.sendEvent
+
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
@@ -1035,7 +1038,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * off result; `undefined` means no evaluation is available for the key.
    */
   getFeatureFlagResult(key: string, options?: FeatureFlagResultOptions): FeatureFlagResult | undefined {
-    return this._getFeatureFlagResult(key, options)
+    return this._getFeatureFlagResult(key, { sendEvent: resolveSendFeatureFlagEvent(options) })
   }
 
   /**
@@ -1167,7 +1170,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   getFeatureFlag(key: string, options?: FeatureFlagResultOptions): FeatureFlagValue | undefined {
     const result = this._getFeatureFlagResult(key, {
       missingFlagBehavior: 'getFeatureFlag',
-      sendEvent: options?.sendEvent,
+      sendEvent: resolveSendFeatureFlagEvent(options),
     })
     return result?.variant ?? result?.enabled
   }
@@ -1222,7 +1225,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const response = this.getFeatureFlag(key, options)
       return response === undefined ? undefined : !!response
     }
-    const result = this._getFeatureFlagResult(key, { sendEvent: options.sendEvent })
+    const result = this._getFeatureFlagResult(key, { sendEvent: resolveSendFeatureFlagEvent(options) })
     const value = result?.variant ?? result?.enabled
     return value === undefined ? options.defaultValue : !!value
   }

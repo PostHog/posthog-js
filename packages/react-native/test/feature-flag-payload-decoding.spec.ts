@@ -56,7 +56,7 @@ describe('PostHog RN feature flag payload decoding', () => {
   it.each(['{broken', '', '   '])('reads a malformed payload %j as null without changing the flag', async (payload) => {
     await loadFlags(payload)
 
-    expect(posthog.getFeatureFlagResult('checkout', { sendEvent: false })).toEqual({
+    expect(posthog.getFeatureFlagResult('checkout', { sendFeatureFlagEvent: false })).toEqual({
       key: 'checkout',
       enabled: true,
       variant: 'blue',
@@ -75,6 +75,6 @@ describe('PostHog RN feature flag payload decoding', () => {
   ])('decodes the valid payload %s', async (payload, expected) => {
     await loadFlags(payload)
 
-    expect(posthog.getFeatureFlagResult('checkout', { sendEvent: false })?.payload).toEqual(expected)
+    expect(posthog.getFeatureFlagResult('checkout', { sendFeatureFlagEvent: false })?.payload).toEqual(expected)
   })
 })

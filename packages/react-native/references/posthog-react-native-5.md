@@ -885,7 +885,7 @@ behavior rather than carrying an explicit off evaluation.
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | The feature flag key |
-| `options?` | `FeatureFlagResultOptions` | Optional per-call settings |
+| `options?` | `PostHogFeatureFlagOptions` | Optional per-call settings |
 
 #### Returns
 
@@ -921,19 +921,29 @@ const value = posthog.getFeatureFlag('key-for-your-boolean-flag')
 
 > **getFeatureFlagResult**(`key`, `options?`): `FeatureFlagResult` \| `undefined`
 
-Returns the current evaluation result for a feature flag. `enabled: false` is a conclusive
-off result; `undefined` means no evaluation is available for the key.
+Gets the evaluation result for a feature flag: whether it's enabled, its variant, and its payload.
+
+`enabled: false` is a conclusive off result; `undefined` means no evaluation is available for the key.
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `key` | `string` |
-| `options?` | `FeatureFlagResultOptions` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `key` | `string` | The feature flag key |
+| `options?` | `PostHogFeatureFlagOptions` | Optional per-call settings |
 
 #### Returns
 
 `FeatureFlagResult` \| `undefined`
+
+The flag's evaluation result, or undefined if none is available
+
+#### Example
+
+```js
+const result = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')
+const payload = result?.payload
+```
 
 ### `useFeatureFlagResult`
 
@@ -1088,7 +1098,7 @@ behavior rather than carrying an explicit off evaluation.
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | The feature flag key |
-| `options` | `FeatureFlagResultOptions` & `object` & `object` | Optional per-call settings |
+| `options` | `PostHogFeatureFlagOptions` & `object` & `object` | Optional per-call settings |
 
 ##### Returns
 
@@ -1127,7 +1137,7 @@ behavior rather than carrying an explicit off evaluation.
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | The feature flag key |
-| `options?` | `IsFeatureEnabledOptions` | Optional per-call settings |
+| `options?` | `PostHogIsFeatureEnabledOptions` | Optional per-call settings |
 
 ##### Returns
 
@@ -2379,29 +2389,9 @@ Result of evaluating a feature flag, including both the flag value and its paylo
 | <a id="payload-1"></a> `payload?` | `readonly` | `JsonType` | - |
 | <a id="variant-1"></a> `variant?` | `readonly` | `string` | - |
 
-### `FeatureFlagResultOptions`
-
-> **FeatureFlagResultOptions** = `object`
-
-#### Properties
-
-| Property | Type | Description |
-| ------ | ------ | ------ |
-| <a id="sendevent"></a> `sendEvent?` | `boolean` | Whether to send a $feature_flag_called event. Defaults to true. |
-
 ### `FeatureFlagValue`
 
 > **FeatureFlagValue** = `string` \| `boolean`
-
-### `IsFeatureEnabledOptions`
-
-> **IsFeatureEnabledOptions** = `FeatureFlagResultOptions` & `object`
-
-#### Type Declaration
-
-| Name | Type | Description |
-| ------ | ------ | ------ |
-| `defaultValue?` | `boolean` | Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. |
 
 ### `JsonType`
 
@@ -2721,7 +2711,7 @@ const user: RequiredUser = {
 | <a id="preloadfeatureflags-2"></a> `preloadFeatureFlags?` | `boolean` | Whether to load feature flags when initialized or not **Default** `true` |
 | <a id="remoteconfigrequesttimeoutms"></a> `remoteConfigRequestTimeoutMs?` | `number` | Timeout in milliseconds for remote config calls **Default** `3000` |
 | <a id="requesttimeout"></a> `requestTimeout?` | `number` | Timeout in milliseconds for any calls **Default** `10000` |
-| <a id="sendfeatureflagevent"></a> `sendFeatureFlagEvent?` | `boolean` | Whether to track that `getFeatureFlag` was called (used by Experiments) In posthog-node this is also the default for reads from an `evaluateFlags()` snapshot (`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a single-flag getter, to override it for that call. **Default** `true` |
+| <a id="sendfeatureflagevent-1"></a> `sendFeatureFlagEvent?` | `boolean` | Whether to track that `getFeatureFlag` was called (used by Experiments) In posthog-node this is also the default for reads from an `evaluateFlags()` snapshot (`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a single-flag getter, to override it for that call. **Default** `true` |
 | <a id="sessionexpirationtimeseconds"></a> `sessionExpirationTimeSeconds?` | `number` | For Session Analysis how long before we expire a session in seconds **Default** `1800` |
 
 ### `PostHogCustomAppProperties`
@@ -2800,6 +2790,18 @@ const user: RequiredUser = {
 
 These are the fields we care about from PostHogFlagsResponse for feature flags.
 
+### `PostHogFeatureFlagOptions`
+
+> **PostHogFeatureFlagOptions** = `object`
+
+Per-call settings for reading a feature flag.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="sendfeatureflagevent"></a> `sendFeatureFlagEvent?` | `boolean` | Whether this read sends a `$feature_flag_called` event. Defaults to the `sendFeatureFlagEvent` client option. |
+
 ### `PostHogFeatureFlagsLoadContext`
 
 > **PostHogFeatureFlagsLoadContext** = `object`
@@ -2837,6 +2839,18 @@ Passed to `onFeatureFlags` listeners with each feature flag load.
 #### Index Signature
 
 \[`type`: `string`\]: `string` \| `number`
+
+### `PostHogIsFeatureEnabledOptions`
+
+> **PostHogIsFeatureEnabledOptions** = `PostHogFeatureFlagOptions` & `object`
+
+Per-call settings for `isFeatureEnabled()`.
+
+#### Type Declaration
+
+| Name | Type | Description |
+| ------ | ------ | ------ |
+| `defaultValue?` | `boolean` | Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. |
 
 ### `PostHogLogsConfig`
 

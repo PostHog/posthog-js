@@ -3,6 +3,21 @@ export type PostHogAutocaptureNavigationTrackerOptions = {
   routeToProperties?: (name: string, params: any) => Record<string, any>
 }
 
+/** Per-call settings for reading a feature flag. */
+export type PostHogFeatureFlagOptions = {
+  /**
+   * Whether this read sends a `$feature_flag_called` event.
+   * Defaults to the `sendFeatureFlagEvent` client option.
+   */
+  sendFeatureFlagEvent?: boolean
+}
+
+/** Per-call settings for `isFeatureEnabled()`. */
+export type PostHogIsFeatureEnabledOptions = PostHogFeatureFlagOptions & {
+  /** Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. */
+  defaultValue?: boolean
+}
+
 /** Passed to `onFeatureFlags` listeners with each feature flag load. */
 export type PostHogFeatureFlagsLoadContext = {
   /** `true` if the latest feature flag load failed. A quota-limited response is not a failure. */
