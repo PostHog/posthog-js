@@ -8,6 +8,7 @@ Release `@posthog/react-native-plugin` 3.0. See the [migration guide](https://gi
 - **Breaking:** require iOS 15 or later and macOS 11 or later
 - **Breaking:** require posthog-ios 4.0, which needs Xcode 26
 - **Breaking:** require posthog-android 4.0
+- Fail the Android build instead of crashing at runtime when another dependency would raise `posthog-android` past 4.x
 - **Breaking:** resolve posthog-ios through Swift Package Manager instead of CocoaPods trunk and ignore the `posthog.useSpm` Podfile property
 - **Breaking:** fail `pod install` for Podfiles that also include `posthog-react-native-session-replay` or the `PostHog` pod — remove them
 - **Breaking:** fail `pod install` for Podfiles that use `generate_multiple_pod_projects`, `deduplicate_targets => false`, or plugin targets with different platforms or `use_frameworks!` linkage
