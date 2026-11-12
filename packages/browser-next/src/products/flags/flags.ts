@@ -109,6 +109,7 @@ export const featureFlags = (options: FeatureFlagsOptions = {}): IFeatureFlags =
             try {
                 return shared.getAllFeatureFlags().map((result) => ({
                     ...result,
+                    enabled: result.variant === '' ? false : result.enabled,
                     payload: result.payload === undefined ? undefined : JSON.parse(JSON.stringify(result.payload)),
                 }))
             } catch (error) {

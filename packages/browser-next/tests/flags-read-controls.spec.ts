@@ -211,6 +211,27 @@ describe.each(['static', 'automatic'] as const)('%s flags read controls', (mode)
         }
     )
 
+    it('keeps empty variants disabled in exposure-free snapshots', async () => {
+        const client = await createFlags({ featureFlagEvaluation: false })
+        const flags = requireInstalledExtension(client.featureFlags)
+        const captured = vi.fn()
+        requireInstalledExtension(client.analytics).onEvent(captured)
+        flags.updateFlags({ legacy: '' }, { legacy: { copy: ['original'] } })
+        const expected = {
+            key: 'legacy',
+            enabled: false,
+            variant: '',
+            payload: { copy: ['original'] },
+        }
+        expect(flags.getFeatureFlag('legacy', { sendFeatureFlagEvent: false })).toEqual(expected)
+        const snapshot = flags.getAllFeatureFlags()
+        expect(snapshot).toEqual([expected])
+        const payload = snapshot[0]?.payload as { copy: string[] }
+        payload.copy.push('changed')
+        expect(flags.getAllFeatureFlags()).toEqual([expected])
+        expect(captured).not.toHaveBeenCalled()
+    })
+
     it('returns an exposure-free empty snapshot while values are unavailable', async () => {
         vi.useFakeTimers()
         const fetch = vi.fn(() => new Promise<Response>(() => {}))

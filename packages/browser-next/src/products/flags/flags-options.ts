@@ -21,7 +21,7 @@ export interface FeatureFlagsOptions {
 export interface FeatureFlagsReadOptions {
     /** Emit a deduplicated $feature_flag_called event. Defaults to true. */
     sendFeatureFlagEvent?: boolean
-    /** Only return a value after remote evaluation has loaded; does not request or await a reload. */
+    /** Only return a value after remote evaluation has loaded. Does not force or await a reload; stale-cache refresh still applies. */
     fresh?: boolean
 }
 

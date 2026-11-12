@@ -76,6 +76,19 @@ for (const load of [(name) => import(name), (name) => require(name)]) {
             flags.getFeatureFlag('test')
             assert.equal(captured.length, 1)
             assert.equal(captured[0].event, '$feature_flag_called')
+            flags.updateFlags({ legacy: '' }, { legacy: { copy: ['original'] } })
+            const emptyVariant = {
+                key: 'legacy',
+                enabled: false,
+                variant: '',
+                payload: { copy: ['original'] },
+            }
+            assert.deepEqual(flags.getFeatureFlag('legacy', { sendFeatureFlagEvent: false }), emptyVariant)
+            const emptyVariantSnapshot = flags.getAllFeatureFlags()
+            assert.deepEqual(emptyVariantSnapshot, [emptyVariant])
+            emptyVariantSnapshot[0].payload.copy.push('changed')
+            assert.deepEqual(flags.getAllFeatureFlags(), [emptyVariant])
+            assert.equal(captured.length, 1)
             subscription.dispose()
             await flags.reloadFeatureFlags()
             assert.equal(reloading.length, 1)
