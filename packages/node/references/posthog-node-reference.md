@@ -3000,8 +3000,8 @@ seconds after the send. Network errors, rate limits and an unavailable service a
 
 List the project's scheduled emails that wait to go out, in send-time order, one page per call.
 A new email, a cancel, a move, or PostHog sending an email can take up to a minute to show
-here. `emails.update()` returns the new time, `emails.cancel()` returns `canceled`, and
-`emails.get()` shows any other status change within a few seconds.
+here. For the current state, `emails.update()` returns the new time, `emails.cancel()`
+returns `canceled`, and `emails.get()` can take a few seconds to show any other status change.
 
 Resolves to `{ data, error }` and does not reject. Never retried: call it again to read the
 page again.
