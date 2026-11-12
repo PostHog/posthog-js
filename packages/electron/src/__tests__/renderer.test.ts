@@ -59,6 +59,37 @@ describe('renderer facade', () => {
         client.dispose()
     })
 
+    it('keeps result reads and bulk reads out of state-listener feedback loops', async () => {
+        const { client, bridge } = harness()
+        await client.ready()
+        let changes = 0
+        client.onStateChange(() => {
+            if (++changes < 3) {
+                client.getFeatureFlagResult('experiment')
+                client.isFeatureEnabled('off')
+                client.getAllFeatureFlags()
+            }
+        })
+        await client.flush()
+        expect(changes).toBe(1)
+        expect(
+            vi.mocked(bridge.request).mock.calls.filter(([request]) => request.command.type === 'flag')
+        ).toHaveLength(2)
+        client.dispose()
+    })
+
+    it('returns public errors as rejected promises and preserves command order after rejection', async () => {
+        const { client, bridge } = harness()
+        await client.ready()
+        await expect(client.setPersonProperties({ invalid: () => {} } as any)).rejects.toThrow()
+        vi.mocked(bridge.request).mockResolvedValueOnce({ ok: false, error: 'Invalid PostHog command' })
+        await expect(client.alias('valid')).rejects.toThrow('Invalid PostHog command')
+        await client.screen('Home')
+        expect(vi.mocked(bridge.request).mock.calls.at(-1)?.[0].command).toEqual({ type: 'screen', name: 'Home' })
+        client.dispose()
+        await expect(client.setPersonPropertiesForFlags({ plan: 'pro' })).rejects.toThrow('disposed')
+    })
+
     it('uses synchronized cached state and awaits ordered identity mutation', async () => {
         const { client, bridge } = harness()
         expect(client.hasOptedOutCapturing()).toBe(true)

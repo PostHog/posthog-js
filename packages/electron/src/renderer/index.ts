@@ -9,6 +9,9 @@ import {
 import {
     BRIDGE_KEY,
     PROTOCOL_VERSION,
+    type FeatureFlagReadOptions,
+    type IsFeatureEnabledOptions,
+    type FeatureFlagResult,
     type Bridge,
     type Command,
     type FeatureFlagValue,
@@ -17,7 +20,15 @@ import {
     type State,
 } from '../shared/protocol'
 
-export type { State, Properties, FeatureFlagValue, JsonType }
+export type {
+    State,
+    Properties,
+    FeatureFlagValue,
+    FeatureFlagResult,
+    FeatureFlagReadOptions,
+    IsFeatureEnabledOptions,
+    JsonType,
+}
 
 export class PostHog {
     private _state?: State
@@ -45,15 +56,16 @@ export class PostHog {
         }
     }
 
-    private _send(command: Command): Promise<void> {
+    private async _send(command: Command): Promise<void> {
         const generation = this._state?.generation ?? 0
+        const snapshot = structuredClone(command)
         const operation = this._tail.then(async () => {
             if (this._disposed) throw new Error('PostHog renderer has been disposed')
             const response = await this._bridge.request({
                 version: PROTOCOL_VERSION,
                 sequence: ++this._sequence,
                 generation,
-                command,
+                command: snapshot,
             })
             if (!response.ok) throw new Error(response.error)
             this._update(response.state)
@@ -69,6 +81,36 @@ export class PostHog {
     capture(event: string, properties?: Properties): Promise<void> {
         if (this.hasOptedOutCapturing()) return Promise.resolve()
         return this._send({ type: 'capture', event, ...(properties ? { properties } : {}) })
+    }
+    alias(alias: string): Promise<void> {
+        if (!alias?.trim()) return Promise.resolve()
+        if (this.hasOptedOutCapturing()) return Promise.resolve()
+        return this._send({ type: 'alias', alias })
+    }
+    screen(name: string, properties?: Properties): Promise<void> {
+        if (!name?.trim()) return Promise.resolve()
+        if (this.hasOptedOutCapturing()) return Promise.resolve()
+        return this._send({ type: 'screen', name, ...(properties ? { properties } : {}) })
+    }
+    setPersonProperties(properties?: Properties, propertiesOnce?: Properties): Promise<void> {
+        if (this.hasOptedOutCapturing()) return Promise.resolve()
+        return this._send({
+            type: 'setPersonProperties',
+            ...(properties ? { properties } : {}),
+            ...(propertiesOnce ? { propertiesOnce } : {}),
+        })
+    }
+    setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): Promise<void> {
+        return this._send({ type: 'setPersonPropertiesForFlags', properties, reloadFeatureFlags })
+    }
+    setGroupPropertiesForFlags(properties: Record<string, Properties>, reloadFeatureFlags = true): Promise<void> {
+        return this._send({ type: 'setGroupPropertiesForFlags', properties, reloadFeatureFlags })
+    }
+    resetPersonPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
+        return this._send({ type: 'resetPersonPropertiesForFlags', reloadFeatureFlags })
+    }
+    resetGroupPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
+        return this._send({ type: 'resetGroupPropertiesForFlags', reloadFeatureFlags })
     }
     identify(distinctId: string, properties?: Properties): Promise<void> {
         return this._send({ type: 'identify', distinctId, ...(properties ? { properties } : {}) })
@@ -94,6 +136,9 @@ export class PostHog {
     reloadFeatureFlags(): Promise<void> {
         return this._send({ type: 'reloadFeatureFlags' })
     }
+    reloadFeatureFlagsAsync(): Promise<void> {
+        return this.reloadFeatureFlags()
+    }
     flush(): Promise<void> {
         return this._send({ type: 'flush' })
     }
@@ -107,6 +152,12 @@ export class PostHog {
     getDistinctId(): string {
         return this._state?.distinctId ?? ''
     }
+    getAnonymousId(): string {
+        return this._state?.anonymousId ?? ''
+    }
+    get optedOut(): boolean {
+        return this.hasOptedOutCapturing()
+    }
     getSessionId(): string {
         return this._state?.sessionId ?? ''
     }
@@ -114,23 +165,51 @@ export class PostHog {
         return this._state?.optedOut ?? true
     }
 
-    getFeatureFlag(key: string, options?: { sendEvent?: boolean }): FeatureFlagValue | undefined {
+    getFeatureFlag(key: string, options?: FeatureFlagReadOptions): FeatureFlagValue | undefined {
+        const flags = this._state?.featureFlags
         const value =
-            this._state?.featureFlags[key] ??
-            (this._state && Object.keys(this._state.featureFlags).length > 0 ? false : undefined)
-        if (options?.sendEvent !== false && this._state) {
+            flags && Object.prototype.hasOwnProperty.call(flags, key)
+                ? flags[key]
+                : flags && Object.keys(flags).length > 0
+                  ? false
+                  : undefined
+        if ((options?.sendFeatureFlagEvent ?? options?.sendEvent) !== false && this._state) {
             void this._send({ type: 'flag', key, flagRevision: this._state.flagRevision, value: value ?? null }).catch(
                 () => {}
             )
         }
         return value
     }
-    isFeatureEnabled(key: string, options?: { sendEvent?: boolean }): boolean | undefined {
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
+        if (options?.defaultValue !== undefined) {
+            const result = this.getFeatureFlagResult(key, options)
+            return result === undefined ? options.defaultValue : Boolean(result.variant ?? result.enabled)
+        }
         const value = this.getFeatureFlag(key, options)
         return value === undefined ? undefined : Boolean(value)
     }
+    getFeatureFlagResult(key: string, options?: FeatureFlagReadOptions): FeatureFlagResult | undefined {
+        // Exposure commands retain the observed snapshot revision, including missing-key reads.
+        this.getFeatureFlag(key, options)
+        if (!this._state || !Object.prototype.hasOwnProperty.call(this._state.featureFlags, key)) return undefined
+        const value = this._state.featureFlags[key]
+        return {
+            key,
+            enabled: Boolean(value),
+            ...(typeof value === 'string' ? { variant: value } : {}),
+            payload: this.getFeatureFlagPayload(key) ?? null,
+        }
+    }
+    getAllFeatureFlags(): FeatureFlagResult[] {
+        return Object.keys(this._state?.featureFlags ?? {}).map((key) =>
+            this.getFeatureFlagResult(key, { sendFeatureFlagEvent: false })!
+        )
+    }
     getFeatureFlagPayload(key: string): JsonType | undefined {
-        const value = this._state?.featureFlagPayloads[key]
+        const payloads = this._state?.featureFlagPayloads
+        const value = payloads && Object.prototype.hasOwnProperty.call(payloads, key) ? payloads[key] : undefined
         return value === undefined ? (this._state?.flagsLoaded ? null : undefined) : structuredClone(value)
     }
     getState(): State {
