@@ -92,6 +92,7 @@ export class PostHog {
     private _lastPublished = ''
     private _flagRevision = 0
     private _lastFlags = ''
+    private _reportedPayloadErrors = new Map<string, string>()
     private _focusTimer?: ReturnType<typeof setTimeout>
     private _timer?: ReturnType<typeof setInterval>
     private _foreground = false
@@ -408,6 +409,16 @@ export class PostHog {
     }
     getFeatureFlagPayload(key: string): JsonType | undefined {
         const details = this._core.getFeatureFlagDetails()
+        // Retain only the current malformed value per current flag, not a history of raw payloads.
+        for (const [reportedKey, reportedRaw] of this._reportedPayloadErrors) {
+            if (
+                !details ||
+                !Object.prototype.hasOwnProperty.call(details.flags, reportedKey) ||
+                details.flags[reportedKey].metadata?.payload !== reportedRaw
+            ) {
+                this._reportedPayloadErrors.delete(reportedKey)
+            }
+        }
         if (!details) return undefined
         const raw = Object.prototype.hasOwnProperty.call(details.flags, key)
             ? details.flags[key].metadata?.payload
@@ -417,7 +428,11 @@ export class PostHog {
         try {
             return JSON.parse(raw) as JsonType
         } catch (error) {
-            this._report(new Error(`PostHog could not decode payload for flag "${key}"`, { cause: error }))
+            if (this._reportedPayloadErrors.get(key) !== raw) {
+                // Mark before invoking application code, which may capture this SDK error.
+                this._reportedPayloadErrors.set(key, raw)
+                this._report(new Error(`PostHog could not decode payload for flag "${key}"`, { cause: error }))
+            }
             return null
         }
     }
