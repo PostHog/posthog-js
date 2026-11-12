@@ -284,9 +284,17 @@ write(`${config.id}-${major}.md`, [
     ...body,
 ])
 if (declared >= major) write(`${config.id}-reference.md`, [frontMatter(title, body, config.logo), ...body])
-// The package's MIGRATION.md, when it has one, is the docs site's migration page.
+// The package's MIGRATION.md, when it has one, is the docs site's migration page. Its H1 becomes the page
+// title, so the page shows one title.
 const migration = path.join(pkgDir, 'MIGRATION.md')
 if (fs.existsSync(migration)) {
-    const head = ['---', `title: "${title} migration guides"`, 'sidebar: Docs', 'showTitle: true', '---'].join('\n')
-    write(`${config.id}-migration.md`, [head, fs.readFileSync(migration, 'utf8').trim()])
+    let guide = fs.readFileSync(migration, 'utf8').trim()
+    let pageTitle = `${title} migration guides`
+    if (guide.startsWith('# ')) {
+        const end = guide.indexOf('\n')
+        pageTitle = (end === -1 ? guide : guide.slice(0, end)).slice(2).trim()
+        guide = end === -1 ? '' : guide.slice(end).trim()
+    }
+    const head = ['---', `title: ${JSON.stringify(pageTitle)}`, 'sidebar: Docs', 'showTitle: true', '---'].join('\n')
+    write(`${config.id}-migration.md`, [head, guide])
 }
