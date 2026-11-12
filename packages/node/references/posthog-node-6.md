@@ -943,6 +943,8 @@ https://posthog.com/docs/error-tracking/installation/node
 
 > **setupExpressErrorHandler**(`_posthog`, `app`): `void`
 
+Captures errors that Express passes to its error middleware. Call it after your routes.
+
 #### Parameters
 
 | Parameter | Type |
@@ -1087,9 +1089,31 @@ failure. The message never contains the secret key or the request body.
 Sends all queued events and spans, and resolves when every send has finished.
 It does not reject when delivery fails: those failures arrive on the `'error'` event.
 
+It has no overall timeout. In an AWS Lambda handler, race it against the time the invocation
+has left, and keep 100 ms to return. The race limits the wait. It does not cancel the flush.
+
 #### Returns
 
 `Promise`\<`void`\>
+
+#### Example
+
+```ts
+const remainingMs = Math.max(0, context.getRemainingTimeInMillis() - 100)
+let timer: ReturnType<typeof setTimeout> | undefined
+try {
+  await Promise.race([
+    client.flush(),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('PostHog flush timed out')), remainingMs)
+    }),
+  ])
+} catch (err) {
+  console.error('PostHog flush failed', err)
+} finally {
+  clearTimeout(timer)
+}
+```
 
 ### `PostHog.flushWithPendingPromises`
 
@@ -2350,6 +2374,9 @@ const clientKeys = client.getFeatureFlagKeysByEvaluationRuntime('client')
 
 > **on**(`event`, `cb`): () => `void`
 
+Listens for an SDK event and returns a function that removes the listener.
+The SDK does not throw for failures in background work, so listen for them on the `'error'` event.
+
 #### Parameters
 
 | Parameter | Type |
@@ -2360,6 +2387,14 @@ const clientKeys = client.getFeatureFlagKeysByEvaluationRuntime('client')
 #### Returns
 
 () => `void`
+
+#### Example
+
+```js
+posthog.on('error', (err) => {
+  console.error('PostHog had an error', err)
+})
+```
 
 ### `PostHog.overrideFeatureFlags`
 
@@ -2682,6 +2717,10 @@ JSON string suitable for the PostHog cookie value
 ### `setupExpressRequestContext`
 
 > **setupExpressRequestContext**(`_posthog`, `app`): `void`
+
+Adds request context to events captured during an Express request. Call it before your routes.
+Events then include `$current_url`, `$request_method`, `$request_path`, `$user_agent`, and `$ip`.
+The IP comes from `x-forwarded-for` when the app runs behind a proxy.
 
 #### Parameters
 
@@ -4788,7 +4827,7 @@ Supports multiple formats:
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="addtracingheaders"></a> `addTracingHeaders?` | `string`[] | A list of hostnames for which to inject PostHog tracing headers (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests. Use this to link requests made from your app to session replays and LLM traces in PostHog. When set, the global `fetch` is patched on initialization and the headers are added to requests whose hostname matches one of the entries. Requires the SDK to wire up `patchFetchForTracingHeaders` against this option (currently supported in posthog-react-native). |
+| <a id="addtracingheaders"></a> `addTracingHeaders?` | `string`[] | A list of hostnames for which to inject PostHog tracing headers (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests. Use this to link requests made from your app to session replays and LLM traces in PostHog. When set, the global `fetch` is patched on initialization and the headers are added to requests whose hostname matches one of the entries. Hostnames match exactly, so pass hostnames only, without a protocol or path. Requires the SDK to wire up `patchFetchForTracingHeaders` against this option (currently supported in posthog-react-native). |
 | <a id="before_send"></a> `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. |
 | <a id="bootstrap"></a> `bootstrap?` | `object` | Option to bootstrap the library with given distinctId and feature flags |
 | `bootstrap.distinctId?` | `string` | - |
@@ -4814,7 +4853,7 @@ Supports multiple formats:
 | <a id="historicalmigration"></a> `historicalMigration?` | `boolean` | Special flag to indicate ingested data is for a historical migration **Default** `false` |
 | <a id="host-4"></a> `host?` | `string` | PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com' **Default** `'https://us.i.posthog.com'` |
 | <a id="maxbatchsize"></a> `maxBatchSize?` | `number` | The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`) **Default** `100` |
-| <a id="maxqueuesize"></a> `maxQueueSize?` | `number` | The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`) **Default** `1000` |
+| <a id="maxqueuesize"></a> `maxQueueSize?` | `number` | The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`) When the queue is full, the SDK drops the oldest event first. **Default** `1000` |
 | <a id="personprofiles"></a> `personProfiles?` | `"always"` \| `"identified_only"` \| `"never"` | Determines when to create Person Profiles for users. - 'always': Always create a person profile for every user (anonymous and identified). - 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group(). Events captured before identification will NOT have person profiles and will be anonymous events. - 'never': Never create person profiles. identify(), alias(), and group() will be no-ops. **Default** `'identified_only'` **Examples** `// Only create profiles when users are identified (recommended for most apps) const posthog = new PostHog('<api_key>', { personProfiles: 'identified_only', }) // Later when user logs in: posthog.identify('user-123', { email: 'user@example.com' })` `// Always create profiles (for apps where you want to track all users) const posthog = new PostHog('<api_key>', { personProfiles: 'always', })` `// Never create profiles (anonymous analytics only) const posthog = new PostHog('<api_key>', { personProfiles: 'never', })` |
 | <a id="preloadfeatureflags-2"></a> `preloadFeatureFlags?` | `boolean` | Whether to load feature flags when initialized or not **Default** `true` |
 | <a id="remoteconfigrequesttimeoutms"></a> `remoteConfigRequestTimeoutMs?` | `number` | Timeout in milliseconds for remote config calls **Default** `3000` |
@@ -4973,7 +5012,7 @@ differently for cellular cost vs tab-suspension behavior).
 | `evaluationContexts?` | readonly `string`[] | Evaluation contexts for feature flags. When set, only feature flags that have at least one matching evaluation tag will be evaluated for this SDK instance. Feature flags with no evaluation tags will always be evaluated. Examples: ['production', 'backend', 'api'] **Default** `undefined` |
 | `evaluationEnvironments?` | readonly `string`[] | Evaluation environments for feature flags. **Deprecated** Use evaluationContexts instead. This property will be removed in a future version. |
 | `featureFlagsLogWarnings?` | `boolean` | Controls whether `FeatureFlagEvaluations` filter helpers (`onlyAccessed()` and `only()`) log warnings when their input is unexpected — for example, calling `onlyAccessed()` before accessing any flags, or passing unknown keys to `only()`. **Default** `true` |
-| `featureFlagsPollingInterval?` | `number` \| `null` | The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds. Set to null to disable automatic polling. Definitions are still loaded on initialization; call reloadFeatureFlags() to refresh them manually. Until refreshed, local evaluation uses the last loaded definitions. |
+| `featureFlagsPollingInterval?` | `number` \| `null` | The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds. The minimum is 100 ms, and a lower value is raised to it. Set to null to disable automatic polling. Definitions are still loaded on initialization; call reloadFeatureFlags() to refresh them manually. Until refreshed, local evaluation uses the last loaded definitions. |
 | `fetch()?` | (`url`, `options`) => `Promise`\<`PostHogFetchResponse`\> | - |
 | `fetchRetryCount?` | `number` | How many times HTTP requests are retried. Capture requests use `captureMaxRetries` when it is set. **Default** `3` |
 | `fetchRetryDelay?` | `number` | The delay between HTTP request retries in milliseconds. Capture requests do not use it: see `captureMaxRetries` for their retry waits. **Default** `3000` |
@@ -4981,7 +5020,7 @@ differently for cellular cost vs tab-suspension behavior).
 | `flushInterval?` | `number` | The interval in milliseconds between periodic flushes **Default** `5000` |
 | `isServer?` | `boolean` | Whether to attach the `$is_server: true` property to every captured event. **Remarks** Defaults to `true` because this SDK is intended for server-side use, where the property lets PostHog distinguish server events from browser and react-native events. Set this to `false` when running the SDK as a client/CLI so the event is attributed to the device OS normally instead of being marked as a server event. When `false`, the `$is_server` property is omitted entirely. A `$is_server` value set on the event, in context or with `register()` wins over this setting. **Default** `true` **Example** `// CLI usage: don't mark events as server-side new PostHog('key', { isServer: false })` |
 | `logs?` | `PostHogLogsConfig` | Configuration for the `posthog.logger` / `posthog.captureLog` logs API. Logs are sent to PostHog Logs as OTLP records, with no OpenTelemetry packages needed. Each record carries the active span's `trace_id` / `span_id` and, inside `withContext`, the `distinctId` and `sessionId`, so logs join back to traces, persons and replays. `serviceName` defaults to the `traces` / `metrics` `serviceName`. **Example** `const client = new PostHog('phc_...', { logs: { serviceName: 'checkout-api' } }) client.logger.info('order placed', { order_id: 'ord_1' })` |
-| `maxCacheSize?` | `number` | - |
+| `maxCacheSize?` | `number` | Maximum number of distinct ids held in the cache that deduplicates $feature_flag_called calls per user. When the cache is full the least recently used distinct ids are evicted. Defaults to 50000. |
 | `maxQueueSize?` | `number` | The maximum number of analytics events held in memory waiting to be sent (must be higher than `flushAt`). When the queue is full, the oldest event is dropped and reported through the `'error'` event. `captureAi` events have their own queue, sized by `captureAiMaxQueueSize`, and do not count toward this limit. **Default** `10000` |
 | `metrics?` | `MetricsConfig` | Configuration for the `posthog.metrics` API (count, gauge, histogram). Set `serviceName` so series can be filtered per service in the Metrics UI. **Example** `const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } }) client.metrics.count('invoices.processed')` |
 | `migratedFrom?` | `string` | The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request. |
