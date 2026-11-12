@@ -1188,9 +1188,6 @@ importers:
       metro:
         specifier: 0.83.1
         version: 0.83.1
-      posthog-react-native-session-replay:
-        specifier: ^1.6.0
-        version: 1.6.0(react-native@0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0))(react@18.2.0)
       react:
         specifier: 18.2.0
         version: 18.2.0
@@ -16180,12 +16177,6 @@ packages:
         optional: true
       react:
         optional: true
-
-  posthog-react-native-session-replay@1.6.0:
-    resolution: {integrity: sha512-OCaei77mtgg7JT+TgHSCgpWeKq2XXENUOPNxGbjhXZa/aJpptOW5VsBqjtH4BPzM2c1veS1DK4/Fb/uV4Rb3cg==}
-    peerDependencies:
-      react: '*'
-      react-native: '*'
 
   powershell-utils@0.1.0:
     resolution: {integrity: sha512-dM0jVuXJPsDN6DvRpea484tCUaMiXWjuCn++HGTqUWzGDjv5tZkEZldAJ/UMlqRYGFrD/etByo4/xOuC/snX2A==}
@@ -37856,11 +37847,6 @@ snapshots:
       '@types/react': 19.2.17
       react: 19.2.7
 
-  posthog-react-native-session-replay@1.6.0(react-native@0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0))(react@18.2.0):
-    dependencies:
-      react: 18.2.0
-      react-native: 0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0)
-
   powershell-utils@0.1.0: {}
 
   powershell-utils@0.2.0: {}
@@ -38208,10 +38194,8 @@ snapshots:
       which: 2.0.2
       yargs: 17.7.2
     transitivePeerDependencies:
-      - bufferutil
       - supports-color
       - typescript
-      - utf-8-validate
 
   react-native-codegen@0.69.2(@babel/preset-env@7.28.5(@babel/core@7.28.5)):
     dependencies:

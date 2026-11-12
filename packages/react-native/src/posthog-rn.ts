@@ -2111,7 +2111,7 @@ export class PostHog extends PostHogCore {
    *
    * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
    *
-   * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
+   * Requires `@posthog/react-native-plugin`.
    *
    * {@label Session Replay}
    *
@@ -2250,9 +2250,7 @@ export class PostHog extends PostHogCore {
     try {
       // Check if the plugin supports startRecording
       if (!OptionalReactNativePlugin.startRecording) {
-        this._logger.warn(
-          'startRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
-        )
+        this._logger.warn('startRecording is not available. Please update @posthog/react-native-plugin.')
         return false
       }
 
@@ -2306,7 +2304,7 @@ export class PostHog extends PostHogCore {
    *
    * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
    *
-   * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
+   * Requires `@posthog/react-native-plugin`.
    *
    * {@label Session Replay}
    *
@@ -2350,9 +2348,7 @@ export class PostHog extends PostHogCore {
     try {
       // Check if the plugin supports stopRecording
       if (!OptionalReactNativePlugin.stopRecording) {
-        this._logger.warn(
-          'stopRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
-        )
+        this._logger.warn('stopRecording is not available. Please update @posthog/react-native-plugin.')
         return false
       }
 
@@ -3443,9 +3439,7 @@ export class PostHog extends PostHogCore {
         }
       } else {
         if (enableNativeErrorTracking) {
-          this._logger.warn(
-            'Native error tracking is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
-          )
+          this._logger.warn('Native error tracking is not available. Please update @posthog/react-native-plugin.')
           // The legacy plugin can't do native crash capture, so don't mark it initialized below.
           enableNativeErrorTracking = false
         }
@@ -3453,9 +3447,7 @@ export class PostHog extends PostHogCore {
         // not initialized: the latch stops enablePush recomputing true on every flags reload,
         // while claiming initialized would assert a native instance setup() never created.
         if (enablePush) {
-          this._logger.warn(
-            'Push notifications require @posthog/react-native-plugin; the legacy session-replay plugin does not support them.'
-          )
+          this._logger.warn('Push notifications are not available. Please update @posthog/react-native-plugin.')
         }
         enablePush = false
         this._pushNativeUnsupported = true

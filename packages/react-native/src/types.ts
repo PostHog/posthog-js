@@ -163,8 +163,7 @@ export type PostHogSessionReplayConfig = {
    * Capture touch coordinates in session replay. Set to false to keep screenshots
    * without recording taps that could reveal sensitive input on a known keypad layout.
    * Does not change masking or `PostHogProvider` touch autocapture.
-   * Android and iOS only. Requires `@posthog/react-native-plugin` 2.9.0 or later;
-   * older plugins and `posthog-react-native-session-replay` ignore this option.
+   * Android and iOS only. Requires `@posthog/react-native-plugin`.
    * Set before constructing PostHog. Changes after initialization do not update native state.
    *
    * @default true
