@@ -336,8 +336,8 @@ export interface Emails {
 
   /**
    * List the project's scheduled emails that wait to go out, in send-time order, one page per call.
-   * A move or a cancel can take a few seconds to show here: `emails.update()` returns the new
-   * time, and `emails.get()` reads `canceled` at once.
+   * A move or a cancel can take a few seconds to show here and in `emails.get()`:
+   * `emails.update()` returns the new time, and `emails.cancel()` returns `canceled`.
    *
    * Resolves to `{ data, error }` and does not reject. Never retried: call it again to read the
    * page again.
