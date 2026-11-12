@@ -77,6 +77,7 @@ export class PostHog {
         return this._send({ type: 'reset' })
     }
     group(groupType: string, groupKey: string | number, properties?: Properties): Promise<void> {
+        if (this.hasOptedOutCapturing()) return Promise.resolve()
         return this._send({ type: 'group', groupType, groupKey, ...(properties ? { properties } : {}) })
     }
     register(properties: Properties): Promise<void> {
