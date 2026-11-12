@@ -6,6 +6,10 @@
 // packages/mcp's real-name zod stays v3 for the unit suite.
 import { z } from 'zod4'
 
+class UpstreamError extends Error {
+  name = 'UpstreamError'
+}
+
 export const TOOLS = [
   {
     name: 'echo',
@@ -36,7 +40,7 @@ export const TOOLS = [
     inputShape: {},
     jsonSchema: { type: 'object', properties: {} },
     handler: async () => {
-      throw new Error('intentional failure')
+      throw Object.assign(new UpstreamError('intentional failure'), { status: 503 })
     },
   },
 ]

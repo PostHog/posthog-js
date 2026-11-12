@@ -41,14 +41,22 @@ interface CallToolResult {
  * as exceptions from any other PostHog SDK.
  *
  * @param error - The thrown value (Error, string, object, CallToolResult, or anything).
+ * @param fallback - Captured instead when reading `error` throws.
  * @returns Core `ErrorProperties` ready to spread onto a `$exception` event.
  */
-export function captureException(error: unknown): CoreErrorTracking.ErrorProperties {
+export function captureException(error: unknown, fallback?: unknown): CoreErrorTracking.ErrorProperties {
   // MCP SDK 1.21.0+ converts tool errors to CallToolResult, which the core
   // coercers don't recognize. Extract the human-readable message first so the
   // exception still carries something useful.
-  const normalized = isCallToolResult(error) ? extractCallToolResultMessage(error) : error
-  return errorPropertiesBuilder.buildFromUnknown(normalized)
+  try {
+    const normalized = isCallToolResult(error) ? extractCallToolResultMessage(error) : error
+    return errorPropertiesBuilder.buildFromUnknown(normalized)
+  } catch {
+    // A thrown value can carry getters that throw; the failure still gets recorded.
+    return fallback === undefined
+      ? errorPropertiesBuilder.buildFromUnknown('Unknown error')
+      : captureException(fallback)
+  }
 }
 
 const STATUS_FIELDS = ['status_code', 'statusCode', 'status']

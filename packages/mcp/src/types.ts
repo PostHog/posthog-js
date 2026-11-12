@@ -360,6 +360,8 @@ export type RegisteredTool = {
   /** Present when the tool was registered with a declared output schema. */
   outputSchema?: unknown
   update?: (...args: unknown[]) => unknown
+  /** MCP SDK v2 builds this from the handler at registration and dispatches through it. */
+  executor?: (args: unknown, extra: CompatibleRequestHandlerExtra) => Promise<unknown>
 } & ({ callback: ToolCallback; handler?: never } | { handler: ToolCallback; callback?: never })
 
 /**
