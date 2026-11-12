@@ -1,0 +1,106 @@
+name: Electron platform and packaging smoke
+
+on:
+    pull_request:
+    merge_group:
+        types: [checks_requested]
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+    group: electron-platform-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    tarballs:
+        runs-on: ubuntu-22.04
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - uses: ./.github/actions/setup
+              with:
+                  install: false
+                  build: false
+            - name: Install build tools without downloading Electron
+              run: pnpm install --frozen-lockfile --filter @posthog/electron... --ignore-scripts
+              env:
+                  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+                  PUPPETEER_SKIP_DOWNLOAD: 'true'
+            - name: Build and pack the SDK dependency graph
+              run: PACKAGE_DEST="$PWD/target" pnpm turbo run package --filter=@posthog/electron
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: electron-local-tarballs
+                  path: target/*.tgz
+                  if-no-files-found: error
+                  retention-days: 7
+
+    smoke:
+        name: ${{ matrix.os }} / Electron ${{ matrix.electron }}
+        needs: tarballs
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [macos-14, windows-2022, ubuntu-22.04]
+                # Exact, mature releases: initial supported major, 42, and a newer major.
+                electron: ['41.0.2', '42.4.0', '43.0.0']
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 25
+        permissions:
+            contents: read
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - uses: ./.github/actions/setup
+              with:
+                  install: false
+                  build: false
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: electron-local-tarballs
+                  path: target
+            - name: Install Linux display and runtime libraries
+              if: runner.os == 'Linux'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y xvfb libgtk-3-0 libnss3 libasound2 libgbm1
+            - name: Install example from local tarballs (no dependency lifecycle scripts)
+              working-directory: examples/example-electron
+              run: |
+                  pnpm add --save-dev --save-exact electron@${{ matrix.electron }} --ignore-scripts
+                  test "$(pnpm config get minimumReleaseAge)" = 10080
+                  node node_modules/electron/install.js
+            - name: Install independent Forge and Builder consumer
+              working-directory: examples/example-electron/packaging
+              run: |
+                  pnpm add --save-dev --save-exact electron@${{ matrix.electron }} --ignore-scripts
+                  test "$(pnpm config get minimumReleaseAge)" = 10080
+                  node node_modules/electron/install.js
+            - name: Real Electron plain, ASAR and runtime fixture smoke
+              working-directory: examples/example-electron
+              run: |
+                  run_smoke() {
+                      if [[ "$RUNNER_OS" == Linux ]]; then xvfb-run -a "$@"; else "$@"; fi
+                  }
+                  pnpm test:mock
+                  run_smoke pnpm test
+                  run_smoke pnpm test:asar
+                  run_smoke pnpm test:platform
+            - name: Package and execute genuine Forge and Builder consumers
+              working-directory: examples/example-electron/packaging
+              env:
+                  # Unpacked native apps only: no signing, notarization, installers or secrets.
+                  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+              run: |
+                  run_smoke() {
+                      if [[ "$RUNNER_OS" == Linux ]]; then xvfb-run -a "$@"; else "$@"; fi
+                  }
+                  run_smoke pnpm test:forge
+                  run_smoke pnpm test:builder

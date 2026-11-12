@@ -58,7 +58,7 @@ export class PostHog {
 
     private async _send(command: Command): Promise<void> {
         const generation = this._state?.generation ?? 0
-        const snapshot = structuredClone(command)
+        const snapshot: Command = JSON.parse(JSON.stringify(structuredClone(command)))
         const operation = this._tail.then(async () => {
             if (this._disposed) throw new Error('PostHog renderer has been disposed')
             const response = await this._bridge.request({
@@ -119,6 +119,7 @@ export class PostHog {
         return this._send({ type: 'reset' })
     }
     group(groupType: string, groupKey: string | number, properties?: Properties): Promise<void> {
+        if (this.hasOptedOutCapturing()) return Promise.resolve()
         return this._send({ type: 'group', groupType, groupKey, ...(properties ? { properties } : {}) })
     }
     register(properties: Properties): Promise<void> {

@@ -1,0 +1,11 @@
+packages:
+    - .
+pnpmfile: .pnpmfile.cjs
+minimumReleaseAge: 10080
+blockExoticSubdeps: true
+trustPolicy: no-downgrade
+nodeLinker: hoisted
+# Only install the runtime binary through the explicit node electron/install.js step.
+allowBuilds:
+    electron: false
+    app-builder-bin: false

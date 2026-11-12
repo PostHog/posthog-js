@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { PostHog } from '../renderer'
-import type { Bridge, State } from '../shared/protocol'
+import { validateRequest, type Bridge, type State } from '../shared/protocol'
 
 function harness() {
     let state: State = {
@@ -18,6 +18,7 @@ function harness() {
     const unsubscribe = vi.fn()
     const bridge: Bridge = {
         request: vi.fn(async (request) => {
+            validateRequest(request)
             if (request.command.type === 'identify')
                 state = {
                     ...state,
@@ -45,6 +46,30 @@ function harness() {
 }
 
 describe('renderer facade', () => {
+    it.each(['capture', 'identify', 'register', 'group'] as const)(
+        'normalizes optional and Date properties before bridging %s',
+        async (operation) => {
+            const { client, bridge } = harness()
+            await client.ready()
+            const date = new Date('2025-01-02T03:04:05.000Z')
+            const properties = { absent: undefined, at: date, nested: { absent: undefined }, list: [undefined, date] }
+            // JavaScript callers can supply values outside TypeScript's JSON property type.
+            const args =
+                operation === 'group'
+                    ? ['team', 'alpha', properties]
+                    : operation === 'register'
+                      ? [properties]
+                      : [operation === 'capture' ? 'dated' : 'alice', properties]
+            await Reflect.apply(client[operation], client, args)
+            const command = vi.mocked(bridge.request).mock.calls[1][0].command
+            expect(command).toMatchObject({
+                properties: { at: '2025-01-02T03:04:05.000Z', nested: {}, list: [null, '2025-01-02T03:04:05.000Z'] },
+            })
+            expect('properties' in command && Object.hasOwn(command.properties!, 'absent')).toBe(false)
+            client.dispose()
+        }
+    )
+
     it('does not create a flag-exposure/state-subscription feedback loop', async () => {
         const { client, bridge } = harness()
         await client.ready()
@@ -121,6 +146,7 @@ describe('renderer facade', () => {
         broadcast({ optedOut: true, revision: 2 })
         await client.capture('secret', { secret: 'private' })
         await client.captureException(new Error('secret'))
+        await client.group('organization', 'secret', { secret: 'private' })
         expect(bridge.request).toHaveBeenCalledTimes(1)
         client.dispose()
     })

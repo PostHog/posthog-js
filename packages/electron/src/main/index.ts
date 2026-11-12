@@ -1,4 +1,4 @@
-import { app, ipcMain, type BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { app, powerMonitor, ipcMain, type BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { PostHogPersistedProperty, type PostHogCoreOptions, type FeatureFlagValue, type JsonType } from '@posthog/core'
@@ -90,6 +90,7 @@ export class PostHog {
     private _focusTimer?: ReturnType<typeof setTimeout>
     private _timer?: ReturnType<typeof setInterval>
     private _foreground = false
+    private _cancelReady!: () => void
     private _cleanups: (() => void)[] = []
     private _tail: Promise<unknown> = Promise.resolve()
 
@@ -126,7 +127,12 @@ export class PostHog {
         singleton = this
         singletonOptions = { projectToken: this._options.projectToken, host: this._options.host }
         ipcMain.handle(COMMAND_CHANNEL, (event, request: unknown) => this._handle(event, request))
-        this._ready = this._initialize()
+        this._ready = Promise.race([
+            this._initialize(),
+            new Promise<void>((resolve) => {
+                this._cancelReady = resolve
+            }),
+        ])
     }
 
     private _report(error: unknown): void {
@@ -137,9 +143,9 @@ export class PostHog {
 
     private async _initialize(): Promise<void> {
         await this._core.ready()
-        if (this._closed) return
+        if (this._closing || this._core.isDisabled) return
         await app.whenReady()
-        if (this._closed) return
+        if (this._closing) return
         if (!this._core.isDisabled && this._options.captureAppLifecycleEvents !== false) {
             const previous = this._core.getPersistedProperty<string>(PostHogPersistedProperty.InstalledAppVersion)
             const previousBuild = this._core.getPersistedProperty<string>(PostHogPersistedProperty.InstalledAppBuild)
@@ -170,10 +176,24 @@ export class PostHog {
             }, interval)
             this._timer.unref()
         }
+        const suspend = (): void => this._core.suspend()
+        const resume = (): void => {
+            this._core.resume()
+            if (!this._closing) void this.flush().catch((error) => this._report(error))
+        }
+        powerMonitor.on('suspend', suspend)
+        powerMonitor.on('resume', resume)
+        this._cleanups.push(() => {
+            powerMonitor.removeListener('suspend', suspend)
+            powerMonitor.removeListener('resume', resume)
+        })
         const quit = (event: Electron.Event): void => {
-            if (this._closed) return
-            event.preventDefault()
-            void this.shutdown(2000).finally(() => app.quit())
+            if (this._closed || event.defaultPrevented) return
+            // Observe cancellation by other will-quit listeners too. Do not force a second quit.
+            queueMicrotask(() => {
+                if (event.defaultPrevented) return
+                void this.flush().catch((error) => this._report(error))
+            })
         }
         app.on('will-quit', quit)
         this._cleanups.push(() => app.removeListener('will-quit', quit))
@@ -315,6 +335,7 @@ export class PostHog {
     }
     captureException(error: unknown, properties?: Properties): Promise<void> {
         return this._run(() => {
+            if (this._core.optedOut || this._core.isDisabled) return
             try {
                 const exception = this._core.getErrorPropertiesBuilder().buildFromUnknown(error)
                 this._core.capture('$exception', { ...properties, ...exception } as unknown as Properties, {
@@ -469,11 +490,9 @@ export class PostHog {
             period: performance.now(),
             dispose: () => {},
         }
-        const navigation = (_event: Electron.Event, _url: string, _inPlace: boolean, mainFrame: boolean): void => {
-            if (mainFrame && !_inPlace) {
-                registration.sequence = 0
-                registration.frame = undefined
-            }
+        const navigation = (): void => {
+            registration.sequence = 0
+            registration.frame = undefined
         }
         const focus = (): void => {
             clearTimeout(this._focusTimer)
@@ -485,7 +504,7 @@ export class PostHog {
             this._focusTimer.unref()
         }
         const dispose = (): void => {
-            contents.removeListener('did-start-navigation', navigation)
+            contents.removeListener('did-navigate', navigation)
             contents.removeListener('destroyed', dispose)
             window.removeListener('focus', focus)
             window.removeListener('blur', blur)
@@ -493,7 +512,7 @@ export class PostHog {
             this._updateFocus()
         }
         registration.dispose = dispose
-        contents.on('did-start-navigation', navigation)
+        contents.on('did-navigate', navigation)
         contents.once('destroyed', dispose)
         window.on('focus', focus)
         window.on('blur', blur)
@@ -642,6 +661,18 @@ export class PostHog {
         clearInterval(this._timer)
         clearTimeout(this._focusTimer)
         let timer: ReturnType<typeof setTimeout> | undefined
+        let cleanupPromise: Promise<void> | undefined
+        const cleanup = (): Promise<void> => {
+            if (cleanupPromise) return cleanupPromise
+            this._closed = true
+            this._cancelReady()
+            const stopped = this._core.stop()
+            ipcMain.removeHandler(COMMAND_CHANNEL)
+            for (const cleanup of this._cleanups) cleanup()
+            for (const registration of this._windows.values()) registration.dispose()
+            if (singleton === this) singleton = undefined
+            return (cleanupPromise = stopped)
+        }
         const drain = async (): Promise<void> => {
             await this._ready
             if (this._closed) return
@@ -649,20 +680,27 @@ export class PostHog {
             if (this._closed) return
             await this._core.shutdown(timeoutMs)
             if (!this._closed) await this._core.persist()
+            await cleanup()
         }
         this._shutdownPromise = Promise.race([
-            drain().catch((error) => this._report(error)),
+            drain().catch(async (error) => {
+                this._report(error)
+                await cleanup()
+            }),
             new Promise<void>((resolve) => {
-                timer = setTimeout(resolve, Math.max(0, timeoutMs))
+                timer = setTimeout(
+                    () => {
+                        this._report(new Error('PostHog shutdown timed out; unsent events remain in storage'))
+                        resolve()
+                    },
+                    Math.max(0, timeoutMs)
+                )
             }),
         ]).finally(() => {
             clearTimeout(timer)
-            this._closed = true
-            this._core.stop()
-            ipcMain.removeHandler(COMMAND_CHANNEL)
-            for (const cleanup of this._cleanups) cleanup()
-            for (const registration of this._windows.values()) registration.dispose()
-            if (singleton === this) singleton = undefined
+            // Filesystem work cannot be cancelled safely. Keep ownership until it settles,
+            // without extending the caller's shutdown budget.
+            void cleanup().catch((error) => this._report(error))
         })
         return this._shutdownPromise
     }
