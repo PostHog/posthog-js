@@ -117,6 +117,11 @@ test('manual alpha workflow has no default publishing, stable promotion, or buil
     assert.match(workflow, /--ignore-scripts --access public/)
     assert.match(workflow, /consumer target\/electron-alpha\/electron.tgz/)
     assert.match(workflow, /sha256sum --check/)
+    assert.equal(
+        (workflow.match(/test "\$SOURCE_SHA" = "\$GITHUB_SHA"/g) ?? []).length,
+        2,
+        'validate and publish must bind tarball source to npm provenance dispatch SHA'
+    )
     assert.equal((workflow.match(/id-token: write/g) ?? []).length, 1)
     const build = workflow.split('    build:\n')[1].split('    publish:\n')[0]
     assert.doesNotMatch(build, /id-token:|secrets\.|npm publish/)

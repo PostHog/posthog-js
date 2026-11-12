@@ -6,7 +6,7 @@ on:
     workflow_dispatch:
         inputs:
             source_sha:
-                description: 'Reviewed full main-ancestor SHA; manifest must already contain the alpha version'
+                description: 'Reviewed full main dispatch-head SHA; must equal this workflow run SHA'
                 required: true
                 type: string
             version:
@@ -48,7 +48,9 @@ jobs:
               env:
                   SOURCE_SHA: ${{ inputs.source_sha }}
                   VERSION: ${{ inputs.version }}
-              run: node scripts/electron-alpha-release.mjs source "$SOURCE_SHA" "$VERSION"
+              run: |
+                  test "$SOURCE_SHA" = "$GITHUB_SHA"
+                  node scripts/electron-alpha-release.mjs source "$SOURCE_SHA" "$VERSION"
 
     build:
         needs: validate
@@ -133,6 +135,7 @@ jobs:
                   VERSION: ${{ inputs.version }}
                   SHA256: ${{ needs.build.outputs.sha256 }}
               run: |
+                  test "$SOURCE_SHA" = "$GITHUB_SHA"
                   node scripts/electron-alpha-release.mjs source "$SOURCE_SHA" "$VERSION"
                   printf '%s  artifact/electron.tgz\n' "$SHA256" | sha256sum --check
                   node scripts/electron-alpha-release.mjs package artifact/electron.tgz "$VERSION"
