@@ -327,19 +327,20 @@ export interface Emails {
 
   /**
    * Stop a scheduled email before PostHog starts sending it. Its result reads `canceled` at once;
-   * `emails.get()` can take a few seconds to show it, and `emails.list()` up to a minute.
+   * `emails.get()` can take a few seconds to show it, and `emails.list()` usually within a minute.
    *
    * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` while
    * PostHog sends the email, and `not_found` a few seconds after it went out. A second cancel
    * answers the same as the first while PostHog can still tell, and `not_found` after that. Network errors, rate limits and an unavailable service
-   * are retried.
+   * are retried. PostHog can answer unavailable until the email's status catches up with a cancel
+   * or a send, so a retried cancel can see that first and then its final answer.
    */
   cancel(id: string): Promise<CancelEmailResponse>
 
   /**
    * List the project's scheduled emails that wait to go out, in send-time order, one page per call.
-   * A new email, a cancel, a move, or PostHog sending an email can take up to a minute to show
-   * here. For the current state, `emails.update()` returns the new time, `emails.cancel()`
+   * A new email, a cancel, a move, or PostHog sending an email usually shows here within a
+   * minute. For the current state, `emails.update()` returns the new time, `emails.cancel()`
    * returns `canceled`, and `emails.get()` can take a few seconds to show any other status change.
    *
    * Resolves to `{ data, error }` and does not reject. Never retried: call it again to read the
