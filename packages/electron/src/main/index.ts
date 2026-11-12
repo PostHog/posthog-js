@@ -375,11 +375,9 @@ export class PostHog {
             period: performance.now(),
             dispose: () => {},
         }
-        const navigation = (_event: Electron.Event, _url: string, _inPlace: boolean, mainFrame: boolean): void => {
-            if (mainFrame && !_inPlace) {
-                registration.sequence = 0
-                registration.frame = undefined
-            }
+        const navigation = (): void => {
+            registration.sequence = 0
+            registration.frame = undefined
         }
         const focus = (): void => {
             clearTimeout(this._focusTimer)
@@ -391,7 +389,7 @@ export class PostHog {
             this._focusTimer.unref()
         }
         const dispose = (): void => {
-            contents.removeListener('did-start-navigation', navigation)
+            contents.removeListener('did-navigate', navigation)
             contents.removeListener('destroyed', dispose)
             window.removeListener('focus', focus)
             window.removeListener('blur', blur)
@@ -399,7 +397,7 @@ export class PostHog {
             this._updateFocus()
         }
         registration.dispose = dispose
-        contents.on('did-start-navigation', navigation)
+        contents.on('did-navigate', navigation)
         contents.once('destroyed', dispose)
         window.on('focus', focus)
         window.on('blur', blur)
