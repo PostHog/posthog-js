@@ -76,7 +76,6 @@
     "@expo/config-plugins": "10.1.2",
     "@expo/metro-config": "~0.20.0",
     "@posthog/react-native-plugin": "workspace:*",
-    "posthog-react-native-session-replay": "^1.6.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-native": "^0.69.1",
@@ -98,8 +97,7 @@
     "expo-file-system": ">= 13.0.0",
     "expo-localization": ">= 11.0.0",
     "expo-updates": ">= 0.25.0",
-    "@posthog/react-native-plugin": ">= 2.12.7",
-    "posthog-react-native-session-replay": ">= 1.6.0",
+    "@posthog/react-native-plugin": ">= 3.0.0",
     "react-native-device-info": ">= 10.0.0",
     "react-native-localize": ">= 3.0.0",
     "react-native-navigation": ">= 6.0.0",
@@ -138,9 +136,6 @@
       "optional": true
     },
     "@posthog/react-native-plugin": {
-      "optional": true
-    },
-    "posthog-react-native-session-replay": {
       "optional": true
     },
     "react-native-safe-area-context": {

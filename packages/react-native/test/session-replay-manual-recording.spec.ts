@@ -3,9 +3,7 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
 import { waitForExpect, wait } from './test-utils'
 
-// Mock the native plugin bridge. No `setup` key, so the SDK takes the legacy start()
-// path (same surface as the standalone posthog-react-native-session-replay package).
-// The mock models the native recorder state: isEnabled() answers what start()/startRecording()
+// The mock models the native recorder state: isEnabled() answers what setup()/startRecording()
 // actually did, which is how a real native SDK reports a start it refused.
 let nativeAccepts = true
 let nativeRecording = false
@@ -13,7 +11,7 @@ let nativeRecording = false
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePluginVersion: '1.4.0',
   OptionalReactNativePlugin: {
-    start: vi.fn(async () => {}),
+    setup: vi.fn(async () => {}),
     startSession: vi.fn(async () => {}),
     endSession: vi.fn(async () => {}),
     isEnabled: vi.fn(async () => false),
@@ -24,7 +22,7 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
 }))
 
 const replay = OptionalReactNativePlugin as unknown as {
-  start: vi.Mock
+  setup: vi.Mock
   startSession: vi.Mock
   endSession: vi.Mock
   isEnabled: vi.Mock
@@ -35,6 +33,10 @@ const replay = OptionalReactNativePlugin as unknown as {
 
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
 AppState.addEventListener = vi.fn()
+
+// Push is on by default and would set up the native plugin before replay starts, so it's
+// off here: setup() then runs only when replay starts recording.
+const pushOff = { capturePushNotificationSubscriptions: false, capturePushNotificationOpened: false }
 
 describe('PostHog RN manual session recording controls', () => {
   vi.useRealTimers()
@@ -52,7 +54,7 @@ describe('PostHog RN manual session recording controls', () => {
     nativeAccepts = true
     nativeRecording = false
 
-    replay.start.mockClear()
+    replay.setup.mockClear()
     replay.startRecording.mockReset()
     replay.stopRecording.mockClear()
     replay.isEnabled.mockClear()
@@ -87,6 +89,10 @@ describe('PostHog RN manual session recording controls', () => {
   })
 
   afterEach(async () => {
+    // Push is off, so setup() only runs to start replay: every call must enable it.
+    for (const [, , pluginConfig] of replay.setup.mock.calls) {
+      expect(pluginConfig.sessionReplay.enabled).toBe(true)
+    }
     await posthog.shutdown()
     vi.useRealTimers()
     warnSpy.mockRestore()
@@ -97,6 +103,7 @@ describe('PostHog RN manual session recording controls', () => {
   // Recording only some sessions: replay stays off at setup, the app drives the recorder.
   const newPostHog = (): PostHog => {
     const client = new PostHog('test-token', {
+      ...pushOff,
       customStorage: mockStorage,
       enableSessionReplay: false,
       flushInterval: 0,
@@ -162,6 +169,7 @@ describe('PostHog RN manual session recording controls', () => {
       }),
     }))
     posthog = new PostHog('test-token', {
+      ...pushOff,
       customStorage: mockStorage,
       enableSessionReplay: true,
       flushInterval: 0,
@@ -169,7 +177,7 @@ describe('PostHog RN manual session recording controls', () => {
     posthog.debug(true)
     await posthog.ready()
     await posthog.reloadFeatureFlagsAsync()
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
 
     linkedFlag = false
     await posthog.reloadFeatureFlagsAsync()

@@ -21,7 +21,7 @@ import { PostHogProvider } from 'posthog-react-native'
 
 export default function App() {
   return (
-    <PostHogProvider apiKey="<ph_project_api_key>" options={{ host: 'https://us.i.posthog.com' }}>
+    <PostHogProvider projectToken="<ph_project_token>" options={{ host: 'https://us.i.posthog.com' }}>
       <YourApp />
     </PostHogProvider>
   )

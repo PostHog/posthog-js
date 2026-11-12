@@ -10,7 +10,7 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
     return pluginVersion.value
   },
   OptionalReactNativePlugin: {
-    start: vi.fn(async () => {}),
+    setup: vi.fn(async () => {}),
     startSession: vi.fn(async () => {}),
     endSession: vi.fn(async () => {}),
     isEnabled: vi.fn(async () => false),
@@ -20,26 +20,22 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
   },
 }))
 
-const replay = OptionalReactNativePlugin as unknown as { start: vi.Mock; setup?: vi.Mock }
+const replay = OptionalReactNativePlugin as unknown as { setup: vi.Mock }
 
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
 AppState.addEventListener = vi.fn()
 
-describe.each(['setup', 'start'] as const)('replay touch configuration through native %s', (method) => {
+describe('replay touch configuration through native setup', () => {
   vi.useRealTimers()
   let posthog: PostHog
 
   beforeEach(() => {
     vi.clearAllMocks()
     pluginVersion.value = undefined
-    if (method === 'setup') {
-      replay.setup = vi.fn(async () => {})
-    }
   })
 
   afterEach(async () => {
     await posthog?.shutdown()
-    delete replay.setup
   })
 
   it.each([undefined, true, false])(
@@ -47,25 +43,22 @@ describe.each(['setup', 'start'] as const)('replay touch configuration through n
     async (captureTouches) => {
       posthog = new PostHog('test-token', {
         persistence: 'memory',
-        disableRemoteConfig: true,
         enableSessionReplay: true,
         flushInterval: 0,
         sessionReplayConfig: captureTouches === undefined ? undefined : { captureTouches },
       })
       await posthog.ready()
-      await waitForExpect(2000, () => expect(replay[method]).toHaveBeenCalledTimes(1))
+      await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
 
-      const config = replay[method]!.mock.calls[0][2]
-      const sdkReplayConfig = method === 'setup' ? config.sessionReplay.sdkReplayConfig : config
+      const config = replay.setup.mock.calls[0][2]
+      const sdkReplayConfig = config.sessionReplay.sdkReplayConfig
       expect(sdkReplayConfig).toMatchObject({
         captureTouches: captureTouches ?? true,
         maskAllTextInputs: true,
         maskAllImages: true,
         throttleDelayMs: 1000,
       })
-      if (method === 'setup') {
-        expect(config.sessionReplay.enabled).toBe(true)
-      }
+      expect(config.sessionReplay.enabled).toBe(true)
       expect(OptionalReactNativePlugin.stopRecording).not.toHaveBeenCalled()
     }
   )
@@ -74,25 +67,24 @@ describe.each(['setup', 'start'] as const)('replay touch configuration through n
     const sessionReplayConfig: PostHogSessionReplayConfig = { captureTouches: false }
     posthog = new PostHog('test-token', {
       persistence: 'memory',
-      disableRemoteConfig: true,
       enableSessionReplay: true,
       flushInterval: 0,
       sessionReplayConfig,
     })
     await posthog.ready()
-    await waitForExpect(2000, () => expect(replay[method]).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
 
     sessionReplayConfig.captureTouches = true
     await posthog.stopSessionRecording()
     await posthog.startSessionRecording()
 
-    expect(replay[method]).toHaveBeenCalledTimes(1)
-    const config = replay[method]!.mock.calls[0][2]
-    expect((method === 'setup' ? config.sessionReplay.sdkReplayConfig : config).captureTouches).toBe(false)
+    expect(replay.setup).toHaveBeenCalledTimes(1)
+    const config = replay.setup.mock.calls[0][2]
+    expect(config.sessionReplay.sdkReplayConfig.captureTouches).toBe(false)
   })
 })
 
-describe.each(['setup', 'start'] as const)('replay touch compatibility warnings through native %s', (method) => {
+describe('replay touch compatibility warnings through native setup', () => {
   vi.useRealTimers()
   let posthog: PostHog
   let warnSpy: vi.SpyInstance
@@ -107,9 +99,6 @@ describe.each(['setup', 'start'] as const)('replay touch compatibility warnings 
     } as Response)
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
-    if (method === 'setup') {
-      replay.setup = vi.fn(async () => {})
-    }
   })
 
   afterEach(async () => {
@@ -118,21 +107,19 @@ describe.each(['setup', 'start'] as const)('replay touch compatibility warnings 
     logSpy.mockRestore()
     fetchSpy.mockRestore()
     pluginVersion.value = undefined
-    delete replay.setup
   })
 
   async function initialize(version: string | undefined, captureTouches?: boolean) {
     pluginVersion.value = version
     posthog = new PostHog('test-token', {
       persistence: 'memory',
-      disableRemoteConfig: true,
       enableSessionReplay: true,
       flushInterval: 0,
       sessionReplayConfig: { captureTouches },
     })
     posthog.debug(true)
     await posthog.ready()
-    await waitForExpect(2000, () => expect(replay[method]).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     return warnSpy.mock.calls.map((args) => args.join(' ')).filter((message) => message.includes('captureTouches'))
   }
 
@@ -145,8 +132,8 @@ describe.each(['setup', 'start'] as const)('replay touch compatibility warnings 
       expect(warnings[0]).toContain('@posthog/react-native-plugin 2.9.0 or later')
       expect(warnings[0]).toContain('may still record touch coordinates')
       expect(warnings[0]).toContain('rebuild')
-      const config = replay[method]!.mock.calls[0][2]
-      expect((method === 'setup' ? config.sessionReplay.sdkReplayConfig : config).captureTouches).toBe(false)
+      const config = replay.setup.mock.calls[0][2]
+      expect(config.sessionReplay.sdkReplayConfig.captureTouches).toBe(false)
       expect(OptionalReactNativePlugin.stopRecording).not.toHaveBeenCalled()
     }
   )
@@ -169,15 +156,12 @@ describe('replay touch configuration before recording starts', () => {
 
   afterEach(async () => {
     await posthog?.shutdown()
-    delete replay.setup
   })
 
   it('configures touch capture when native error tracking initializes the plugin first', async () => {
     vi.clearAllMocks()
-    replay.setup = vi.fn(async () => {})
     posthog = new PostHog('test-token', {
       persistence: 'memory',
-      disableRemoteConfig: true,
       enableSessionReplay: false,
       errorTracking: { autocapture: { nativeCrashes: true } },
       flushInterval: 0,

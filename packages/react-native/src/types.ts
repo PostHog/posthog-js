@@ -3,15 +3,6 @@ export type PostHogAutocaptureNavigationTrackerOptions = {
   routeToProperties?: (name: string, params: any) => Record<string, any>
 }
 
-/**
- * @deprecated
- */
-export type PostHogNavigationRef = {
-  getCurrentRoute(): any | undefined
-  isReady: () => boolean
-  current?: PostHogNavigationRef | any | undefined
-}
-
 export type PostHogRageClickConfig = {
   /**
    * Enable or disable rage click (rage tap) detection.
@@ -99,13 +90,13 @@ export type PostHogAutocaptureOptions = {
    * For @react-navigation/native v7 and above, because of a library change, you'll need to capture the screens manually and disable this option
    *  You can use the onStateChange callback from the NavigationContainer to capture the screens automatically using the screen capture method
    *  You can use the 'usePostHog()' hook or your own posthog instance to capture the screens
-   *  Since captureScreens is disabled, you don't need to pass the navigationRef, the navigation mutation object is also ignored
+   *  Since captureScreens is disabled, the navigation mutation object is also ignored
    *  See example: https://reactnavigation.org/docs/screen-tracking/ and https://posthog.com/docs/libraries/react-native#manually-capturing-screen-capture-events
    *
    * For expo-router, expo-router uses @react-navigation/native, but does not expose the NavigationContainer, you'll need to capture the screens manually and disable this option
    *  expo-router always has access to a URL, you can use the URL to capture the screens automatically using the screen capture method
    *  You can use the 'usePostHog()' hook or your own posthog instance to capture the screens
-   *  Since captureScreens is disabled, you don't need to pass the navigationRef, the navigation mutation object is also ignored
+   *  Since captureScreens is disabled, the navigation mutation object is also ignored
    *  See example: https://docs.expo.dev/router/reference/screen-tracking/ and https://posthog.com/docs/libraries/react-native#manually-capturing-screen-capture-events
    *
    * @default true
@@ -118,13 +109,6 @@ export type PostHogAutocaptureOptions = {
    * @default Default to the route name and params
    */
   navigation?: PostHogAutocaptureNavigationTrackerOptions
-  /**
-   * If you create a navigation ref with createNavigationContainerRef, you need to pass the navigation ref
-   * Only used for expo-router and @react-navigation/native if captureScreens is true
-   *
-   * @deprecated this is deprecated since it didn't work as expected, check out the `captureScreens` comments for capturing screen views semi-automatically
-   */
-  navigationRef?: PostHogNavigationRef
 }
 
 export interface PostHogCustomAppProperties {
@@ -163,8 +147,7 @@ export type PostHogSessionReplayConfig = {
    * Capture touch coordinates in session replay. Set to false to keep screenshots
    * without recording taps that could reveal sensitive input on a known keypad layout.
    * Does not change masking or `PostHogProvider` touch autocapture.
-   * Android and iOS only. Requires `@posthog/react-native-plugin` 2.9.0 or later;
-   * older plugins and `posthog-react-native-session-replay` ignore this option.
+   * Android and iOS only. Requires `@posthog/react-native-plugin`.
    * Set before constructing PostHog. Changes after initialization do not update native state.
    *
    * @default true
@@ -197,31 +180,9 @@ export type PostHogSessionReplayConfig = {
    */
   captureLog?: boolean
   /**
-   * Deboucer delay used to reduce the number of snapshots captured and reduce performance impact
-   * This is used for capturing the view as a screenshot
-   * The lower the number more snapshots will be captured but higher the performance impact
-   *
-   * @default 1000
-   * @deprecated please use throttleDelayMs instead
-   */
-  iOSdebouncerDelayMs?: number
-  /**
-   * Deboucer delay used to reduce the number of snapshots captured and reduce performance impact
-   * This is used for capturing the view as a screenshot
-   * The lower the number more snapshots will be captured but higher the performance impact
-   * Ps: it was 500ms (0.5s) by default until version 3.3.7
-   *
-   * @default 1000
-   * @deprecated please use throttleDelayMs instead
-   */
-  androidDebouncerDelayMs?: number
-  /**
    * Throttling delay used to reduce the number of snapshots captured and reduce performance impact
    * This is used for capturing the view as a wireframe or screenshot
    * The lower the number more snapshots will be captured but higher the performance impact
-   *
-   * This value has precedence over iOSdebouncerDelayMs and androidDebouncerDelayMs
-   * If this is not set, we will take the max number between iOSdebouncerDelayMs and androidDebouncerDelayMs for back compatibility
    *
    * @default 1000
    */

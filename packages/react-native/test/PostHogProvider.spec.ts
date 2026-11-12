@@ -289,7 +289,7 @@ describe('PostHogProvider', () => {
     ['missing', undefined],
     ['empty', ''],
     ['blank', '   '],
-  ])('should render a disabled client instead of throwing when the api key is %s', (_case, apiKey) => {
+  ])('should render a disabled client instead of throwing when the project token is %s', (_case, projectToken) => {
     const onClient = vi.fn()
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -298,7 +298,7 @@ describe('PostHogProvider', () => {
         render(
           React.createElement(
             PostHogProvider,
-            { apiKey, autocapture: false, options: { persistence: 'memory' } },
+            { projectToken, autocapture: false, options: { persistence: 'memory' } },
             React.createElement(CaptureClient, { onClient })
           )
         )
@@ -314,17 +314,14 @@ describe('PostHogProvider', () => {
     }
   })
 
-  it.each([
-    ['projectToken', { projectToken: 'phc_token' }, 'phc_token'],
-    ['deprecated apiKey', { apiKey: 'phc_legacy' }, 'phc_legacy'],
-    ['projectToken over apiKey', { projectToken: 'phc_token', apiKey: 'phc_legacy' }, 'phc_token'],
-  ])('should create the client with %s', (_case, props, expected) => {
+  it('should create the client with projectToken', () => {
     const onClient = vi.fn()
+    const expected = 'phc_token'
 
     render(
       React.createElement(
         PostHogProvider,
-        { ...props, autocapture: false, options: { persistence: 'memory' } },
+        { projectToken: expected, autocapture: false, options: { persistence: 'memory' } },
         React.createElement(CaptureClient, { onClient })
       )
     )

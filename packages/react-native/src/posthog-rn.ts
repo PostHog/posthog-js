@@ -159,7 +159,7 @@ type ManualRecordingStartRequest = {
   awaitEventTrigger?: boolean
 }
 
-export interface PostHogOptions extends PostHogCoreOptions {
+export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvironments' | 'disableRemoteConfig'> {
   /**
    * Allows you to provide the storage type.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
@@ -370,8 +370,8 @@ export class PostHog extends PostHogCore {
   private _nativeErrorTrackingInitialized: boolean = false
   private _androidNdkCrashesUnsupportedWarned: boolean = false
   // Initialized: setup() ran carrying push config, so a live native instance exists.
-  // Unsupported: this plugin can never do push — latched so the enable check stops
-  // recomputing, without claiming an instance that isn't there.
+  // Unsupported: no native plugin is installed, so push can never start — latched so the
+  // enable check stops recomputing, without claiming an instance that isn't there.
   private _pushNativeInitialized: boolean = false
   private _fatalJsCaptureNativeInitialized: boolean = false
   private _pushNativeUnsupported: boolean = false
@@ -434,7 +434,7 @@ export class PostHog extends PostHogCore {
   /**
    * The project token the client was created with.
    *
-   * @deprecated Use `projectToken` instead. This will be removed in the next major version.
+   * @deprecated Use `projectToken` instead.
    */
   get apiKey(): string {
     return this.projectToken
@@ -2111,7 +2111,7 @@ export class PostHog extends PostHogCore {
    *
    * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
    *
-   * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
+   * Requires `@posthog/react-native-plugin`.
    *
    * {@label Session Replay}
    *
@@ -2250,9 +2250,7 @@ export class PostHog extends PostHogCore {
     try {
       // Check if the plugin supports startRecording
       if (!OptionalReactNativePlugin.startRecording) {
-        this._logger.warn(
-          'startRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
-        )
+        this._logger.warn('startRecording is not available. Please update @posthog/react-native-plugin.')
         return false
       }
 
@@ -2306,7 +2304,7 @@ export class PostHog extends PostHogCore {
    *
    * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
    *
-   * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
+   * Requires `@posthog/react-native-plugin`.
    *
    * {@label Session Replay}
    *
@@ -2350,9 +2348,7 @@ export class PostHog extends PostHogCore {
     try {
       // Check if the plugin supports stopRecording
       if (!OptionalReactNativePlugin.stopRecording) {
-        this._logger.warn(
-          'stopRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
-        )
+        this._logger.warn('stopRecording is not available. Please update @posthog/react-native-plugin.')
         return false
       }
 
@@ -3154,8 +3150,8 @@ export class PostHog extends PostHogCore {
     forcePush: boolean = false
   ): Promise<boolean> {
     const nativeErrorAutocapture = this._nativeErrorAutocapture(options)
-    let enableNativeErrorTracking = nativeErrorAutocapture.nativeCrashes || nativeErrorAutocapture.androidNdkCrashes
-    let enablePush = this._isPushNativeEnabled(options, forcePush)
+    const enableNativeErrorTracking = nativeErrorAutocapture.nativeCrashes || nativeErrorAutocapture.androidNdkCrashes
+    const enablePush = this._isPushNativeEnabled(options, forcePush)
     const enableFatalJsCapture = this._isFatalJsCaptureNativeEnabled()
 
     // Session replay has no macOS backend — the native plugin no-ops its recording controls there.
@@ -3230,8 +3226,6 @@ export class PostHog extends PostHogCore {
       screenshotColorMode,
       screenshotModeBackgroundCapture = false,
       sampleRate: localSampleRate,
-      iOSdebouncerDelayMs = defaultThrottleDelayMs,
-      androidDebouncerDelayMs = defaultThrottleDelayMs,
     } = options?.sessionReplayConfig ?? {}
 
     if (captureTouches === false && !isMacOS()) {
@@ -3244,15 +3238,7 @@ export class PostHog extends PostHogCore {
       }
     }
 
-    let throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
-
-    // if deprecated values are set, we use the higher one for back compatibility
-    if (
-      throttleDelayMs === defaultThrottleDelayMs &&
-      (iOSdebouncerDelayMs !== defaultThrottleDelayMs || androidDebouncerDelayMs !== defaultThrottleDelayMs)
-    ) {
-      throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
-    }
+    const throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
 
     // Gate captureLog and captureNetworkTelemetry using cached remote config.
     // The effective state is: localEnabled AND remoteEnabled.
@@ -3328,8 +3314,6 @@ export class PostHog extends PostHogCore {
       ...(screenshotColorMode !== undefined ? { screenshotColorMode } : {}),
       screenshotModeBackgroundCapture,
       sampleRate,
-      iOSdebouncerDelayMs,
-      androidDebouncerDelayMs,
       throttleDelayMs,
     }
 
@@ -3383,97 +3367,62 @@ export class PostHog extends PostHogCore {
         ? await OptionalReactNativePlugin.isEnabled().catch(() => false)
         : false
 
-      // setup() and start() overwrite the native session id even when the native SDK ignores
-      // them as a repeat setup, so only the owner of the native session may call them.
+      // setup() overwrites the native session id even when the native SDK ignores
+      // it as a repeat setup, so only the owner of the native session may call it.
       if (nativeSessionOwner && nativeSessionOwner !== this && !this._canTakeOverNativeSession(nativeSessionOwner)) {
         this._logger.info('Native PostHog plugin already set up by another PostHog client.')
         return false
       }
 
-      if (OptionalReactNativePlugin.setup) {
-        // The provider can't cross the bridge, so only an enabled marker goes into the
-        // setup map; the JS listener itself must be installed here, before setup() captures it.
-        // Installed regardless of enablePush: an opted-out app's only setup() call comes from
-        // replay/error-tracking, and native ignores a second — skip here and subscriptions stay
-        // unauthenticated for the process. Inert while opted out, since native only mints on a
-        // subscription request, which its own opt-out flag blocks.
-        let pushIdentityProviderEnabled = false
-        if (options?.pushIdentityProvider) {
-          if (OptionalReactNativePlugin.setPushIdentityProvider) {
-            OptionalReactNativePlugin.setPushIdentityProvider(options.pushIdentityProvider)
-            pushIdentityProviderEnabled = true
-          } else {
-            this._logger.warn(
-              'pushIdentityProvider requires a newer @posthog/react-native-plugin; push subscriptions will be sent unauthenticated.'
-            )
-          }
-        }
-
-        const pluginConfig = {
-          sessionReplay: {
-            enabled: enableSessionReplay,
-            sdkReplayConfig,
-            decideReplayConfig: cachedSessionReplayConfig,
-          },
-          errorTracking: {
-            nativeAutocapture: nativeErrorAutocapture.nativeCrashes,
-            androidNdkCrashes: nativeErrorAutocapture.androidNdkCrashes,
-            exceptionSteps: this._errorTracking.getNativePluginExceptionStepsConfig(),
-            // Tells native to drop its fatal JS crash report only after markFatalExceptionHandled().
-            fatalExceptionMarker: true,
-          },
-          // Always sent, even when push init isn't the reason we're here: the native
-          // defaults are true, so an explicit opt-out must reach the native config.
-          push: {
-            capturePushNotificationSubscriptions: options?.capturePushNotificationSubscriptions ?? true,
-            capturePushNotificationOpened: options?.capturePushNotificationOpened ?? true,
-            pushIdentityProviderEnabled,
-          },
-          ...(options?.rageClickConfig && { rageClick: options.rageClickConfig }),
-        }
-        nativeSessionOwner = this
-        await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)
-        // Native resolves its own persisted opt-out over the config value passed above, so an
-        // earlier optIn() keeps winning and sdkOptions.optOut alone can't opt a user back out.
-        // Only an explicit optOut()/optIn() overwrites it, so re-assert JS consent every setup.
-        await OptionalReactNativePlugin.setOptOut?.(this.optedOut)
-        if (wasSessionReplayEnabled) {
-          // if somehow the SDK is already enabled with a different sessionId, we reset it
-          this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
-        }
-      } else {
-        if (enableNativeErrorTracking) {
-          this._logger.warn(
-            'Native error tracking is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
-          )
-          // The legacy plugin can't do native crash capture, so don't mark it initialized below.
-          enableNativeErrorTracking = false
-        }
-        // start() carries no push config, so the legacy plugin can never do push. Unsupported,
-        // not initialized: the latch stops enablePush recomputing true on every flags reload,
-        // while claiming initialized would assert a native instance setup() never created.
-        if (enablePush) {
-          this._logger.warn(
-            'Push notifications require @posthog/react-native-plugin; the legacy session-replay plugin does not support them.'
-          )
-        }
-        enablePush = false
-        this._pushNativeUnsupported = true
-        if (!enableSessionReplay) {
-          return false
-        }
-        nativeSessionOwner = this
-        if (!(await OptionalReactNativePlugin.isEnabled())) {
-          await OptionalReactNativePlugin.start(
-            String(sessionId),
-            sdkOptions,
-            sdkReplayConfig,
-            cachedSessionReplayConfig
-          )
+      // The provider can't cross the bridge, so only an enabled marker goes into the
+      // setup map; the JS listener itself must be installed here, before setup() captures it.
+      // Installed regardless of enablePush: an opted-out app's only setup() call comes from
+      // replay/error-tracking, and native ignores a second — skip here and subscriptions stay
+      // unauthenticated for the process. Inert while opted out, since native only mints on a
+      // subscription request, which its own opt-out flag blocks.
+      let pushIdentityProviderEnabled = false
+      if (options?.pushIdentityProvider) {
+        if (OptionalReactNativePlugin.setPushIdentityProvider) {
+          OptionalReactNativePlugin.setPushIdentityProvider(options.pushIdentityProvider)
+          pushIdentityProviderEnabled = true
         } else {
-          // if somehow the SDK is already enabled with a different sessionId, we reset it
-          this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
+          this._logger.warn(
+            'pushIdentityProvider requires a newer @posthog/react-native-plugin; push subscriptions will be sent unauthenticated.'
+          )
         }
+      }
+
+      const pluginConfig = {
+        sessionReplay: {
+          enabled: enableSessionReplay,
+          sdkReplayConfig,
+          decideReplayConfig: cachedSessionReplayConfig,
+        },
+        errorTracking: {
+          nativeAutocapture: nativeErrorAutocapture.nativeCrashes,
+          androidNdkCrashes: nativeErrorAutocapture.androidNdkCrashes,
+          exceptionSteps: this._errorTracking.getNativePluginExceptionStepsConfig(),
+          // Tells native to drop its fatal JS crash report only after markFatalExceptionHandled().
+          fatalExceptionMarker: true,
+        },
+        // Always sent, even when push init isn't the reason we're here: the native
+        // defaults are true, so an explicit opt-out must reach the native config.
+        push: {
+          capturePushNotificationSubscriptions: options?.capturePushNotificationSubscriptions ?? true,
+          capturePushNotificationOpened: options?.capturePushNotificationOpened ?? true,
+          pushIdentityProviderEnabled,
+        },
+        ...(options?.rageClickConfig && { rageClick: options.rageClickConfig }),
+      }
+      nativeSessionOwner = this
+      await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)
+      // Native resolves its own persisted opt-out over the config value passed above, so an
+      // earlier optIn() keeps winning and sdkOptions.optOut alone can't opt a user back out.
+      // Only an explicit optOut()/optIn() overwrites it, so re-assert JS consent every setup.
+      await OptionalReactNativePlugin.setOptOut?.(this.optedOut)
+      if (wasSessionReplayEnabled) {
+        // if somehow the SDK is already enabled with a different sessionId, we reset it
+        this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
       }
       this._currentSessionId = sessionId
       if (enableSessionReplay) {

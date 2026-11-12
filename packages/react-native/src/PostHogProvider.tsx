@@ -23,12 +23,6 @@ export interface PostHogProviderProps {
    * https://us.posthog.com/settings/project-details#variables
    */
   projectToken?: string
-  /**
-   * Your PostHog project token. Ignored when `projectToken` is set.
-   *
-   * @deprecated Use `projectToken` instead. This will be removed in the next major version.
-   */
-  apiKey?: string
   /** An existing PostHog client instance */
   client?: PostHog
   /**
@@ -67,7 +61,7 @@ function PostHogNavigationHook({
   options?: PostHogAutocaptureOptions
   client?: PostHog
 }): JSX.Element | null {
-  useNavigationTracker(options?.navigation, options?.navigationRef, client)
+  useNavigationTracker(options?.navigation, client)
   return null
 }
 
@@ -136,7 +130,6 @@ export const PostHogProvider = ({
   client,
   options,
   projectToken,
-  apiKey,
   autocapture,
   style,
   debug = false,
@@ -144,10 +137,8 @@ export const PostHogProvider = ({
   const captureAll = autocapture === true
   const captureNone = autocapture === false
 
-  const token = projectToken ?? apiKey
-
   const posthog = useMemo(() => {
-    if (client && token) {
+    if (client && projectToken) {
       console.warn(
         'You have provided both a client and a projectToken to PostHogProvider. The projectToken will be ignored in favour of the client.'
       )
@@ -163,8 +154,8 @@ export const PostHogProvider = ({
         options?.captureAppLifecycleEvents !== undefined ? options.captureAppLifecycleEvents : !captureNone,
     }
 
-    return new PostHog(token ?? '', parsedOptions)
-  }, [client, token]) // oxlint-disable-line react/exhaustive-deps
+    return new PostHog(projectToken ?? '', parsedOptions)
+  }, [client, projectToken]) // oxlint-disable-line react/exhaustive-deps
 
   const autocaptureOptions = useMemo(
     () => (autocapture && typeof autocapture !== 'boolean' ? autocapture : {}),

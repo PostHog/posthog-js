@@ -78,7 +78,7 @@ Some packages have their own contributor guides with extra package-level checks:
 ## Workspace
 
 - This repository is structured as a pnpm workspace and each SDK and tooling package is a member of this global workspace.
-- Example and playground projects are independent pnpm workspaces. Run `pnpm install` inside the specific project folder. Projects using the shared `.pnpmfile.cjs` rewrite PostHog dependencies to local tarballs, with exclusions such as `@posthog/cli` and `posthog-react-native-session-replay`. Check the project's `pnpm-workspace.yaml` and referenced pnpmfile for its exact behavior.
+- Example and playground projects are independent pnpm workspaces. Run `pnpm install` inside the specific project folder. Projects using the shared `.pnpmfile.cjs` rewrite PostHog dependencies to local tarballs, with exclusions such as `@posthog/cli`. Check the project's `pnpm-workspace.yaml` and referenced pnpmfile for its exact behavior.
 
 ## Dependency cooldown
 

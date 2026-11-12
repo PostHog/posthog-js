@@ -5,17 +5,14 @@ import type PostHogReactNativePlugin from '@posthog/react-native-plugin'
 import type { PostHogPushIdentityProvider } from '../types'
 
 /**
- * `@posthog/react-native-plugin` is the primary native plugin; we fall back to
- * `posthog-react-native-session-replay` (same surface minus the newer methods)
- * when only the legacy package is installed. Optional methods are absent on
- * older plugins, so callers check availability at runtime.
+ * Optional methods are absent on older `@posthog/react-native-plugin` versions,
+ * so callers check availability at runtime.
  *
  * `captureFatalException` is part of `PostHogReactNativePlugin` since the version that
  * moved fatal JavaScript exceptions onto the native SDK's own queue. Older plugins do not
  * expose it, so callers check existence before use and fall back to the JS event queue.
  */
 export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin & {
-  setup?: (sessionId: string, sdkOptions: { [key: string]: any }, pluginConfig: { [key: string]: any }) => Promise<void>
   startRecording?: (resumeCurrent: boolean) => Promise<void>
   stopRecording?: () => Promise<void>
   addExceptionStep?: (message: string, properties?: { [key: string]: any }) => Promise<void>
@@ -34,10 +31,7 @@ export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin &
 export type OptionalPluginLoaders = {
   loadPrimary: () => PostHogReactNativePluginExtended
   loadPrimaryVersion: () => string | undefined
-  loadLegacy: () => PostHogReactNativePluginExtended
 }
-
-let legacyPluginWarned = false
 
 export const resolveOptionalPlugin = (
   platformOS: string,
@@ -56,22 +50,6 @@ export const resolveOptionalPlugin = (
         // Metro falls back to file-based resolution, so version logging only degrades to unknown where needed.
       }
     } catch {}
-
-    // The legacy fallback is session-replay only and has no macOS support, so it's skipped on macOS.
-    if (!plugin && platformOS !== 'macos') {
-      try {
-        plugin = loaders ? loaders.loadLegacy() : require('posthog-react-native-session-replay')
-      } catch {}
-
-      // Always visible (not gated on debug): it resolves at import, before any client or logger exists.
-      if (plugin && !legacyPluginWarned) {
-        legacyPluginWarned = true
-        console.warn(
-          '[PostHog] posthog-react-native-session-replay is deprecated and no longer receives native SDK updates. ' +
-            'Replace it with @posthog/react-native-plugin.'
-        )
-      }
-    }
   }
 
   return { plugin, version }

@@ -1,16 +1,13 @@
 import type { OptionalPluginLoaders } from '../src/optional/OptionalPlugin'
 
 let resolveOptionalPlugin: typeof import('../src/optional/OptionalPlugin').resolveOptionalPlugin
-let warnSpy: vi.SpyInstance
 
 beforeEach(async () => {
   vi.resetModules()
-  warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   ;({ resolveOptionalPlugin } = await import('../src/optional/OptionalPlugin'))
 })
 
 const PRIMARY = { __plugin: 'primary' }
-const LEGACY = { __plugin: 'legacy' }
 
 type LoadedOptionalPlugin = {
   plugin: unknown
@@ -31,13 +28,11 @@ const loadOptionalPlugin = (
   {
     primaryInstalled = true,
     primaryMetadataAvailable = true,
-    legacyInstalled = true,
-  }: { primaryInstalled?: boolean; primaryMetadataAvailable?: boolean; legacyInstalled?: boolean } = {}
+  }: { primaryInstalled?: boolean; primaryMetadataAvailable?: boolean } = {}
 ): LoadedOptionalPlugin => {
   const loaders: OptionalPluginLoaders = {
     loadPrimary: optionalLoader(primaryInstalled, PRIMARY) as OptionalPluginLoaders['loadPrimary'],
     loadPrimaryVersion: optionalLoader(primaryMetadataAvailable, '2.4.1'),
-    loadLegacy: optionalLoader(legacyInstalled, LEGACY) as OptionalPluginLoaders['loadLegacy'],
   }
   return resolveOptionalPlugin(os, loaders)
 }
@@ -45,10 +40,6 @@ const loadOptionalPlugin = (
 describe('OptionalPlugin loader', () => {
   it('loads the primary plugin on macOS', () => {
     expect(loadOptionalPlugin('macos').plugin).toBe(PRIMARY)
-  })
-
-  it('does not fall back to the legacy (session-replay-only) plugin on macOS', () => {
-    expect(loadOptionalPlugin('macos', { primaryInstalled: false }).plugin).toBeUndefined()
   })
 
   it('loads the primary plugin on iOS', () => {
@@ -66,44 +57,15 @@ describe('OptionalPlugin loader', () => {
     expect(loaded.version).toBeUndefined()
   })
 
-  it('falls back to the legacy plugin on iOS when the primary is not installed', () => {
-    expect(loadOptionalPlugin('ios', { primaryInstalled: false }).plugin).toBe(LEGACY)
-  })
-
-  it('loads no plugin on iOS when neither the primary nor the legacy plugin is installed', () => {
-    expect(loadOptionalPlugin('ios', { primaryInstalled: false, legacyInstalled: false }).plugin).toBeUndefined()
+  it.each(['ios', 'android', 'macos'])('loads no plugin on %s when the plugin is not installed', (os) => {
+    expect(loadOptionalPlugin(os, { primaryInstalled: false }).plugin).toBeUndefined()
   })
 
   it('loads the primary plugin on Android', () => {
     expect(loadOptionalPlugin('android').plugin).toBe(PRIMARY)
   })
 
-  it('falls back to the legacy plugin on Android when the primary is not installed', () => {
-    expect(loadOptionalPlugin('android', { primaryInstalled: false }).plugin).toBe(LEGACY)
-  })
-
   it('loads no native plugin on web', () => {
     expect(loadOptionalPlugin('web').plugin).toBeUndefined()
-  })
-
-  it('warns once that the legacy plugin is deprecated when it is loaded', () => {
-    loadOptionalPlugin('ios', { primaryInstalled: false })
-    loadOptionalPlugin('android', { primaryInstalled: false })
-
-    expect(warnSpy).toHaveBeenCalledTimes(1)
-    expect(warnSpy.mock.calls[0][0]).toContain('posthog-react-native-session-replay is deprecated')
-    expect(warnSpy.mock.calls[0][0]).toContain('@posthog/react-native-plugin')
-  })
-
-  it.each([
-    ['ios', {}],
-    ['android', {}],
-    ['ios', { primaryInstalled: false, legacyInstalled: false }],
-    ['macos', { primaryInstalled: false }],
-    ['web', { primaryInstalled: false }],
-  ])('does not warn about the legacy plugin on %s with %o', (os, options) => {
-    loadOptionalPlugin(os, options)
-
-    expect(warnSpy).not.toHaveBeenCalled()
   })
 })
