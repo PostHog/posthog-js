@@ -55,10 +55,12 @@ Read the checklist first, then the sections that apply to you.
 
 6.x.x sends events to these endpoints:
 
-| Method                                                                                                              | Endpoint                 |
-| ------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| `capture`, `captureImmediate`, `identify`, `alias`, `groupIdentify`, `captureException` and the other event methods | `/i/v1/analytics/events` |
-| `captureAi`, `captureAiImmediate`, and `@posthog/ai` on posthog-node 6.x.x                                          | `/i/v1/ai/events`        |
+| Method                                                                                          | Endpoint                 |
+| ----------------------------------------------------------------------------------------------- | ------------------------ |
+| `capture`, `identify`, `alias`, `groupIdentify`, `captureException` and the other event methods | `/i/v1/analytics/events` |
+| `captureAi`, `captureAiImmediate`, and `@posthog/ai` on posthog-node 6.x.x                      | `/i/v1/ai/events`        |
+
+`captureImmediate` also sends to `/i/v1/analytics/events`.
 
 If you send events through your own reverse proxy, update it before you upgrade:
 
@@ -96,12 +98,16 @@ A disabled client sends nothing. To build one on purpose, for example in tests, 
 
 Each wrapper package works with these posthog-node versions:
 
-| Package                                             | Works with                                                                                          |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `@posthog/ai`                                       | posthog-node 5.x.x and 6.x.x. On 6.x.x it sends AI events with `captureAi()`.                       |
-| `@posthog/mcp`                                      | posthog-node 5.x.x and 6.x.x                                                                        |
-| `@posthog/openfeature-node-provider`                | posthog-node 5.x.x and 6.x.x. It uses only the feature flag APIs.                                   |
-| `@posthog/convex`, `@posthog/next`, `@posthog/nuxt` | posthog-node 5.x.x, as a dependency. Check each package's changelog for posthog-node 6.x.x support. |
+| Package                                             | Works with posthog-node |
+| --------------------------------------------------- | ----------------------- |
+| `@posthog/ai`                                       | 5.x.x and 6.x.x         |
+| `@posthog/mcp`                                      | 5.x.x and 6.x.x         |
+| `@posthog/openfeature-node-provider`                | 5.x.x and 6.x.x         |
+| `@posthog/convex`, `@posthog/next`, `@posthog/nuxt` | 5.x.x                   |
+
+On 6.x.x, `@posthog/ai` sends AI events with `captureAi()`. `@posthog/openfeature-node-provider` uses only the feature flag APIs.
+
+`@posthog/convex`, `@posthog/next`, and `@posthog/nuxt` have posthog-node 5.x.x as a dependency. Check each package's changelog for posthog-node 6.x.x support.
 
 Upgrade `@posthog/ai` and `@posthog/mcp` to a version that accepts posthog-node 6.x.x before or together with posthog-node.
 
@@ -117,14 +123,24 @@ List `posthog-node` in your dependencies so you choose when to move to 6.x.x.
 
 6.x.x removes or changes these APIs:
 
-| 5.x.x                                                                                                           | 6.x.x                                                                                                                                                                                         |
-| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POSTHOG_CAPTURE_MODE` environment variable                                                                     | Not read. Capture v1 is the only path. Each client logs one warning when it is created with the variable set.                                                                                 |
-| `CaptureV1Error` (the error name in capture v1 mode)                                                            | `CaptureError`, exported from `posthog-node`. There is no alias.                                                                                                                              |
-| `captureException(error, distinctId, properties, uuid, flags)`                                                  | `captureException(error, { distinctId, properties, options, uuid, flags, level })`. JavaScript positional calls still work in 6.x.x. TypeScript callers must use the options object.          |
-| `captureExceptionImmediate(error, distinctId, properties, flags)`                                               | `captureExceptionImmediate(error, { distinctId, properties, options, uuid, flags, level })`. JavaScript positional calls still work in 6.x.x. TypeScript callers must use the options object. |
-| `prepareEventMessage()` returns `{ distinctId, event, properties, options: { uuid, timestamp, disableGeoip } }` | Returns a flat message: `{ distinctId, event, properties, options, uuid, timestamp, disableGeoip }`. `options` holds the event options.                                                       |
-| `fetchRetryDelay` set capture retry waits                                                                       | Capture ignores it. See [Update error handling](#update-error-handling).                                                                                                                      |
+| 5.x.x                                              | 6.x.x             |
+| -------------------------------------------------- | ----------------- |
+| `POSTHOG_CAPTURE_MODE`                             | Not read          |
+| `CaptureV1Error`                                   | `CaptureError`    |
+| `captureException()` positional arguments          | An options object |
+| `captureExceptionImmediate()` positional arguments | An options object |
+| `prepareEventMessage()` nested result              | A flat message    |
+| `fetchRetryDelay` for capture                      | Ignored           |
+
+6.x.x doesn't read the `POSTHOG_CAPTURE_MODE` environment variable. Capture v1 is the only path. Each client logs one warning when it is created with the variable set.
+
+`CaptureV1Error` was the error name in capture v1 mode. `CaptureError` is exported from `posthog-node`. There is no alias.
+
+In 5.x.x `fetchRetryDelay` set capture retry waits. Capture now ignores it. See [Update error handling](#update-error-handling).
+
+The 5.x.x signatures were `captureException(error, distinctId, properties, uuid, flags)` and `captureExceptionImmediate(error, distinctId, properties, flags)`. In 6.x.x both methods take `(error, { distinctId, properties, options, uuid, flags, level })`.
+
+JavaScript positional calls still work in 6.x.x. TypeScript callers must use the options object.
 
 `captureException()` and `captureExceptionImmediate()` take an options object after `error`:
 
@@ -139,6 +155,8 @@ posthog.captureException(error, {
   level: 'warning',
 })
 ```
+
+In 5.x.x `prepareEventMessage()` returned `{ distinctId, event, properties, options: { uuid, timestamp, disableGeoip } }`. In 6.x.x it returns a flat message, `{ distinctId, event, properties, options, uuid, timestamp, disableGeoip }`, and `options` holds the event options.
 
 `prepareEventMessage()` returns `uuid`, `timestamp`, and `disableGeoip` at the top level:
 
@@ -237,11 +255,17 @@ Analytics events and `captureAi()` events use separate lanes. Each lane has its 
 
 The AI lane has its own settings. It doesn't read `maxQueueSize`, `requestTimeout`, `captureCompression`, or `disableCompression`.
 
-| Option                      | Default  | What it does                                                                       |
-| --------------------------- | -------- | ---------------------------------------------------------------------------------- |
-| `captureAiMaxQueueSize`     | 1000     | AI events held in memory. When full, the oldest is dropped and reported.           |
-| `captureAiRequestTimeoutMs` | 30000    | Timeout of each AI request, in milliseconds.                                       |
-| `captureAiCompression`      | `'gzip'` | Same values as `captureCompression`. We recommend `'zstd'` on Node 22.15 or later. |
+| Option                      | Default  |
+| --------------------------- | -------- |
+| `captureAiMaxQueueSize`     | 1000     |
+| `captureAiRequestTimeoutMs` | 30000    |
+| `captureAiCompression`      | `'gzip'` |
+
+`captureAiMaxQueueSize` sets how many AI events are held in memory. When the queue is full, the oldest is dropped and reported.
+
+`captureAiRequestTimeoutMs` is the timeout of each AI request, in milliseconds.
+
+`captureAiCompression` takes the same values as `captureCompression`. We recommend `'zstd'` on Node 22.15 or later.
 
 `captureMaxRetries`, `flushAt`, `flushInterval`, and `maxBatchSize` apply to both lanes. The SDK logs an invalid value for one of these options once and uses the default.
 
