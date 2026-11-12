@@ -57,6 +57,20 @@ describe('PostHog RN onFeatureFlags', () => {
     expect(listener).toHaveBeenLastCalledWith({ 'beta-ui': true }, { errorsLoading: false })
   })
 
+  it('keeps notifying other listeners and finishes the load when a listener throws', async () => {
+    posthog = newPostHog()
+    await posthog.ready()
+    posthog.onFeatureFlags(() => {
+      throw new Error('boom')
+    })
+    const listener = vi.fn()
+    posthog.onFeatureFlags(listener)
+
+    await expect(posthog.reloadFeatureFlagsAsync()).resolves.toBeDefined()
+
+    expect(listener).toHaveBeenLastCalledWith({ 'beta-ui': true }, { errorsLoading: false })
+  })
+
   it('reports a failed load with the last known flags and errorsLoading true', async () => {
     posthog = newPostHog()
     await posthog.ready()

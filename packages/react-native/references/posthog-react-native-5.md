@@ -966,6 +966,9 @@ const payload = result?.payload
 
 > **getAllFeatureFlags**(): `FeatureFlagResult`[]
 
+Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
+the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
+
 #### Returns
 
 `FeatureFlagResult`[]

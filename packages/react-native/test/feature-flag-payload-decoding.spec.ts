@@ -66,6 +66,20 @@ describe('PostHog RN feature flag payload decoding', () => {
     expect(posthog.getFeatureFlag('checkout')).toEqual('blue')
   })
 
+  it('reads a malformed payload as null in getFeatureFlagDetails()', async () => {
+    await loadFlags('{broken')
+
+    expect(posthog.getFeatureFlagDetails()?.featureFlagPayloads).toEqual({ checkout: null })
+  })
+
+  it('keeps a malformed payload null after a merging updateFlags()', async () => {
+    await loadFlags('{broken')
+
+    posthog.updateFlags({ other: true }, undefined, { merge: true })
+
+    expect(posthog.getFeatureFlagResult('checkout', { sendFeatureFlagEvent: false })?.payload).toBeNull()
+  })
+
   it.each([
     ['{"cta":"Try now"}', { cta: 'Try now' }],
     ['""', ''],

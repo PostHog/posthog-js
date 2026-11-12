@@ -1,6 +1,6 @@
 import { version } from './version'
 
-import { PostHogCoreWithLegacyFeatureFlags, getFetch } from '@posthog/core'
+import { PostHogCore, getFetch } from '@posthog/core'
 import type {
   PostHogEventProperties,
   PostHogFetchOptions,
@@ -13,7 +13,7 @@ import { PostHogStorage, getStorage } from './storage'
 import { PostHogOptions } from './types'
 import { patch } from './patch'
 
-export class PostHog extends PostHogCoreWithLegacyFeatureFlags {
+export class PostHog extends PostHogCore {
   private _storage: PostHogStorage
   private _storageCache: any
   private _storageKey: string

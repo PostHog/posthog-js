@@ -58,7 +58,11 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
 const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolean | undefined =>
   options?.sendFeatureFlagEvent ?? options?.sendEvent
 
-export abstract class PostHogCore extends PostHogCoreStateless {
+/**
+ * The PostHog client core without the feature flag getters that `getFeatureFlagResult()`,
+ * `getAllFeatureFlags()` and `updateFlags()` replace.
+ */
+export abstract class PostHogCoreBase extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
   private disableRemoteFeatureFlags: boolean
@@ -977,8 +981,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       return createFlagsResponseFromFlagsAndPayloads(featureFlags ?? {}, featureFlagPayloads ?? {})
     }
 
-    return normalizeFlagsResponse(
-      storedDetails as PostHogV1FlagsResponse | PostHogV2FlagsResponse
+    return normalizeFlagsResponse(storedDetails as PostHogV1FlagsResponse | PostHogV2FlagsResponse, (payload) =>
+      this.decodeFeatureFlagPayload(payload)
     ) as PostHogFeatureFlagDetails
   }
 
@@ -1030,7 +1034,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     if (!details) {
       return undefined
     }
-    return getPayloadsFromFlags(details.flags)
+    return getPayloadsFromFlags(details.flags, (payload) => this.decodeFeatureFlagPayload(payload))
   }
 
   /**
@@ -1041,15 +1045,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._getFeatureFlagResult(key, { sendEvent: resolveSendFeatureFlagEvent(options) })
   }
 
-  /**
-   * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
-   * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
-   */
   /** Decodes a flag's stored payload for flag results. */
   protected decodeFeatureFlagPayload(payload: any): JsonType {
     return parsePayload(payload)
   }
 
+  /**
+   * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
+   * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
+   */
   getAllFeatureFlags(): FeatureFlagResult[] {
     return flagDetailsToResults(this.getFeatureFlagDetails()?.flags ?? {}, (payload) =>
       this.decodeFeatureFlagPayload(payload)
@@ -1210,7 +1214,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       flags,
     }
 
-    return normalizeFlagsResponse(result) as PostHogFeatureFlagDetails
+    return normalizeFlagsResponse(result, (payload) =>
+      this.decodeFeatureFlagPayload(payload)
+    ) as PostHogFeatureFlagDetails
   }
 
   /**
@@ -1307,7 +1313,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       for (const key in existingDetails) {
         const storedPayload = existingDetails[key].metadata?.payload
         if (storedPayload !== undefined) {
-          existingPayloads[key] = parsePayload(storedPayload)
+          existingPayloads[key] = this.decodeFeatureFlagPayload(storedPayload)
         }
       }
       const finalFlags = { ...existingFlags, ...flags }
@@ -1772,11 +1778,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 }
 
-/**
- * `PostHogCore` plus the feature flag getters that `getFeatureFlagResult()`,
- * `getAllFeatureFlags()` and `updateFlags()` replace. SDKs that still ship them extend this class.
- */
-export abstract class PostHogCoreWithLegacyFeatureFlags extends PostHogCore {
+/** The PostHog client core, including the deprecated feature flag getters. */
+export abstract class PostHogCore extends PostHogCoreBase {
   /**
    * @deprecated Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
    */

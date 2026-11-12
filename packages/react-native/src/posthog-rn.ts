@@ -5,7 +5,7 @@ import {
   CaptureLogger,
   JsonType,
   PostHogCaptureOptions,
-  PostHogCore,
+  PostHogCoreBase,
   PostHogCoreOptions,
   PostHogEventProperties,
   PostHogFetchOptions,
@@ -360,7 +360,7 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
   pushIdentityProvider?: PostHogPushIdentityProvider
 }
 
-export class PostHog extends PostHogCore {
+export class PostHog extends PostHogCoreBase {
   private _persistence: PostHogOptions['persistence']
   private _eventsStorage: PostHogRNStorage
   private _logsStorage: PostHogRNStorage
@@ -1755,9 +1755,14 @@ export class PostHog extends PostHogCore {
     callback: (flags: Record<string, boolean | string>, context: PostHogFeatureFlagsLoadContext) => void
   ): () => void {
     return this.on('featureflags', () => {
-      callback(this.getFeatureFlagDetails()?.featureFlags ?? {}, {
-        errorsLoading: this.didLatestFeatureFlagsLoadFail(),
-      })
+      // A throwing app callback must not stop the other listeners or the flag load itself.
+      try {
+        callback(this.getFeatureFlagDetails()?.featureFlags ?? {}, {
+          errorsLoading: this.didLatestFeatureFlagsLoadFail(),
+        })
+      } catch (error) {
+        this._logger.error('onFeatureFlags callback threw:', error)
+      }
     })
   }
 
