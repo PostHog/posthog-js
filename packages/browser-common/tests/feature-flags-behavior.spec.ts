@@ -3396,6 +3396,8 @@ describe('parseFlagsResponse', () => {
             $minimal_flag_called_events: false,
             $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
             $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
+            $feature_flag_details: {},
+            $feature_flag_payloads: {},
         })
         expect(window.console.warn).toHaveBeenCalledWith(
             '[PostHog.js] [FeatureFlags]',

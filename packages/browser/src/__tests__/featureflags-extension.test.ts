@@ -308,6 +308,47 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         }
     )
 
+    it('persists legacy array recovery over a sibling failed snapshot and reopens without its payload', async () => {
+        const config = {
+            advanced_disable_feature_flags: true,
+            persistence: 'localStorage' as const,
+            persistence_name: `cross-tab-legacy-recovery-${uuidv7()}`,
+            persistence_save_debounce_ms: 0,
+        }
+        const posthog = await createPosthogInstance(uuidv7(), config)
+        posthog.persistence?.register({
+            [ENABLED_FEATURE_FLAGS]: { flag: false },
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: { flag: failedFlagDetail },
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { flag: { source: 'failed' } },
+        })
+        const sibling = new PostHogPersistence(posthog.config)
+        try {
+            posthog.featureFlags.receivedFeatureFlags({
+                // @ts-expect-error Legacy v1 servers return an array rather than a value map.
+                featureFlags: ['flag'],
+            })
+            sibling.register({ unrelated: true })
+            const stored = JSON.parse(window.localStorage.getItem(`ph_${config.persistence_name}`) || '{}')
+            expect(stored[ENABLED_FEATURE_FLAGS]).toEqual({ flag: true })
+            expect(stored[PERSISTENCE_FEATURE_FLAG_DETAILS]).toEqual({})
+            expect(stored[PERSISTENCE_FEATURE_FLAG_PAYLOADS]).toEqual({})
+            const reopened = await createPosthogInstance(uuidv7(), config)
+            try {
+                expect(reopened.getFeatureFlagResult('flag', { send_event: false })).toEqual({
+                    key: 'flag',
+                    enabled: true,
+                    variant: undefined,
+                    payload: undefined,
+                })
+            } finally {
+                await reopened.shutdown()
+            }
+        } finally {
+            sibling.destroy()
+            await posthog.shutdown()
+        }
+    })
+
     it('keeps a pending local successful pair when reconciling a failed merge', async () => {
         const persistenceName = `cross-tab-pending-merge-${uuidv7()}`
         const posthog = await createPosthogInstance(uuidv7(), {

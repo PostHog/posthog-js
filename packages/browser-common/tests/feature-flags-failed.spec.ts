@@ -1,3 +1,4 @@
+import type { FeatureFlagDetail } from '@posthog/core'
 import { parseFlagsResponse } from '../src/feature-flags'
 import { createConfig, createFlagsClient, setupFlags, disposeFlags } from './helpers/feature-flags'
 import {
@@ -26,43 +27,50 @@ describe('failed browser flag records', () => {
         vi.useRealTimers()
     })
 
-    it.each([true, false, undefined])(
-        'filters pre-fix persisted failures without a network refresh (%s)',
-        (errorsWhileComputingFlags) => {
-            const client = createFlagsClient()
-            client.kv.set({
-                [ENABLED_FEATURE_FLAGS]: { failed: 'placeholder' },
-                [PERSISTENCE_FEATURE_FLAG_DETAILS]: { failed },
-                [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { failed: '{"remote":true}' },
-                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['failed'],
-                [PERSISTENCE_FEATURE_FLAG_ERRORS]: errorsWhileComputingFlags ? ['errors_while_computing_flags'] : [],
+    it.each(
+        [true, false, undefined].flatMap((errorsWhileComputingFlags) =>
+            [true, false, undefined].map((defaultValue) => ({ errorsWhileComputingFlags, defaultValue }))
+        )
+    )('tracks an isolated persisted failed isFeatureEnabled read %j', ({ errorsWhileComputingFlags, defaultValue }) => {
+        const client = createFlagsClient()
+        client.kv.set({
+            [ENABLED_FEATURE_FLAGS]: { failed: 'placeholder' },
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: { failed },
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { failed: '{"remote":true}' },
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['failed'],
+            [PERSISTENCE_FEATURE_FLAG_ERRORS]: errorsWhileComputingFlags ? ['errors_while_computing_flags'] : [],
+        })
+        const flags = setupFlags(client, createConfig({ remoteRequestsDisabled: true }))
+        expect(flags.isFeatureEnabled('failed', { defaultValue, fresh: true })).toBe(defaultValue)
+        expect(flags.isFeatureEnabled('failed', { defaultValue, send_event: false })).toBe(defaultValue)
+        expect(client.capture).not.toHaveBeenCalled()
+        expect(flags.isFeatureEnabled('failed', { defaultValue })).toBe(defaultValue)
+        expect(client.capture).toHaveBeenCalledTimes(1)
+        expect(client.capture).toHaveBeenCalledWith(
+            '$feature_flag_called',
+            expect.objectContaining({
+                $feature_flag_response: undefined,
+                $feature_flag_error: errorsWhileComputingFlags
+                    ? 'errors_while_computing_flags,evaluation_failed'
+                    : 'evaluation_failed',
             })
-            const flags = setupFlags(client, createConfig({ remoteRequestsDisabled: true }))
-            expect(flags.getFeatureFlagResult('failed', { send_event: false })).toBeUndefined()
-            expect(flags.isFeatureEnabled('failed', { defaultValue: true })).toBe(true)
-            expect(flags.getFeatureFlag('failed')).toBeUndefined()
-            expect(flags.getAllFeatureFlags()).toEqual([])
-            expect(flags.getFlagPayloads()).toEqual({})
-            expect(client.capture).toHaveBeenCalledWith(
-                '$feature_flag_called',
-                expect.objectContaining({
-                    $feature_flag_response: undefined,
-                    $feature_flag_error: errorsWhileComputingFlags
-                        ? 'errors_while_computing_flags,evaluation_failed'
-                        : 'evaluation_failed',
-                })
-            )
-            expect(client.sendRequest).not.toHaveBeenCalled()
-            vi.mocked(client.capture).mockRestore()
-            client.capture('other')
-            expect(client.capturedEvents[0]?.properties).not.toHaveProperty('$feature/failed')
-            expect(client.capturedEvents[0]?.properties[PERSISTENCE_FEATURE_FLAG_PAYLOADS]).toEqual({})
-            expect(client.capturedEvents[0]?.properties[PERSISTENCE_ACTIVE_FEATURE_FLAGS]).toEqual([])
-            flags.updateFlags({ healthy: true }, undefined, { merge: true })
-            expect(flags.getFlagVariants()).toEqual({ healthy: true })
-            expect(flags.getFlagPayloads()).toEqual({})
-        }
-    )
+        )
+        expect(flags.isFeatureEnabled('failed', { defaultValue })).toBe(defaultValue)
+        expect(client.capture).toHaveBeenCalledTimes(1)
+        expect(flags.getFeatureFlagResult('failed', { send_event: false })).toBeUndefined()
+        expect(flags.getFeatureFlag('failed')).toBeUndefined()
+        expect(flags.getAllFeatureFlags()).toEqual([])
+        expect(flags.getFlagPayloads()).toEqual({})
+        expect(client.sendRequest).not.toHaveBeenCalled()
+        vi.mocked(client.capture).mockRestore()
+        client.capture('other')
+        expect(client.capturedEvents[0]?.properties).not.toHaveProperty('$feature/failed')
+        expect(client.capturedEvents[0]?.properties[PERSISTENCE_FEATURE_FLAG_PAYLOADS]).toEqual({})
+        expect(client.capturedEvents[0]?.properties[PERSISTENCE_ACTIVE_FEATURE_FLAGS]).toEqual([])
+        flags.updateFlags({ healthy: true }, undefined, { merge: true })
+        expect(flags.getFlagVariants()).toEqual({ healthy: true })
+        expect(flags.getFlagPayloads()).toEqual({})
+    })
 
     it('preserves legacy, retained successful, overridden and bootstrapped values on startup', () => {
         const client = createFlagsClient()
@@ -107,6 +115,155 @@ describe('failed browser flag records', () => {
             payload: { bootstrap: true },
         })
     })
+
+    it.each([false, true])(
+        'accepts a legacy array after a failed detail and reopen (pre-fix cache: %s)',
+        (preFixCache) => {
+            const client = createFlagsClient()
+            const config = createConfig({ remoteRequestsDisabled: true })
+            const flags = setupFlags(client, config)
+            flags.receivedFeatureFlags({
+                flags: {
+                    failed,
+                    unresolved: { ...failed, key: 'unresolved' },
+                    healthy: { key: 'healthy', enabled: true, metadata: { payload: '{"healthy":true}' } },
+                },
+            })
+            if (preFixCache) {
+                client.kv.set(PERSISTENCE_FEATURE_FLAG_PAYLOADS, { failed: 'placeholder', healthy: '{"healthy":true}' })
+            }
+            const callback = vi.fn()
+            flags.onFeatureFlags(callback)
+            flags.receivedFeatureFlags({
+                // @ts-expect-error Legacy v1 servers return an array rather than a value map.
+                featureFlags: ['failed', 'healthy'],
+            })
+            expect(flags.getFeatureFlagResult('failed')).toEqual({
+                key: 'failed',
+                enabled: true,
+                variant: undefined,
+                payload: undefined,
+            })
+            expect(client.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag_response: true,
+                })
+            )
+            expect(vi.mocked(client.capture).mock.calls[0]?.[1]).not.toHaveProperty('$feature_flag_error')
+            expect(vi.mocked(client.capture).mock.calls[0]?.[1]).not.toHaveProperty('$feature_flag_id')
+            expect(vi.mocked(client.capture).mock.calls[0]?.[1]).not.toHaveProperty('$feature_flag_reason')
+            expect(flags.getFeatureFlagDetails('failed')).toBeUndefined()
+            expect(flags.getFeatureFlagDetails('unresolved')?.failed).toBe(true)
+            expect(flags.getFlagVariants()).toEqual({ failed: true, healthy: true })
+            expect(flags.getFlagPayloads()).toEqual({ healthy: '{"healthy":true}' })
+            expect(callback).toHaveBeenLastCalledWith(
+                ['failed', 'healthy'],
+                { failed: true, healthy: true },
+                { errorsLoading: undefined }
+            )
+            vi.mocked(client.capture).mockRestore()
+            client.capture('other')
+            expect(client.capturedEvents[0]?.properties).toMatchObject({
+                '$feature/failed': true,
+                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['failed', 'healthy'],
+                [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { healthy: '{"healthy":true}' },
+            })
+            flags.dispose()
+            const reopened = setupFlags(client, config)
+            expect(reopened.getFeatureFlagResult('failed', { send_event: false })).toEqual({
+                key: 'failed',
+                enabled: true,
+                variant: undefined,
+                payload: undefined,
+            })
+            expect(reopened.getFeatureFlagResult('healthy', { send_event: false })?.payload).toEqual({ healthy: true })
+            client.capture('reopened')
+            expect(client.capturedEvents[1]?.properties['$feature/failed']).toBe(true)
+        }
+    )
+
+    it('keeps overrides out of persisted legacy recovery values and payloads', () => {
+        const client = createFlagsClient()
+        const config = createConfig({ remoteRequestsDisabled: true })
+        const flags = setupFlags(client, config)
+        flags.receivedFeatureFlags({
+            flags: { failed, healthy: { ...healthy, enabled: true, metadata: { payload: '{"healthy":true}' } } },
+        })
+        flags.overrideFeatureFlags({
+            flags: { failed: 'override', healthy: false },
+            payloads: { failed: { override: true }, healthy: { override: true } },
+            suppressWarning: true,
+        })
+        flags.receivedFeatureFlags({
+            // @ts-expect-error Legacy v1 servers return an array rather than a value map.
+            featureFlags: ['failed', 'healthy'],
+        })
+        expect(flags.getFeatureFlagResult('failed', { send_event: false })).toMatchObject({
+            variant: 'override',
+            payload: { override: true },
+        })
+        flags.overrideFeatureFlags(false)
+        flags.dispose()
+        const reopened = setupFlags(client, config)
+        expect(reopened.getFeatureFlagResult('failed', { send_event: false })).toEqual({
+            key: 'failed',
+            enabled: true,
+            variant: undefined,
+            payload: undefined,
+        })
+        expect(reopened.getFeatureFlagResult('healthy', { send_event: false })).toEqual({
+            key: 'healthy',
+            enabled: true,
+            variant: undefined,
+            payload: { healthy: true },
+        })
+        expect(reopened.getFeatureFlagDetails('healthy')?.original_enabled).toBeUndefined()
+    })
+
+    it.each([10, 1000].flatMap((count) => [false, true].map((failedSibling) => ({ count, failedSibling }))))(
+        'does not rescan unrelated flag details on cached reads %j',
+        ({ count, failedSibling }) => {
+            const client = createFlagsClient()
+            const flags = setupFlags(client, createConfig({ remoteRequestsDisabled: true }))
+            const readFailure = vi.fn(() => failedSibling)
+            const details: Record<string, FeatureFlagDetail> = {
+                target: { key: 'target', enabled: false, metadata: { payload: '{"target":true}' } },
+            }
+            for (let i = 0; i < count; i++) {
+                details[`sibling-${i}`] = {
+                    key: `sibling-${i}`,
+                    enabled: true,
+                    get failed() {
+                        return readFailure()
+                    },
+                }
+            }
+            flags.receivedFeatureFlags({ flags: details })
+            readFailure.mockClear()
+            for (let i = 0; i < 5; i++) {
+                expect(flags.getFeatureFlagResult('target', { send_event: false })).toEqual({
+                    key: 'target',
+                    enabled: false,
+                    variant: undefined,
+                    payload: undefined,
+                })
+            }
+            expect(readFailure.mock.calls.length).toBe(0)
+            expect(client.capture).not.toHaveBeenCalled()
+            flags.getFeatureFlagResult('target')
+            expect(client.capture).toHaveBeenCalledTimes(1)
+            readFailure.mockClear()
+            for (let i = 0; i < 5; i++) {
+                expect(flags.isFeatureEnabled('target')).toBe(false)
+                expect(flags.getFeatureFlagResult('sibling-0', { send_event: false })?.enabled).toBe(
+                    failedSibling ? undefined : true
+                )
+            }
+            expect(readFailure.mock.calls.length).toBeLessThanOrEqual(5)
+            expect(client.capture).toHaveBeenCalledTimes(1)
+        }
+    )
 
     it.each([
         { partialResponse: true, errorsWhileComputingFlags: false },

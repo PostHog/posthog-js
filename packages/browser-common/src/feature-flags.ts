@@ -185,9 +185,18 @@ export const parseFlagsResponse = (
                 $enabled_feature_flags[featureFlags[i]] = true
             }
         }
+        const newFeatureFlagDetails = { ...currentFlagDetails }
+        featureFlags.forEach((key) => {
+            if (newFeatureFlagDetails[key]?.failed) {
+                delete newFeatureFlagDetails[key]
+            }
+        })
         return {
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: featureFlags,
             [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails,
+            // A recovered key must not inherit a failed placeholder's payload.
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: filterFailedFlagValues(currentFlagPayloads, currentFlagDetails),
             // Legacy responses never carry the gate — fail safe to full events.
             [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: false,
         }
@@ -1406,11 +1415,19 @@ export class PostHogFeatureFlags implements Extension {
             return undefined
         }
 
-        const flagVariants = this.getFlagVariants()
-        const flagExists = key in flagVariants
-        const flagValue = flagVariants[key]!
-        const payloads = this.getFlagPayloads()
-        const payload = payloads[key]
+        const storedFlags = this._prop(ENABLED_FEATURE_FLAGS)
+        const failed = this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)?.[key]?.failed
+        const overriddenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+        const hasOverride = !!overriddenFlags && key in overriddenFlags
+        const flagExists = hasOverride || (!failed && !!storedFlags && key in storedFlags)
+        const flagValue = hasOverride ? overriddenFlags[key] : failed ? undefined : storedFlags?.[key]
+        const overriddenPayloads = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+        const payload =
+            overriddenPayloads && key in overriddenPayloads
+                ? overriddenPayloads[key]
+                : failed
+                  ? undefined
+                  : this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS)?.[key]
         const flagReportValue = String(flagValue)
         const requestId = this._prop(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
         const evaluatedAt = this._prop(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT) || undefined
@@ -1675,7 +1692,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return options.defaultValue
         }
-        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (!this._hasLoadedFlags && !this.getFlags().length && !this.getFeatureFlagDetails(key)?.failed) {
             this._logger.warn('isFeatureEnabled for key "' + key + FLAG_TIMEOUT_MSG)
             return options.defaultValue
         }
@@ -1717,8 +1734,14 @@ export class PostHogFeatureFlags implements Extension {
             }
         }
         const currentFlags = this.getFlagVariants()
-        const currentFlagPayloads = this.getFlagPayloads()
-        const currentFlagDetails = this.getFlagsWithDetails()
+        // Legacy arrays retain prior metadata/payloads, not their locally overridden projections.
+        const isLegacyArrayResponse = !response.flags && isArray(response.featureFlags)
+        const currentFlagPayloads = isLegacyArrayResponse
+            ? this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) || {}
+            : this.getFlagPayloads()
+        const currentFlagDetails = isLegacyArrayResponse
+            ? this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS) || {}
+            : this.getFlagsWithDetails()
         const statePatch = parseFlagsResponse(
             response,
             currentFlags,
