@@ -56,6 +56,20 @@ export function attachmentFiles(
   }))
 }
 
+/**
+ * Checks the email's size once a react element is rendered, since its html and the text derived
+ * from it were unknown when the files were checked.
+ */
+export function refuseRenderedMessageOverLimit(files: AttachmentFile[], content: Record<string, unknown>): void {
+  const html = typeof content.html === 'string' ? content.html : ''
+  const text = typeof content.text === 'string' ? content.text : ''
+  refuseMessageOverLimit(
+    files.map(({ bytes }) => bytes.byteLength),
+    [html, text || html],
+    typeof content.subject === 'string' ? content.subject : ''
+  )
+}
+
 export async function hashedFiles(files: AttachmentFile[]): Promise<HashedFile[]> {
   return Promise.all(
     files.map(async (file, index) => ({

@@ -1,0 +1,11 @@
+:root {
+  --p: 8px;
+}
+#card {
+  padding: var(--p);
+  padding-left: 12px;
+  background: rgb(1, 2, 3);
+}
+#card {
+  color: rgb(4, 5, 6);
+}
