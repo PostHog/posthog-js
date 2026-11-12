@@ -1,5 +1,17 @@
 # @posthog/mcp
 
+## 1.2.0
+
+### Minor Changes
+
+- [#5671](https://github.com/PostHog/posthog-js/pull/5671) [`4a30932`](https://github.com/PostHog/posthog-js/commit/4a309320e3c2c1fb643bfe8070975c2068db3918) Thanks [@lucasheriques](https://github.com/lucasheriques)! - A failed tool call now sets `$mcp_error_status` to the HTTP status behind it, read from the thrown error or its `cause` chain (`status_code`, `statusCode` or `status`, on the error or its `response`, as a fetch `Response`, axios and got carry it). Failures from an upstream API now group by status in MCP Analytics instead of landing in "unknown".
+  (2026-11-12)
+
+### Patch Changes
+
+- [#5682](https://github.com/PostHog/posthog-js/pull/5682) [`8f5e876`](https://github.com/PostHog/posthog-js/commit/8f5e87698d2591f846403790d09fca0f194945b6) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Ignore non-string `name`/`version` values returned by the `clientInfo` option instead of recording them as the MCP client.
+  (2026-11-12)
+
 ## 1.1.1
 
 ### Patch Changes
