@@ -24,7 +24,7 @@ delete env.ELECTRON_RUN_AS_NODE
 delete env.NODE_OPTIONS
 let passed = false
 try {
-    for (const name of ['types', 'core', 'electron']) {
+    for (const name of ['types', 'core', 'browser-common', 'electron']) {
         run(pnpm, ['pack', '--out', join(directory, `${name}.tgz`)], { cwd: join(root, '..', name) })
     }
     await cp(new URL('./error-autocapture/', import.meta.url), directory, { recursive: true })
@@ -41,7 +41,7 @@ try {
     )
     await writeFile(
         join(directory, 'pnpm-workspace.yaml'),
-        "packages: []\nminimumReleaseAge: 10080\nautoInstallPeers: false\noverrides:\n  '@posthog/core': file:./core.tgz\n  '@posthog/types': file:./types.tgz\n"
+        "packages: []\nminimumReleaseAge: 10080\nautoInstallPeers: false\noverrides:\n  '@posthog/core': file:./core.tgz\n  '@posthog/types': file:./types.tgz\n  '@posthog/browser-common': file:./browser-common.tgz\n"
     )
     run(pnpm, ['install', '--ignore-scripts', '--config.minimum-release-age=10080'], { cwd: directory })
     // Bundle only the installed consumer; no SDK source aliases or workspace symlinks.

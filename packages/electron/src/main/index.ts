@@ -1,4 +1,4 @@
-import { app, ipcMain, type BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { app, powerMonitor, ipcMain, type BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { PostHogPersistedProperty, type PostHogCoreOptions, type FeatureFlagValue, type JsonType } from '@posthog/core'
@@ -11,13 +11,25 @@ import {
     STATE_CHANNEL,
     validateRequest,
     trustedUrl,
+    normalizeFlagResult,
+    type FeatureFlagReadOptions,
+    type IsFeatureEnabledOptions,
+    type FeatureFlagResult,
     type Command,
     type Properties,
     type Response,
     type State,
 } from '../shared/protocol'
 
-export type { State, Properties, FeatureFlagValue, JsonType }
+export type {
+    State,
+    Properties,
+    FeatureFlagValue,
+    FeatureFlagResult,
+    FeatureFlagReadOptions,
+    IsFeatureEnabledOptions,
+    JsonType,
+}
 
 export interface PostHogOptions extends Pick<
     PostHogCoreOptions,
@@ -31,6 +43,8 @@ export interface PostHogOptions extends Pick<
     | 'fetchRetryDelay'
     | 'preloadFeatureFlags'
     | 'disableRemoteFeatureFlags'
+    | 'disableRemoteConfig'
+    | 'remoteConfigRequestTimeoutMs'
     | 'defaultOptIn'
     | 'disabled'
     | 'bootstrap'
@@ -82,6 +96,7 @@ export class PostHog {
     private _timer?: ReturnType<typeof setInterval>
     private _foreground = false
     private _stopExceptionAutocapture?: () => void
+    private _cancelReady!: () => void
     private _cleanups: (() => void)[] = []
     private _tail: Promise<unknown> = Promise.resolve()
 
@@ -118,7 +133,12 @@ export class PostHog {
         singleton = this
         singletonOptions = { projectToken: this._options.projectToken, host: this._options.host }
         ipcMain.handle(COMMAND_CHANNEL, (event, request: unknown) => this._handle(event, request))
-        this._ready = this._initialize()
+        this._ready = Promise.race([
+            this._initialize(),
+            new Promise<void>((resolve) => {
+                this._cancelReady = resolve
+            }),
+        ])
     }
 
     private _report(error: unknown): void {
@@ -129,9 +149,9 @@ export class PostHog {
 
     private async _initialize(): Promise<void> {
         await this._core.ready()
-        if (this._closed) return
+        if (this._closing || this._core.isDisabled) return
         await app.whenReady()
-        if (this._closed) return
+        if (this._closing) return
         if (!this._closing && this._options.enableExceptionAutocapture === true) {
             this._stopExceptionAutocapture = startProcessExceptionAutocapture(
                 () => !this._closing && !this._core.isDisabled && !this._core.optedOut,
@@ -168,10 +188,24 @@ export class PostHog {
             }, interval)
             this._timer.unref()
         }
+        const suspend = (): void => this._core.suspend()
+        const resume = (): void => {
+            this._core.resume()
+            if (!this._closing) void this.flush().catch((error) => this._report(error))
+        }
+        powerMonitor.on('suspend', suspend)
+        powerMonitor.on('resume', resume)
+        this._cleanups.push(() => {
+            powerMonitor.removeListener('suspend', suspend)
+            powerMonitor.removeListener('resume', resume)
+        })
         const quit = (event: Electron.Event): void => {
-            if (this._closed) return
-            event.preventDefault()
-            void this.shutdown(2000).finally(() => app.quit())
+            if (this._closed || event.defaultPrevented) return
+            // Observe cancellation by other will-quit listeners too. Do not force a second quit.
+            queueMicrotask(() => {
+                if (event.defaultPrevented) return
+                void this.flush().catch((error) => this._report(error))
+            })
         }
         app.on('will-quit', quit)
         this._cleanups.push(() => app.removeListener('will-quit', quit))
@@ -211,6 +245,62 @@ export class PostHog {
         if (!event.trim() || event === '$snapshot') return Promise.resolve()
         return this._run(() => this._core.capture(event, properties))
     }
+    alias(alias: string): Promise<void> {
+        if (!alias?.trim()) return Promise.resolve()
+        return this._run(() => this._alias(alias))
+    }
+    private _alias(alias: string): void {
+        if (!this._core.optedOut) this._core.alias(alias)
+    }
+    async screen(name: string, properties?: Properties): Promise<void> {
+        if (!name?.trim()) return Promise.resolve()
+        return this._run(() => {
+            if (!this._core.optedOut) {
+                this._core.capture('$screen', structuredClone({ ...properties, $screen_name: name }))
+            }
+        })
+    }
+    async setPersonProperties(properties?: Properties, propertiesOnce?: Properties): Promise<void> {
+        return this._run(() => this._setPersonProperties(properties, propertiesOnce))
+    }
+    private _setPersonProperties(properties?: Properties, propertiesOnce?: Properties): void {
+        if (this._core.optedOut) return
+        const set = properties === undefined ? undefined : structuredClone(properties)
+        const once = propertiesOnce === undefined ? undefined : structuredClone(propertiesOnce)
+        this._core.setPersonProperties(set, once)
+    }
+    async setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): Promise<void> {
+        const copy = structuredClone(properties)
+        return this._run(() => this._setPersonPropertiesForFlags(copy, reloadFeatureFlags))
+    }
+    private async _setPersonPropertiesForFlags(properties: Properties, reload: boolean): Promise<void> {
+        if (!Object.keys(properties).length) return
+        this._core.setPersonPropertiesForFlags(properties, false)
+        if (reload) await this._core.reloadFeatureFlagsAsync()
+    }
+    async setGroupPropertiesForFlags(properties: Record<string, Properties>, reloadFeatureFlags = true): Promise<void> {
+        const copy = structuredClone(properties)
+        return this._run(() => this._setGroupPropertiesForFlags(copy, reloadFeatureFlags))
+    }
+    private async _setGroupPropertiesForFlags(properties: Record<string, Properties>, reload: boolean): Promise<void> {
+        if (!Object.keys(properties).length) return
+        this._core.setGroupPropertiesForFlags(properties)
+        if (reload) await this._core.reloadFeatureFlagsAsync()
+    }
+    resetPersonPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
+        return this._run(() => this._resetPersonPropertiesForFlags(reloadFeatureFlags))
+    }
+    private async _resetPersonPropertiesForFlags(reload: boolean): Promise<void> {
+        this._core.resetPersonPropertiesForFlags()
+        if (reload) await this._core.reloadFeatureFlagsAsync()
+    }
+    resetGroupPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
+        return this._run(() => this._resetGroupPropertiesForFlags(reloadFeatureFlags))
+    }
+    private async _resetGroupPropertiesForFlags(reload: boolean): Promise<void> {
+        this._core.resetGroupPropertiesForFlags()
+        if (reload) await this._core.reloadFeatureFlagsAsync()
+    }
     identify(distinctId: string, properties?: Properties): Promise<void> {
         if (!distinctId?.trim()) return Promise.resolve()
         return this._run(() => this._identify(distinctId, properties))
@@ -231,6 +321,7 @@ export class PostHog {
         const optedOut = this._core.optedOut
         this._core.reset([
             PostHogPersistedProperty.OptedOut,
+            PostHogPersistedProperty.RemoteConfig,
             PostHogPersistedProperty.InstalledAppVersion,
             PostHogPersistedProperty.InstalledAppBuild,
         ])
@@ -265,6 +356,7 @@ export class PostHog {
         if (!canCapture()) return Promise.resolve()
         return this._run(
             () => {
+                if (this._core.optedOut || this._core.isDisabled) return
                 try {
                     const exception = this._core.getErrorPropertiesBuilder().buildFromUnknown(error, hint)
                     this._core.capture('$exception', { ...properties, ...exception } as unknown as Properties, {
@@ -282,21 +374,68 @@ export class PostHog {
     getDistinctId(): string {
         return this._core.getDistinctId()
     }
+    getAnonymousId(): string {
+        return this._core.getAnonymousId()
+    }
+    hasOptedOutCapturing(): boolean {
+        return this._core.optedOut
+    }
     getSessionId(): string {
         return this._core.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? ''
     }
-    getFeatureFlag(key: string): FeatureFlagValue | undefined {
-        return this._core.getFeatureFlag(key)
+    getFeatureFlag(key: string, options?: FeatureFlagReadOptions): FeatureFlagValue | undefined {
+        return this._core.getFeatureFlag(key, { sendEvent: options?.sendFeatureFlagEvent ?? options?.sendEvent })
+    }
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
+        return this._core.isFeatureEnabled(key, {
+            sendEvent: options?.sendFeatureFlagEvent ?? options?.sendEvent,
+            defaultValue: options?.defaultValue,
+        })
+    }
+    getFeatureFlagResult(key: string, options?: FeatureFlagReadOptions): FeatureFlagResult | undefined {
+        const result = this._core.getFeatureFlagResult(key, {
+            sendEvent: options?.sendFeatureFlagEvent ?? options?.sendEvent,
+        })
+        return result === undefined ? undefined : this._copyFlagResult(result)
+    }
+    private _copyFlagResult(result: FeatureFlagResult): FeatureFlagResult {
+        return normalizeFlagResult({ ...result, payload: this.getFeatureFlagPayload(result.key) ?? null })
+    }
+    getAllFeatureFlags(): FeatureFlagResult[] {
+        return this._core.getAllFeatureFlags().map((result) => this._copyFlagResult(result))
     }
     getFeatureFlagPayload(key: string): JsonType | undefined {
-        return this._core.getFeatureFlagPayload(key)
+        const details = this._core.getFeatureFlagDetails()
+        if (!details) return undefined
+        const raw = Object.prototype.hasOwnProperty.call(details.flags, key)
+            ? details.flags[key].metadata?.payload
+            : undefined
+        if (raw === undefined) return null
+        // Decode raw metadata once; never reparse a decoded string in the renderer or result adapters.
+        try {
+            return JSON.parse(raw) as JsonType
+        } catch (error) {
+            this._report(new Error(`PostHog could not decode payload for flag "${key}"`, { cause: error }))
+            return null
+        }
     }
     get optedOut(): boolean {
         return this._core.optedOut
     }
-    async reloadFeatureFlagsAsync(): Promise<void> {
+    reloadFeatureFlags(): Promise<void> {
+        return this._reloadFeatureFlags()
+    }
+    reloadFeatureFlagsAsync(): Promise<void> {
+        return this.reloadFeatureFlags()
+    }
+    private async _reloadFeatureFlags(generation?: number, authorize?: () => void): Promise<void> {
         await this._ready
+        await this._tail
         if (this._closing) return
+        if (generation !== undefined && generation !== this._generation) throw new Error('Stale PostHog identity')
+        authorize?.()
         await this._core.reloadFeatureFlagsAsync()
         await this._core.persist()
         this._scheduleState()
@@ -313,7 +452,7 @@ export class PostHog {
         const flags = this._core.getFeatureFlags() ?? {}
         const payloads: Record<string, JsonType> = {}
         for (const key of Object.keys(flags)) {
-            const payload = this._core.getFeatureFlagPayload(key)
+            const payload = this.getFeatureFlagPayload(key)
             if (payload !== undefined) payloads[key] = payload
         }
         return structuredClone({
@@ -323,6 +462,7 @@ export class PostHog {
             anonymousId: this._core.getAnonymousId(),
             sessionId: this.getSessionId(),
             optedOut: this._core.optedOut,
+            autocapture: this._core.getAutocaptureState(),
             featureFlags: flags,
             flagsLoaded: this._core.getFeatureFlags() !== undefined,
             flagRevision: this._flagRevision,
@@ -376,11 +516,9 @@ export class PostHog {
             period: performance.now(),
             dispose: () => {},
         }
-        const navigation = (_event: Electron.Event, _url: string, _inPlace: boolean, mainFrame: boolean): void => {
-            if (mainFrame && !_inPlace) {
-                registration.sequence = 0
-                registration.frame = undefined
-            }
+        const navigation = (): void => {
+            registration.sequence = 0
+            registration.frame = undefined
         }
         const focus = (): void => {
             clearTimeout(this._focusTimer)
@@ -392,7 +530,7 @@ export class PostHog {
             this._focusTimer.unref()
         }
         const dispose = (): void => {
-            contents.removeListener('did-start-navigation', navigation)
+            contents.removeListener('did-navigate', navigation)
             contents.removeListener('destroyed', dispose)
             window.removeListener('focus', focus)
             window.removeListener('blur', blur)
@@ -400,7 +538,7 @@ export class PostHog {
             this._updateFocus()
         }
         registration.dispose = dispose
-        contents.on('did-start-navigation', navigation)
+        contents.on('did-navigate', navigation)
         contents.once('destroyed', dispose)
         window.on('focus', focus)
         window.on('blur', blur)
@@ -481,13 +619,37 @@ export class PostHog {
     ): Promise<void> {
         if (command.type === 'hello') return
         if (command.type === 'flush') return this.flush()
-        if (command.type === 'reloadFeatureFlags') return this.reloadFeatureFlagsAsync()
+        if (command.type === 'reloadFeatureFlags') return this._reloadFeatureFlags(generation, authorize)
+        if (command.type === 'loadAutocaptureConfig') {
+            await this._core.loadAutocaptureConfig()
+            if (!this._closing) await this._core.persist()
+            this._scheduleState()
+            return
+        }
         return this._run(
             () =>
                 this._core.withContext(context, () => {
                     switch (command.type) {
                         case 'capture':
                             return this._core.capture(command.event, { ...command.properties, ...context })
+                        case 'alias':
+                            return this._alias(command.alias)
+                        case 'screen':
+                            return this._core.capture('$screen', {
+                                ...command.properties,
+                                ...context,
+                                $screen_name: command.name,
+                            })
+                        case 'setPersonProperties':
+                            return this._setPersonProperties(command.properties, command.propertiesOnce)
+                        case 'setPersonPropertiesForFlags':
+                            return this._setPersonPropertiesForFlags(command.properties, command.reloadFeatureFlags)
+                        case 'setGroupPropertiesForFlags':
+                            return this._setGroupPropertiesForFlags(command.properties, command.reloadFeatureFlags)
+                        case 'resetPersonPropertiesForFlags':
+                            return this._resetPersonPropertiesForFlags(command.reloadFeatureFlags)
+                        case 'resetGroupPropertiesForFlags':
+                            return this._resetGroupPropertiesForFlags(command.reloadFeatureFlags)
                         case 'identify':
                             return this._identify(command.distinctId, command.properties)
                         case 'reset':
@@ -533,6 +695,18 @@ export class PostHog {
         clearInterval(this._timer)
         clearTimeout(this._focusTimer)
         let timer: ReturnType<typeof setTimeout> | undefined
+        let cleanupPromise: Promise<void> | undefined
+        const cleanup = (): Promise<void> => {
+            if (cleanupPromise) return cleanupPromise
+            this._closed = true
+            this._cancelReady()
+            const stopped = this._core.stop()
+            ipcMain.removeHandler(COMMAND_CHANNEL)
+            for (const cleanup of this._cleanups) cleanup()
+            for (const registration of this._windows.values()) registration.dispose()
+            if (singleton === this) singleton = undefined
+            return (cleanupPromise = stopped)
+        }
         const drain = async (): Promise<void> => {
             await this._ready
             if (this._closed) return
@@ -540,20 +714,27 @@ export class PostHog {
             if (this._closed) return
             await this._core.shutdown(timeoutMs)
             if (!this._closed) await this._core.persist()
+            await cleanup()
         }
         this._shutdownPromise = Promise.race([
-            drain().catch((error) => this._report(error)),
+            drain().catch(async (error) => {
+                this._report(error)
+                await cleanup()
+            }),
             new Promise<void>((resolve) => {
-                timer = setTimeout(resolve, Math.max(0, timeoutMs))
+                timer = setTimeout(
+                    () => {
+                        this._report(new Error('PostHog shutdown timed out; unsent events remain in storage'))
+                        resolve()
+                    },
+                    Math.max(0, timeoutMs)
+                )
             }),
         ]).finally(() => {
             clearTimeout(timer)
-            this._closed = true
-            this._core.stop()
-            ipcMain.removeHandler(COMMAND_CHANNEL)
-            for (const cleanup of this._cleanups) cleanup()
-            for (const registration of this._windows.values()) registration.dispose()
-            if (singleton === this) singleton = undefined
+            // Filesystem work cannot be cancelled safely. Keep ownership until it settles,
+            // without extending the caller's shutdown budget.
+            void cleanup().catch((error) => this._report(error))
         })
         return this._shutdownPromise
     }

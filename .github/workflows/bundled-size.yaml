@@ -102,5 +102,6 @@ jobs:
           NODE_OPTIONS: --disable-warning=DEP0169
         with:
           compression: "none"
+          omit-unchanged: true
           # Build hashes contain an uppercase letter or a digit. Names like `analytics-delivery` must stay distinct.
           strip-hash: '-((?=\w*[A-Z0-9])\w{8})\.'
