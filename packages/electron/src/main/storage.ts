@@ -323,7 +323,8 @@ export class ElectronStorage {
         const temporary = join(this.directory, `.state-${randomUUID()}.tmp`)
         try {
             await fs.writeFile(temporary, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
-            if (!this.stopped) await fs.rename(temporary, this.file)
+            // stop() retains ownership until this already-started write settles.
+            await fs.rename(temporary, this.file)
         } finally {
             await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => {
                 if (error.code !== 'ENOENT') {
