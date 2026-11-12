@@ -1418,12 +1418,12 @@ export class PostHogFeatureFlags implements Extension {
         const storedFlags = this._prop(ENABLED_FEATURE_FLAGS)
         const failed = this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)?.[key]?.failed
         const overriddenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
-        const hasOverride = !!overriddenFlags && key in overriddenFlags
+        const hasOverride = !!overriddenFlags && Object.prototype.hasOwnProperty.call(overriddenFlags, key)
         const flagExists = hasOverride || (!failed && !!storedFlags && key in storedFlags)
         const flagValue = hasOverride ? overriddenFlags[key] : failed ? undefined : storedFlags?.[key]
         const overriddenPayloads = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
         const payload =
-            overriddenPayloads && key in overriddenPayloads
+            overriddenPayloads && Object.prototype.hasOwnProperty.call(overriddenPayloads, key)
                 ? overriddenPayloads[key]
                 : failed
                   ? undefined

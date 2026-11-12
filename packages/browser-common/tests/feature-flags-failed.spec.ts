@@ -221,6 +221,48 @@ describe('failed browser flag records', () => {
         expect(reopened.getFeatureFlagDetails('healthy')?.original_enabled).toBeUndefined()
     })
 
+    it.each(
+        ['constructor', 'toString'].flatMap((key) =>
+            [
+                { flags: {} },
+                { payloads: {} },
+                { flags: { unrelated: true }, payloads: { unrelated: { override: true } } },
+            ].map((overrides) => ({ key, overrides }))
+        )
+    )('ignores inherited overrides for an existing healthy flag %j', ({ key, overrides }) => {
+        const client = createFlagsClient()
+        const flags = setupFlags(client, createConfig({ remoteRequestsDisabled: true }))
+        flags.receivedFeatureFlags({
+            featureFlags: { [key]: false },
+            featureFlagPayloads: { [key]: '{"healthy":true}' },
+        })
+        expect(flags.getFeatureFlagResult(key, { send_event: false })).toEqual({
+            key,
+            enabled: false,
+            variant: undefined,
+            payload: { healthy: true },
+        })
+        flags.overrideFeatureFlags({ ...overrides, suppressWarning: true })
+        expect(flags.getFeatureFlagResult(key, { send_event: false })).toEqual({
+            key,
+            enabled: false,
+            variant: undefined,
+            payload: { healthy: true },
+        })
+        flags.overrideFeatureFlags({
+            flags: { [key]: 'owned' },
+            payloads: { [key]: { owned: true } },
+            suppressWarning: true,
+        })
+        expect(flags.getFeatureFlagResult(key, { send_event: false })).toEqual({
+            key,
+            enabled: true,
+            variant: 'owned',
+            payload: { owned: true },
+        })
+        expect(client.capture).not.toHaveBeenCalled()
+    })
+
     it.each([10, 1000].flatMap((count) => [false, true].map((failedSibling) => ({ count, failedSibling }))))(
         'does not rescan unrelated flag details on cached reads %j',
         ({ count, failedSibling }) => {
