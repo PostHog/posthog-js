@@ -1,0 +1,54 @@
+name: Electron optional-feature validation
+
+on:
+    pull_request:
+    merge_group:
+        types: [checks_requested]
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+    group: electron-features-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    native-features:
+        # One pinned native runtime is regression evidence, not a cross-OS support claim.
+        runs-on: macos-14
+        timeout-minutes: 25
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+            - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+              with:
+                  version: 11.7.0
+                  cache: false
+                  install: false
+            - name: Install matching workspace graph without lifecycle scripts
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 'true'
+                  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+              run: |
+                  pnpm install --filter @posthog/electron... --frozen-lockfile --ignore-scripts
+                  test "$(pnpm config get minimumReleaseAge)" = 10080
+                  node -e "require('node:assert/strict').equal(require('./packages/electron/package.json').devDependencies.electron, '42.4.0')"
+            - name: Install the explicitly pinned Electron binary
+              run: node packages/electron/node_modules/electron/install.js
+            - name: Check merged SDK and built exports
+              run: pnpm turbo run build check-types test:unit test:built --filter=@posthog/electron
+            - name: Run real local-receiver native fixtures
+              run: |
+                  pnpm --filter @posthog/electron test:delivery
+                  pnpm --filter @posthog/electron test:autocapture
+                  pnpm --filter @posthog/electron test:errors
+                  pnpm --filter @posthog/electron test:utility

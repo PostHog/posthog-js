@@ -76,7 +76,7 @@ jobs:
                   PUPPETEER_SKIP_DOWNLOAD: 'true'
                   ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
               run: |
-                  pnpm install --frozen-lockfile
+                  pnpm install --filter @posthog/electron... --frozen-lockfile --ignore-scripts
                   pnpm test:electron-alpha-release
                   pnpm test:dependency-cooldown
                   pnpm turbo run build check-types test:unit test:built --filter=@posthog/electron

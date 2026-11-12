@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { hostname } from 'node:os'
 
 const DEFAULT_MAX_STORAGE_BYTES = 5 * 1024 * 1024
 const DEFAULT_MAX_QUEUE_AGE_MS = 7 * 24 * 60 * 60 * 1000
@@ -40,9 +41,12 @@ function isQueueItem(value: unknown): value is QueueItem {
     )
 }
 
-/** Single-process storage. Call load before using the store; mutations must go through set. */
+/** Exclusively owned local storage. Call load before use; mutations must go through set. */
 export class ElectronStorage {
     private stopped = false
+    private owned = false
+    private readonly owner = JSON.stringify({ host: hostname(), pid: process.pid, token: randomUUID() })
+    private stopping?: Promise<void>
     private values: Values = Object.create(null)
     private serialized = JSON.stringify({ version: 1, values: {} })
     private revision = 0
@@ -74,7 +78,55 @@ export class ElectronStorage {
         await this.loading
     }
 
+    get isOwned(): boolean {
+        return this.owned && !this.stopped
+    }
+
+    private async acquire(): Promise<void> {
+        await fs.mkdir(this.directory, { recursive: true, mode: 0o700 })
+        await fs.chmod(this.directory, 0o700)
+        const lock = join(this.directory, '.owner')
+        try {
+            await fs.writeFile(lock, this.owner, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+            const previous = await fs.readFile(lock, 'utf8')
+            const owner: unknown = JSON.parse(previous)
+            if (
+                !isObject(owner) ||
+                owner.host !== hostname() ||
+                !Number.isSafeInteger(owner.pid) ||
+                (owner.pid as number) <= 0 ||
+                typeof owner.token !== 'string' ||
+                !/^[a-f0-9-]{36}$/.test(owner.token)
+            )
+                throw new Error('Unverifiable Electron storage ownership')
+            try {
+                process.kill(owner.pid as number, 0)
+                throw new Error('Electron storage is already owned by another process')
+            } catch (probeError) {
+                if ((probeError as NodeJS.ErrnoException).code !== 'ESRCH') throw probeError
+            }
+            // Never delete this tombstone: only one reclaimer may remove this owner generation.
+            // A crashed reclaimer requires manual recovery with all application processes stopped.
+            await fs.writeFile(join(this.directory, `.reclaim-${owner.token}`), '', { mode: 0o600, flag: 'wx' })
+            if ((await fs.readFile(lock, 'utf8')) !== previous) throw new Error('Electron storage owner changed')
+            await fs.unlink(lock)
+            await fs.writeFile(lock, this.owner, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+        }
+        this.owned = true
+    }
+
     private async loadState(): Promise<void> {
+        try {
+            if (this.stopped) return
+            await this.acquire()
+            if (this.stopped) return
+        } catch (error) {
+            this.values = Object.assign(Object.create(null), { opted_out: true })
+            this.report(error)
+            return
+        }
         let text: string
         try {
             text = await fs.readFile(this.file, 'utf8')
@@ -121,7 +173,7 @@ export class ElectronStorage {
     }
 
     get<T>(key: string): T | undefined {
-        if (key === 'queue' && !this.stopped) {
+        if (key === 'queue' && this.isOwned) {
             const bounded = this.bound(this.values)
             if (bounded.serialized !== this.serialized) {
                 this.values = bounded.values
@@ -134,7 +186,7 @@ export class ElectronStorage {
     }
 
     set<T>(key: string, value: T | null): void {
-        if (this.stopped) return
+        if (!this.isOwned) return
         const next: Values = Object.assign(Object.create(null), this.values)
         if (value === null) {
             delete next[key]
@@ -156,7 +208,7 @@ export class ElectronStorage {
 
     /** Waits for atomic write completion, not an fsync/power-loss durability barrier. */
     async flush(): Promise<void> {
-        if (this.stopped) return
+        if (!this.isOwned) return
         // Retention also applies when the queue has been idle since the last write.
         const bounded = this.bound(this.values)
         if (bounded.serialized !== this.serialized) {
@@ -210,12 +262,25 @@ export class ElectronStorage {
         return { values, serialized }
     }
 
-    stop(): void {
+    stop(): Promise<void> {
         this.stopped = true
+        return (this.stopping ??= (async () => {
+            await this.loading
+            await this.pending?.catch(() => {})
+            if (!this.owned) return
+            const lock = join(this.directory, '.owner')
+            try {
+                if ((await fs.readFile(lock, 'utf8')) === this.owner) await fs.unlink(lock)
+            } catch (error) {
+                this.report(error)
+            } finally {
+                this.owned = false
+            }
+        })())
     }
 
     private scheduleWrite(): void {
-        if (this.stopped || this.pending) {
+        if (!this.isOwned || this.pending) {
             return
         }
         this.failure = undefined
@@ -258,6 +323,7 @@ export class ElectronStorage {
         const temporary = join(this.directory, `.state-${randomUUID()}.tmp`)
         try {
             await fs.writeFile(temporary, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+            // stop() retains ownership until this already-started write settles.
             await fs.rename(temporary, this.file)
         } finally {
             await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => {

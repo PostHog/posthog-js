@@ -127,3 +127,22 @@ test('manual alpha workflow has no default publishing, stable promotion, or buil
     assert.equal(pkg.publishConfig.registry, 'https://registry.npmjs.org')
     assert.ok(pkg.files.includes('MIGRATION.md'))
 })
+
+test('native optional-feature CI keeps merged fixtures on one pinned macOS runtime without publishing privileges', () => {
+    const workflow = readFileSync('.github/workflows/electron-features.yml', 'utf8')
+    assert.match(workflow, /runs-on: macos-14/)
+    assert.match(workflow, /timeout-minutes: 25/)
+    assert.match(workflow, /permissions: \{\}/)
+    assert.match(workflow, /contents: read/)
+    assert.match(workflow, /node-version: 24/)
+    assert.match(workflow, /version: 11\.7\.0/)
+    assert.match(workflow, /42\.4\.0/)
+    assert.match(workflow, /pnpm install --filter @posthog\/electron\.\.\. --frozen-lockfile --ignore-scripts/)
+    assert.match(workflow, /node packages\/electron\/node_modules\/electron\/install\.js/)
+    assert.match(workflow, /build check-types test:unit test:built/)
+    for (const fixture of ['delivery', 'autocapture', 'errors', 'utility']) {
+        assert.ok(workflow.includes(`pnpm --filter @posthog/electron test:${fixture}`))
+    }
+    for (const action of workflow.matchAll(/uses: ([^\n]+)/g)) assert.match(action[1], /@[a-f0-9]{40} #/)
+    assert.doesNotMatch(workflow, /id-token:|contents: write|secrets\.|--no-sandbox|continue-on-error|npm publish/)
+})

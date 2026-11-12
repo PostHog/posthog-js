@@ -1,0 +1,151 @@
+import { test, mock } from 'node:test'
+import { EventEmitter } from 'node:events'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import assert from 'node:assert/strict'
+import { Fixture, startServer, protocol } from './server.mjs'
+import { mockOrigin } from './network-policy.mjs'
+
+test('mockOrigin rejects live hosts, credentials, missing ports and non-HTTP inputs', () => {
+    for (const value of [
+        undefined,
+        null,
+        'https://us.i.posthog.com',
+        'http://example.invalid:8080',
+        'http://127.0.0.1',
+        'http://user@127.0.0.1:8080',
+        'http://127.0.0.1:8080/path',
+    ])
+        assert.equal(mockOrigin(value), undefined)
+    for (const host of ['127.0.0.1', '192.168.10.2', '10.2.3.4', '172.16.2.3', '[::1]'])
+        assert.equal(mockOrigin(`http://${host}:8080`), `http://${host}:8080`)
+})
+test('server negotiates semantic client profiles without advertising private controls', async () => {
+    const adapter = await startServer({ consumer: '/not-used-for-negotiation', port: 0 })
+    try {
+        const response = await fetch(`http://127.0.0.1:${adapter.address.port}/v2/negotiate`, {
+            method: 'POST',
+            body: JSON.stringify({ protocol }),
+        })
+        const value = await response.json()
+        assert.equal(value.protocol, protocol)
+        assert.deepEqual(
+            value.profiles.map((profile) => [profile.id, profile.sdk_type, profile.fixture_capabilities]),
+            [
+                ['electron-main', 'client', ['storage.empty.v1']],
+                ['electron-renderer', 'client', ['storage.empty.v1']],
+            ]
+        )
+        const lossy = await fetch(`http://127.0.0.1:${adapter.address.port}/v2/negotiate`, {
+            method: 'POST',
+            body: `{"protocol":"${protocol}","extra":9007199254740993}`,
+        })
+        assert.equal(lossy.status, 400)
+    } finally {
+        await adapter.close()
+    }
+})
+test(
+    'real Electron fixture rejects live hosts, preserves precision failures and bounds lifecycle',
+    { skip: !process.env.POSTHOG_ELECTRON_CONSUMER },
+    async () => {
+        const adapter = await startServer({ consumer: process.env.POSTHOG_ELECTRON_CONSUMER, port: 0 })
+        const signals = []
+        const originalKill = process.kill
+        const kill = mock.method(process, 'kill', (...args) => {
+            signals.push(args[0])
+            return originalKill(...args)
+        })
+        const request = async (path, body) => {
+            const response = await fetch(`http://127.0.0.1:${adapter.address.port}${path}`, {
+                method: 'POST',
+                body: typeof body === 'string' ? body : JSON.stringify(body),
+            })
+            return { status: response.status, value: await response.json() }
+        }
+        try {
+            const deadline = await request('/v2/fixtures/allocate', {
+                fixture_id: 'deadline',
+                case_id: 'server.test.mjs',
+                profile_id: 'electron-main',
+                timeout_ms: 1,
+            })
+            assert.equal(deadline.status, 400)
+            assert.match(deadline.value.error, /deadline/)
+            for (const profile of ['electron-main', 'electron-renderer']) {
+                const fixture_id = profile
+                const base = { fixture_id, timeout_ms: 15000 }
+                assert.equal(
+                    (
+                        await request('/v2/fixtures/allocate', {
+                            ...base,
+                            case_id: 'server.test.mjs',
+                            profile_id: profile,
+                        })
+                    ).status,
+                    200
+                )
+                const blocked = await request('/v2/invoke', {
+                    ...base,
+                    call_id: `${profile}-live`,
+                    route: '/setup',
+                    args: { project_token: 'not-live', config: { host: 'https://us.i.posthog.com' } },
+                })
+                assert.equal(blocked.value.completion.failure.code, 'mock-host-required')
+                const lossy = await request(
+                    '/v2/invoke',
+                    `{"fixture_id":"${fixture_id}","timeout_ms":15000,"call_id":"${profile}-precision","route":"/capture","args":{"event":"lossy","properties":{"n":9007199254740993}}}`
+                )
+                assert.equal(lossy.value.completion.failure.code, 'number-representation')
+                assert.equal((await request('/v2/fixtures/close', base)).status, 200)
+                const count = signals.length
+                assert.equal((await request('/v2/fixtures/close', base)).status, 400)
+                assert.equal(signals.length, count)
+                assert.equal(
+                    (await request('/v2/fixtures/allocate', { ...base, case_id: 'duplicate', profile_id: profile }))
+                        .status,
+                    400
+                )
+            }
+        } finally {
+            try {
+                await adapter.close()
+                await adapter.close()
+                assert.equal(new Set(signals).size, signals.length, 'never signal a retired process group again')
+            } finally {
+                kill.mock.restore()
+            }
+        }
+    }
+)
+
+test('fixture stop is idempotent and never signals an already exited process group', async () => {
+    const signals = []
+    const child = Object.assign(new EventEmitter(), { pid: 424242, exitCode: null, signalCode: null })
+    const kill = mock.method(process, 'kill', (pid, signal) => {
+        signals.push([pid, signal])
+        child.exitCode = 0
+        queueMicrotask(() => child.emit('exit', 0))
+        return true
+    })
+    const fixture = Object.assign(Object.create(Fixture.prototype), {
+        child,
+        lines: { close() {} },
+        directory: await mkdtemp(join(tmpdir(), 'electron-stop-unit-')),
+    })
+    try {
+        await Promise.all([fixture.stop(), fixture.stop()])
+        await fixture.stop()
+        assert.deepEqual(signals, [[-424242, 'SIGKILL']])
+        const exited = Object.assign(Object.create(Fixture.prototype), {
+            child: Object.assign(new EventEmitter(), { pid: 424243, exitCode: 0, signalCode: null }),
+            lines: { close() {} },
+            directory: await mkdtemp(join(tmpdir(), 'electron-exited-unit-')),
+        })
+        await exited.stop()
+        assert.equal(signals.length, 1)
+    } finally {
+        kill.mock.restore()
+    }
+})
