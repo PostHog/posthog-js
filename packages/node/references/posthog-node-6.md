@@ -1972,6 +1972,9 @@ Each event fills the keys it left unset in this order: the event's own values, t
 properties, then these, then the values the SDK adds (such as `$is_server` and
 `$geoip_disable`). `before_send` sees the result and can change it.
 
+A `$process_person_profile` registered here never reaches `$identify`, `$create_alias`,
+`$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events (see `registerOptions()`).
+
 #### Example
 
 ```ts
@@ -2482,6 +2485,10 @@ Context `properties` and `options` fill only what an event left unset: the event
 win, and context values beat `register()` and `registerOptions()` values and the values the SDK
 adds. `before_send` sees the result and can change it.
 
+On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once`
+events, a context `process_person_profile` option applies only when the distinct id is
+generated, and a `$process_person_profile` property never applies (see `registerOptions()`).
+
 #### Example
 
 ```ts
@@ -2986,7 +2993,7 @@ the client renders. PostHog sends it as is and never stores it. PostHog derives 
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-distinctid"></a> `distinctId?` | `string` | - |
-| <a id="property-options"></a> `options?` | `Record`\<`string`, `JsonType`\> | Options that fill the options an event left unset (missing or `null`). The event's own options win; these beat options from `registerOptions()`. |
+| <a id="property-options"></a> `options?` | `Record`\<`string`, `JsonType`\> | Options that fill the options an event left unset (missing or `null`). The event's own options win; these beat options from `registerOptions()`. A `process_person_profile` here does not reach `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events unless their distinct id is generated. |
 | <a id="property-properties"></a> `properties?` | `Record`\<`string`, `any`\> | Properties that fill the keys an event left unset. The event's own values win. |
 | <a id="property-sessionid"></a> `sessionId?` | `string` | - |
 
@@ -4959,7 +4966,7 @@ differently for cellular cost vs tab-suspension behavior).
 | ------ | ------ | ------ |
 | `__preview_capture_bot_pageviews?` | `boolean` | PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION Enables collection of bot traffic as $bot_pageview events instead of dropping them. When enabled, events with a $raw_user_agent property that matches the bot detection list will have their $pageview event renamed to $bot_pageview. To use this feature, pass the user agent in event properties: `client.capture({ distinctId: 'user_123', event: '$pageview', properties: { $raw_user_agent: req.headers['user-agent'] } })` |
 | `appHost?` | `string` | Your PostHog app host, such as `https://posthog.example.com`. `emails.send` sends there. Needed only when `host` is not PostHog Cloud, for example a reverse proxy, which must not receive the secret key. On PostHog Cloud, the client derives `https://us.posthog.com` or `https://eu.posthog.com` from `host`. |
-| `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. **Remarks** The hook gets a copy of the finished event: the event's own values, then the values filled from context, `register()` and `registerOptions()`, then the values the SDK adds (such as `$is_server`, `$geoip_disable`, feature flag properties and `options.process_person_profile`). It has the final say: it can change or remove any of them, and nothing is added after it. Set `$geoip_disable` in `properties` to change GeoIP; the `disableGeoip` and `groups` fields are already applied to the properties it sees. |
+| `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. **Remarks** The hook gets a copy of the finished event: the event's own values, then the values filled from context, `register()` and `registerOptions()`, then the values the SDK adds (such as `$is_server`, `$geoip_disable`, feature flag properties and `options.process_person_profile`). It has the final say: it can change or remove any of them, and nothing is added after it. Set `$geoip_disable` in `properties` to change GeoIP; the `disableGeoip` and `groups` fields are already applied to the properties it sees. On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once` events it sees `options.process_person_profile` and no `$process_person_profile` property. Those events get their default from the event name the call used, so a hook that renames an event to one of them must set `options.process_person_profile` itself. |
 | `captureAiCompression?` | `"none"` \| `"gzip"` \| `"deflate"` \| `"zstd"` | How `captureAi` requests compress their body, with the same values as `captureCompression`. It does not read `captureCompression` or `disableCompression`. **Default** `'gzip'` |
 | `captureAiMaxQueueSize?` | `number` | The maximum number of `captureAi` events held in memory waiting to be sent. When the queue is full, the oldest AI event is dropped and reported through the `'error'` event. **Default** `1000` |
 | `captureAiRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `captureAi` request. Analytics capture requests use `requestTimeout`. **Default** `30000` |
