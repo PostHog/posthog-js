@@ -767,27 +767,31 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
     expect(twice.classpathPresent).toBe(true)
   })
 
-  it.each(['1.0.0', '1.4.0', '0.9.9'])('bumps an existing %s classpath that predates native symbols', (version) => {
-    const contents = projectBuildGradle.replace(
-      'classpath("com.android.tools.build:gradle")',
-      `classpath("com.android.tools.build:gradle")\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")`
-    )
-    const result = addPostHogAndroidGradlePluginClasspath(contents)
-    expect(result.contents).not.toContain(`posthog-android-gradle-plugin:${version}`)
-    expect(result.contents.split('posthog-android-gradle-plugin')).toHaveLength(2)
-  })
+  it.each(['1.0.0', '1.4.0', '1.5.0', '1.6.0', '1.7.0', '0.9.9'])(
+    'bumps an existing %s classpath that predates native symbol conflict options',
+    (version) => {
+      const contents = projectBuildGradle.replace(
+        'classpath("com.android.tools.build:gradle")',
+        `classpath("com.android.tools.build:gradle")\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")`
+      )
+      const result = addPostHogAndroidGradlePluginClasspath(contents)
+      expect(result.contents).not.toContain(`posthog-android-gradle-plugin:${version}`)
+      expect(result.contents).toContain('posthog-android-gradle-plugin:1.8.0')
+      expect(result.contents.split('posthog-android-gradle-plugin')).toHaveLength(2)
+    }
+  )
 
-  it.each(['1.5.0', '2.0.0'])('keeps an existing %s classpath', (version) => {
+  it.each(['1.8.0', '1.9.0', '2.0.0'])('keeps an existing %s classpath', (version) => {
     const contents = `buildscript {\n    dependencies {\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")\n    }\n}`
     expect(addPostHogAndroidGradlePluginClasspath(contents).contents).toBe(contents)
   })
 
-  it('keeps a variable-driven classpath and warns that it needs 1.5.0', () => {
+  it('keeps a variable-driven classpath and warns that it needs 1.8.0', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const contents =
       'buildscript {\n    dependencies {\n        classpath("com.posthog:posthog-android-gradle-plugin:$posthogVersion")\n    }\n}'
     expect(addPostHogAndroidGradlePluginClasspath(contents).contents).toBe(contents)
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('uploadNativeSymbols needs 1.5.0 or later'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('uploadNativeSymbols needs 1.8.0 or later'))
   })
 
   it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
@@ -1372,7 +1376,7 @@ describe('postHogExpoPlugin Android native symbols', () => {
   it('configures native symbol uploads in Kotlin Gradle files', async () => {
     const result = await compilePlugin(projectBuildGradle, { uploadNativeSymbols: { includeSource: true } }, 'kotlin')
 
-    expect(result.project).toContain('classpath("com.posthog:posthog-android-gradle-plugin:1.6.0")')
+    expect(result.project).toContain('classpath("com.posthog:posthog-android-gradle-plugin:1.8.0")')
     expect(result.app).toContain('apply(plugin = "com.posthog.android")')
     expect(result.app).toContain('setProperty("uploadNativeSymbols", true)')
     expect(result.app).toContain('setProperty("includeNativeSymbolSources", true)')
@@ -1389,6 +1393,44 @@ describe('postHogExpoPlugin Android native symbols', () => {
     expect(result.app).toContain(`extra["${property}"] = true`)
     expect(result.app).not.toContain('apply from:')
     expect(result.app).not.toContain('project.ext.')
+  })
+
+  it.each(['groovy', 'kotlin'] as const)(
+    'keeps a variable plugin classpath compatible without conflict options in %s',
+    async (language) => {
+      const project = projectBuildGradle.replace(
+        'classpath("com.android.tools.build:gradle")',
+        'classpath("com.android.tools.build:gradle")\n        classpath("com.posthog:posthog-android-gradle-plugin:$posthogVersion")'
+      )
+      const result = await compilePlugin(project, {}, language)
+
+      expect(result.project).toBe(project)
+      for (const property of ['skipOnConflict', 'force']) {
+        expect(result.app).not.toContain(language === 'kotlin' ? `setProperty("${property}",` : `    ${property} =`)
+      }
+    }
+  )
+
+  it.each(['groovy', 'kotlin'] as const)('forwards native upload conflict options in %s', async (language) => {
+    for (const option of ['skipOnConflict', 'force'] as const) {
+      const result = await compilePlugin(
+        projectBuildGradle,
+        { uploadNativeSymbols: { includeSource: true }, [option]: true },
+        language
+      )
+      const otherOption = option === 'skipOnConflict' ? 'force' : 'skipOnConflict'
+      expect(result.app).toContain(language === 'kotlin' ? `setProperty("${option}", true)` : `    ${option} = true`)
+      expect(result.app).not.toContain(language === 'kotlin' ? `setProperty("${otherOption}",` : `    ${otherOption} =`)
+
+      const reset = await compilePlugin(result.project, {}, language, result.app)
+      for (const property of ['skipOnConflict', 'force']) {
+        expect(reset.app).not.toContain(language === 'kotlin' ? `setProperty("${property}",` : `    ${property} =`)
+      }
+      expect(await compilePlugin(reset.project, {}, language, reset.app)).toEqual(reset)
+
+      const disabled = await compilePlugin(reset.project, { uploadNativeSymbols: false }, language, reset.app)
+      expect(disabled.app).not.toContain('posthog-native-symbols')
+    }
   })
 
   it('keeps repeated Kotlin prebuilds idempotent and updates upload options', async () => {
@@ -1413,7 +1455,7 @@ describe('postHogExpoPlugin Android native symbols', () => {
     'supports a %s project Gradle file with a Kotlin app',
     async (projectLanguage) => {
       const result = await compilePlugin(projectBuildGradle, {}, 'kotlin', kotlinAppBuildGradle, projectLanguage)
-      expect(result.project).toContain('classpath("com.posthog:posthog-android-gradle-plugin:1.6.0")')
+      expect(result.project).toContain('classpath("com.posthog:posthog-android-gradle-plugin:1.8.0")')
       expect(result.app).toContain('apply(plugin = "com.posthog.android")')
     }
   )

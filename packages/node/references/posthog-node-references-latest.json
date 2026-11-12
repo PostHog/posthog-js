@@ -94,7 +94,7 @@
             {
               "description": "The alias data containing distinctId and alias",
               "isOptional": false,
-              "type": "{\n        distinctId: string;\n        alias: string;\n        disableGeoip?: boolean;\n        options?: Record<string, JsonType>;\n    }",
+              "type": "{\n        distinctId: string;\n        alias: string;\n        disableGeoip?: boolean;\n    }",
               "name": "data"
             }
           ],
@@ -123,7 +123,7 @@
             {
               "description": "The alias data containing distinctId and alias",
               "isOptional": false,
-              "type": "{\n        distinctId: string;\n        alias: string;\n        disableGeoip?: boolean;\n        options?: Record<string, JsonType>;\n    }",
+              "type": "{\n        distinctId: string;\n        alias: string;\n        disableGeoip?: boolean;\n    }",
               "name": "data"
             }
           ],
@@ -223,7 +223,7 @@
         {
           "category": "Error tracking",
           "description": "Capture an error exception as an event.",
-          "details": "The 5.x positional form `captureException(error, distinctId, properties, uuid, flags)` still works in 6.x but logs a deprecation error once per process, and will be removed in the next major version.",
+          "details": null,
           "id": "captureException",
           "showDocs": true,
           "title": "captureException",
@@ -231,12 +231,12 @@
             {
               "id": "capture_an_error_with_user_id",
               "name": "Capture an error with user ID",
-              "code": "\n\n// Capture an error with user ID\ntry {\n  // Some risky operation\n  riskyOperation()\n} catch (error) {\n  client.captureException(error, { distinctId: 'user_123' })\n}\n\n\n"
+              "code": "\n\n// Capture an error with user ID\ntry {\n  // Some risky operation\n  riskyOperation()\n} catch (error) {\n  client.captureException(error, 'user_123')\n}\n\n\n"
             },
             {
-              "id": "capture_with_additional_properties_and_a_level",
-              "name": "Capture with additional properties and a level",
-              "code": "\n\n// Capture with additional properties and a level\ntry {\n  apiCall()\n} catch (error) {\n  client.captureException(error, {\n    distinctId: 'user_123',\n    properties: { endpoint: '/api/users', method: 'POST', status_code: 500 },\n    level: 'warning',\n  })\n}\n\n\n\n"
+              "id": "capture_with_additional_properties",
+              "name": "Capture with additional properties",
+              "code": "\n\n// Capture with additional properties\ntry {\n  apiCall()\n} catch (error) {\n  client.captureException(error, 'user_123', {\n    endpoint: '/api/users',\n    method: 'POST',\n    status_code: 500\n  })\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -248,10 +248,28 @@
               "name": "error"
             },
             {
-              "description": "Optional distinct id, properties, options, uuid, flags snapshot and level",
+              "description": "Optional user distinct ID",
               "isOptional": true,
-              "type": "CaptureExceptionOptions",
-              "name": "options"
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "Optional additional properties to include",
+              "isOptional": true,
+              "type": "Record<string | number, any>",
+              "name": "additionalProperties"
+            },
+            {
+              "description": "Optional event UUID",
+              "isOptional": true,
+              "type": "EventMessage['uuid']",
+              "name": "uuid"
+            },
+            {
+              "description": "Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events",
+              "isOptional": true,
+              "type": "FeatureFlagEvaluations",
+              "name": "flags"
             }
           ],
           "returnType": {
@@ -263,7 +281,7 @@
         {
           "category": "Error tracking",
           "description": "Capture an error exception as an event immediately (synchronously).",
-          "details": "The 5.x positional form `captureExceptionImmediate(error, distinctId, properties, flags)` still works in 6.x but logs a deprecation error once per process, and will be removed in the next major version.",
+          "details": null,
           "id": "captureExceptionImmediate",
           "showDocs": true,
           "title": "captureExceptionImmediate",
@@ -271,12 +289,12 @@
             {
               "id": "capture_an_error_immediately_with_user_id",
               "name": "Capture an error immediately with user ID",
-              "code": "\n\n// Capture an error immediately with user ID\ntry {\n  // Some risky operation\n  riskyOperation()\n} catch (error) {\n  await client.captureExceptionImmediate(error, { distinctId: 'user_123' })\n}\n\n\n"
+              "code": "\n\n// Capture an error immediately with user ID\ntry {\n  // Some risky operation\n  riskyOperation()\n} catch (error) {\n  await client.captureExceptionImmediate(error, 'user_123')\n}\n\n\n"
             },
             {
               "id": "capture_with_additional_properties",
               "name": "Capture with additional properties",
-              "code": "\n\n// Capture with additional properties\ntry {\n  apiCall()\n} catch (error) {\n  await client.captureExceptionImmediate(error, {\n    distinctId: 'user_123',\n    properties: { endpoint: '/api/users', method: 'POST', status_code: 500 },\n  })\n}\n\n\n\n"
+              "code": "\n\n// Capture with additional properties\ntry {\n  apiCall()\n} catch (error) {\n  await client.captureExceptionImmediate(error, 'user_123', {\n    endpoint: '/api/users',\n    method: 'POST',\n    status_code: 500\n  })\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -288,10 +306,22 @@
               "name": "error"
             },
             {
-              "description": "Optional distinct id, properties, options, uuid, flags snapshot and level",
+              "description": "Optional user distinct ID",
               "isOptional": true,
-              "type": "CaptureExceptionOptions",
-              "name": "options"
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "Optional additional properties to include",
+              "isOptional": true,
+              "type": "Record<string | number, any>",
+              "name": "additionalProperties"
+            },
+            {
+              "description": "Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events",
+              "isOptional": true,
+              "type": "FeatureFlagEvaluations",
+              "name": "flags"
             }
           ],
           "returnType": {
@@ -336,6 +366,35 @@
           "returnType": {
             "id": "Promise<void>",
             "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Logs",
+          "description": "Captures one structured log record to PostHog Logs. Attaches the active span's ids and the `withContext` person and session unless the options set their own.",
+          "details": null,
+          "id": "captureLog",
+          "showDocs": true,
+          "title": "captureLog",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nclient.captureLog({ body: 'payment failed', level: 'error', attributes: { code: 'E001' } })\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "CaptureLogOptions",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -434,7 +493,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Context data to apply (distinctId, sessionId, properties, options)",
+              "description": "Context data to apply (distinctId, sessionId, properties)",
               "isOptional": false,
               "type": "Partial<ContextData>",
               "name": "data"
@@ -498,7 +557,6 @@
         },
         {
           "category": "",
-          "description": "Sends all queued events and spans, and resolves when every send has finished. It does not reject when delivery fails: those failures arrive on the `'error'` event.",
           "details": null,
           "id": "flush",
           "showDocs": true,
@@ -978,7 +1036,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip, options }"
+              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip }"
             },
             {
               "description": "",
@@ -1013,7 +1071,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip, options, }"
+              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip, }"
             },
             {
               "description": "",
@@ -1053,7 +1111,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ distinctId, properties, disableGeoip, options }"
+              "name": "{ distinctId, properties, disableGeoip }"
             },
             {
               "description": "",
@@ -1088,7 +1146,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ distinctId, properties, disableGeoip, options }"
+              "name": "{ distinctId, properties, disableGeoip }"
             },
             {
               "description": "",
@@ -1201,89 +1259,30 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
-          "category": "Capture",
-          "description": "Build an event as `capture()` would send it, without sending it.",
-          "details": "The result has the same shape as the message passed in: `options` holds the event's options after every layer filled them, and `uuid`, `timestamp` and `disableGeoip` are top-level fields. Rejects with `null` when `before_send` drops the event.",
+          "category": "",
+          "details": null,
           "id": "prepareEventMessage",
           "showDocs": true,
           "title": "prepareEventMessage",
           "examples": [
             {
-              "id": "",
-              "name": "",
-              "code": "\n\nconst message = await client.prepareEventMessage({ distinctId: 'user_123', event: 'button_clicked' })\nconsole.log(message.properties.$is_server, message.options)\n\n\n\n"
+              "id": "prepareeventmessage",
+              "name": "Generated example for prepareEventMessage",
+              "code": "// Generated example for prepareEventMessage\nposthog.prepareEventMessage();"
             }
           ],
           "releaseTag": "public",
           "params": [
             {
-              "description": "The event to build",
+              "description": "",
               "isOptional": false,
               "type": "EventMessage",
               "name": "props"
             }
           ],
           "returnType": {
-            "id": "Promise<PreparedEventMessage>",
-            "name": "Promise<PreparedEventMessage>"
-          },
-          "path": "src/entrypoints/index.node.ts"
-        },
-        {
-          "category": "Capture",
-          "description": "Register properties that every event sent by this client carries.",
-          "details": "Each event fills the keys it left unset in this order: the event's own values, then context properties, then these, then the values the SDK adds (such as `$is_server` and `$geoip_disable`). `before_send` sees the result and can change it.",
-          "id": "register",
-          "showDocs": true,
-          "title": "register",
-          "examples": [
-            {
-              "id": "",
-              "name": "",
-              "code": "\n\nawait client.register({ service: 'billing' })\n\n\n\n"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [
-            {
-              "description": "The properties to add to every event",
-              "isOptional": false,
-              "type": "PostHogEventProperties",
-              "name": "properties"
-            }
-          ],
-          "returnType": {
-            "id": "Promise<void>",
-            "name": "Promise<void>"
-          },
-          "path": "src/entrypoints/index.node.ts"
-        },
-        {
-          "category": "Capture",
-          "description": "Register options that every event sent by this client carries.",
-          "details": "Each event fills the options it left unset (missing or `null`) in this order: the event's own `options`, then context options, then these, then the options the SDK adds (such as `process_person_profile: false` for an event with no distinct id). `before_send` sees the result and can change it. Values are sent to capture unchanged. Capture drops an event whose option value it cannot read, so a bad value registered here drops every event.",
-          "id": "registerOptions",
-          "showDocs": true,
-          "title": "registerOptions",
-          "examples": [
-            {
-              "id": "",
-              "name": "",
-              "code": "\n\nawait client.registerOptions({ cookieless_mode: true })\n\n\n\n"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [
-            {
-              "description": "The options to add to every event",
-              "isOptional": false,
-              "type": "Record<string, JsonType>",
-              "name": "options"
-            }
-          ],
-          "returnType": {
-            "id": "Promise<void>",
-            "name": "Promise<void>"
+            "id": "Promise<{\n        distinctId: string;\n        event: string;\n        properties: PostHogEventProperties;\n        options: PostHogCaptureOptions;\n    }>",
+            "name": "Promise<{\n        distinctId: string;\n        event: string;\n        properties: PostHogEventProperties;\n        options: PostHogCaptureOptions;\n    }>"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -1374,7 +1373,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ distinctId, properties, propertiesOnce, options }"
+              "name": "{ distinctId, properties, propertiesOnce }"
             },
             {
               "description": "",
@@ -1425,64 +1424,6 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
-          "category": "Capture",
-          "description": "Remove a property added with `register()`.",
-          "details": null,
-          "id": "unregister",
-          "showDocs": true,
-          "title": "unregister",
-          "examples": [
-            {
-              "id": "unregister",
-              "name": "Generated example for unregister",
-              "code": "// Generated example for unregister\nposthog.unregister();"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [
-            {
-              "description": "The property name to remove",
-              "isOptional": false,
-              "type": "string",
-              "name": "property"
-            }
-          ],
-          "returnType": {
-            "id": "Promise<void>",
-            "name": "Promise<void>"
-          },
-          "path": "src/entrypoints/index.node.ts"
-        },
-        {
-          "category": "Capture",
-          "description": "Remove an option added with `registerOptions()`.",
-          "details": null,
-          "id": "unregisterOptions",
-          "showDocs": true,
-          "title": "unregisterOptions",
-          "examples": [
-            {
-              "id": "unregisteroptions",
-              "name": "Generated example for unregisterOptions",
-              "code": "// Generated example for unregisterOptions\nposthog.unregisterOptions();"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [
-            {
-              "description": "The option name to remove",
-              "isOptional": false,
-              "type": "string",
-              "name": "key"
-            }
-          ],
-          "returnType": {
-            "id": "Promise<void>",
-            "name": "Promise<void>"
-          },
-          "path": "src/entrypoints/index.node.ts"
-        },
-        {
           "category": "Identification",
           "description": "Remove properties from a person profile.",
           "details": null,
@@ -1502,7 +1443,7 @@
               "description": "",
               "isOptional": false,
               "type": "any",
-              "name": "{ distinctId, properties, options }"
+              "name": "{ distinctId, properties }"
             },
             {
               "description": "",
@@ -1554,7 +1495,7 @@
         {
           "category": "Context",
           "description": "Run a function with specific context that will be applied to all events captured within that context. It propagates the context to all subsequent calls down the call stack. Context properties like tags and sessionId will be automatically attached to all events. By default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.",
-          "details": "Context `properties` and `options` fill only what an event left unset: the event's own values win, and context values beat `register()` and `registerOptions()` values and the values the SDK adds. `before_send` sees the result and can change it.",
+          "details": null,
           "id": "withContext",
           "showDocs": true,
           "title": "withContext",
@@ -1568,7 +1509,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Context data to apply (sessionId, distinctId, properties, options)",
+              "description": "Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)",
               "isOptional": false,
               "type": "Partial<ContextData>",
               "name": "data"
@@ -1760,6 +1701,34 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
+          "category": "",
+          "details": null,
+          "id": "register",
+          "showDocs": true,
+          "title": "register",
+          "examples": [
+            {
+              "id": "register",
+              "name": "Generated example for register",
+              "code": "// Generated example for register\nposthog.register();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "PostHogEventProperties",
+              "name": "properties"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
           "category": "Initialization",
           "description": "Shuts down the PostHog instance and ensures all events are sent.\nCall shutdown() once before the process exits to ensure that all events have been sent and all promises have resolved. Do not use this function if you intend to keep using this PostHog instance after calling it. Use flush() for per-request cleanup instead.",
           "details": null,
@@ -1780,6 +1749,34 @@
               "isOptional": true,
               "type": "number",
               "name": "shutdownTimeoutMs"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "details": null,
+          "id": "unregister",
+          "showDocs": true,
+          "title": "unregister",
+          "examples": [
+            {
+              "id": "unregister",
+              "name": "Generated example for unregister",
+              "code": "// Generated example for unregister\nposthog.unregister();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "property"
             }
           ],
           "returnType": {
@@ -2024,79 +2021,6 @@
       "example": "(event: EventMessage) => EventMessage | null"
     },
     {
-      "id": "CaptureCodec",
-      "name": "CaptureCodec",
-      "properties": [],
-      "path": "src/capture-v1/compression.ts",
-      "example": "Exclude<CaptureCompression, 'none'>"
-    },
-    {
-      "id": "CaptureCompression",
-      "name": "CaptureCompression",
-      "properties": [],
-      "path": "src/capture-v1/compression.ts",
-      "example": "(typeof CAPTURE_COMPRESSIONS)[number]"
-    },
-    {
-      "id": "CaptureCompressor",
-      "name": "CaptureCompressor",
-      "properties": [],
-      "path": "src/capture-v1/compression.ts"
-    },
-    {
-      "id": "CaptureDroppedEvent",
-      "name": "CaptureDroppedEvent",
-      "properties": [
-        {
-          "type": "string",
-          "name": "details"
-        },
-        {
-          "type": "string",
-          "name": "uuid"
-        }
-      ],
-      "path": "src/capture-v1/errors.ts"
-    },
-    {
-      "id": "CaptureEndpoint",
-      "name": "CaptureEndpoint",
-      "properties": [],
-      "path": "src/capture-v1/types.ts",
-      "example": "typeof ANALYTICS_CAPTURE_ENDPOINT | typeof AI_CAPTURE_ENDPOINT"
-    },
-    {
-      "id": "CaptureErrorParams",
-      "name": "CaptureErrorParams",
-      "properties": [
-        {
-          "description": "The underlying transport/HTTP/parse failure, when the whole batch failed.",
-          "type": "unknown",
-          "name": "cause"
-        },
-        {
-          "description": "Events the server rejected outright (billing/validation).",
-          "type": "CaptureDroppedEvent[]",
-          "name": "drops"
-        },
-        {
-          "description": "The capture lane the batch was sent to.",
-          "type": "CaptureEndpoint",
-          "name": "endpoint"
-        },
-        {
-          "type": "string",
-          "name": "requestId"
-        },
-        {
-          "description": "UUIDs of events still pending `retry` after the attempt budget was exhausted, or lost to a batch-level failure.",
-          "type": "string[]",
-          "name": "retryExhausted"
-        }
-      ],
-      "path": "src/capture-v1/errors.ts"
-    },
-    {
       "id": "CaptureEvent",
       "name": "CaptureEvent",
       "properties": [
@@ -2134,41 +2058,10 @@
       "path": "../core/src/types.ts"
     },
     {
-      "id": "CaptureExceptionOptions",
-      "name": "CaptureExceptionOptions",
-      "properties": [
-        {
-          "description": "The event's distinct id. Without one, the context distinct id is used, else a personless id.",
-          "type": "string",
-          "name": "distinctId"
-        },
-        {
-          "description": "Properties to add to the event. Exception properties the SDK or PostHog owns, such as\n`$exception_list` and `$exception_level`, are ignored: use `level` to set the level.",
-          "type": "Record<string | number, any>",
-          "name": "properties"
-        },
-        {
-          "description": "Per-event options, as in `capture()`.",
-          "type": "Record<string, JsonType>",
-          "name": "options"
-        },
-        {
-          "description": "Overrides the generated event UUID. Must be a valid UUID.",
-          "type": "string",
-          "name": "uuid"
-        },
-        {
-          "description": "A `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events.",
-          "type": "FeatureFlagEvaluations",
-          "name": "flags"
-        },
-        {
-          "description": "The exception's severity, sent as `$exception_level`. An unknown value is ignored.",
-          "type": "\"fatal\" | \"error\" | \"warning\" | \"log\" | \"info\" | \"debug\"",
-          "name": "level"
-        }
-      ],
-      "path": "src/types.ts"
+      "id": "CaptureLogger",
+      "name": "CaptureLogger",
+      "properties": [],
+      "path": "../core/src/logs/types.ts"
     },
     {
       "id": "ChunkIdMapType",
@@ -2176,6 +2069,43 @@
       "properties": [],
       "path": "../core/src/error-tracking/types.ts",
       "example": "Record<string, string>"
+    },
+    {
+      "id": "CodeEmailFields",
+      "name": "CodeEmailFields",
+      "properties": [
+        {
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.",
+          "type": "boolean",
+          "name": "captureEngagement"
+        },
+        {
+          "description": "A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender.",
+          "type": "string",
+          "name": "from"
+        },
+        {
+          "type": "string | string[]",
+          "name": "replyTo"
+        },
+        {
+          "type": "string",
+          "name": "subject"
+        },
+        {
+          "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog. Letters, digits, hyphens and underscores, at most 400.",
+          "type": "string",
+          "name": "templateKey"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
+      "id": "CodeEmailForm",
+      "name": "CodeEmailForm",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "CodeEmailFields & ({\n    html: string;\n    text?: string;\n    react?: never;\n} | {\n    html?: string;\n    text: string;\n    react?: never;\n} | {\n    react: EmailReactElement;\n    text?: string;\n    html?: never;\n})"
     },
     {
       "id": "Coercer",
@@ -2222,12 +2152,6 @@
           "name": "distinctId"
         },
         {
-          "description": "Options that fill the options an event left unset (missing or `null`). The event's own options win; these beat options from `registerOptions()`.",
-          "type": "Record<string, JsonType>",
-          "name": "options"
-        },
-        {
-          "description": "Properties that fill the keys an event left unset. The event's own values win.",
           "type": "Record<string, any>",
           "name": "properties"
         },
@@ -2317,6 +2241,21 @@
         }
       ],
       "path": "src/emails/errors.ts"
+    },
+    {
+      "id": "EmailReactElement",
+      "name": "EmailReactElement",
+      "properties": [
+        {
+          "type": "unknown",
+          "name": "props"
+        },
+        {
+          "type": "unknown",
+          "name": "type"
+        }
+      ],
+      "path": "src/emails/types.ts"
     },
     {
       "id": "Emails",
@@ -2461,12 +2400,6 @@
           "name": "disableGeoip"
         },
         {
-          "description": "Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.\nCapture drops an event whose option value it cannot read (`invalid_options`), and the SDK\nreports the drop through the `'error'` event.",
-          "type": "Record<string, JsonType>",
-          "name": "options"
-        },
-        {
-          "description": "The event's distinct id. When it is missing, empty or only whitespace, the context distinct id\nis used; without one, the event gets a generated id and `options.process_person_profile: false`.",
           "type": "string",
           "name": "distinctId"
         },
@@ -2913,21 +2846,35 @@
           "name": "properties"
         },
         {
-          "description": "The event's distinct id. When it is missing, empty or only whitespace, the context distinct id\nis used, then `$<groupType>_<groupKey>`.",
           "type": "string",
           "name": "distinctId"
         },
         {
           "type": "boolean",
           "name": "disableGeoip"
-        },
-        {
-          "description": "Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.\nCapture drops an event whose option value it cannot read (`invalid_options`), and the SDK\nreports the drop through the `'error'` event.",
-          "type": "Record<string, JsonType>",
-          "name": "options"
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "HonoContextLike",
+      "name": "HonoContextLike",
+      "properties": [
+        {
+          "description": "Set by Hono when a handler threw and its error handler produced the response.",
+          "type": "unknown",
+          "name": "error"
+        },
+        {
+          "type": "{\n        raw: Request;\n        routePath: string;\n    }",
+          "name": "req"
+        },
+        {
+          "type": "Response",
+          "name": "res"
+        }
+      ],
+      "path": "src/extensions/fetch-request.ts"
     },
     {
       "id": "IdentifyMessage",
@@ -2944,21 +2891,33 @@
         {
           "type": "boolean",
           "name": "disableGeoip"
-        },
-        {
-          "description": "Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.\nCapture drops an event whose option value it cannot read (`invalid_options`), and the SDK\nreports the drop through the `'error'` event.",
-          "type": "Record<string, JsonType>",
-          "name": "options"
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "InstrumentRequestOptions",
+      "name": "InstrumentRequestOptions",
+      "properties": [
+        {
+          "description": "The matched route pattern (`/users/:id`), once the handler has run. Used to name the span and as the `http.route` metric attribute. Without it the span is named after the method only, so raw paths never become high-cardinality span names or metric series.",
+          "type": "(request: Request, response: Response | undefined) => string | undefined",
+          "name": "getRoute"
+        },
+        {
+          "description": "Skip instrumentation (health checks, for example). The handler still runs, with no span or metrics.",
+          "type": "(request: Request) => boolean",
+          "name": "ignore"
+        }
+      ],
+      "path": "src/extensions/fetch-request.ts"
     },
     {
       "id": "IPostHog",
       "name": "IPostHog",
       "properties": [
         {
-          "description": "The `posthog.emails` API: sends transactional email from PostHog email templates. Needs `secretKey`, a project secret API key with the `hog_flow:write` scope.",
+          "description": "The `posthog.emails` API: sends transactional email from PostHog email templates. Needs `secretKey`, a project secret API key with the `transactional_email:write` scope.",
           "type": "Emails",
           "name": "emails"
         },
@@ -3745,10 +3704,6 @@
         {
           "type": "AbortSignal",
           "name": "signal"
-        },
-        {
-          "type": "\"error\" | \"follow\" | \"manual\"",
-          "name": "redirect"
         }
       ],
       "path": "../core/src/types.ts"
@@ -3865,9 +3820,102 @@
       "path": "../core/src/types.ts"
     },
     {
+      "id": "PostHogForRequests",
+      "name": "PostHogForRequests",
+      "properties": [
+        {
+          "description": "Run a function with specific context that will be applied to all events captured within that context.\nIt propagates the context to all subsequent calls down the call stack.\nContext properties like tags and sessionId will be automatically attached to all events.\nBy default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.",
+          "type": "<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions) => T",
+          "name": "withContext"
+        },
+        {
+          "description": "Runs a callback with a span active for its duration and ends the span for\nyou — at return for a sync callback, at settle for an async one. Takes an\noptional `StartSpanOptions` between the name and the callback:\n`withSpan(name, fn)` or `withSpan(name, options, fn)`.\n\nSpans started inside the callback nest under it automatically. If the\ncallback throws or rejects, the span records the exception and the original\nerror is rethrown unchanged. A callback that ends the span itself gets the\nrethrow but not the recording, since the span is already exported by then.\n\nSpans nest across `await` only on the Node runtime, which tracks the active\nspan with `AsyncLocalStorage`. The edge build restores the active span when\nthe callback returns its promise, so spans started after an `await` there\nbegin a new trace.\n\n{@label Traces}",
+          "type": "{ <T>(name: string, fn: (span: Span) => T): T; <T>(name: string, options: StartSpanOptions, fn: (span: Span) => T): T; }",
+          "name": "withSpan"
+        },
+        {
+          "description": "Get the current context data.",
+          "type": "() => ContextData | undefined",
+          "name": "getContext"
+        },
+        {
+          "description": "The `posthog.metrics` API: a statsd-style pre-aggregating metrics client — alpha.\nSamples are folded into per-series aggregates in memory and flushed\nperiodically as one OTLP data point per series per window, so recording\nfrom hot paths is cheap. Configure via the `metrics` client option.",
+          "type": "Metrics",
+          "name": "metrics"
+        },
+        {
+          "description": "The project token the client was created with. Same value as `projectToken`.",
+          "type": "string",
+          "name": "apiKey"
+        },
+        {
+          "type": "PostHogOptions",
+          "name": "options"
+        }
+      ],
+      "path": "src/extensions/fetch-request.ts"
+    },
+    {
+      "id": "PostHogLogsConfig",
+      "name": "PostHogLogsConfig",
+      "properties": [
+        {
+          "description": "Pre-send filter. See  for shape and examples. Configure as a single function or a chain.",
+          "type": "BeforeSendLogFn | BeforeSendLogFn[]",
+          "name": "beforeSend"
+        },
+        {
+          "description": "Deployment environment attached as OTLP `deployment.environment` (e.g. `'production'`, `'staging'`, `'dev'`).",
+          "type": "string",
+          "name": "environment"
+        },
+        {
+          "description": "How often the periodic background flush fires (ms). Records also flush eagerly when the buffer fills, on AppState changes (RN), and on `shutdown()`. Lower values trade battery/bandwidth for fresher data. Default: 10000 (RN) / 3000 (browser).",
+          "type": "number",
+          "name": "flushIntervalMs"
+        },
+        {
+          "description": "Max records per outbound POST. Keeps each request under the server's request body cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser).",
+          "type": "number",
+          "name": "maxBatchRecordsPerPost"
+        },
+        {
+          "description": "Number of buffered records that triggers an immediate flush. Records also flush on the periodic interval and on `shutdown()`. The queue can grow past this while an async flush is in flight (e.g. during a synchronous burst); a separate, larger memory backstop evicts the oldest only once the queue exceeds the per-interval rate cap. Default: 100.",
+          "type": "number",
+          "name": "maxBufferSize"
+        },
+        {
+          "description": "Tumbling-window rate cap. Bounds how many records can be captured within a sliding (technically tumbling) time window. Records exceeding the cap are dropped synchronously at `captureLog()` (they never enter the buffer or consume bandwidth). A single warn line is logged per window when the cap is hit.\nDefaults are per-SDK; on RN the default is `{ maxLogs: 500, windowMs: 10000 }` (≈50 logs/sec ceiling, tuned for cellular bandwidth).",
+          "type": "{\n        maxLogs?: number;\n        windowMs?: number;\n    }",
+          "name": "rateCap"
+        },
+        {
+          "description": "Extra OTLP resource attributes attached to every record. Spread first; SDK-controlled keys (`service.name`, `telemetry.sdk.*`, RN's `os.*`) are layered on top so users cannot accidentally clobber them. Use the dedicated `serviceName` / `environment` / `serviceVersion` fields to override those keys.",
+          "type": "Record<string, LogAttributeValue>",
+          "name": "resourceAttributes"
+        },
+        {
+          "description": "Service name attached to every record as the OTLP `service.name` resource attribute. Used by the Logs UI for filtering / grouping. Defaults to `'unknown_service'` when unset.",
+          "type": "string",
+          "name": "serviceName"
+        },
+        {
+          "description": "Service version attached as OTLP `service.version`. Useful for correlating regressions to specific app releases.",
+          "type": "string",
+          "name": "serviceVersion"
+        }
+      ],
+      "path": "../core/src/logs/types.ts"
+    },
+    {
       "id": "PostHogOptions",
       "name": "PostHogOptions",
       "properties": [
+        {
+          "description": "Whether to disable GeoIP lookups",
+          "type": "boolean",
+          "name": "disableGeoip"
+        },
         {
           "description": "PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com'",
           "type": "string",
@@ -3930,6 +3978,21 @@
           "name": "bootstrap"
         },
         {
+          "description": "How many times we will retry HTTP requests",
+          "type": "number",
+          "name": "fetchRetryCount"
+        },
+        {
+          "description": "The delay between HTTP request retries in milliseconds",
+          "type": "number",
+          "name": "fetchRetryDelay"
+        },
+        {
+          "description": "Timeout in milliseconds for any calls",
+          "type": "number",
+          "name": "requestTimeout"
+        },
+        {
           "description": "Timeout in milliseconds for feature flag calls",
           "type": "number",
           "name": "featureFlagsRequestTimeoutMs"
@@ -3948,6 +4011,11 @@
           "description": "For Session Analysis how long before we expire a session in seconds",
           "type": "number",
           "name": "sessionExpirationTimeSeconds"
+        },
+        {
+          "description": "Whether to disable GZIP compression",
+          "type": "boolean",
+          "name": "disableCompression"
         },
         {
           "description": "Special flag to indicate ingested data is for a historical migration",
@@ -3980,72 +4048,17 @@
           "name": "persistence"
         },
         {
-          "description": "Whether to disable GeoIP lookups for events and feature flag requests. When on, every event\ngets `$geoip_disable: true` unless the event, its context or `register()` sets\n`$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's\nown `$geoip_disable` property.",
-          "type": "boolean",
-          "name": "disableGeoip"
-        },
-        {
           "description": "The interval in milliseconds between periodic flushes",
           "type": "number",
           "name": "flushInterval"
         },
         {
-          "description": "The maximum number of analytics events held in memory waiting to be sent (must be higher than `flushAt`).\nWhen the queue is full, the oldest event is dropped and reported through the `'error'` event.\n`captureAi` events have their own queue, sized by `captureAiMaxQueueSize`, and do not count toward this limit.",
+          "description": "The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)",
           "type": "number",
           "name": "maxQueueSize"
         },
         {
-          "description": "Whether the Express and NestJS integrations read the `X-POSTHOG-DISTINCT-ID` and\n`X-POSTHOG-SESSION-ID` request headers into the request context. A distinct id or session id\nyou pass explicitly always wins over these headers, and they are never used for authentication.\nTurning it off does not turn off `readPostHogCookie`. To stop all request linking, set\n`captureTracingHeaders: false` and leave `readPostHogCookie` off (its default).",
-          "type": "boolean",
-          "name": "captureTracingHeaders"
-        },
-        {
-          "description": "How many times a capture request is retried after its first attempt, on both capture lanes.\nWaits start at 100 ms and double each retry, with jitter, up to 30 seconds; a `Retry-After`\nheader can raise a wait. Only HTTP 404, 408, 429, 500, 502, 503 and 504 and network errors are retried.\nWhen not set, `fetchRetryCount` is used.",
-          "type": "number",
-          "name": "captureMaxRetries"
-        },
-        {
-          "description": "How many times HTTP requests are retried. Capture requests use `captureMaxRetries` when it is set.",
-          "type": "number",
-          "name": "fetchRetryCount"
-        },
-        {
-          "description": "The delay between HTTP request retries in milliseconds. Capture requests do not use it:\nsee `captureMaxRetries` for their retry waits.",
-          "type": "number",
-          "name": "fetchRetryDelay"
-        },
-        {
-          "description": "How analytics capture requests compress their body. `'deflate'` is zlib-wrapped. `'zstd'` needs\nNode 22.15 or later and falls back to `'gzip'` elsewhere, including the edge build. When not set,\n`disableCompression: true` means `'none'`.",
-          "type": "\"none\" | \"gzip\" | \"deflate\" | \"zstd\"",
-          "name": "captureCompression"
-        },
-        {
-          "description": "How `captureAi` requests compress their body, with the same values as `captureCompression`.\nIt does not read `captureCompression` or `disableCompression`.",
-          "type": "\"none\" | \"gzip\" | \"deflate\" | \"zstd\"",
-          "name": "captureAiCompression"
-        },
-        {
-          "description": "Timeout in milliseconds for any calls. `captureAi` requests use `captureAiRequestTimeoutMs`.",
-          "type": "number",
-          "name": "requestTimeout"
-        },
-        {
-          "description": "The maximum number of `captureAi` events held in memory waiting to be sent. When the queue is\nfull, the oldest AI event is dropped and reported through the `'error'` event.",
-          "type": "number",
-          "name": "captureAiMaxQueueSize"
-        },
-        {
-          "description": "Timeout in milliseconds for each `captureAi` request. Analytics capture requests use `requestTimeout`.",
-          "type": "number",
-          "name": "captureAiRequestTimeoutMs"
-        },
-        {
-          "description": "Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it\nis set, and `captureAi` requests use `captureAiCompression`.",
-          "type": "boolean",
-          "name": "disableCompression"
-        },
-        {
-          "description": "Lets the Express and NestJS integrations read the session ID, and the distinct ID of an identified user, from the\nposthog-js cookie when a request has neither tracing header.\n\nTurn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server\ncannot read an opt-out that posthog-js keeps in localStorage (its default).\n\nIt needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie\nname (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set\n`sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set\n`optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie\ncounts as opted out. A request sent right\nafter `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a\nshort delay. When `captureTracingHeaders` is `false`, the tracing headers are ignored and every request falls\nback to the cookie. To stop all request linking, also leave this option off.",
+          "description": "Lets the Express and NestJS integrations read the session ID, and the distinct ID of an identified user, from the\nposthog-js cookie when a request has neither tracing header.\n\nTurn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server\ncannot read an opt-out that posthog-js keeps in localStorage (its default).\n\nIt needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie\nname (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set\n`sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set\n`optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie\ncounts as opted out. A request sent right\nafter `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a\nshort delay.",
           "type": "boolean | { sessionIdleTimeoutSeconds?: number; optOutCapturingByDefault?: boolean; }",
           "name": "readPostHogCookie"
         },
@@ -4055,12 +4068,17 @@
           "name": "metrics"
         },
         {
+          "description": "Configuration for the `posthog.logger` / `posthog.captureLog` logs API. Logs are sent\nto PostHog Logs as OTLP records, with no OpenTelemetry packages needed.\n\nEach record carries the active span's `trace_id` / `span_id` and, inside `withContext`,\nthe `distinctId` and `sessionId`, so logs join back to traces, persons and replays.\n`serviceName` defaults to the `traces` / `metrics` `serviceName`.",
+          "type": "PostHogLogsConfig",
+          "name": "logs"
+        },
+        {
           "description": "Configuration for distributed tracing (`startSpan` / `withSpan`). Tracing is\noff until this is set; supplying it is all that's needed to turn it on.\n\nSet `serviceName` so spans can be attributed and grouped per service — the\nproduct aggregates operations by service and span name.\n\n`shutdown()` drains spans that have already ended, within the shutdown\ntimeout; spans still open at that point are discarded.",
           "type": "TracesConfig",
           "name": "traces"
         },
         {
-          "description": "Credential for fetching local feature flag definitions, decrypting remote config and\nsending email.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. `emails.send` needs a Project Secret API Key with the\n`hog_flow:write` scope; set `enableLocalEvaluation: false` when the key is only for email.\nPrefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
+          "description": "Credential for fetching local feature flag definitions, decrypting remote config and\nsending email.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. `emails.send` needs a Project Secret API Key with the\n`transactional_email:write` scope; set `enableLocalEvaluation: false` when the key is only for email.\nPrefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
           "type": "string",
           "name": "secretKey"
         },
@@ -4084,6 +4102,11 @@
           "description": "Number of retries for an `emails.send` after a network error, a rate limit, or an\nunavailable service. Every retry sends the same idempotency key. Set to 0 when a job\nrunner already retries the send.",
           "type": "number",
           "name": "emailRequestMaxRetries"
+        },
+        {
+          "description": "The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request.",
+          "type": "string",
+          "name": "migratedFrom"
         },
         {
           "description": "Redact prompts, outputs and error details from every event that the PostHog AI\nintegrations (`@posthog/ai`) capture with this client. Per-call privacy settings\ncan only add redaction. Defaults to false.",
@@ -4359,42 +4382,6 @@
       "path": "../core/src/types.ts"
     },
     {
-      "id": "PreparedEventMessage",
-      "name": "PreparedEventMessage",
-      "properties": [
-        {
-          "type": "string",
-          "name": "distinctId"
-        },
-        {
-          "type": "string",
-          "name": "event"
-        },
-        {
-          "type": "PostHogEventProperties",
-          "name": "properties"
-        },
-        {
-          "description": "The event's options, sent to capture unchanged.",
-          "type": "Record<string, JsonType>",
-          "name": "options"
-        },
-        {
-          "type": "string",
-          "name": "uuid"
-        },
-        {
-          "type": "Date",
-          "name": "timestamp"
-        },
-        {
-          "type": "boolean",
-          "name": "disableGeoip"
-        }
-      ],
-      "path": "src/types.ts"
-    },
-    {
       "id": "PreviouslyCapturedError",
       "name": "PreviouslyCapturedError",
       "properties": [],
@@ -4581,8 +4568,15 @@
       "path": "../core/src/utils/index.ts"
     },
     {
-      "id": "SendEmailOptions",
-      "name": "SendEmailOptions",
+      "id": "SendCodeEmailOptions",
+      "name": "SendCodeEmailOptions",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "SendEmailBase & CodeEmailForm & Without<TemplateEmailForm>"
+    },
+    {
+      "id": "SendEmailBase",
+      "name": "SendEmailBase",
       "properties": [
         {
           "description": "The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address.",
@@ -4590,7 +4584,7 @@
           "name": "distinctId"
         },
         {
-          "description": "1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too.",
+          "description": "1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too.",
           "type": "string",
           "name": "idempotencyKey"
         },
@@ -4600,22 +4594,19 @@
           "name": "maxRetries"
         },
         {
-          "description": "Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`.",
-          "type": "Record<string, unknown>",
-          "name": "templateData"
-        },
-        {
-          "description": "The UUID of an email template made transactional in PostHog.",
-          "type": "string",
-          "name": "templateId"
-        },
-        {
           "description": "One recipient email address.",
           "type": "string",
           "name": "to"
         }
       ],
       "path": "src/emails/types.ts"
+    },
+    {
+      "id": "SendEmailOptions",
+      "name": "SendEmailOptions",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "SendTemplateEmailOptions | SendCodeEmailOptions"
     },
     {
       "id": "SendEmailResponse",
@@ -4683,6 +4674,78 @@
       "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
+      "id": "SendTemplateEmailOptions",
+      "name": "SendTemplateEmailOptions",
+      "properties": [
+        {
+          "description": "One recipient email address.",
+          "type": "string",
+          "name": "to"
+        },
+        {
+          "description": "The recipient's distinct ID in your product. The email's events go to this person.\nWithout it, they go to a person whose distinct ID is the email address.",
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "description": "1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted\nqueues nothing and returns the first send's result. The same key with other options sends\nnothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that\ncovers its own retries. Pass a key derived from what the email is for, such as\n`welcome:user_123`, to cover retries outside this call too.",
+          "type": "string",
+          "name": "idempotencyKey"
+        },
+        {
+          "description": "Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off.",
+          "type": "number",
+          "name": "maxRetries"
+        },
+        {
+          "description": "The UUID of an email template made transactional in PostHog.",
+          "type": "string",
+          "name": "templateId"
+        },
+        {
+          "description": "Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it\nin PostHog. Letters, digits, hyphens and underscores, at most 400.",
+          "type": "never",
+          "name": "templateKey"
+        },
+        {
+          "type": "never",
+          "name": "subject"
+        },
+        {
+          "description": "A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender.",
+          "type": "never",
+          "name": "from"
+        },
+        {
+          "type": "never",
+          "name": "replyTo"
+        },
+        {
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.",
+          "type": "never",
+          "name": "captureEngagement"
+        },
+        {
+          "type": "never",
+          "name": "html"
+        },
+        {
+          "type": "never",
+          "name": "text"
+        },
+        {
+          "type": "never",
+          "name": "react"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
       "id": "SendTracesBatchOutcome",
       "name": "SendTracesBatchOutcome",
       "properties": [],
@@ -4731,11 +4794,6 @@
         {
           "type": "Record<string | number, any>",
           "name": "propertiesOnce"
-        },
-        {
-          "description": "Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.\nCapture drops an event whose option value it cannot read (`invalid_options`), and the SDK\nreports the drop through the `'error'` event.",
-          "type": "Record<string, JsonType>",
-          "name": "options"
         }
       ],
       "path": "src/types.ts"
@@ -5333,6 +5391,23 @@
       "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {
+      "id": "TemplateEmailForm",
+      "name": "TemplateEmailForm",
+      "properties": [
+        {
+          "description": "Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`.",
+          "type": "Record<string, unknown>",
+          "name": "templateData"
+        },
+        {
+          "description": "The UUID of an email template made transactional in PostHog.",
+          "type": "string",
+          "name": "templateId"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
       "id": "UnresolvedFlagReason",
       "name": "UnresolvedFlagReason",
       "properties": [],
@@ -5350,14 +5425,16 @@
         {
           "type": "string | string[]",
           "name": "properties"
-        },
-        {
-          "description": "Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,\n`cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.\nCapture drops an event whose option value it cannot read (`invalid_options`), and the SDK\nreports the drop through the `'error'` event.",
-          "type": "Record<string, JsonType>",
-          "name": "options"
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "Without",
+      "name": "Without",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "{\n    [K in keyof T]?: never;\n}"
     }
   ],
   "categories": [
@@ -5365,6 +5442,7 @@
     "Identification",
     "Capture",
     "Error tracking",
+    "Logs",
     "Privacy",
     "Feature flags",
     "Traces",

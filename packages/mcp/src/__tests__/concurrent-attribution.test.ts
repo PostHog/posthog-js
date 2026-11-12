@@ -240,6 +240,20 @@ describe('concurrent request attribution', () => {
     expect(initializes.map((event) => event.properties.$mcp_client_version)).toEqual(['1.0.0', '2.0.0'])
   })
 
+  it('lets the host clientInfo callback outrank the handshake body on initialize', async () => {
+    const server = createServer({ clientInfo: () => ({ name: 'host-client', version: '9.9.9' }) })
+
+    await invokeInitialize(server, handshake('client-a', '1.0.0'), { requestInfo: { headers: {} } })
+    await flushCaptures()
+
+    const initializes = capture.findCapturesByEvent('$mcp_initialize')
+    expect(initializes).toHaveLength(1)
+    expect(initializes[0].properties).toMatchObject({
+      $mcp_client_name: 'host-client',
+      $mcp_client_version: '9.9.9',
+    })
+  })
+
   it('stamps the handshaking client before a slow identify lets another handshake replace it', async () => {
     const identifyBStarted = deferred()
     const releaseIdentifyB = deferred()

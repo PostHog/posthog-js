@@ -115,6 +115,7 @@ export class TestClient implements Client {
     session: SessionContext | undefined
     isOptedOut: boolean
     canCapture: boolean
+    isRateLimited = false
 
     private _remoteConfigResult: RemoteConfigResult | undefined
     private _requestResponse: ApiResponse
@@ -153,7 +154,7 @@ export class TestClient implements Client {
         this.getExtension = options.getExtension ?? (() => undefined)
     }
 
-    capture(event: string, properties?: Properties | null, options?: CaptureOptions): void {
+    capture(event: string, properties?: Properties | null, options?: CaptureOptions): boolean {
         const dynamicProperties = this._dynamicEventPropertyProducers.reduce(
             (acc, producer) => ({ ...acc, ...producer() }),
             {} as Record<string, unknown>
@@ -162,6 +163,7 @@ export class TestClient implements Client {
 
         this.capturedEvents.push({ event, properties: finalProperties, options })
         this._eventPublisher.publish({ event, properties: finalProperties })
+        return true
     }
 
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {

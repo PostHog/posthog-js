@@ -20,13 +20,13 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
                 readyState: 0,
                 status: 0,
                 responseText: '{}',
-                onreadystatechange: undefined as (() => void) | undefined,
+                onloadend: undefined as (() => void) | undefined,
             }
             xhr.send.mockImplementation(() => {
                 if (!isUndefined(responseState.status)) {
                     xhr.readyState = 4
                     xhr.status = responseState.status
-                    xhr.onreadystatechange?.()
+                    xhr.onloadend?.()
                 }
             })
             return xhr

@@ -306,6 +306,45 @@ describe('Web Experimentation', () => {
                 expect(elParent.innerHTML).toEqual('original')
             })
         })
+
+        describe('experiment running on a feature flag', () => {
+            const flaggedExperimentWithUrlConditions = {
+                ...buttonWebExperimentWithUrlConditions,
+                feature_flag_key: 'signup-button-test',
+            } as unknown as WebExperiment
+
+            function applyVariantOnPage(testLocation: string): HTMLElement {
+                experimentsResponse = { experiments: [flaggedExperimentWithUrlConditions] }
+                const elParent = createTestDocument()
+                vi.spyOn(WebExperiments, 'getWindowLocation').mockReturnValue(
+                    new URL(testLocation) as unknown as Location
+                )
+                simulateFeatureFlags({ 'signup-button-test': 'variant-sign-up' })
+                return elParent
+            }
+
+            it.each([
+                ['the page the variant targets', 'https://example.com/Signup', 'Sign me up'],
+                ['any other page', 'https://example.com/pricing', 'original'],
+            ])('loads the experiment and changes %s', (_pageDescription, testLocation, expectedInnerHTML) => {
+                expect(applyVariantOnPage(testLocation).innerHTML).toEqual(expectedInnerHTML)
+            })
+
+            it.each([
+                ['the page the variant targets', 'https://example.com/Signup', 'Sign me up'],
+                ['any other page', 'https://example.com/pricing', 'original'],
+            ])(
+                'changes %s when the flags arrive again for a loaded experiment',
+                (_pageDescription, testLocation, expectedInnerHTML) => {
+                    const elParent = applyVariantOnPage(testLocation)
+                    elParent.innerHTML = 'original'
+
+                    simulateFeatureFlags({ 'signup-button-test': 'variant-sign-up' })
+
+                    expect(elParent.innerHTML).toEqual(expectedInnerHTML)
+                }
+            )
+        })
     })
 
     describe('utm match conditions', () => {

@@ -1,5 +1,52 @@
 # @posthog/types
 
+## 1.424.0
+
+### Minor Changes
+
+- [#5663](https://github.com/PostHog/posthog-js/pull/5663) [`d6dbd3a`](https://github.com/PostHog/posthog-js/commit/d6dbd3a6f7aa9ac91f7c5ed6217c45768604bae9) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Add `imageUrl` to the `EarlyAccessFeature` type
+  (2026-11-11)
+
+## 1.423.0
+
+### Minor Changes
+
+- [#5599](https://github.com/PostHog/posthog-js/pull/5599) [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): expose `traceId` and `spanId` getters on the `Span` handle, for correlating logs from other loggers with a trace without parsing `traceparent()`
+  (2026-11-10)
+
+### Patch Changes
+
+- [#5595](https://github.com/PostHog/posthog-js/pull/5595) [`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Warn once in the console, even outside debug mode, when the bot user agent filter drops events, and document that `captureLog` logs bypass the filter.
+  (2026-11-10)
+
+## 1.422.0
+
+### Minor Changes
+
+- [#5594](https://github.com/PostHog/posthog-js/pull/5594) [`bfbaff7`](https://github.com/PostHog/posthog-js/commit/bfbaff7e597428cdd6f683c78e60e651f6d2c590) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): expose `traceId` and `spanId` getters on the `Span` handle, for correlating logs from other loggers with a trace without parsing `traceparent()`
+  (2026-11-09)
+
+## 1.421.1
+
+### Patch Changes
+
+- [#5561](https://github.com/PostHog/posthog-js/pull/5561) [`ab49034`](https://github.com/PostHog/posthog-js/commit/ab49034bb69cdf840318c6ab824492e76a72751d) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Mask hidden input values in session replay when `maskAllInputs` is enabled, and accept `hidden` in `maskInputOptions`.
+  (2026-11-06)
+
+## 1.421.0
+
+### Minor Changes
+
+- [#5580](https://github.com/PostHog/posthog-js/pull/5580) [`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f) Thanks [@haacked](https://github.com/haacked)! - `metrics.histogram()` accepts a `bounds` option that sets the histogram's bucket boundaries, and `beforeSend` sees and can change them. The first sample of a histogram (name and unit) fixes its bounds until the client resets. A later sample with different bounds is recorded in the fixed buckets and logs a warning, and a sample with invalid bounds is dropped. The experimental `posthog.flags.request.duration` histogram now uses the bounds `[50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]` ms, so its p50 and p95 resolve between 50ms and 5s. This changes the metric's buckets, which its experimental status allows.
+  (2026-11-05)
+
+## 1.420.0
+
+### Minor Changes
+
+- [#5547](https://github.com/PostHog/posthog-js/pull/5547) [`742f73f`](https://github.com/PostHog/posthog-js/commit/742f73f01e05fe6413704840d2ba6c0ad5cdf6ec) Thanks [@haacked](https://github.com/haacked)! - Add the experimental `metrics.flags` option. When it is on, the browser SDK records the round trip of every `/flags` HTTP attempt as the histogram `posthog.flags.request.duration`, with the server host, the response status or error type, and the browser's timezone as attributes. The option, the metric name, and its attributes may change or be removed in any release.
+  (2026-11-04)
+
 ## 1.419.0
 
 ### Minor Changes

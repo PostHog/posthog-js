@@ -5,7 +5,7 @@ import { isArray, isUndefined } from '@posthog/core'
 import type { TracingHeadersHostnames } from './tracing-headers-types'
 import type { Extension } from './types'
 
-const logger = createLogger('[TracingHeaders]')
+const logger = /* @__PURE__ */ createLogger('[TracingHeaders]')
 
 export class TracingHeaders implements Extension {
     private _restoreXHRPatch: (() => void) | undefined = undefined

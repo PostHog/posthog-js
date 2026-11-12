@@ -2,6 +2,11 @@ import * as bundles from '../extensions/extension-bundles'
 import * as slimEntrypoint from '../entrypoints/extension-bundles.es'
 
 describe('extension-bundles entrypoint', () => {
+    it('includes exactly the grouped constructors in AllExtensions', () => {
+        const { AllExtensions, ...featureBundles } = bundles
+        expect(AllExtensions).toEqual(Object.assign({}, ...Object.values(featureBundles)))
+    })
+
     it('exports no bundle that extension-bundles lacks', () => {
         expect(Object.keys(slimEntrypoint).sort()).toEqual(Object.keys(bundles).sort())
     })

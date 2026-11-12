@@ -14,7 +14,7 @@ import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 
-const logger = createLogger('[Web Vitals]')
+const logger = /* @__PURE__ */ createLogger('[Web Vitals]')
 
 // the metric observer registration function from the web-vitals library (onLCP, onCLS, ...).
 // it takes the report callback plus an optional ReportOpts (e.g. `reportSoftNavs`).

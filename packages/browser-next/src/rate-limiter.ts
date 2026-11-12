@@ -21,14 +21,9 @@ export class ClientRateLimiter {
 
     consume(): ClientRateLimitResult {
         const now = this._now()
-        if (!this._initialized) {
-            this._initialized = true
-            this._last = now
-        } else {
-            const elapsed = Math.max(0, now - this._last)
-            this._last = Math.max(this._last, now)
-            this._tokens = Math.min(this._burst, this._tokens + (elapsed / 1_000) * this._eventsPerSecond)
-        }
+        this._tokens = this._tokensAt(now)
+        this._last = this._initialized ? Math.max(this._last, now) : now
+        this._initialized = true
 
         if (this._tokens >= 1) {
             this._tokens = Math.max(0, this._tokens - 1)
@@ -42,8 +37,26 @@ export class ClientRateLimiter {
         return { allowed: false, ...(reportDropped === undefined ? {} : { reportDropped }) }
     }
 
+    /** Whether `consume()` refuses a token now. It changes no state. */
+    get wouldLimit(): boolean {
+        return this._tokensAt(this._now()) < 1
+    }
+
+    /** Whether the last consumed token was refused. */
+    get limited(): boolean {
+        return this._limited
+    }
+
     reported(): void {
         this._unreportedDropped = 0
+    }
+
+    private _tokensAt(now: number): number {
+        if (!this._initialized) {
+            return this._tokens
+        }
+        const elapsed = Math.max(0, now - this._last)
+        return Math.min(this._burst, this._tokens + (elapsed / 1_000) * this._eventsPerSecond)
     }
 
     private _now(): number {

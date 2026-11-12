@@ -743,18 +743,13 @@ function serializeNode(
         rootId,
       });
     case n.TEXT_NODE:
+    case n.CDATA_SECTION_NODE:
       return serializeTextNode(n as Text, {
         doc,
         needsMask,
         maskTextFn,
         rootId,
       });
-    case n.CDATA_SECTION_NODE:
-      return {
-        type: NodeType.CDATA,
-        textContent: '',
-        rootId,
-      };
     case n.COMMENT_NODE:
       return {
         type: NodeType.Comment,
@@ -788,7 +783,9 @@ function serializeTextNode(
   const parentTagName = parent && (parent as HTMLElement).tagName;
   let text = dom.textContent(n);
   const isStyle = parentTagName === 'STYLE' ? true : undefined;
-  const isScript = parentTagName === 'SCRIPT' ? true : undefined;
+  const isScript =
+    typeof parentTagName === 'string' &&
+    parentTagName.toUpperCase() === 'SCRIPT';
   if (isStyle && text) {
     try {
       // try to read style sheet
@@ -853,6 +850,19 @@ function findStylesheet(doc: Document, href: string) {
  */
 function hrefFrom(n: unknown): string | undefined {
   return (n as HTMLLinkElement).href;
+}
+
+/**
+ * Whether the browser renders `n`: false inside content it skips
+ * (`content-visibility: auto` off screen, `display: none`). Browsers without
+ * `checkVisibility`, or without its `contentVisibilityAuto` option, report
+ * the element as rendered.
+ */
+function isRendered(n: Element): boolean {
+  return (
+    typeof n.checkVisibility !== 'function' ||
+    n.checkVisibility({ contentVisibilityAuto: true })
+  );
 }
 
 function serializeElementNode(
@@ -1156,11 +1166,18 @@ function serializeElementNode(
     // Since `scrollTop` & `scrollLeft` are always 0 when an element is added to the DOM.
     // And scrolls also get picked up by rrweb's ScrollObserver
     // So we can safely skip the `scrollTop/Left` calls for newly added elements
-    if (n.scrollLeft) {
-      attributes.rr_scrollLeft = n.scrollLeft;
-    }
-    if (n.scrollTop) {
-      attributes.rr_scrollTop = n.scrollTop;
+    //
+    // Nor do we read them on content the browser skips rendering
+    // (`content-visibility: auto` off screen, `display: none`): there the read
+    // forces the style and layout of the skipped subtree, which on a page laid
+    // out with `content-visibility` makes a full snapshot lay out the whole page
+    if (isRendered(n)) {
+      if (n.scrollLeft) {
+        attributes.rr_scrollLeft = n.scrollLeft;
+      }
+      if (n.scrollTop) {
+        attributes.rr_scrollTop = n.scrollTop;
+      }
     }
   }
   // block element
@@ -1834,6 +1851,7 @@ function snapshot(
           textarea: true,
           select: true,
           password: true,
+          hidden: true,
         }
       : maskAllInputs === false
       ? {

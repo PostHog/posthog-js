@@ -11,6 +11,7 @@ import {
 } from './tracing-headers'
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import { notifyContextListeners } from './context/listeners'
+import { getContextLifetimeSignal } from './context/lifetime'
 import { PostHogBackendClient } from '../client'
 
 // Local interfaces to avoid runtime dependency on @nestjs/common
@@ -39,6 +40,12 @@ export interface ExceptionCaptureOptions {
 export interface PostHogInterceptorOptions {
   /** Enable exception capture. Pass `true` for defaults or an object to configure. @default false */
   captureExceptions?: boolean | ExceptionCaptureOptions
+  /**
+   * Returns the distinct ID for a request, such as the signed-in user's ID from your auth layer.
+   * It takes precedence over the `X-POSTHOG-DISTINCT-ID` tracing header and over a distinct ID
+   * already set in the PostHog context. Return `undefined` to fall back to those.
+   */
+  getDistinctId?: (request: any) => string | undefined
 }
 
 function getClientIp(headers: IncomingHttpHeaders, request: any): string | undefined {
@@ -67,12 +74,28 @@ export class PostHogInterceptor implements NestInterceptor {
   private posthog: PostHogBackendClient
   private captureExceptions: boolean
   private minStatusToCapture: number
+  private getDistinctId?: (request: any) => string | undefined
 
   constructor(posthog: PostHogBackendClient, options?: PostHogInterceptorOptions) {
     this.posthog = posthog
     const capture = options?.captureExceptions
     this.captureExceptions = !!capture
     this.minStatusToCapture = (typeof capture === 'object' ? capture.minStatusToCapture : undefined) ?? 500
+    this.getDistinctId = options?.getDistinctId
+  }
+
+  private resolveDistinctId(request: any): string | undefined {
+    if (!this.getDistinctId) {
+      return undefined
+    }
+    try {
+      const distinctId = this.getDistinctId(request)
+      // Blank IDs fall back; any other ID is kept verbatim, as explicit captures keep it.
+      return typeof distinctId === 'string' && distinctId.trim() ? distinctId : undefined
+    } catch {
+      // A failing resolver must not break the request; fall back to headers and context.
+      return undefined
+    }
   }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
@@ -99,14 +122,34 @@ export class PostHogInterceptor implements NestInterceptor {
     addProperty(properties, '$user_agent', getFirstHeaderValue(headers['user-agent']))
     addProperty(properties, '$ip', getClientIp(headers, request))
 
-    const contextData = {
-      ...(sessionId !== undefined ? { sessionId } : {}),
-      ...(distinctId !== undefined ? { distinctId } : {}),
-      properties,
-    }
+    return new Observable((subscriber) => {
+      // Identity is read when the request subscribes, so it comes from this request's async context.
+      // The order is: the app's getDistinctId, then the tracing headers, then identity the app set
+      // before this interceptor ran, for example in a middleware. Headers come before that earlier
+      // identity, so a context the app entered globally can't override a request's own header.
+      const existing = this.posthog.getContext()
+      const resolvedDistinctId = this.resolveDistinctId(request)
+      const requestDistinctId = resolvedDistinctId ?? distinctId ?? existing?.distinctId
+      const requestSessionId = sessionId ?? existing?.sessionId
 
-    return new Observable((subscriber) =>
-      this.posthog.withContext(
+      // The app can give withContext an AbortSignal to end that context early, for example when the
+      // request it belongs to is cancelled. After the signal aborts, getContext() no longer returns
+      // the context. The fresh context below would not see that signal, so identity copied from the
+      // earlier context would stay visible to the handler after the app ended it. Passing the earlier
+      // context's signal on makes the copied identity end at the same time as the original.
+      const copiesDistinctId =
+        resolvedDistinctId === undefined && distinctId === undefined && existing?.distinctId !== undefined
+      const copiesSessionId = sessionId === undefined && existing?.sessionId !== undefined
+      const signal = existing && (copiesDistinctId || copiesSessionId) ? getContextLifetimeSignal(existing) : undefined
+
+      // Properties always start fresh, so properties from an earlier context never reach this request.
+      const contextData = {
+        ...(requestSessionId !== undefined ? { sessionId: requestSessionId } : {}),
+        ...(requestDistinctId !== undefined ? { distinctId: requestDistinctId } : {}),
+        properties,
+      }
+
+      return this.posthog.withContext(
         contextData,
         () => {
           notifyContextListeners(this.posthog, true)
@@ -125,7 +168,9 @@ export class PostHogInterceptor implements NestInterceptor {
                 const responseStatus = status ?? response?.statusCode
                 const properties: Record<string, any> | undefined =
                   responseStatus !== undefined ? { $response_status_code: responseStatus } : undefined
-                this.posthog.captureException(exception, { distinctId, properties })
+                // A copied distinct ID that the app already ended must not label this exception.
+                const exceptionDistinctId = copiesDistinctId && signal?.aborted ? undefined : requestDistinctId
+                this.posthog.captureException(exception, { distinctId: exceptionDistinctId, properties })
                 return throwError(() => exception)
               })
             )
@@ -133,8 +178,8 @@ export class PostHogInterceptor implements NestInterceptor {
 
           return source.subscribe(subscriber)
         },
-        { fresh: true }
+        { fresh: true, ...(signal ? { signal } : {}) }
       )
-    )
+    })
   }
 }

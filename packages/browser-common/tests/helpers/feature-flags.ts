@@ -23,7 +23,7 @@ export function createConfig(overrides: Partial<FeatureFlagsConfig> = {}): Mutab
 export function createFlagsClient(options: TestClientOptions = {}): TestClient {
     const client = createTestClient({ projectToken: 'random fake token', distinctId: 'blah id', logger, ...options })
     client.deviceId = undefined
-    vi.spyOn(client, 'capture').mockImplementation(() => {})
+    vi.spyOn(client, 'capture').mockImplementation(() => true)
     vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
     return client
 }

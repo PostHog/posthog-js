@@ -274,7 +274,7 @@ The AI lane has its own settings. It doesn't read `maxQueueSize`, `requestTimeou
 Each event is built in this order. Each step fills only the properties and options the steps before it left unset, except for `$lib` and `$lib_version` (see [Check SDK identity](#check-sdk-identity)):
 
 1. The call's own `properties` and `options`, then its `groups` (merged into `$groups`) and `disableGeoip` (fills `$geoip_disable`).
-2. Context `properties` and `options`, from `withContext()`, `enterContext()`, or the Express and NestJS integrations.
+2. Context `properties` and `options`, from `withContext()`, `enterContext()`, or the Express, NestJS, Hono, and `instrumentRequest` integrations.
 3. `register()` properties and `registerOptions()` options.
 4. Values the SDK adds:
    - `$lib` and `$lib_version`, the client's library name and version (see [Check SDK identity](#check-sdk-identity))
@@ -352,7 +352,7 @@ posthog.identify({
 
 ### Check tracing headers
 
-The Express and NestJS integrations read the `X-POSTHOG-DISTINCT-ID` and `X-POSTHOG-SESSION-ID` request headers into the request context, as in 5.x.x. These headers only fill a missing distinct ID or session ID, and any client can set them, so never use them for authentication.
+The Express, NestJS, Hono, and `instrumentRequest` integrations read the `X-POSTHOG-DISTINCT-ID` and `X-POSTHOG-SESSION-ID` request headers into the request context, as in 5.x.x. These headers only fill a missing distinct ID or session ID, and any client can set them, so never use them for authentication.
 
 To stop reading them, set the new client option `captureTracingHeaders: false`:
 

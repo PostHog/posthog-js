@@ -123,6 +123,7 @@ describe('WebMCP', () => {
             },
             required: ['query', 'context', 'llm_model'],
         })
+        expect(wrappedTool.inputSchema.properties.llm_model.description).not.toMatch(/system prompt/i)
         expect(tool.inputSchema).toBe(inputSchema)
         expect(inputSchema).toEqual({
             type: 'object',

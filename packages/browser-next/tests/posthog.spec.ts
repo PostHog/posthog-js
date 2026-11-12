@@ -42,7 +42,7 @@ describe('@posthog/browser core', () => {
         }
     })
 
-    it('admits capture synchronously and returns void', async () => {
+    it('admits capture synchronously and returns true', async () => {
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             capturePageview: false,
@@ -53,9 +53,9 @@ describe('@posthog/browser core', () => {
         const events: string[] = []
         posthog.onEvent(({ event }) => events.push(event))
 
-        const result: void = posthog.capture('synchronous')
+        const result: boolean = posthog.capture('synchronous')
 
-        expect(result).toBeUndefined()
+        expect(result).toBe(true)
         expect(events).toEqual(['synchronous'])
         await posthog.dispose()
     })
@@ -757,15 +757,17 @@ describe('@posthog/browser core', () => {
         const observed: string[] = []
         posthog.onEvent(({ event }) => observed.push(event))
 
+        const admitted: boolean[] = []
         for (let index = 0; index < 102; index++) {
-            await posthog.capture(`event-${index}`)
+            admitted.push(posthog.capture(`event-${index}`))
         }
         expect(observed.slice(0, 100)).toEqual(Array.from({ length: 100 }, (_, index) => `event-${index}`))
         expect(observed.slice(100)).toEqual(['$$client_ingestion_warning'])
+        expect(admitted).toEqual([...Array(100).fill(true), false, false])
         expect(warn).toHaveBeenCalledTimes(1)
 
         now.mockReturnValue(1_100)
-        await posthog.capture('after_refill')
+        expect(posthog.capture('after_refill')).toBe(true)
         expect(observed.at(-1)).toBe('after_refill')
         await posthog.dispose()
     })
