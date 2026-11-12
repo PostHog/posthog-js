@@ -123,14 +123,11 @@ posthog.capture('$feature_interaction', {
 
 ## Block Lighthouse traffic
 
-PostHog doesn't block Lighthouse by default, so tools built on it, such as Ahrefs and Semrush, can inflate your numbers. To block it, add its user agents to `custom_blocked_useragents`.
+posthog-js already skips browsers whose user agent contains `Chrome-Lighthouse`, ignoring case. Some tools built on Lighthouse, such as Ahrefs and Semrush, send an ordinary browser user agent instead, so PostHog can't tell them apart from real visitors. If one of them inflates your numbers, add a string that only its user agent contains to `custom_blocked_useragents`. The SDK sends nothing from a browser whose user agent contains one of these strings, ignoring case, so never add a full browser user agent: that also blocks real visitors on the same browser and platform.
 
 ```ts
 posthog.init('<ph_project_api_key>', {
-    custom_blocked_useragents: [
-        'Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    ],
+    custom_blocked_useragents: ['example-crawler'],
 })
 ```
 
