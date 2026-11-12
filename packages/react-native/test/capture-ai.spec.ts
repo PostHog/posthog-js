@@ -242,4 +242,35 @@ describe('React Native captureAi', () => {
     expect(encoding(AI_PATH)).toBe('gzip')
     expect(encoding(ANALYTICS_PATH)).toBeUndefined()
   })
+
+  it('does not resend AI events from routine analytics flushes during the AI resend wait', async () => {
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(1)
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const client = await newPostHog({ flushAt: 1 })
+    client.captureAi('$ai_generation')
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    for (const name of ['first', 'second', 'third']) {
+      client.capture(name)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    randomSpy.mockRestore()
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+    expect(sent(ANALYTICS_PATH).flat()).toEqual(['first', 'second', 'third'])
+  })
+
+  it('does not send AI events left from an earlier launch when the SDK is disabled', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog()
+    earlier.captureAi('$ai_generation')
+    await earlier.shutdown()
+    requests = []
+    respond = () => ({ status: 200, body: { results: {} } })
+
+    const disabled = await newPostHog({ disabled: true })
+    await disabled.flush()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(sent(AI_PATH)).toEqual([])
+  })
 })

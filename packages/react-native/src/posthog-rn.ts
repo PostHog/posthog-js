@@ -60,6 +60,7 @@ import { getOtherProjectSurveyProgress } from './surveys/survey-progress'
 import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
 import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
+import { OptionalAsyncStorage } from './optional/OptionalAsyncStorage'
 import {
   PostHogAutocaptureOptions,
   PostHogCustomAppProperties,
@@ -608,7 +609,12 @@ export class PostHog extends PostHogCore {
     if (theStorage) {
       this._eventsStorage = createEventsStorage(theStorage)
       this._logsStorage = createLogsStorage(theStorage)
-      this._aiStorage = createAiStorage(theStorage)
+      // AsyncStorage stores each key as one row: Android caps a row read near 2 MB and the whole
+      // database at 6 MB by default, so an AI queue there could break every other key's writes.
+      this._aiStorage =
+        !options?.customStorage && theStorage === OptionalAsyncStorage
+          ? createAiMemoryStorage()
+          : createAiStorage(theStorage)
       // `allSettled` so one pipeline's preload failure doesn't block the other. The failing
       // cache starts empty; future writes still target its configured storage backend.
       const preloads: Array<['events' | 'logs' | 'AI events', Promise<void>]> = []
@@ -639,6 +645,9 @@ export class PostHog extends PostHogCore {
       this._aiStorage = createAiMemoryStorage()
     }
     this._aiLane = this._createCaptureAiLane(options)
+    if (this.isDisabled) {
+      this._aiLane.stop()
+    }
 
     // Seed from sync `AppState.currentState` so the very first capture (which
     // can happen before any 'change' event fires) is already tagged. Maps
@@ -910,7 +919,7 @@ export class PostHog extends PostHogCore {
       await Promise.all([
         this._logs.shutdown(logsBudgetMs),
         super._shutdown(remainingMs),
-        raceWithTimeout(this._aiLane.shutdown(), remainingMs),
+        this.isDisabled ? Promise.resolve() : raceWithTimeout(this._aiLane.shutdown(), remainingMs),
       ])
     } finally {
       this._aiLane.stop()
@@ -1032,7 +1041,8 @@ export class PostHog extends PostHogCore {
     if (Date.now() < this._captureResendAt) {
       return Promise.resolve()
     }
-    return super.flushAutomatic()
+    // Analytics only: the AI lane runs its own timer and resend wait.
+    return super.flush()
   }
 
   private _scheduleCaptureResend(retryAfterMs: number | undefined): void {
@@ -1656,7 +1666,7 @@ export class PostHog extends PostHogCore {
    */
   flush(): Promise<void> {
     // Signal both lanes before waiting on either.
-    const aiFlush = this._aiLane.flush()
+    const aiFlush = this.isDisabled ? Promise.resolve() : this._aiLane.flush()
     return Promise.all([super.flush(), aiFlush]).then(() => undefined)
   }
 
