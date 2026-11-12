@@ -951,18 +951,19 @@ client.debug(false)
 
 > **get** **emails**(): `Emails`
 
-The `posthog.emails` API: sends transactional email from PostHog email templates, reads
-the status of each email it sent, and sets a recipient's topic preferences.
+The `posthog.emails` API: sends transactional email from PostHog email templates, now or at a
+later time, reads the status of each email it sent, moves, cancels and lists scheduled emails,
+and sets a recipient's topic preferences.
 
-Needs `secretKey`, a project secret API key. `send` needs the `transactional_email:write` scope
-(the "Send transactional email" preset), and `get` needs `transactional_email:read` or
-`transactional_email:write`. `setPreferences` needs the
+Needs `secretKey`, a project secret API key. `send`, `update` and `cancel` need the
+`transactional_email:write` scope (the "Send transactional email" preset), and `get` and `list`
+need `transactional_email:read` or `transactional_email:write`. `setPreferences` needs the
 `messaging_preference:write` scope, which cannot send email. Keys made with `hog_flow:write` still
-work for all three. Requests go to `appHost`, or to the PostHog Cloud app host of `host`. `send`,
-`get` and `setPreferences` resolve to `{ data, error }` and do not reject.
-`data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
-and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
-returns the error `client_closed`.
+work for all of them. Requests go to `appHost`, or to the PostHog Cloud app host of `host`. Every
+call resolves to `{ data, error }` and does not reject.
+`data.id` is the queued email's message ID, which `get`, `update` and `cancel` take. A disabled
+client sends nothing and returns the error `client_disabled`. After `shutdown()`, the client
+sends nothing and returns the error `client_closed`.
 
 ##### Example
 
@@ -980,6 +981,16 @@ if (error) {
 }
 
 const status = await client.emails.get(data.id) // later, for example from a job
+
+// Send a reminder in 3 days, then call it off when the user upgrades
+const reminder = await client.emails.send({
+  to: 'user@example.com',
+  templateId: '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b',
+  scheduledAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+})
+if (reminder.data) {
+  await client.emails.cancel(reminder.data.id) // later, when the user upgrades
+}
 
 // From a preference center: opt out of one topic, keep the rest
 await client.emails.setPreferences({ to: 'user@example.com', topics: { newsletter: false } })
@@ -2751,6 +2762,24 @@ awaited and the span is dropped.
 
 `SpanRecord` \| `null`
 
+### `CancelEmailResponse`
+
+> **CancelEmailResponse** = \{ `data`: `CancelEmailResult`; `error`: `null`; \} \| \{ `data`: `null`; `error`: `EmailError`; \}
+
+What `posthog.emails.cancel()` resolves to. Exactly one of `data` and `error` is set.
+The promise does not reject.
+
+### `CancelEmailResult`
+
+A canceled email.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-id"></a> `id` | `string` |
+| <a id="property-status"></a> `status` | `"canceled"` |
+
 ### `CaptureEvent`
 
 > **CaptureEvent** = `object`
@@ -2858,10 +2887,12 @@ Minimal cookie-reading interface compatible with Next.js `cookies()`,
 
 ### `EmailDeliveryStatus`
 
-> **EmailDeliveryStatus** = `"queued"` \| `"sent"` \| `"failed"` \| `"delivered"` \| `"bounced"` \| `"complained"`
+> **EmailDeliveryStatus** = `"scheduled"` \| `"canceled"` \| `"queued"` \| `"sent"` \| `"failed"` \| `"delivered"` \| `"bounced"` \| `"complained"`
 
 What happened to an email. Later SDK versions can see values this list does not have yet.
 
+- `scheduled`: the email waits for its `scheduledAt`, and stays `scheduled` after a move.
+- `canceled`: `emails.cancel()` stopped the email before PostHog started sending it.
 - `queued`: the email waits to go out.
 - `sent`: PostHog handed the email to the email provider.
 - `failed`: the email was not sent, and `reason` says why.
@@ -2915,10 +2946,31 @@ posthog-node needs no React types.
 ### `Emails`
 
 The `posthog.emails` API: sends transactional email from PostHog email templates or from
-content your code rendered, reads the status of each email it sent, and sets a recipient's
-topic preferences.
+content your code rendered, now or at a later time, reads the status of each email it sent,
+moves, cancels and lists scheduled emails, and sets a recipient's topic preferences.
 
 #### Methods
+
+##### cancel()
+
+> **cancel**(`id`): `Promise`\<`CancelEmailResponse`\>
+
+Stop a scheduled email before PostHog starts sending it. A canceled email reads `canceled`.
+
+Resolves to `{ data, error }` and does not reject. The error code is `already_sending` once
+PostHog has started sending the email. A second cancel answers the same while PostHog can
+still tell, and `not_found` after that. Network errors, rate limits and an unavailable service
+are retried.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `string` |
+
+###### Returns
+
+`Promise`\<`CancelEmailResponse`\>
 
 ##### get()
 
@@ -2940,6 +2992,25 @@ seconds after the send. Network errors, rate limits and an unavailable service a
 
 `Promise`\<`GetEmailResponse`\>
 
+##### list()
+
+> **list**(`options`): `Promise`\<`ListEmailsResponse`\>
+
+List the project's scheduled emails that wait to go out, in send-time order, one page per call.
+
+Resolves to `{ data, error }` and does not reject. Never retried: call it again to read the
+page again.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | `ListEmailsOptions` |
+
+###### Returns
+
+`Promise`\<`ListEmailsResponse`\>
+
 ##### send()
 
 > **send**(`options`): `Promise`\<`SendEmailResponse`\>
@@ -2948,7 +3019,8 @@ Queue one email, from a transactional email template or from content your code r
 
 Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the email,
 not that it was delivered. Network errors, rate limits, an in-flight idempotency key and
-an unavailable service are retried with the same idempotency key.
+an unavailable service are retried with the same idempotency key. With `scheduledAt`, the
+email waits until that time, and `data.status` is `scheduled`.
 
 ###### Parameters
 
@@ -2983,6 +3055,28 @@ API yet. Network errors, rate limits and an unavailable service are retried.
 
 `Promise`\<`SetEmailPreferencesResponse`\>
 
+##### update()
+
+> **update**(`options`): `Promise`\<`UpdateEmailResponse`\>
+
+Move a scheduled email to a new time. Only the time changes: to change the content, the
+recipient or the sender, cancel the email and send it again.
+
+Resolves to `{ data, error }` and does not reject. The error code is `already_sending` once
+PostHog has started sending the email, `canceled` after a cancel, and `invalid_scheduled_at`
+for a time more than 30 days after the first send call. Network errors, rate limits and an
+unavailable service are retried, because the same move twice ends the same.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | `UpdateEmailOptions` |
+
+###### Returns
+
+`Promise`\<`UpdateEmailResponse`\>
+
 ### `EmailStatus`
 
 The status of an email that `posthog.emails.send()` queued.
@@ -2992,9 +3086,9 @@ The status of an email that `posthog.emails.send()` queued.
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-createdat"></a> `createdAt` | `string` | When PostHog queued the email, as an ISO 8601 timestamp. |
-| <a id="property-id"></a> `id` | `string` | The message ID that `send()` returned. |
+| <a id="property-id-1"></a> `id` | `string` | The message ID that `send()` returned. |
 | <a id="property-reason"></a> `reason` | `string` \| `null` | Why a failed email was not sent, such as `provider_error` or `recipient_suppressed`, or the bounce type of a bounced email: `hard`, `soft` or `unknown`. Null otherwise. |
-| <a id="property-status"></a> `status` | `EmailDeliveryStatus` \| `string` & `object` | - |
+| <a id="property-status-1"></a> `status` | `EmailDeliveryStatus` \| `string` & `object` | - |
 | <a id="property-statusat"></a> `statusAt` | `string` | When the email reached its current status, as an ISO 8601 timestamp. |
 
 ### `EmailWarning`
@@ -4336,6 +4430,36 @@ recorded on the span and rethrown unchanged.
 | `link?` | `string` \| `null` |
 | `type` | *typeof* `SurveyQuestionType.Link` |
 
+### `ListEmailsOptions`
+
+Options for `posthog.emails.list()`.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-cursor"></a> `cursor?` | `string` | The `next` cursor of the page before. Leave it out for the first page. |
+| <a id="property-limit"></a> `limit?` | `number` | At most this many emails, 1 to 100. Defaults to 100. |
+| <a id="property-status-2"></a> `status` | `"scheduled"` | Which emails to list. Only `scheduled` emails can be listed. |
+
+### `ListEmailsResponse`
+
+> **ListEmailsResponse** = \{ `data`: `ListEmailsResult`; `error`: `null`; \} \| \{ `data`: `null`; `error`: `EmailError`; \}
+
+What `posthog.emails.list()` resolves to. Exactly one of `data` and `error` is set.
+The promise does not reject.
+
+### `ListEmailsResult`
+
+One page of scheduled emails, in send-time order.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-next"></a> `next` | `string` \| `null` | Pass it as `cursor` to read the next page. Null on the last page. |
+| <a id="property-results"></a> `results` | `ScheduledEmail`[] | - |
+
 ### `LogAttributes`
 
 > **LogAttributes** = `Record`\<`string`, `LogAttributeValue`\>
@@ -4937,6 +5061,19 @@ Common types shared across PostHog SDKs
 | <a id="responsevalues"></a> `responseValues` | `Record`\<`string`, `any`\> |
 | <a id="type-3"></a> `type` | *typeof* `SurveyQuestionBranchingType.ResponseBased` |
 
+### `ScheduledEmail`
+
+A scheduled email that waits to go out.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-createdat-1"></a> `createdAt` | `string` | When PostHog accepted the send, as an ISO 8601 timestamp. |
+| <a id="property-id-2"></a> `id` | `string` | The message ID that `send()` returned. |
+| <a id="property-scheduledat"></a> `scheduledAt` | `string` | When PostHog will send the email, as an ISO 8601 timestamp, after any move. |
+| <a id="property-to-1"></a> `to` | `string` | - |
+
 ### `SendCodeEmailOptions`
 
 > **SendCodeEmailOptions** = `SendEmailBase` & `CodeEmailForm` & `Without`\<`TemplateEmailForm`\>
@@ -4952,7 +5089,8 @@ What every send takes, whatever its form.
 | <a id="property-distinctid-1"></a> `distinctId?` | `string` | The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address. |
 | <a id="property-idempotencykey"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too. |
 | <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
-| <a id="property-to-1"></a> `to` | `string` | One recipient email address. |
+| <a id="property-scheduledat-1"></a> `scheduledAt?` | `string` \| `Date` | Send the email later, at most 30 days after this call: a `Date`, or an ISO 8601 string with an offset, such as `'2026-12-01T09:00:00Z'` or `'2026-12-01T10:00:00+01:00'`. A string without an offset fails before any request, so the email never goes out in a timezone you didn't pick. A time at or before now sends at once. The idempotency key covers the time, so the same key with another time sends nothing and returns `idempotency_key_reused`. Move the email with `emails.update()`, or stop it with `emails.cancel()`, until PostHog starts sending it. posthog-node releases from before this option don't take it: from 5.62.0 they refuse it before any request, and before 5.62.0 they drop it and send the email at once. |
+| <a id="property-to-2"></a> `to` | `string` | One recipient email address. |
 
 ### `SendEmailOptions`
 
@@ -4975,8 +5113,10 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-id-1"></a> `id` | `string` | The queued email's message ID. |
+| <a id="property-id-3"></a> `id` | `string` | The queued email's message ID. |
 | <a id="property-replayed"></a> `replayed` | `boolean` | True when PostHog had already accepted this idempotency key and returned the first send's result. |
+| <a id="property-scheduledat-2"></a> `scheduledAt` | `string` \| `null` | When PostHog will send a scheduled email, as an ISO 8601 timestamp. Null for an email sent now. |
+| <a id="property-status-3"></a> `status` | `"scheduled"` \| `"queued"` \| `string` & `object` | `scheduled` when the email waits for its `scheduledAt`, else `queued`. A replay returns the first send's status; read the current one with `emails.get()`. |
 | <a id="property-warnings"></a> `warnings` | `EmailWarning`[] | - |
 
 ### `SendFeatureFlagsOptions`
@@ -5019,7 +5159,7 @@ Options for `posthog.emails.setPreferences()`. Set `allMarketing`, `topics`, or 
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-allmarketing-1"></a> `allMarketing?` | `boolean` | `false` opts the recipient out of every marketing topic. `true` lifts that opt-out. Applied before `topics`. |
-| <a id="property-to-2"></a> `to` | `string` | The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients. |
+| <a id="property-to-3"></a> `to` | `string` | The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients. |
 | <a id="property-topics-1"></a> `topics?` | `Record`\<`string`, `boolean`\> | Topic key to `false` to opt the recipient out of that topic, or `true` to opt them back in. Topic keys are the ones you set under Workflows opt-outs. Opting back in to one marketing topic after an all-marketing opt-out lifts that opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out keep their current choice. |
 
 ### `SetEmailPreferencesResponse`
@@ -5300,7 +5440,7 @@ encoding — `userId: 42` reads as `42`, not `{ intValue: "42" }`.
 | <a id="property-parentspanid"></a> `parentSpanId?` | `readonly` | `string` | **`Experimental`** Absent on a root span. |
 | <a id="property-spanid-1"></a> `spanId` | `readonly` | `string` | **`Experimental`** |
 | <a id="property-starttime"></a> `startTime` | `public` | `number` | **`Experimental`** Millisecond epoch. |
-| <a id="property-status-1"></a> `status?` | `public` | `object` | **`Experimental`** |
+| <a id="property-status-4"></a> `status?` | `public` | `object` | **`Experimental`** |
 | `status.code` | `public` | `SpanStatusCode` | - |
 | `status.message?` | `public` | `string` | - |
 | <a id="property-traceid-1"></a> `traceId` | `readonly` | `string` | **`Experimental`** Assignment to any of the three identity fields is ignored with a debug warning: rewriting ids orphans children that already shipped. |
@@ -5604,6 +5744,36 @@ evaluation call, and `unresolved_dependency` from a flag the definition depends 
 | ------ | ------ |
 | <a id="distinctid-3"></a> `distinctId` | `string` |
 | <a id="properties-4"></a> `properties` | `string` \| `string`[] |
+
+### `UpdateEmailOptions`
+
+Options for `posthog.emails.update()`. Only the time of a scheduled email can change.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-id-4"></a> `id` | `string` | The message ID that `send()` returned. |
+| <a id="property-scheduledat-3"></a> `scheduledAt` | `string` \| `Date` | The new send time: a `Date`, or an ISO 8601 string with an offset. It must stay within 30 days of the first send call. A time at or before now sends the email at once. |
+
+### `UpdateEmailResponse`
+
+> **UpdateEmailResponse** = \{ `data`: `UpdateEmailResult`; `error`: `null`; \} \| \{ `data`: `null`; `error`: `EmailError`; \}
+
+What `posthog.emails.update()` resolves to. Exactly one of `data` and `error` is set.
+The promise does not reject.
+
+### `UpdateEmailResult`
+
+A scheduled email after its move.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-id-5"></a> `id` | `string` | - |
+| <a id="property-scheduledat-4"></a> `scheduledAt` | `string` | When PostHog will send the email, as an ISO 8601 timestamp. |
+| <a id="property-status-5"></a> `status` | `"scheduled"` \| `string` & `object` | `scheduled` until PostHog sends the email. |
 
 ### `Without`
 

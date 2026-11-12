@@ -8,6 +8,8 @@ export { FeatureFlagEvaluations } from './feature-flag-evaluations'
 export { EmailError } from './emails/errors'
 export type { EmailErrorName } from './emails/errors'
 export type {
+  CancelEmailResponse,
+  CancelEmailResult,
   CodeEmailForm,
   EmailDeliveryStatus,
   EmailPreferences,
@@ -16,6 +18,10 @@ export type {
   EmailStatus,
   EmailWarning,
   GetEmailResponse,
+  ListEmailsOptions,
+  ListEmailsResponse,
+  ListEmailsResult,
+  ScheduledEmail,
   SendCodeEmailOptions,
   SendEmailBase,
   SendEmailOptions,
@@ -25,6 +31,9 @@ export type {
   SetEmailPreferencesOptions,
   SetEmailPreferencesResponse,
   TemplateEmailForm,
+  UpdateEmailOptions,
+  UpdateEmailResponse,
+  UpdateEmailResult,
 } from './emails/types'
 export type {
   FlagDefinitionCacheData,

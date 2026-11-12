@@ -814,18 +814,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * The `posthog.emails` API: sends transactional email from PostHog email templates, reads
-   * the status of each email it sent, and sets a recipient's topic preferences.
+   * The `posthog.emails` API: sends transactional email from PostHog email templates, now or at a
+   * later time, reads the status of each email it sent, moves, cancels and lists scheduled emails,
+   * and sets a recipient's topic preferences.
    *
-   * Needs `secretKey`, a project secret API key. `send` needs the `transactional_email:write` scope
-   * (the "Send transactional email" preset), and `get` needs `transactional_email:read` or
-   * `transactional_email:write`. `setPreferences` needs the
+   * Needs `secretKey`, a project secret API key. `send`, `update` and `cancel` need the
+   * `transactional_email:write` scope (the "Send transactional email" preset), and `get` and `list`
+   * need `transactional_email:read` or `transactional_email:write`. `setPreferences` needs the
    * `messaging_preference:write` scope, which cannot send email. Keys made with `hog_flow:write` still
-   * work for all three. Requests go to `appHost`, or to the PostHog Cloud app host of `host`. `send`,
-   * `get` and `setPreferences` resolve to `{ data, error }` and do not reject.
-   * `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
-   * and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
-   * returns the error `client_closed`.
+   * work for all of them. Requests go to `appHost`, or to the PostHog Cloud app host of `host`. Every
+   * call resolves to `{ data, error }` and does not reject.
+   * `data.id` is the queued email's message ID, which `get`, `update` and `cancel` take. A disabled
+   * client sends nothing and returns the error `client_disabled`. After `shutdown()`, the client
+   * sends nothing and returns the error `client_closed`.
    *
    * @example
    * ```ts
@@ -842,6 +843,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * }
    *
    * const status = await client.emails.get(data.id) // later, for example from a job
+   *
+   * // Send a reminder in 3 days, then call it off when the user upgrades
+   * const reminder = await client.emails.send({
+   *   to: 'user@example.com',
+   *   templateId: '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b',
+   *   scheduledAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+   * })
+   * if (reminder.data) {
+   *   await client.emails.cancel(reminder.data.id) // later, when the user upgrades
+   * }
    *
    * // From a preference center: opt out of one topic, keep the rest
    * await client.emails.setPreferences({ to: 'user@example.com', topics: { newsletter: false } })

@@ -76,7 +76,10 @@ function emailErrorName(status: number | undefined, code: string): EmailErrorNam
     case 404:
       return 'not_found'
     case 409:
-      return code === 'template_outdated' ? 'validation_error' : 'concurrent_idempotent_requests'
+      // Moving or canceling an email that PostHog started sending, or canceled, can't succeed on a retry.
+      return ['template_outdated', 'already_sending', 'canceled'].includes(code)
+        ? 'validation_error'
+        : 'concurrent_idempotent_requests'
     case 422:
       // The template send route also answers 422 for send checks such as recipient_suppressed.
       return code === 'idempotency_key_reused' ? 'invalid_idempotent_request' : 'validation_error'

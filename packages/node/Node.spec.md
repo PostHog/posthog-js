@@ -10,7 +10,7 @@ posthog-node, the Node.js backend SDK: server-side capture, identify and local f
 - flag definitions: PostHog servers answer the poller with the flag definitions used for local evaluation
   handler: FeatureFlagsPoller in src/extensions/feature-flags/feature-flags.ts
   trust: posthog-api
-- email responses: PostHog servers answer `emails.send` with a queued message ID or an error, `emails.get` with an email's status or an error, and `emails.setPreferences` with the recipient's preferences or an error
+- email responses: PostHog servers answer `emails.send` with a queued or scheduled message ID or an error, `emails.get` with an email's status or an error, `emails.update` and `emails.cancel` with the moved or canceled email or an error, `emails.list` with a page of scheduled emails or an error, and `emails.setPreferences` with the recipient's preferences or an error
   handler: EmailSender in src/emails/emails.ts
   trust: posthog-api
   control: none — the reply only fills the result the caller awaits, and its one effect, a retry, is bounded by maxRetries and a 30 second ceiling
