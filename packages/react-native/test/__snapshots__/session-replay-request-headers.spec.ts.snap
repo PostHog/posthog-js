@@ -28,6 +28,7 @@ exports[`PostHog RN session replay request headers > snapshots the complete nati
         "maskAllSandboxedViews": true,
         "maskAllTextInputs": true,
         "sampleRate": undefined,
+        "screenshotModeBackgroundCapture": true,
         "throttleDelayMs": 250,
         "verifyScreenshotMaskAlignment": true,
       },

@@ -434,7 +434,7 @@ export class PostHog extends PostHogCore {
   /**
    * The project token the client was created with.
    *
-   * @deprecated Use `projectToken` instead. This will be removed in the next major version.
+   * @deprecated Use `projectToken` instead.
    */
   get apiKey(): string {
     return this.projectToken
@@ -3224,6 +3224,7 @@ export class PostHog extends PostHogCore {
       screenshotScale,
       screenshotCompressionQuality,
       screenshotColorMode,
+      screenshotModeBackgroundCapture = false,
       sampleRate: localSampleRate,
     } = options?.sessionReplayConfig ?? {}
 
@@ -3311,6 +3312,7 @@ export class PostHog extends PostHogCore {
       ...(Number.isFinite(screenshotScale) ? { screenshotScale } : {}),
       ...(Number.isFinite(screenshotCompressionQuality) ? { screenshotCompressionQuality } : {}),
       ...(screenshotColorMode !== undefined ? { screenshotColorMode } : {}),
+      screenshotModeBackgroundCapture,
       sampleRate,
       throttleDelayMs,
     }

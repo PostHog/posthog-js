@@ -8,5 +8,4 @@
 - **Breaking:** remove `evaluationEnvironments` from the `PostHogOptions` type — pass `evaluationContexts` instead
 - **Breaking:** remove `disableRemoteConfig`, which had no effect, from the `PostHogOptions` type
 - **Breaking:** remove `sessionReplayConfig.iOSdebouncerDelayMs` and `androidDebouncerDelayMs` — pass `throttleDelayMs` instead
-- **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture`, which `@posthog/react-native-plugin` 3.0 ignores
 - **Breaking:** remove the `autocapture.navigationRef` option and the `PostHogNavigationRef` type, and drop the `navigationRef` argument from `useNavigationTracker(options, client)`
