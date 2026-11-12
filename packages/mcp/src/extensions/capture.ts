@@ -95,6 +95,7 @@ export function captureEvent(
     // downstream in posthog-events.ts.
     error: eventInput.error,
     errorType: eventInput.errorType,
+    errorStatus: eventInput.errorStatus,
     conversationId: eventInput.conversationId,
     properties: eventInput.properties,
   }

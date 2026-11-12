@@ -31,6 +31,8 @@ def options(kwargs):
     result = {camel(k): v for k, v in kwargs.items()}
     if 'config' in result:
         result['config'] = {camel(k): v for k, v in result['config'].items()}
+    if 'composition' in result:
+        result['composition'] = {**result['composition'], 'inputs': [options(row) for row in result['composition']['inputs']]}
     return result
 
 client = OfflineEvaluations(project_id=123, secret_key='test-secret', max_retries=0)
@@ -75,6 +77,16 @@ for method, args, kwargs, response in [
     ('get_version', (S, V), {}, version_response()),
     ('list_versions', (S,), dict(limit=2, cursor='opaque+cursor'), {'count': 1, 'results': [version_response()], 'next_cursor': None}),
 ]: case('scorers', method, args, kwargs, response)
+base_case_count = len(captured)
+composition = {'expression': 'quality * 2', 'inputs': [{'alias': 'quality', 'scorer_version_id': V}]}
+composite = scorer_response(calculation='composite', composition=composition)
+case('scorers', 'create', (), dict(name='Combined', kind='numeric', config={'max': 2}, calculation='composite', composition=composition), composite)
+case('scorers', 'create_version', (S,), dict(config={'max': 2}, base_version=1, composition=composition), composite)
+case('scorers', 'list', (), dict(calculation='composite', input_definition_id=S, tags=['Quality'], offset=2), page_response(composite))
+case('scorers', 'get_version', (S, V), {}, version_response(calculation='composite', composition=composition))
+for config in [{}, {'config': {}}]:
+    case('scorers', 'validate_composition', (), dict(kind='numeric', composition=composition, **config), {'valid': True})
+composite_cases, captured = captured[base_case_count:], captured[:base_case_count]
 for method, kwargs, response in [
     ('get_tags', {}, {'id': E, 'tags': ['regression']}),
     ('set_tags', {}, {'id': E, 'tags': ['regression']}),
@@ -87,10 +99,11 @@ for index, kwargs in enumerate([{}, {'payload': {}}, {'output': None}, {'input':
     kwargs['id'] = I
     declaration = EvaluationItem(**kwargs)
     local.append({'kind': 'item', 'options': options(kwargs), 'wire': declaration.to_dict()})
-for kwargs in [{'value': False}, {'value': 0}, {'value': -1.25}, {'value': ['😀', '\ue000', 'a']}, {'status': 'error', 'error_code': 'timeout', 'error_message': None}, {'status': 'skipped'}, {'status': 'not_applicable'}, {'value': True, 'evaluated_at': '2026-10-02T14:00:00.123456+02:00'}]:
+for kwargs in [{'value': False}, {'value': 0}, {'value': -1.25}, {'value': ['😀', '\ue000', 'a']}, {'status': 'error', 'error_code': 'timeout', 'error_message': None}, {'status': 'skipped'}, {'status': 'not_applicable'}, {'value': True, 'evaluated_at': '2026-10-02T14:00:00.123456+02:00'}, {'calculate': True}, {'calculate': False, 'value': False}]:
     kwargs = dict(item=I, scorer_version_id=V, **kwargs)
     declaration = EvaluationResult(**kwargs)
     local.append({'kind': 'result', 'options': options(kwargs), 'wire': declaration.to_dict()})
+composite_local, local = local[-2:], local[:-2]
 # Keep exact JSON text: decoding these fixtures in JS before comparing would hide
 # integer changes introduced by JSON.stringify's shortest number representation.
 portable = []
@@ -111,6 +124,23 @@ transport.request = Mock(side_effect=lambda method, path, **kwargs: upload_respo
 client.resume_experiment(E).upload_results([result])
 call = transport.request.call_args
 upload = {'body': json.loads(call.kwargs['body']), 'response': upload_response(call.kwargs['body'])}
+calculated = EvaluationResult(item=item, scorer_version_id=S, calculate=True)
+def composite_response(body):
+    response = upload_response(body)
+    for row in response['results']:
+        row['status'] = 'error' if row['scorer_version_id'] == S else 'ok'
+        row['error_code'] = 'composite_formula_error' if row['scorer_version_id'] == S else None
+    return response
+transport.request = Mock(side_effect=lambda method, path, **kwargs: composite_response(kwargs['body']))
+client.resume_experiment(E).upload_results([calculated, result])
+call = transport.request.call_args
+composite_upload = {'body': json.loads(call.kwargs['body']), 'response': composite_response(call.kwargs['body'])}
 client.close()
-output = {'pythonRevision': subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip(), 'cases': captured, 'declarations': local, 'portableDeclarations': portable, 'upload': upload}
-Path(__file__).with_name('python-parity.json').write_text(json.dumps(output, ensure_ascii=False, indent=4) + '\n')
+revision = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+if '--composites-only' in sys.argv:
+    output = {'pythonRevision': revision, 'cases': composite_cases, 'declarations': composite_local, 'compositeUpload': composite_upload}
+    filename = 'python-composite-parity.json'
+else:
+    output = {'pythonRevision': revision, 'cases': captured, 'declarations': local, 'portableDeclarations': portable, 'upload': upload}
+    filename = 'python-parity.json'
+Path(__file__).with_name(filename).write_text(json.dumps(output, ensure_ascii=False, indent=4) + '\n')
