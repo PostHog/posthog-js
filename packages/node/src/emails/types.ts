@@ -55,7 +55,8 @@ interface CodeEmailFields {
    * subject off engagement events, and keeps its content out of PostHog's logs.
    *
    * Without it, a send whose `templateKey` matches a template saved in PostHog follows that
-   * template's setting, and any other send is sensitive.
+   * template's setting, and any other send is sensitive. PostHog refuses `sensitive: false` when
+   * the matching template is sensitive.
    */
   sensitive?: boolean
   /**
