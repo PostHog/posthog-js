@@ -105,6 +105,17 @@ test('stable release discovery deliberately excludes Electron while retaining co
     }
 })
 
+test('CI changeset discovery fetches base history and prepares main for detached checkouts', () => {
+    const release = readFileSync('.github/workflows/release-electron-alpha.yml', 'utf8')
+    const library = readFileSync('.github/workflows/library-ci.yml', 'utf8')
+    const build = release.split('    build:\n')[1].split('    publish:\n')[0]
+    const unit = library.split('  unit:\n')[1].split('  edge-runtime:\n')[0]
+    for (const job of [build, unit]) {
+        assert.match(job, /fetch-depth: 0/)
+        assert.match(job, /git show-ref --verify --quiet refs\/heads\/main \|\| git branch main origin\/main/)
+    }
+})
+
 test('manual alpha workflow has no default publishing, stable promotion, or build OIDC credentials', () => {
     const workflow = readFileSync('.github/workflows/release-electron-alpha.yml', 'utf8')
     assert.match(workflow, /permissions: \{\}/)
