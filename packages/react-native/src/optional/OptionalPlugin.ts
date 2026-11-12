@@ -13,7 +13,6 @@ import type { PostHogPushIdentityProvider } from '../types'
  * expose it, so callers check existence before use and fall back to the JS event queue.
  */
 export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin & {
-  setup?: (sessionId: string, sdkOptions: { [key: string]: any }, pluginConfig: { [key: string]: any }) => Promise<void>
   startRecording?: (resumeCurrent: boolean) => Promise<void>
   stopRecording?: () => Promise<void>
   addExceptionStep?: (message: string, properties?: { [key: string]: any }) => Promise<void>

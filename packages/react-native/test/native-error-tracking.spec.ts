@@ -10,7 +10,6 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
     return pluginVersion.current
   },
   OptionalReactNativePlugin: {
-    start: vi.fn(() => Promise.resolve()),
     setup: vi.fn(() => Promise.resolve()),
     startSession: vi.fn(() => Promise.resolve()),
     endSession: vi.fn(() => Promise.resolve()),
@@ -37,7 +36,6 @@ const mockPlugin = OptionalReactNativePlugin as unknown as {
 }
 
 const resetMockPlugin = (): void => {
-  mockPlugin.start.mockImplementation(() => Promise.resolve())
   // `setup` may have been deleted by the legacy-plugin test; restore it if so.
   mockPlugin.setup = mockPlugin.setup ?? vi.fn()
   mockPlugin.setup.mockImplementation(() => Promise.resolve())
@@ -75,7 +73,6 @@ describe('native error tracking', () => {
     await waitForNativePluginEvaluation(posthog)
 
     expect(mockPlugin.setup).not.toHaveBeenCalled()
-    expect(mockPlugin.start).not.toHaveBeenCalled()
 
     await posthog.shutdown()
   })
@@ -207,38 +204,6 @@ describe('native error tracking', () => {
     expect(mockPlugin.startRecording).toHaveBeenCalled()
 
     await posthog.shutdown()
-  })
-
-  it('with the legacy plugin (no setup), starts replay via start() and does not report native crash capture as started', async () => {
-    // Emulates posthog-react-native-session-replay: the legacy package has no setup().
-    delete (mockPlugin as { setup?: vi.Mock }).setup
-    // _logger only emits when debug is on (isDebug = whether debug() was called), so spy on the
-    // console and enable debug before init runs.
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
-
-    const posthog = new PostHog('test-token', {
-      persistence: 'memory',
-      flushInterval: 0,
-      enableSessionReplay: true,
-      errorTracking: { autocapture: { nativeCrashes: true } },
-    })
-    posthog.debug(true)
-
-    await posthog.ready()
-
-    await waitForExpect(100, () => {
-      expect(mockPlugin.start).toHaveBeenCalledTimes(1)
-    })
-
-    // nativeCrashes was requested but the legacy plugin can't do it: we must warn AND must
-    // not claim it started.
-    expect(warnSpy.mock.calls.flat().join(' ')).toContain('Native error tracking is not available')
-    expect(logSpy.mock.calls.flat().join(' ')).not.toContain('Native error tracking started')
-
-    await posthog.shutdown()
-    warnSpy.mockRestore()
-    logSpy.mockRestore()
   })
 
   it('routes to error-tracking-only setup() when session replay is gated off by a linked flag', async () => {

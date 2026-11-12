@@ -3,11 +3,10 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
 import { wait } from './test-utils'
 
-// Mock the native plugin bridge. No `setup` key, so the SDK takes the legacy start()
-// path (same surface as the standalone posthog-react-native-session-replay package).
+// Mock the native plugin bridge.
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePlugin: {
-    start: vi.fn(async () => {}),
+    setup: vi.fn(async () => {}),
     startSession: vi.fn(async () => {}),
     endSession: vi.fn(async () => {}),
     isEnabled: vi.fn(async () => false),
@@ -18,7 +17,7 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePluginVersion: '1.4.0',
 }))
 
-const replay = OptionalReactNativePlugin as unknown as { start: vi.Mock; isEnabled: vi.Mock }
+const replay = OptionalReactNativePlugin as unknown as { setup: vi.Mock; isEnabled: vi.Mock }
 
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
 AppState.addEventListener = vi.fn()
@@ -37,7 +36,7 @@ describe('PostHog RN session replay sampleRate logging', () => {
   const infos = (): string[] => logSpy.mock.calls.map((args) => args.join(' '))
 
   beforeEach(() => {
-    replay.start.mockClear()
+    replay.setup.mockClear()
     replay.isEnabled.mockImplementation(async () => false)
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})

@@ -5,7 +5,6 @@ import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
-    start: vi.fn(() => Promise.resolve()),
     setup: vi.fn(() => Promise.resolve()),
     startSession: vi.fn(() => Promise.resolve()),
     endSession: vi.fn(() => Promise.resolve()),
@@ -107,7 +106,6 @@ describe('push notifications', () => {
       })
 
       expect(mockPlugin.setup).not.toHaveBeenCalled()
-      expect(mockPlugin.start).not.toHaveBeenCalled()
 
       await posthog.shutdown()
     })
@@ -619,20 +617,6 @@ describe('push notifications', () => {
         pushIdentityProviderEnabled: false,
       })
       expect(mockPlugin.registerPushNotificationToken).toHaveBeenCalledWith('a-token', null)
-
-      await posthog.shutdown()
-    })
-
-    it('does not claim native initialization on the legacy session-replay plugin', async () => {
-      // The legacy plugin has no setup(), so push can never reach native. Latched unsupported,
-      // not initialized: a manual call must no-op rather than be reported as delivered, and
-      // replay's resume path must not trust an instance that isn't there.
-      delete (mockPlugin as any).setup
-      const posthog = await createPostHog()
-
-      await posthog.registerPushNotificationToken('a-token')
-
-      expect(mockPlugin.registerPushNotificationToken).not.toHaveBeenCalled()
 
       await posthog.shutdown()
     })

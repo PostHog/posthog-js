@@ -3,13 +3,11 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
 import { waitForExpect, wait } from './test-utils'
 
-// Mock the native plugin bridge so we can assert which native calls happen. No `setup`
-// key, so the SDK takes the legacy start() path (same surface as the standalone
-// posthog-react-native-session-replay package).
+// Mock the native plugin bridge so we can assert which native calls happen.
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
-    start: vi.fn(async () => {}),
+    setup: vi.fn(async () => {}),
     startSession: vi.fn(async () => {}),
     endSession: vi.fn(async () => {}),
     isEnabled: vi.fn(async () => false),
@@ -20,7 +18,7 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
 }))
 
 const replay = OptionalReactNativePlugin as unknown as {
-  start: vi.Mock
+  setup: vi.Mock
   startSession: vi.Mock
   endSession: vi.Mock
   isEnabled: vi.Mock
@@ -31,6 +29,10 @@ const replay = OptionalReactNativePlugin as unknown as {
 
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
 AppState.addEventListener = vi.fn()
+
+// Push is on by default and would set up the native plugin before replay starts, so it's
+// off here: setup() then runs only when replay starts recording.
+const pushOff = { capturePushNotificationSubscriptions: false, capturePushNotificationOpened: false }
 
 describe('PostHog RN session replay event triggers', () => {
   vi.useRealTimers()
@@ -44,7 +46,7 @@ describe('PostHog RN session replay event triggers', () => {
   let currentSessionRecording: any = {}
 
   beforeEach(() => {
-    replay.start.mockClear()
+    replay.setup.mockClear()
     replay.startSession.mockClear()
     replay.endSession.mockClear()
     replay.startRecording.mockClear()
@@ -52,7 +54,7 @@ describe('PostHog RN session replay event triggers', () => {
     replay.identify.mockClear()
     replay.isEnabled.mockClear()
     replay.isEnabled.mockImplementation(async () => false)
-    replay.start.mockImplementation(async () => {})
+    replay.setup.mockImplementation(async () => {})
 
     currentFlags = {}
     currentSessionRecording = {}
@@ -82,6 +84,7 @@ describe('PostHog RN session replay event triggers', () => {
 
   const newPostHog = (): PostHog =>
     new PostHog('test-token', {
+      ...pushOff,
       customStorage: mockStorage,
       enableSessionReplay: true,
       flushInterval: 0,
@@ -96,7 +99,7 @@ describe('PostHog RN session replay event triggers', () => {
     await w.reloadFeatureFlagsAsync()
     await wait(50)
     await w.shutdown()
-    replay.start.mockClear()
+    replay.setup.mockClear()
     replay.startRecording.mockClear()
     replay.stopRecording.mockClear()
   }
@@ -110,16 +113,16 @@ describe('PostHog RN session replay event triggers', () => {
     await wait(50)
 
     // Trigger configured but not fired -> no native recording.
-    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.setup).not.toHaveBeenCalled()
 
     // A non-matching event does not activate.
     posthog.capture('some_other_event')
     await wait(50)
-    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.setup).not.toHaveBeenCalled()
 
     // The matching event activates recording for the session.
     posthog.capture('$pageview')
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
   })
 
   it('activation persists for the rest of the session across flag reloads', async () => {
@@ -131,14 +134,14 @@ describe('PostHog RN session replay event triggers', () => {
     await wait(50)
 
     posthog.capture('$pageview')
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     replay.isEnabled.mockImplementation(async () => true)
 
     // Re-evaluating within the same session keeps recording active: no stop, no second init.
     await posthog.reloadFeatureFlagsAsync()
     await wait(50)
     expect(replay.stopRecording).not.toHaveBeenCalled()
-    expect(replay.start).toHaveBeenCalledTimes(1)
+    expect(replay.setup).toHaveBeenCalledTimes(1)
   })
 
   it('matches a $screen event against an event trigger', async () => {
@@ -148,10 +151,10 @@ describe('PostHog RN session replay event triggers', () => {
     posthog = newPostHog()
     await posthog.ready()
     await wait(50)
-    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.setup).not.toHaveBeenCalled()
 
     await posthog.screen('Home')
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
   })
 
   it('AND-combines with the linked flag: a fired trigger does not record while the flag is off', async () => {
@@ -166,12 +169,12 @@ describe('PostHog RN session replay event triggers', () => {
     // Trigger fires but the linked flag is off -> AND fails -> no recording.
     posthog.capture('$pageview')
     await wait(50)
-    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.setup).not.toHaveBeenCalled()
 
     // Linked flag turns on; the trigger is still activated for this session -> recording starts.
     currentFlags = { 'replay-flag': true }
     await posthog.reloadFeatureFlagsAsync()
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
   })
 
   it('re-arms on session rotation: recording stops and needs a fresh matching event', async () => {
@@ -184,7 +187,7 @@ describe('PostHog RN session replay event triggers', () => {
 
     // Activate recording for the first session.
     posthog.capture('$pageview')
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     replay.isEnabled.mockImplementation(async () => true)
 
     // Force the session to expire, then rotate it. The previous activation no longer matches the
@@ -196,7 +199,7 @@ describe('PostHog RN session replay event triggers', () => {
     // A fresh matching event in the new session re-activates recording (resume, not re-init).
     posthog.capture('$pageview')
     await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
-    expect(replay.start).toHaveBeenCalledTimes(1)
+    expect(replay.setup).toHaveBeenCalledTimes(1)
   })
 
   it('clears trigger activation on reset() so a new user does not inherit it, then re-arms', async () => {
@@ -209,7 +212,7 @@ describe('PostHog RN session replay event triggers', () => {
 
     // User A activates the trigger for their session.
     posthog.capture('$pageview')
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     const activatedSession = posthog.getPersistedProperty(
       PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession
     )
@@ -238,11 +241,11 @@ describe('PostHog RN session replay event triggers', () => {
     posthog = newPostHog()
     await posthog.ready()
     await wait(50)
-    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.setup).not.toHaveBeenCalled()
 
     // The second configured string trigger activates recording.
     await posthog.screen('Home')
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
   })
 
   it('treats a non-array eventTriggers config as no triggers (records normally)', async () => {
@@ -253,7 +256,7 @@ describe('PostHog RN session replay event triggers', () => {
     posthog = newPostHog()
     await posthog.ready()
     // No triggers configured -> replay records without waiting for a matching event.
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
   })
 
   it('does not activate when before_send drops the matching event', async () => {
@@ -261,6 +264,7 @@ describe('PostHog RN session replay event triggers', () => {
     await warmup()
 
     posthog = new PostHog('test-token', {
+      ...pushOff,
       customStorage: mockStorage,
       enableSessionReplay: true,
       flushInterval: 0,
@@ -273,12 +277,13 @@ describe('PostHog RN session replay event triggers', () => {
     // The matching event is dropped by before_send -> processBeforeEnqueue returns null -> no activation.
     posthog.capture('$pageview')
     await wait(50)
-    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.setup).not.toHaveBeenCalled()
   })
 
   it('does not arm event triggers when session replay is disabled locally', async () => {
     currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
     posthog = new PostHog('test-token', {
+      ...pushOff,
       customStorage: mockStorage,
       enableSessionReplay: false,
       flushInterval: 0,
@@ -289,7 +294,7 @@ describe('PostHog RN session replay event triggers', () => {
 
     posthog.capture('$pageview')
     await wait(50)
-    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.setup).not.toHaveBeenCalled()
     expect(replay.startRecording).not.toHaveBeenCalled()
   })
 
@@ -309,18 +314,18 @@ describe('PostHog RN session replay event triggers', () => {
     posthog = newPostHog()
     await posthog.ready()
     await wait(50)
-    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.setup).not.toHaveBeenCalled()
 
     // Server removes eventTriggers. The in-memory armed list must clear so the gate no longer
     // blocks: replay should now record without waiting for a matching event.
     currentSessionRecording = { endpoint: '/s/' }
     await posthog.reloadFeatureFlagsAsync()
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
 
     // And a previously-configured trigger name is now inert (does not re-gate or re-activate).
     posthog.capture('$pageview')
     await wait(50)
-    expect(replay.start).toHaveBeenCalledTimes(1)
+    expect(replay.setup).toHaveBeenCalledTimes(1)
   })
 
   it('is idempotent when the matching event is captured again while already recording', async () => {
@@ -332,14 +337,14 @@ describe('PostHog RN session replay event triggers', () => {
     await wait(50)
 
     posthog.capture('$pageview')
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     replay.isEnabled.mockImplementation(async () => true)
 
     // Re-firing the same trigger within the active session must not re-init or re-resume recording.
     posthog.capture('$pageview')
     posthog.capture('$pageview')
     await wait(50)
-    expect(replay.start).toHaveBeenCalledTimes(1)
+    expect(replay.setup).toHaveBeenCalledTimes(1)
     expect(replay.startRecording).not.toHaveBeenCalled()
     expect(replay.stopRecording).not.toHaveBeenCalled()
   })
@@ -353,13 +358,13 @@ describe('PostHog RN session replay event triggers', () => {
     await wait(50)
 
     // First native start fails transiently (e.g. bridge hiccup), then succeeds on the next attempt.
-    replay.start.mockImplementationOnce(async () => {
+    replay.setup.mockImplementationOnce(async () => {
       throw new Error('native start failed')
     })
 
     // The matching event activates the session, but the native start fails -> not recording yet.
     posthog.capture('$pageview')
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     // Activation is persisted even though recording did not start.
     expect(
       posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession)
@@ -367,6 +372,6 @@ describe('PostHog RN session replay event triggers', () => {
 
     // A second matching event in the same session re-kicks the native start instead of staying stuck.
     posthog.capture('$pageview')
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(2))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(2))
   })
 })

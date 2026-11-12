@@ -3,13 +3,11 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
 import { waitForExpect } from './test-utils'
 
-// Mock the native plugin bridge so we can assert which native calls happen. No `setup`
-// key, so the SDK takes the legacy start() path (same surface as the standalone
-// posthog-react-native-session-replay package).
+// Mock the native plugin bridge so we can assert which native calls happen.
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
-    start: vi.fn(async () => {}),
+    setup: vi.fn(async () => {}),
     startSession: vi.fn(async () => {}),
     endSession: vi.fn(async () => {}),
     isEnabled: vi.fn(async () => false),
@@ -20,9 +18,8 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
 }))
 
 const replay = OptionalReactNativePlugin as unknown as {
-  start: vi.Mock
+  setup: vi.Mock
   isEnabled: vi.Mock
-  setup?: vi.Mock
 }
 
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
@@ -36,9 +33,9 @@ describe('PostHog RN session replay request headers', () => {
   let mockStorage: PostHogCustomStorage
 
   beforeEach(() => {
-    replay.start.mockClear()
+    replay.setup.mockClear()
     replay.isEnabled.mockImplementation(async () => false)
-    replay.start.mockImplementation(async () => {})
+    replay.setup.mockImplementation(async () => {})
     ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
       const res = url.includes('flags') ? { featureFlags: {}, sessionRecording: { endpoint: '/s/' } } : { status: 'ok' }
       return { status: 200, json: () => Promise.resolve(res) }
@@ -57,51 +54,9 @@ describe('PostHog RN session replay request headers', () => {
     if (posthog) {
       await posthog.shutdown()
     }
-    delete replay.setup
-  })
-
-  it('snapshots the complete legacy native start envelope', async () => {
-    posthog = new PostHog('test-token', {
-      customStorage: mockStorage,
-      enableSessionReplay: true,
-      flushInterval: 0,
-      requestHeaders: { Authorization: 'Bearer test-jwt' },
-    })
-    await posthog.ready()
-
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
-
-    const [sessionId, sdkOptions, pluginConfig, cachedConfig] = replay.start.mock.calls[0]
-    expect(typeof sessionId).toBe('string')
-    expect(sessionId).not.toBe('')
-    expect(sessionId).toBe(posthog.getSessionId())
-    expect(typeof sdkOptions.sdkVersion).toBe('string')
-    expect(sdkOptions.sdkVersion).not.toBe('')
-    expect(typeof sdkOptions.distinctId).toBe('string')
-    expect(sdkOptions.distinctId).not.toBe('')
-    expect(typeof sdkOptions.anonymousId).toBe('string')
-    expect(sdkOptions.anonymousId).not.toBe('')
-    expect(sdkOptions.distinctId).toBe(sdkOptions.anonymousId)
-    expect(sdkOptions.requestHeaders).toEqual({ Authorization: 'Bearer test-jwt' })
-    expect(pluginConfig.verifyScreenshotMaskAlignment).toBe(false)
-
-    expect({
-      sessionId: '<session-id>',
-      sdkOptions: {
-        ...sdkOptions,
-        anonymousId: '<anonymous-id>',
-        distinctId: '<anonymous-id>',
-        sdkVersion: '<sdk-version>',
-      },
-      pluginConfig,
-      cachedConfig,
-    }).toMatchSnapshot()
   })
 
   it('snapshots the complete native setup envelope used by session replay', async () => {
-    // Adding a `setup` mock switches the SDK to the modern setup() dispatch path.
-    replay.setup = vi.fn(async () => {})
-
     posthog = new PostHog('test-token', {
       persistence: 'memory',
       bootstrap: { distinctId: 'replay-snapshot-id' },
@@ -125,7 +80,6 @@ describe('PostHog RN session replay request headers', () => {
     await posthog.ready()
 
     await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
-    expect(replay.start).not.toHaveBeenCalled()
 
     const [sessionId, sdkOptions, pluginConfig] = replay.setup.mock.calls[0]
     expect(typeof sessionId).toBe('string')
