@@ -20,7 +20,7 @@ You need to change code or configuration if your app does any of these:
 - reuses one event `uuid` for more than one event
 - sets `$process_person_profile`, `$cookieless_mode`, `$ignore_sent_at` or `$product_tour_id` as a property: use the matching option instead (see [Event options](#event-options))
 - sets `$is_server`, `$geoip_disable` or feature flag properties on events, in context or with `register()`, and expects the SDK's value to win
-- turns person processing off with `registerOptions()`, `register({ $process_person_profile: false })`, or context options or properties, and calls `identify`, `alias`, `groupIdentify` or `setPersonProperties` (see [Layer order](#layer-order))
+- turns person processing off with `registerOptions()`, `register({ $process_person_profile: false })`, or context options or properties, and expects it to apply to identify-style events, or builds or renames an identify-style event in `before_send` (see [Identify-style events](#identify-style-events))
 - sets `$lib` or `$lib_version` (see [SDK identity](#sdk-identity))
 - sends a `$session_id` or `$window_id` that is not a string
 - passes a personal API key (`phx_...`) as the project API key
@@ -235,7 +235,7 @@ Capture v1 sends processing options in an `options` object, next to `properties`
 - Options are sent as given. The SDK no longer converts their values. PostHog validates them and drops an event whose option value it cannot read, which reaches `'error'` with `details: 'invalid_options'`.
 - Capture reads common forms of a boolean option value, such as the strings `"true"`, `"yes"`, `"on"` or `"1"`, but a value it cannot read drops the whole event (`invalid_options`). Pass `true` or `false`.
 - An `options` value that is not an object is logged as an error and ignored. The event is still sent.
-- Legacy option properties still work, but an option overrides its legacy property. Use options.
+- Legacy option properties still work, but an option overrides its legacy property. Use options. On an [identify-style event](#identify-style-events), a `$process_person_profile` property passed to the call becomes the call's option, so it wins over context and `registerOptions()`.
 
   | Legacy option property    | Option                    |
   | ------------------------- | ------------------------- |
@@ -250,7 +250,7 @@ Capture v1 sends processing options in an `options` object, next to `properties`
 
 Each event is built in this order. Each step fills only the properties and options the steps before it left unset, except for `$lib` and `$lib_version` (see [SDK identity](#sdk-identity)):
 
-1. the call's own `properties` and `options`, then its `groups` (merged into `$groups`) and `disableGeoip` (fills `$geoip_disable`)
+1. the call's own `properties` and `options`, then its `groups` (merged into `$groups`) and `disableGeoip` (fills `$geoip_disable`). An identify-style event also gets its `process_person_profile` option here (see [Identify-style events](#identify-style-events)).
 2. context `properties` and `options`, from `withContext()`, `enterContext()` or the Express, NestJS, Hono, and `instrumentRequest` integrations
 3. `register()` properties and `registerOptions()` options
 4. values the SDK adds: `$lib` and `$lib_version` (the client's library name and version, see [SDK identity](#sdk-identity)), `$is_server` (from `isServer`), `$geoip_disable` (from `disableGeoip`), the `$feature/<key>` and `$active_feature_flags` properties (from `flags` or `sendFeatureFlags`), `$trace_id` and `$span_id` from the active OpenTelemetry span on `$exception` events, and `options.process_person_profile = false` for an event without a distinct id
@@ -266,23 +266,27 @@ The call's `groups` merges into its own `$groups` property key by key, and `grou
 These changes follow from this order:
 
 - A `$lib`, `$is_server`, `$geoip_disable` or feature flag property set on the event, in context or with `register()` now wins over the SDK's value. In 5.x the SDK overwrote some of them. For `$lib_version`, see [SDK identity](#sdk-identity).
-- `before_send` now sees `$lib`, `$lib_version`, `$is_server`, `$geoip_disable`, feature flag properties and `options`. In 5.x the SDK added these properties after the hook, and events had no `options`. Trace ids and the `$session_id` from context were already set before the hook in 5.x. For an event without a distinct id, the hook now sees `process_person_profile: false` in `options`.
+- `before_send` now sees `$lib`, `$lib_version`, `$is_server`, `$geoip_disable`, feature flag properties and `options`. In 5.x the SDK added these properties after the hook, and events had no `options`. Trace ids and the `$session_id` from context were already set before the hook in 5.x. For an event without a distinct id, the hook now sees `process_person_profile: false` in `options`, and for an identify-style event it sees the event's `process_person_profile`.
 - To change an option in `before_send`, edit `options`. The first hook always gets an `options` object. With an array of hooks, each later hook gets what the previous one returned, which may have no `options`.
-- Review your `before_send` hooks for the new event shape. A hook that returns a new message must copy `options`, or the event is sent without them. That includes the `process_person_profile: false` the SDK sets for an event without a distinct id, so PostHog would create a person for its generated id.
+- Review your `before_send` hooks for the new event shape. A hook that returns a new message must copy `options`, or the event is sent without them. That includes the `process_person_profile: false` the SDK sets for an event without a distinct id, so PostHog would create a person for its generated id, and the `process_person_profile` of an identify-style event, so a `$process_person_profile: false` property from context or `register()` would turn person processing off for it.
 - `before_send` gets its own copy of the event's plain objects and arrays. Changing a nested value no longer changes your objects or the `register()` and context values, as it could in 5.x. Class instances, such as `Date`, are not copied.
 - `$geoip_disable` and `$groups` are set before `before_send`, so to change them, edit the properties. Changing the message's `disableGeoip` or `groups` field has no effect.
 - A `before_send` hook that throws drops the event, as in 5.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing. It is printed with `console.error` even when `debug` is off; in 5.x it showed only with `debug` on.
 - With `sendFeatureFlags`, the `/flags` request now runs before `before_send` and uses the event's own distinct id, even for an event the hook then drops. Changes the hook makes to the message's `groups` or `sendFeatureFlags` no longer reach that request, as editing those objects in place could in 5.x. To avoid that request, call `evaluateFlags()` yourself and pass the snapshot as `flags`.
 - Context and `register()` properties and options now reach `identify`, `alias` and `groupIdentify` events, not only `capture`.
-- That includes person processing turned off with `registerOptions()`, context options, or a legacy `$process_person_profile: false` property in `register()` or a context. 5.x never sent `register()` or context values with `identify`, `alias` or `groupIdentify`, so these calls kept working. PostHog drops `$identify`, `$create_alias` and `$groupidentify` events with person processing off and shows an ingestion warning, so they never create or merge a person or update a group. It keeps a `$set` event from `setPersonProperties` but ignores its person update. `'error'` does not report these drops, because capture accepts the events. To keep them, pass the option to the call, which wins over context and `register()`, or set it in `before_send`:
 
-  ```ts
-  posthog.identify({
-    distinctId: 'user_123',
-    properties: { plan: 'pro' },
-    options: { process_person_profile: true },
-  })
-  ```
+### Identify-style events
+
+`$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once` events create, merge or update persons and groups.
+With person processing off, PostHog drops `$identify`, `$create_alias` and `$groupidentify` events and ignores the person update of a `$set` event, so these events default to `process_person_profile: true`, whichever method sends them:
+
+- The call's own `process_person_profile` option wins. If the call has none, its `$process_person_profile` property becomes the option and is removed from the properties.
+- Otherwise the option is `true`, so person processing turned off with `registerOptions()`, context options, or a `$process_person_profile: false` property in `register()` or a context does not reach these events. `identify`, `alias` and `groupIdentify` keep creating and updating persons and groups, as in 5.x.
+- An event with a generated personless distinct id keeps `process_person_profile: false`. The `$<groupType>_<groupKey>` id `groupIdentify` falls back to is not generated, so it gets `true`.
+- A `null` option or property counts as unset.
+- `before_send` sees the option and can change it.
+- The SDK checks the event name the call used. A `before_send` hook that builds an identify-style event, or renames an event to one, gets no default and must set `options.process_person_profile` itself.
+- `setPersonProperties`, `unsetPersonProperties` and `capture()` with one of these event names get the same default. In 5.x they took a `$process_person_profile` property from `register()` or a context.
 
 ## GeoIP
 

@@ -2421,6 +2421,10 @@ Each event fills the options it left unset (missing or `null`) in this order: th
 result and can change it. Values are sent to capture unchanged. Capture drops an event whose
 option value it cannot read, so a bad value registered here drops every event.
 
+A `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once`
+event whose call leaves `process_person_profile` unset gets `true` instead of a value registered
+here, unless its distinct id is generated.
+
 #### Example
 
 ```ts
