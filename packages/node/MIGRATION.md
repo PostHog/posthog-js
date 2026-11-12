@@ -18,7 +18,7 @@ Read the checklist first, then the sections that apply to you.
 
 **Before you upgrade**
 
-- [ ] You send events through a reverse proxy → [Prepare your proxy](#prepare-your-proxy)
+- [ ] You send events through a reverse proxy, or to a self-hosted PostHog → [Prepare your proxy](#prepare-your-proxy)
 - [ ] You pass a personal API key (`phx_...`) as the project token → [Use a project token](#use-a-project-token)
 - [ ] You use `@posthog/convex`, `@posthog/next`, or `@posthog/nuxt`, which depend on posthog-node 5.x.x → [Update wrapper packages](#update-wrapper-packages)
 - [ ] You use `@posthog/ai`, `@posthog/mcp`, or `@posthog/openfeature-node-provider`, and your app doesn't list `posthog-node` in its own dependencies → [Update wrapper packages](#update-wrapper-packages)
@@ -61,6 +61,10 @@ Read the checklist first, then the sections that apply to you.
 | `captureAi`, `captureAiImmediate`, and `@posthog/ai` on posthog-node 6.x.x                      | `/i/v1/ai/events`        |
 
 `captureImmediate` also sends to `/i/v1/analytics/events`.
+
+If you send events to a self-hosted PostHog, check that it serves both `/i/v1/analytics/events` and `/i/v1/ai/events` before you upgrade. Self-hosted PostHog serves the AI endpoint from a separate capture service, so check each one.
+
+An endpoint that isn't served drops every event sent to it. A `404` that lasts through every retry can mean the deployment has no capture v1 route.
 
 If you send events through your own reverse proxy, update it before you upgrade:
 
