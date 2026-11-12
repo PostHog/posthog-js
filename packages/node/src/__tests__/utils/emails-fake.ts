@@ -34,10 +34,13 @@ const CODE_FORM_FIELDS = new Set([
   'cc',
   'bcc',
   'capture_engagement',
+  'tracking',
+  'sensitive',
   'distinct_id',
   'to',
   'attachments',
 ])
+const TRACKING_KINDS = new Set(['opens', 'clicks', 'engagement'])
 const ATTACHMENT_FIELDS = new Set(['sha256', 'filename', 'content_type', 'content_id'])
 const MESSAGE_TOO_LARGE_WHY =
   "PostHog's email provider takes emails up to 40 MB, and Base64 encoding makes each file about a third larger."
@@ -84,10 +87,18 @@ export interface QueuedEmail {
   html?: string
   text?: string
   captureEngagement?: boolean
+  tracking?: EmailTracking
+  sensitive?: boolean
   distinctId?: string
   templateId?: string
   messageData?: Record<string, unknown>
   attachments: QueuedAttachment[]
+}
+
+export interface EmailTracking {
+  opens?: boolean
+  clicks?: boolean
+  engagement?: boolean
 }
 
 export type ServerChange = Partial<Omit<FakePostHogOptions, 'secretKey'>>
@@ -390,6 +401,16 @@ export class FakePostHog {
     if (capture_engagement !== undefined && typeof capture_engagement !== 'boolean') {
       throw invalidField('capture_engagement', 'Must be a valid boolean.')
     }
+    if (body.sensitive !== undefined && typeof body.sensitive !== 'boolean') {
+      throw invalidField('sensitive', 'Must be a valid boolean.')
+    }
+    const tracking = body.tracking === undefined ? undefined : trackingOf(body.tracking)
+    if (tracking !== undefined && capture_engagement !== undefined) {
+      throw invalidField(
+        'tracking',
+        'Send either `tracking` or `capture_engagement`. `capture_engagement` is deprecated, so set `tracking.engagement` instead.'
+      )
+    }
     const attachments = this.attachmentsOf(body.attachments, [html ?? '', text || textFromHtml(html ?? '')], subject)
     return {
       to,
@@ -402,6 +423,8 @@ export class FakePostHog {
       ...(from !== undefined && { from }),
       ...(distinct_id !== undefined && { distinctId: distinct_id }),
       captureEngagement: capture_engagement ?? true,
+      ...(tracking !== undefined && { tracking }),
+      ...(body.sensitive !== undefined && { sensitive: body.sensitive }),
       attachments,
     }
   }
@@ -479,6 +502,27 @@ function faultAnswer(route: Route, { status, code, message, page }: Exclude<Faul
 
 function refusal(status: number, type: string, code: string, attr: string | null, explained: Json): Refused {
   return new Refused({ status, body: { type, code, attr, ...explained } })
+}
+
+function trackingOf(value: unknown): EmailTracking {
+  if (typeof value === 'boolean') {
+    return { opens: value, clicks: value, engagement: value }
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw invalidField('tracking', 'Must be a valid boolean.')
+  }
+  const kinds = Object.entries(value)
+  if (kinds.some(([kind]) => !TRACKING_KINDS.has(kind))) {
+    throw invalidField('tracking', '`tracking` takes `opens`, `clicks` and `engagement`.')
+  }
+  if (kinds.some(([, on]) => typeof on !== 'boolean')) {
+    throw invalidField('tracking', 'Must be a valid boolean.')
+  }
+  const tracking: EmailTracking = Object.fromEntries(kinds)
+  if (tracking.clicks && tracking.opens === false) {
+    throw invalidField('tracking', 'Click tracking needs open tracking. Turn on `opens`, or turn off `clicks`.')
+  }
+  return tracking
 }
 
 function invalidField(attr: string, detail: string): Refused {

@@ -15,6 +15,7 @@ export type {
   EmailReactElement,
   Emails,
   EmailStatus,
+  EmailTracking,
   EmailWarning,
   GetEmailResponse,
   SendCodeEmailOptions,

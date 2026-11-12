@@ -82,6 +82,8 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   cc: true,
   bcc: true,
   attachments: true,
+  sensitive: true,
+  tracking: true,
   html: true,
   text: true,
   react: true,
@@ -623,13 +625,15 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
 }
 
 function codeFormFields(send: UncheckedSend): Record<string, unknown> {
-  const { from, replyTo, cc, bcc, captureEngagement } = send
+  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking } = send
   return {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
     ...(cc !== undefined && unlessEmpty('cc', addressList(cc))),
     ...(bcc !== undefined && unlessEmpty('bcc', addressList(bcc))),
-    capture_engagement: captureEngagement ?? true,
+    ...(captureEngagement !== undefined && { capture_engagement: captureEngagement }),
+    ...(sensitive !== undefined && { sensitive }),
+    ...(tracking !== undefined && { tracking }),
   }
 }
 
