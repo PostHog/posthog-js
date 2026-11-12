@@ -3172,10 +3172,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       (this.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as unknown[] | undefined)?.[0]
     // One flush only sends what was queued when it started, so records logged while it was in
     // flight (a SIGTERM handler logging after calling shutdown) need another pass. Stops once a
-    // pass leaves the oldest record in place (the endpoint is down) or the race below has ended.
+    // pass leaves the oldest record in place (the endpoint is down), the race below has ended, or
+    // the deadline has passed. The deadline check matters when every pass resolves without yielding
+    // to timers (a fetch that logs each request), since the race's timeout could then never fire.
     const drainLogs = async (pipeline: PostHogLogs): Promise<void> => {
       let oldest = oldestQueuedLog()
-      while (oldest !== undefined && !logsDrainStopped) {
+      while (oldest !== undefined && !logsDrainStopped && Date.now() < shutdownDeadlineMs) {
         await pipeline.flush().catch(() => {})
         const next = oldestQueuedLog()
         if (next === oldest) {

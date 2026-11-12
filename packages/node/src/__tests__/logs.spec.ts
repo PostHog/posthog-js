@@ -174,6 +174,23 @@ describe('PostHog Node.js logs', () => {
     expect(logsCalls()).toHaveLength(1)
   })
 
+  it('ends the shutdown drain at the deadline when every logs request queues another log', async () => {
+    mockedFetch.mockImplementation(async (url: any) => {
+      if (String(url).includes('/i/v1/logs')) {
+        posthog.logger.info('logged by fetch')
+        vi.setSystemTime(Date.now() + 100)
+      }
+      return { status: 200, headers: { get: () => null }, text: async () => '' } as any
+    })
+    create()
+    posthog.logger.info('first')
+
+    await posthog.shutdown(1000)
+
+    expect(logsCalls().length).toBeGreaterThan(1)
+    expect(logsCalls().length).toBeLessThanOrEqual(11)
+  })
+
   it('holds a serverless invocation open for a handler that only logs', async () => {
     const waitUntil = vi.fn()
     create({
