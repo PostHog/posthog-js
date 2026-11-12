@@ -1315,6 +1315,43 @@ describe('emails', () => {
     expect((await pending).data?.status).toBe('canceled')
   })
 
+  it('sends every move accepted before shutdown, including one queued behind another move', async () => {
+    const moved = (scheduledAt: string): Reply => ({
+      status: 200,
+      body: { id: MESSAGE_ID, status: 'scheduled', scheduled_at: scheduledAt },
+    })
+    replies = [rejected(503), moved('2026-12-02T09:00:00Z'), moved('2026-12-03T09:00:00Z')]
+
+    const first = posthog.emails.update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })
+    const second = posthog.emails.update({ id: MESSAGE_ID, scheduledAt: '2026-12-03T09:00:00Z' })
+    const shutdown = posthog.shutdown()
+    await vi.runAllTimersAsync()
+    await shutdown
+
+    expect((await first).data?.scheduledAt).toBe('2026-12-02T09:00:00Z')
+    expect((await second).data?.scheduledAt).toBe('2026-12-03T09:00:00Z')
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('moves the email to the time it had when update was called, even if the caller changes the options after', async () => {
+    replies = [
+      new TypeError('fetch failed'),
+      { status: 200, body: { id: MESSAGE_ID, status: 'scheduled', scheduled_at: '2026-12-02T09:00:00Z' } },
+    ]
+    const options = { id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' }
+
+    const pending = posthog.emails.update(options)
+    options.scheduledAt = '2026-12-09T09:00:00Z'
+    options.id = '01a18356-c56c-0001-e494-7666bc915199'
+    await vi.runAllTimersAsync()
+    await pending
+
+    expect(fetch.mock.calls.map(([url, init]) => [url, JSON.parse(init.body).scheduled_at])).toEqual([
+      [STATUS_URL, '2026-12-02T09:00:00Z'],
+      [STATUS_URL, '2026-12-02T09:00:00Z'],
+    ])
+  })
+
   describe('get', () => {
     const statusReply = (fields: Record<string, unknown> = {}): Reply => ({
       status: 200,

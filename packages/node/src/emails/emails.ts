@@ -54,6 +54,7 @@ const MAX_RETRY_DELAY_MS = 30_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
+const MOVE_FAILED = 'Moving the email failed unexpectedly.'
 const SCHEDULING_UNSUPPORTED: EmailWarning = {
   code: 'scheduling_unsupported',
   message: 'This PostHog predates scheduled sends, so it ignored scheduledAt and sent the email now.',
@@ -136,6 +137,13 @@ interface PreparedSend {
   scheduled: boolean
 }
 
+interface PreparedMove {
+  messageId: string
+  url: string
+  headers: Record<string, string>
+  body: string
+}
+
 interface Reply {
   status: number
   payload: unknown
@@ -168,19 +176,21 @@ export class EmailSender implements Emails {
   }
 
   update(options: UpdateEmailOptions): Promise<UpdateEmailResponse> {
-    const email = typeof options?.id === 'string' ? options.id.toLowerCase() : undefined
-    if (email === undefined) {
-      return this.track(this.updateUntracked(options))
+    let move: PreparedMove
+    try {
+      move = this.prepareMove(options)
+    } catch (error) {
+      return this.track(Promise.resolve({ data: null, error: asEmailError(error, MOVE_FAILED) }))
     }
-    const earlierMove = this.latestMoveByEmail.get(email) ?? Promise.resolve()
-    const move = earlierMove.then(() => this.updateUntracked(options))
-    this.latestMoveByEmail.set(email, move)
-    void move.finally(() => {
-      if (this.latestMoveByEmail.get(email) === move) {
-        this.latestMoveByEmail.delete(email)
+    const earlierMove = this.latestMoveByEmail.get(move.messageId) ?? Promise.resolve()
+    const pending = earlierMove.then(() => this.sendMove(move))
+    this.latestMoveByEmail.set(move.messageId, pending)
+    void pending.finally(() => {
+      if (this.latestMoveByEmail.get(move.messageId) === pending) {
+        this.latestMoveByEmail.delete(move.messageId)
       }
     })
-    return this.track(move)
+    return this.track(pending)
   }
 
   cancel(id: string): Promise<CancelEmailResponse> {
@@ -257,34 +267,41 @@ export class EmailSender implements Emails {
     }
   }
 
-  private async updateUntracked(options: UpdateEmailOptions): Promise<UpdateEmailResponse> {
+  private prepareMove(options: UpdateEmailOptions): PreparedMove {
+    const update: { [Field in keyof UpdateEmailOptions]?: unknown } = options ?? {}
+    const messageId = messageIdOf(update.id)
+    const body = safeJsonStringify({ scheduled_at: scheduledTime(update.scheduledAt, 'Nothing was changed.') })
+    const otherChange = Object.entries(update).find(
+      ([name, value]) => value !== undefined && name !== 'id' && name !== 'scheduledAt'
+    )?.[0]
+    if (otherChange !== undefined) {
+      throw new EmailError({
+        code: 'invalid_form',
+        message: `update changes only scheduledAt, so it doesn't take ${otherChange}. Nothing was changed.`,
+        field: otherChange,
+        fix: 'To change the content, the recipient or the sender, cancel the email and send it again.',
+      })
+    }
+    const { appHost, secretKey } = this.connect(
+      'no email was moved',
+      'Moving a scheduled email needs secretKey, a project secret API key with the transactional_email:write scope.'
+    )
+    return {
+      messageId,
+      url: appHost + STATUS_PATH.replace('{messageId}', messageId),
+      headers: this.headers(secretKey, { 'Content-Type': 'application/json' }),
+      body,
+    }
+  }
+
+  private async sendMove({ url, headers, body }: PreparedMove): Promise<UpdateEmailResponse> {
     try {
-      const update: { [Field in keyof UpdateEmailOptions]?: unknown } = options ?? {}
-      const messageId = messageIdOf(update.id)
-      const body = safeJsonStringify({ scheduled_at: scheduledTime(update.scheduledAt, 'Nothing was changed.') })
-      const otherChange = Object.entries(update).find(
-        ([name, value]) => value !== undefined && name !== 'id' && name !== 'scheduledAt'
-      )?.[0]
-      if (otherChange !== undefined) {
-        throw new EmailError({
-          code: 'invalid_form',
-          message: `update changes only scheduledAt, so it doesn't take ${otherChange}. Nothing was changed.`,
-          field: otherChange,
-          fix: 'To change the content, the recipient or the sender, cancel the email and send it again.',
-        })
-      }
-      const { appHost, secretKey } = this.connect(
-        'no email was moved',
-        'Moving a scheduled email needs secretKey, a project secret API key with the transactional_email:write scope.'
-      )
-      const url = appHost + STATUS_PATH.replace('{messageId}', messageId)
-      const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
       const result = await this.withRetries(this.config.maxRetries, async () =>
         parseUpdateReply(await this.request(url, 'PATCH', headers, body))
       )
       return { data: result, error: null }
     } catch (error) {
-      return { data: null, error: asEmailError(error, 'Moving the email failed unexpectedly.') }
+      return { data: null, error: asEmailError(error, MOVE_FAILED) }
     }
   }
 
