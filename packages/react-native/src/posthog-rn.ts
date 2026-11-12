@@ -338,7 +338,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
    *
    * @default 60000
    */
-  captureAiTimeout?: number
+  captureAiRequestTimeoutMs?: number
 
   /**
    * Maximum size, in bytes, of a serialized {@link PostHog.captureAi} event. The SDK drops a larger
@@ -1123,7 +1123,7 @@ export class PostHog extends PostHogCore {
     } else if (compression !== undefined) {
       this._logger.warn(`captureAiCompression "${String(compression)}" is not supported; using gzip.`)
     }
-    this._captureAiTimeoutMs = positive(options?.captureAiTimeout) ?? CAPTURE_AI_DEFAULT_TIMEOUT_MS
+    this._captureAiTimeoutMs = positive(options?.captureAiRequestTimeoutMs) ?? CAPTURE_AI_DEFAULT_TIMEOUT_MS
     let maxEventBytes = positive(options?.captureAiMaxEventBytes) ?? CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES
     if (maxEventBytes > CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES) {
       this._logger.warn(
@@ -1682,7 +1682,7 @@ export class PostHog extends PostHogCore {
    * never sends events here, even ones named `$ai_*`.
    *
    * AI events use `flushAt`, `maxBatchSize` and `flushInterval` like other events, and
-   * `captureAiCompression`, `captureAiMaxQueueSize` and `captureAiTimeout` instead of the analytics
+   * `captureAiCompression`, `captureAiMaxQueueSize` and `captureAiRequestTimeoutMs` instead of the analytics
    * settings. Requests carry up to about 5 MiB of events, and the SDK sends as soon as that much is
    * queued. Up to 50 MiB of AI events are kept; beyond that, the oldest are dropped.
    *
