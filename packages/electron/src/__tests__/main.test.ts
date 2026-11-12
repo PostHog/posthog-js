@@ -819,7 +819,42 @@ describe('main Electron client', () => {
         await owner.flush()
         expect(batches).toEqual([])
     })
-
+    it('acknowledges an in-flight capture only after its state rename even when shutdown times out', async () => {
+        const { promises: fs } = await import('node:fs')
+        const { dirname } = await import('node:path')
+        const owner = await start()
+        let release!: () => void
+        const write = fs.writeFile.bind(fs)
+        vi.spyOn(fs, 'writeFile').mockImplementationOnce(async (...args) => {
+            await new Promise<void>((resolve) => {
+                release = resolve
+            })
+            await write(...args)
+        })
+        const rename = fs.rename.bind(fs)
+        let committed = false
+        vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+            expect(await fs.readFile(join(dirname(String(args[1])), '.owner'), 'utf8')).toContain(String(process.pid))
+            await rename(...args)
+            committed = true
+        })
+        let acknowledged = false
+        const capture = owner.capture('pending-shutdown').then(() => {
+            acknowledged = true
+        })
+        const flushing = owner.flush()
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+        await owner.shutdown(1)
+        expect(acknowledged).toBe(false)
+        expect(committed).toBe(false)
+        release()
+        await Promise.all([capture, flushing])
+        expect(committed).toBe(true)
+        const namespace = (await fs.readdir(directory))[0]
+        const persisted = JSON.parse(await fs.readFile(join(directory, namespace, 'state.json'), 'utf8'))
+        expect(persisted.values.queue.map((item: any) => item.message.event)).toContain('pending-shutdown')
+        await vi.waitFor(async () => expect(await fs.readdir(join(directory, namespace))).toEqual(['state.json']))
+    })
     it('keeps the existing bridge authorized when a navigation never commits', async () => {
         const owner = await start()
         const page = renderer(owner, 1)
