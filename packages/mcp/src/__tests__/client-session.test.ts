@@ -180,6 +180,11 @@ describe('client conversation ids', () => {
       session: CODEX_SESSION,
     },
     {
+      name: 'Codex by the host clientInfo option',
+      input: { meta: { sessionId: CODEX_ID }, options: { clientInfo: () => ({ name: 'codex-mcp-client' }) } },
+      session: CODEX_SESSION,
+    },
+    {
       name: 'VS Code by client name',
       input: { meta: { ...VSCODE_CLIENT_META, 'vscode.conversationId': VSCODE_ID } },
       session: VSCODE_SESSION,

@@ -1,5 +1,5 @@
-import type { CompatibleRequestHandlerExtra, MCPRequestLike } from '../types'
-import { resolveClientIdentity } from './client-identity'
+import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } from '../types'
+import { readHostClientInfo, resolveClientIdentity } from './client-identity'
 import { readHeaderValue } from './headers'
 import { deterministicPrefixedId } from './ids'
 import { getRequestHeaders } from './request-headers'
@@ -98,8 +98,8 @@ export function recognizeClient(client: RequestClientSignals): ClientConversatio
 }
 
 /**
- * The client name follows "Client and server identity": the request's own
- * `_meta` first, then a replayed session token's `cn`, then a handshake bound to
+ * The client name follows "Client and server identity": the host's
+ * `clientInfo` option, then the request's own `_meta`, then a replayed session token's `cn`, then a handshake bound to
  * the request's transport session.
  */
 export function readClientSignals(
@@ -116,7 +116,7 @@ export function readClientSignals(
 export function readRequestClientSignals(
   request: MCPRequestLike,
   extra?: CompatibleRequestHandlerExtra,
-  server?: unknown
+  server?: MCPServerLike
 ): RequestClientSignals {
   const headers = getRequestHeaders(extra)
   // A session-scoped instance or a one-client connection (no HTTP request) only
@@ -125,7 +125,7 @@ export function readRequestClientSignals(
   const handshakeBound = extra?.sessionId !== undefined || headers === undefined
   return readClientSignals(
     headers,
-    resolveClientIdentity({ request, extra })?.clientName,
+    readHostClientInfo(server, request, extra)?.name ?? resolveClientIdentity({ request, extra })?.clientName,
     handshakeBound ? resolveClientIdentity({ request, extra, server })?.clientName : undefined
   )
 }
@@ -139,7 +139,7 @@ export interface RequestClient {
 export function resolveRequestClient(
   request: MCPRequestLike,
   extra?: CompatibleRequestHandlerExtra,
-  server?: unknown
+  server?: MCPServerLike
 ): RequestClient {
   const row = recognizeClient(readRequestClientSignals(request, extra, server))
   return { row, conversation: readClientConversation(row, request.params?._meta) }
