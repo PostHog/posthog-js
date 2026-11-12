@@ -423,7 +423,7 @@ describe('ElectronStorage', () => {
         expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toBe(contents)
     })
 
-    it('stops before a pending rename and retains ownership until that writer settles', async () => {
+    it('commits an already-started write before releasing ownership on stop', async () => {
         const store = await storage()
         store.set('distinct_id', 'old')
         await store.flush()
@@ -437,11 +437,17 @@ describe('ElectronStorage', () => {
         })
         store.set('distinct_id', 'new')
         await reachedWrite.promise
+        const rename = fs.rename.bind(fs)
+        const committed = vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+            expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
+            await rename(...args)
+        })
         const stopping = store.stop()
         expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
         releaseWrite.resolve()
         await stopping
-        expect((await diskState()).values.distinct_id).toBe('old')
+        expect(committed).toHaveBeenCalledOnce()
+        expect((await diskState()).values.distinct_id).toBe('new')
         expect(await fs.readdir(directory)).toEqual(['state.json'])
     })
 })
