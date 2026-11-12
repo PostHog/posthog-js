@@ -651,7 +651,7 @@ export class PostHog extends PostHogCoreBase {
     })
 
     const initAfterStorage = (): void => {
-      // 5.0 has no way to set or clear overrides, so ones saved by 4.x's overrideFeatureFlag() are dropped.
+      // Clear flag overrides persisted by 4.x's overrideFeatureFlag().
       this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, null)
       // reset session id on app restart
       const enablePersistSessionIdAcrossRestart = options?.enablePersistSessionIdAcrossRestart
