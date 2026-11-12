@@ -2962,7 +2962,7 @@ Resolves to `{ data, error }` and does not reject. The error code is `already_se
 PostHog sends the email, and `not_found` a few seconds after it went out. A second cancel
 answers the same as the first while PostHog can still tell, and `not_found` after that. Network errors, rate limits and an unavailable service
 are retried. PostHog can also answer unavailable for a few seconds after a cancel or a send,
-until the email's status catches up; when the retries run out first, the error code is
+until the email's status catches up; when the retries run out first, the error's name is
 `service_unavailable`, and calling `cancel()` again gets the final answer.
 
 ###### Parameters
