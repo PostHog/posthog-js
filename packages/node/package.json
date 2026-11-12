@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.68.2",
+  "version": "5.70.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -22,8 +22,7 @@
     "build": "rslib build",
     "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
-    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "generate-references": "pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "engines": {
     "node": "^20.20.0 || >=22.22.0"
@@ -53,22 +52,30 @@
     "@opentelemetry/sdk-trace-base": "^2.10.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog/types": "workspace:^",
+    "@react-email/render": "^2.1.1",
     "@rslib/core": "catalog:",
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
+    "@types/react": "catalog:",
     "esbuild": "^0.25.0",
     "@vitest/coverage-v8": "catalog:",
     "ajv": "^8.18.0",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "rxjs": "^7.8.0",
     "typescript": "catalog:native",
     "vitest": "catalog:"
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.2.0",
+    "@react-email/render": "^2.1.0",
     "rxjs": "^7.0.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
+      "optional": true
+    },
+    "@react-email/render": {
       "optional": true
     },
     "rxjs": {

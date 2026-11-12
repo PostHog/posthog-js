@@ -1,3 +1,5 @@
+import { createElement, type ReactElement, Suspense, use } from 'react'
+
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
@@ -7,6 +9,7 @@ const TEMPLATE_ID = '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b'
 const SEND_URL = 'https://us.posthog.com/api/projects/@current/messaging/send/email/'
 const MESSAGE_ID = '01a18356-c56c-0001-e494-7666bc915188'
 const STATUS_URL = `https://us.posthog.com/api/projects/@current/messaging/emails/${MESSAGE_ID}/`
+const PREFERENCES_URL = 'https://us.posthog.com/api/projects/@current/messaging/preferences/'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 type Reply = Error | { status: number; body?: unknown; headers?: Record<string, string> }
@@ -20,6 +23,27 @@ const rejected = (status: number, code?: string, headers: Record<string, string>
   status,
   body: code ? { type: 'invalid_request', code, detail: 'Nope.', attr: null } : undefined,
   headers,
+})
+
+const SEND_FIELDS = new Set([
+  'template_id',
+  'message_data',
+  'template_key',
+  'subject',
+  'html',
+  'text',
+  'from',
+  'reply_to',
+  'capture_engagement',
+  'distinct_id',
+  'to',
+])
+
+const fakeReply = (status: number, body: unknown) => ({
+  status,
+  text: async () => JSON.stringify(body),
+  json: async () => body,
+  headers: { get: () => null },
 })
 
 describe('emails', () => {
@@ -49,6 +73,28 @@ describe('emails', () => {
   }
 
   const sentHeaders = (): string[] => fetch.mock.calls.map(([, options]) => options.headers['Idempotency-Key'])
+
+  const deliverToInbox = (): Record<string, unknown>[] => {
+    const inbox: Record<string, unknown>[] = []
+    fetch.mockImplementation(async (url: string, options: { method: string; body?: string }) => {
+      if (url !== SEND_URL || options.method !== 'POST') {
+        return fakeReply(404, { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null })
+      }
+      const email: Record<string, unknown> = JSON.parse(options.body ?? '{}')
+      const unknownField = Object.keys(email).find((field) => !SEND_FIELDS.has(field))
+      if (unknownField !== undefined) {
+        return fakeReply(400, {
+          type: 'validation_error',
+          code: 'invalid_input',
+          detail: 'Unknown field.',
+          attr: unknownField,
+        })
+      }
+      inbox.push(email)
+      return fakeReply(202, { message_id: 'msg_1', replayed: false })
+    })
+    return inbox
+  }
 
   beforeEach(() => {
     replies = []
@@ -120,6 +166,17 @@ describe('emails', () => {
       to: 'user@example.com',
       message_data: {},
     })
+  })
+
+  it('sends the template data each send was called with', async () => {
+    const inbox = deliverToInbox()
+    const templateData = { name: 'Ada' }
+
+    const toAda = send({ templateData })
+    templateData.name = 'Bob'
+    await Promise.all([toAda, send({ to: 'bob@example.com', templateData })])
+
+    expect(inbox.map((email) => email.message_data)).toEqual([{ name: 'Ada' }, { name: 'Bob' }])
   })
 
   it.each([
@@ -198,6 +255,201 @@ describe('emails', () => {
       ...body,
       to: 'user@example.com',
       distinct_id: 'user_123',
+    })
+  })
+
+  describe('content from a React Email element', () => {
+    const WelcomeMail = ({ firstName }: { firstName: string }): ReactElement =>
+      createElement('html', null, createElement('body', null, createElement('p', null, `Welcome, ${firstName}`)))
+    const welcome = createElement(WelcomeMail, { firstName: 'Ada' })
+
+    const sendReact = (content: Record<string, unknown>): ReturnType<PostHog['emails']['send']> =>
+      posthog.emails.send({
+        to: 'user@example.com',
+        templateKey: 'welcome',
+        subject: 'Welcome',
+        ...content,
+      } as SendEmailOptions)
+
+    let inbox: Record<string, unknown>[]
+
+    beforeEach(() => {
+      inbox = deliverToInbox()
+    })
+
+    afterEach(() => {
+      vi.doUnmock('@react-email/render')
+    })
+
+    const withoutRenderer = (): void => {
+      vi.doMock('@react-email/render', () => {
+        throw new Error("Cannot find package '@react-email/render'")
+      })
+    }
+
+    it('renders the element into html and text', async () => {
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        {
+          template_key: 'welcome',
+          subject: 'Welcome',
+          html: expect.stringContaining('<p>Welcome, Ada</p>'),
+          text: 'Welcome, Ada',
+          capture_engagement: true,
+          to: 'user@example.com',
+        },
+      ])
+    })
+
+    it('renders content that waits inside nested Suspense boundaries', async () => {
+      let startLoading = (): void => {}
+      const firstName = new Promise<string>((resolve) => {
+        startLoading = () => setTimeout(() => resolve('Ada'), 10)
+      })
+      const Greeting = (): ReactElement => {
+        startLoading()
+        return createElement('p', null, `Welcome, ${use(firstName)}`)
+      }
+      const fallback = createElement('p', null, 'Loading')
+      const Mail = (): ReactElement =>
+        createElement(
+          'html',
+          null,
+          createElement(
+            'body',
+            null,
+            createElement(Suspense, { fallback }, createElement(Suspense, { fallback }, createElement(Greeting)))
+          )
+        )
+
+      let settled = false
+      const pending = sendReact({ react: createElement(Mail) }).finally(() => {
+        settled = true
+      })
+      while (!settled) {
+        await vi.advanceTimersByTimeAsync(5)
+      }
+      await pending
+
+      expect(inbox).toEqual([expect.objectContaining({ text: 'Welcome, Ada' })])
+      expect(inbox[0].html).toEqual(expect.stringContaining('<p>Welcome, Ada</p>'))
+      expect(inbox[0].html).not.toMatch(/Loading|<script|<template/)
+    })
+
+    it('keeps the text the caller wrote', async () => {
+      await sendReact({ react: welcome, text: 'Hi Ada' })
+
+      expect(inbox).toEqual([
+        expect.objectContaining({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Hi Ada' }),
+      ])
+    })
+
+    it('sends the other fields as they were when send was called, while the element renders', async () => {
+      const replyTo = ['support@example.com']
+
+      const pending = sendReact({ react: welcome, replyTo })
+      replyTo.push('someone-else@example.com')
+      await pending
+
+      expect(inbox).toEqual([expect.objectContaining({ reply_to: ['support@example.com'] })])
+    })
+
+    it.each([
+      ['html beside react', { react: welcome, html: '<p>Hi</p>' }, 'html'],
+      ['react that is not an element', { react: '<p>Hi</p>' }, 'react'],
+      ['react shaped like an element', { react: { type: 'p', props: { children: 'Hi' } } }, 'react'],
+      [
+        'react on the template form',
+        { templateKey: undefined, subject: undefined, templateId: TEMPLATE_ID, react: welcome },
+        'react',
+      ],
+    ])('refuses %s before rendering or sending', async (_name, content, field) => {
+      const { data, error } = await sendReact(content)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
+      expect(inbox).toEqual([])
+    })
+
+    it('explains how to send html or react, not both', async () => {
+      const { error } = await sendReact({ react: welcome, html: '<p>Hi</p>' })
+
+      expect({ message: error?.message, fix: error?.fix }).toEqual({
+        message: 'A send with react renders its own html, so it takes no html. No email was sent.',
+        fix: 'Remove html to send the rendered react element, or remove react to send your html.',
+      })
+    })
+
+    it('asks to install @react-email/render when it does not load, and sends nothing', async () => {
+      withoutRenderer()
+
+      const { data, error } = await sendReact({ react: welcome })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'missing_react_renderer',
+        message:
+          "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
+        fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
+        cause: expect.any(Error),
+      })
+      expect(inbox).toEqual([])
+    })
+
+    it('sends html without loading @react-email/render', async () => {
+      withoutRenderer()
+      const { error } = await sendReact({ html: '<p>Hi</p>' })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([expect.objectContaining({ html: '<p>Hi</p>' })])
+    })
+
+    it('reports a disabled client before it loads @react-email/render', async () => {
+      withoutRenderer()
+      makeClient({ disabled: true })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error?.code).toBe('client_disabled')
+    })
+
+    it('reports an element that fails to render, and sends nothing', async () => {
+      const Broken = (): ReactElement => {
+        throw new Error('firstName is missing')
+      }
+
+      const { data, error } = await sendReact({ react: createElement(Broken) })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        message: 'Rendering the react element failed, so no email was sent.',
+        cause: expect.objectContaining({ message: 'firstName is missing' }),
+      })
+      expect(inbox).toEqual([])
+    })
+
+    it('gives up on an element that never finishes rendering, after the request timeout', async () => {
+      makeClient({ emailRequestTimeoutMs: 1000 })
+      const Waits = (): ReactElement => use(new Promise<ReactElement>(() => {}))
+
+      let settled = false
+      const pending = sendReact({ react: createElement(Waits) }).finally(() => {
+        settled = true
+      })
+      while (!settled) {
+        await vi.advanceTimersByTimeAsync(100)
+      }
+      const { data, error } = await pending
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        cause: expect.objectContaining({ message: 'Rendering the react element took longer than 1000ms.' }),
+      })
+      expect(inbox).toEqual([])
     })
   })
 
@@ -662,6 +914,120 @@ describe('emails', () => {
 
       expect(data?.status).toBe('bounced')
       expect(fetch).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('setPreferences', () => {
+    const applied = (fields: Record<string, unknown> = {}): Reply => ({
+      status: 200,
+      body: { identifier: 'user@example.com', all_marketing: null, topics: { newsletter: false }, ...fields },
+    })
+
+    const setPreferences = (
+      options: Record<string, unknown> = { to: 'user@example.com', topics: { newsletter: false } }
+    ): ReturnType<PostHog['emails']['setPreferences']> =>
+      posthog.emails.setPreferences(options as unknown as Parameters<PostHog['emails']['setPreferences']>[0])
+
+    it('posts every change in one request to the app host', async () => {
+      replies = [applied({ all_marketing: true, topics: { newsletter: true, 'product-updates': false } })]
+
+      const { data, error } = await setPreferences({
+        to: 'user@example.com',
+        allMarketing: false,
+        topics: { newsletter: true },
+      })
+
+      expect(error).toBeNull()
+      expect(data).toEqual({
+        to: 'user@example.com',
+        allMarketing: true,
+        topics: { newsletter: true, 'product-updates': false },
+      })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      const [url, options] = fetch.mock.calls[0]
+      expect(url).toBe(PREFERENCES_URL)
+      expect(options.method).toBe('POST')
+      expect(options.headers).toEqual({
+        Authorization: `Bearer ${SECRET_KEY}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'posthog-node/1.2.3',
+      })
+      expect(JSON.parse(options.body)).toEqual({
+        identifier: 'user@example.com',
+        all_marketing: false,
+        topics: { newsletter: true },
+      })
+    })
+
+    it('leaves out the changes the call does not make', async () => {
+      replies = [applied()]
+
+      await setPreferences({ to: 'user@example.com', allMarketing: false })
+
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ identifier: 'user@example.com', all_marketing: false })
+    })
+
+    it('reports an unknown topic as unknown_topic without a retry', async () => {
+      replies = [
+        {
+          status: 404,
+          body: { type: 'invalid_request', code: 'unknown_topic', detail: 'No topic newsletter.', attr: null },
+        },
+      ]
+
+      const { data, error } = await setPreferences()
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'unknown_topic', name: 'not_found', message: 'No topic newsletter.' })
+      expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['a topic value that is not a boolean', { topics: { newsletter: 'false' } }],
+      ['no topics', { topics: null }],
+      ['an all_marketing value that is not a boolean', { all_marketing: 'false' }],
+    ])('reports a reply with %s as api_error', async (_label, fields) => {
+      replies = [applied(fields)]
+
+      const { data, error } = await setPreferences()
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'api_error', statusCode: 200 })
+    })
+
+    it('retries an unavailable service, because the same change twice ends the same', async () => {
+      replies = [rejected(503), applied()]
+
+      const pending = setPreferences()
+      await vi.runAllTimersAsync()
+      const { data } = await pending
+
+      expect(data?.topics).toEqual({ newsletter: false })
+      expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('needs a secret key', async () => {
+      makeClient({ secretKey: undefined })
+
+      const { error } = await setPreferences()
+
+      expect(error).toMatchObject({ code: 'missing_secret_key', name: 'missing_api_key' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['an empty recipient', { to: ' ', allMarketing: false }, 'invalid_recipient'],
+      ['no change', { to: 'user@example.com', topics: {} }, 'invalid_preferences'],
+      ['a non-boolean all marketing', { to: 'user@example.com', allMarketing: 'no' }, 'invalid_preferences'],
+      ['a topic list', { to: 'user@example.com', topics: ['newsletter'] }, 'invalid_preferences'],
+      ['a non-boolean topic', { to: 'user@example.com', topics: { newsletter: 'off' } }, 'invalid_preferences'],
+    ])('rejects %s before sending', async (_name, options, code) => {
+      const { data, error } = await setPreferences(options)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code, name: 'validation_error' })
+      expect(fetch).not.toHaveBeenCalled()
     })
   })
 })

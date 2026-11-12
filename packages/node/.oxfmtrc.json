@@ -8,6 +8,7 @@
   "sortPackageJson": false,
   "ignorePatterns": [
     "references/*.json",
+    "references/*.md",
     "src/__tests__/fixtures/feature_flag_rules_v2/*.json",
     "src/__tests__/fixtures/released-flags-*.json"
   ]

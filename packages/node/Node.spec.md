@@ -14,7 +14,7 @@ posthog-node, the Node.js backend SDK: server-side capture, identify and local f
   handler: readFlagRecords in src/flags-response.ts
   trust: posthog-api
   control: none — a record with a known field of the wrong JSON type reads as a disabled flag and leaves the other flags readable
-- email responses: PostHog servers answer `emails.send` with a queued message ID or an error, and `emails.get` with an email's status or an error
+- email responses: PostHog servers answer `emails.send` with a queued message ID or an error, `emails.get` with an email's status or an error, and `emails.setPreferences` with the recipient's preferences or an error
   handler: EmailSender in src/emails/emails.ts
   trust: posthog-api
   control: none — the reply only fills the result the caller awaits, and its one effect, a retry, is bounded by maxRetries and a 30 second ceiling

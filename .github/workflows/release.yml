@@ -343,9 +343,16 @@ jobs:
 
             - name: Update versions and changelogs
               run: |
-                  pnpm bump && pnpm generate-references:versioned
+                  pnpm bump
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
+
+            - name: Generate Markdown SDK references
+              env:
+                  SDK_SPECS: ${{ runner.temp }}/sdk-specs
+              run: |
+                  scripts/fetch-sdk-specs.sh "$SDK_SPECS"
+                  pnpm generate-references
 
             - name: Update lockfile
               run: pnpm install

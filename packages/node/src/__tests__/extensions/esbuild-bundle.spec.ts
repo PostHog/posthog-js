@@ -14,6 +14,8 @@ const withoutOpenTelemetry: Plugin = {
   },
 }
 
+const withoutReactEmailRender = { '@react-email/render': './not-installed/@react-email/render' }
+
 async function libraryBundledByConvex(platform: Platform): Promise<string> {
   const result = await build({
     stdin: {
@@ -33,21 +35,43 @@ async function libraryBundledByConvex(platform: Platform): Promise<string> {
   return library
 }
 
-describe('esbuild bundle of the built package', () => {
-  it.each(['index.node.mjs', 'index.node.js'])('bundles %s when @opentelemetry/api is not installed', async (file) => {
-    const entryPoint = fileURLToPath(new URL(`../../../dist/entrypoints/${file}`, import.meta.url))
-    expect(existsSync(entryPoint)).toBe(true)
+const builtEntrypoint = (file: string): string => {
+  const entryPoint = fileURLToPath(new URL(`../../../dist/entrypoints/${file}`, import.meta.url))
+  expect(existsSync(entryPoint)).toBe(true)
+  return entryPoint
+}
 
+describe('esbuild bundle of the built package', () => {
+  it.each(['index.node.mjs', 'index.node.js'])('bundles %s when no optional peer is installed', async (file) => {
     const result = await build({
-      entryPoints: [entryPoint],
+      entryPoints: [builtEntrypoint(file)],
       bundle: true,
       platform: 'node',
       write: false,
       logLevel: 'silent',
       plugins: [withoutOpenTelemetry],
+      alias: withoutReactEmailRender,
     })
 
-    expect(result.errors).toEqual([])
+    expect({ errors: result.errors, warnings: result.warnings }).toEqual({ errors: [], warnings: [] })
+  })
+
+  it.each([
+    ['Convex', ['convex', 'module']],
+    ['Cloudflare Workers', ['workerd', 'worker', 'browser']],
+  ])('bundles index.edge.mjs for %s when @react-email/render is not installed', async (_runtime, conditions) => {
+    const result = await build({
+      entryPoints: [builtEntrypoint('index.edge.mjs')],
+      bundle: true,
+      platform: 'browser',
+      format: 'esm',
+      conditions,
+      write: false,
+      logLevel: 'silent',
+      alias: withoutReactEmailRender,
+    })
+
+    expect({ errors: result.errors, warnings: result.warnings }).toEqual({ errors: [], warnings: [] })
   })
 
   it.each([
