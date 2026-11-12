@@ -314,9 +314,9 @@ export interface Emails {
    * Move a scheduled email to a new time. Only the time changes: to change the content, the
    * recipient or the sender, cancel the email and send it again.
    *
-   * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` once
-   * PostHog has started sending the email, `canceled` after a cancel, and `invalid_scheduled_at`
-   * for a time more than 30 days after the first send call. A time at or before now sends the
+   * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` while
+   * PostHog sends the email, `not_found` a few seconds after it went out, `canceled` after a
+   * cancel, and `invalid_scheduled_at` for a time more than 30 days after the first send call. A time at or before now sends the
    * email at once. Network errors, rate limits and an unavailable service are retried, because
    * the same move twice ends the same; after a move to now, the retry can answer `already_sending`,
    * which means the email is going out.
@@ -326,15 +326,16 @@ export interface Emails {
   /**
    * Stop a scheduled email before PostHog starts sending it. A canceled email reads `canceled`.
    *
-   * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` once
-   * PostHog has started sending the email. A second cancel answers the same while PostHog can
-   * still tell, and `not_found` after that. Network errors, rate limits and an unavailable service
+   * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` while
+   * PostHog sends the email, and `not_found` a few seconds after it went out. A second cancel
+   * answers the same as the first while PostHog can still tell, and `not_found` after that. Network errors, rate limits and an unavailable service
    * are retried.
    */
   cancel(id: string): Promise<CancelEmailResponse>
 
   /**
    * List the project's scheduled emails that wait to go out, in send-time order, one page per call.
+   * A move or a cancel can take a few seconds to show here; `emails.get()` shows it at once.
    *
    * Resolves to `{ data, error }` and does not reject. Never retried: call it again to read the
    * page again.
