@@ -115,7 +115,6 @@ describe('Electron React bindings with a real renderer facade', () => {
         })
         expect(h.flags().map((request) => request.command)).toEqual([
             { type: 'flag', key: 'experiment', flagRevision: 1, value: 'control' },
-            { type: 'flag', key: 'experiment', flagRevision: 1, value: 'control' },
         ])
         expect(h.flags().every((request) => request.generation === 0)).toBe(true)
     })
@@ -165,17 +164,17 @@ describe('Electron React bindings with a real renderer facade', () => {
         expect(values('secondary')).toEqual(values())
         await settle(h.client)
         await settle(second)
-        expect(
-            h
-                .flags()
-                .slice(-4)
-                .every(
-                    (request) =>
-                        request.generation === 3 &&
-                        request.command.type === 'flag' &&
-                        request.command.flagRevision === 8
-                )
-        ).toBe(true)
+        expect(h.flags()).toHaveLength(4)
+        expect(h.flags().slice(2)).toEqual([
+            expect.objectContaining({
+                generation: 3,
+                command: { type: 'flag', key: 'experiment', flagRevision: 8, value: false },
+            }),
+            expect.objectContaining({
+                generation: 3,
+                command: { type: 'flag', key: 'experiment', flagRevision: 8, value: false },
+            }),
+        ])
         // Consent is enforced by main, not by a separate React tracker or transport.
         act(() => h.broadcast({ optedOut: false }))
         await settle(h.client)
@@ -243,9 +242,10 @@ describe('Electron React bindings with a real renderer facade', () => {
         expect(values().payload).toBe(false)
         await settle(h.client)
         const count = h.flags().length
+        expect(count).toBe(2)
         act(() => h.broadcast({ generation: 2, flagRevision: 3 }))
         await settle(h.client)
-        expect(h.flags()).toHaveLength(count + 2)
+        expect(h.flags()).toHaveLength(count + 1)
         expect(h.flags().at(-1)).toMatchObject({
             generation: 2,
             command: { type: 'flag', flagRevision: 3, value: '' },
