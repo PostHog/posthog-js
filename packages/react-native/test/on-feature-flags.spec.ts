@@ -18,7 +18,8 @@ describe('PostHog RN onFeatureFlags', () => {
       if (url.includes('/flags')) {
         return {
           status: flagsStatus,
-          json: () => Promise.resolve({ featureFlags: { 'beta-ui': true } }),
+          json: () =>
+            Promise.resolve({ featureFlags: { 'beta-ui': true, checkout: 'test', 'old-ui': false, empty: '' } }),
           text: () => Promise.resolve(''),
         }
       }
@@ -46,7 +47,14 @@ describe('PostHog RN onFeatureFlags', () => {
       fetchRetryCount: 0,
     })
 
-  it('reports a successful load with errorsLoading false', async () => {
+  // Disabled flags and empty variants are left out.
+  const loaded = (errorsLoading: boolean) => ({
+    flags: ['beta-ui', 'checkout'],
+    variants: { 'beta-ui': true, checkout: 'test' },
+    errorsLoading,
+  })
+
+  it('reports the enabled flags of a successful load with errorsLoading false', async () => {
     posthog = newPostHog()
     await posthog.ready()
     const listener = vi.fn()
@@ -54,7 +62,7 @@ describe('PostHog RN onFeatureFlags', () => {
 
     await posthog.reloadFeatureFlagsAsync()
 
-    expect(listener).toHaveBeenLastCalledWith({ 'beta-ui': true }, { errorsLoading: false })
+    expect(listener).toHaveBeenLastCalledWith(loaded(false))
   })
 
   it('keeps notifying other listeners and finishes the load when a listener throws', async () => {
@@ -68,7 +76,7 @@ describe('PostHog RN onFeatureFlags', () => {
 
     await expect(posthog.reloadFeatureFlagsAsync()).resolves.toBeDefined()
 
-    expect(listener).toHaveBeenLastCalledWith({ 'beta-ui': true }, { errorsLoading: false })
+    expect(listener).toHaveBeenLastCalledWith(loaded(false))
   })
 
   it('reports a failed load with the last known flags and errorsLoading true', async () => {
@@ -81,7 +89,7 @@ describe('PostHog RN onFeatureFlags', () => {
     flagsStatus = 500
     await posthog.reloadFeatureFlagsAsync()
 
-    expect(listener).toHaveBeenLastCalledWith({ 'beta-ui': true }, { errorsLoading: true })
+    expect(listener).toHaveBeenLastCalledWith(loaded(true))
   })
 
   it('reports a failed first load with no flags and errorsLoading true', async () => {
@@ -93,7 +101,7 @@ describe('PostHog RN onFeatureFlags', () => {
 
     await posthog.reloadFeatureFlagsAsync()
 
-    expect(listener).toHaveBeenLastCalledWith({}, { errorsLoading: true })
+    expect(listener).toHaveBeenLastCalledWith({ flags: [], variants: {}, errorsLoading: true })
   })
 
   it('clears errorsLoading once a later load succeeds', async () => {
@@ -107,7 +115,7 @@ describe('PostHog RN onFeatureFlags', () => {
     flagsStatus = 200
     await posthog.reloadFeatureFlagsAsync()
 
-    expect(listener).toHaveBeenLastCalledWith({ 'beta-ui': true }, { errorsLoading: false })
+    expect(listener).toHaveBeenLastCalledWith(loaded(false))
   })
 
   it('stops calling back after unsubscribing', async () => {
@@ -118,6 +126,70 @@ describe('PostHog RN onFeatureFlags', () => {
 
     unsubscribe()
     await posthog.reloadFeatureFlagsAsync()
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('calls a listener added after a load once with the current values, after registering returns', async () => {
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    const listener = vi.fn()
+
+    posthog.onFeatureFlags(listener)
+    expect(listener).not.toHaveBeenCalled()
+    await Promise.resolve()
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener).toHaveBeenCalledWith(loaded(false))
+  })
+
+  it('does not call a listener added before any load until flags load', async () => {
+    posthog = newPostHog()
+    await posthog.ready()
+    const listener = vi.fn()
+
+    posthog.onFeatureFlags(listener)
+    await Promise.resolve()
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('skips the catch-up call when a load already reached the listener', async () => {
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    const listener = vi.fn()
+
+    posthog.onFeatureFlags(listener)
+    posthog.updateFlags({ 'beta-ui': true })
+    await Promise.resolve()
+
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips the catch-up call when unsubscribed before it runs', async () => {
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    const listener = vi.fn()
+
+    posthog.onFeatureFlags(listener)()
+    await Promise.resolve()
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('does not catch up a listener added after reset() until the next load', async () => {
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    flagsStatus = 500
+    posthog.reset()
+    const listener = vi.fn()
+
+    posthog.onFeatureFlags(listener)
+    await Promise.resolve()
 
     expect(listener).not.toHaveBeenCalled()
   })

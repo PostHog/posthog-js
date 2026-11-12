@@ -1275,15 +1275,6 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     return (await this.flagsAsync({ sendAnonDistinctId: sendAnonDistinctId }))?.featureFlags
   }
 
-  onFeatureFlags(cb: (flags: PostHogFlagsResponse['featureFlags']) => void): () => void {
-    return this.on('featureflags', async () => {
-      const flags = this.getFeatureFlagValues()
-      if (flags) {
-        cb(flags)
-      }
-    })
-  }
-
   /**
    * Replaces (or merges into) the stored feature flags and payloads with locally supplied
    * values, exactly as if they had been returned by the flags endpoint: the values are
@@ -1780,6 +1771,15 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
 /** The PostHog client core, including the deprecated feature flag getters. */
 export abstract class PostHogCore extends PostHogCoreBase {
+  onFeatureFlags(cb: (flags: PostHogFlagsResponse['featureFlags']) => void): () => void {
+    return this.on('featureflags', async () => {
+      const flags = this.getFeatureFlagValues()
+      if (flags) {
+        cb(flags)
+      }
+    })
+  }
+
   /**
    * @deprecated Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
    */

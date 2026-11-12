@@ -220,7 +220,7 @@ describe('PostHogSurveyProvider — autoPresentSurveys gating', () => {
     // Its linked flag flips off during the deferral window.
     await act(async () => {
       flags = {}
-      flagCb?.({})
+      flagCb?.({ flags: [], variants: {}, errorsLoading: false })
     })
 
     // Un-defer: the survey no longer matches, so nothing is presented.
@@ -334,8 +334,9 @@ describe('PostHogSurveyProvider — popup delay', () => {
     })
   }
   const setFlags = (flags: Record<string, boolean>) => {
+    mockClient.getFeatureFlagDetails.mockReturnValue({ featureFlags: flags })
     const callback = mockClient.onFeatureFlags.mock.calls[0][0]
-    act(() => callback(flags))
+    act(() => callback({ flags: [], variants: {}, errorsLoading: false }))
   }
 
   beforeEach(() => {

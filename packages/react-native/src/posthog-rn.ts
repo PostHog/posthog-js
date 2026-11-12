@@ -45,7 +45,7 @@ import {
   PostHogCustomAppProperties,
   PostHogCustomStorage,
   PostHogFeatureFlagOptions,
-  PostHogFeatureFlagsLoadContext,
+  PostHogFeatureFlagsLoaded,
   PostHogIsFeatureEnabledOptions,
   PostHogPushIdentityProvider,
   PostHogRageClickConfig,
@@ -431,6 +431,7 @@ export class PostHog extends PostHogCoreBase {
   private _surveysReady: boolean = false
   private _setDefaultPersonProperties: boolean
   private _overrideDisplayLanguage: string | null
+  private _featureFlagsLoaded = false
   private _requestHeaders: { [header_name: string]: string } = {}
 
   /**
@@ -484,6 +485,9 @@ export class PostHog extends PostHogCoreBase {
     }
 
     super(normalizedProjectToken, options)
+    this.on('featureflags', () => {
+      this._featureFlagsLoaded = true
+    })
     this._isInitialized = false
     // Replay has no macOS backend, so opt-in has nothing to restart there.
     this._sessionReplayWanted = options?.enableSessionReplay === true && !isMacOS()
@@ -715,7 +719,7 @@ export class PostHog extends PostHogCoreBase {
       // Re-evaluate session replay on every flags load/reload so the linked flag
       // gates recording without an app restart. A pending manual start can also retry here,
       // even when replay was disabled at setup.
-      this.onFeatureFlags(() => {
+      this.on('featureflags', () => {
         if (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending) {
           void this._evaluateAndStartSessionReplay()
         }
@@ -1220,6 +1224,8 @@ export class PostHog extends PostHogCoreBase {
    * @public
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
+    // The previous user's flags are no longer current, so late listeners wait for the next load.
+    this._featureFlagsLoaded = false
     // When propertiesToKeep is not explicitly provided, automatically preserve app lifecycle
     // properties and device_id to prevent duplicate "Application Installed" events and
     // to maintain stable feature flag bucketing across identity changes.
@@ -1732,38 +1738,66 @@ export class PostHog extends PostHogCoreBase {
   /**
    * Calls `callback` whenever feature flags load, including when a load fails.
    *
-   * The callback receives the current flag values, keyed by flag key, and whether the latest
-   * load failed. After a failed load the values are the last known ones, which can be empty.
+   * The callback receives the enabled flags, their values, and whether the latest load failed. After a
+   * failed load the values are the last known ones, which can be empty. If flags have already loaded
+   * when you register, it's also called with the current values shortly afterwards.
    *
    * {@label Feature flags}
    *
    * @example
    * ```js
-   * const unsubscribe = posthog.onFeatureFlags((flags, { errorsLoading }) => {
+   * const unsubscribe = posthog.onFeatureFlags(({ flags, variants, errorsLoading }) => {
    *   if (errorsLoading) {
-   *     // flags hold the last known values
+   *     // flags and variants hold the last known values
+   *   }
+   *   if (variants['new-checkout'] === 'test') {
+   *     // show the test variant
    *   }
    * })
    * ```
    *
    * @public
    *
-   * @param callback Called with the flag values and the load context
+   * @param callback Called with the enabled flags, their values, and whether the latest load failed
    * @returns A function that stops further calls
    */
-  onFeatureFlags(
-    callback: (flags: Record<string, boolean | string>, context: PostHogFeatureFlagsLoadContext) => void
-  ): () => void {
-    return this.on('featureflags', () => {
+  onFeatureFlags(callback: (loaded: PostHogFeatureFlagsLoaded) => void): () => void {
+    let active = true
+    let delivered = false
+    const deliver = (): void => {
+      if (!active) {
+        return
+      }
+      delivered = true
       // A throwing app callback must not stop the other listeners or the flag load itself.
       try {
-        callback(this.getFeatureFlagDetails()?.featureFlags ?? {}, {
-          errorsLoading: this.didLatestFeatureFlagsLoadFail(),
-        })
+        callback(this._currentFeatureFlagsLoaded())
       } catch (error) {
         this._logger.error('onFeatureFlags callback threw:', error)
       }
-    })
+    }
+    const unsubscribe = this.on('featureflags', deliver)
+    if (this._featureFlagsLoaded) {
+      void Promise.resolve().then(() => {
+        if (!delivered) {
+          deliver()
+        }
+      })
+    }
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }
+
+  private _currentFeatureFlagsLoaded(): PostHogFeatureFlagsLoaded {
+    const variants: Record<string, string | boolean> = {}
+    for (const [key, value] of Object.entries(this.getFeatureFlagDetails()?.featureFlags ?? {})) {
+      if (value === true || (typeof value === 'string' && value !== '')) {
+        variants[key] = value
+      }
+    }
+    return { flags: Object.keys(variants), variants, errorsLoading: this.didLatestFeatureFlagsLoadFail() }
   }
 
   /**

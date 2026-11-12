@@ -18,9 +18,16 @@ export type PostHogIsFeatureEnabledOptions = PostHogFeatureFlagOptions & {
   defaultValue?: boolean
 }
 
-/** Passed to `onFeatureFlags` listeners with each feature flag load. */
-export type PostHogFeatureFlagsLoadContext = {
-  /** `true` if the latest feature flag load failed. A quota-limited response is not a failure. */
+/** The feature flags passed to an `onFeatureFlags` callback. Disabled flags are left out. */
+export type PostHogFeatureFlagsLoaded = {
+  /** The keys of the enabled feature flags. */
+  flags: string[]
+  /** The values of the enabled feature flags: `true` for a boolean flag, or the variant for a multivariate flag. */
+  variants: Record<string, string | boolean>
+  /**
+   * `true` if the latest attempt to load feature flags failed. `flags` and `variants` then hold the last
+   * known values, which can be empty. A quota-limited response is not a failure.
+   */
   errorsLoading: boolean
 }
 
