@@ -23,6 +23,7 @@ export class ElectronCore extends PostHogCore {
     private _autocaptureLoad?: Promise<void>
     private _disableRemoteConfig: boolean
     private _stopped = false
+    private _suspended = false
     private _identityEpoch = 0
     private _controllers = new Set<AbortController>()
     private _retryAt = 0
@@ -46,6 +47,10 @@ export class ElectronCore extends PostHogCore {
         this._isInitialized = false
         this._initialization = this._initPromise = this._storage.load().then(() => {
             if (this._stopped) return
+            if (!this._storage.isOwned) {
+                this.disabled = true
+                return
+            }
             this._isInitialized = true
             const cached = this.getPersistedProperty(PostHogPersistedProperty.RemoteConfig)
             if (cached !== undefined)
@@ -188,7 +193,7 @@ export class ElectronCore extends PostHogCore {
     }
 
     async fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
-        if (this._stopped) throw new Error('PostHog is shut down')
+        if (this._stopped || !this._storage.isOwned || this._suspended) throw new Error('PostHog delivery is inactive')
         const target = new URL(url)
         const host = new URL(this.host)
         const configHost =
@@ -276,6 +281,7 @@ export class ElectronCore extends PostHogCore {
         const status = isRecord(error) ? error.status : undefined
         return (
             isPostHogFetchNetworkError(error) ||
+            status === 407 ||
             status === 408 ||
             status === 429 ||
             (typeof status === 'number' && status >= 500)
@@ -283,12 +289,14 @@ export class ElectronCore extends PostHogCore {
     }
 
     protected async sendBatch(...args: Parameters<PostHogCore['sendBatch']>): Promise<void> {
-        if (this._stopped || Date.now() < this._retryAt) throw new RetryLaterError('PostHog delivery paused')
+        if (this._stopped || this._suspended || !this._storage.isOwned || Date.now() < this._retryAt)
+            throw new RetryLaterError('PostHog delivery paused')
         try {
             await this._storage.flush()
         } catch (error) {
             throw new RetryLaterError('PostHog storage write failed', { cause: error })
         }
+        if (this._stopped || this._suspended) throw new RetryLaterError('PostHog delivery paused')
         try {
             const cutoff = Date.now() - this._maxQueueAgeMs
             const eligible = args[0].filter((message) => {
@@ -319,12 +327,21 @@ export class ElectronCore extends PostHogCore {
         return this._storage.flush()
     }
 
-    stop(): void {
+    suspend(): void {
+        this._suspended = true
+        for (const controller of this._controllers) controller.abort()
+    }
+
+    resume(): void {
+        this._suspended = false
+    }
+
+    stop(): Promise<void> {
         this._stopped = true
-        this._storage.stop()
         this.disabled = true
         clearTimeout(this._flushTimer)
         for (const controller of this._controllers) controller.abort()
         this._controllers.clear()
+        return this._storage.stop()
     }
 }

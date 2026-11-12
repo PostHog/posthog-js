@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { PostHog } from '../renderer'
-import type { Bridge, State } from '../shared/protocol'
+import { validateRequest, type Bridge, type State } from '../shared/protocol'
 
 function harness() {
     let state: State = {
@@ -18,6 +18,7 @@ function harness() {
     const unsubscribe = vi.fn()
     const bridge: Bridge = {
         request: vi.fn(async (request) => {
+            validateRequest(request)
             if (request.command.type === 'identify')
                 state = {
                     ...state,
@@ -45,6 +46,30 @@ function harness() {
 }
 
 describe('renderer facade', () => {
+    it.each(['capture', 'identify', 'register', 'group'] as const)(
+        'normalizes optional and Date properties before bridging %s',
+        async (operation) => {
+            const { client, bridge } = harness()
+            await client.ready()
+            const date = new Date('2025-01-02T03:04:05.000Z')
+            const properties = { absent: undefined, at: date, nested: { absent: undefined }, list: [undefined, date] }
+            // JavaScript callers can supply values outside TypeScript's JSON property type.
+            const args =
+                operation === 'group'
+                    ? ['team', 'alpha', properties]
+                    : operation === 'register'
+                      ? [properties]
+                      : [operation === 'capture' ? 'dated' : 'alice', properties]
+            await Reflect.apply(client[operation], client, args)
+            const command = vi.mocked(bridge.request).mock.calls[1][0].command
+            expect(command).toMatchObject({
+                properties: { at: '2025-01-02T03:04:05.000Z', nested: {}, list: [null, '2025-01-02T03:04:05.000Z'] },
+            })
+            expect('properties' in command && Object.hasOwn(command.properties!, 'absent')).toBe(false)
+            client.dispose()
+        }
+    )
+
     it('does not create a flag-exposure/state-subscription feedback loop', async () => {
         const { client, bridge } = harness()
         await client.ready()
@@ -57,6 +82,37 @@ describe('renderer facade', () => {
         const commands = vi.mocked(bridge.request).mock.calls.map(([request]) => request.command)
         expect(commands).toContainEqual({ type: 'flag', key: 'experiment', value: 'control', flagRevision: 1 })
         client.dispose()
+    })
+
+    it('keeps result reads and bulk reads out of state-listener feedback loops', async () => {
+        const { client, bridge } = harness()
+        await client.ready()
+        let changes = 0
+        client.onStateChange(() => {
+            if (++changes < 3) {
+                client.getFeatureFlagResult('experiment')
+                client.isFeatureEnabled('off')
+                client.getAllFeatureFlags()
+            }
+        })
+        await client.flush()
+        expect(changes).toBe(1)
+        expect(
+            vi.mocked(bridge.request).mock.calls.filter(([request]) => request.command.type === 'flag')
+        ).toHaveLength(2)
+        client.dispose()
+    })
+
+    it('returns public errors as rejected promises and preserves command order after rejection', async () => {
+        const { client, bridge } = harness()
+        await client.ready()
+        await expect(client.setPersonProperties({ invalid: () => {} } as any)).rejects.toThrow()
+        vi.mocked(bridge.request).mockResolvedValueOnce({ ok: false, error: 'Invalid PostHog command' })
+        await expect(client.alias('valid')).rejects.toThrow('Invalid PostHog command')
+        await client.screen('Home')
+        expect(vi.mocked(bridge.request).mock.calls.at(-1)?.[0].command).toEqual({ type: 'screen', name: 'Home' })
+        client.dispose()
+        await expect(client.setPersonPropertiesForFlags({ plan: 'pro' })).rejects.toThrow('disposed')
     })
 
     it('uses synchronized cached state and awaits ordered identity mutation', async () => {
@@ -90,6 +146,7 @@ describe('renderer facade', () => {
         broadcast({ optedOut: true, revision: 2 })
         await client.capture('secret', { secret: 'private' })
         await client.captureException(new Error('secret'))
+        await client.group('organization', 'secret', { secret: 'private' })
         expect(bridge.request).toHaveBeenCalledTimes(1)
         client.dispose()
     })

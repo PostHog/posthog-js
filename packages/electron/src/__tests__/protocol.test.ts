@@ -19,6 +19,31 @@ describe('Electron bridge protocol', () => {
         ])
             expect(() => validateRequest(request(command))).toThrow()
     })
+    it('validates helper arguments and boolean reload controls at runtime', () => {
+        for (const command of [
+            { type: 'alias', alias: 'user' },
+            { type: 'screen', name: 'Home', properties: { tab: 'main' } },
+            { type: 'setPersonProperties', propertiesOnce: { source: 'signup' } },
+            { type: 'setPersonPropertiesForFlags', properties: { plan: 'pro' }, reloadFeatureFlags: false },
+            { type: 'setGroupPropertiesForFlags', properties: { company: { plan: 'pro' } }, reloadFeatureFlags: true },
+            { type: 'resetPersonPropertiesForFlags', reloadFeatureFlags: false },
+            { type: 'resetGroupPropertiesForFlags', reloadFeatureFlags: true },
+        ])
+            expect(() => validateRequest(request(command))).not.toThrow()
+        for (const command of [
+            { type: 'alias', alias: ' ' },
+            { type: 'alias', alias: 42 },
+            { type: 'screen', name: '' },
+            { type: 'screen', name: 'Home', properties: [] },
+            { type: 'setPersonProperties', propertiesOnce: [] },
+            { type: 'setPersonPropertiesForFlags', properties: null, reloadFeatureFlags: false },
+            { type: 'setPersonPropertiesForFlags', properties: {}, reloadFeatureFlags: 'false' },
+            { type: 'setGroupPropertiesForFlags', properties: { company: 'pro' }, reloadFeatureFlags: true },
+            { type: 'resetPersonPropertiesForFlags' },
+            { type: 'resetGroupPropertiesForFlags', reloadFeatureFlags: 1 },
+        ])
+            expect(() => validateRequest(request(command))).toThrow('Invalid PostHog command')
+    })
     it('rejects oversized, cyclic, deep and prototype-poisoning inputs', () => {
         expect(() =>
             validateRequest(
