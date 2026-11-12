@@ -302,8 +302,8 @@ export interface Emails {
   send(options: SendEmailOptions): Promise<SendEmailResponse>
 
   /**
-   * Read the status of an email that `send()` queued, for 30 days after the send. A cancel can
-   * take a few seconds to show here, as `emails.list()` says.
+   * Read the status of an email that `send()` queued, for 30 days after the send. The status
+   * can take a few seconds to change after a cancel, a move to now, or the send itself.
    *
    * Resolves to `{ data, error }` and does not reject. The error code is `not_found` when no
    * email of this project has the ID, when the email is older than 30 days, or for a few
@@ -327,7 +327,7 @@ export interface Emails {
 
   /**
    * Stop a scheduled email before PostHog starts sending it. Its result reads `canceled` at once;
-   * reads can lag it, as `emails.list()` says.
+   * `emails.get()` and `emails.list()` can take a few seconds to show it.
    *
    * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` while
    * PostHog sends the email, and `not_found` a few seconds after it went out. A second cancel
@@ -338,8 +338,8 @@ export interface Emails {
 
   /**
    * List the project's scheduled emails that wait to go out, in send-time order, one page per call.
-   * A move or a cancel can take a few seconds to show here, and a cancel in `emails.get()`:
-   * `emails.update()` returns the new time, and `emails.cancel()` returns `canceled`.
+   * A move or a cancel can take a few seconds to show here: `emails.update()` returns the new
+   * time, and `emails.cancel()` returns `canceled`.
    *
    * Resolves to `{ data, error }` and does not reject. Never retried: call it again to read the
    * page again.
