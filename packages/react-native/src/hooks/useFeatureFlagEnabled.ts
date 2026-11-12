@@ -17,12 +17,12 @@ export function useFeatureFlagEnabled(flag: string, defaultValue: boolean, clien
 export function useFeatureFlagEnabled(flag: string, defaultValue?: boolean, client?: PostHog): boolean | undefined
 export function useFeatureFlagEnabled(flag: string, defaultValue?: boolean, client?: PostHog): boolean | undefined {
   const posthog = useOverridablePostHog(client, 'useFeatureFlagEnabled')
-  const [enabled, setEnabled] = useState<boolean | undefined>(() => posthog?.isFeatureEnabled(flag))
+  const [enabled, setEnabled] = useState<boolean | undefined>(() => posthog?.getFeatureFlagResult(flag)?.enabled)
 
   useEffect(() => {
-    setEnabled(posthog?.isFeatureEnabled(flag))
+    setEnabled(posthog?.getFeatureFlagResult(flag)?.enabled)
     return posthog?.onFeatureFlags(() => {
-      setEnabled(posthog.isFeatureEnabled(flag))
+      setEnabled(posthog.getFeatureFlagResult(flag)?.enabled)
     })
   }, [posthog, flag])
 

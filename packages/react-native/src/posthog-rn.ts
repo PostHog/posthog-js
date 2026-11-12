@@ -651,6 +651,8 @@ export class PostHog extends PostHogCoreBase {
     })
 
     const initAfterStorage = (): void => {
+      // 5.0 has no way to set or clear overrides, so ones saved by 4.x's overrideFeatureFlag() are dropped.
+      this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, null)
       // reset session id on app restart
       const enablePersistSessionIdAcrossRestart = options?.enablePersistSessionIdAcrossRestart
       if (!enablePersistSessionIdAcrossRestart) {
@@ -1208,9 +1210,8 @@ export class PostHog extends PostHogCoreBase {
    *
    * @example
    * ```js
-   * // reset but keep feature flag overrides and app lifecycle properties
+   * // reset but keep app lifecycle properties
    * posthog.reset([
-   *   PostHogPersistedProperty.OverrideFeatureFlags,
    *   PostHogPersistedProperty.InstalledAppBuild,
    *   PostHogPersistedProperty.InstalledAppVersion,
    * ])
@@ -1779,7 +1780,8 @@ export class PostHog extends PostHogCoreBase {
     const unsubscribe = this.on('featureflags', deliver)
     if (this._featureFlagsLoaded) {
       void Promise.resolve().then(() => {
-        if (!delivered) {
+        // reset() in the same tick discards the loaded flags, so there's nothing to catch up on.
+        if (this._featureFlagsLoaded && !delivered) {
           deliver()
         }
       })

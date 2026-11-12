@@ -1553,9 +1553,8 @@ posthog.reset()
 ```
 
 ```js
-// reset but keep feature flag overrides and app lifecycle properties
+// reset but keep app lifecycle properties
 posthog.reset([
-  PostHogPersistedProperty.OverrideFeatureFlags,
   PostHogPersistedProperty.InstalledAppBuild,
   PostHogPersistedProperty.InstalledAppVersion,
 ])

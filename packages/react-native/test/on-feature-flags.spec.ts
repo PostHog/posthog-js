@@ -1,4 +1,4 @@
-import { PostHog, PostHogCustomStorage } from '../src'
+import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { Linking, AppState } from 'react-native'
 
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
@@ -192,5 +192,35 @@ describe('PostHog RN onFeatureFlags', () => {
     await Promise.resolve()
 
     expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('does not catch up a listener when reset() runs in the same tick it was added', async () => {
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    const listener = vi.fn()
+
+    posthog.onFeatureFlags(listener)
+    posthog.reset()
+    await Promise.resolve()
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('clears feature flag overrides saved by 4.x when it starts', async () => {
+    const cached = new PostHog('test-token', {
+      customStorage: mockStorage,
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+    })
+    await cached.ready()
+    ;(cached as any).setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, { 'beta-ui': false })
+    await cached.shutdown()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+
+    expect(posthog.getFeatureFlag('beta-ui')).toBe(true)
   })
 })

@@ -677,24 +677,26 @@ describe('PostHog React Native', () => {
       posthog = new PostHog('1', {
         customStorage: storage,
         captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
       })
 
       // Sync-storage init: feature flags should be readable immediately without
       // awaiting any preload. Specific storage.getItem call count is an
       // implementation detail and not asserted — only that sync behavior holds.
       expect(posthog.getFeatureFlag('flag')).toEqual(undefined)
-      posthog.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, { flag: true })
+      posthog.updateFlags({ flag: true })
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
 
-      // Shut down the first instance to persist the override and clear its
+      // Shut down the first instance to persist the flags and clear its
       // timers before replacing it.
       await posthog.shutdown()
 
-      // New instance but same sync storage — the override persisted via
-      // the first instance is visible to the second without preload.
+      // New instance but same sync storage — the flags persisted via
+      // the first instance are visible to the second without preload.
       posthog = new PostHog('1', {
         customStorage: storage,
         captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
       })
 
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
@@ -1536,15 +1538,15 @@ describe('PostHog React Native', () => {
         })
         await posthog.ready()
 
-        posthog.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, { testFlag: true })
+        posthog.setPersistedProperty(PostHogPersistedProperty.PersonProperties, { plan: 'pro' })
         posthog.register({ customProp: 'value' })
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({ plan: 'pro' })
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual({ customProp: 'value' })
 
-        posthog.reset([PostHogPersistedProperty.OverrideFeatureFlags])
+        posthog.reset([PostHogPersistedProperty.PersonProperties])
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({ plan: 'pro' })
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
       })
 

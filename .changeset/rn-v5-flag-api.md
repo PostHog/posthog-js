@@ -9,7 +9,7 @@
 - **Breaking:** remove `getFeatureFlagPayload()` — use `getFeatureFlagResult(key, { sendFeatureFlagEvent: false })?.payload`
 - **Breaking:** remove `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` — use `getAllFeatureFlags()`
 - **Breaking:** remove `onFeatureFlag()` — use `onFeatureFlags()` and read the flag with `getFeatureFlagResult()`
-- **Breaking:** remove `overrideFeatureFlag()` — use `updateFlags()`, and set `disableRemoteFeatureFlags` to keep the values from being replaced by the next load
+- **Breaking:** remove `overrideFeatureFlag()` — use `updateFlags()`, and set `disableRemoteFeatureFlags` to keep the values from being replaced by the next load. Overrides set with it in 4.x are cleared on upgrade
 - **Breaking:** remove the `useFeatureFlagWithPayload()` hook and its `FeatureFlagWithPayload` type — use `useFeatureFlagResult()`
 - **Breaking:** remove the `useFeatureFlag()` hook — use `useFeatureFlagVariantKey(key)` for the value or `useFeatureFlagEnabled(key)` for on/off
 - **Breaking:** remove the `useFeatureFlags()` hook — use `useActiveFeatureFlags()` for the enabled flag keys

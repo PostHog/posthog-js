@@ -28,11 +28,18 @@ describe('feature flag hooks', () => {
     listeners = []
     featureFlags = {}
     posthog = {
-      isFeatureEnabled: vi.fn((key: string) => (key in featureFlags ? !!featureFlags[key] : undefined)),
-      getFeatureFlag: vi.fn((key: string) => featureFlags[key]),
-      getFeatureFlagResult: vi.fn((key: string) =>
-        key in featureFlags ? { key, payload: { color: 'blue' } } : undefined
-      ),
+      getFeatureFlagResult: vi.fn((key: string) => {
+        if (!(key in featureFlags)) {
+          return undefined
+        }
+        const value = featureFlags[key]
+        return {
+          key,
+          enabled: typeof value === 'string' ? true : value,
+          variant: typeof value === 'string' ? value : undefined,
+          payload: { color: 'blue' },
+        }
+      }),
       getFeatureFlagDetails: vi.fn(() => ({ featureFlags })),
       onFeatureFlags: vi.fn((listener: (loaded: PostHogFeatureFlagsLoaded) => void) => {
         listeners.push(listener)
@@ -49,7 +56,7 @@ describe('feature flag hooks', () => {
     notify()
 
     expect(result.current).toBe(true)
-    expect(posthog.isFeatureEnabled).toHaveBeenLastCalledWith('beta')
+    expect(posthog.getFeatureFlagResult).toHaveBeenLastCalledWith('beta')
   })
 
   it('useFeatureFlagEnabled returns undefined for an unknown flag without a default', () => {
@@ -67,7 +74,7 @@ describe('feature flag hooks', () => {
     notify()
 
     expect(result.current).toBe('test')
-    expect(posthog.getFeatureFlag).toHaveBeenLastCalledWith('checkout')
+    expect(posthog.getFeatureFlagResult).toHaveBeenLastCalledWith('checkout')
   })
 
   it('useFeatureFlagPayload reads the payload without sending $feature_flag_called', () => {
