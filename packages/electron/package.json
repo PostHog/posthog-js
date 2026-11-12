@@ -51,15 +51,19 @@
         "dev": "tsdown --watch",
         "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.json",
         "test:unit": "vitest run",
-        "test:built": "node --test test/*.test.mjs",
+        "test:delivery": "node --test test/delivery/delivery.test.mjs",
+        "test:built": "node --test test/exports.test.mjs test/react-exports.test.mjs",
+        "test:errors": "node test/error-autocapture.test.mjs",
         "lint": "oxlint --report-unused-disable-directives-severity error src",
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
         "clean": "rimraf dist coverage",
         "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
-        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
+        "test:autocapture": "node test/autocapture/run.mjs"
     },
     "dependencies": {
-        "@posthog/core": "workspace:^"
+        "@posthog/core": "workspace:^",
+        "@posthog/browser-common": "workspace:^"
     },
     "peerDependencies": {
         "electron": ">=41",

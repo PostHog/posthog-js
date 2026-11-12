@@ -25,7 +25,8 @@ import {
 
 import RageClick from './rageclick'
 import type { EventName, Properties } from '@posthog/types'
-import type { RemoteConfigResult } from './types/remote-config'
+import type { RemoteConfig } from './types/remote-config'
+import type { Listener } from './pubsub'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 import type { AutocaptureConfig, AutocaptureConfigSource } from './autocapture-config'
 
@@ -339,6 +340,14 @@ export function autocapturePropertiesForElement(
     return { props, target }
 }
 
+export type AutocaptureRemoteConfigResult =
+    | { ok: true; config: Pick<RemoteConfig, 'autocapture_opt_out' | 'elementsChainAsString'> }
+    | { ok: false }
+
+export type AutocaptureClient = Pick<Client, 'distinctId' | 'kv' | 'capture'> & {
+    readonly onRemoteConfig: Listener<AutocaptureRemoteConfigResult>
+}
+
 export const AutocaptureExtension = 'autocapture' as ExtensionToken<Autocapture>
 
 export class Autocapture implements Extension {
@@ -352,7 +361,7 @@ export class Autocapture implements Extension {
     _elementsChainAsString = false
     private _listenerWindow: Window | undefined
     private _listenerDocument: Document | undefined
-    private _client: Client | undefined
+    private _client: AutocaptureClient | undefined
     private readonly _config: AutocaptureConfig = {
         enabled: false,
         rageclick: false,
@@ -486,12 +495,10 @@ export class Autocapture implements Extension {
         this._elementSelectors = null
     }
 
-    setup(client: Client): void {
+    setup(client: AutocaptureClient): void {
         this._compileUrlPatterns()
         this._client = client
-        const subscription = client.onRemoteConfig(
-            this.onRemoteConfig.bind(this) as Parameters<Client['onRemoteConfig']>[0]
-        )
+        const subscription = client.onRemoteConfig(this.onRemoteConfig.bind(this))
         if (this._disposed) {
             subscription.dispose()
             return
@@ -622,7 +629,7 @@ export class Autocapture implements Extension {
         }
     }
 
-    public onRemoteConfig(result: RemoteConfigResult): void {
+    public onRemoteConfig(result: AutocaptureRemoteConfigResult): void {
         if (this._disposed) {
             return
         }
