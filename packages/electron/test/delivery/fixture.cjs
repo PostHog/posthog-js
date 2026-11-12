@@ -61,7 +61,14 @@ app.whenReady()
         createInterface({ input: process.stdin }).on('line', async (line) => {
             const { id, command, args = [] } = JSON.parse(line)
             try {
-                if (command === 'exit') {
+                if (command === 'quit') {
+                    send({ id, state: owner.getState(), errors })
+                    app.quit()
+                } else if (command === 'cancelQuit') {
+                    app.once('will-quit', (event) => event.preventDefault())
+                    app.quit()
+                    send({ id, state: owner.getState(), errors })
+                } else if (command === 'exit') {
                     await owner.shutdown(...args)
                     send({ id, state: owner.getState(), errors })
                     app.exit(0)

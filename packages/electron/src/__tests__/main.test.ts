@@ -944,6 +944,18 @@ describe('main Electron client', () => {
         expect(process.listenerCount('unhandledRejection')).toBe(rejected)
     })
 
+    it('registers exactly one per-SDK exit listener and removes it on each shutdown', async () => {
+        const baseline = process.listeners('exit')
+        for (let i = 0; i < 2; i++) {
+            const owner = await start()
+            expect(init({ projectToken: 'test-token', storageDirectory: directory })).toBe(owner)
+            expect(process.listeners('exit')).toHaveLength(baseline.length + 1)
+            await owner.shutdown(50)
+            await owner.shutdown(50)
+            expect(process.listeners('exit')).toEqual(baseline)
+        }
+    })
+
     it('suspend pauses delivery and resume flushes without synthetic activity or session renewal', async () => {
         vi.useFakeTimers({ toFake: ['Date'] })
         const owner = await start()
