@@ -3,7 +3,6 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
 import { wait } from './test-utils'
 
-// Mock the native plugin bridge.
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePlugin: {
     setup: vi.fn(async () => {}),

@@ -3,7 +3,6 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
 import { waitForExpect, wait } from './test-utils'
 
-// Mock the native plugin bridge.
 // The mock models the native recorder state: isEnabled() answers what setup()/startRecording()
 // actually did, which is how a real native SDK reports a start it refused.
 let nativeAccepts = true
