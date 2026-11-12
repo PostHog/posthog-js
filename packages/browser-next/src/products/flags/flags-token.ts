@@ -1,10 +1,20 @@
 import type { Disposable, ExtensionToken } from '@posthog/browser-common'
-import type { FeatureFlagResult, FeatureFlagsReloadResult, FeatureFlagsCallback, JsonType } from './flags-options'
+import type {
+    FeatureFlagResult,
+    FeatureFlagsReloadResult,
+    FeatureFlagsCallback,
+    FeatureFlagsReadOptions,
+    JsonType,
+} from './flags-options'
 import type { IPostHogInternal, BrowserExtension } from '../../core/context/browser-client'
 
 export interface IFeatureFlags extends BrowserExtension {
     setup(client: IPostHogInternal): void | Promise<void>
-    getFeatureFlag(key: string): FeatureFlagResult | undefined
+    getFeatureFlag(key: string, options?: FeatureFlagsReadOptions): FeatureFlagResult | undefined
+    /** Read detached snapshots of all known results synchronously without emitting exposure events. */
+    getAllFeatureFlags(): FeatureFlagResult[]
+    /** Observe automatic and explicit reload starts, not their completion. */
+    onReloading(callback: () => void): Disposable
     /** Refresh remotely and await its outcome. Calls during an active evaluation wait for a follow-up request. */
     reloadFeatureFlags(): Promise<FeatureFlagsReloadResult>
     onFeatureFlags(callback: FeatureFlagsCallback): Disposable

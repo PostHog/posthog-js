@@ -11,6 +11,7 @@ import { FeatureFlagsExtension, type IFeatureFlags } from './flags-token'
 export { FeatureFlagsExtension, type IFeatureFlags } from './flags-token'
 export type {
     FeatureFlagsOptions,
+    FeatureFlagsReadOptions,
     FeatureFlagsCallback,
     FeatureFlagResult,
     FeatureFlagsReloadResult,
@@ -91,14 +92,42 @@ export const featureFlags = (options: FeatureFlagsOptions = {}): IFeatureFlags =
             shared.setPersonPropertiesForFlags({ ...value.initialPersonProperties }, false)
             shared.ensureFlagsLoaded()
         },
-        getFeatureFlag: (key) => {
+        getFeatureFlag: (key, options) => {
             if (disposed) return undefined
             try {
-                return shared.getFeatureFlagResult(key)
+                return shared.getFeatureFlagResult(key, {
+                    send_event: options?.sendFeatureFlagEvent ?? true,
+                    fresh: options?.fresh ?? false,
+                })
             } catch (error) {
                 client?.logger.error('Feature flag read failed', error)
                 return undefined
             }
+        },
+        getAllFeatureFlags: () => {
+            if (disposed) return []
+            try {
+                return shared.getAllFeatureFlags().map((result) => ({
+                    ...result,
+                    payload: result.payload === undefined ? undefined : JSON.parse(JSON.stringify(result.payload)),
+                }))
+            } catch (error) {
+                client?.logger.error('Feature flags snapshot failed', error)
+                return []
+            }
+        },
+        onReloading: (callback) => {
+            if (!disposed) {
+                try {
+                    const unsubscribe = shared.onReloading(() => {
+                        if (!disposed) callback()
+                    })
+                    return { dispose: unsubscribe }
+                } catch (error) {
+                    client?.logger.error('Feature flags reloading subscription failed', error)
+                }
+            }
+            return { dispose() {} }
         },
         reloadFeatureFlags: async () => {
             if (disposed) return { status: 'cancelled' }

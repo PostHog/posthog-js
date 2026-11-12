@@ -18,6 +18,13 @@ export interface FeatureFlagsOptions {
     onlyEvaluateSurveyFeatureFlags?: boolean
 }
 
+export interface FeatureFlagsReadOptions {
+    /** Emit a deduplicated $feature_flag_called event. Defaults to true. */
+    sendFeatureFlagEvent?: boolean
+    /** Only return a value after remote evaluation has loaded; does not request or await a reload. */
+    fresh?: boolean
+}
+
 export type FeatureFlagsConfiguration = false | FeatureFlagsOptions
 export type FeatureFlagsCallback = (flags: FeatureFlagResult[], errorsLoading: boolean) => void
 export type { FeatureFlagResult, JsonType }
