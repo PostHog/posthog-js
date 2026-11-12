@@ -14,6 +14,7 @@
     "files": [
         "dist",
         "README.md",
+        "MIGRATION.md",
         "LICENSE"
     ],
     "main": "dist/main.cjs",
@@ -55,6 +56,11 @@
     },
     "dependencies": {
         "@posthog/core": "workspace:^"
+    },
+    "publishConfig": {
+        "access": "public",
+        "tag": "alpha",
+        "registry": "https://registry.npmjs.org"
     },
     "peerDependencies": {
         "electron": ">=41"
