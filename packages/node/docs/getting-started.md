@@ -33,3 +33,44 @@ Flush queued events before the process exits.
 ```ts
 await client.shutdown()
 ```
+
+## Express request context
+
+Call `setupExpressRequestContext(client, app)` before your routes and `setupExpressErrorHandler(client, app)` after them. Events captured during a request then include `$current_url`, `$request_method`, `$request_path`, `$user_agent`, and `$ip`. The IP comes from `x-forwarded-for` when the app runs behind a proxy.
+
+## AWS Lambda
+
+`flush` has no overall timeout. In a Lambda handler, race it against the time the invocation has left, and keep 100 ms to return.
+
+```ts
+const remainingMs = Math.max(0, context.getRemainingTimeInMillis() - 100)
+let timer: ReturnType<typeof setTimeout> | undefined
+try {
+  await Promise.race([
+    client.flush(),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('PostHog flush timed out')), remainingMs)
+    }),
+  ])
+} catch (err) {
+  console.error('PostHog flush failed', err)
+} finally {
+  clearTimeout(timer)
+}
+```
+
+The timeout limits the wait. It does not cancel the flush.
+
+## Handle SDK errors
+
+The SDK does not throw for failures in background work. Listen for them on the client.
+
+```ts
+client.on('error', (err) => {
+  console.error('PostHog had an error', err)
+})
+```
+
+## Feature flag limits
+
+`featureFlagsPollingInterval` has a minimum of `100` ms. `maxCacheSize` sets the size of the cache that deduplicates `$feature_flag_called` events per user, and defaults to `50000`.
