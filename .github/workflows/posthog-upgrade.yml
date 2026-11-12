@@ -158,6 +158,20 @@ jobs:
                           --trust-policy-exclude='semver@6.3.1'
                   fi
 
+            - name: Regenerate replay schema
+              id: replay-schema
+              if: ${{ github.event.inputs.package_name == 'posthog-js' }}
+              continue-on-error: true
+              env:
+                  NODE_OPTIONS: --max-old-space-size=8192
+              run: pnpm --filter=@posthog/frontend mobile-replay:schema:build:json
+
+            - name: Discard partial replay schema output
+              if: ${{ steps.replay-schema.outcome == 'failure' }}
+              run: |
+                  echo "::warning::Replay schema regeneration failed; the PR ships without it and CI will flag the stale schema."
+                  git checkout -- frontend/src/scenes/session-recordings/mobile-replay/schema
+
             - name: Generate pull request details
               id: generate-pr-details
               shell: bash
