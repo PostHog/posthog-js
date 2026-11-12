@@ -303,7 +303,8 @@ export interface Emails {
 
   /**
    * Read the status of an email that `send()` queued, for 30 days after the send. The status
-   * can take a few seconds to change after a cancel, a move to now, or the send itself.
+   * can take a few seconds to change after a cancel, a move to now, or when PostHog sends a
+   * scheduled email.
    *
    * Resolves to `{ data, error }` and does not reject. The error code is `not_found` when no
    * email of this project has the ID, when the email is older than 30 days, or for a few
