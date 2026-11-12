@@ -2384,6 +2384,7 @@ and queries that filter on these values.
 Error values:
   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
   FLAG_MISSING: Requested flag not in API response
+  EVALUATION_FAILED: Requested flag's remote record has no evaluated value
   LOCAL_EVALUATION_INCONCLUSIVE: Flag has a loaded local definition but local evaluation could not resolve it
   QUOTA_LIMITED: Rate/quota limit exceeded
   TIMEOUT: Request timed out
@@ -2397,6 +2398,7 @@ Error values:
 | <a id="property-apierror"></a> `apiError()` | (`status`) => `string` |
 | <a id="property-connection_error"></a> `CONNECTION_ERROR` | `"connection_error"` |
 | <a id="property-errors_while_computing"></a> `ERRORS_WHILE_COMPUTING` | `"errors_while_computing_flags"` |
+| <a id="property-evaluation_failed"></a> `EVALUATION_FAILED` | `"evaluation_failed"` |
 | <a id="property-flag_missing"></a> `FLAG_MISSING` | `"flag_missing"` |
 | <a id="property-local_evaluation_inconclusive"></a> `LOCAL_EVALUATION_INCONCLUSIVE` | `"local_evaluation_inconclusive"` |
 | <a id="property-quota_limited"></a> `QUOTA_LIMITED` | `"quota_limited"` |
