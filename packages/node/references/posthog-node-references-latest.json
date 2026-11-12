@@ -2080,6 +2080,11 @@
           "name": "captureEngagement"
         },
         {
+          "description": "The email's message category. Without it, the email follows the category of the template that `templateKey` names, or is transactional with no category. A template made in PostHog is transactional: PostHog refuses a `templateKey` that names a template in a marketing category with `marketing_template`. `TRANSACTIONAL_EMAIL_CATEGORY` asks for transactional email with no category, so PostHog refuses it with `category_mismatch` when `templateKey` names a template in a category. A `MessageCategory` files the email under that category. A marketing email honors the recipient's opt-outs and gets unsubscribe headers. Its `html`, or its `text` when it has no `html`, needs the `{{ unsubscribe_url }}` placeholder.\nThe send returns an error with code `category_mismatch` when a category with this key has another type, or when `templateKey` names a template in another category; `too_many_categories` when the project can't take another category; `unsubscribe_link_required` when a marketing email has no unsubscribe placeholder; `copies_not_allowed` when a marketing email has copies; `recipient_opted_out` when the recipient opted out of the category or of all marketing email; and `marketing_template` when `templateKey` names a template in a marketing category.",
+          "type": "typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory",
+          "name": "category"
+        },
+        {
           "description": "A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender.",
           "type": "string",
           "name": "from"
@@ -3079,6 +3084,33 @@
         }
       ],
       "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "MessageCategory",
+      "name": "MessageCategory",
+      "properties": [
+        {
+          "description": "Notes about which emails belong to the category. Used only when the send creates the category.",
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "description": "Identifies the category in the project, such as `'newsletter'`. Recipients opt out of a category by its key.",
+          "type": "string",
+          "name": "key"
+        },
+        {
+          "description": "The category's name, shown in PostHog. Used only when the send creates the category.",
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "description": "A marketing category honors the recipient's opt-outs. A transactional one only files the email.",
+          "type": "'marketing' | 'transactional'",
+          "name": "type"
+        }
+      ],
+      "path": "src/emails/types.ts"
     },
     {
       "id": "MiddlewareError",
@@ -4750,6 +4782,11 @@
           "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.",
           "type": "never",
           "name": "captureEngagement"
+        },
+        {
+          "description": "The email's message category. Without it, the email follows the category of the template that\n`templateKey` names, or is transactional with no category. A template made in PostHog is\ntransactional: PostHog refuses a `templateKey` that names a template in a marketing category with\n`marketing_template`. `TRANSACTIONAL_EMAIL_CATEGORY` asks for transactional email with no\ncategory, so PostHog refuses it with `category_mismatch` when `templateKey` names a template in\na category. A `MessageCategory` files the email under that category. A marketing email honors\nthe recipient's opt-outs and gets unsubscribe headers. Its `html`, or its `text` when it has no\n`html`, needs the `{{ unsubscribe_url }}` placeholder.\n\nThe send returns an error with code `category_mismatch` when a category with this key has\nanother type, or when `templateKey` names a template in another category; `too_many_categories`\nwhen the project can't take another category; `unsubscribe_link_required` when a marketing email\nhas no unsubscribe placeholder; `copies_not_allowed` when a marketing email has copies;\n`recipient_opted_out` when the recipient opted out of the category or of all marketing email; and\n`marketing_template` when `templateKey` names a template in a marketing category.",
+          "type": "never",
+          "name": "category"
         },
         {
           "type": "never",

@@ -47,6 +47,7 @@
   "PostHog.waitForLocalEvaluationReady": "flag-definition-loader",
   "PostHog.withSpan": "traces",
   "PostHogSentryIntegration": "capture-exception",
+  "TRANSACTIONAL_EMAIL_CATEGORY": "emails",
   "enrichCurrentSpan": "traces",
   "instrumentRequest": "traces",
   "new PostHog(...)": "setup",
