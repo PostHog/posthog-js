@@ -73,6 +73,105 @@ describe('ElectronStorage', () => {
         expect(restarted.get('opted_out')).toBe(false)
     })
 
+    it('releases idle ownership synchronously at final exit without changing persisted state', async () => {
+        const store = await storage()
+        store.set('distinct_id', 'same-person')
+        await store.flush()
+        const before = await fs.readFile(join(directory, 'state.json'), 'utf8')
+        store.releaseOnExit()
+        store.releaseOnExit()
+        expect(store.isOwned).toBe(false)
+        expect(await fs.readdir(directory)).toEqual(['state.json'])
+        expect(await fs.readFile(join(directory, 'state.json'), 'utf8')).toBe(before)
+        const next = await storage()
+        expect(next.get('distinct_id')).toBe('same-person')
+    })
+
+    it('keeps ownership at exit while the initial state read is pending', async () => {
+        const reached = deferred(),
+            release = deferred()
+        const read = fs.readFile.bind(fs)
+        vi.spyOn(fs, 'readFile').mockImplementationOnce(async (...args) => {
+            reached.resolve()
+            await release.promise
+            return read(...args)
+        })
+        const store = new ElectronStorage(directory)
+        stores.push(store)
+        const loading = store.load()
+        await reached.promise
+        try {
+            store.releaseOnExit()
+            expect(store.isOwned).toBe(true)
+            expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
+        } finally {
+            release.resolve()
+            await loading
+        }
+    })
+
+    it('keeps ownership at exit while a state write is pending', async () => {
+        const store = await storage()
+        const reached = deferred(),
+            release = deferred()
+        const rename = fs.rename.bind(fs)
+        vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+            reached.resolve()
+            await release.promise
+            await rename(...args)
+        })
+        store.set('distinct_id', 'pending')
+        await reached.promise
+        try {
+            store.releaseOnExit()
+            expect(store.isOwned).toBe(true)
+            expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
+        } finally {
+            release.resolve()
+            await store.flush()
+        }
+    })
+
+    it('never mixes final exit release with an async stop already releasing ownership', async () => {
+        const store = await storage()
+        const reached = deferred(),
+            release = deferred()
+        const unlink = fs.unlink.bind(fs)
+        vi.spyOn(fs, 'unlink').mockImplementationOnce(async (path) => {
+            reached.resolve()
+            await release.promise
+            await unlink(path)
+        })
+        const stopping = store.stop()
+        await reached.promise
+        try {
+            store.releaseOnExit()
+            expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
+        } finally {
+            release.resolve()
+            await stopping
+        }
+        expect(await fs.readdir(directory)).toEqual([])
+    })
+
+    it('does not unlink an owner whose nonce changed before final exit', async () => {
+        const store = await storage()
+        const lock = join(directory, '.owner')
+        const replacement = { ...JSON.parse(await fs.readFile(lock, 'utf8')), token: 'b'.repeat(36) }
+        await fs.writeFile(lock, JSON.stringify(replacement))
+        store.releaseOnExit()
+        expect(JSON.parse(await fs.readFile(lock, 'utf8'))).toEqual(replacement)
+    })
+
+    it('does not release another live instance ownership at exit', async () => {
+        const owner = await storage()
+        const lock = await fs.readFile(join(directory, '.owner'), 'utf8')
+        const denied = await storage()
+        denied.releaseOnExit()
+        expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toBe(lock)
+        expect(owner.isOwned).toBe(true)
+    })
+
     it('removes null values rather than persisting null', async () => {
         const store = await storage()
         store.set('distinct_id', 'old')

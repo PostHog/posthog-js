@@ -141,6 +141,9 @@ export class PostHog {
             () => this._scheduleState(),
             (error) => this._report(error)
         )
+        const exit = (): void => storage.releaseOnExit()
+        process.once('exit', exit)
+        this._cleanups.push(() => process.removeListener('exit', exit))
         singleton = this
         singletonOptions = { projectToken: this._options.projectToken, host: this._options.host }
         ipcMain.handle(COMMAND_CHANNEL, (event, request: unknown) => this._handle(event, request))
