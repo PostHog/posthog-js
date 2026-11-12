@@ -8,7 +8,9 @@ import { app, powerMonitor, type BrowserWindow, type IpcMainInvokeEvent, type Ut
 import {
     COMMAND_CHANNEL,
     MAX_MESSAGE_BYTES,
+    STATE_CHANNEL,
     type Command,
+    type Request,
     type Response as BridgeResponse,
     type State,
 } from '../shared/protocol'
@@ -855,6 +857,51 @@ describe('main Electron client', () => {
         expect(persisted.values.queue.map((item: any) => item.message.event)).toContain('pending-shutdown')
         await vi.waitFor(async () => expect(await fs.readdir(join(directory, namespace))).toEqual(['state.json']))
     })
+
+    it.each(['capture', 'identify'] as const)(
+        'accepts %s after more than 100 repeated reads through the real renderer and owner',
+        async (operation) => {
+            vi.spyOn(performance, 'now').mockReturnValue(0)
+            const owner = await start()
+            await owner.reloadFeatureFlagsAsync()
+            const page = renderer(owner, 1)
+            const request = vi.fn((value: Request) => mock.handlers.get(COMMAND_CHANNEL)!(page.event, value))
+            const facade = new RendererPostHog({
+                request,
+                subscribe: (callback) => {
+                    page.contents.mainFrame.send.mockImplementation((channel, state) => {
+                        if (channel === STATE_CHANNEL) callback(state)
+                    })
+                    return () => page.contents.mainFrame.send.mockReset()
+                },
+            })
+            try {
+                await facade.ready()
+                for (let i = 0; i < 150; i++) {
+                    expect(facade.getFeatureFlag('test')).toBe('variant')
+                    expect(facade.isFeatureEnabled('test')).toBe(true)
+                }
+                if (operation === 'capture') await expect(facade.capture('after-flag-reads')).resolves.toBeUndefined()
+                else await expect(facade.identify('alice')).resolves.toBeUndefined()
+                await owner.flush()
+                expect(request.mock.calls.filter(([value]) => value.command.type === 'flag')).toHaveLength(1)
+                expect(batches.filter((event) => event.event === '$feature_flag_called')).toHaveLength(1)
+                if (operation === 'capture') {
+                    expect(batches.find((event) => event.event === 'after-flag-reads')?.properties).toMatchObject({
+                        $electron_process: 'renderer',
+                        $window_id: '1',
+                    })
+                } else {
+                    expect(owner.getDistinctId()).toBe('alice')
+                    expect(facade.getDistinctId()).toBe('alice')
+                    expect(batches.find((event) => event.event === '$identify')?.distinct_id).toBe('alice')
+                }
+            } finally {
+                facade.dispose()
+            }
+        }
+    )
+
     it('keeps the existing bridge authorized when a navigation never commits', async () => {
         const owner = await start()
         const page = renderer(owner, 1)
