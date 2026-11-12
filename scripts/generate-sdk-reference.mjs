@@ -15,6 +15,9 @@
  * here. The docs/ folder still comes from this checkout.
  *
  * `--major` defaults to the package.json major, plus one when a major changeset for the package is pending.
+ *
+ * When the package has a MIGRATION.md, the script also writes it as `<id>-migration.md`, the docs site's
+ * migration page.
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -281,3 +284,9 @@ write(`${config.id}-${major}.md`, [
     ...body,
 ])
 if (declared >= major) write(`${config.id}-reference.md`, [frontMatter(title, body, config.logo), ...body])
+// The package's MIGRATION.md, when it has one, is the docs site's migration page.
+const migration = path.join(pkgDir, 'MIGRATION.md')
+if (fs.existsSync(migration)) {
+    const head = ['---', `title: "${title} migration guides"`, 'sidebar: Docs', 'showTitle: true', '---'].join('\n')
+    write(`${config.id}-migration.md`, [head, fs.readFileSync(migration, 'utf8').trim()])
+}
