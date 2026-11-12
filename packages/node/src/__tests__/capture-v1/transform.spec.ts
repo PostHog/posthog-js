@@ -1,6 +1,6 @@
 import type { JsonType, PostHogEventProperties } from '@posthog/core'
 
-import { buildV1Event } from '@/capture-v1/transform'
+import { buildV1Event } from '@posthog/core/capture-v1'
 
 function baseMessage(overrides: PostHogEventProperties = {}): PostHogEventProperties {
   return {

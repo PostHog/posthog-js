@@ -1,4 +1,4 @@
-import type { JsonType, PostHogEventProperties } from '@posthog/core'
+import type { JsonType, PostHogEventProperties } from '../types'
 
 /** Capture lane for analytics events. */
 export const ANALYTICS_CAPTURE_ENDPOINT = '/i/v1/analytics/events'

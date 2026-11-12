@@ -4,8 +4,8 @@ import { type AddressInfo } from 'node:net'
 import { createServer, type Server } from 'node:http'
 import { gunzipSync } from 'node:zlib'
 
-import { V1CaptureSender } from '@/capture-v1/sender'
-import { serializeV1Event } from '@/capture-v1/serialize'
+import { V1CaptureSender } from '@posthog/core/capture-v1'
+import { serializeV1Event } from '@posthog/core/capture-v1'
 import { zlibCompressor } from '@/compression.node'
 
 // Node's fetch throws when it replays a byte body on a redirect it follows itself, so this runs against a real server.

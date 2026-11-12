@@ -10,6 +10,9 @@
   "types": "dist/index.d.ts",
   "typesVersions": {
     "*": {
+      "capture-v1": [
+        "dist/capture-v1/index.d.ts"
+      ],
       "error-tracking": [
         "dist/error-tracking/index.d.ts"
       ],
@@ -81,6 +84,11 @@
       "types": "./dist/utils/index.d.ts",
       "require": "./dist/utils/index.js",
       "import": "./dist/utils/index.mjs"
+    },
+    "./capture-v1": {
+      "types": "./dist/capture-v1/index.d.ts",
+      "require": "./dist/capture-v1/index.js",
+      "import": "./dist/capture-v1/index.mjs"
     }
   },
   "dependencies": {
