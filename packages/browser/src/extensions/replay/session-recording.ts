@@ -25,6 +25,7 @@ import {
     RemoteConfig,
     RemoteConfigResult,
     SessionRecordingPersistedConfig,
+    SessionRecordingOptions,
     SessionStartReason,
 } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
@@ -85,6 +86,7 @@ export class SessionRecording implements Extension {
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _sessionRecordingDisposed = false
+    private _selectMaskingFn: SessionRecordingOptions['selectMaskingFn'] = undefined
     private _documentWasEverVisible = hasDocumentEverBeenVisible()
 
     private _onVisibilityChange = (): void => {
@@ -149,7 +151,15 @@ export class SessionRecording implements Extension {
         }
 
         if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
-            return
+            if (!this._checkSelectMaskingSupport()) {
+                this.stopRecording()
+                return
+            }
+            if (this._selectMaskingFn === this._config.session_recording?.selectMaskingFn) {
+                return
+            }
+            // Discard old-policy buffers before installing a replacement callback.
+            this._lazyLoadedSessionRecording.discard({ discardProducerEvents: true })
         }
 
         // According to the rrweb docs, rrweb is not supported on IE11 and below:
@@ -231,12 +241,14 @@ export class SessionRecording implements Extension {
         this._persistFlagsOnSessionListener?.()
         this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.stop()
+        this._selectMaskingFn = undefined
     }
 
     private _discardRecording(discardProducerEvents = false) {
         this._persistFlagsOnSessionListener?.()
         this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.discard({ discardProducerEvents })
+        this._selectMaskingFn = undefined
     }
 
     private _resetSampling() {
@@ -380,6 +392,19 @@ export class SessionRecording implements Extension {
         return Date.now() - config.cache_timestamp <= RECORDING_REMOTE_CONFIG_TTL_MS
     }
 
+    private _checkSelectMaskingSupport(): boolean {
+        if (
+            !this._config.session_recording?.selectMaskingFn ||
+            (assignableWindow.__PosthogExtensions__?.rrweb?.record?.supportsSelectMasking === true &&
+                assignableWindow.__PosthogExtensions__?.initSessionRecording?.supportsSelectMasking === true)
+        ) {
+            return true
+        }
+        this._recordingStatus = DISABLED
+        logger.error('Session recording has not started: the recorder does not support selectMaskingFn.')
+        return false
+    }
+
     private _onScriptLoaded(startReason?: SessionStartReason) {
         if (this._sessionRecordingDisposed || !this._isRecordingEnabled || !this._instance.sessionManager) {
             this._recordingStatus = DISABLED
@@ -393,6 +418,11 @@ export class SessionRecording implements Extension {
             this._instance.register_for_session({
                 [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
             })
+            return
+        }
+
+        // An older extension may discard the policy before its own start check.
+        if (!this._checkSelectMaskingSupport()) {
             return
         }
 
@@ -417,7 +447,15 @@ export class SessionRecording implements Extension {
 
         this._recordingStatus = LAZY_LOADING
         this._lazyLoadedSessionRecording.setDocumentWasEverVisible?.(this._documentWasEverVisible)
+        const selectMaskingFn = this._config.session_recording?.selectMaskingFn
         this._lazyLoadedSessionRecording.start(startReason)
+        this._selectMaskingFn = selectMaskingFn
+        if (
+            this._lazyLoadedSessionRecording.isStarted &&
+            selectMaskingFn !== this._config.session_recording?.selectMaskingFn
+        ) {
+            this.startIfEnabledOrStop()
+        }
     }
 
     /**

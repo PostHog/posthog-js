@@ -1,0 +1,281 @@
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+import type { Browser, Page } from 'puppeteer';
+import type { eventWithTime } from '@posthog/rrweb-types';
+import { launchPuppeteer } from '../utils';
+
+type TestWindow = Window & { rrweb: typeof import('../../src') };
+const code = readFileSync(
+  resolve(__dirname, '../../dist/rrweb.umd.cjs'),
+  'utf8',
+);
+let browser: Browser;
+let page: Page;
+beforeAll(async () => {
+  browser = await launchPuppeteer();
+});
+beforeEach(async () => {
+  page = await browser.newPage();
+  await page.evaluate(code);
+});
+afterEach(async () => {
+  await page.close();
+});
+afterAll(async () => {
+  await browser.close();
+});
+
+async function capture(
+  shape: string,
+  change: string,
+  mode = 'redactor',
+  explicit = false,
+) {
+  return page.evaluate(
+    async ({ shape, change, mode, explicit }) => {
+      const { record, Replayer } = (window as unknown as TestWindow).rrweb;
+      const values =
+        shape === 'duplicates' ? ['same', 'same', 'same'] : ['a', 'b', 'c'];
+      const options = values
+        .map(
+          (value, index) => `<option value="${value}">Choice ${index}</option>`,
+        )
+        .join('');
+      document.body.innerHTML = `<select class="private" multiple>${shape === 'grouped' ? `<optgroup label="Choices">${options}</optgroup>` : options}</select><input type="text" value="OTHER-TEXT-SECRET"><input type="password" value="OTHER-PASSWORD-SECRET">`;
+      const select = document.querySelector('select')!;
+      if (change === 'remove')
+        for (const option of select.options)
+          option.setAttribute('selected', '');
+      const events: eventWithTime[] = [];
+      const calls: { text: string; tag: string }[] = [];
+      const explicitCategory = mode === 'category';
+      const maskInputOptions = Object.fromEntries(
+        [
+          'color',
+          'date',
+          'datetime-local',
+          'email',
+          'month',
+          'number',
+          'range',
+          'search',
+          'tel',
+          'text',
+          'time',
+          'url',
+          'week',
+          'textarea',
+          'select',
+          'password',
+          'hidden',
+        ].map((key) => [key, key !== 'select']),
+      );
+      const stop = record({
+        maskAllInputs: !explicitCategory,
+        selectMaskingFn: explicit ? () => 'masked' : undefined,
+        maskInputOptions,
+        blockSelector: mode === 'block' ? 'select.private' : undefined,
+        ignoreSelector: mode === 'ignore' ? 'select.private' : undefined,
+        maskInputFn: (text, element) => {
+          calls.push({ text, tag: element.tagName });
+          return mode === 'passthrough' ? text : 'redacted';
+        },
+        emit: (event) => events.push(event),
+      })!;
+      const indices = shape === 'duplicates' ? [1, 2] : [0, 1];
+      if (change === 'remove') select.options[1].removeAttribute('selected');
+      else
+        for (const index of indices) {
+          if (change === 'default')
+            select.options[index].defaultSelected = true;
+          else if (change === 'setter') select.options[index].selected = true;
+          else select.options[index].setAttribute('selected', '');
+        }
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      stop();
+      const selectedMutations = events.flatMap((event) =>
+        event.type === 3 && event.data.source === 0
+          ? event.data.attributes.filter((item) =>
+              Object.hasOwn(item.attributes, 'selected'),
+            )
+          : [],
+      );
+      const inputs = events.flatMap((event) =>
+        event.type === 3 && event.data.source === 5 ? [event.data] : [],
+      );
+      const replayer = new Replayer(events);
+      replayer.pause(
+        events[events.length - 1].timestamp - events[0].timestamp + 1,
+      );
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      const replaySelect =
+        replayer.iframe.contentDocument!.querySelector('select');
+      const replayIndices = replaySelect
+        ? Array.from(replaySelect.selectedOptions, (option) => option.index)
+        : null;
+      replayer.destroy();
+      return {
+        liveIndices: Array.from(
+          select.selectedOptions,
+          (option) => option.index,
+        ),
+        replayIndices,
+        selectedMutations,
+        inputs,
+        calls,
+        payload: JSON.stringify(events),
+      };
+    },
+    { shape, change, mode, explicit },
+  );
+}
+
+for (const shape of ['direct', 'grouped', 'duplicates']) {
+  it.each(['attribute', 'default', 'remove'])(
+    `regression: custom redaction must not expose selected identity (${shape}, %s)`,
+    async (change) => {
+      const result = await capture(shape, change);
+      expect(result.selectedMutations).toEqual([]);
+      expect(result.inputs.length).toBeGreaterThan(0);
+      expect(
+        result.inputs.every(
+          (input) => !Object.hasOwn(input, 'selectedOptionIds'),
+        ),
+      ).toBe(true);
+      expect(result.replayIndices).toEqual([]);
+    },
+  );
+}
+
+for (const shape of ['direct', 'grouped', 'duplicates']) {
+  it.each(['attribute', 'default', 'remove'])(
+    `explicit policy fixes the legacy privacy reproduction (${shape}, %s)`,
+    async (change) => {
+      const result = await capture(shape, change, 'redactor', true);
+      expect(result.selectedMutations).toEqual([]);
+      expect(result.inputs.length).toBeGreaterThan(0);
+      expect(
+        result.inputs.every(
+          (input) => !Object.hasOwn(input, 'selectedOptionIds'),
+        ),
+      ).toBe(true);
+      expect(result.replayIndices).toEqual([]);
+    },
+  );
+}
+
+it('original callback text is still recorded under explicit masking', async () => {
+  const result = await capture('direct', 'setter', 'passthrough', true);
+  expect(result.inputs[0].text).toBe('a');
+  expect(result.inputs[0]).not.toHaveProperty('selectedOptionIds');
+  expect(result.replayIndices).toEqual([]);
+});
+
+it('characterizes safe custom-redactor property updates', async () => {
+  const result = await capture('direct', 'setter');
+  expect(result.selectedMutations).toEqual([]);
+  expect(result.inputs).toHaveLength(1);
+  expect(result.inputs[0].text).toBe('redacted');
+  expect(result.inputs[0]).not.toHaveProperty('selectedOptionIds');
+  expect(result.replayIndices).toEqual([]);
+});
+
+it.each(['attribute', 'default', 'remove', 'setter'])(
+  'existing explicit category unmasking preserves duplicates (%s)',
+  async (change) => {
+    const result = await capture('duplicates', change, 'category');
+    expect(result.replayIndices).toEqual(change === 'remove' ? [0, 2] : [1, 2]);
+    expect(result.calls.filter((call) => call.tag === 'SELECT')).toEqual([]);
+    expect(result.payload).not.toContain('OTHER-TEXT-SECRET');
+    expect(result.payload).not.toContain('OTHER-PASSWORD-SECRET');
+    if (change === 'setter')
+      expect(result.inputs[0].selectedOptionIds).toHaveLength(2);
+  },
+);
+
+it('maskAllInputs true overrides select false rather than explicitly unmasking', async () => {
+  const result = await capture('duplicates', 'setter');
+  expect(result.calls.some((call) => call.tag === 'SELECT')).toBe(true);
+  expect(result.inputs[0]).not.toHaveProperty('selectedOptionIds');
+  expect(result.replayIndices).toEqual([]);
+});
+
+it('existing subtree blocking omits choices and retains an empty placeholder', async () => {
+  const result = await capture('direct', 'attribute', 'block');
+  expect(result.selectedMutations).toEqual([]);
+  expect(result.inputs).toEqual([]);
+  expect(result.replayIndices).toEqual([]);
+  expect(result.payload).not.toContain('Choice 0');
+});
+
+it('ignoreSelector is not a selected-attribute privacy workaround', async () => {
+  const result = await capture('direct', 'attribute', 'ignore');
+  expect(result.selectedMutations).toHaveLength(2);
+  expect(result.inputs).toEqual([]);
+  expect(result.replayIndices).toEqual([0, 1]);
+});
+
+it('identical scalar output cannot distinguish passthrough from redaction', async () => {
+  const outputs = await page.evaluate(() => {
+    const select = document.createElement('select');
+    select.multiple = true;
+    select.innerHTML =
+      '<option value="same">A</option><option value="same">B</option><option value="same">C</option>';
+    select.options[1].selected = select.options[2].selected = true;
+    function callback(redact: boolean) {
+      return (text: string) => (redact ? 'same' : text);
+    }
+    return [callback(false)(select.value), callback(true)(select.value)];
+  });
+  expect(outputs).toEqual(['same', 'same']);
+});
+
+it.each([false, true])(
+  'protocol probe: explicit option IDs update snapshot masking (masked=%s)',
+  async (masked) => {
+    const result = await page.evaluate(async (masked) => {
+      const { record, Replayer } = (window as unknown as TestWindow).rrweb;
+      document.body.innerHTML =
+        '<select multiple><option value="same">A</option><option value="same">B</option><option value="same">C</option></select>';
+      const select = document.querySelector('select')!;
+      const events: eventWithTime[] = [];
+      const stop = record({
+        maskAllInputs: masked,
+        emit: (event) => events.push(event),
+      })!;
+      const selectedOptionIds = [select.options[1], select.options[2]].map(
+        (option) => record.mirror.getId(option),
+      );
+      const id = record.mirror.getId(select);
+      stop();
+      events.push({
+        type: 3,
+        data: {
+          source: 5,
+          id,
+          text: 'same',
+          isChecked: false,
+          selectedOptionIds,
+        },
+        timestamp: events[events.length - 1].timestamp + 1,
+      });
+      const replayer = new Replayer(events);
+      replayer.pause(
+        events[events.length - 1].timestamp - events[0].timestamp + 1,
+      );
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      const selected = Array.from(
+        replayer.iframe.contentDocument!.querySelector('select')!
+          .selectedOptions,
+        (option) => option.index,
+      );
+      replayer.destroy();
+      return selected;
+    }, masked);
+    expect(result).toEqual([1, 2]);
+  },
+);

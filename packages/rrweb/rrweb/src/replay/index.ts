@@ -8,6 +8,7 @@ import {
   toLowerCase,
   attachShadowRootSafely,
   restoreSelectState,
+  updateSelectMaskingState,
 } from '@posthog/rrweb-snapshot';
 import {
   RRDocument,
@@ -2490,6 +2491,7 @@ export class Replayer {
       return this.debugNodeNotFound(d, d.id);
     }
     try {
+      updateSelectMaskingState(target, this.mirror, !d.selectedOptionIds);
       (target as HTMLInputElement).checked = d.isChecked;
       if (target.nodeName === 'SELECT' && d.selectedOptionIds) {
         const select = target as HTMLSelectElement;

@@ -2867,6 +2867,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             maskAllInputs: true,
             maskInputOptions: { password: true },
             maskInputFn: undefined,
+            selectMaskingFn: undefined,
             maskAllElementAttributes: false,
             maskAttributeFn: undefined,
             slimDOMOptions: {},
@@ -2990,6 +2991,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             logger.error(
                 '_startRecorder was called but rrwebRecord is not available. This indicates something has gone wrong.'
             )
+            return
+        }
+
+        if (sessionRecordingOptions.selectMaskingFn && rrwebRecord.supportsSelectMasking !== true) {
+            logger.error('Session recording has not started: the recorder does not support selectMaskingFn.')
             return
         }
 

@@ -6,6 +6,7 @@ import {
   isShadowRoot,
   needMaskingText,
   maskInputValue,
+  getInputMaskOptions,
   maskAttributeValue,
   Mirror,
   isNativeShadowDom,
@@ -135,6 +136,7 @@ export default class MutationBuffer {
   private maskInputOptions: observerParam['maskInputOptions'];
   private maskTextFn: observerParam['maskTextFn'];
   private maskInputFn: observerParam['maskInputFn'];
+  private selectMaskingFn: observerParam['selectMaskingFn'];
   private maskAllElementAttributes: observerParam['maskAllElementAttributes'];
   private maskAttributeFn: observerParam['maskAttributeFn'];
   private keepIframeSrcFn: observerParam['keepIframeSrcFn'];
@@ -165,6 +167,7 @@ export default class MutationBuffer {
         'maskInputOptions',
         'maskTextFn',
         'maskInputFn',
+        'selectMaskingFn',
         'maskAllElementAttributes',
         'maskAttributeFn',
         'keepIframeSrcFn',
@@ -672,6 +675,7 @@ export default class MutationBuffer {
       maskInputOptions: this.maskInputOptions,
       maskTextFn: this.maskTextFn,
       maskInputFn: this.maskInputFn,
+      selectMaskingFn: this.selectMaskingFn,
       maskAllElementAttributes: this.maskAllElementAttributes,
       maskAttributeFn: this.maskAttributeFn,
       slimDOMOptions: this.slimDOMOptions,
@@ -752,6 +756,10 @@ export default class MutationBuffer {
     if (isIgnored(m.target, this.mirror, this.slimDOMOptions)) {
       return;
     }
+    if (this.selectMaskingFn) {
+      const owner = closestElementOfNode(m.target)?.closest('select');
+      if (owner) this.selectedAttributeChanges.add(owner as HTMLSelectElement);
+    }
     switch (m.type) {
       case 'characterData': {
         const value = dom.textContent(m.target);
@@ -793,13 +801,14 @@ export default class MutationBuffer {
         if (
           tagNameLower === 'option' &&
           attributeName === 'selected' &&
-          this.maskInputOptions.select
+          (this.selectMaskingFn || this.maskInputOptions.select)
         ) {
           let parent = dom.parentElement(target);
           if (parent?.tagName === 'OPTGROUP')
             parent = dom.parentElement(parent);
           // A scalar loses choices; custom multiselects keep their legacy attributes.
           const customMultiselect =
+            !this.selectMaskingFn &&
             this.maskInputFn &&
             parent?.tagName === 'SELECT' &&
             (parent as HTMLSelectElement).multiple;
@@ -817,7 +826,11 @@ export default class MutationBuffer {
 
           value = maskInputValue({
             element: htmlTarget,
-            maskInputOptions: this.maskInputOptions,
+            maskInputOptions: getInputMaskOptions(
+              htmlTarget,
+              this.maskInputOptions,
+              this.selectMaskingFn,
+            ),
             tagName: target.tagName,
             type,
             value,

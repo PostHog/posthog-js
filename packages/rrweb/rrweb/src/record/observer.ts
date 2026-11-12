@@ -1,6 +1,8 @@
 import {
   type MaskInputOptions,
   maskInputValue,
+  getInputMaskOptions,
+  updateSelectMaskingState,
   Mirror,
   getInputType,
   stringifyStylesheet,
@@ -451,6 +453,7 @@ function initInputObserver({
   ignoreSelector,
   maskInputOptions,
   maskInputFn,
+  selectMaskingFn,
   sampling,
   userTriggeredOnInput,
 }: observerParam): listenerHandler {
@@ -511,9 +514,20 @@ function initInputObserver({
       return;
     }
     const type: Lowercase<string> = getInputType(target) || '';
+    const inputMaskOptions = getInputMaskOptions(
+      target,
+      maskInputOptions,
+      selectMaskingFn,
+    );
+    if (
+      selectMaskingFn &&
+      (!active || isBlocked(target, blockClass, blockSelector, true))
+    ) {
+      return;
+    }
     const shouldMaskInput =
-      maskInputOptions[tagName.toLowerCase() as keyof MaskInputOptions] ||
-      maskInputOptions[type as keyof MaskInputOptions];
+      inputMaskOptions[tagName.toLowerCase() as keyof MaskInputOptions] ||
+      inputMaskOptions[type as keyof MaskInputOptions];
     let selectedOptions =
       tagName === 'SELECT'
         ? getSelectedOptions(target as HTMLSelectElement)
@@ -553,7 +567,7 @@ function initInputObserver({
     } else if (shouldMaskInput) {
       text = maskInputValue({
         element: target,
-        maskInputOptions,
+        maskInputOptions: inputMaskOptions,
         tagName,
         type,
         value: text,
@@ -564,6 +578,8 @@ function initInputObserver({
     }
     const value: inputValue = { text, isChecked };
     if (selectedOptionIds) value.selectedOptionIds = selectedOptionIds;
+    if (selectMaskingFn && selectedOptions)
+      updateSelectMaskingState(target, mirror, !!shouldMaskInput);
     if (userTriggeredOnInput) value.userTriggered = userTriggered;
     cbWithDedup(target, value);
     // if a radio was checked

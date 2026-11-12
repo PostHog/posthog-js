@@ -258,7 +258,7 @@ describe('Lazy SessionRecording', () => {
         }
     }
 
-    const addRRwebToWindow = () => {
+    const addRRwebToWindow = (selectMaskingSupport?: boolean) => {
         assignableWindow.__PosthogExtensions__.rrweb = {
             record: vi.fn(({ emit }) => {
                 _emit = emit
@@ -280,6 +280,7 @@ describe('Lazy SessionRecording', () => {
             getObserverInitFailures: vi.fn(() => undefined),
             resetSnapshotCostState: vi.fn(),
         }
+        assignableWindow.__PosthogExtensions__.rrweb.record.supportsSelectMasking = selectMaskingSupport
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = vi.fn(() => {
             // we pretend to be rrweb and call emit
             _emit(createFullSnapshot())
@@ -297,6 +298,7 @@ describe('Lazy SessionRecording', () => {
         assignableWindow.__PosthogExtensions__.initSessionRecording = (_ph, documentWasEverVisible) => {
             return new LazyLoadedSessionRecording(posthog, documentWasEverVisible)
         }
+        assignableWindow.__PosthogExtensions__.initSessionRecording.supportsSelectMasking = true
     }
 
     beforeEach(() => {
@@ -3945,6 +3947,7 @@ describe('Lazy SessionRecording', () => {
                 maskTextFn: undefined,
                 maskInputOptions: { password: true },
                 maskInputFn: undefined,
+                selectMaskingFn: undefined,
                 maskAllElementAttributes: false,
                 maskAttributeFn: undefined,
                 slimDOMOptions: {},
@@ -3955,6 +3958,37 @@ describe('Lazy SessionRecording', () => {
                 recordCrossOriginIframes: false,
                 recordAfter: 'DOMContentLoaded',
             })
+        })
+
+        it.each([undefined, false])(
+            'does not use an unsupported recorder with an explicit select policy (%s)',
+            (support) => {
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                    addRRwebToWindow(support)
+                    callback()
+                })
+                posthog.config.session_recording.selectMaskingFn = () => 'masked'
+
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
+            }
+        )
+
+        it('forwards the explicit select masking policy to rrweb', () => {
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                addRRwebToWindow(true)
+                callback()
+            })
+            const selectMaskingFn = (element: HTMLSelectElement): 'masked' | 'unmasked' =>
+                element.hasAttribute('data-public') ? 'unmasked' : 'masked'
+            posthog.config.session_recording.selectMaskingFn = selectMaskingFn
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ selectMaskingFn })
+            )
         })
 
         it('removes scripts when JSON-LD capture is enabled', () => {
