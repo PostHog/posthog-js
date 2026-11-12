@@ -1,3 +1,5 @@
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { createElement, type ReactElement, Suspense, use } from 'react'
 
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
@@ -187,7 +189,6 @@ describe('emails', () => {
         template_key: 'password-reset',
         subject: 'Reset your password',
         html: '<p>Reset</p>',
-        capture_engagement: true,
       },
     ],
     [
@@ -224,7 +225,6 @@ describe('emails', () => {
         html: '<p>Reset</p>',
         text: 'Reset',
         reply_to: ['a@example.com', 'b@example.com'],
-        capture_engagement: true,
       },
     ],
     [
@@ -239,7 +239,6 @@ describe('emails', () => {
         template_key: 'password-reset',
         subject: 'Reset',
         html: '<p>Reset</p>',
-        capture_engagement: true,
       },
     ],
   ])('posts content from code with %s to the same send URL', async (_name, content, body) => {
@@ -297,7 +296,6 @@ describe('emails', () => {
           subject: 'Welcome',
           html: expect.stringContaining('<p>Welcome, Ada</p>'),
           text: 'Welcome, Ada',
-          capture_engagement: true,
           to: 'user@example.com',
         },
       ])
@@ -1029,5 +1027,76 @@ describe('emails', () => {
       expect(error).toMatchObject({ code, name: 'validation_error' })
       expect(fetch).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('emails over HTTP', () => {
+  const CODE_SEND = { to: 'user@example.com', templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>' }
+  const CODE_SEND_BODY = { to: 'user@example.com', template_key: 'welcome', subject: 'Welcome', html: '<p>Hi</p>' }
+
+  let server: Server
+  let posthog: PostHog
+  let received: unknown[]
+
+  beforeAll(async () => {
+    vi.useRealTimers()
+    server = createServer((request, response) => {
+      let body = ''
+      request.on('data', (chunk) => (body += chunk))
+      request.on('end', () => {
+        received.push(JSON.parse(body))
+        response.writeHead(202, { 'Content-Type': 'application/json' })
+        response.end(JSON.stringify({ message_id: 'msg_1', replayed: false }))
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    posthog = new PostHog('phc_test', {
+      secretKey: SECRET_KEY,
+      appHost: `http://127.0.0.1:${port}`,
+      enableLocalEvaluation: false,
+    })
+  })
+
+  afterAll(async () => {
+    await posthog.shutdown()
+    await new Promise((resolve) => server.close(resolve))
+  })
+
+  beforeEach(() => {
+    received = []
+  })
+
+  it.each([
+    ['no tracking or sensitive choice, which leaves them and capture_engagement out', {}, {}],
+    ['the email marked sensitive', { sensitive: true }, { sensitive: true }],
+    ['the email marked not sensitive', { sensitive: false }, { sensitive: false }],
+    ['all tracking turned off', { tracking: false }, { tracking: false }],
+    ['all tracking turned on', { tracking: true }, { tracking: true }],
+    [
+      'each kind of tracking chosen',
+      { tracking: { opens: true, clicks: true, engagement: false } },
+      { tracking: { opens: true, clicks: true, engagement: false } },
+    ],
+    ['the deprecated captureEngagement', { captureEngagement: false }, { capture_engagement: false }],
+  ])('delivers a code send with %s', async (_name, options, body) => {
+    const { data, error } = await posthog.emails.send({ ...CODE_SEND, ...options })
+
+    expect(error).toBeNull()
+    expect(data?.id).toBe('msg_1')
+    expect(received).toEqual([{ ...CODE_SEND_BODY, ...body }])
+  })
+
+  it.each([
+    ['tracking', { tracking: false }],
+    ['sensitive', { sensitive: false }],
+  ])('refuses %s on the template form without sending', async (field, option) => {
+    const send = { to: 'user@example.com', templateId: TEMPLATE_ID, ...option } as unknown as SendEmailOptions
+
+    const { data, error } = await posthog.emails.send(send)
+
+    expect(data).toBeNull()
+    expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
+    expect(received).toEqual([])
   })
 })

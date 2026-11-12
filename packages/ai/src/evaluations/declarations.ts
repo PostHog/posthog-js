@@ -45,11 +45,23 @@ export type ScoreValue = boolean | number | readonly string[]
 export type ScoreInput = ScoreValue | bigint
 export type ResultStatus = 'ok' | 'error' | 'skipped' | 'not_applicable'
 type Outcome =
-  | ({ status?: 'ok'; value: ScoreInput; errorCode?: never } & PayloadOptions<
+  | {
+      calculate: true
+      status?: 'ok'
+      value?: null
+      errorCode?: null
+      payload?: never
+      reasoning?: never
+      errorMessage?: never
+      metadata?: never
+      evaluatorTraceId?: null
+      evaluatedAt?: null
+    }
+  | ({ calculate?: false; status?: 'ok'; value: ScoreInput; errorCode?: never } & PayloadOptions<
       Omit<ResultPayload, 'errorMessage'> & { errorMessage?: null }
     >)
-  | ({ status: 'error'; value?: never; errorCode?: string } & PayloadOptions<ResultPayload>)
-  | ({ status: 'skipped' | 'not_applicable'; value?: never; errorCode?: never } & PayloadOptions<
+  | ({ calculate?: false; status: 'error'; value?: never; errorCode?: string } & PayloadOptions<ResultPayload>)
+  | ({ calculate?: false; status: 'skipped' | 'not_applicable'; value?: never; errorCode?: never } & PayloadOptions<
       Omit<ResultPayload, 'errorMessage'> & { errorMessage?: null }
     >)
 export type EvaluationResultOptions = Outcome & {
@@ -203,6 +215,8 @@ export class EvaluationItem {
 
 /** An evaluator outcome pinned to an exact scorer version. `ok` does not imply passing. */
 export class EvaluationResult {
+  /** Request a server-calculated composite instead of reporting a value. */
+  readonly calculate: boolean
   readonly item: EvaluationItem | string
   readonly scorerVersionId: string
   readonly itemId: string
@@ -211,6 +225,7 @@ export class EvaluationResult {
     keys(options, [
       'item',
       'scorerVersionId',
+      'calculate',
       'status',
       'value',
       'errorCode',
@@ -222,6 +237,19 @@ export class EvaluationResult {
     this.item = options.item instanceof EvaluationItem ? options.item : uuid(options.item)
     this.itemId = typeof this.item === 'string' ? this.item : this.item.id
     this.scorerVersionId = uuid(options.scorerVersionId)
+    if (options.calculate !== undefined && typeof options.calculate !== 'boolean')
+      throw new TypeError('calculate must be a boolean.')
+    this.calculate = options.calculate === true
+    if (
+      this.calculate &&
+      (options.value != null ||
+        (options.status !== undefined && options.status !== 'ok') ||
+        options.errorCode != null ||
+        options.evaluatorTraceId != null ||
+        options.evaluatedAt != null ||
+        ['payload', ...Object.keys(RESULT_FIELDS)].some((key) => (options as WireObject)[key] !== undefined))
+    )
+      throw new TypeError('A calculation accepts only item, scorerVersionId, and calculate: true.')
     const status = options.status ?? 'ok'
     if (!['ok', 'error', 'skipped', 'not_applicable'].includes(status))
       throw new TypeError('Unsupported result status.')
@@ -229,8 +257,12 @@ export class EvaluationResult {
       throw new TypeError('Only ok results can contain a score.')
     if (status !== 'error' && options.errorCode != null)
       throw new TypeError('Only error results can contain an error code.')
-    const body: WireObject = { item_id: this.itemId, scorer_version_id: this.scorerVersionId, status }
-    if (status === 'ok') body.value = score(options.value)
+    const body: WireObject = { item_id: this.itemId, scorer_version_id: this.scorerVersionId }
+    if (this.calculate) body.calculate = true
+    else {
+      body.status = status
+      if (status === 'ok') body.value = score(options.value)
+    }
     if (options.errorCode != null) body.error_code = identifier(options.errorCode, 128)
     if (options.evaluatorTraceId != null) body.evaluator_trace_id = identifier(options.evaluatorTraceId)
     if (options.evaluatedAt != null) body.evaluated_at = timestamp(options.evaluatedAt)
@@ -256,6 +288,7 @@ export class EvaluationResult {
     keys(data, [
       'item_id',
       'scorer_version_id',
+      'calculate',
       'status',
       'value',
       'error_code',
@@ -279,6 +312,7 @@ export class EvaluationResult {
       defined({
         item: options.item ?? itemId,
         scorerVersionId: data.scorer_version_id,
+        calculate: data.calculate,
         status: data.status,
         value: valueInput,
         errorCode: data.error_code,
