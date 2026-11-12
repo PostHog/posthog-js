@@ -178,7 +178,7 @@ Model identifiers must be nonempty strings of at most 255 characters and are pre
 trimming. Explicit models survive serialization, retries, and recovery. Changing a model requires
 a new item UUID because model attribution is part of the immutable execution declaration.
 
-`scorers` provides create/get/list/update/createVersion/getVersion/listVersions. Configurations
+`scorers` provides create/get/list/update/createVersion/getVersion/listVersions/validateComposition. Configurations
 are typed by `kind`: `boolean`, `numeric`, or `categorical`. Store `currentVersionId` to pin a
 configuration. Metadata updates do not create versions; explicit `createVersion` does, including
 when the configuration is unchanged. Optional `baseVersion` detects conflicting version writes.
@@ -186,10 +186,84 @@ Scorer names are not unique. A result with `status: 'ok'` means the evaluator su
 may still fail the pinned scorer's passing rule. Other statuses are `error`, `skipped`, and
 `not_applicable`, and carry no score.
 
+### Composite scorers
+
+Composite scorers calculate an item score on the server from exact, pinned versions of reported
+scorers. This requires the composite scorer backend rollout. Ordinary scorer requests and uploads
+remain compatible with older backends.
+
+```ts
+import { EvaluationItem, EvaluationResult } from '@posthog/ai/evaluations'
+
+const quality = await evaluations.scorers.get(qualityScorerId)
+const safety = await evaluations.scorers.get(safetyScorerId)
+const composition = {
+  expression: 'quality * number(safe)',
+  inputs: [
+    { alias: 'quality', scorerVersionId: quality.currentVersionId },
+    { alias: 'safe', scorerVersionId: safety.currentVersionId },
+  ],
+}
+// Validation checks syntax, input access, and types without saving a scorer.
+await evaluations.scorers.validateComposition({ kind: 'numeric', composition, config: { min: 0, max: 1 } })
+const combined = await evaluations.scorers.create({
+  name: 'Safe answer quality',
+  kind: 'numeric',
+  config: { min: 0, max: 1 },
+  calculation: 'composite',
+  composition,
+})
+const experiment = await evaluations.createExperiment({
+  name: 'Combined quality',
+  expectedItemCount: 1,
+  expectedResultCount: 3,
+})
+const item = new EvaluationItem({ input: 'Question', output: 'Answer' })
+const receipt = await experiment.uploadResults([
+  new EvaluationResult({ item, scorerVersionId: quality.currentVersionId, value: 0.8 }),
+  new EvaluationResult({ item, scorerVersionId: safety.currentVersionId, value: true }),
+  new EvaluationResult({ item, scorerVersionId: combined.currentVersionId, calculate: true }),
+])
+// An acknowledged calculation may have failed; inspect its stored outcome.
+const outcome = receipt.chunks[0].results[2]
+if (outcome.status === 'error') console.error(outcome.errorCode)
+await experiment.complete()
+```
+
+The example uses numeric quality and Boolean safety scorers. Boolean inputs retain their raw
+polarity; categorical inputs are lists of keys, usable as `"safe" in categories`. Formulas support
+arithmetic, comparisons, membership, Boolean operators, conditionals, `number`, `min`, `max`, and
+`abs`. They accept 1–16 inputs and up to 1,024 characters. Aliases must be unique lowercase
+identifiers (`[a-z][a-z0-9_]{0,31}`), cannot be formula keywords/functions, and must occur in the
+expression. Nested composites and numeric composite `step` values are unsupported.
+
+Calculation mode and output kind are fixed after creation. Pass the complete `composition` to
+`createVersion`, alongside `config` and optionally `baseVersion`. Source updates never change
+existing pins: `inputScorers` exposes both pinned config and latest-version metadata.
+`list({ calculation: 'composite', inputDefinitionId })` finds dependent composites.
+Omitting `config` from `validateComposition` checks syntax and types only; runtime values and
+output bounds are checked during ingestion. The SDK never evaluates formulas or discovers inputs.
+
+Use `calculate: true` without a value, payload, error, evaluator trace, or evaluation time.
+Ingestion-only keys must supply every pinned input in the same upload, including on exact retries.
+Reusing stored inputs without resubmitting them requires both `evaluation:read` and
+`llm_analytics:read`. Bulk uploads preserve caller order and keep all supplied results for a
+composite-bearing item together, including intervening results. Group each item's results together
+in large batches: an indivisible group exceeding 1,000 items/results or 5 MiB rejects the entire
+bulk call before any request is sent.
+
+Receipts expose stored `status` and `errorCode`. Input errors propagate as `composite_input_error`;
+formula or output-rule failures use `composite_formula_error`. Accepted composite errors count
+toward `expectedResultCount`, while derived results add no uploaded-result billing usage.
+Exact retries return stored outcomes, subject to current access checks. Older reported receipts
+without outcomes expose `status: null` and `errorCode: null`. Save and restore calculation
+declarations with the same serialization and recovery methods as reported results.
+
 | Operation                              | Credential and scope                                                 |
 | -------------------------------------- | -------------------------------------------------------------------- |
 | Dataset reads/writes                   | Personal key: `dataset:read` / `dataset:write`                       |
 | Scorer reads/writes                    | Personal key: `llm_analytics:read` / `llm_analytics:write`           |
+| Formula validation                     | Personal key: `llm_analytics:read`                                   |
 | Experiment create/upload/complete/fail | Personal or project secret key: `offline_evaluation_ingestion:write` |
 | Experiment tags                        | Personal key: `evaluation:read` / `evaluation:write`                 |
 
