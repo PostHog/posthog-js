@@ -10,6 +10,7 @@ export type { EmailErrorName } from './emails/errors'
 export type {
   CodeEmailForm,
   EmailDeliveryStatus,
+  EmailPreferences,
   EmailReactElement,
   Emails,
   EmailStatus,
@@ -21,6 +22,8 @@ export type {
   SendEmailResponse,
   SendEmailResult,
   SendTemplateEmailOptions,
+  SetEmailPreferencesOptions,
+  SetEmailPreferencesResponse,
   TemplateEmailForm,
 } from './emails/types'
 export type {
