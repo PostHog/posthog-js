@@ -1030,6 +1030,13 @@ failure. The message never contains the secret key or the request body.
 | <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog answered. | - |
 | <a id="why"></a> `why?` | `readonly` | `string` | - | - |
 
+### `TRANSACTIONAL_EMAIL_CATEGORY`
+
+> `const` **TRANSACTIONAL\_EMAIL\_CATEGORY**: `"transactional"` = `'transactional'`
+
+The built-in message category of `posthog.emails.send()`: transactional email with no category. Unlike a
+send without a category, it doesn't follow the category of the template that `templateKey` names.
+
 ## Flush
 
 ### `PostHog.flush`
@@ -2796,6 +2803,7 @@ Options accepted by `posthog.metrics.count/gauge/histogram`.
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-captureengagement"></a> `captureEngagement?` | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. |
+| <a id="property-category"></a> `category?` | `"transactional"` \| `MessageCategory` | The email's message category. Without it, the email follows the category of the template that `templateKey` names, or is transactional with no category. `TRANSACTIONAL_EMAIL_CATEGORY` asks for transactional email with no category, so PostHog refuses it with `category_mismatch` when `templateKey` names a template in a category. A `MessageCategory` files the email under that category. A marketing email honors the recipient's opt-outs and gets unsubscribe headers. Its `html`, or its `text` when it has no `html`, needs the `{{ unsubscribe_url }}` placeholder. The send returns an error with code `category_mismatch` when a category with this key has another type, or when `templateKey` names a template in another category; `too_many_categories` when the project can't take another category; `unsubscribe_link_required` when a marketing email has no unsubscribe placeholder; `copies_not_allowed` when a marketing email has copies; and `recipient_opted_out` when the recipient opted out of the category or of all marketing email. |
 | <a id="property-from"></a> `from?` | `string` | A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender. |
 | <a id="property-replyto"></a> `replyTo?` | `string` \| `string`[] | - |
 | <a id="property-subject"></a> `subject` | `string` | - |
@@ -4427,6 +4435,21 @@ Warning. Something unexpected but non-fatal.
 
 Log capture types
 
+### `MessageCategory`
+
+A message category that a send defines in code. PostHog creates the category when the project has
+none with this key, and restores it when it was deleted. Otherwise the send leaves the category as it
+is: a send never renames a category or changes its description. Change those in PostHog.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-description"></a> `description?` | `string` | Notes about which emails belong to the category. Used only when the send creates the category. |
+| <a id="property-key"></a> `key` | `string` | Identifies the category in the project, such as `'newsletter'`. Recipients opt out of a category by its key. |
+| <a id="property-name"></a> `name` | `string` | The category's name, shown in PostHog. Used only when the send creates the category. |
+| <a id="property-type-1"></a> `type` | `"transactional"` \| `"marketing"` | A marketing category honors the recipient's opt-outs. A transactional one only files the email. |
+
 ### `MetricAttributes`
 
 > **MetricAttributes** = `Record`\<`string`, `MetricAttributeValue`\>
@@ -5237,7 +5260,7 @@ encoding — `userId: 42` reads as `42`, not `{ intValue: "42" }`.
 | <a id="property-endtime"></a> `endTime` | `public` | `number` | **`Experimental`** Millisecond epoch. |
 | <a id="property-events"></a> `events` | `public` | `object`[] | **`Experimental`** |
 | <a id="property-kind"></a> `kind` | `public` | `SpanKind` | **`Experimental`** |
-| <a id="property-name"></a> `name` | `public` | `string` | **`Experimental`** |
+| <a id="property-name-1"></a> `name` | `public` | `string` | **`Experimental`** |
 | <a id="property-parentspanid"></a> `parentSpanId?` | `readonly` | `string` | **`Experimental`** Absent on a root span. |
 | <a id="property-spanid-1"></a> `spanId` | `readonly` | `string` | **`Experimental`** |
 | <a id="property-starttime"></a> `startTime` | `public` | `number` | **`Experimental`** Millisecond epoch. |
