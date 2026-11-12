@@ -3,8 +3,7 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState, Platform } from 'react-native'
 import { wait, waitForNativeChain, waitForNativePluginEvaluation } from './test-utils'
 
-// The native plugin bridge. The
-// getter lets a test remove the plugin altogether to model an app without it installed.
+// The native plugin bridge. The getter lets a test remove the plugin altogether to model an app without it installed.
 let nativeRecording = false
 // The native replay debug map returned by `getSessionReplayDebugProperties`; mutable so a
 // test can shape it, reset to `{}` (no integration) between tests.

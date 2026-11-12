@@ -36,8 +36,6 @@ const mockPlugin = OptionalReactNativePlugin as unknown as {
 }
 
 const resetMockPlugin = (): void => {
-  // `setup` may have been deleted by the legacy-plugin test; restore it if so.
-  mockPlugin.setup = mockPlugin.setup ?? vi.fn()
   mockPlugin.setup.mockImplementation(() => Promise.resolve())
   mockPlugin.startSession.mockImplementation(() => Promise.resolve())
   mockPlugin.endSession.mockImplementation(() => Promise.resolve())

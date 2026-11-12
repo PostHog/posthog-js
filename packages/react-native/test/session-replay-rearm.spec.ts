@@ -81,6 +81,10 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
   })
 
   afterEach(async () => {
+    // Push is off, so setup() only runs to start replay: every call must enable it.
+    for (const [, , pluginConfig] of replay.setup.mock.calls) {
+      expect(pluginConfig.sessionReplay.enabled).toBe(true)
+    }
     await posthog.shutdown()
   })
 
