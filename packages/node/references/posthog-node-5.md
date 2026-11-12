@@ -2795,11 +2795,13 @@ Options accepted by `posthog.metrics.count/gauge/histogram`.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-captureengagement"></a> `captureEngagement?` | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. |
+| <a id="property-captureengagement"></a> ~~`captureEngagement?`~~ | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. **Deprecated** Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a send that sets both `captureEngagement` and `tracking`. |
 | <a id="property-from"></a> `from?` | `string` | A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender. |
 | <a id="property-replyto"></a> `replyTo?` | `string` \| `string`[] | - |
+| <a id="property-sensitive"></a> `sensitive?` | `boolean` | Marks the email as sensitive, such as one that carries login links, reset tokens or codes. A sensitive email keeps its links as they are unless `tracking` turns clicks on, leaves its subject off engagement events, and keeps its content out of PostHog's logs. Without it, a send whose `templateKey` matches a template saved in PostHog follows that template's setting, and any other send is sensitive. |
 | <a id="property-subject"></a> `subject` | `string` | - |
 | <a id="property-templatekey"></a> `templateKey` | `string` | Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog. Letters, digits, hyphens and underscores, at most 400. |
+| <a id="property-tracking"></a> `tracking?` | `boolean` \| `EmailTracking` | What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel, captures engagement events, and counts clicks only when the email isn't sensitive. - `true` turns on opens, clicks and engagement events. - `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the email's opens or clicks, and captures no engagement events. - An object turns each kind on or off. A key you leave out keeps its default. Turn clicks on for a sensitive email only when its links are safe to send through PostHog's click tracking. |
 
 ### `CodeEmailForm`
 
@@ -2956,6 +2958,18 @@ The status of an email that `posthog.emails.send()` queued.
 | <a id="property-reason"></a> `reason` | `string` \| `null` | Why a failed email was not sent, such as `provider_error` or `recipient_suppressed`, or the bounce type of a bounced email: `hard`, `soft` or `unknown`. Null otherwise. |
 | <a id="property-status"></a> `status` | `EmailDeliveryStatus` \| `string` & `object` | - |
 | <a id="property-statusat"></a> `statusAt` | `string` | When the email reached its current status, as an ISO 8601 timestamp. |
+
+### `EmailTracking`
+
+Which kinds of tracking a send with `templateKey` turns on.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-clicks"></a> `clicks?` | `boolean` | Counts clicks by sending the email's links through PostHog's click tracking. Defaults to `false` for a sensitive email and `true` for any other. Needs `opens`: PostHog refuses a send with `opens: false` and `clicks: true`. |
+| <a id="property-engagement"></a> `engagement?` | `boolean` | Captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. |
+| <a id="property-opens"></a> `opens?` | `boolean` | Counts opens with PostHog's open pixel. Defaults to `true`. |
 
 ### `EmailWarning`
 
