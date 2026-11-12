@@ -15,6 +15,7 @@ export default defineConfig({
       'expo-file-system': fromRoot('./test/mocks/expo-file-system.ts'),
       'expo-localization': fromRoot('./test/mocks/expo-localization.ts'),
       '@posthog/core/surveys': fromRoot('../core/src/surveys/index.ts'),
+      '@posthog/core/capture-v1': fromRoot('../core/src/capture-v1/index.ts'),
       '@posthog/core': fromRoot('../core/src/index.ts'),
       '@posthog/types': fromRoot('../types/src/index.ts'),
       '@posthog/react-native-plugin/package.json': fromRoot('../react-native-plugin/package.json'),

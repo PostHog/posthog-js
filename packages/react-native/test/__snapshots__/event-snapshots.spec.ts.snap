@@ -3,11 +3,13 @@
 exports[`PostHog React Native event and request snapshots > snapshots complete enriched analytics events at the decoded batch boundary 1`] = `
 {
   "body": {
-    "api_key": "snapshot-project-token",
     "batch": [
       {
         "distinct_id": "anonymous-snapshot-id",
         "event": "report exported",
+        "options": {
+          "process_person_profile": false,
+        },
         "properties": {
           "$active_feature_flags": [
             "checkout-flow",
@@ -27,23 +29,23 @@ exports[`PostHog React Native event and request snapshots > snapshots complete e
           "$locale": "en-US",
           "$os_name": "iOS",
           "$os_version": "17.0",
-          "$process_person_profile": false,
           "$recording_status": "disabled",
           "$screen_height": 1334,
           "$screen_width": 750,
           "$sdk_debug_pending_queue_size": 0,
-          "$session_id": "<session-id>",
           "$timezone": "UTC",
           "account_tier": "pro",
           "export_format": "csv",
           "row_count": 42,
         },
+        "session_id": "<session-id>",
         "timestamp": "<event-timestamp>",
         "uuid": "<event-uuid>",
       },
       {
         "distinct_id": "identified-snapshot-id",
         "event": "$identify",
+        "options": {},
         "properties": {
           "$active_feature_flags": [
             "checkout-flow",
@@ -68,7 +70,6 @@ exports[`PostHog React Native event and request snapshots > snapshots complete e
           "$screen_width": 750,
           "$sdk_debug_pending_queue_size": 1,
           "$sdk_debug_session_start": 1704164645000,
-          "$session_id": "<session-id>",
           "$set": {
             "email": "snapshot@example.com",
           },
@@ -78,12 +79,14 @@ exports[`PostHog React Native event and request snapshots > snapshots complete e
           "$timezone": "UTC",
           "account_tier": "pro",
         },
+        "session_id": "<session-id>",
         "timestamp": "<event-timestamp>",
         "uuid": "<event-uuid>",
       },
       {
         "distinct_id": "identified-snapshot-id",
         "event": "$groupidentify",
+        "options": {},
         "properties": {
           "$active_feature_flags": [
             "checkout-flow",
@@ -115,16 +118,19 @@ exports[`PostHog React Native event and request snapshots > snapshots complete e
           "$screen_height": 1334,
           "$screen_width": 750,
           "$sdk_debug_pending_queue_size": 2,
-          "$session_id": "<session-id>",
           "$timezone": "UTC",
           "account_tier": "pro",
         },
+        "session_id": "<session-id>",
         "timestamp": "<event-timestamp>",
         "uuid": "<event-uuid>",
       },
       {
         "distinct_id": "identified-snapshot-id",
         "event": "$feature_flag_called",
+        "options": {
+          "process_person_profile": true,
+        },
         "properties": {
           "$active_feature_flags": [
             "checkout-flow",
@@ -150,22 +156,24 @@ exports[`PostHog React Native event and request snapshots > snapshots complete e
           "$locale": "en-US",
           "$os_name": "iOS",
           "$os_version": "17.0",
-          "$process_person_profile": true,
           "$recording_status": "disabled",
           "$screen_height": 1334,
           "$screen_width": 750,
           "$sdk_debug_pending_queue_size": 3,
-          "$session_id": "<session-id>",
           "$timezone": "UTC",
           "$used_bootstrap_value": true,
           "account_tier": "pro",
         },
+        "session_id": "<session-id>",
         "timestamp": "<event-timestamp>",
         "uuid": "<event-uuid>",
       },
       {
         "distinct_id": "identified-snapshot-id",
         "event": "$exception",
+        "options": {
+          "process_person_profile": true,
+        },
         "properties": {
           "$active_feature_flags": [
             "checkout-flow",
@@ -215,28 +223,32 @@ exports[`PostHog React Native event and request snapshots > snapshots complete e
           "$locale": "en-US",
           "$os_name": "iOS",
           "$os_version": "17.0",
-          "$process_person_profile": true,
           "$recording_status": "disabled",
           "$screen_height": 1334,
           "$screen_width": 750,
           "$sdk_debug_pending_queue_size": 4,
-          "$session_id": "<session-id>",
           "$timezone": "UTC",
           "account_tier": "pro",
           "order_id": "order-123",
         },
+        "session_id": "<session-id>",
         "timestamp": "<event-timestamp>",
         "uuid": "<event-uuid>",
       },
     ],
-    "sent_at": "2024-01-02T03:04:05.000Z",
+    "created_at": "2024-01-02T03:04:05.000Z",
   },
   "headers": {
+    "Authorization": "Bearer snapshot-project-token",
     "Content-Type": "application/json",
+    "PostHog-Attempt": "1",
+    "PostHog-Request-Id": "<request-id>",
+    "PostHog-Request-Timestamp": "2024-01-02T03:04:05.000Z",
+    "PostHog-Sdk-Info": "posthog-react-native/<sdk-version>",
     "User-Agent": "posthog-react-native/<sdk-version>",
   },
   "method": "POST",
-  "url": "https://snapshot.posthog.test/batch/",
+  "url": "https://snapshot.posthog.test/i/v1/analytics/events",
 }
 `;
 
