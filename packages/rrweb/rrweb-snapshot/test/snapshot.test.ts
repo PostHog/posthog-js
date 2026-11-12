@@ -296,6 +296,42 @@ describe('scrollTop/scrollLeft', () => {
       },
     });
   });
+
+  // Reading a scroll position inside content the browser skips rendering
+  // (`content-visibility: auto` off screen) forces the layout of that content
+  it('should not read scroll positions of content the browser skips rendering', () => {
+    const el = render(`<div>Lorem ipsum</div>`);
+    const checkVisibility = vi.fn(() => false);
+    const scrollTop = vi.fn(() => 10);
+    const scrollLeft = vi.fn(() => 20);
+    Object.defineProperty(el, 'checkVisibility', { value: checkVisibility });
+    Object.defineProperty(el, 'scrollTop', { get: scrollTop });
+    Object.defineProperty(el, 'scrollLeft', { get: scrollLeft });
+
+    const serialized = serializeNode(el) as elementNode;
+
+    expect(checkVisibility).toHaveBeenCalledWith({
+      contentVisibilityAuto: true,
+    });
+    expect(scrollTop).not.toHaveBeenCalled();
+    expect(scrollLeft).not.toHaveBeenCalled();
+    expect(serialized.attributes).not.toHaveProperty('rr_scrollTop');
+    expect(serialized.attributes).not.toHaveProperty('rr_scrollLeft');
+  });
+
+  it('should serialize scroll positions of rendered content', () => {
+    const el = render(`<div>Lorem ipsum</div>`);
+    Object.defineProperty(el, 'checkVisibility', { value: () => true });
+    el.scrollTop = 10;
+    el.scrollLeft = 20;
+
+    expect(serializeNode(el)).toMatchObject({
+      attributes: {
+        rr_scrollTop: 10,
+        rr_scrollLeft: 20,
+      },
+    });
+  });
 });
 
 describe('CDATA text content', () => {

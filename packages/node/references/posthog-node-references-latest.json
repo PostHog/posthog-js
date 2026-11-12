@@ -2075,10 +2075,9 @@
       "name": "CodeEmailFields",
       "properties": [
         {
-          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.\nDeprecated: Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a send that sets both `captureEngagement` and `tracking`.",
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.",
           "type": "boolean",
-          "name": "captureEngagement",
-          "releaseTag": "deprecated"
+          "name": "captureEngagement"
         },
         {
           "description": "A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender.",
@@ -2090,11 +2089,6 @@
           "name": "replyTo"
         },
         {
-          "description": "Marks the email as sensitive, such as one that carries login links, reset tokens or codes. A sensitive email keeps its links as they are unless `tracking` turns clicks on, leaves its subject off engagement events, and keeps its content out of PostHog's logs.\nWithout it, a send whose `templateKey` matches a template saved in PostHog follows that template's setting, and any other send is sensitive.",
-          "type": "boolean",
-          "name": "sensitive"
-        },
-        {
           "type": "string",
           "name": "subject"
         },
@@ -2102,11 +2096,6 @@
           "description": "Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog. Letters, digits, hyphens and underscores, at most 400.",
           "type": "string",
           "name": "templateKey"
-        },
-        {
-          "description": "What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel, captures engagement events, and counts clicks only when the email isn't sensitive.\n- `true` turns on opens, clicks and engagement events. - `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the email's opens or clicks, and captures no engagement events. - An object turns each kind on or off. A key you leave out keeps its default.\nTurn clicks on for a sensitive email only when its links are safe to send through PostHog's click tracking.",
-          "type": "boolean | EmailTracking",
-          "name": "tracking"
         }
       ],
       "path": "src/emails/types.ts"
@@ -2116,7 +2105,7 @@
       "name": "CodeEmailForm",
       "properties": [],
       "path": "src/emails/types.ts",
-      "example": "CodeEmailFields & ({\n    html: string;\n    text?: string;\n} | {\n    html?: string;\n    text: string;\n})"
+      "example": "CodeEmailFields & ({\n    html: string;\n    text?: string;\n    react?: never;\n} | {\n    html?: string;\n    text: string;\n    react?: never;\n} | {\n    react: EmailReactElement;\n    text?: string;\n    html?: never;\n})"
     },
     {
       "id": "Coercer",
@@ -2254,6 +2243,21 @@
       "path": "src/emails/errors.ts"
     },
     {
+      "id": "EmailReactElement",
+      "name": "EmailReactElement",
+      "properties": [
+        {
+          "type": "unknown",
+          "name": "props"
+        },
+        {
+          "type": "unknown",
+          "name": "type"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
       "id": "Emails",
       "name": "Emails",
       "properties": [],
@@ -2286,28 +2290,6 @@
           "description": "When the email reached its current status, as an ISO 8601 timestamp.",
           "type": "string",
           "name": "statusAt"
-        }
-      ],
-      "path": "src/emails/types.ts"
-    },
-    {
-      "id": "EmailTracking",
-      "name": "EmailTracking",
-      "properties": [
-        {
-          "description": "Counts clicks by sending the email's links through PostHog's click tracking. Defaults to `false` for a sensitive email and `true` for any other. Needs `opens`: PostHog refuses a send with `opens: false` and `clicks: true`.",
-          "type": "boolean",
-          "name": "clicks"
-        },
-        {
-          "description": "Captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks.",
-          "type": "boolean",
-          "name": "engagement"
-        },
-        {
-          "description": "Counts opens with PostHog's open pixel. Defaults to `true`.",
-          "type": "boolean",
-          "name": "opens"
         }
       ],
       "path": "src/emails/types.ts"
@@ -2875,6 +2857,26 @@
       "path": "src/types.ts"
     },
     {
+      "id": "HonoContextLike",
+      "name": "HonoContextLike",
+      "properties": [
+        {
+          "description": "Set by Hono when a handler threw and its error handler produced the response.",
+          "type": "unknown",
+          "name": "error"
+        },
+        {
+          "type": "{\n        raw: Request;\n        routePath: string;\n    }",
+          "name": "req"
+        },
+        {
+          "type": "Response",
+          "name": "res"
+        }
+      ],
+      "path": "src/extensions/fetch-request.ts"
+    },
+    {
       "id": "IdentifyMessage",
       "name": "IdentifyMessage",
       "properties": [
@@ -2892,6 +2894,23 @@
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "InstrumentRequestOptions",
+      "name": "InstrumentRequestOptions",
+      "properties": [
+        {
+          "description": "The matched route pattern (`/users/:id`), once the handler has run. Used to name the span and as the `http.route` metric attribute. Without it the span is named after the method only, so raw paths never become high-cardinality span names or metric series.",
+          "type": "(request: Request, response: Response | undefined) => string | undefined",
+          "name": "getRoute"
+        },
+        {
+          "description": "Skip instrumentation (health checks, for example). The handler still runs, with no span or metrics.",
+          "type": "(request: Request) => boolean",
+          "name": "ignore"
+        }
+      ],
+      "path": "src/extensions/fetch-request.ts"
     },
     {
       "id": "IPostHog",
@@ -3801,6 +3820,42 @@
       "path": "../core/src/types.ts"
     },
     {
+      "id": "PostHogForRequests",
+      "name": "PostHogForRequests",
+      "properties": [
+        {
+          "description": "Run a function with specific context that will be applied to all events captured within that context.\nIt propagates the context to all subsequent calls down the call stack.\nContext properties like tags and sessionId will be automatically attached to all events.\nBy default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.",
+          "type": "<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions) => T",
+          "name": "withContext"
+        },
+        {
+          "description": "Runs a callback with a span active for its duration and ends the span for\nyou — at return for a sync callback, at settle for an async one. Takes an\noptional `StartSpanOptions` between the name and the callback:\n`withSpan(name, fn)` or `withSpan(name, options, fn)`.\n\nSpans started inside the callback nest under it automatically. If the\ncallback throws or rejects, the span records the exception and the original\nerror is rethrown unchanged. A callback that ends the span itself gets the\nrethrow but not the recording, since the span is already exported by then.\n\nSpans nest across `await` only on the Node runtime, which tracks the active\nspan with `AsyncLocalStorage`. The edge build restores the active span when\nthe callback returns its promise, so spans started after an `await` there\nbegin a new trace.\n\n{@label Traces}",
+          "type": "{ <T>(name: string, fn: (span: Span) => T): T; <T>(name: string, options: StartSpanOptions, fn: (span: Span) => T): T; }",
+          "name": "withSpan"
+        },
+        {
+          "description": "Get the current context data.",
+          "type": "() => ContextData | undefined",
+          "name": "getContext"
+        },
+        {
+          "description": "The `posthog.metrics` API: a statsd-style pre-aggregating metrics client — alpha.\nSamples are folded into per-series aggregates in memory and flushed\nperiodically as one OTLP data point per series per window, so recording\nfrom hot paths is cheap. Configure via the `metrics` client option.",
+          "type": "Metrics",
+          "name": "metrics"
+        },
+        {
+          "description": "The project token the client was created with. Same value as `projectToken`.",
+          "type": "string",
+          "name": "apiKey"
+        },
+        {
+          "type": "PostHogOptions",
+          "name": "options"
+        }
+      ],
+      "path": "src/extensions/fetch-request.ts"
+    },
+    {
       "id": "PostHogLogsConfig",
       "name": "PostHogLogsConfig",
       "properties": [
@@ -4671,20 +4726,9 @@
           "name": "replyTo"
         },
         {
-          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.\nDeprecated: Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a\nsend that sets both `captureEngagement` and `tracking`.",
+          "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.",
           "type": "never",
-          "name": "captureEngagement",
-          "releaseTag": "deprecated"
-        },
-        {
-          "description": "Marks the email as sensitive, such as one that carries login links, reset tokens or codes.\nA sensitive email keeps its links as they are unless `tracking` turns clicks on, leaves its\nsubject off engagement events, and keeps its content out of PostHog's logs.\n\nWithout it, a send whose `templateKey` matches a template saved in PostHog follows that\ntemplate's setting, and any other send is sensitive.",
-          "type": "never",
-          "name": "sensitive"
-        },
-        {
-          "description": "What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel,\ncaptures engagement events, and counts clicks only when the email isn't sensitive.\n\n- `true` turns on opens, clicks and engagement events.\n- `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the\n  email's opens or clicks, and captures no engagement events.\n- An object turns each kind on or off. A key you leave out keeps its default.\n\nTurn clicks on for a sensitive email only when its links are safe to send through PostHog's\nclick tracking.",
-          "type": "never",
-          "name": "tracking"
+          "name": "captureEngagement"
         },
         {
           "type": "never",
@@ -4693,6 +4737,10 @@
         {
           "type": "never",
           "name": "text"
+        },
+        {
+          "type": "never",
+          "name": "react"
         }
       ],
       "path": "src/emails/types.ts"

@@ -1,5 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { createElement, type ReactElement, Suspense, use } from 'react'
 
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
 
@@ -23,6 +24,27 @@ const rejected = (status: number, code?: string, headers: Record<string, string>
   status,
   body: code ? { type: 'invalid_request', code, detail: 'Nope.', attr: null } : undefined,
   headers,
+})
+
+const SEND_FIELDS = new Set([
+  'template_id',
+  'message_data',
+  'template_key',
+  'subject',
+  'html',
+  'text',
+  'from',
+  'reply_to',
+  'capture_engagement',
+  'distinct_id',
+  'to',
+])
+
+const fakeReply = (status: number, body: unknown) => ({
+  status,
+  text: async () => JSON.stringify(body),
+  json: async () => body,
+  headers: { get: () => null },
 })
 
 describe('emails', () => {
@@ -52,6 +74,28 @@ describe('emails', () => {
   }
 
   const sentHeaders = (): string[] => fetch.mock.calls.map(([, options]) => options.headers['Idempotency-Key'])
+
+  const deliverToInbox = (): Record<string, unknown>[] => {
+    const inbox: Record<string, unknown>[] = []
+    fetch.mockImplementation(async (url: string, options: { method: string; body?: string }) => {
+      if (url !== SEND_URL || options.method !== 'POST') {
+        return fakeReply(404, { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null })
+      }
+      const email: Record<string, unknown> = JSON.parse(options.body ?? '{}')
+      const unknownField = Object.keys(email).find((field) => !SEND_FIELDS.has(field))
+      if (unknownField !== undefined) {
+        return fakeReply(400, {
+          type: 'validation_error',
+          code: 'invalid_input',
+          detail: 'Unknown field.',
+          attr: unknownField,
+        })
+      }
+      inbox.push(email)
+      return fakeReply(202, { message_id: 'msg_1', replayed: false })
+    })
+    return inbox
+  }
 
   beforeEach(() => {
     replies = []
@@ -123,6 +167,17 @@ describe('emails', () => {
       to: 'user@example.com',
       message_data: {},
     })
+  })
+
+  it('sends the template data each send was called with', async () => {
+    const inbox = deliverToInbox()
+    const templateData = { name: 'Ada' }
+
+    const toAda = send({ templateData })
+    templateData.name = 'Bob'
+    await Promise.all([toAda, send({ to: 'bob@example.com', templateData })])
+
+    expect(inbox.map((email) => email.message_data)).toEqual([{ name: 'Ada' }, { name: 'Bob' }])
   })
 
   it.each([
@@ -198,6 +253,200 @@ describe('emails', () => {
       ...body,
       to: 'user@example.com',
       distinct_id: 'user_123',
+    })
+  })
+
+  describe('content from a React Email element', () => {
+    const WelcomeMail = ({ firstName }: { firstName: string }): ReactElement =>
+      createElement('html', null, createElement('body', null, createElement('p', null, `Welcome, ${firstName}`)))
+    const welcome = createElement(WelcomeMail, { firstName: 'Ada' })
+
+    const sendReact = (content: Record<string, unknown>): ReturnType<PostHog['emails']['send']> =>
+      posthog.emails.send({
+        to: 'user@example.com',
+        templateKey: 'welcome',
+        subject: 'Welcome',
+        ...content,
+      } as SendEmailOptions)
+
+    let inbox: Record<string, unknown>[]
+
+    beforeEach(() => {
+      inbox = deliverToInbox()
+    })
+
+    afterEach(() => {
+      vi.doUnmock('@react-email/render')
+    })
+
+    const withoutRenderer = (): void => {
+      vi.doMock('@react-email/render', () => {
+        throw new Error("Cannot find package '@react-email/render'")
+      })
+    }
+
+    it('renders the element into html and text', async () => {
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        {
+          template_key: 'welcome',
+          subject: 'Welcome',
+          html: expect.stringContaining('<p>Welcome, Ada</p>'),
+          text: 'Welcome, Ada',
+          to: 'user@example.com',
+        },
+      ])
+    })
+
+    it('renders content that waits inside nested Suspense boundaries', async () => {
+      let startLoading = (): void => {}
+      const firstName = new Promise<string>((resolve) => {
+        startLoading = () => setTimeout(() => resolve('Ada'), 10)
+      })
+      const Greeting = (): ReactElement => {
+        startLoading()
+        return createElement('p', null, `Welcome, ${use(firstName)}`)
+      }
+      const fallback = createElement('p', null, 'Loading')
+      const Mail = (): ReactElement =>
+        createElement(
+          'html',
+          null,
+          createElement(
+            'body',
+            null,
+            createElement(Suspense, { fallback }, createElement(Suspense, { fallback }, createElement(Greeting)))
+          )
+        )
+
+      let settled = false
+      const pending = sendReact({ react: createElement(Mail) }).finally(() => {
+        settled = true
+      })
+      while (!settled) {
+        await vi.advanceTimersByTimeAsync(5)
+      }
+      await pending
+
+      expect(inbox).toEqual([expect.objectContaining({ text: 'Welcome, Ada' })])
+      expect(inbox[0].html).toEqual(expect.stringContaining('<p>Welcome, Ada</p>'))
+      expect(inbox[0].html).not.toMatch(/Loading|<script|<template/)
+    })
+
+    it('keeps the text the caller wrote', async () => {
+      await sendReact({ react: welcome, text: 'Hi Ada' })
+
+      expect(inbox).toEqual([
+        expect.objectContaining({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Hi Ada' }),
+      ])
+    })
+
+    it('sends the other fields as they were when send was called, while the element renders', async () => {
+      const replyTo = ['support@example.com']
+
+      const pending = sendReact({ react: welcome, replyTo })
+      replyTo.push('someone-else@example.com')
+      await pending
+
+      expect(inbox).toEqual([expect.objectContaining({ reply_to: ['support@example.com'] })])
+    })
+
+    it.each([
+      ['html beside react', { react: welcome, html: '<p>Hi</p>' }, 'html'],
+      ['react that is not an element', { react: '<p>Hi</p>' }, 'react'],
+      ['react shaped like an element', { react: { type: 'p', props: { children: 'Hi' } } }, 'react'],
+      [
+        'react on the template form',
+        { templateKey: undefined, subject: undefined, templateId: TEMPLATE_ID, react: welcome },
+        'react',
+      ],
+    ])('refuses %s before rendering or sending', async (_name, content, field) => {
+      const { data, error } = await sendReact(content)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
+      expect(inbox).toEqual([])
+    })
+
+    it('explains how to send html or react, not both', async () => {
+      const { error } = await sendReact({ react: welcome, html: '<p>Hi</p>' })
+
+      expect({ message: error?.message, fix: error?.fix }).toEqual({
+        message: 'A send with react renders its own html, so it takes no html. No email was sent.',
+        fix: 'Remove html to send the rendered react element, or remove react to send your html.',
+      })
+    })
+
+    it('asks to install @react-email/render when it does not load, and sends nothing', async () => {
+      withoutRenderer()
+
+      const { data, error } = await sendReact({ react: welcome })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'missing_react_renderer',
+        message:
+          "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
+        fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
+        cause: expect.any(Error),
+      })
+      expect(inbox).toEqual([])
+    })
+
+    it('sends html without loading @react-email/render', async () => {
+      withoutRenderer()
+      const { error } = await sendReact({ html: '<p>Hi</p>' })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([expect.objectContaining({ html: '<p>Hi</p>' })])
+    })
+
+    it('reports a disabled client before it loads @react-email/render', async () => {
+      withoutRenderer()
+      makeClient({ disabled: true })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error?.code).toBe('client_disabled')
+    })
+
+    it('reports an element that fails to render, and sends nothing', async () => {
+      const Broken = (): ReactElement => {
+        throw new Error('firstName is missing')
+      }
+
+      const { data, error } = await sendReact({ react: createElement(Broken) })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        message: 'Rendering the react element failed, so no email was sent.',
+        cause: expect.objectContaining({ message: 'firstName is missing' }),
+      })
+      expect(inbox).toEqual([])
+    })
+
+    it('gives up on an element that never finishes rendering, after the request timeout', async () => {
+      makeClient({ emailRequestTimeoutMs: 1000 })
+      const Waits = (): ReactElement => use(new Promise<ReactElement>(() => {}))
+
+      let settled = false
+      const pending = sendReact({ react: createElement(Waits) }).finally(() => {
+        settled = true
+      })
+      while (!settled) {
+        await vi.advanceTimersByTimeAsync(100)
+      }
+      const { data, error } = await pending
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        cause: expect.objectContaining({ message: 'Rendering the react element took longer than 1000ms.' }),
+      })
+      expect(inbox).toEqual([])
     })
   })
 
