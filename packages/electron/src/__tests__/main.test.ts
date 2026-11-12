@@ -3,7 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
+import type { BrowserWindow, IpcMainInvokeEvent, UtilityProcess } from 'electron'
+import { envelope } from '../utility/protocol'
 import { COMMAND_CHANNEL, type Command, type Response as BridgeResponse, type State } from '../shared/protocol'
 
 const mock = vi.hoisted(() => ({
@@ -104,6 +105,105 @@ function renderer(owner: PostHog, id: number) {
         },
     }
 }
+
+function utility(owner: PostHog) {
+    const replies = new EventEmitter()
+    const child = Object.assign(new EventEmitter(), { postMessage: (message: any) => replies.emit('reply', message) })
+    const dispose = owner.registerUtilityProcess(child as unknown as UtilityProcess)
+    let token: string
+    replies.once('reply', (message) => {
+        token = message.token
+    })
+    child.emit('message', envelope({ kind: 'connect' }))
+    let sequence = 0
+    const send = (command: Command, generation = owner.getState().generation): Promise<BridgeResponse> =>
+        new Promise((resolve) => {
+            const current = ++sequence
+            const listener = (message: any): void => {
+                if (message.kind === 'closed') {
+                    replies.removeListener('reply', listener)
+                    resolve({ ok: false, error: 'closed' })
+                } else if (message.kind === 'response' && message.sequence === current) {
+                    replies.removeListener('reply', listener)
+                    resolve(message.response)
+                }
+            }
+            replies.on('reply', listener)
+            child.emit(
+                'message',
+                envelope({ kind: 'request', token, request: { version: 1, sequence: current, generation, command } })
+            )
+        })
+    return { send, child, dispose }
+}
+
+describe('main utility owner routing', () => {
+    it('shares main identity, consent and session while protecting utility capture and exception attribution', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        await child.send({ type: 'identify', distinctId: 'utility-alice' })
+        expect(owner.getDistinctId()).toBe('utility-alice')
+        const properties = { $electron_process: 'renderer', $utility_process_id: 'spoof' }
+        await child.send({ type: 'capture', event: 'utility-work', properties })
+        await child.send({
+            type: 'exception',
+            properties: {
+                ...properties,
+                $exception_list: [{ type: 'Error', value: 'utility handled', mechanism: { handled: true } }],
+            },
+        })
+        await child.send({ type: 'flush' })
+        const events = batches.filter((event) => ['utility-work', '$exception'].includes(event.event))
+        expect(events).toHaveLength(2)
+        for (const event of events) {
+            expect(event.distinct_id).toBe('utility-alice')
+            expect(event.properties.$electron_process).toBe('utility')
+            expect(event.properties.$utility_process_id).not.toBe('spoof')
+            expect(event.properties.$session_id).toBe(owner.getSessionId())
+        }
+        expect(events[0].properties.$utility_process_id).toBe(events[1].properties.$utility_process_id)
+        const generation = owner.getState().generation
+        await owner.optOut()
+        expect((await child.send({ type: 'capture', event: 'stale' }, generation)).ok).toBe(false)
+        await child.send({ type: 'capture', event: 'blocked' })
+        await child.send({ type: 'reset' })
+        expect(owner.optedOut).toBe(true)
+        await owner.flush()
+        expect(batches.some((event) => ['stale', 'blocked'].includes(event.event))).toBe(false)
+    })
+
+    it('checks observed flag revision and identity inside the serialized utility command path', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        await child.send({ type: 'reloadFeatureFlags' })
+        const state = owner.getState()
+        await child.send({ type: 'flag', key: 'test', value: 'variant', flagRevision: state.flagRevision })
+        await child.send({ type: 'flag', key: 'test', value: 'variant', flagRevision: state.flagRevision })
+        await child.send({ type: 'flag', key: 'test', value: 'variant', flagRevision: state.flagRevision - 1 })
+        await owner.flush()
+        expect(batches.filter((event) => event.event === '$feature_flag_called')).toHaveLength(1)
+        expect(batches.find((event) => event.event === '$feature_flag_called')?.properties.$electron_process).toBe(
+            'utility'
+        )
+        await owner.reset()
+        expect((await child.send({ type: 'capture', event: 'old-identity' }, state.generation)).ok).toBe(false)
+    })
+
+    it('revokes queued utility mutations when the child exits', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        const queued = child.send({ type: 'identify', distinctId: 'disconnected' })
+        child.child.emit('exit', 1)
+        expect(await queued).toMatchObject({ ok: false })
+        await owner.flush()
+        expect(owner.getDistinctId()).not.toBe('disconnected')
+        expect(child.child.listenerCount('message')).toBe(0)
+        child.dispose()
+    })
+})
 
 describe('main Electron client', () => {
     it('counts cold start and aggregate focus transitions once across windows', async () => {

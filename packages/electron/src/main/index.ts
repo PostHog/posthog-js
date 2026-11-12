@@ -1,9 +1,17 @@
-import { app, ipcMain, type BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import {
+    app,
+    ipcMain,
+    type BrowserWindow,
+    type IpcMainInvokeEvent,
+    type WebContents,
+    type UtilityProcess,
+} from 'electron'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { PostHogPersistedProperty, type PostHogCoreOptions, type FeatureFlagValue, type JsonType } from '@posthog/core'
 import { ElectronCore } from './client'
 import { ElectronStorage } from './storage'
+import { attachUtilityProcess, type UtilityRegistration } from '../utility/attach'
 import {
     COMMAND_CHANNEL,
     STATE_CHANNEL,
@@ -66,6 +74,7 @@ export class PostHog {
     private _core: ElectronCore
     private _ready: Promise<void>
     private _windows = new Map<number, RegisteredWindow>()
+    private _utilities = new Map<UtilityProcess, UtilityRegistration>()
     private _revision = 0
     private _generation = 0
     private _closed = false
@@ -327,6 +336,7 @@ export class PostHog {
             if (serialized === this._lastPublished) return
             this._lastPublished = serialized
             state.revision = ++this._revision
+            for (const registered of this._utilities.values()) registered.publish(state)
             for (const registered of this._windows.values()) {
                 if (
                     !registered.contents.isDestroyed() &&
@@ -384,6 +394,20 @@ export class PostHog {
         window.on('blur', blur)
         this._windows.set(contents.id, registration)
         return dispose
+    }
+
+    /** Register only a trusted utilityProcess.fork() result, immediately after forking. */
+    registerUtilityProcess(child: UtilityProcess): () => void {
+        if (this._closing) throw new Error('PostHog is shut down')
+        if (this._utilities.has(child)) throw new Error('PostHog utility process is already registered')
+        const registration = attachUtilityProcess(
+            child,
+            (command, context, generation, authorize) => this._execute(command, context, generation, authorize),
+            () => this.getState(),
+            () => this._utilities.delete(child)
+        )
+        this._utilities.set(child, registration)
+        return registration.dispose
     }
 
     private _updateFocus(): void {
@@ -457,9 +481,10 @@ export class PostHog {
         generation: number,
         authorize: () => void
     ): Promise<void> {
-        if (command.type === 'hello') return
-        if (command.type === 'flush') return this.flush()
-        if (command.type === 'reloadFeatureFlags') return this.reloadFeatureFlagsAsync()
+        if (command.type === 'hello') return this._run(() => {}, undefined, authorize)
+        if (command.type === 'flush') return this._run(() => this._core.flush(), undefined, authorize)
+        if (command.type === 'reloadFeatureFlags')
+            return this._run(() => this._core.reloadFeatureFlagsAsync(), generation, authorize)
         return this._run(
             () =>
                 this._core.withContext(context, () => {
@@ -506,6 +531,7 @@ export class PostHog {
     shutdown(timeoutMs = 2000): Promise<void> {
         if (this._shutdownPromise) return this._shutdownPromise
         this._closing = true
+        for (const registration of this._utilities.values()) registration.dispose()
         clearInterval(this._timer)
         clearTimeout(this._focusTimer)
         let timer: ReturnType<typeof setTimeout> | undefined

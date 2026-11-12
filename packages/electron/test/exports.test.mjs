@@ -61,12 +61,18 @@ test('standalone preload requires only electron and strips privileged IPC event 
 test('renderer has no Node/Electron imports and no recorder code is delivered', async () => {
     const renderer = await readFile(new URL('dist/renderer.mjs', root), 'utf8')
     assert.doesNotMatch(renderer, /from ['"](?:electron|node:|fs['"]|path['"])/)
-    for (const name of ['main.mjs', 'renderer.mjs', 'preload.cjs']) {
+    for (const name of ['main.mjs', 'renderer.mjs', 'utility.mjs', 'preload.cjs']) {
         assert.doesNotMatch(
             await readFile(new URL('dist/' + name, root), 'utf8'),
             /rrweb|recording\/|startSessionRecording|recorder\.js/
         )
     }
+    const utility = await readFile(new URL('dist/utility.mjs', root), 'utf8')
+    assert.doesNotMatch(utility, /posthog-node|posthog-js|__POSTHOG_ELECTRON__|ipcRenderer|window\./)
+    const utilityFacade = await import(new URL('dist/utility.mjs', root).href)
+    assert.deepEqual(Object.keys(utilityFacade).sort(), ['PostHog', 'init'])
+    assert.equal(typeof utilityFacade.PostHog.prototype.startSessionRecording, 'undefined')
+    assert.throws(() => new utilityFacade.PostHog(), /utilityProcess.parentPort/)
     const facade = await import(new URL('dist/renderer.mjs', root).href)
     assert.equal(typeof facade.init, 'function')
     assert.equal(typeof facade.PostHog.prototype.startSessionRecording, 'undefined')

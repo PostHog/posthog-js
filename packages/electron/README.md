@@ -1,6 +1,6 @@
 # @posthog/electron (alpha)
 
-Coordinated PostHog analytics and client feature flags for Electron. One main-process client owns identity, consent, sessions, storage and networking; trusted renderer windows use a sandbox-compatible preload bridge.
+Coordinated PostHog analytics and client feature flags for Electron. One main-process client owns identity, consent, sessions, storage and networking; trusted renderer windows use a sandbox-compatible preload bridge and explicitly registered utility processes use `process.parentPort`.
 
 This alpha supports manual events, identify/reset, groups, registered properties, opt-in/out, cached feature flags/payloads with exposure events, application lifecycle events, handled JavaScript exceptions, flush and shutdown. **Session replay, browser autocapture, automatic exception interception, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
 
@@ -71,6 +71,43 @@ One identity/session is shared across the app, not one per window. Use `reset()`
 
 `onStateChange(callback)` returns an unsubscribe function. `getState()` returns a copy of the current identity/consent/flag snapshot. `dispose()` removes renderer subscriptions. Main flag APIs include `getFeatureFlag()`, `getFeatureFlagPayload()` and `reloadFeatureFlagsAsync()`; renderer uses `reloadFeatureFlags()`. Flag reads report exposure through main's tracker. Options `{ sendEvent: false }` suppress renderer exposure events.
 
+### Trusted utility processes (opt-in)
+
+Only instrument utility code you own and trust. In main, pass the actual result of Electron's `utilityProcess.fork()` immediately to the owner:
+
+```js
+import { utilityProcess } from 'electron'
+
+// Inside app.whenReady(), with the main PostHog owner already initialized:
+const child = utilityProcess.fork('/absolute/path/to/utility.cjs')
+const unregister = posthog.registerUtilityProcess(child)
+// unregister() revokes this child's SDK connection without killing it.
+```
+
+In `utility.cjs`:
+
+```js
+const { init } = require('@posthog/electron/utility')
+
+async function run() {
+    const posthog = await init()
+    await posthog.capture('background_work_completed', { task: 'thumbnail' })
+    try {
+        throw new Error('Example handled utility error')
+    } catch (error) {
+        await posthog.captureException(error)
+    }
+    await posthog.flush()
+}
+run().catch(console.error)
+```
+
+The utility facade has the same methods as the renderer facade above, including identity, consent, cached flags, `onStateChange()` and `dispose()`. It does not start an independent Node/browser SDK, persist files, or send analytics HTTP requests. Main remains the single authority for identity, consent, queue, session and flag exposure deduplication. Await mutations and handle rejected stale-identity commands as with renderers. Main changes are broadcast to connected children. Capture and exception events carry protected `$electron_process: 'utility'` and an owner-generated `$utility_process_id` stable for that registration, not a caller-supplied PID.
+
+No preload, window registration, global IPC channel or `ELECTRON_RUN_AS_NODE` is involved. Messages use a dedicated versioned namespace on that child's `parentPort`; unrelated application messages are ignored. Each registration has its own connection token, strictly increasing request sequence, 100 requests/second limit, 100 pending-request cap, 256 KiB JSON message bound and nesting limit. The bridge rejects timed-out requests after 10 seconds. Registration requires a handshake within 10 seconds (including children that never spawn or already exited); register immediately after forking. Exit, unregister and owner shutdown revoke the registration and reject pending child operations. `dispose()` closes the local facade; use one facade lifetime per registration. Do not retry a timed-out mutation blindly: main may already have accepted it.
+
+This is **not** a sandbox or an untrusted-plugin interface: a registered utility can mutate the app's shared identity and consent just like trusted renderer code. Do not register workers running untrusted code. No automatic uncaught-error hooks, native crash reporting, replay, surveys or tours are installed.
+
 ## Consent and storage
 
 - Capture is opted in by default; configure `defaultOptIn: false` for explicit opt-in. Call `optIn()`/`optOut()` from either process.
@@ -96,5 +133,7 @@ From the repository root:
 ```sh
 pnpm turbo run build check-types test:unit test:built --filter=@posthog/electron
 ```
+
+For the dedicated real utility-process test (after building), run `pnpm --filter @posthog/electron test:utility`. It packs and independently installs the SDK/core/types tarballs into a temporary app, starts the installed Electron binary normally, and forks actual utility processes. It needs a GUI-capable Electron environment (or Xvfb on Linux), but no credentials. The fixture checks coordinated identity/consent/session, handled exceptions, protected context, flag exposure deduplication, reset, pending promise rejection on unregister, unexpected exit cleanup and replacement-child attribution. See [the fixture proof](test/utility-process/README.md).
 
 The example installs tarballs, not source symlinks. No PostHog credentials are needed for its smoke test. The shared browser SDK is unchanged; optional DOM autocapture integration remains a later milestone rather than an advertised alpha feature.

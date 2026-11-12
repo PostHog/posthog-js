@@ -3,6 +3,7 @@ import { defineConfig, type UserConfig } from 'tsdown'
 const entries = {
     main: 'src/main/index.ts',
     renderer: 'src/renderer/index.ts',
+    utility: 'src/utility/index.ts',
     preload: 'src/preload/index.ts',
     'preload-helper': 'src/preload/helper.ts',
 }
