@@ -25,6 +25,11 @@
             "import": "./dist/main.mjs",
             "require": "./dist/main.cjs"
         },
+        "./utility": {
+            "types": "./dist/utility.d.ts",
+            "import": "./dist/utility.mjs",
+            "require": "./dist/utility.cjs"
+        },
         "./renderer": {
             "types": "./dist/renderer.d.ts",
             "import": "./dist/renderer.mjs",
@@ -38,6 +43,11 @@
             "types": "./dist/preload-helper.d.ts",
             "import": "./dist/preload-helper.mjs",
             "require": "./dist/preload-helper.cjs"
+        },
+        "./react": {
+            "types": "./dist/react.d.ts",
+            "import": "./dist/react.mjs",
+            "require": "./dist/react.cjs"
         }
     },
     "scripts": {
@@ -46,18 +56,25 @@
         "dev": "tsdown --watch",
         "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.json",
         "test:unit": "vitest run",
-        "test:built": "node --test test/exports.test.mjs",
+        "test:delivery": "node --test test/delivery/delivery.test.mjs",
+        "test:built": "node --test test/exports.test.mjs test/react-exports.test.mjs",
+        "test:utility": "node test/utility-process/run.mjs",
+        "test:errors": "node test/error-autocapture.test.mjs",
         "lint": "oxlint --report-unused-disable-directives-severity error src",
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
         "clean": "rimraf dist coverage",
         "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
-        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
+        "test:autocapture": "node test/autocapture/run.mjs"
     },
     "dependencies": {
-        "@posthog/core": "workspace:^"
+        "@posthog/core": "workspace:^",
+        "@posthog/browser-common": "workspace:^"
     },
     "peerDependencies": {
-        "electron": ">=41"
+        "electron": ">=41",
+        "react": ">=18.0.0",
+        "@types/react": ">=18.0.0"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
@@ -65,6 +82,21 @@
         "electron": "42.4.0",
         "tsdown": "catalog:",
         "typescript": "catalog:native",
-        "vitest": "catalog:"
+        "vitest": "catalog:",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+        "@types/react": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@testing-library/dom": "catalog:",
+        "jsdom": "catalog:",
+        "@types/react-dom": "~19.2.0"
+    },
+    "peerDependenciesMeta": {
+        "react": {
+            "optional": true
+        },
+        "@types/react": {
+            "optional": true
+        }
     }
 }
