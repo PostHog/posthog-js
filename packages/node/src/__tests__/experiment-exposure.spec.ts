@@ -1231,6 +1231,32 @@ describe('$experiment_exposure', () => {
       expect(await sent(client, events, path, 1)).toEqual([FLAG_CALLED, EXPOSURE])
     })
 
+    it.each(VALUE_PATHS)(
+      'a read whose client opts out before the queue takes its events keeps no dedupe key (%s)',
+      async (path) => {
+        const { client, events } = createClient([response([split()])])
+        const prepare = (client as any)._prepareEventMessage.bind(client)
+        let optingOut = true
+        vi.spyOn(client as any, '_prepareEventMessage').mockImplementation(async (...args: any[]) => {
+          const prepared = await prepare(...args)
+          if (optingOut) {
+            // The application opts out after the read reserved the keys and before the queue takes
+            // the events, which then drops them without an error.
+            await client.optOut()
+          }
+          return prepared
+        })
+
+        expect(await read(client, path)).toBe('annual')
+        await settle(client)
+        expect(events).toEqual([])
+        optingOut = false
+        await client.optIn()
+
+        expect(await sent(client, events, path, 1)).toEqual([FLAG_CALLED, EXPOSURE])
+      }
+    )
+
     it('an opted-out config version 1 read is deduped as before', async () => {
       // Config version 1 dedupe is unchanged: the attempt takes the key.
       const { client, events } = createClient([response([v4Record('condition_match', 'annual', { configVersion: 1 })])])

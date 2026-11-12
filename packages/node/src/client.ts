@@ -1228,6 +1228,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this.addPendingPromise(
       this._prepareEventMessage(props, prepareOptions)
         .then(({ distinctId, event, properties, options }) => {
+          // The queue drops the event without an error when the client was disabled or opted out
+          // while the event was prepared, so a flag event's dedupe key is released here.
+          if (this.disabled || this.optedOut) {
+            prepareOptions?.onCaptureFailed?.()
+          }
           const captureOptions: PostHogCaptureOptions = {
             timestamp: options.timestamp,
             disableGeoip: options.disableGeoip,
@@ -2928,8 +2933,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * The key is reserved before capture and stays reserved while capture runs, so a read during
    * capture does not send the event again. It is released when capture fails, so a later read
-   * sends the event: the capture call throws, the client is disabled or opted out, `before_send`
-   * throws, or the event cannot be prepared or queued. An event that `before_send` discards keeps
+   * sends the event: the capture call throws, the client is disabled or opted out (also while the
+   * event is prepared), `before_send` throws, or the event cannot be prepared or queued. An event that `before_send` discards keeps
    * its key: the application chose to drop it, and later reads would be dropped the same way.
    * A failure is logged and never reaches the read.
    */
