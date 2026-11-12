@@ -1035,6 +1035,7 @@
         "_validateEmail",
         "_validateIdentifyId",
         "_validateSampleRate",
+        "_visibilityListening",
         "_visibilityStateListener",
         "_waitForStoragePersist",
         "_warnIfClientMaskingShadowsServer",

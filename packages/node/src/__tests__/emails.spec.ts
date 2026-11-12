@@ -1,3 +1,5 @@
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { createElement, type ReactElement, Suspense, use } from 'react'
 
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
@@ -9,6 +11,7 @@ const TEMPLATE_ID = '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b'
 const SEND_URL = 'https://us.posthog.com/api/projects/@current/messaging/send/email/'
 const MESSAGE_ID = '01a18356-c56c-0001-e494-7666bc915188'
 const STATUS_URL = `https://us.posthog.com/api/projects/@current/messaging/emails/${MESSAGE_ID}/`
+const PREFERENCES_URL = 'https://us.posthog.com/api/projects/@current/messaging/preferences/'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 type Reply = Error | { status: number; body?: unknown; headers?: Record<string, string> }
@@ -186,7 +189,6 @@ describe('emails', () => {
         template_key: 'password-reset',
         subject: 'Reset your password',
         html: '<p>Reset</p>',
-        capture_engagement: true,
       },
     ],
     [
@@ -223,7 +225,6 @@ describe('emails', () => {
         html: '<p>Reset</p>',
         text: 'Reset',
         reply_to: ['a@example.com', 'b@example.com'],
-        capture_engagement: true,
       },
     ],
     [
@@ -238,7 +239,6 @@ describe('emails', () => {
         template_key: 'password-reset',
         subject: 'Reset',
         html: '<p>Reset</p>',
-        capture_engagement: true,
       },
     ],
   ])('posts content from code with %s to the same send URL', async (_name, content, body) => {
@@ -296,7 +296,6 @@ describe('emails', () => {
           subject: 'Welcome',
           html: expect.stringContaining('<p>Welcome, Ada</p>'),
           text: 'Welcome, Ada',
-          capture_engagement: true,
           to: 'user@example.com',
         },
       ])
@@ -914,5 +913,190 @@ describe('emails', () => {
       expect(data?.status).toBe('bounced')
       expect(fetch).toHaveBeenCalledTimes(2)
     })
+  })
+
+  describe('setPreferences', () => {
+    const applied = (fields: Record<string, unknown> = {}): Reply => ({
+      status: 200,
+      body: { identifier: 'user@example.com', all_marketing: null, topics: { newsletter: false }, ...fields },
+    })
+
+    const setPreferences = (
+      options: Record<string, unknown> = { to: 'user@example.com', topics: { newsletter: false } }
+    ): ReturnType<PostHog['emails']['setPreferences']> =>
+      posthog.emails.setPreferences(options as unknown as Parameters<PostHog['emails']['setPreferences']>[0])
+
+    it('posts every change in one request to the app host', async () => {
+      replies = [applied({ all_marketing: true, topics: { newsletter: true, 'product-updates': false } })]
+
+      const { data, error } = await setPreferences({
+        to: 'user@example.com',
+        allMarketing: false,
+        topics: { newsletter: true },
+      })
+
+      expect(error).toBeNull()
+      expect(data).toEqual({
+        to: 'user@example.com',
+        allMarketing: true,
+        topics: { newsletter: true, 'product-updates': false },
+      })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      const [url, options] = fetch.mock.calls[0]
+      expect(url).toBe(PREFERENCES_URL)
+      expect(options.method).toBe('POST')
+      expect(options.headers).toEqual({
+        Authorization: `Bearer ${SECRET_KEY}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'posthog-node/1.2.3',
+      })
+      expect(JSON.parse(options.body)).toEqual({
+        identifier: 'user@example.com',
+        all_marketing: false,
+        topics: { newsletter: true },
+      })
+    })
+
+    it('leaves out the changes the call does not make', async () => {
+      replies = [applied()]
+
+      await setPreferences({ to: 'user@example.com', allMarketing: false })
+
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ identifier: 'user@example.com', all_marketing: false })
+    })
+
+    it('reports an unknown topic as unknown_topic without a retry', async () => {
+      replies = [
+        {
+          status: 404,
+          body: { type: 'invalid_request', code: 'unknown_topic', detail: 'No topic newsletter.', attr: null },
+        },
+      ]
+
+      const { data, error } = await setPreferences()
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'unknown_topic', name: 'not_found', message: 'No topic newsletter.' })
+      expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['a topic value that is not a boolean', { topics: { newsletter: 'false' } }],
+      ['no topics', { topics: null }],
+      ['an all_marketing value that is not a boolean', { all_marketing: 'false' }],
+    ])('reports a reply with %s as api_error', async (_label, fields) => {
+      replies = [applied(fields)]
+
+      const { data, error } = await setPreferences()
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'api_error', statusCode: 200 })
+    })
+
+    it('retries an unavailable service, because the same change twice ends the same', async () => {
+      replies = [rejected(503), applied()]
+
+      const pending = setPreferences()
+      await vi.runAllTimersAsync()
+      const { data } = await pending
+
+      expect(data?.topics).toEqual({ newsletter: false })
+      expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('needs a secret key', async () => {
+      makeClient({ secretKey: undefined })
+
+      const { error } = await setPreferences()
+
+      expect(error).toMatchObject({ code: 'missing_secret_key', name: 'missing_api_key' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['an empty recipient', { to: ' ', allMarketing: false }, 'invalid_recipient'],
+      ['no change', { to: 'user@example.com', topics: {} }, 'invalid_preferences'],
+      ['a non-boolean all marketing', { to: 'user@example.com', allMarketing: 'no' }, 'invalid_preferences'],
+      ['a topic list', { to: 'user@example.com', topics: ['newsletter'] }, 'invalid_preferences'],
+      ['a non-boolean topic', { to: 'user@example.com', topics: { newsletter: 'off' } }, 'invalid_preferences'],
+    ])('rejects %s before sending', async (_name, options, code) => {
+      const { data, error } = await setPreferences(options)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code, name: 'validation_error' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+  })
+})
+
+describe('emails over HTTP', () => {
+  const CODE_SEND = { to: 'user@example.com', templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>' }
+  const CODE_SEND_BODY = { to: 'user@example.com', template_key: 'welcome', subject: 'Welcome', html: '<p>Hi</p>' }
+
+  let server: Server
+  let posthog: PostHog
+  let received: unknown[]
+
+  beforeAll(async () => {
+    vi.useRealTimers()
+    server = createServer((request, response) => {
+      let body = ''
+      request.on('data', (chunk) => (body += chunk))
+      request.on('end', () => {
+        received.push(JSON.parse(body))
+        response.writeHead(202, { 'Content-Type': 'application/json' })
+        response.end(JSON.stringify({ message_id: 'msg_1', replayed: false }))
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    posthog = new PostHog('phc_test', {
+      secretKey: SECRET_KEY,
+      appHost: `http://127.0.0.1:${port}`,
+      enableLocalEvaluation: false,
+    })
+  })
+
+  afterAll(async () => {
+    await posthog.shutdown()
+    await new Promise((resolve) => server.close(resolve))
+  })
+
+  beforeEach(() => {
+    received = []
+  })
+
+  it.each([
+    ['no tracking or sensitive choice, which leaves them and capture_engagement out', {}, {}],
+    ['the email marked sensitive', { sensitive: true }, { sensitive: true }],
+    ['the email marked not sensitive', { sensitive: false }, { sensitive: false }],
+    ['all tracking turned off', { tracking: false }, { tracking: false }],
+    ['all tracking turned on', { tracking: true }, { tracking: true }],
+    [
+      'each kind of tracking chosen',
+      { tracking: { opens: true, clicks: true, engagement: false } },
+      { tracking: { opens: true, clicks: true, engagement: false } },
+    ],
+    ['the deprecated captureEngagement', { captureEngagement: false }, { capture_engagement: false }],
+  ])('delivers a code send with %s', async (_name, options, body) => {
+    const { data, error } = await posthog.emails.send({ ...CODE_SEND, ...options })
+
+    expect(error).toBeNull()
+    expect(data?.id).toBe('msg_1')
+    expect(received).toEqual([{ ...CODE_SEND_BODY, ...body }])
+  })
+
+  it.each([
+    ['tracking', { tracking: false }],
+    ['sensitive', { sensitive: false }],
+  ])('refuses %s on the template form without sending', async (field, option) => {
+    const send = { to: 'user@example.com', templateId: TEMPLATE_ID, ...option } as unknown as SendEmailOptions
+
+    const { data, error } = await posthog.emails.send(send)
+
+    expect(data).toBeNull()
+    expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
+    expect(received).toEqual([])
   })
 })
