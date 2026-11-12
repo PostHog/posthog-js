@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "main": "../dist/capture-v1/index.js",
+  "module": "../dist/capture-v1/index.mjs",
+  "types": "../dist/capture-v1/index.d.ts"
+}

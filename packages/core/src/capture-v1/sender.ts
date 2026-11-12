@@ -1,4 +1,5 @@
-import { type FetchLike, type PostHogFetchOptions, type PostHogFetchResponse, uuidv7 } from '@posthog/core'
+import type { FetchLike, PostHogFetchOptions, PostHogFetchResponse } from '../types'
+import { uuidv7 } from '../vendor/uuidv7'
 
 import { type CaptureCodec, type CaptureCompression, webCompressor } from './compression'
 import {

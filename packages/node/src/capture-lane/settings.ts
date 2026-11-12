@@ -1,4 +1,4 @@
-import { CAPTURE_COMPRESSIONS, type CaptureCompression } from '../capture-v1/compression'
+import { CAPTURE_COMPRESSIONS, type CaptureCompression } from '@posthog/core/capture-v1'
 import type { PostHogOptions } from '../types'
 
 export const DEFAULT_CAPTURE_MAX_RETRIES = 3

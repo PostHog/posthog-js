@@ -6,7 +6,7 @@ import {
   type CaptureCompressor,
   resolveCaptureCodec,
   webCompressor,
-} from '@/capture-v1/compression'
+} from '@posthog/core/capture-v1'
 import { createZlibCompressor } from '@/compression.node'
 import { PostHog as EdgePostHog } from '@/entrypoints/index.edge'
 import { PostHog, type PostHogOptions } from '@/entrypoints/index.node'

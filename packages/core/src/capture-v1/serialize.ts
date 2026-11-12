@@ -1,4 +1,5 @@
-import { type PostHogEventProperties, safeJsonStringify } from '@posthog/core'
+import type { PostHogEventProperties } from '../types'
+import { safeJsonStringify } from '../utils/string-utils'
 
 import { buildV1Event } from './transform'
 

@@ -1,4 +1,4 @@
-import { canonicalizeUuid, eventUuidv7 } from '@/capture-v1/uuid'
+import { canonicalizeUuid, eventUuidv7 } from '@posthog/core/capture-v1'
 import type { PostHogOptions } from '@/entrypoints/index.node'
 
 import { AI_CAPTURE_PATH, ANALYTICS_CAPTURE_PATH, captureEvents } from '../utils'
@@ -6,8 +6,8 @@ import { V1WiringHarness } from '../utils/v1-wiring'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
 // A pass-through spy, so the tests below see which uuids the crypto-backed generator produced.
-vi.mock('@/capture-v1/uuid', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/capture-v1/uuid')>()
+vi.mock('@posthog/core/capture-v1', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@posthog/core/capture-v1')>()
   return { ...actual, eventUuidv7: vi.fn(actual.eventUuidv7) }
 })
 

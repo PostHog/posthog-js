@@ -1,4 +1,5 @@
-import { EVENT_OPTION_LEGACY_PROPERTIES, type JsonType, type PostHogEventProperties } from '@posthog/core'
+import { EVENT_OPTION_LEGACY_PROPERTIES } from '../event-options'
+import type { JsonType, PostHogEventProperties } from '../types'
 
 import type { V1Event, V1EventOptions } from './types'
 

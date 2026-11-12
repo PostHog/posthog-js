@@ -1,9 +1,9 @@
 import { type Logger, type PostHogEventProperties, safeSetTimeout } from '@posthog/core'
 
-import { CaptureError, CaptureLossTally, type CaptureDroppedEvent, describeCaptureLoss } from '../capture-v1/errors'
-import type { V1SendOptions } from '../capture-v1/sender'
-import { type SerializedV1Event, serializeV1Event, wireProblem } from '../capture-v1/serialize'
-import type { CaptureEndpoint } from '../capture-v1/types'
+import { CaptureError, CaptureLossTally, type CaptureDroppedEvent, describeCaptureLoss } from '@posthog/core/capture-v1'
+import type { V1SendOptions } from '@posthog/core/capture-v1'
+import { type SerializedV1Event, serializeV1Event, wireProblem } from '@posthog/core/capture-v1'
+import type { CaptureEndpoint } from '@posthog/core/capture-v1'
 
 /** Upper bound on the uuids one local-drop report lists; the message still carries the full count. */
 const MAX_REPORTED_LOCAL_DROPS = 100
