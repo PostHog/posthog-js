@@ -329,6 +329,7 @@ const xhr = (options: TransportRequestOptions) => {
             readRetryAfter(() => req.getResponseHeader('Retry-After'))
         )
     }
+    options.onSend?.(url)
     req.send(body)
 }
 
@@ -455,6 +456,7 @@ const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolea
             reservedBytes = requestSize!
             pendingKeepaliveBytes += reservedBytes
         }
+        options.onSend?.(url)
         // Reserve immediately before dispatch (after async encoding). Fetch resolves at headers:
         // retain bytes through body consumption, including while timeout/abort is still pending.
         // A patched abort that does not terminate fetch must not replenish the budget.
