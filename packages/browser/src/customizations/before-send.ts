@@ -6,12 +6,19 @@ import { logger } from '@posthog/browser-common/utils/logger'
 /**
  * Provides an implementation of sampling that samples based on the distinct ID.
  * Using the provided percentage.
- * Can be used to create a beforeCapture fn for a PostHog instance.
+ * Can be used to create a before_send hook for a PostHog instance.
  *
  * Setting 0.5 will cause roughly 50% of distinct ids to have events sent.
  * Not 50% of events for each distinct id.
  *
  * Import it from `posthog-js/customizations` and pass it to `before_send`.
+ *
+ * @example
+ * ```ts
+ * import { sampleByDistinctId } from 'posthog-js/customizations'
+ *
+ * posthog.init('<ph_project_token>', { before_send: sampleByDistinctId(0.4) })
+ * ```
  *
  * @param percent a number from 0 to 1, 1 means always send and, 0 means never send the event
  */
@@ -33,12 +40,19 @@ export function sampleByDistinctId(percent: number): BeforeSendFn {
 /**
  * Provides an implementation of sampling that samples based on the session ID.
  * Using the provided percentage.
- * Can be used to create a beforeCapture fn for a PostHog instance.
+ * Can be used to create a before_send hook for a PostHog instance.
  *
  * Setting 0.5 will cause roughly 50% of sessions to have events sent.
  * Not 50% of events for each session.
  *
  * Import it from `posthog-js/customizations` and pass it to `before_send`.
+ *
+ * @example
+ * ```ts
+ * import { sampleBySessionId } from 'posthog-js/customizations'
+ *
+ * posthog.init('<ph_project_token>', { before_send: sampleBySessionId(0.25) })
+ * ```
  *
  * @param percent a number from 0 to 1, 1 means always send and, 0 means never send the event
  */
@@ -60,7 +74,7 @@ export function sampleBySessionId(percent: number): BeforeSendFn {
 /**
  * Provides an implementation of sampling that samples based on the event name.
  * Using the provided percentage.
- * Can be used to create a beforeCapture fn for a PostHog instance.
+ * Import it from `posthog-js/customizations` and pass the hook to `before_send`.
  *
  * @param eventNames an array of event names to sample, sampling is applied across events not per event name
  * @param percent a number from 0 to 1, 1 means always send, 0 means never send the event

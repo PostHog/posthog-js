@@ -78,6 +78,9 @@
     "new PostHog(...)": "setup",
     "posthog": "setup",
     "utils": [
+        "sampleByDistinctId",
+        "sampleBySessionId",
+        "sampleByEvent",
         "Compression",
         "DEFAULT_PRODUCT_TOUR_APPEARANCE",
         "PostHog.featureFlags",
@@ -95,6 +98,7 @@
         "severityLevels"
     ],
     "hidden": [
+        "printAndDropEverything",
         "PostHog.SentryIntegration",
         "PostHog.analyticsDefaultEndpoint",
         "PostHog.autocapture",

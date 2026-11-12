@@ -1501,7 +1501,7 @@ export interface PostHogConfig {
      *
      * PostHog stores the distinct ID, session ID, device ID, feature flags, super properties, and some config in the browser.
      *
-     * - `'localStorage+cookie'` stores the distinct ID and session ID in a cookie, and the rest in `localStorage`.
+     * - `'localStorage+cookie'` stores essential state, such as the distinct ID, device ID and session ID, in a cookie, and other data in `localStorage`. `cookie_persisted_properties` adds custom properties to the cookie.
      * - `'cookie'` stores everything in a cookie. Cookies hold about 4KB, so many feature flags can cause `431 Request Header Fields Too Large` errors.
      * - `'localStorage'` stores everything in `localStorage`.
      * - `'sessionStorage'` stores everything in `sessionStorage`.
@@ -2051,6 +2051,13 @@ export interface PostHogConfig {
      * per-origin localStorage when both stores carry the same key. The SDK also checks
      * for cookie changes before captures and persistence writes so already-open sibling
      * subdomains adopt identity changes made by `identify()` or `reset()`.
+     *
+     * Synchronization happens on the tab's next PostHog activity, not immediately.
+     * A persistence write can adopt an identity without immediately reloading feature flags.
+     * When the SDK next processes that identity, such as before a capture, it clears
+     * identity-bound flag state and starts a reload. `onFeatureFlags` runs after that reload.
+     * If the session ID changes, `onSessionId` runs when the tab next checks its session.
+     * A synchronized `reset()` also clears event and session properties of the previous identity.
      *
      * When `defaults` is `'2026-08-29'` or later, this defaults to `true`.
      *

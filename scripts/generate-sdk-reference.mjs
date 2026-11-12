@@ -35,6 +35,7 @@ const PACKAGES = {
         name: 'JavaScript Web',
         logo: 'javascript',
         entry: 'src/entrypoints/module.no-external.es.ts',
+        extraEntries: ['src/customizations/before-send.ts'],
     },
     node: { id: 'posthog-node', name: 'Node.js', logo: 'nodejs', entry: 'src/entrypoints/index.node.ts' },
     'react-native': { id: 'posthog-react-native', name: 'React Native', logo: 'react', entry: 'src/index.ts' },
@@ -146,7 +147,10 @@ function capabilityMap(labels, caps, current) {
 
 function reference(app, project, caps, current) {
     const render = renderer(app, project)
-    const exported = project.children.filter(isPublic)
+    const entries = config.extraEntries
+        ? project.children.flatMap((r) => (r.kindOf(Kind.Module) && r.name !== '<internal>' ? r.children : [r]))
+        : project.children
+    const exported = entries.filter(isPublic)
     const main = exported.find((c) => c.name === 'PostHog')
     // Every public PostHog member and every other public export goes through the capability map.
     const members = (main.children ?? []).filter((m) => m.kindOf(MEMBER_KINDS) && isPublic(m))
@@ -233,7 +237,7 @@ const nextMajor = (await readChangesets(values.source ?? ROOT)).some((c) =>
 const major = Number(values.major ?? declared + Number(nextMajor))
 
 const app = await Application.bootstrapWithPlugins({
-    entryPoints: [path.join(pkgDir, config.entry)],
+    entryPoints: [config.entry, ...(config.extraEntries ?? [])].map((entry) => path.join(pkgDir, entry)),
     tsconfig: path.join(pkgDir, 'tsconfig.json'),
     // missing-exports documents the types a page names that the package doesn't export, such as @posthog/core's.
     plugin: ['typedoc-plugin-markdown', 'typedoc-plugin-missing-exports'].map((p) =>

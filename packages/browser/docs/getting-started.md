@@ -82,7 +82,27 @@ The loader reads its options from these attributes:
 - `data-config` takes your other `init` options as JSON.
 - `data-defer-init="true"` skips the automatic `init`, so you can call `posthog.init` yourself with function options.
 
+A cross-origin asset proxy must preserve the CORS response headers from PostHog's asset host and serve the same approved script bytes. When upgrading, update the pinned version and both hashes together. A hash mismatch blocks execution. Don't retry without integrity.
+
 The hashes cover only `loader.js` and `array.js`. They don't cover the recorder, surveys, toolbar, or `config.js` scripts. Use the manifest from the regional asset host you serve, because toolbar assets differ between regions.
+
+## Prevent runtime script downloads
+
+Use a no-external build and set `disable_external_dependency_loading: true` on the first initialization of every SDK instance. See [browser extension setup](https://posthog.com/docs/advanced/browser-extension) for no-external imports and feature trade-offs. The default `posthog-js` npm import can still download dependencies.
+
+Don't combine this setup with the snippet, a tag-manager installation, or another permissively configured SDK copy. A no-external build doesn't remove shared loaders or renderers registered by another bundle.
+
+With external loading disabled, the standard loader doesn't fetch executable `config.js`. Without preloaded configuration, the SDK requests configuration as JSON instead. Configuration, flags and events still use the network. Preventing script downloads doesn't sanitize remote HTML or disable bundled renderers.
+
+## Use samplers with the HTML snippet
+
+Load the customization script before the snippet calls `posthog.init`. Adjust the host for your region or proxy:
+
+```html
+<script src="https://us.i.posthog.com/static/customizations.full.js"></script>
+```
+
+Set the snippet's `before_send` option to `posthogCustomizations.sampleByDistinctId(0.4)` to keep about 40% of distinct IDs, or `posthogCustomizations.sampleBySessionId(0.25)` to keep about 25% of sessions. A given distinct ID or session sends either all its events or none.
 
 ## Cookies in iframes
 
