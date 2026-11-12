@@ -916,6 +916,10 @@ describe('emails', () => {
       ["a time in words, as Resend's API takes", 'in 1 hour'],
       ['a month that does not exist', '2026-13-01T09:00:00Z'],
       ['a day that does not exist', '2026-02-30T09:00:00Z'],
+      ['an hour that does not exist', '2026-12-01T99:00:00Z'],
+      ['a minute that does not exist', '2026-12-01T09:60:00Z'],
+      ['a second that does not exist', '2026-12-01T09:00:61Z'],
+      ['an offset that does not exist', '2026-12-01T09:00:00+99:99'],
       ['an invalid Date', new Date('nope')],
       ['a timestamp in milliseconds', 1_796_115_600_000],
       ['null', null],
@@ -1005,6 +1009,40 @@ describe('emails', () => {
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'already_sending', statusCode: 409 })
       expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('runs a second move of the same email after the first move and its retries', async () => {
+      replies = [
+        new TypeError('fetch failed'),
+        moved({ scheduled_at: '2026-12-02T09:00:00Z' }),
+        moved({ scheduled_at: '2026-12-03T09:00:00Z' }),
+      ]
+
+      const first = update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })
+      const second = update({ id: MESSAGE_ID.toUpperCase(), scheduledAt: '2026-12-03T09:00:00Z' })
+      await vi.runAllTimersAsync()
+      const [firstResult, secondResult] = await Promise.all([first, second])
+
+      expect(fetch.mock.calls.map(([, options]) => JSON.parse(options.body).scheduled_at)).toEqual([
+        '2026-12-02T09:00:00Z',
+        '2026-12-02T09:00:00Z',
+        '2026-12-03T09:00:00Z',
+      ])
+      expect(firstResult.data?.scheduledAt).toBe('2026-12-02T09:00:00Z')
+      expect(secondResult.data?.scheduledAt).toBe('2026-12-03T09:00:00Z')
+    })
+
+    it('moves different emails without waiting for each other', async () => {
+      const otherId = MESSAGE_ID.replace(/.$/, MESSAGE_ID.endsWith('0') ? '1' : '0')
+      replies = [new TypeError('fetch failed'), moved({ id: otherId }), moved()]
+
+      const first = update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })
+      const second = update({ id: otherId, scheduledAt: '2026-12-02T09:00:00Z' })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(fetch).toHaveBeenCalledTimes(2)
+      await vi.runAllTimersAsync()
+      await Promise.all([first, second])
     })
 
     it('refuses a time without an offset without saying an email was sent', async () => {

@@ -59,7 +59,8 @@ const SCHEDULING_UNSUPPORTED: EmailWarning = {
   message: 'This PostHog predates scheduled sends, so it ignored scheduledAt and sent the email now.',
   fix: 'Update PostHog before you schedule emails with it.',
 }
-const OFFSET_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/
+const OFFSET_TIME_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 
 type EveryField<Form> = Record<keyof Form, true>
 interface ReactRenderer {
@@ -151,6 +152,7 @@ export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
   private readonly hooks: EmailSenderHooks
   private readonly inFlight = new Set<Promise<unknown>>()
+  private readonly latestMoveByEmail = new Map<string, Promise<UpdateEmailResponse>>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
@@ -166,7 +168,19 @@ export class EmailSender implements Emails {
   }
 
   update(options: UpdateEmailOptions): Promise<UpdateEmailResponse> {
-    return this.track(this.updateUntracked(options))
+    const email = typeof options?.id === 'string' ? options.id.toLowerCase() : undefined
+    if (email === undefined) {
+      return this.track(this.updateUntracked(options))
+    }
+    const earlierMove = this.latestMoveByEmail.get(email) ?? Promise.resolve()
+    const move = earlierMove.then(() => this.updateUntracked(options))
+    this.latestMoveByEmail.set(email, move)
+    void move.finally(() => {
+      if (this.latestMoveByEmail.get(email) === move) {
+        this.latestMoveByEmail.delete(email)
+      }
+    })
+    return this.track(move)
   }
 
   cancel(id: string): Promise<CancelEmailResponse> {

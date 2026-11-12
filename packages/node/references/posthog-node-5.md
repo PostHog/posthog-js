@@ -3069,7 +3069,8 @@ PostHog sends the email, `not_found` a few seconds after it went out, `canceled`
 cancel, and `invalid_scheduled_at` for a time more than 30 days after the first send call. A time at or before now sends the
 email at once. Network errors, rate limits and an unavailable service are retried, because
 the same move twice ends the same; after a move to now, the retry can answer `already_sending`,
-which means the email is going out.
+which means the email is going out. Moves of one email from this client run one after another,
+in call order, so a retry never undoes a later move.
 
 ###### Parameters
 
