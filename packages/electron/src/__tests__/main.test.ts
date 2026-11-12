@@ -356,6 +356,65 @@ describe.each(['main', 'renderer'] as const)('%s public contracts through the ma
 })
 
 describe('main Electron client', () => {
+    it('reports an unchanged malformed flag payload once before a callback captures the SDK error', async () => {
+        const captures: Promise<void>[] = []
+        const onError = vi.fn((error: unknown) => {
+            // Finite guard proves recursive reporting without risking an unbounded test loop.
+            if (onError.mock.calls.length <= 3) captures.push(owner.captureException(error))
+        })
+        const owner = await start({ onError })
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: {
+                        broken: { key: 'broken', enabled: true, variant: 'blue', metadata: { payload: '{broken' } },
+                    },
+                })
+            )
+        )
+        await owner.reloadFeatureFlags()
+        await Promise.all(captures)
+        await owner.flush()
+        expect(owner.getFeatureFlagPayload('broken')).toBeNull()
+        expect(owner.getFeatureFlagResult('broken', { sendFeatureFlagEvent: false })).toMatchObject({
+            variant: 'blue',
+            payload: null,
+        })
+        owner.getState()
+        owner.getState()
+        await owner.flush()
+        expect(onError).toHaveBeenCalledTimes(1)
+        expect(batches.filter(({ event }) => event === '$exception')).toHaveLength(1)
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: {
+                        broken: { key: 'broken', enabled: true, metadata: { payload: '{different' } },
+                        another: { key: 'another', enabled: false, metadata: { payload: ' ' } },
+                    },
+                })
+            )
+        )
+        await owner.reloadFeatureFlags()
+        await Promise.all(captures)
+        await owner.flush()
+        expect(onError).toHaveBeenCalledTimes(3)
+        mock.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ flags: {} })))
+        await owner.reloadFeatureFlags()
+        expect(owner.getFeatureFlagPayload('broken')).toBeNull()
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: {
+                        broken: { key: 'broken', enabled: true, metadata: { payload: '{different' } },
+                    },
+                })
+            )
+        )
+        await owner.reloadFeatureFlags()
+        expect(onError).toHaveBeenCalledTimes(4)
+    })
+
     it.each(['screen', 'set', 'setOnce'] as const)('does not inspect opted-out %s properties', async (operation) => {
         const owner = await start()
         await owner.optOut()
