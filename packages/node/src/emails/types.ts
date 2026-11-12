@@ -330,11 +330,13 @@ export interface Emails {
    * `emails.get()` can take a few seconds to show it, and `emails.list()` usually shows it within a minute.
    *
    * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` while
-   * PostHog sends the email, and `not_found` a few seconds after it went out. A second cancel
-   * answers the same as the first while PostHog can still tell, and `not_found` after that. Network errors, rate limits and an unavailable service
-   * are retried. PostHog can also answer unavailable for a few seconds after a cancel or a send,
-   * until the email's status catches up; when the retries run out first, the error's name is
-   * `service_unavailable`, and calling `cancel()` again gets the final answer.
+   * PostHog sends the email, and `not_found` a few seconds after it went out. Network errors,
+   * rate limits and an unavailable service are retried.
+   *
+   * For a few seconds after a cancel or a send, until the email's status catches up, PostHog can
+   * answer unavailable. When that outlasts the retries, the error's name is `service_unavailable`,
+   * and the next call can answer the same until the status catches up. Once it has, a second
+   * cancel answers the same as the first while PostHog can still tell, and `not_found` after that.
    */
   cancel(id: string): Promise<CancelEmailResponse>
 
