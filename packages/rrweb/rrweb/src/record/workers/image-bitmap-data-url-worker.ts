@@ -75,12 +75,19 @@ interface ImageBitmapDataURLResponseWorker {
   postMessage(e: ImageBitmapDataURLWorkerResponse): void;
 }
 
-// `as any` because: https://github.com/Microsoft/TypeScript/issues/20595
-// some browsers (Safari) cannot encode WebP: convertToBlob silently returns lossless PNG,
-// many times larger than the lossy WebP asked for. once that is seen, opaque frames go as
-// JPEG at the same quality; frames with see-through pixels stay PNG, as JPEG would replay
-// them on black
+// Safari silently encodes WebP requests as huge lossless PNG; probe on 1x1 since oversized frames fall back too
+let webpProbeStarted = false;
 let noWebpEncoder = false;
+
+function probeWebpEncoder(): void {
+  webpProbeStarted = true;
+  void new OffscreenCanvas(1, 1)
+    .convertToBlob({ type: 'image/webp' })
+    .then((blob) => {
+      noWebpEncoder = blob.type !== 'image/webp';
+    })
+    .catch(() => undefined);
+}
 
 function isOpaque(pixels: Uint8ClampedArray): boolean {
   for (let i = 3; i < pixels.length; i += 4) {
@@ -89,23 +96,20 @@ function isOpaque(pixels: Uint8ClampedArray): boolean {
   return true;
 }
 
-async function encodeFrame(
-  canvas: OffscreenCanvas,
+function encodeOptions(
   options: DataURLOptions,
   pixels: Uint8ClampedArray,
-): Promise<Blob> {
-  const wantsWebp = options.type === 'image/webp';
-  if (wantsWebp && noWebpEncoder && isOpaque(pixels)) {
-    return canvas.convertToBlob({ ...options, type: 'image/jpeg' });
-  }
-  const blob = await canvas.convertToBlob(options);
-  if (!wantsWebp || blob.type === 'image/webp' || noWebpEncoder) return blob;
-  noWebpEncoder = true;
-  return isOpaque(pixels)
-    ? canvas.convertToBlob({ ...options, type: 'image/jpeg' })
-    : blob;
+): DataURLOptions {
+  if (options.type !== 'image/webp') return options;
+  // not awaited: frames sent before the probe settles keep the requested type
+  if (!webpProbeStarted) probeWebpEncoder();
+  // JPEG has no alpha, so see-through frames keep the PNG fallback
+  return noWebpEncoder && isOpaque(pixels)
+    ? { ...options, type: 'image/jpeg' }
+    : options;
 }
 
+// `as any` because: https://github.com/Microsoft/TypeScript/issues/20595
 const worker: ImageBitmapDataURLResponseWorker = self;
 
 let reusableCanvas: OffscreenCanvas | null = null;
@@ -179,7 +183,9 @@ worker.onmessage = async function (e) {
         }
       }
 
-      const blob = await encodeFrame(reusableCanvas, dataURLOptions, pixels); // takes a while
+      const blob = await reusableCanvas.convertToBlob(
+        encodeOptions(dataURLOptions, pixels),
+      ); // takes a while
       const arrayBuffer = await blob.arrayBuffer();
       worker.postMessage({
         id,
