@@ -143,19 +143,30 @@ sdkReplayConfig: { throttleDelayMs: 500 }
 
 **If ignored:** replay silently uses the 1000 ms default.
 
-#### `screenshotModeBackgroundCapture` is ignored on iOS
-
-This experimental option no longer has any effect, and screenshots are captured on the main thread. `posthog-react-native` still accepts the option, so nothing warns you. You can remove it from `sessionReplayConfig`.
-
 #### Session replay records only masked screenshots
 
-`posthog-ios` 4.0 and `posthog-android` 4.0 remove wireframe capture. The plugin already forced screenshot mode, so your recordings don't change. If native code in your app sets `sessionReplayConfig.screenshotMode` (iOS) or `sessionReplayConfig.screenshot` (Android), remove it, because it no longer compiles.
+`posthog-ios` 4.0 and `posthog-android` 4.0 remove wireframe capture. The plugin already forced screenshot mode, so recordings keep the same mode. If native code in your app sets `sessionReplayConfig.screenshotMode` (iOS) or `sessionReplayConfig.screenshot` (Android), remove it, because it no longer compiles.
 
-Masking changes on iOS with `posthog-ios` 4.0: secure text inputs stay masked inside a `ph-no-mask` view, and if a masked view sits inside a view backed by its own `CALayer` subclass, such as a `lottie-react-native` animation, the SDK masks the whole window for that frame. Fast scrolling on such a screen may also drop replay frames. See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md).
+Plugin 2.x used `posthog-ios` 3.92 and `posthog-android` 3.74, so recordings also pick up these changes from the native releases since then:
+
+- On iOS, masking covers content a masked view draws outside its bounds, such as unclipped images, layer shadows and button titles, and with `maskAllImages`, image attachments in text.
+- On iOS, secure text inputs stay masked inside a `ph-no-mask` view. If a masked view sits inside a view backed by its own `CALayer` subclass, such as a `lottie-react-native` animation, the SDK masks the whole window for that frame, and fast scrolling on such a screen may drop replay frames.
+- On iOS and Android, touches inside a `ph-no-capture` view are no longer recorded.
+- On Android, dialog windows, which back React Native's `Modal`, are drawn into the same frame as the activity.
+
+See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md).
 
 #### iOS uploads pause while cellular data is off
 
-Native uploads, such as session replay and native crash reports, pause while cellular data is turned off for your app, instead of sending requests that fail.
+Native uploads, such as session replay and native crash reports, pause while the device is on cellular and cellular data is turned off for your app, instead of sending requests that fail. They resume when the device has a usable connection, such as Wi-Fi.
+
+#### Retries wait at most 30 seconds
+
+Session replay and native event uploads wait at most 30 seconds when PostHog answers with `Retry-After`. After a failed upload, the wait doubles from 1 second up to 30 seconds, with some random jitter. 2.x had no cap on `Retry-After` and added 1 second per failure.
+
+#### Native crashes recorded while opted out are dropped
+
+A native crash that happens while the user is opted out is no longer sent after `optIn()`. A crash recorded while the user was opted in is still sent.
 
 #### Native events go to capture v1
 
@@ -167,7 +178,7 @@ Native uploads, such as session replay and native crash reports, pause while cel
 - A proxy that redirects these requests, other than with a 307 or 308 to the same origin as `host`, drops them.
 - A native event whose distinct ID is empty, whitespace-only or over 200 UTF-8 bytes is dropped. 2.x shortened a long ID to 200 characters and kept the event. Events captured in JavaScript still go to `/batch`, which shortens it as before, so with a long distinct ID, such as a JWT, the app keeps its JavaScript events but loses its native ones.
 - On iOS, a native event leaves out a property whose value is `null` instead of sending it as `null`. On Android, a `null` element in a list is sent at its position instead of being removed. `$set` and `$set_once` still send `null` values.
-- These events report `$locale` as a full language tag with region, such as `de-CH` or `zh-Hant-TW` instead of `de` or `zh-TW`, and can carry `$app_language` (see below).
+- These events report `$locale` as the device's preferred language, as a full language tag such as `de-CH` or `zh-Hant-TW` instead of `de` or `zh-TW`, and can carry `$app_language` (see below). On iOS, 2.x reported the language your app bundle resolved, so an English-only app on a French device now sends `fr-FR` instead of `en`. A language picked for your app in iOS Settings still counts. On Android, 2.x reported `Locale.getDefault()`, so a per-app language or `Locale.setDefault()` no longer changes it.
 - On Android, `$locale` uses the current codes `he`, `id` and `yi` instead of the legacy `iw`, `in` and `ji`, so a value such as `in-ID` becomes `id-ID`. Update filters that match those.
 
 See [Capture v1](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#capture-v1) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#locale-and-app_language) in the `posthog-ios` migration guide, and [Endpoints](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md#endpoints) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md#locale-and-app_language) in the `posthog-android` one.
@@ -207,7 +218,6 @@ Apps on React Native's full Swift Package Manager integration no longer bundle t
 - [ ] Native `import PostHog` code still compiles, and custom dSYM upload scripts are updated.
 - [ ] `posthog-react-native-session-replay`, any `pod 'PostHog'` line, and any other pod that depends on `PostHog` are removed. `pod install` stops with an error for the first two, and the Xcode build fails with `Redefinition of module 'PostHog'` for the rest.
 - [ ] Direct `start()` calls now use `setup()`, and direct `setup()` calls pass `throttleDelayMs`.
-- [ ] Optional: `screenshotModeBackgroundCapture` is removed.
 - [ ] Reverse proxies and self-hosted instances serve `/i/v1/*`, proxies pass the `Authorization`, `Content-*`, `User-Agent` and `PostHog-*` headers and the response through unchanged and don't authenticate with `Authorization`, and they don't redirect capture requests to another origin.
 - [ ] Your distinct IDs are 200 bytes or shorter, or you accept that native events with longer ones are dropped.
 - [ ] If you want `$app_language`, your app calls `posthog.setAppLanguage()`.
