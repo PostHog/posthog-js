@@ -3,6 +3,7 @@ import { version } from './version'
 import {
   allSettled,
   ErrorTracking as CoreErrorTracking,
+  EVENT_OPTION_LEGACY_PROPERTIES,
   FeatureFlagValue,
   isBlockedUA,
   isPlainObject,
@@ -84,7 +85,14 @@ import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/set
 import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
 import { canonicalizeUuid, eventUuidv7 } from './capture-v1/uuid'
 import { readEventOptions } from './capture-v1/transform'
-import { fillLibraryProperties, fillOptions, fillProperties, isUnsetProperty, snapshotLayer } from './event-defaults'
+import {
+  fillIdentifyStylePersonProfile,
+  fillLibraryProperties,
+  fillOptions,
+  fillProperties,
+  isUnsetProperty,
+  snapshotLayer,
+} from './event-defaults'
 import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 import { notifyContextListeners } from './extensions/context/listeners'
 import { getEventContext } from './extensions/context/event-context'
@@ -3424,6 +3432,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * result and can change it. Values are sent to capture unchanged. Capture drops an event whose
    * option value it cannot read, so a bad value registered here drops every event.
    *
+   * A `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once`
+   * event whose call leaves `process_person_profile` unset gets `true` instead of a value registered
+   * here, unless its distinct id is generated.
+   *
    * @example
    * ```ts
    * await client.registerOptions({ cookieless_mode: true })
@@ -4019,6 +4031,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const eventDistinctId = resolvedDistinctId ?? eventUuidv7()
 
     const eventProperties: PostHogEventProperties = readCallerValues(() => ({ ...(properties || {}) }))
+    // Read before any layer fills properties, so only the caller's own value counts.
+    const callerPersonProfile = eventProperties[EVENT_OPTION_LEGACY_PROPERTIES.process_person_profile]
     if (prepareOptions.distinctIdProperty) {
       eventProperties.distinct_id = eventDistinctId
     }
@@ -4049,6 +4063,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     fillLibraryProperties(eventProperties, libraryId, libraryVersion)
 
     const filledOptions: Record<string, JsonType> = { ...callOptions }
+    fillIdentifyStylePersonProfile(
+      event,
+      filledOptions,
+      eventProperties,
+      callerPersonProfile,
+      resolvedDistinctId !== undefined
+    )
     fillOptions(filledOptions, [
       contextOptions,
       globalOptions,
