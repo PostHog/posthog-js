@@ -91,7 +91,14 @@ dependencies {
   //noinspection GradleDynamicVersion
   implementation "com.facebook.react:react-native:+"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-  implementation "com.posthog:posthog-android:3.74.2"
+  // strictly: Gradle otherwise raises this version when the app or another library asks for a
+  // newer posthog-android, and this plugin, compiled against 3.x, then crashes at runtime.
+  implementation("com.posthog:posthog-android") {
+    version {
+      strictly "[3.74.2,4.0.0)"
+      prefer "3.74.2"
+    }
+  }
 
   testImplementation "junit:junit:4.13.2"
   testImplementation "org.json:json:20250517"
