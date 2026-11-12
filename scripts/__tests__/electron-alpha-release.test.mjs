@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 import test from 'node:test'
 import { assertCoreHooks, checkRegistry, metadata, packageName, validateManifest } from '../electron-alpha-release.mjs'
+
+// CLI status also enforces unrelated changed-package policy and requires a Git base branch.
+const require = createRequire(import.meta.url)
+const getReleasePlan = createRequire(require.resolve('@changesets/cli/package.json'))(
+    '@changesets/get-release-plan'
+).default
 
 const manifest = {
     name: packageName,
@@ -79,7 +85,7 @@ test('published core must actually implement both required hooks, including inhe
     assertCoreHooks({ PostHogCore: Complete })
 })
 
-test('stable release discovery deliberately excludes Electron while retaining core release', () => {
+test('stable release discovery deliberately excludes Electron while retaining core release', async () => {
     const config = JSON.parse(readFileSync('.changeset/config.json', 'utf8'))
     assert.ok(config.ignore.includes(packageName))
     const stable = readFileSync('.github/workflows/release.yml', 'utf8')
@@ -89,12 +95,7 @@ test('stable release discovery deliberately excludes Electron while retaining co
         const frontmatter = readFileSync(join('.changeset', file), 'utf8').split('---')[1]
         assert.ok(!frontmatter?.includes(packageName), `${file}: ignored Electron must not appear in stable changesets`)
     }
-    const output = join(mkdtempSync(join(tmpdir(), 'electron-alpha-changesets-')), 'status.json')
-    execFileSync('pnpm', ['changeset', 'status', '--output', relative(process.cwd(), output)], {
-        stdio: 'pipe',
-        env: { ...process.env, CI: 'true', COLUMNS: '80', LINES: '24' },
-    })
-    const plan = JSON.parse(readFileSync(output, 'utf8'))
+    const plan = await getReleasePlan(process.cwd())
     for (const release of plan.releases.filter((release) => release.name === packageName)) {
         assert.equal(release.type, 'none')
         assert.equal(
@@ -105,14 +106,34 @@ test('stable release discovery deliberately excludes Electron while retaining co
     }
 })
 
-test('CI changeset discovery fetches base history and prepares main for detached checkouts', () => {
-    const release = readFileSync('.github/workflows/release-electron-alpha.yml', 'utf8')
-    const library = readFileSync('.github/workflows/library-ci.yml', 'utf8')
-    const build = release.split('    build:\n')[1].split('    publish:\n')[0]
-    const unit = library.split('  unit:\n')[1].split('  edge-runtime:\n')[0]
-    for (const job of [build, unit]) {
-        assert.match(job, /fetch-depth: 0/)
-        assert.match(job, /git show-ref --verify --quiet refs\/heads\/main \|\| git branch main origin\/main/)
+test('release planning works without Git refs and does not stabilize ignored Electron dependencies', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'electron-alpha-plan-'))
+    const json = (path, value) => writeFileSync(join(directory, path), JSON.stringify(value))
+    try {
+        mkdirSync(join(directory, '.changeset'))
+        mkdirSync(join(directory, 'packages/core'), { recursive: true })
+        mkdirSync(join(directory, 'packages/electron'), { recursive: true })
+        json('package.json', { name: 'alpha-plan-fixture', private: true })
+        writeFileSync(join(directory, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n')
+        json('packages/core/package.json', { name: '@posthog/core', version: '1.0.0' })
+        json('packages/electron/package.json', {
+            name: packageName,
+            version: '0.1.0-alpha.0',
+            dependencies: { '@posthog/core': 'workspace:^' },
+        })
+        json('.changeset/config.json', {
+            ...JSON.parse(readFileSync('.changeset/config.json', 'utf8')),
+            changelog: false,
+        })
+        writeFileSync(join(directory, '.changeset/core.md'), "---\n'@posthog/core': patch\n---\nCore hooks.\n")
+        const plan = await getReleasePlan(directory)
+        assert.equal(plan.releases.find(({ name }) => name === '@posthog/core')?.newVersion, '1.0.1')
+        for (const release of plan.releases.filter(({ name }) => name === packageName)) {
+            assert.equal(release.type, 'none')
+            assert.equal(release.newVersion, '0.1.0-alpha.0')
+        }
+    } finally {
+        rmSync(directory, { recursive: true, force: true })
     }
 })
 

@@ -37,8 +37,6 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
 
       - name: Setup environment
         uses: ./.github/actions/setup
@@ -47,9 +45,7 @@ jobs:
         run: pnpm test:dependency-cooldown
 
       - name: Check Electron alpha release isolation
-        run: |
-          git show-ref --verify --quiet refs/heads/main || git branch main origin/main
-          pnpm test:electron-alpha-release
+        run: pnpm test:electron-alpha-release
 
       - name: Check task graph
         run: pnpm test:build-graph
