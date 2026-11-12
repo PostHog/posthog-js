@@ -848,7 +848,8 @@ describe('emails', () => {
   describe('message categories', () => {
     // Stands in for PostHog's send route: it reads a category the way the route's serializer does, ignores
     // fields it doesn't know, keeps categories by key, and applies the route's checks for marketing email.
-    // A templateKey that names a template made in PostHog follows the template's category.
+    // A templateKey that names a template made in PostHog follows the template's category, and is refused when
+    // that category is marketing.
     let categories: Map<string, { type: string; name: string; description: string }>
     let templates: Map<string, string | null>
     let optedOut: Set<string>
@@ -870,6 +871,9 @@ describe('emails', () => {
     }
 
     const sendForTemplate = (templateCategory: string | null, category: unknown): unknown => {
+      if (templateCategory !== null && categories.get(templateCategory)?.type === 'marketing') {
+        return refusal(400, 'marketing_template')
+      }
       const followsTemplate =
         category === undefined ||
         category === null ||
@@ -1079,26 +1083,37 @@ describe('emails', () => {
       expect(categories.size).toBe(0)
     })
 
-    describe('with a templateKey that names a template in a category', () => {
-      const sendForDigest = (
+    it('refuses a templateKey that names a template in a marketing category', async () => {
+      categories.set('newsletter', { type: 'marketing', name: 'Newsletter', description: '' })
+      templates.set('november-digest', 'newsletter')
+
+      const { data, error } = await posthog.emails.send({ ...CODE_SEND, templateKey: 'november-digest' })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'marketing_template', name: 'validation_error', statusCode: 400 })
+      expect(filedUnder).toEqual([])
+    })
+
+    describe('with a templateKey that names a template in a transactional category', () => {
+      const sendForReceipt = (
         category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
       ): ReturnType<PostHog['emails']['send']> =>
-        posthog.emails.send({ ...CODE_SEND, templateKey: 'november-digest', category })
+        posthog.emails.send({ ...CODE_SEND, templateKey: 'order-receipt', category })
 
       beforeEach(() => {
-        categories.set('newsletter', { type: 'marketing', name: 'Newsletter', description: '' })
-        templates.set('november-digest', 'newsletter')
+        categories.set('receipts', { type: 'transactional', name: 'Receipts', description: '' })
+        templates.set('order-receipt', 'receipts')
       })
 
       it("files the email under the template's category when the send names none", async () => {
-        const { error } = await sendForDigest()
+        const { error } = await sendForReceipt()
 
         expect(error).toBeNull()
-        expect(filedUnder).toEqual(['newsletter'])
+        expect(filedUnder).toEqual(['receipts'])
       })
 
       it('refuses the built-in category, which asks for transactional email with no category', async () => {
-        const { data, error } = await sendForDigest(TRANSACTIONAL_EMAIL_CATEGORY)
+        const { data, error } = await sendForReceipt(TRANSACTIONAL_EMAIL_CATEGORY)
 
         expect(data).toBeNull()
         expect(error).toMatchObject({

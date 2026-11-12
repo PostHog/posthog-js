@@ -65,17 +65,20 @@ interface CodeEmailFields {
   captureEngagement?: boolean
   /**
    * The email's message category. Without it, the email follows the category of the template that
-   * `templateKey` names, or is transactional with no category. `TRANSACTIONAL_EMAIL_CATEGORY` asks for
-   * transactional email with no category, so PostHog refuses it with `category_mismatch` when
-   * `templateKey` names a template in a category. A `MessageCategory` files the email under that
-   * category. A marketing email honors the recipient's opt-outs and gets unsubscribe headers. Its
-   * `html`, or its `text` when it has no `html`, needs the `{{ unsubscribe_url }}` placeholder.
+   * `templateKey` names, or is transactional with no category. A template made in PostHog is
+   * transactional: PostHog refuses a `templateKey` that names a template in a marketing category with
+   * `marketing_template`. `TRANSACTIONAL_EMAIL_CATEGORY` asks for transactional email with no
+   * category, so PostHog refuses it with `category_mismatch` when `templateKey` names a template in
+   * a category. A `MessageCategory` files the email under that category. A marketing email honors
+   * the recipient's opt-outs and gets unsubscribe headers. Its `html`, or its `text` when it has no
+   * `html`, needs the `{{ unsubscribe_url }}` placeholder.
    *
    * The send returns an error with code `category_mismatch` when a category with this key has
    * another type, or when `templateKey` names a template in another category; `too_many_categories`
    * when the project can't take another category; `unsubscribe_link_required` when a marketing email
-   * has no unsubscribe placeholder; `copies_not_allowed` when a marketing email has copies; and
-   * `recipient_opted_out` when the recipient opted out of the category or of all marketing email.
+   * has no unsubscribe placeholder; `copies_not_allowed` when a marketing email has copies;
+   * `recipient_opted_out` when the recipient opted out of the category or of all marketing email; and
+   * `marketing_template` when `templateKey` names a template in a marketing category.
    */
   category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
 }
