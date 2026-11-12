@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.70.0
+
+### Minor Changes
+
+- [#5511](https://github.com/PostHog/posthog-js/pull/5511) [`b64482a`](https://github.com/PostHog/posthog-js/commit/b64482a18cb26d29b7e2b760f344d7af2ad9823a) Thanks [@Silthus](https://github.com/Silthus)! - Opt a recipient out of email topics, or back in, with `posthog.emails.setPreferences({ to, topics, allMarketing })`. One call sends the whole change in one request, using the client's `secretKey`.
+  (2026-11-12)
+
 ## 5.69.0
 
 ### Minor Changes
