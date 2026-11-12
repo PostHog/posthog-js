@@ -44,8 +44,52 @@ interface CodeEmailFields {
    * bounced) as events of the recipient. Defaults to `true`. A project whose admin turned
    * engagement capture off captures nothing, whatever the send asks. A template made in PostHog
    * follows the project's setting.
+   *
+   * @deprecated Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a
+   * send that sets both `captureEngagement` and `tracking`.
    */
   captureEngagement?: boolean
+  /**
+   * Marks the email as sensitive, such as one that carries login links, reset tokens or codes.
+   * A sensitive email keeps its links as they are unless `tracking` turns clicks on, leaves its
+   * subject off engagement events, and keeps its content out of PostHog's logs.
+   *
+   * Without it, a send whose `templateKey` matches a template saved in PostHog follows that
+   * template's setting, and any other send is sensitive. PostHog refuses `sensitive: false` when
+   * the matching template is sensitive.
+   */
+  sensitive?: boolean
+  /**
+   * What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel,
+   * captures engagement events, and counts clicks only when the email isn't sensitive.
+   *
+   * - `true` turns on opens, clicks and engagement events.
+   * - `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the
+   *   email's opens or clicks, and captures no engagement events.
+   * - An object turns each kind on or off. A key you leave out keeps its default.
+   *
+   * Turn clicks on for a sensitive email only when its links are safe to send through PostHog's
+   * click tracking.
+   */
+  tracking?: boolean | EmailTracking
+}
+
+/** Which kinds of tracking a send with `templateKey` turns on. */
+export interface EmailTracking {
+  /** Counts opens with PostHog's open pixel. Defaults to `true`. */
+  opens?: boolean
+  /**
+   * Counts clicks by sending the email's links through PostHog's click tracking. Defaults to
+   * `false` for a sensitive email and `true` for any other. Needs `opens`: PostHog refuses a send
+   * with `opens: false` and `clicks: true`.
+   */
+  clicks?: boolean
+  /**
+   * Captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events
+   * of the recipient. Defaults to `true`. A project whose admin turned engagement capture off
+   * captures nothing, whatever the send asks.
+   */
+  engagement?: boolean
 }
 
 /**
@@ -148,8 +192,44 @@ export interface EmailStatus {
 export type GetEmailResponse = { data: EmailStatus; error: null } | { data: null; error: EmailError }
 
 /**
+ * Options for `posthog.emails.setPreferences()`. Set `allMarketing`, `topics`, or both.
+ */
+export interface SetEmailPreferencesOptions {
+  /**
+   * The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and
+   * `jane@example.com` are two recipients.
+   */
+  to: string
+  /** `false` opts the recipient out of every marketing topic. `true` lifts that opt-out. Applied before `topics`. */
+  allMarketing?: boolean
+  /**
+   * Topic key to `false` to opt the recipient out of that topic, or `true` to opt them back in. Topic keys are the
+   * ones you set under Workflows opt-outs. Opting back in to one marketing topic after an all-marketing opt-out lifts
+   * that opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out
+   * keep their current choice.
+   */
+  topics?: Record<string, boolean>
+}
+
+/** A recipient's preferences after the change. */
+export interface EmailPreferences {
+  to: string
+  /** `false` when the recipient opted out of all marketing, `true` when they opted back in, `null` when they never chose. */
+  allMarketing: boolean | null
+  /** Topic key to `false` (opted out) or `true` (opted in), for every topic the recipient chose. */
+  topics: Record<string, boolean>
+}
+
+/**
+ * What `posthog.emails.setPreferences()` resolves to. Exactly one of `data` and `error` is set.
+ * The promise does not reject.
+ */
+export type SetEmailPreferencesResponse = { data: EmailPreferences; error: null } | { data: null; error: EmailError }
+
+/**
  * The `posthog.emails` API: sends transactional email from PostHog email templates or from
- * content your code rendered, and reads the status of each email it sent.
+ * content your code rendered, reads the status of each email it sent, and sets a recipient's
+ * topic preferences.
  */
 export interface Emails {
   /**
@@ -169,4 +249,16 @@ export interface Emails {
    * seconds after the send. Network errors, rate limits and an unavailable service are retried.
    */
   get(id: string): Promise<GetEmailResponse>
+
+  /**
+   * Opt one recipient out of topics, or back in, in one request. PostHog saves the whole change at once. The same
+   * change twice ends the same, but a retry that lands after a newer change for the same recipient undoes that
+   * change. A failed call may still have saved the change. Workflows sends skip a marketing topic the recipient
+   * opted out of.
+   *
+   * Resolves to `{ data, error }` and does not reject. The error code is `unknown_topic` when a topic key names no
+   * topic of the project, and nothing is saved. A plain `not_found` means the PostHog instance has no preferences
+   * API yet. Network errors, rate limits and an unavailable service are retried.
+   */
+  setPreferences(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse>
 }

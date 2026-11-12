@@ -951,14 +951,15 @@ client.debug(false)
 
 > **get** **emails**(): `Emails`
 
-The `posthog.emails` API: sends transactional email from PostHog email templates, and reads
-the status of each email it sent.
+The `posthog.emails` API: sends transactional email from PostHog email templates, reads
+the status of each email it sent, and sets a recipient's topic preferences.
 
-Needs `secretKey`, a project secret API key with the `transactional_email:write` scope (the
-"Send transactional email" preset). A key with only `transactional_email:read` can read
-statuses but not send. Keys made with `hog_flow:write` still work. Requests go to `appHost`,
-or to the PostHog Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and
-do not reject.
+Needs `secretKey`, a project secret API key. `send` needs the `transactional_email:write` scope
+(the "Send transactional email" preset), and `get` needs `transactional_email:read` or
+`transactional_email:write`. `setPreferences` needs the
+`messaging_preference:write` scope, which cannot send email. Keys made with `hog_flow:write` still
+work for all three. Requests go to `appHost`, or to the PostHog Cloud app host of `host`. `send`,
+`get` and `setPreferences` resolve to `{ data, error }` and do not reject.
 `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
 and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
 returns the error `client_closed`.
@@ -979,6 +980,9 @@ if (error) {
 }
 
 const status = await client.emails.get(data.id) // later, for example from a job
+
+// From a preference center: opt out of one topic, keep the rest
+await client.emails.setPreferences({ to: 'user@example.com', topics: { newsletter: false } })
 ```
 
 ##### Returns
@@ -992,7 +996,7 @@ Needs `secretKey`, a project secret API key with the `transactional_email:write`
 
 ### `EmailError`
 
-PostHog did not queue the email, or the client could not tell whether it did.
+PostHog refused an email call, or the client could not tell whether it succeeded.
 
 Branch on `code`, PostHog's stable error code, or on `name`, a coarse category of the
 failure. The message never contains the secret key or the request body.
@@ -2795,11 +2799,13 @@ Options accepted by `posthog.metrics.count/gauge/histogram`.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-captureengagement"></a> `captureEngagement?` | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. |
+| <a id="property-captureengagement"></a> ~~`captureEngagement?`~~ | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. **Deprecated** Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a send that sets both `captureEngagement` and `tracking`. |
 | <a id="property-from"></a> `from?` | `string` | A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender. |
 | <a id="property-replyto"></a> `replyTo?` | `string` \| `string`[] | - |
+| <a id="property-sensitive"></a> `sensitive?` | `boolean` | Marks the email as sensitive, such as one that carries login links, reset tokens or codes. A sensitive email keeps its links as they are unless `tracking` turns clicks on, leaves its subject off engagement events, and keeps its content out of PostHog's logs. Without it, a send whose `templateKey` matches a template saved in PostHog follows that template's setting, and any other send is sensitive. PostHog refuses `sensitive: false` when the matching template is sensitive. |
 | <a id="property-subject"></a> `subject` | `string` | - |
 | <a id="property-templatekey"></a> `templateKey` | `string` | Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog. Letters, digits, hyphens and underscores, at most 400. |
+| <a id="property-tracking"></a> `tracking?` | `boolean` \| `EmailTracking` | What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel, captures engagement events, and counts clicks only when the email isn't sensitive. - `true` turns on opens, clicks and engagement events. - `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the email's opens or clicks, and captures no engagement events. - An object turns each kind on or off. A key you leave out keeps its default. Turn clicks on for a sensitive email only when its links are safe to send through PostHog's click tracking. |
 
 ### `CodeEmailForm`
 
@@ -2884,6 +2890,18 @@ A coarse category of the failure, for code that branches on the kind of failure 
 | <a id="property-statuscode"></a> `statusCode?` | `number` |
 | <a id="property-why"></a> `why?` | `string` |
 
+### `EmailPreferences`
+
+A recipient's preferences after the change.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-allmarketing"></a> `allMarketing` | `boolean` \| `null` | `false` when the recipient opted out of all marketing, `true` when they opted back in, `null` when they never chose. |
+| <a id="property-to"></a> `to` | `string` | - |
+| <a id="property-topics"></a> `topics` | `Record`\<`string`, `boolean`\> | Topic key to `false` (opted out) or `true` (opted in), for every topic the recipient chose. |
+
 ### `EmailReactElement`
 
 A React element, such as `<WelcomeEmail firstName="Ada" />`. Typed by its shape, so
@@ -2899,7 +2917,8 @@ posthog-node needs no React types.
 ### `Emails`
 
 The `posthog.emails` API: sends transactional email from PostHog email templates or from
-content your code rendered, and reads the status of each email it sent.
+content your code rendered, reads the status of each email it sent, and sets a recipient's
+topic preferences.
 
 #### Methods
 
@@ -2943,6 +2962,29 @@ an unavailable service are retried with the same idempotency key.
 
 `Promise`\<`SendEmailResponse`\>
 
+##### setPreferences()
+
+> **setPreferences**(`options`): `Promise`\<`SetEmailPreferencesResponse`\>
+
+Opt one recipient out of topics, or back in, in one request. PostHog saves the whole change at once. The same
+change twice ends the same, but a retry that lands after a newer change for the same recipient undoes that
+change. A failed call may still have saved the change. Workflows sends skip a marketing topic the recipient
+opted out of.
+
+Resolves to `{ data, error }` and does not reject. The error code is `unknown_topic` when a topic key names no
+topic of the project, and nothing is saved. A plain `not_found` means the PostHog instance has no preferences
+API yet. Network errors, rate limits and an unavailable service are retried.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | `SetEmailPreferencesOptions` |
+
+###### Returns
+
+`Promise`\<`SetEmailPreferencesResponse`\>
+
 ### `EmailStatus`
 
 The status of an email that `posthog.emails.send()` queued.
@@ -2956,6 +2998,18 @@ The status of an email that `posthog.emails.send()` queued.
 | <a id="property-reason"></a> `reason` | `string` \| `null` | Why a failed email was not sent, such as `provider_error` or `recipient_suppressed`, or the bounce type of a bounced email: `hard`, `soft` or `unknown`. Null otherwise. |
 | <a id="property-status"></a> `status` | `EmailDeliveryStatus` \| `string` & `object` | - |
 | <a id="property-statusat"></a> `statusAt` | `string` | When the email reached its current status, as an ISO 8601 timestamp. |
+
+### `EmailTracking`
+
+Which kinds of tracking a send with `templateKey` turns on.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-clicks"></a> `clicks?` | `boolean` | Counts clicks by sending the email's links through PostHog's click tracking. Defaults to `false` for a sensitive email and `true` for any other. Needs `opens`: PostHog refuses a send with `opens: false` and `clicks: true`. |
+| <a id="property-engagement"></a> `engagement?` | `boolean` | Captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. |
+| <a id="property-opens"></a> `opens?` | `boolean` | Counts opens with PostHog's open pixel. Defaults to `true`. |
 
 ### `EmailWarning`
 
@@ -4912,7 +4966,7 @@ What every send takes, whatever its form.
 | <a id="property-distinctid-1"></a> `distinctId?` | `string` | The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address. |
 | <a id="property-idempotencykey"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too. |
 | <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
-| <a id="property-to"></a> `to` | `string` | One recipient email address. |
+| <a id="property-to-1"></a> `to` | `string` | One recipient email address. |
 
 ### `SendEmailOptions`
 
@@ -4969,6 +5023,25 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 | <a id="projectid"></a> `projectId?` | `number` |
 | <a id="sendexceptionstoposthog"></a> `sendExceptionsToPostHog?` | `boolean` |
 | <a id="severityallowlist"></a> `severityAllowList?` | `SeverityLevel`[] \| `"*"` |
+
+### `SetEmailPreferencesOptions`
+
+Options for `posthog.emails.setPreferences()`. Set `allMarketing`, `topics`, or both.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-allmarketing-1"></a> `allMarketing?` | `boolean` | `false` opts the recipient out of every marketing topic. `true` lifts that opt-out. Applied before `topics`. |
+| <a id="property-to-2"></a> `to` | `string` | The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients. |
+| <a id="property-topics-1"></a> `topics?` | `Record`\<`string`, `boolean`\> | Topic key to `false` to opt the recipient out of that topic, or `true` to opt them back in. Topic keys are the ones you set under Workflows opt-outs. Opting back in to one marketing topic after an all-marketing opt-out lifts that opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out keep their current choice. |
+
+### `SetEmailPreferencesResponse`
+
+> **SetEmailPreferencesResponse** = \{ `data`: `EmailPreferences`; `error`: `null`; \} \| \{ `data`: `null`; `error`: `EmailError`; \}
+
+What `posthog.emails.setPreferences()` resolves to. Exactly one of `data` and `error` is set.
+The promise does not reject.
 
 ### `SetPersonPropertiesMessage`
 

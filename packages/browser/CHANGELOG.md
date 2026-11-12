@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.447.15
+
+### Patch Changes
+
+- [#5670](https://github.com/PostHog/posthog-js/pull/5670) [`753e5bf`](https://github.com/PostHog/posthog-js/commit/753e5bfda9aa216337f6b59a806666cf43f861a7) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dropdown selection masking without changing custom multiselect behavior.
+  (2026-11-12)
+
 ## 1.447.14
 
 ### Patch Changes
