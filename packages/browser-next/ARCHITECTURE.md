@@ -84,7 +84,7 @@ A type import must not become a JavaScript import.
 Use the shared `Client` and `Extension` contracts from `@posthog/browser-common`.
 Do not create a second extension contract.
 
-For product capability interfaces, use `I<Product>` for application controls, `I<Product>Internal` for SDK-only capabilities, and `I<Product>Common` for shared implementations. Use the full product name for its camelCase factory and its `Options`, `Configuration`, and `Callback` types. Feature flags uses `featureFlags()`, `IFeatureFlags`, `IFeatureFlagsInternal`, `IFeatureFlagsCommon`, and `FeatureFlagsOptions` / `FeatureFlagsConfiguration` / `FeatureFlagsCallback`. Lookup tokens use `FeatureFlagsExtension` and `FeatureFlagsCommonExtension`.
+For product capability interfaces, use `I<Product>` for application controls, `I<Product>Internal` for SDK-only capabilities, and `I<Product>Common` for shared implementations. Use the full product name for its camelCase factory and its `Options`, `Configuration`, and `Callback` types.
 
 Type shared lookup tokens against capability interfaces, not implementation classes. The implementation must satisfy the interface; consumers must not depend on its private members.
 

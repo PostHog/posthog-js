@@ -182,20 +182,6 @@ Configuration arrays and regular expressions are snapshotted before asynchronous
 
 ## Feature flags
 
-### API names
-
-Use `featureFlags(options)` from `@posthog/browser/flags` for explicit composition. The capability interface is `IFeatureFlags`; its related types are `FeatureFlagsOptions`, `FeatureFlagsConfiguration`, and `FeatureFlagsCallback`.
-
-| Previous name        | Replacement                 |
-| -------------------- | --------------------------- |
-| `flags(options)`     | `featureFlags(options)`     |
-| `FeatureFlags`       | `IFeatureFlags`             |
-| `FlagsOptions`       | `FeatureFlagsOptions`       |
-| `FlagsConfiguration` | `FeatureFlagsConfiguration` |
-| `FlagsCallback`      | `FeatureFlagsCallback`      |
-
-### Composition and controls
-
 Flags dynamically load during `createPostHog()` by default. Initialization waits for the module and extension setup, not the network response. Use `flags: false` to omit automatic flags, or configure the extension through `flags`:
 
 ```ts
