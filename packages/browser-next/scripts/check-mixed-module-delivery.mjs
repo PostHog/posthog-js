@@ -58,7 +58,7 @@ let createPostHog
 let createEsmPostHog
 let createCorePostHog
 let analytics
-let flags
+let featureFlags
 let logs
 let commonJsLogs
 let commonJsFlags
@@ -77,8 +77,8 @@ try {
     ;({ analytics } = await import('@posthog/browser/analytics'))
     ;({ createPostHog: createEsmPostHog } = await import('@posthog/browser'))
     await import('@posthog/browser/core')
-    ;({ flags } = await import('@posthog/browser/flags'))
-    ;({ flags: commonJsFlags } = require('@posthog/browser/flags'))
+    ;({ featureFlags } = await import('@posthog/browser/flags'))
+    ;({ featureFlags: commonJsFlags } = require('@posthog/browser/flags'))
     ;({ logs } = await import('@posthog/browser/logs'))
     ;({ logs: commonJsLogs } = require('@posthog/browser/logs'))
     ;({ surveys } = await import('@posthog/browser/surveys'))
@@ -179,7 +179,7 @@ if (
     throw new Error('The CommonJS core entrypoint must load only remote configuration, not analytics delivery')
 }
 
-for (const createFlags of [flags, commonJsFlags]) {
+for (const createFlags of [featureFlags, commonJsFlags]) {
     const client = await createCorePostHog({
         projectToken: 'ph_test',
         storage: false,

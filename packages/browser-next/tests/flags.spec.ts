@@ -1,8 +1,8 @@
 import { requireInstalledExtension } from './helpers'
 import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore } from '../src/composition/npm/core'
-import { flags } from '../src/products/flags/flags'
-import type { FlagsOptions } from '../src/products/flags/flags'
+import { featureFlags } from '../src/products/flags/flags'
+import type { FeatureFlagsOptions } from '../src/products/flags/flags'
 import type { IPostHog, PostHogOptions } from '../src/core/types'
 import { localRemoteConfig, MemoryStorage } from './helpers'
 
@@ -56,7 +56,7 @@ describe('flags', () => {
     it.each([false, { bootstrap: { featureFlags: { ignored: true } } }] as const)(
         'prefers the explicit static instance over %j',
         async (configuration) => {
-            const extension = flags({
+            const extension = featureFlags({
                 featureFlagEvaluation: false,
                 bootstrap: { featureFlags: { static: 'variant' } },
             })
@@ -72,13 +72,13 @@ describe('flags', () => {
 
     it.each(['static', 'dynamic'])('uses the same %s configuration and result/subscription API', async (mode) => {
         vi.useFakeTimers()
-        const options: FlagsOptions = {
+        const options: FeatureFlagsOptions = {
             featureFlagEvaluation: false,
             bootstrap: { featureFlags: { off: false, test: 'a' }, featureFlagPayloads: { test: { text: 'payload' } } },
         }
         const fetch = vi.fn()
         const client = await create(
-            mode === 'static' ? { fetch, extensions: [flags(options)] } : { fetch, flags: options }
+            mode === 'static' ? { fetch, extensions: [featureFlags(options)] } : { fetch, flags: options }
         )
         const captured = vi.fn()
         requireInstalledExtension(client.analytics).onEvent(captured)
@@ -214,7 +214,7 @@ describe('flags', () => {
 
     it('snapshots extension configuration before setup', async () => {
         const options = { bootstrap: { featureFlags: { test: 'original' } }, featureFlagEvaluation: false }
-        const extension = flags(options)
+        const extension = featureFlags(options)
         options.bootstrap.featureFlags.test = 'changed'
         const client = await create({ extensions: [extension] })
         expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('test')?.variant).toBe('original')

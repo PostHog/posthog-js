@@ -1,8 +1,8 @@
 import type { Client, DeepReadonly, Extension, ExtensionToken, Listener } from '@posthog/browser-common'
 import type { IAnalytics } from '../../products/analytics/analytics-api'
 import type { IAnalyticsExtension } from '../../products/analytics/analytics-internal'
-import type { FeatureFlags } from '../../products/flags/flags-token'
-import type { FlagsExtension } from '../../products/flags/flags-internal'
+import type { IFeatureFlags } from '../../products/flags/flags-token'
+import type { IFeatureFlagsInternal } from '../../products/flags/flags-internal'
 import type { LogsExtension } from '../../products/logs/logs-internal'
 import type { SurveysExtension } from '../../products/surveys/surveys-internal'
 import type { ConsentState } from '../state/state'
@@ -38,7 +38,7 @@ export type BrowserExtension = Extension<IPostHogInternal>
 
 export interface BrowserProducts {
     analytics: IAnalytics
-    featureFlags: FeatureFlags
+    featureFlags: IFeatureFlags
     logs: LogsExtension
     surveys: SurveysExtension
     autocapture: BrowserExtension & { setElementSelectors(selectors: Set<string>): void }
@@ -46,7 +46,7 @@ export interface BrowserProducts {
 
 export interface InternalBrowserProducts extends BrowserProducts {
     analytics: IAnalyticsExtension
-    featureFlags: FlagsExtension
+    featureFlags: IFeatureFlagsInternal
 }
 
 export type BrowserExtensionAccess<Products extends BrowserProducts = BrowserProducts> = Readonly<Partial<Products>> & {

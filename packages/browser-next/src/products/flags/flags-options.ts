@@ -1,6 +1,6 @@
 import type { FeatureFlagResult, JsonType } from '@posthog/types'
 
-export interface FlagsOptions {
+export interface FeatureFlagsOptions {
     /** Evaluate flags remotely. Defaults to true; false retains bootstrap and injected values. */
     featureFlagEvaluation?: boolean
     bootstrap?: {
@@ -18,7 +18,7 @@ export interface FlagsOptions {
     onlyEvaluateSurveyFeatureFlags?: boolean
 }
 
-export type FlagsConfiguration = false | FlagsOptions
-export type FlagsCallback = (flags: FeatureFlagResult[], errorsLoading: boolean) => void
+export type FeatureFlagsConfiguration = false | FeatureFlagsOptions
+export type FeatureFlagsCallback = (flags: FeatureFlagResult[], errorsLoading: boolean) => void
 export type { FeatureFlagResult, JsonType }
-export type { FeatureFlagsReloadResult } from '@posthog/browser-common/feature-flags'
+export type { FeatureFlagsReloadResult } from '@posthog/browser-common'

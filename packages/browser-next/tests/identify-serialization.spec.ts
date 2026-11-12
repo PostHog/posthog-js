@@ -1,6 +1,6 @@
 import { analytics } from '../src/products/analytics/analytics'
 import { createPostHog } from '../src/composition/npm/core'
-import { flags } from '../src/products/flags/flags'
+import { featureFlags } from '../src/products/flags/flags'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { createFetch, localRemoteConfig, requireInstalledExtension, type SentRequest } from './helpers'
 
@@ -15,7 +15,7 @@ const create = async (debug = false) => {
         capturePageview: false,
         remoteConfig: localRemoteConfig,
         fetch: createFetch(requests),
-        extensions: [analytics({ flushInterval: 0 }), flags({ featureFlagEvaluation: false })],
+        extensions: [analytics({ flushInterval: 0 }), featureFlags({ featureFlagEvaluation: false })],
     })
     clients.push(client)
     return { client, product: requireInstalledExtension(client.analytics), requests }

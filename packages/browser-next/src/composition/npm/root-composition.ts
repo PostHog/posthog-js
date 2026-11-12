@@ -75,7 +75,7 @@ const configureFlags = (options: PostHogOptions): ProductDefinition | undefined 
     const configuration = options?.flags
     if (configuration === false) return
     const snapshot = configuration && JSON.parse(JSON.stringify(configuration))
-    return { load: () => import('../../products/flags/flags').then(({ flags }) => flags(snapshot)) }
+    return { load: () => import('../../products/flags/flags').then(({ featureFlags }) => featureFlags(snapshot)) }
 }
 
 const configureLogs = (options: PostHogOptions): ProductDefinition | undefined => {

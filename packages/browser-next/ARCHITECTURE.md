@@ -84,6 +84,10 @@ A type import must not become a JavaScript import.
 Use the shared `Client` and `Extension` contracts from `@posthog/browser-common`.
 Do not create a second extension contract.
 
+For product capability interfaces, use `I<Product>` for application controls, `I<Product>Internal` for SDK-only capabilities, and `I<Product>Common` for shared implementations. Use the full product name for its camelCase factory and its `Options`, `Configuration`, and `Callback` types. Feature flags uses `featureFlags()`, `IFeatureFlags`, `IFeatureFlagsInternal`, `IFeatureFlagsCommon`, and `FeatureFlagsOptions` / `FeatureFlagsConfiguration` / `FeatureFlagsCallback`. Lookup tokens use `FeatureFlagsExtension` and `FeatureFlagsCommonExtension`.
+
+Type shared lookup tokens against capability interfaces, not implementation classes. The implementation must satisfy the interface; consumers must not depend on its private members.
+
 ### 4.2 Small runtime primitives
 
 This layer contains small and general functions. Each function must have one clear purpose.
@@ -233,11 +237,13 @@ Survey action selectors are owned by the optional surveys module. It returns cop
 
 ### Feature flags
 
-`flags` accepts the same `FlagsOptions` as `flags(options)` from `@posthog/browser/flags`. With no explicit `featureFlags` extension, the root awaits a literal flags import and extension setup before resolving. It does not await remote evaluation. `flags: false` disables automatic inclusion; an explicit instance takes precedence. Failed loading/setup is isolated from core capture. The manual core entrypoint never imports flags automatically.
+`flags` accepts the same `FeatureFlagsOptions` as `featureFlags(options)` from `@posthog/browser/flags`. With no explicit `featureFlags` extension, the root awaits a literal flags import and extension setup before resolving. It does not await remote evaluation. `flags: false` disables automatic inclusion; an explicit instance takes precedence. Failed loading/setup is isolated from core capture. The manual core entrypoint never imports flags automatically.
 
 Applications access flag controls through `await posthog.resolveExtension(FeatureFlagsExtension)`. The typed token is lightweight and does not import the implementation. Result conversion, subscriptions, bootstrap, and evaluation stay in the optional module. Missing or failed extensions return undefined from lookup. Callbacks enumerate results without emitting flag-called events.
 
 Browser-next supplies an `IPostHogInternal` scoped host with a separate shared `Client` adapter. Identification publishes `onIdentify`; local person-property updates publish the product-host `onChangeProperties` notification with `set`, `setOnce` and `unset` fields. Property setters do not publish identification, while identification with properties publishes both notifications. Core also supplies `onGroup`, `onGroupsReset` and `onReset`. Notifications run synchronously, independently of capture admission. Publishers isolate listener failures and do not replay earlier operations. Extensions subscribe during setup and dispose their subscriptions during teardown. Flags uses identification to update identity-dependent tracking and property changes to update evaluation context; core does not look up product-specific hooks.
+
+The public `IFeatureFlags` contract exposes application controls; `IFeatureFlagsInternal` adds survey targeting context for SDK consumers. Shared lookup exposes `IFeatureFlagsCommon`, implemented by `PostHogFeatureFlags`, through `FeatureFlagsCommonExtension`.
 
 Flags passes the shared `Client` directly to the shared feature-flags implementation and stores its values through `Client.kv`. The host owns storage selection, serialization, and durable writes. Core reset clears persisted extension data before notifying flags to clear its in-memory evaluation state and reload. Flag values follow the client's configured persistence, including memory-only operation with `storage: false`.
 
@@ -413,10 +419,10 @@ A generic loader function does not create a chunk by itself. The owner or a prod
 Use this form when the application selects an extension before client creation:
 
 ```ts
-const { flags } = await import('@posthog/browser/flags')
+const { featureFlags } = await import('@posthog/browser/flags')
 const posthog = await createPostHog({
     projectToken,
-    extensions: [flags()],
+    extensions: [featureFlags()],
 })
 ```
 
