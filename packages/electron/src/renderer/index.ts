@@ -21,6 +21,7 @@ export type { State, Properties, FeatureFlagValue, JsonType }
 
 export class PostHog {
     private _state?: State
+    private _reportedFlags = new Set<string>()
     private _sequence = 0
     private _tail: Promise<unknown> = Promise.resolve()
     private _listeners = new Set<(state: State) => void>()
@@ -37,6 +38,14 @@ export class PostHog {
 
     private _update(state: State): void {
         if (this._disposed || (this._state && state.revision <= this._state.revision)) return
+        if (
+            this._state?.generation !== state.generation ||
+            this._state?.flagRevision !== state.flagRevision ||
+            this._state?.sessionId !== state.sessionId ||
+            this._state?.optedOut !== state.optedOut
+        ) {
+            this._reportedFlags = new Set()
+        }
         this._state = structuredClone(state)
         for (const listener of this._listeners) {
             try {
@@ -119,9 +128,17 @@ export class PostHog {
             this._state?.featureFlags[key] ??
             (this._state && Object.keys(this._state.featureFlags).length > 0 ? false : undefined)
         if (options?.sendEvent !== false && this._state) {
-            void this._send({ type: 'flag', key, flagRevision: this._state.flagRevision, value: value ?? null }).catch(
-                () => {}
-            )
+            const reportedFlags = this._reportedFlags
+            const reportKey = JSON.stringify([key, value ?? null])
+            if (!reportedFlags.has(reportKey)) {
+                reportedFlags.add(reportKey)
+                void this._send({
+                    type: 'flag',
+                    key,
+                    flagRevision: this._state.flagRevision,
+                    value: value ?? null,
+                }).catch(() => reportedFlags.delete(reportKey))
+            }
         }
         return value
     }
@@ -147,6 +164,7 @@ export class PostHog {
         this._disposed = true
         this._unsubscribe()
         this._listeners.clear()
+        this._reportedFlags.clear()
         if (singleton === this) singleton = undefined
     }
 }
