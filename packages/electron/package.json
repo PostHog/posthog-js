@@ -38,6 +38,11 @@
             "types": "./dist/preload-helper.d.ts",
             "import": "./dist/preload-helper.mjs",
             "require": "./dist/preload-helper.cjs"
+        },
+        "./react": {
+            "types": "./dist/react.d.ts",
+            "import": "./dist/react.mjs",
+            "require": "./dist/react.cjs"
         }
     },
     "scripts": {
@@ -46,7 +51,7 @@
         "dev": "tsdown --watch",
         "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.json",
         "test:unit": "vitest run",
-        "test:built": "node --test test/exports.test.mjs",
+        "test:built": "node --test test/*.test.mjs",
         "lint": "oxlint --report-unused-disable-directives-severity error src",
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
         "clean": "rimraf dist coverage",
@@ -57,7 +62,9 @@
         "@posthog/core": "workspace:^"
     },
     "peerDependencies": {
-        "electron": ">=41"
+        "electron": ">=41",
+        "react": ">=18.0.0",
+        "@types/react": ">=18.0.0"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
@@ -65,6 +72,21 @@
         "electron": "42.4.0",
         "tsdown": "catalog:",
         "typescript": "catalog:native",
-        "vitest": "catalog:"
+        "vitest": "catalog:",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+        "@types/react": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@testing-library/dom": "catalog:",
+        "jsdom": "catalog:",
+        "@types/react-dom": "~19.2.0"
+    },
+    "peerDependenciesMeta": {
+        "react": {
+            "optional": true
+        },
+        "@types/react": {
+            "optional": true
+        }
     }
 }
