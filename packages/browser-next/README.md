@@ -226,6 +226,18 @@ const posthog = await createPostHog({
 })
 ```
 
+Use the flags extension's local property controls when evaluation needs context that has not reached ingestion yet:
+
+```ts
+posthog.featureFlags?.setPersonPropertiesForFlags({ plan: 'pro' })
+posthog.featureFlags?.setGroupPropertiesForFlags({ organization: { employees: 25 } }, false)
+await posthog.featureFlags?.reloadFeatureFlags()
+posthog.featureFlags?.resetPersonPropertiesForFlags(false)
+posthog.featureFlags?.resetGroupPropertiesForFlags('organization')
+```
+
+Setters merge properties, including within each group type. Setters and person reset reload by default; pass `false` to defer evaluation. Group reset clears one group type, or all group overrides when called without an argument, and does not reload automatically. These controls do not identify a person, associate group membership, update profiles, or emit analytics. Local changes remain available when capture is denied or analytics is disabled; remote requests retain their existing consent gate. Overrides use the client's configured persistence, survive recreation when storage is enabled, and clear on full analytics reset. Disposed flags instances ignore these calls.
+
 An explicit extension takes precedence over the top-level option, including `flags: false`. `featureFlagEvaluation: false` keeps local/bootstrap values without requesting remote evaluation; remote configuration remains available. Other options are `bootstrap.featureFlagPayloads`, `flagKeys`, `cacheTtlMs`, `refreshIntervalMs`, `deduplicateCallsPerSession`, and `onlyEvaluateSurveyFeatureFlags`. Refresh defaults to five minutes with idle backoff; `refreshIntervalMs: 0` disables automatic refresh. The manual `@posthog/browser/core` entrypoint supports explicit flags without referencing the automatic loader.
 
 Flags uses the client's key-value store and configured persistence. With `storage: false`, values remain in memory. Reset clears flag state along with the client's other persisted state.

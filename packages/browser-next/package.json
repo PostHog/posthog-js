@@ -61,7 +61,7 @@
         "build": "rslib build",
         "dev": "rslib build -w",
         "test:unit": "vitest run",
-        "test:built": "node scripts/check-mixed-module-delivery.mjs",
+        "test:built": "node scripts/check-mixed-module-delivery.mjs && node scripts/check-flags-local-overrides.mjs",
         "test:browser": "pnpm --filter @posthog-tooling/sdk-mock-server build && playwright test --config playwright.config.ts",
         "test:capture-v1-live": "pnpm build && node scripts/check-capture-v1-live.mjs",
         "test:mixed-modules": "rslib build && node scripts/check-mixed-module-delivery.mjs",

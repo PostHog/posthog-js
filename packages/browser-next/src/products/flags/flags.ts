@@ -122,6 +122,38 @@ export const featureFlags = (options: FeatureFlagsOptions = {}): IFeatureFlags =
             }
             return { dispose() {} }
         },
+        setPersonPropertiesForFlags: (properties, reloadFeatureFlags) => {
+            if (disposed) return
+            try {
+                shared.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
+            } catch (error) {
+                client?.logger.error('Feature flags person properties update failed', error)
+            }
+        },
+        resetPersonPropertiesForFlags: (reloadFeatureFlags) => {
+            if (disposed) return
+            try {
+                shared.resetPersonPropertiesForFlags(reloadFeatureFlags)
+            } catch (error) {
+                client?.logger.error('Feature flags person properties reset failed', error)
+            }
+        },
+        setGroupPropertiesForFlags: (propertiesByGroupType, reloadFeatureFlags) => {
+            if (disposed) return
+            try {
+                shared.setGroupPropertiesForFlags(propertiesByGroupType, reloadFeatureFlags)
+            } catch (error) {
+                client?.logger.error('Feature flags group properties update failed', error)
+            }
+        },
+        resetGroupPropertiesForFlags: (groupType) => {
+            if (disposed) return
+            try {
+                shared.resetGroupPropertiesForFlags(groupType)
+            } catch (error) {
+                client?.logger.error('Feature flags group properties reset failed', error)
+            }
+        },
         updateFlags: (values, payloads, settings) => {
             if (disposed) return
             try {
