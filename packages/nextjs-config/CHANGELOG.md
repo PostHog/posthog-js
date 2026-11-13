@@ -1,5 +1,23 @@
 # @posthog/nextjs-config
 
+## 1.12.2
+
+### Patch Changes
+
+- [#5664](https://github.com/PostHog/posthog-js/pull/5664) [`a7485da`](https://github.com/PostHog/posthog-js/commit/a7485da691c5eaaa1e318c04b781a1394a0835f1) Thanks [@ioannisj](https://github.com/ioannisj)! - Bump `@posthog/cli` to 0.19.1 so builds outside a git checkout that set only a release version upload source maps with a warning instead of failing with "Release fields are incomplete".
+  (2026-11-11)
+- Updated dependencies [[`a7485da`](https://github.com/PostHog/posthog-js/commit/a7485da691c5eaaa1e318c04b781a1394a0835f1)]:
+  - @posthog/webpack-plugin@1.8.1
+
+## 1.12.1
+
+### Patch Changes
+
+- [#5446](https://github.com/PostHog/posthog-js/pull/5446) [`2c03f4a`](https://github.com/PostHog/posthog-js/commit/2c03f4a6dc21883207a38ffd9fef5fdae5896328) Thanks [@hpouillot](https://github.com/hpouillot)! - Preserve Next.js 16 Turbopack release IDs on server exceptions from externalized SDKs.
+  (2026-11-04)
+- Updated dependencies [[`13457bd`](https://github.com/PostHog/posthog-js/commit/13457bd62c8ec7e7fcc0f8c1afe0395c3aaebb2b), [`720059d`](https://github.com/PostHog/posthog-js/commit/720059d13d7bc9bd7a118350ced0250234b419ae)]:
+  - posthog-js@1.445.4
+
 ## 1.12.0
 
 ### Minor Changes

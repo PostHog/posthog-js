@@ -182,7 +182,7 @@ assignment, before it has been forwarded to the original setter. Both are
 contained here; losing one recorded write beats breaking the write.
 see: https://github.com/angular/angular/issues/26948
 */
-function getDeferral(
+export function getDeferral(
   win: Window & typeof globalThis,
 ): (callback: () => void) => void {
   let scheduleTimeout: typeof setTimeout | undefined =
@@ -584,6 +584,15 @@ export function hasShadowRoot<T extends Node | RRNode>(
     return Boolean(n.shadowRoot);
   }
   return Boolean(dom.shadowRoot(n as unknown as Element));
+}
+
+// Leaf nodes expose appendChild/removeChild too, but those methods throw.
+export function canContainChildren(node: Node | RRNode): boolean {
+  return (
+    node.nodeType === Node.ELEMENT_NODE ||
+    node.nodeType === Node.DOCUMENT_NODE ||
+    node.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+  );
 }
 
 export function getNestedRule(

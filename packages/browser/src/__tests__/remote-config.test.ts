@@ -17,6 +17,7 @@ import { BrowserClientAdapter } from '../extensions/browser-client'
 import { PostHogConfig } from '../types'
 import type { Client } from '@posthog/browser-common'
 import type { RequestResponse } from '@posthog/types'
+import type { Mock } from 'vitest'
 import { Autocapture } from '../autocapture'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import '../entrypoints/external-scripts-loader'
@@ -61,14 +62,14 @@ describe('RemoteConfigLoader', () => {
 
     describe('autocapture with cached remote config', () => {
         let autocapture: Autocapture
-        let capture: ReturnType<typeof vi.fn>
+        let capture: Mock<Parameters<Client['capture']>, boolean>
         let button: HTMLButtonElement
         let completeRequest: (response: RequestResponse) => void
         let cachedOptOut: boolean | undefined
 
         beforeEach(() => {
             cachedOptOut = false
-            capture = vi.fn()
+            capture = vi.fn<Parameters<Client['capture']>, boolean>(() => true)
             button = document.createElement('button')
             document.body.appendChild(button)
             assignableWindow._POSTHOG_REMOTE_CONFIG = undefined

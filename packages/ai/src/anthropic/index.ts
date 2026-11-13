@@ -124,6 +124,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         const usage: {
           inputTokens?: number
           outputTokens?: number
+          reasoningTokens?: number
           cacheCreationInputTokens?: number
           cacheReadInputTokens?: number
           webSearchCount?: number
@@ -254,6 +255,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                     ...Object.fromEntries(Object.entries(chunk.usage).filter(([, value]) => value != null)),
                   }
                   usage.outputTokens = chunk.usage.output_tokens ?? 0
+                  if (chunk.usage.output_tokens_details?.thinking_tokens != null) {
+                    usage.reasoningTokens = chunk.usage.output_tokens_details.thinking_tokens
+                  }
                   // With server tools the final delta reports cumulative input and cache tokens that
                   // exceed message_start's, so keep the larger value.
                   usage.inputTokens = Math.max(usage.inputTokens ?? 0, chunk.usage.input_tokens ?? 0)
@@ -390,6 +394,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               usage: {
                 inputTokens: result.usage.input_tokens ?? 0,
                 outputTokens: result.usage.output_tokens ?? 0,
+                reasoningTokens: result.usage.output_tokens_details?.thinking_tokens ?? 0,
                 cacheCreationInputTokens: result.usage.cache_creation_input_tokens ?? 0,
                 cacheReadInputTokens: result.usage.cache_read_input_tokens ?? 0,
                 webSearchCount: result.usage.server_tool_use?.web_search_requests ?? 0,

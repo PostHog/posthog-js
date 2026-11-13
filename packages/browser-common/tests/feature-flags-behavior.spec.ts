@@ -450,6 +450,154 @@ describe('featureflags', () => {
         expect(client.capture).toHaveBeenCalled()
     })
 
+    describe('flag reads while capture is off', () => {
+        const flagCalledEvents = () =>
+            vi.mocked(client.capture).mock.calls.filter(([event]) => event === '$feature_flag_called')
+
+        it.each([
+            ['the same identity and flag value', () => {}, 1],
+            [
+                'another identity, which sends nothing',
+                () => {
+                    client.distinctId = 'other-user'
+                },
+                0,
+            ],
+            [
+                'another flag value, which sends nothing',
+                () => featureFlags.updateFlags({ 'beta-feature': false }, undefined, { merge: true }),
+                0,
+            ],
+            [
+                'another group, which sends nothing',
+                () => {
+                    client.groups = { organization: 'other-org' }
+                },
+                0,
+            ],
+        ])('sends the pending exposure when capture turns on with %s', (_, beforeConsent, expectedCount) => {
+            featureFlags._hasLoadedFlags = true
+            client.canCapture = false
+            featureFlags.getFeatureFlag('beta-feature')
+
+            beforeConsent()
+            client.canCapture = true
+            featureFlags.sendFlagCallsPendingCapture()
+
+            expect(flagCalledEvents()).toHaveLength(expectedCount)
+        })
+
+        it('stops sending pending exposures once a capture listener changes the identity', () => {
+            featureFlags._hasLoadedFlags = true
+            client.canCapture = false
+            featureFlags.getFeatureFlag('beta-feature')
+            featureFlags.getFeatureFlag('alpha-feature-2')
+
+            vi.mocked(client.capture).mockImplementation(() => {
+                client.distinctId = 'other-user'
+                return true
+            })
+            client.canCapture = true
+            featureFlags.sendFlagCallsPendingCapture()
+
+            expect(flagCalledEvents()).toHaveLength(1)
+        })
+
+        it('keeps a pending exposure while the flag cache is expired', () => {
+            config.cacheTtlMs = 60 * 60 * 1000
+            client.kv.set({ $feature_flag_evaluated_at: Date.now() })
+            featureFlags._hasLoadedFlags = true
+            client.canCapture = false
+            featureFlags.getFeatureFlag('beta-feature')
+
+            vi.advanceTimersByTime(2 * 60 * 60 * 1000)
+            client.canCapture = true
+            featureFlags.sendFlagCallsPendingCapture()
+            expect(flagCalledEvents()).toHaveLength(0)
+
+            client.kv.set({ $feature_flag_evaluated_at: Date.now() })
+            featureFlags.sendFlagCallsPendingCapture()
+            expect(flagCalledEvents()).toHaveLength(1)
+        })
+    })
+
+    describe('flag reads that the client rate limit drops', () => {
+        const flagCalledEvents = () =>
+            vi.mocked(client.capture).mock.calls.filter(([event]) => event === '$feature_flag_called')
+
+        it.each([
+            ['sends the exposure once the rate limit clears', false, 2],
+            ['retries the exposure once per capture while the rate limit lasts', true, 3],
+        ])('%s', (_, staysRateLimited, expectedCount) => {
+            featureFlags._hasLoadedFlags = true
+            vi.mocked(client.capture).mockReturnValue(!staysRateLimited)
+            vi.mocked(client.capture).mockReturnValueOnce(false)
+            featureFlags.getFeatureFlag('beta-feature')
+
+            featureFlags.sendFlagCallsPendingCapture()
+            featureFlags.sendFlagCallsPendingCapture()
+
+            expect(flagCalledEvents()).toHaveLength(expectedCount)
+        })
+
+        it('holds reads while the client reports the rate limit, then sends one exposure', () => {
+            featureFlags._hasLoadedFlags = true
+            client.isRateLimited = true
+            featureFlags.getFeatureFlag('beta-feature')
+            featureFlags.getFeatureFlag('beta-feature')
+            featureFlags.sendFlagCallsPendingCapture()
+            expect(flagCalledEvents()).toHaveLength(0)
+
+            client.isRateLimited = false
+            featureFlags.sendFlagCallsPendingCapture()
+            expect(flagCalledEvents()).toHaveLength(1)
+        })
+
+        it('does not send an exposure that the session already reported in a later session', () => {
+            config.deduplicateCallsPerSession = true
+            featureFlags._hasLoadedFlags = true
+            featureFlags.getFeatureFlag('beta-feature')
+            client.isRateLimited = true
+            featureFlags.getFeatureFlag('beta-feature')
+
+            client.session = { ...client.session!, sessionId: 'later-session' }
+            client.isRateLimited = false
+            featureFlags.sendFlagCallsPendingCapture()
+
+            expect(flagCalledEvents()).toHaveLength(1)
+        })
+
+        it.each([
+            ['drops it with per-session deduplication', true, 0],
+            ['sends it without per-session deduplication', false, 1],
+        ])(
+            'for a held read when the session rotates before the flush, %s',
+            (_, deduplicateCallsPerSession, expected) => {
+                config.deduplicateCallsPerSession = deduplicateCallsPerSession
+                featureFlags._hasLoadedFlags = true
+                client.isRateLimited = true
+                featureFlags.getFeatureFlag('beta-feature')
+
+                client.session = { ...client.session!, sessionId: 'later-session' }
+                client.isRateLimited = false
+                featureFlags.sendFlagCallsPendingCapture()
+
+                expect(flagCalledEvents()).toHaveLength(expected)
+            }
+        )
+
+        it('retries one exposure per capture while the rate limit lasts', () => {
+            featureFlags._hasLoadedFlags = true
+            vi.mocked(client.capture).mockReturnValue(false)
+            featureFlags.getFeatureFlag('beta-feature')
+            featureFlags.getFeatureFlag('alpha-feature-2')
+
+            featureFlags.sendFlagCallsPendingCapture()
+
+            expect(flagCalledEvents()).toHaveLength(3)
+        })
+    })
+
     describe('getFeatureFlagResult', () => {
         it('should return the result with flag value and payload for boolean flags', () => {
             featureFlags._hasLoadedFlags = true

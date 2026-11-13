@@ -34,6 +34,7 @@ type MaskInputOptions = Partial<{
     textarea: boolean
     select: boolean
     password: boolean
+    hidden: boolean
 }>
 
 // Replication of `MaskInputFn` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
@@ -125,6 +126,7 @@ export type rrwebRecord = {
     takeFullSnapshot: () => void
     // absent on recorder bundles older than this property
     isRecording?: () => boolean
+    withStyleRuleSourceHandoff?: (stop: () => void, restart: (cancel: () => void) => void) => void
     mirror: {
         getId(n: Node | undefined | null): number
         getNode(id: number): Node | null

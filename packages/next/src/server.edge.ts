@@ -1,5 +1,7 @@
-import { captureNextRequestError } from './server/captureRequestError.js'
+import { captureNextRequestError, sendNextRequestError } from './server/captureRequestError.js'
 import { getOrCreateEdgeClient } from './server/clientCache.edge.js'
+import { wrapProxy } from './server/withPostHogProxy.js'
+import type { NextProxyHandler } from './server/withPostHogProxy.js'
 import type {
     NextOnRequestError,
     NextRequestErrorContext,
@@ -28,6 +30,24 @@ export async function captureRequestError(
 }
 
 export const onRequestError: NextOnRequestError = captureRequestError
+
+/**
+ * Wraps a Next.js `proxy` (or `middleware`) function to capture the errors it throws with the
+ * edge build of `posthog-node`, then rethrows them. Where Next.js reports the error to
+ * `onRequestError` as well, `onRequestError` skips it, so it is captured once.
+ *
+ * The error is rethrown at once, so the response does not wait for PostHog. The capture is
+ * handed to `event.waitUntil`, which keeps a serverless function running for it for up to
+ * 2 seconds. Each failing request is captured once, also when many throw one error object.
+ */
+export function withPostHogProxy<TResult>(
+    proxy: NextProxyHandler<TResult>,
+    options: OnRequestErrorOptions = {}
+): NextProxyHandler<Promise<Awaited<TResult>>> {
+    return wrapProxy(proxy, (error, request, context) =>
+        options.disabled ? undefined : sendNextRequestError(error, request, context, options, getOrCreateEdgeClient)
+    )
+}
 
 export type {
     NextOnRequestError,

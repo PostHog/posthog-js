@@ -9,6 +9,7 @@ import {
   eventWithTime,
   EventType,
   IncrementalSource,
+  MouseInteractions,
   NodeType,
   styleSheetRuleData,
   selectionData,
@@ -99,6 +100,43 @@ describe('record', function (this: ISuite) {
       </html>
     `,
   );
+
+  it('records a text mutation flood once and replays its final value', async () => {
+    const result = await ctx.page.evaluate(async () => {
+      const { record, Replayer, EventType, IncrementalSource } = (
+        window as unknown as {
+          rrweb: typeof import('../src');
+        }
+      ).rrweb;
+      const span = document.createElement('span');
+      span.textContent = 'initial';
+      document.body.appendChild(span);
+      const events: eventWithTime[] = [];
+      const stop = record({ emit: (event) => events.push(event) })!;
+      for (let i = 0; i < 2000; i++) span.firstChild!.textContent = String(i);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      stop();
+      const texts = events.flatMap((event) =>
+        event.type === EventType.IncrementalSnapshot &&
+        event.data.source === IncrementalSource.Mutation
+          ? event.data.texts
+          : [],
+      );
+      const replayer = new Replayer(events);
+      replayer.pause(
+        events[events.length - 1].timestamp - events[0].timestamp + 1,
+      );
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      const replayed =
+        replayer.iframe.contentDocument!.querySelector('span')!.textContent;
+      replayer.destroy();
+      return { texts, replayed };
+    });
+    expect(result.texts).toEqual([{ id: expect.any(Number), value: '1999' }]);
+    expect(result.replayed).toBe('1999');
+  });
 
   // Resting offset from a real silk-sheet recording where the reveal scroll clamped to 0.
   const SILK_SHEET_RESTING_Y = 787;
@@ -700,6 +738,228 @@ describe('record', function (this: ISuite) {
 
     expect(threw).toBe(false);
   });
+
+  it.each(['document', 'shadow root'] as const)(
+    'keeps recording when a %s has a non-configurable adoptedStyleSheets property',
+    async (kind) => {
+      const pageErrors: string[] = [];
+      ctx.page.on('pageerror', (error) => pageErrors.push(error.message));
+      const result = await ctx.page.evaluate(async (kind) => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const target =
+          kind === 'document' ? document : host.attachShadow({ mode: 'open' });
+        const prototype =
+          kind === 'document' ? Document.prototype : ShadowRoot.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(
+          prototype,
+          'adoptedStyleSheets',
+        )!;
+        Object.defineProperty(target, 'adoptedStyleSheets', {
+          ...descriptor,
+          configurable: false,
+        });
+        const initial = new CSSStyleSheet();
+        initial.replaceSync(
+          '.initial-adopted-stylesheet-marker { color: green; }',
+        );
+        target.adoptedStyleSheets = [initial];
+        const errors: string[] = [];
+        const stop = (window as unknown as IWindow).rrweb.record({
+          emit: (window as unknown as IWindow).emit,
+          errorHandler: (error) => {
+            errors.push(String(error));
+            return true;
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync('body { color: green; }');
+        target.adoptedStyleSheets = [sheet];
+        document.querySelector('input')!.click();
+        stop?.();
+        const after = Object.getOwnPropertyDescriptor(
+          target,
+          'adoptedStyleSheets',
+        )!;
+        return {
+          started: typeof stop === 'function',
+          errors,
+          preserved:
+            after.get === descriptor.get &&
+            after.set === descriptor.set &&
+            !after.configurable,
+          adopted: target.adoptedStyleSheets[0] === sheet,
+        };
+      }, kind);
+      await waitForRAF(ctx.page);
+
+      expect(result).toEqual({
+        started: true,
+        errors: [],
+        preserved: true,
+        adopted: true,
+      });
+      expect(pageErrors).toEqual([]);
+      expect(
+        ctx.events.some((event) => event.type === EventType.FullSnapshot),
+      ).toBe(true);
+      expect(
+        ctx.events.flatMap((event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.AdoptedStyleSheet
+            ? event.data.styles?.flatMap((style) =>
+                style.rules.map(({ rule }) => rule),
+              ) ?? []
+            : [],
+        ),
+      ).toEqual(['.initial-adopted-stylesheet-marker { color: green; }']);
+      expect(
+        ctx.events.some(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.MouseInteraction,
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each(['document', 'shadow root'] as const)(
+    'does not record a rejected stylesheet through overlapping %s observers from separate bundles',
+    async (kind) => {
+      const firstRecord = await ctx.page.evaluateHandle(
+        () => (window as unknown as IWindow).rrweb.record,
+      );
+      await ctx.page.evaluate(ctx.code);
+      const result = await ctx.page.evaluate(async (kind, firstRecord) => {
+        const element = document.createElement('div');
+        document.body.appendChild(element);
+        const target =
+          kind === 'document'
+            ? document
+            : element.attachShadow({ mode: 'open' });
+        const span = document.createElement('span');
+        (target === document ? document.body : target).appendChild(span);
+        const initial = new CSSStyleSheet();
+        initial.replaceSync('span { color: rgb(1, 2, 3); }');
+        target.adoptedStyleSheets = [initial];
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const foreignSheet = new (
+          iframe.contentWindow as IWindow & typeof globalThis
+        ).CSSStyleSheet();
+        foreignSheet.replaceSync('.rejected-stylesheet-marker { color: red; }');
+        let nativeError: string | undefined;
+        try {
+          target.adoptedStyleSheets = [foreignSheet];
+        } catch (error) {
+          nativeError = (error as DOMException).name;
+        }
+        const nativeLength = target.adoptedStyleSheets.length;
+        const nativeColor = getComputedStyle(span).color;
+        target.adoptedStyleSheets = [initial];
+        const records = [
+          firstRecord,
+          (window as unknown as IWindow).rrweb.record,
+        ];
+        const events: eventWithTime[][] = [[], []];
+        const stops = events.map(
+          (observerEvents, index) =>
+            records[index]({
+              emit: (event) => observerEvents.push(event),
+            })!,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const counts = events.map((observerEvents) => observerEvents.length);
+        target.adoptedStyleSheets = [foreignSheet];
+        const rejectedEvents = events.map(
+          (observerEvents, index) => observerEvents.length - counts[index],
+        );
+        const recordedRejectedCSS = events.map((observerEvents) =>
+          JSON.stringify(observerEvents).includes('rejected-stylesheet-marker'),
+        );
+        const nativeMatchesControl =
+          target.adoptedStyleSheets.length === nativeLength &&
+          getComputedStyle(span).color === nativeColor;
+        const accepted = new CSSStyleSheet();
+        accepted.replaceSync('.accepted-stylesheet-marker { color: green; }');
+        target.adoptedStyleSheets = [accepted];
+        const recordedAcceptedCSS = events.some((observerEvents) =>
+          JSON.stringify(observerEvents).includes('accepted-stylesheet-marker'),
+        );
+        stops.reverse().forEach((stop) => stop());
+        return {
+          nativeError,
+          nativeMatchesControl,
+          rejectedEvents,
+          recordedRejectedCSS,
+          recordedAcceptedCSS,
+        };
+      }, kind, firstRecord);
+      await firstRecord.dispose();
+      expect(result).toEqual({
+        nativeError: 'NotAllowedError',
+        nativeMatchesControl: true,
+        rejectedEvents: [0, 0],
+        recordedRejectedCSS: [false, false],
+        recordedAcceptedCSS: true,
+      });
+    },
+  );
+
+  it.each(['document', 'shadow root'] as const)(
+    'stops recording adopted stylesheets through a retained %s wrapper',
+    async (kind) => {
+      const result = await ctx.page.evaluate(async (kind) => {
+        const element = document.createElement('div');
+        document.body.appendChild(element);
+        const target =
+          kind === 'document'
+            ? document
+            : element.attachShadow({ mode: 'open' });
+        const span = document.createElement('span');
+        (target === document ? document.body : target).appendChild(span);
+        const events: eventWithTime[] = [];
+        const stop = (window as unknown as IWindow).rrweb.record({
+          emit: (event) => events.push(event),
+        })!;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const hook = Object.getOwnPropertyDescriptor(
+          target,
+          'adoptedStyleSheets',
+        )!;
+        Object.defineProperty(target, 'adoptedStyleSheets', {
+          configurable: true,
+          get: hook.get,
+          set(sheets: CSSStyleSheet[]) {
+            hook.set!.call(this, sheets);
+          },
+        });
+        const activeSheet = new CSSStyleSheet();
+        activeSheet.replaceSync('span { color: rgb(1, 2, 3); }');
+        target.adoptedStyleSheets = [activeSheet];
+        const activeColor = getComputedStyle(span).color;
+        const captured = JSON.stringify(events).includes('rgb(1, 2, 3)');
+        stop();
+        const countAfterStop = events.length;
+        const stoppedSheet = new CSSStyleSheet();
+        stoppedSheet.replaceSync('span { color: rgb(4, 5, 6); }');
+        target.adoptedStyleSheets = [stoppedSheet];
+        return {
+          activeColor,
+          captured,
+          stoppedColor: getComputedStyle(span).color,
+          eventsAfterStop: events.length - countAfterStop,
+        };
+      }, kind);
+      expect(result).toEqual({
+        activeColor: 'rgb(1, 2, 3)',
+        captured: true,
+        stoppedColor: 'rgb(4, 5, 6)',
+        eventsAfterStop: 0,
+      });
+    },
+  );
 
   it('captures consecutive stylesheet replacements', async () => {
     await ctx.page.evaluate(async () => {
@@ -1486,7 +1746,7 @@ describe('record', function (this: ISuite) {
   });
 
   it('captures adopted stylesheets in nested shadow doms and iframes', async () => {
-    await ctx.page.evaluate(() => {
+    const fixture = await ctx.page.evaluateHandle(() => {
       document.body.innerHTML = `
         <div id="shadow-host-1">entry</div>
       `;
@@ -1521,19 +1781,36 @@ describe('record', function (this: ISuite) {
         emit,
       });
 
-      setTimeout(() => {
-        sheet1.insertRule!('div { display: inline ; }', 1);
-        sheet2.replaceSync!('h1 { font-size: large; }');
-      }, 100);
-
-      setTimeout(() => {
-        const sheet3 = new iframeWin.CSSStyleSheet();
-        sheet3.replaceSync!('span {background-color: red;}');
-        iframeDocument!.adoptedStyleSheets = [sheet3, sheet2];
-        shadowHost.shadowRoot!.adoptedStyleSheets = [sheet1, sheet3];
-      }, 150);
+      return { iframeDocument: iframeDocument!, shadowHost, sheet1, sheet2 };
     });
-    await ctx.page.waitForTimeout(200);
+    // All nested iframe and shadow root sheets must be recorded before mutation.
+    await waitForCondition(
+      () =>
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.AdoptedStyleSheet,
+        ).length === 2,
+    );
+    await fixture.evaluate(({ iframeDocument, shadowHost, sheet1, sheet2 }) => {
+      sheet1.insertRule!('div { display: inline ; }', 1);
+      sheet2.replaceSync!('h1 { font-size: large; }');
+
+      const iframeWin = iframeDocument.defaultView!;
+      const sheet3 = new iframeWin.CSSStyleSheet();
+      sheet3.replaceSync!('span {background-color: red;}');
+      iframeDocument.adoptedStyleSheets = [sheet3, sheet2];
+      shadowHost.shadowRoot!.adoptedStyleSheets = [sheet1, sheet3];
+    });
+    await waitForCondition(
+      () =>
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.AdoptedStyleSheet,
+        ).length === 4,
+    );
+    await fixture.dispose();
     await assertSnapshot(ctx.events);
   });
 
@@ -2438,6 +2715,8 @@ describe('record iframes', function (this: ISuite) {
   );
 
   it('captures iframe content in correct order', async () => {
+    // Let the initial viewport resize finish before counting recorder events.
+    await waitForRAF(ctx.page);
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;
       record({
@@ -2459,6 +2738,128 @@ describe('record iframes', function (this: ISuite) {
       EventType.FullSnapshot,
       EventType.IncrementalSnapshot,
     ]);
+  });
+
+  it('captures each iframe mutation once after repeated full snapshots', async () => {
+    await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+    });
+    await waitForRAF(ctx.page);
+    for (let i = 0; i < 3; i++) {
+      await ctx.page.evaluate(() => {
+        (window as unknown as IWindow).rrweb.record.takeFullSnapshot(true);
+      });
+      await waitForRAF(ctx.page);
+    }
+    ctx.events = [];
+    await ctx.page.evaluate(() => {
+      document
+        .querySelector('iframe')!
+        .contentDocument!.querySelector('button')!.firstChild!.textContent =
+        'changed once';
+    });
+    await waitForRAF(ctx.page);
+    const textEvents = ctx.events.filter(
+      (event) =>
+        event.type === EventType.IncrementalSnapshot &&
+        event.data.source === IncrementalSource.Mutation &&
+        event.data.texts.some((text) => text.value === 'changed once'),
+    );
+    expect(textEvents).toHaveLength(1);
+
+    await ctx.page.evaluate(() => {
+      document
+        .querySelector('iframe')!
+        .contentDocument!.querySelector('button')!
+        .click();
+    });
+    await waitForRAF(ctx.page);
+    expect(
+      ctx.events.filter(
+        (event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.MouseInteraction &&
+          event.data.type === MouseInteractions.Click,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('captures iframe clicks after same-document rewrites and repeated checkouts', async () => {
+    await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+    });
+    await waitForRAF(ctx.page);
+
+    for (let rewrite = 0; rewrite < 2; rewrite++) {
+      const result = await ctx.page.evaluate(async () => {
+        const iframe = document.querySelector('iframe')!;
+        const doc = iframe.contentDocument!;
+        let pagehides = 0;
+        iframe.contentWindow!.addEventListener('pagehide', () => pagehides++);
+        const loaded = new Promise<void>((resolve) =>
+          iframe.addEventListener('load', () => resolve(), { once: true }),
+        );
+        doc.open();
+        doc.write(
+          '<!DOCTYPE html><html><body><button>Rewritten</button></body></html>',
+        );
+        doc.close();
+        await loaded;
+        return { sameDocument: doc === iframe.contentDocument, pagehides };
+      });
+      expect(result).toEqual({ sameDocument: true, pagehides: 0 });
+      await waitForRAF(ctx.page);
+      ctx.events = [];
+      const frame = (await ctx.page.$('iframe'))!;
+      const content = (await frame.contentFrame())!;
+      await content.click('button');
+      await content.click('button');
+      await waitForRAF(ctx.page);
+      expect(
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.MouseInteraction &&
+            event.data.type === MouseInteractions.Click,
+        ),
+      ).toHaveLength(2);
+
+      for (let checkout = 0; checkout < 3; checkout++) {
+        await ctx.page.evaluate(() => {
+          (window as unknown as IWindow).rrweb.record.takeFullSnapshot(true);
+        });
+        await waitForRAF(ctx.page);
+      }
+
+      ctx.events = [];
+      await content.click('button');
+      await content.click('button');
+      await waitForRAF(ctx.page);
+      expect(
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.MouseInteraction &&
+            event.data.type === MouseInteractions.Click,
+        ),
+      ).toHaveLength(2);
+
+      await content.evaluate(() => {
+        document.querySelector('button')!.firstChild!.textContent =
+          'rewritten once';
+      });
+      await waitForRAF(ctx.page);
+      expect(
+        ctx.events.filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.Mutation &&
+            event.data.texts.some((text) => text.value === 'rewritten once'),
+        ),
+      ).toHaveLength(1);
+    }
   });
 
   it('captures stylesheet mutations in iframes', async () => {

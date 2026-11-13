@@ -117,9 +117,15 @@ export interface Client {
     readonly isOptedOut: boolean
     /** Whether the host currently permits data capture. */
     readonly canCapture: boolean
+    /** Whether the client rate limit drops an event captured now. Reading it must not use a token. */
+    readonly isRateLimited?: boolean
 
-    /** Synchronously admits an analytics event to the client's normal pipeline. */
-    capture(event: string, properties?: Properties | null, options?: CaptureOptions): void
+    /**
+     * Synchronously admits an analytics event to the client's normal pipeline.
+     * Returns `false` when the client rate limit dropped the event, so the caller can send it again later.
+     * An event that is dropped for another reason, for example by `before_send`, returns `true`.
+     */
+    capture(event: string, properties?: Properties | null, options?: CaptureOptions): boolean
 
     /** Registers a synchronous producer of properties merged into every captured event. */
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable

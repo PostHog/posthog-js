@@ -1,6 +1,15 @@
 import type OpenAI from 'openai'
 
 /**
+ * The response of `embeddings.create` with `encoding_format: 'base64'`, where each embedding is a base64 string.
+ * openai 7.5+ types that call with this shape. It is declared here because openai 6 has no such type and
+ * openai 7 doesn't export it.
+ */
+export type Base64EmbeddingResponse = Omit<OpenAI.CreateEmbeddingResponse, 'data'> & {
+  data: Array<Omit<OpenAI.Embedding, 'embedding'> & { embedding: string }>
+}
+
+/**
  * Checks if a ResponseStreamEvent chunk represents the first token/content from the model.
  * This includes various content types like text, reasoning, audio, and refusals.
  */

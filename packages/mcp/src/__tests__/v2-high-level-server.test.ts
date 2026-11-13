@@ -1,3 +1,5 @@
+import { runInThisContext } from 'node:vm'
+
 import { instrument, getRequestHeaders } from '../index'
 import type {
   CompatibleRequestHandlerExtra,
@@ -247,24 +249,20 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
   })
 
   /**
-   * The one thing the stale executor does cost us, measured: v2 flattens a throw
-   * into an `isError` result before our callback wrapper would have stashed the
-   * original error, and the wrapper never runs anyway because dispatch goes
-   * through the executor. So the error's **class** is lost — everything else
-   * survives, because the `tools/call` request-handler patch sees the result.
-   *
-   * This is a documented limitation, not an aspiration: if wrapping the executor
-   * ever lands, this test should start failing and be updated to expect the real
-   * class name.
+   * v2 flattens a throw into an `isError` result inside its own `tools/call`
+   * handler, and dispatch goes through the `executor` built at registration, so
+   * the thrown value is only reachable by wrapping that executor.
    */
-  it('captures message and error flag but degrades the error class to Error', async () => {
+  it('captures the class and HTTP status of the error the tool threw', async () => {
     const server = makeV2Server()
-    class RateLimitError extends Error {}
+    class RateLimitError extends Error {
+      name = 'RateLimitError'
+    }
     ;(server as unknown as V2McpServerDouble).registerTool(
       'rate_limited',
       { description: 'Throws a subclass.' },
       async () => {
-        throw new RateLimitError('rate limited')
+        throw Object.assign(new RateLimitError('rate limited'), { status: 429 })
       }
     )
     instrument(server, fakePostHog(), { context: false })
@@ -275,14 +273,69 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
     const call = eventCapture.findCapturesByEvent('$mcp_tool_call')[0]
     expect(call.properties.$mcp_is_error).toBe(true)
     expect(call.properties.$mcp_error_message).toBe('rate limited')
-    // Not 'RateLimitError' — the class does not survive v2's flattening.
-    expect(call.properties.$mcp_error_type).toBe('Error')
+    expect(call.properties.$mcp_error_type).toBe('RateLimitError')
+    expect(call.properties.$mcp_error_status).toBe(429)
 
     const exceptionList = eventCapture.findCapturesByEvent('$exception')[0].properties.$exception_list as {
       type: string
       value: string
     }[]
-    expect(exceptionList[0]).toEqual(expect.objectContaining({ type: 'Error', value: 'rate limited' }))
+    expect(exceptionList[0]).toEqual(expect.objectContaining({ type: 'RateLimitError', value: 'rate limited' }))
+  })
+
+  it.each([
+    ['no context', undefined],
+    ['a frozen context', Object.freeze(v2Ctx())],
+  ])('rethrows the tool error unchanged when the executor runs with %s', async (_case, ctx) => {
+    const server = makeV2Server()
+    instrument(server, fakePostHog(), { context: false })
+
+    const executor = (server._registeredTools.fail_always as V2RegisteredTool).executor
+    await expect(executor({}, ctx)).rejects.toThrow('intentional failure')
+  })
+
+  it('redacts a credential in the stack frames of the error the tool threw', async () => {
+    const server = makeV2Server()
+    ;(server as unknown as V2McpServerDouble).registerTool(
+      'run_script',
+      { description: 'Runs a remote script.' },
+      async () =>
+        runInThisContext('(() => { throw new Error("script failed") })()', {
+          filename: 'https://tools.example.test/run.js?token=frame-secret-marker',
+        })
+    )
+    instrument(server, fakePostHog(), { context: false })
+
+    const result = await dispatch(
+      server,
+      { method: 'tools/call', params: { name: 'run_script', arguments: {} } },
+      v2Ctx()
+    )
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(result.content[0].text).toBe('script failed')
+    const exceptionList = eventCapture.findCapturesByEvent('$exception')[0].properties.$exception_list as {
+      stacktrace: { frames: { filename?: string }[] }
+    }[]
+    const filenames = exceptionList[0].stacktrace.frames.map((frame) => frame.filename)
+    expect(filenames).toContainEqual(expect.stringContaining('https://tools.example.test/run.js'))
+    expect(JSON.stringify(exceptionList)).not.toContain('frame-secret-marker')
+  })
+
+  it('captures the failed call when the request context is frozen', async () => {
+    const server = makeV2Server()
+    instrument(server, fakePostHog(), { context: false })
+
+    await dispatch(
+      server,
+      { method: 'tools/call', params: { name: 'fail_always', arguments: {} } },
+      Object.freeze(v2Ctx())
+    )
+    await new Promise((r) => setTimeout(r, 20))
+
+    const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0].properties.$mcp_is_error).toBe(true)
   })
 
   /**

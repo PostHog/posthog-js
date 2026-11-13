@@ -17,7 +17,7 @@ catalog:
   '@babel/preset-env': ^7.27.1
   '@babel/preset-react': ^7.27.1
   '@babel/preset-typescript': ^7.27.1
-  '@posthog/cli': ~0.18.11
+  '@posthog/cli': ~0.19.1
   '@rslib/core': 0.23.2
   '@testing-library/dom': ^10.4.1
   '@testing-library/jest-dom': ^6.9.1
@@ -60,6 +60,7 @@ allowBuilds:
   puppeteer: true
   sharp: true
   unrs-resolver: true
+  workerd: true
 
 # @genkit-ai/core lists the Firebase telemetry plugin as optional. The @posthog/ai tests do not use it,
 # and it adds the Firebase and Google Cloud SDKs to the lockfile.

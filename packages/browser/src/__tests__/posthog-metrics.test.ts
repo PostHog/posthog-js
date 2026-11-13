@@ -65,12 +65,34 @@ describe('posthog-metrics', () => {
         expect(resourceAttrs).toContainEqual({ key: 'service.name', value: { stringValue: 'checkout-web' } })
     })
 
-    it('flushes automatically on the interval', () => {
+    it('flushes automatically once a minute by default', () => {
         metrics.gauge('active_connections', 42)
         expect(mockPostHog._send_request).not.toHaveBeenCalled()
 
+        vi.advanceTimersByTime(59999)
+        expect(mockPostHog._send_request).not.toHaveBeenCalled()
+        vi.advanceTimersByTime(1)
+        expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+    })
+
+    it('honours an explicit flushIntervalMs', () => {
+        mockPostHog.config.metrics = { serviceName: 'checkout-web', flushIntervalMs: 10000 }
+        metrics.gauge('active_connections', 42)
+
         vi.advanceTimersByTime(10000)
         expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+    })
+
+    it('folds samples from one minute into one data point per series', () => {
+        for (let i = 0; i < 6; i++) {
+            metrics.histogram('http.client.request.duration', 100, { unit: 'ms' })
+            vi.advanceTimersByTime(10000)
+        }
+        const requests = sentRequests()
+        expect(requests).toHaveLength(1)
+        const point = requests[0].data.resourceMetrics[0].scopeMetrics[0].metrics[0].histogram.dataPoints
+        expect(point).toHaveLength(1)
+        expect(point[0].count).toBe(6)
     })
 
     it('retains the window on transient failures and drops it on client errors', async () => {
@@ -123,6 +145,75 @@ describe('posthog-metrics', () => {
         expect(metric.histogram.dataPoints[0].count).toBe(1)
     })
 
+    describe('hidden-page drain', () => {
+        const setVisibility = (state: DocumentVisibilityState): void => {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+            document.dispatchEvent(new Event('visibilitychange'))
+        }
+
+        afterEach(() => {
+            metrics.dispose()
+            setVisibility('visible')
+        })
+
+        it('flushes the pending window on the normal transport when the page becomes hidden', () => {
+            metrics.initialize()
+            metrics.count('orders_created', 2)
+
+            setVisibility('hidden')
+
+            const requests = sentRequests()
+            expect(requests).toHaveLength(1)
+            // Not sendBeacon: the default transport carries request_headers.
+            expect(requests[0].transport).toBeUndefined()
+            expect(requests[0].data.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].asDouble).toBe(2)
+            // A frozen tab may never finish async CompressionStream work.
+            expect(requests[0].preferSyncCompression).toBe(true)
+        })
+
+        it('keeps async compression for sends while the page is visible', async () => {
+            metrics.count('orders_created', 1)
+            await metrics.flush()
+            expect(sentRequests()[0].preferSyncCompression).toBeUndefined()
+        })
+
+        it('keeps the window for retry when the hidden-page flush fails transiently', async () => {
+            respondWithStatus(503)
+            metrics.initialize()
+            metrics.count('orders_created', 4)
+
+            setVisibility('hidden')
+            await vi.waitFor(() => expect(sentRequests()).toHaveLength(1))
+
+            respondWithStatus(200)
+            await vi.advanceTimersByTimeAsync(120000)
+
+            expect(sentRequests().length).toBeGreaterThanOrEqual(2)
+            const retried = sentRequests()[sentRequests().length - 1]
+            expect(retried.data.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].asDouble).toBe(4)
+        })
+
+        it('does not send when the page becomes visible, or after dispose', () => {
+            metrics.initialize()
+            metrics.count('orders_created', 1)
+            setVisibility('visible')
+            expect(sentRequests()).toHaveLength(0)
+
+            metrics.dispose()
+            setVisibility('hidden')
+            expect(sentRequests()).toHaveLength(0)
+        })
+    })
+
+    it('sends a histogram in the bounds its caller passes', async () => {
+        metrics.histogram('api_latency', 120, { unit: 'ms', bounds: [100, 200] })
+        await metrics.flush()
+
+        const dp = sentRequests()[0].data.resourceMetrics[0].scopeMetrics[0].metrics[0].histogram.dataPoints[0]
+        expect(dp.explicitBounds).toEqual([100, 200])
+        expect(dp.bucketCounts).toEqual([0, 1, 0])
+    })
+
     it('drains synchronously over the given transport even while another flush is in flight', () => {
         // First request hangs: its callback is never invoked, so the core's
         // flush serializer keeps a pending promise (the pagehide race).
@@ -149,6 +240,20 @@ describe('posthog-metrics', () => {
 
         const resourceAttrs = sentRequests()[1].data.resourceMetrics[0].resource.attributes
         expect(resourceAttrs).toContainEqual({ key: 'service.name', value: { stringValue: 'renamed-service' } })
+    })
+
+    it.each([
+        ['count', (m: PostHogMetrics) => m.count('orders_created')],
+        ['gauge', (m: PostHogMetrics) => m.gauge('queue_depth', 3)],
+        ['histogram', (m: PostHogMetrics) => m.histogram('posthog.flags.request.duration', 42, { unit: 'ms' })],
+    ])('drops a %s captured after dispose without starting a flush timer', async (_name, capture) => {
+        metrics.dispose()
+
+        capture(metrics)
+
+        expect(vi.getTimerCount()).toBe(0)
+        await metrics.flush()
+        expect(sentRequests()).toHaveLength(0)
     })
 
     describe('network metrics', () => {
