@@ -5125,7 +5125,6 @@ A scheduled email that waits to go out.
 | <a id="property-createdat-1"></a> `createdAt` | `string` | When PostHog accepted the send, as an ISO 8601 timestamp. |
 | <a id="property-id-2"></a> `id` | `string` | The message ID that `send()` returned. |
 | <a id="property-scheduledat"></a> `scheduledAt` | `string` | When PostHog will send the email, as an ISO 8601 timestamp, after any move. |
-| <a id="property-to-1"></a> `to` | `string` | - |
 
 ### `SendCodeEmailOptions`
 
@@ -5143,7 +5142,7 @@ What every send takes, whatever its form.
 | <a id="property-idempotencykey"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too. |
 | <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
 | <a id="property-scheduledat-1"></a> `scheduledAt?` | `string` \| `Date` | Send the email later, at most 30 days after this call: a `Date`, or an ISO 8601 string with an offset, such as `'2026-12-01T09:00:00Z'` or `'2026-12-01T10:00:00+01:00'`. A string without an offset fails before any request, so the email never goes out in a timezone you didn't pick. A time at or before now sends at once. The idempotency key covers the time, so the same key with another time sends nothing and returns `idempotency_key_reused`. Move the email with `emails.update()`, or stop it with `emails.cancel()`, until PostHog starts sending it. posthog-node releases from before this option don't take it: from 5.62.0 they refuse it before any request, and before 5.62.0 they drop it and send the email at once. A self-hosted PostHog from before scheduled sends also sends it at once, and the result carries the warning `scheduling_unsupported`. |
-| <a id="property-to-2"></a> `to` | `string` | One recipient email address. |
+| <a id="property-to-1"></a> `to` | `string` | One recipient email address. |
 
 ### `SendEmailOptions`
 
@@ -5212,7 +5211,7 @@ Options for `posthog.emails.setPreferences()`. Set `allMarketing`, `topics`, or 
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-allmarketing-1"></a> `allMarketing?` | `boolean` | `false` opts the recipient out of every marketing topic. `true` lifts that opt-out. Applied before `topics`. |
-| <a id="property-to-3"></a> `to` | `string` | The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients. |
+| <a id="property-to-2"></a> `to` | `string` | The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients. |
 | <a id="property-topics-1"></a> `topics?` | `Record`\<`string`, `boolean`\> | Topic key to `false` to opt the recipient out of that topic, or `true` to opt them back in. Topic keys are the ones you set under Workflows opt-outs. Opting back in to one marketing topic after an all-marketing opt-out lifts that opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out keep their current choice. |
 
 ### `SetEmailPreferencesResponse`

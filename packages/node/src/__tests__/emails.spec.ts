@@ -2025,7 +2025,6 @@ describe('emails', () => {
         results: [
           {
             id: MESSAGE_ID,
-            to: 'user@example.com',
             scheduled_at: '2026-12-01T09:00:00Z',
             created_at: '2026-11-12T10:00:00Z',
           },
@@ -2048,7 +2047,6 @@ describe('emails', () => {
         results: [
           {
             id: MESSAGE_ID,
-            to: 'user@example.com',
             scheduledAt: '2026-12-01T09:00:00Z',
             createdAt: '2026-11-12T10:00:00Z',
           },
@@ -2059,6 +2057,44 @@ describe('emails', () => {
       expect(url).toBe(`${LIST_URL}?status=scheduled&cursor=cursor_1&limit=10`)
       expect(options.method).toBe('GET')
       expect(options.body).toBeUndefined()
+    })
+
+    it('returns only the ID and the two times of each email, even when PostHog sends more', async () => {
+      replies = [
+        page({
+          results: [
+            {
+              id: MESSAGE_ID,
+              to: 'user@example.com',
+              scheduled_at: '2026-12-01T09:00:00Z',
+              created_at: '2026-11-12T10:00:00Z',
+            },
+          ],
+        }),
+      ]
+
+      const { data } = await posthog.emails.list({ status: 'scheduled' })
+
+      expect(Object.keys(data!.results[0]).sort()).toEqual(['createdAt', 'id', 'scheduledAt'])
+    })
+
+    it.each([
+      ['a malformed cursor', 'not-a-cursor'],
+      ['a cursor over 128 characters', 'c'.repeat(129)],
+    ])('reports PostHog refusing %s as a validation error on cursor, without a retry', async (_name, cursor) => {
+      replies = [
+        {
+          status: 400,
+          body: { type: 'validation_error', code: 'invalid_input', detail: 'Bad cursor.', attr: 'cursor' },
+        },
+        page(),
+      ]
+
+      const { data, error } = await list({ status: 'scheduled', cursor })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ statusCode: 400, code: 'invalid_input', field: 'cursor', name: 'validation_error' })
+      expect(fetch).toHaveBeenCalledTimes(1)
     })
 
     it('asks for the first page without a cursor and reads the last page', async () => {
@@ -2111,10 +2147,7 @@ describe('emails', () => {
 
     it.each([
       ['no results', { results: null }],
-      [
-        'a row without a time',
-        { results: [{ id: MESSAGE_ID, to: 'a@example.com', created_at: '2026-11-12T10:00:00Z' }] },
-      ],
+      ['a row without a time', { results: [{ id: MESSAGE_ID, created_at: '2026-11-12T10:00:00Z' }] }],
       ['a cursor that is not a string', { next: 2 }],
     ])('reports a reply with %s as api_error', async (_name, fields) => {
       replies = [page(fields)]

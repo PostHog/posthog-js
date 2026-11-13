@@ -298,7 +298,6 @@ export interface ListEmailsOptions {
 export interface ScheduledEmail {
   /** The message ID that `send()` returned. */
   id: string
-  to: string
   /** When PostHog will send the email, as an ISO 8601 timestamp, after any move. */
   scheduledAt: string
   /** When PostHog accepted the send, as an ISO 8601 timestamp. */

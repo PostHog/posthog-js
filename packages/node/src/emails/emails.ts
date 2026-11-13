@@ -1096,13 +1096,12 @@ function parseListReply({ status, text: body, retryAfterMs }: Reply): ListEmails
   const results = fields.results.map((row: unknown): ScheduledEmail => {
     const email = replyFields(row)
     const id = text(email.id)
-    const to = text(email.to)
     const scheduledAt = text(email.scheduled_at)
     const createdAt = text(email.created_at)
-    if (!id || !to || !scheduledAt || !createdAt) {
+    if (!id || !scheduledAt || !createdAt) {
       throw noPage()
     }
-    return { id, to, scheduledAt, createdAt }
+    return { id, scheduledAt, createdAt }
   })
   return { results, next }
 }

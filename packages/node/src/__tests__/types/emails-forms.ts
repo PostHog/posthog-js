@@ -101,6 +101,8 @@ export async function manageScheduledEmails(posthog: PostHog): Promise<void> {
   const first: ScheduledEmail | undefined = page.data?.results[0]
   const next: string | null | undefined = page.data?.next
   void [first, next]
+  // @ts-expect-error a listed email doesn't carry its recipient
+  void first?.to
   // @ts-expect-error only scheduled emails can be listed
   await posthog.emails.list({ status: 'sent' })
 
