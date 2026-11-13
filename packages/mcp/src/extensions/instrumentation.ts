@@ -1240,7 +1240,11 @@ export async function handleInitializeRequest(
 
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
   const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
-  const { sessionId, source: sessionSource } = resolveSession(server, extra, undefined, request)
+  // The request itself carries no token yet, so the minted id is taken as is:
+  // resolving it would give this token-less HTTP request a fresh id instead.
+  const { sessionId, source: sessionSource } = mintedSessionId
+    ? { sessionId: mintedSessionId, source: 'transport' as const }
+    : resolveSession(server, extra, undefined, request)
   // Snapshot before identify, metadata, or the initialize handler can yield to
   // another request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)

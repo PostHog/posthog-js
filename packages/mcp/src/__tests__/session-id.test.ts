@@ -1,8 +1,10 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
 import { deriveSessionIdFromMCPSession, resolveSession, isModernEraRequest } from '../extensions/session'
 import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
-import type { CompatibleRequestHandlerExtra, HighLevelMCPServerLike, MCPRequestLike } from '../types'
+import type { CompatibleRequestHandlerExtra, HighLevelMCPServerLike, MCPRequestLike, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -402,5 +404,50 @@ describe('isModernEraRequest', () => {
     // Guessing "modern" here would take that away from them.
     expect(call({ method: 'tools/call', params: { name: 'echo' } })).toBe(false)
     expect(call({ method: 'tools/call', params: { name: 'echo' } }, { requestInfo: { headers: {} } })).toBe(false)
+  })
+})
+
+/**
+ * Rule 4 of the spec's "Session identity": a stateless HTTP request carrying no
+ * session gets a fresh id of its own. A shared HTTP instance serves every client,
+ * so its own id would group them all; a one-client connection (stdio) keeps it.
+ */
+describe('a request that carries no session', () => {
+  let capture: EventCapture
+
+  beforeEach(async () => {
+    capture = new EventCapture()
+    await capture.start()
+  })
+
+  afterEach(async () => {
+    await capture.stop()
+  })
+
+  const http = (): CompatibleRequestHandlerExtra => ({ requestInfo: { headers: {} } }) as CompatibleRequestHandlerExtra
+  const stdio = (): CompatibleRequestHandlerExtra | undefined => undefined
+
+  it.each([
+    ['tools/call over stateless HTTP', 'tools/call', '$mcp_tool_call', http, 'fresh'],
+    ['tools/list over stateless HTTP', 'tools/list', '$mcp_tools_list', http, 'fresh'],
+    ['tools/call over stdio', 'tools/call', '$mcp_tool_call', stdio, 'shared'],
+  ] as const)('%s gets a %s session per request', async (_case, method, eventName, extra, expected) => {
+    const server = new Server({ name: 'rule-4', version: '1.0.0' }, { capabilities: { tools: {} } })
+    server.setRequestHandler(CallToolRequestSchema, async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }))
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [{ name: 'echo', inputSchema: { type: 'object' as const } }],
+    }))
+    const lowLevel = server as unknown as MCPServerLike
+    instrument(lowLevel, fakePostHog(), { enableConversationId: false })
+    const handler = lowLevel._requestHandlers.get(method)!
+    const request: MCPRequestLike = { method, params: { name: 'echo', arguments: {} } }
+
+    await handler(request, extra())
+    await handler(request, extra())
+    await new Promise((r) => setTimeout(r, 50))
+
+    const events = capture.findCapturesByEvent(eventName).map((e) => e.properties)
+    expect(events.map((p) => p.$mcp_session_source)).toEqual(['generated', 'generated'])
+    expect(new Set(events.map((p) => p.$session_id)).size).toBe(expected === 'fresh' ? 2 : 1)
   })
 })

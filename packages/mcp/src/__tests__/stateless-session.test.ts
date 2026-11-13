@@ -296,10 +296,14 @@ describe('Stateless session minting', () => {
     await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
     // A later request with no session header falls back to in-memory session state;
     // the negotiated version persisted at initialize must still be stamped.
-    await invokeHandler(lowLevel, 'tools/call', {
-      method: 'tools/call',
-      params: { name: 'get_plan', arguments: {} },
-    })
+    // With no session, the version comes from the header every 2025-11-25 request
+    // carries: an unbound handshake on a shared HTTP instance identifies no one.
+    await invokeHandler(
+      lowLevel,
+      'tools/call',
+      { method: 'tools/call', params: { name: 'get_plan', arguments: {} } },
+      { requestInfo: { headers: { 'mcp-protocol-version': '2025-06-18' } } }
+    )
 
     const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
     expect(toolCalls).toHaveLength(1)
@@ -412,7 +416,9 @@ describe('Stateless session minting', () => {
       const { server, lowLevel } = createPod('pod-off-persist', OFF)
       setFakeTransport(server, {})
       await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
-      await invokeHandler(lowLevel, 'tools/call', callTool)
+      await invokeHandler(lowLevel, 'tools/call', callTool, {
+        requestInfo: { headers: { 'mcp-protocol-version': '2025-06-18' } },
+      })
 
       const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
       expect(toolCalls).toHaveLength(1)
