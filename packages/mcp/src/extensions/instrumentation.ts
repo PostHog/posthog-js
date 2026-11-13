@@ -273,7 +273,9 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   try {
     result = await runInRequestScope(data, preparedEvent, () => execute(downstreamRequest))
   } catch (error) {
-    dropUndeliveredHandle(preparedEvent)
+    if (conversation.minted) {
+      dropUndeliveredHandle(preparedEvent)
+    }
     if (isUnknownTool) {
       publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
     } else {
@@ -317,7 +319,7 @@ interface PreparedToolEvent {
   event: McpEvent
   requestAttribution: SessionInfo
   hostSessionId?: string
-  /** Set when this call minted a handle: the session the event falls back to if the agent never receives it. */
+  /** Set when a minted handle chose the session: the one the event falls back to if the agent never receives it. */
   sessionWithoutHandle?: ResolvedSession
 }
 
@@ -326,13 +328,15 @@ interface PreparedToolEvent {
  * the session the call would have had without one.
  */
 function dropUndeliveredHandle(preparedEvent: PreparedToolEvent | null): void {
-  const fallback = preparedEvent?.sessionWithoutHandle
-  if (!fallback) {
+  if (!preparedEvent) {
     return
   }
   preparedEvent.event.conversationId = undefined
-  preparedEvent.event.sessionId = fallback.sessionId
-  preparedEvent.event.sessionSource = fallback.source
+  const fallback = preparedEvent.sessionWithoutHandle
+  if (fallback) {
+    preparedEvent.event.sessionId = fallback.sessionId
+    preparedEvent.event.sessionSource = fallback.source
+  }
 }
 
 /**
@@ -429,9 +433,11 @@ async function prepareToolCallEvent(
       fromHost,
     } = resolveSession(server, extra, conversation.conversationId, request, client)
     // Resolved now, with the handle's, so both describe the call as it arrived.
-    const sessionWithoutHandle = conversation.minted
-      ? resolveSession(server, extra, undefined, request, client)
-      : undefined
+    // Only when the minted handle chose the session; a host or client id outranks it.
+    const sessionWithoutHandle =
+      conversation.minted && sessionSource === 'conversation'
+        ? resolveSession(server, extra, undefined, request, client)
+        : undefined
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
     const sessionInfo = getSessionInfo(server, data, sessionId, extra)
@@ -517,7 +523,7 @@ function applyConversationInstructions(
   }
 
   // Only a minted session handle can be lost this way — one the agent supplied, it has.
-  if (!delivered) {
+  if (!delivered && conversation.minted) {
     dropUndeliveredHandle(preparedEvent)
   }
 
