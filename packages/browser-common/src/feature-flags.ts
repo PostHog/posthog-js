@@ -235,7 +235,10 @@ export const parseFlagsResponse = (
                   ...currentFlagDetails,
                   ...Object.fromEntries(
                       Object.entries(flagDetails).filter(
-                          ([key, detail]) => !detail.failed || isUndefined(currentFlags[key])
+                          ([key, detail]) =>
+                              !detail.failed ||
+                              !Object.prototype.hasOwnProperty.call(currentFlags, key) ||
+                              isUndefined(currentFlags[key])
                       )
                   ),
               }

@@ -224,6 +224,59 @@ describe('failed browser flag records', () => {
     it.each(
         ['constructor', 'toString'].flatMap((key) =>
             [
+                { partialResponse: true, errorsWhileComputingFlags: false },
+                { partialResponse: false, errorsWhileComputingFlags: true },
+            ].flatMap((mode) => [false, true].map((cached) => ({ key, cached, ...mode })))
+        )
+    )(
+        'retains failed diagnostics unless a prototype-named key has an own cached value %j',
+        ({ key, cached, ...mode }) => {
+            const client = createFlagsClient()
+            const flags = setupFlags(client, createConfig({ remoteRequestsDisabled: true }))
+            if (cached) {
+                flags.receivedFeatureFlags({
+                    featureFlags: { [key]: false },
+                    featureFlagPayloads: { [key]: '{"cached":true}' },
+                })
+            }
+            flags.receivedFeatureFlags(
+                { flags: { [key]: { ...failed, key } }, errorsWhileComputingFlags: mode.errorsWhileComputingFlags },
+                undefined,
+                mode
+            )
+
+            if (cached) {
+                expect(flags.getFeatureFlagResult(key, { send_event: false })).toEqual({
+                    key,
+                    enabled: false,
+                    variant: undefined,
+                    payload: { cached: true },
+                })
+                expect(flags.isFeatureEnabled(key, { defaultValue: true, send_event: false })).toBe(false)
+                expect(flags.getFeatureFlagDetails(key)?.failed).toBeUndefined()
+            } else {
+                expect(flags.getFeatureFlagResult(key, { send_event: false })).toBeUndefined()
+                expect(flags.getFeatureFlag(key, { send_event: false })).toBeUndefined()
+                expect(flags.getFeatureFlagPayload(key)).toBeUndefined()
+                expect(flags.isFeatureEnabled(key, { send_event: false })).toBeUndefined()
+                expect(flags.isFeatureEnabled(key, { defaultValue: true, send_event: false })).toBe(true)
+                expect(flags.getFeatureFlagDetails(key)).toMatchObject({
+                    key,
+                    failed: true,
+                    metadata: { id: 42 },
+                    reason: { code: 'dependency_error' },
+                })
+                expect(flags.getFlagVariants()).toEqual({})
+                expect(flags.getFlagPayloads()).toEqual({})
+            }
+            expect(client.capture).not.toHaveBeenCalled()
+            expect(client.sendRequest).not.toHaveBeenCalled()
+        }
+    )
+
+    it.each(
+        ['constructor', 'toString'].flatMap((key) =>
+            [
                 { flags: {} },
                 { payloads: {} },
                 { flags: { unrelated: true }, payloads: { unrelated: { override: true } } },
