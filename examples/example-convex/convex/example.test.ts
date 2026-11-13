@@ -71,9 +71,7 @@ function firstBatchEvent(): Record<string, unknown> {
 }
 
 function allBatchEvents(): Record<string, unknown>[] {
-    return batchCalls().flatMap(
-        (call) => (call.body as { batch: Record<string, unknown>[] }).batch
-    )
+    return batchCalls().flatMap((call) => (call.body as { batch: Record<string, unknown>[] }).batch)
 }
 
 async function finishScheduledFunctions(t: ReturnType<typeof initConvexTest>) {
@@ -81,7 +79,7 @@ async function finishScheduledFunctions(t: ReturnType<typeof initConvexTest>) {
     // A single timer pass can race with the scheduled action starting, which makes assertions
     // observe no PostHog batch call or leaves scheduled writes running during the next test.
     await t.finishAllScheduledFunctions(() => {
-        vi.runOnlyPendingTimers()
+        vi.advanceTimersByTime(0)
     })
 }
 
@@ -483,7 +481,9 @@ describe('getFeatureFlag (local eval)', () => {
                     filters: {
                         groups: [
                             {
-                                properties: [{ key: 'email', value: ['user@acme.com'], operator: 'exact', type: 'person' }],
+                                properties: [
+                                    { key: 'email', value: ['user@acme.com'], operator: 'exact', type: 'person' },
+                                ],
                                 rollout_percentage: 100,
                             },
                         ],
@@ -786,9 +786,7 @@ describe('getAllFlags (local eval)', () => {
     })
 
     test('respects flagKeys filter', async () => {
-        global.fetch = mockFetch(
-            definitionsResponse([flagDef('flag-a'), flagDef('flag-b'), flagDef('flag-c')])
-        )
+        global.fetch = mockFetch(definitionsResponse([flagDef('flag-a'), flagDef('flag-b'), flagDef('flag-c')]))
         const t = initConvexTest()
         await loadDefinitions(t)
 
@@ -872,9 +870,7 @@ describe('refreshFlagDefinitions cron action', () => {
     const noArgs = {}
 
     /** Builds a fetch mock whose responses are picked per call from the supplied sequence. */
-    function sequencedFetch(
-        responses: Array<{ status: number; body?: unknown; headers?: Record<string, string> }>
-    ) {
+    function sequencedFetch(responses: Array<{ status: number; body?: unknown; headers?: Record<string, string> }>) {
         fetchCalls = []
         let i = 0
         // Statuses where the spec forbids a body (Response constructor throws on non-null body).
@@ -964,9 +960,7 @@ describe('refreshFlagDefinitions cron action', () => {
         await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)
 
         // Now PostHog flaps cold-cache 503s. Cache is < 5min old so we keep what we have.
-        global.fetch = sequencedFetch([
-            { status: 503, body: 'Required data not found in cache.' },
-        ])
+        global.fetch = sequencedFetch([{ status: 503, body: 'Required data not found in cache.' }])
         const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)) as {
             status: string
         }
@@ -988,9 +982,7 @@ describe('refreshFlagDefinitions cron action', () => {
             // Jump 6 minutes forward; the cached defs now count as stale.
             vi.setSystemTime(new Date(Date.now() + 6 * 60 * 1000))
 
-            global.fetch = sequencedFetch([
-                { status: 503, body: 'Required data not found in cache.' },
-            ])
+            global.fetch = sequencedFetch([{ status: 503, body: 'Required data not found in cache.' }])
             const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)) as {
                 status: string
             }
@@ -1198,10 +1190,7 @@ describe('evaluateAllFlags (remote)', () => {
 
     test('returns all flags and payloads', async () => {
         global.fetch = mockFetch(
-            flagsResponse(
-                { 'flag-a': true, 'flag-b': 'variant', 'flag-c': false },
-                { 'flag-a': { config: 'value' } }
-            )
+            flagsResponse({ 'flag-a': true, 'flag-b': 'variant', 'flag-c': false }, { 'flag-a': { config: 'value' } })
         )
         const t = initConvexTest()
 
