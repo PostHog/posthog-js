@@ -26,12 +26,6 @@ Changes to `.changeset/` on `main` trigger the [`Release` workflow](https://gith
 4. Creates package tags and GitHub releases.
 5. Dispatches downstream dependency upgrades and reports the result in Slack.
 
-### Docusaurus migration
-
-`posthog-docusaurus` keeps its existing npm name and version history, but now publishes from `packages/docusaurus` through the npm matrix in `release.yml`. Before its first monorepo release, an npm package owner must change its trusted publisher to the `PostHog/posthog-js` repository and `release.yml` workflow, without an environment restriction (the normal publish job has none). Coordinate disabling the old `PostHog/posthog-docusaurus` publisher to avoid competing releases. Repository changes alone do not migrate npm publishing permissions.
-
-The imported snapshot is [PostHog/posthog-docusaurus@dea5bde](https://github.com/PostHog/posthog-docusaurus/commit/dea5bde). Its pending pageview-fix changeset is retained. The package publishes its source directly and does not require a build or a separate S3 upload.
-
 ### `posthog-js` S3/CDN gate
 
 The `posthog-js` S3 release happens before npm publishing. When `posthog-js` changes, every npm publish job is gated on:
