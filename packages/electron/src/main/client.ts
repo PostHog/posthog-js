@@ -16,11 +16,14 @@ import { ElectronStorage } from './storage'
 import { isRecord } from '../shared/protocol'
 import { sanitizeAutocaptureConfig, type AutocaptureState } from '../shared/autocapture'
 
+const AUTOCAPTURE_CONFIG_MAX_AGE_MS = 60_000
+
 class RetryLaterError extends Error {}
 
 export class ElectronCore extends PostHogCore {
     private _autocaptureStatus: AutocaptureState['status'] = 'pending'
     private _autocaptureLoad?: Promise<void>
+    private _autocaptureLoadedAt?: number
     private _disableRemoteConfig: boolean
     private _stopped = false
     private _suspended = false
@@ -94,11 +97,21 @@ export class ElectronCore extends PostHogCore {
         }
     }
 
-    loadAutocaptureConfig(): Promise<void> {
+    loadAutocaptureConfig(forceRefresh = false): Promise<void> {
         if (this._stopped || this.isDisabled || this.optedOut || this._disableRemoteConfig) return Promise.resolve()
         if (this._autocaptureLoad) return this._autocaptureLoad
-        this._autocaptureStatus = 'pending'
-        this._notify()
+        if (
+            !forceRefresh &&
+            this._autocaptureStatus === 'loaded' &&
+            this._autocaptureLoadedAt !== undefined &&
+            Date.now() - this._autocaptureLoadedAt < AUTOCAPTURE_CONFIG_MAX_AGE_MS
+        )
+            return Promise.resolve()
+        // A warm refresh must not pause capture in already-connected windows.
+        if (this._autocaptureStatus !== 'loaded') {
+            this._autocaptureStatus = 'pending'
+            this._notify()
+        }
         // These whitelisted project settings are identity-independent, unlike flag responses.
         this._autocaptureLoad = this.getRemoteConfig()
             .then((response) => {
@@ -109,6 +122,7 @@ export class ElectronCore extends PostHogCore {
                 }
                 this._autocaptureStatus = response ? 'loaded' : 'failed'
                 if (response) {
+                    this._autocaptureLoadedAt = Date.now()
                     this.setPersistedProperty(PostHogPersistedProperty.RemoteConfig, {
                         ...sanitizeAutocaptureConfig(this.getPersistedProperty(PostHogPersistedProperty.RemoteConfig)),
                         ...sanitizeAutocaptureConfig(response),

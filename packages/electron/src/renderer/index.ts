@@ -60,7 +60,16 @@ export class PostHog {
         if (_options.autocapture) {
             this._autocapture = new RendererAutocapture(
                 {
-                    getState: () => this.getState(),
+                    getState: () => {
+                        const state = this._state
+                        if (!state) throw new Error('PostHog renderer is not ready')
+                        return {
+                            generation: state.generation,
+                            distinctId: state.distinctId,
+                            optedOut: state.optedOut,
+                            autocapture: state.autocapture,
+                        }
+                    },
                     capture: (event, properties) => this.capture(event, properties),
                     loadConfig: () => this._send({ type: 'loadAutocaptureConfig' }),
                     onError: (error) => {

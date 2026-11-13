@@ -10,6 +10,7 @@ afterEach(() => {
     for (const client of clients.splice(0)) client.dispose()
     document.body.innerHTML = ''
     delete (globalThis as any)[BRIDGE_KEY]
+    vi.useRealTimers()
 })
 
 function harness(
@@ -87,6 +88,75 @@ describe('Electron DOM autocapture', () => {
         off.click()
         await client.flush()
         expect(off.captures()).toHaveLength(1)
+    })
+
+    it('does not copy unrelated flag payloads on pointer events', async () => {
+        const h = harness({ autocapture: true }, enabled)
+        await h.client.ready()
+        h.broadcast({ featureFlagPayloads: { large: { rows: Array(1000).fill('payload') } } })
+        const clone = vi.spyOn(globalThis, 'structuredClone')
+        for (let index = 0; index < 20; index++) {
+            const event = new MouseEvent('pointerdown', { bubbles: true, button: 0 })
+            Object.defineProperties(event, { isPrimary: { value: true }, pointerId: { value: index } })
+            document.querySelector('#safe')!.dispatchEvent(event)
+            document.querySelector('#safe')!.dispatchEvent(new MouseEvent('pointercancel', { bubbles: true }))
+        }
+        expect(
+            clone.mock.calls.filter(([value]) => value && typeof value === 'object' && 'featureFlagPayloads' in value)
+        ).toHaveLength(0)
+    })
+
+    it('retries failed config in the same generation with a single capped backoff and recovers', async () => {
+        vi.useFakeTimers()
+        const h = harness()
+        await h.client.ready()
+        await h.client.flush()
+        h.broadcast({ autocapture: { status: 'failed' } })
+        await h.client.flush()
+        const loads = () => h.requests.filter(({ command }) => command.type === 'loadAutocaptureConfig').length
+        expect(loads()).toBe(1)
+        h.click()
+        await h.client.flush()
+        expect(h.captures()).toHaveLength(0)
+        for (const delay of [1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000]) {
+            const before = loads()
+            h.broadcast({ sessionId: 'unchanged-config' })
+            await vi.advanceTimersByTimeAsync(delay - 1)
+            expect(loads()).toBe(before)
+            await vi.advanceTimersByTimeAsync(1)
+            expect(loads()).toBe(before + 1)
+        }
+        h.broadcast({ autocapture: enabled })
+        h.click()
+        await h.client.flush()
+        expect(h.captures()).toHaveLength(1)
+        const before = loads()
+        await vi.advanceTimersByTimeAsync(120000)
+        expect(loads()).toBe(before)
+        expect(h.client.getState().generation).toBe(0)
+    })
+
+    it.each(['optOut', 'dispose'] as const)('cancels failed-config retries on %s', async (stop) => {
+        vi.useFakeTimers()
+        const h = harness()
+        await h.client.ready()
+        await h.client.flush()
+        h.broadcast({ autocapture: { status: 'failed' } })
+        await h.client.flush()
+        if (stop === 'optOut') await h.client.optOut()
+        else h.client.dispose()
+        const before = h.requests.length
+        await vi.advanceTimersByTimeAsync(120000)
+        expect(h.requests).toHaveLength(before)
+        if (stop === 'optOut') {
+            await h.client.optIn()
+            await h.client.flush()
+            expect(h.requests.filter(({ command }) => command.type === 'loadAutocaptureConfig')).toHaveLength(2)
+            h.broadcast({ autocapture: enabled })
+            h.click()
+            await h.client.flush()
+            expect(h.captures()).toHaveLength(1)
+        }
     })
 
     it('waits for authoritative config, then routes click/change/submit through capture in order', async () => {

@@ -1091,6 +1091,35 @@ describe('main-routed autocapture config', () => {
         expect(owner.getState().flagsLoaded).toBe(false)
     })
 
+    it('reuses loaded project config across windows and identity changes, then refreshes an expired kill switch without pausing capture', async () => {
+        const owner = await start({ disableRemoteFeatureFlags: true })
+        mock.fetch.mockImplementation(async () => new Response(JSON.stringify({ autocapture_opt_out: false })))
+        await load(owner)
+        const now = Date.now()
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+        await owner.identify('another-user')
+        await owner.reset()
+        await load(owner, 92)
+        expect(mock.fetch).toHaveBeenCalledTimes(1)
+        expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: false })
+        clock.mockReturnValue(now + 60001)
+        let resolve!: (response: Response) => void
+        mock.fetch.mockImplementation(
+            () =>
+                new Promise((done) => {
+                    resolve = done
+                })
+        )
+        const refresh = load(owner, 93)
+        await vi.waitFor(() => expect(mock.fetch).toHaveBeenCalledTimes(2))
+        expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: false })
+        resolve(new Response(JSON.stringify({ autocapture_opt_out: true })))
+        await refresh
+        expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: true })
+        mock.fetch.mockImplementation(async () => new Response('{}'))
+        clock.mockRestore()
+    })
+
     it('keeps a persisted project kill switch through reset, restart, malformed response and fetch failure', async () => {
         let owner = await start()
         mock.fetch.mockResolvedValue(new Response(JSON.stringify({ autocapture_opt_out: true })))
@@ -1106,7 +1135,9 @@ describe('main-routed autocapture config', () => {
         await load(owner)
         expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: true })
         mock.fetch.mockRejectedValue(new Error('offline'))
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_001)
         await load(owner, 92)
+        clock.mockRestore()
         expect(owner.getState().autocapture).toEqual({ status: 'failed', autocapture_opt_out: true })
     })
 
