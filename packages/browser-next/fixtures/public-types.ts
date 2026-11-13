@@ -56,6 +56,19 @@ export const publicProductViews = async (posthog: IPostHog, internal: IPostHogIn
     posthog.analytics?.captureImmediate('immediate')
     posthog.analytics?.identify('person')
     posthog.analytics?.group('company', 'company-123')
+    posthog.analytics?.alias('account-123')
+    posthog.analytics?.groupIdentify('organization', 0, { plan: 'paid' }, { uuid: 'group-uuid', timestamp: new Date() })
+    posthog.analytics?.resetGroups()
+    acquired?.alias('account-456')
+    acquired?.groupIdentify('organization', 'external')
+    acquired?.resetGroups()
+    internal.analytics?.alias('internal-account')
+    internal.analytics?.groupIdentify('organization', 42)
+    internal.analytics?.resetGroups()
+    const groupsReset = posthog.onGroupsReset(() => {})
+    const internalGroupsReset = internal.onGroupsReset(() => {})
+    groupsReset.dispose()
+    internalGroupsReset.dispose()
     const propertiesChanged = internal.onChangeProperties(({ set, setOnce, unset }) => {
         const name: unknown = set?.name ?? setOnce?.name
         const removed: readonly string[] | undefined = unset
@@ -64,6 +77,10 @@ export const publicProductViews = async (posthog: IPostHog, internal: IPostHogIn
     propertiesChanged.dispose()
     // @ts-expect-error Property notifications belong to the scoped product host.
     posthog.onChangeProperties(() => {})
+    // @ts-expect-error Alias targets are strings.
+    posthog.analytics?.alias(42)
+    // @ts-expect-error Group keys are strings or numbers.
+    posthog.analytics?.groupIdentify('organization', true)
     posthog.analytics?.createPersonProfile()
     posthog.analytics?.setPersonProperties({ plan: 'paid' }, { initial: true })
     posthog.analytics?.setPersonProperties(undefined, { initial: true })

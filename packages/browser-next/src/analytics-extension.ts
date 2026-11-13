@@ -57,6 +57,8 @@ const isValidDistinctId = (value: unknown): value is string =>
     isNonEmptyString(value) &&
     !['$posthog_cookieless', 'distinct_id', 'distinctid', 'undefined', 'null'].includes(value.toLowerCase())
 
+const isValidGroupKey = (value: unknown): value is string | number => isNonEmptyString(value) || Number.isFinite(value)
+
 const eventTimestamp = (timestamp: Date | undefined): string => {
     try {
         return (timestamp ?? new Date()).toISOString()
@@ -682,6 +684,13 @@ export class Analytics implements IAnalyticsExtension {
         return hasProperties ? this._capture('$set', null, options, false, personProperties) : false
     }
 
+    readonly alias = (alias: string): void => {
+        const host = this._host
+        if (!isValidDistinctId(alias) || this._disposed || !host?.canCapture() || !host.state.prepare()) return
+        if (!this._requirePersonProcessing()) return
+        this._capture('$create_alias', { alias })
+    }
+
     readonly group = async (type: string, key: string, properties?: Record<string, unknown>): Promise<void> => {
         if (
             !isNonEmptyString(type) ||
@@ -705,6 +714,30 @@ export class Analytics implements IAnalyticsExtension {
             $group_key: key,
             ...(properties ? { $group_set: properties } : {}),
         })
+    }
+
+    readonly groupIdentify = (
+        type: string,
+        key: string | number,
+        properties: Record<string, unknown> = {},
+        options: CaptureOptions = {}
+    ): void => {
+        const host = this._host
+        if (this._disposed || !host?.canCapture()) return
+        if (!isNonEmptyString(type) || !isValidGroupKey(key)) {
+            host.logger.warn('Group identify requires a non-empty type and a string or finite numeric key')
+            return
+        }
+        if (!host.state.prepare() || !this._requirePersonProcessing()) return
+        this.capture('$groupidentify', { $group_type: type, $group_key: key, $group_set: properties }, options)
+    }
+
+    readonly resetGroups = (): void => {
+        const host = this._host
+        if (this._disposed || !host?.canMutate()) return
+        host.state.prepare()
+        host.state.resetGroups()
+        host.publishGroupsReset()
     }
 
     readonly reset = (): void => {

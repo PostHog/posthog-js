@@ -86,6 +86,7 @@ class PostHog implements IPostHog {
     readonly onNewSession: IPostHog['onNewSession']
     readonly onIdentify: IPostHogInternal['onIdentify']
     readonly onGroup: IPostHogInternal['onGroup']
+    readonly onGroupsReset: IPostHogInternal['onGroupsReset']
     readonly onReset: IPostHogInternal['onReset']
     readonly onConsentChange: IPostHogInternal['onConsentChange']
     readonly onSession: Client['onSession']
@@ -97,6 +98,7 @@ class PostHog implements IPostHog {
     private readonly _identifyPublisher: Publisher<IdentifyInfo>
     private readonly _changePropertiesPublisher: Publisher<ChangePropertiesInfo>
     private readonly _groupPublisher: Publisher<GroupInfo>
+    private readonly _groupsResetPublisher: Publisher<void>
     private readonly _resetPublisher: Publisher<void>
     readonly _registry: ExtensionRegistry<IPostHogInternal>
     readonly _requestRuntime: RequestRuntime
@@ -160,6 +162,7 @@ class PostHog implements IPostHog {
             this.logger.error('A person-property listener failed', error)
         )
         this._groupPublisher = new Publisher((error) => this.logger.error('A group listener failed', error))
+        this._groupsResetPublisher = new Publisher((error) => this.logger.error('A group reset listener failed', error))
         this._resetPublisher = new Publisher((error) => this.logger.error('A reset listener failed', error))
         this._newSessionPublisher = new Publisher((error) => this.logger.error('A session listener failed', error))
         this._consentChangePublisher = new Publisher((error) =>
@@ -235,6 +238,7 @@ class PostHog implements IPostHog {
         }
         this.onIdentify = this._identifyPublisher.listener
         this.onGroup = this._groupPublisher.listener
+        this.onGroupsReset = this._groupsResetPublisher.listener
         this.onReset = this._resetPublisher.listener
         this.onConsentChange = this._consentChangePublisher.listener
         this.onNewSession = this._newSessionPublisher.listener
@@ -474,6 +478,7 @@ class PostHog implements IPostHog {
             this._identifyPublisher.dispose()
             this._changePropertiesPublisher.dispose()
             this._groupPublisher.dispose()
+            this._groupsResetPublisher.dispose()
             this._resetPublisher.dispose()
             this._consentChangePublisher.dispose()
             this._newSessionPublisher.dispose()
@@ -751,6 +756,7 @@ class PostHog implements IPostHog {
                 onIdentify: host.onIdentify,
                 onChangeProperties: host._changePropertiesPublisher.listener,
                 onGroup: host.onGroup,
+                onGroupsReset: host.onGroupsReset,
                 onReset: host.onReset,
             },
             capabilities
@@ -804,6 +810,7 @@ class PostHog implements IPostHog {
             publishIdentify: (info) => this._identifyPublisher.publish(info),
             publishChangeProperties: (info) => this._changePropertiesPublisher.publish(info),
             publishGroup: (info) => this._groupPublisher.publish(info),
+            publishGroupsReset: () => this._groupsResetPublisher.publish(undefined),
             publishReset: () => this._resetPublisher.publish(undefined),
         }
     }
