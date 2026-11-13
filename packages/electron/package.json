@@ -1,5 +1,6 @@
 {
     "name": "@posthog/electron",
+    "private": true,
     "version": "0.1.0-alpha.0",
     "description": "PostHog analytics and feature flags for Electron applications",
     "license": "MIT",

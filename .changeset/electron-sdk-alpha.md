@@ -1,6 +1,5 @@
 ---
-'@posthog/electron': minor
 '@posthog/core': patch
 ---
 
-Add an Electron analytics SDK with shared identity, feature flags, secure IPC, and persistent delivery.
+Add extension hooks for context-safe feature flags and transient batch retention.
