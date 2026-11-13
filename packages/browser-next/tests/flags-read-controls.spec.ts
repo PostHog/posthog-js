@@ -1,5 +1,9 @@
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
-import type { FeatureFlagsOptions, FeatureFlagsReadOptions } from '../src/products/flags/flags-options'
+import type {
+    FeatureFlagsOptions,
+    FeatureFlagsReadOptions,
+    FeatureFlagsReloadResult,
+} from '../src/products/flags/flags-options'
 import { featureFlags } from '../src/products/flags/flags'
 import type { IPostHog, PostHogOptions } from '../src/core/types'
 import { createBufferedRootPostHog, localRemoteConfig, MemoryStorage, requireInstalledExtension } from './helpers'
@@ -281,6 +285,145 @@ describe.each(['static', 'automatic'] as const)('%s flags read controls', (mode)
         expect(retained).toHaveBeenCalledOnce()
     })
 
+    it.each(['explicit', 'automatic'] as const)(
+        'coalesces a reload requested synchronously from an %s start callback',
+        async (trigger) => {
+            vi.useFakeTimers()
+            const fetch = vi.fn(async () => remoteFlags())
+            const client = await createFlags({ refreshIntervalMs: 0 }, { fetch })
+            const flags = requireInstalledExtension(client.featureFlags)
+            await vi.advanceTimersByTimeAsync(5)
+            fetch.mockClear()
+            const nested: Promise<FeatureFlagsReloadResult>[] = []
+            const callback = vi.fn(() => {
+                if (callback.mock.calls.length <= 3) nested.push(flags.reloadFeatureFlags())
+            })
+            flags.onReloading(callback)
+            const outer = trigger === 'explicit' ? flags.reloadFeatureFlags() : undefined
+            if (trigger === 'automatic') await requireInstalledExtension(client.analytics).identify('next-person')
+            expect(callback).toHaveBeenCalledOnce()
+            expect(nested).toHaveLength(1)
+            const completion = outer ?? flags.reloadFeatureFlags()
+            await Promise.resolve()
+            expect(callback).toHaveBeenCalledOnce()
+            expect(vi.getTimerCount()).toBe(1)
+            expect(fetch).not.toHaveBeenCalled()
+            await vi.advanceTimersByTimeAsync(5)
+            expect(await Promise.all(nested)).toEqual([{ status: 'loaded' }])
+            expect(await completion).toEqual({ status: 'loaded' })
+            await vi.advanceTimersByTimeAsync(20)
+            expect(callback).toHaveBeenCalledOnce()
+            expect(vi.getTimerCount()).toBe(0)
+            expect(fetch).toHaveBeenCalledOnce()
+        }
+    )
+
+    it('shares a failed evaluation outcome with a reload requested from a start callback', async () => {
+        vi.useFakeTimers()
+        const fetch = vi.fn(async () => remoteFlags())
+        const client = await createFlags({ refreshIntervalMs: 0 }, { fetch })
+        const flags = requireInstalledExtension(client.featureFlags)
+        await vi.advanceTimersByTimeAsync(5)
+        fetch.mockClear()
+        fetch.mockImplementation(async () => new Response('{}'))
+        const nested: Promise<FeatureFlagsReloadResult>[] = []
+        const callback = vi.fn(() => {
+            if (callback.mock.calls.length <= 3) nested.push(flags.reloadFeatureFlags())
+        })
+        flags.onReloading(callback)
+        const outer = flags.reloadFeatureFlags()
+        await vi.advanceTimersByTimeAsync(5)
+        expect(await outer).toEqual({ status: 'error' })
+        expect(await Promise.all(nested)).toEqual([{ status: 'error' }])
+        expect(callback).toHaveBeenCalledOnce()
+        expect(fetch).toHaveBeenCalledOnce()
+    })
+
+    it('preserves an ordinary in-flight reload as a follow-up request', async () => {
+        vi.useFakeTimers()
+        const fetch = vi.fn(() => Promise.resolve(remoteFlags()))
+        const client = await createFlags({ refreshIntervalMs: 0 }, { fetch })
+        const flags = requireInstalledExtension(client.featureFlags)
+        await vi.advanceTimersByTimeAsync(5)
+        fetch.mockClear()
+        const responses: Array<(value: Response) => void> = []
+        fetch.mockImplementation(() => new Promise<Response>((resolve) => responses.push(resolve)))
+        const callback = vi.fn()
+        flags.onReloading(callback)
+        const first = flags.reloadFeatureFlags()
+        expect(callback).toHaveBeenCalledOnce()
+        await vi.advanceTimersByTimeAsync(5)
+        expect(fetch).toHaveBeenCalledOnce()
+        const followUp = flags.reloadFeatureFlags()
+        const completedFollowUp = vi.fn()
+        void followUp.then(completedFollowUp)
+        expect(callback).toHaveBeenCalledTimes(2)
+        await vi.advanceTimersByTimeAsync(5)
+        expect(fetch).toHaveBeenCalledOnce()
+        responses[0]!(remoteFlags())
+        await vi.advanceTimersByTimeAsync(0)
+        expect(await first).toEqual({ status: 'loaded' })
+        expect(fetch).toHaveBeenCalledTimes(2)
+        expect(completedFollowUp).not.toHaveBeenCalled()
+        responses[1]!(remoteFlags())
+        await vi.advanceTimersByTimeAsync(0)
+        expect(await followUp).toEqual({ status: 'loaded' })
+        expect(completedFollowUp).toHaveBeenCalledOnce()
+        expect(callback).toHaveBeenCalledTimes(2)
+        expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('cancels a nested reload disposed before its deferred delegation', async () => {
+        vi.useFakeTimers()
+        const fetch = vi.fn(async () => remoteFlags())
+        const client = await createFlags({ refreshIntervalMs: 0 }, { fetch })
+        const flags = requireInstalledExtension(client.featureFlags)
+        await vi.advanceTimersByTimeAsync(5)
+        fetch.mockClear()
+        const delegate = vi.spyOn(PostHogFeatureFlags.prototype, 'reloadFeatureFlagsAsync')
+        const nested: Promise<FeatureFlagsReloadResult>[] = []
+        const callback = vi.fn(() => {
+            if (callback.mock.calls.length <= 3) nested.push(flags.reloadFeatureFlags())
+        })
+        flags.onReloading(callback)
+        const outer = flags.reloadFeatureFlags()
+        flags.dispose?.()
+        expect(await outer).toEqual({ status: 'cancelled' })
+        expect(await Promise.all(nested)).toEqual([{ status: 'cancelled' }])
+        expect(delegate).toHaveBeenCalledOnce()
+        expect(callback).toHaveBeenCalledOnce()
+        await vi.advanceTimersByTimeAsync(10)
+        expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('restores synchronous reload starts after a throwing listener', async () => {
+        vi.useFakeTimers()
+        const client = await createFlags({ refreshIntervalMs: 0 }, { fetch: async () => remoteFlags() })
+        const flags = requireInstalledExtension(client.featureFlags)
+        await vi.advanceTimersByTimeAsync(5)
+        const nested: Promise<FeatureFlagsReloadResult>[] = []
+        const callback = vi.fn(() => {
+            if (callback.mock.calls.length === 1) {
+                nested.push(flags.reloadFeatureFlags())
+                throw new Error('callback')
+            }
+        })
+        flags.onReloading(callback)
+        const otherListener = vi.fn()
+        flags.onReloading(otherListener)
+        const first = flags.reloadFeatureFlags()
+        expect(callback).toHaveBeenCalledOnce()
+        expect(otherListener).toHaveBeenCalledOnce()
+        await vi.advanceTimersByTimeAsync(5)
+        expect(await first).toEqual({ status: 'loaded' })
+        expect(await Promise.all(nested)).toEqual([{ status: 'loaded' }])
+        const next = flags.reloadFeatureFlags()
+        expect(callback).toHaveBeenCalledTimes(2)
+        expect(otherListener).toHaveBeenCalledTimes(2)
+        await vi.advanceTimersByTimeAsync(5)
+        expect(await next).toEqual({ status: 'loaded' })
+    })
+
     it('contains reload callback errors without preventing other listeners or remote loading', async () => {
         vi.useFakeTimers()
         const client = await createFlags({ refreshIntervalMs: 0 }, { fetch: async () => remoteFlags() })
@@ -298,15 +441,22 @@ describe.each(['static', 'automatic'] as const)('%s flags read controls', (mode)
     })
 })
 
-it('observes the initial automatic reload when subscribed before setup', async () => {
+it('coalesces a nested reload requested from the initial automatic start before setup completes', async () => {
     vi.useFakeTimers()
     const flags = featureFlags({ refreshIntervalMs: 0 })
-    const callback = vi.fn()
+    const nested: Promise<FeatureFlagsReloadResult>[] = []
+    const callback = vi.fn(() => {
+        if (callback.mock.calls.length <= 3) nested.push(flags.reloadFeatureFlags())
+    })
     flags.onReloading(callback)
-    await create({ extensions: [flags], fetch: async () => remoteFlags() })
+    const fetch = vi.fn(async () => remoteFlags())
+    await create({ extensions: [flags], fetch })
     expect(callback).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(1)
     await vi.advanceTimersByTimeAsync(5)
+    expect(await Promise.all(nested)).toEqual([{ status: 'loaded' }])
     expect(callback).toHaveBeenCalledOnce()
+    expect(fetch).toHaveBeenCalledOnce()
 })
 
 it('contains delegate and snapshot-copy failures and makes controls inert after disposal', async () => {

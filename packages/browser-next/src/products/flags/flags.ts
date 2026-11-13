@@ -35,6 +35,7 @@ export const featureFlags = (options: FeatureFlagsOptions = {}): IFeatureFlags =
     }
     let client: IPostHogInternal | undefined
     let disposed = false
+    let notifyingReloadStart = false
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
 
@@ -121,7 +122,13 @@ export const featureFlags = (options: FeatureFlagsOptions = {}): IFeatureFlags =
             if (!disposed) {
                 try {
                     const unsubscribe = shared.onReloading(() => {
-                        if (!disposed) callback()
+                        if (disposed) return
+                        notifyingReloadStart = true
+                        try {
+                            callback()
+                        } finally {
+                            notifyingReloadStart = false
+                        }
                     })
                     return { dispose: unsubscribe }
                 } catch (error) {
@@ -133,6 +140,11 @@ export const featureFlags = (options: FeatureFlagsOptions = {}): IFeatureFlags =
         reloadFeatureFlags: async () => {
             if (disposed) return { status: 'cancelled' }
             try {
+                if (notifyingReloadStart) {
+                    // Shared reload installs its debounce after notifying listeners.
+                    await Promise.resolve()
+                    if (disposed) return { status: 'cancelled' }
+                }
                 return await shared.reloadFeatureFlagsAsync()
             } catch (error) {
                 client?.logger.error('Feature flags reload failed', error)

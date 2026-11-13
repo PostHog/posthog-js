@@ -9,6 +9,7 @@ for (const load of [(name) => import(name), (name) => require(name)]) {
     const { analytics } = await load('@posthog/browser/analytics')
     for (const inclusion of ['automatic', 'static']) {
         const captured = []
+        let flagRequests = 0
         const flagOptions = {
             refreshIntervalMs: 0,
             bootstrap: {
@@ -35,6 +36,7 @@ for (const load of [(name) => import(name), (name) => require(name)]) {
             ],
             fetch: async (input) => {
                 assert.ok(String(input).includes('/flags/'))
+                flagRequests++
                 return new Response(
                     JSON.stringify({
                         flags: {
@@ -92,6 +94,34 @@ for (const load of [(name) => import(name), (name) => require(name)]) {
             subscription.dispose()
             await flags.reloadFeatureFlags()
             assert.equal(reloading.length, 1)
+            for (const trigger of ['explicit', 'automatic']) {
+                const before = flagRequests
+                let starts = 0
+                const nested = []
+                const nestedSubscription = flags.onReloading(() => {
+                    starts++
+                    if (starts <= 3) nested.push(flags.reloadFeatureFlags())
+                })
+                try {
+                    let completion
+                    if (trigger === 'explicit') {
+                        completion = flags.reloadFeatureFlags()
+                    } else {
+                        await client.analytics.identify('nested-reload-person')
+                        completion = flags.reloadFeatureFlags()
+                    }
+                    assert.equal(starts, 1)
+                    assert.equal(nested.length, 1)
+                    assert.deepEqual(await Promise.all([completion, ...nested]), [
+                        { status: 'loaded' },
+                        { status: 'loaded' },
+                    ])
+                    assert.equal(starts, 1)
+                    assert.equal(flagRequests - before, 1)
+                } finally {
+                    nestedSubscription.dispose()
+                }
+            }
         } finally {
             subscription?.dispose()
             await client.dispose()
