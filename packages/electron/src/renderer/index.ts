@@ -19,10 +19,12 @@ import {
 
 export type { State, Properties, FeatureFlagValue, JsonType }
 
+const bridgeSequences = new WeakMap<Bridge, number>()
+
 export class PostHog {
     private _state?: State
     private _reportedFlags = new Set<string>()
-    private _sequence = 0
+    private _ready?: Promise<void>
     private _tail: Promise<unknown> = Promise.resolve()
     private _listeners = new Set<(state: State) => void>()
     private _unsubscribe: () => void
@@ -54,25 +56,39 @@ export class PostHog {
         }
     }
 
-    private _send(command: Command): Promise<void> {
+    private async _send(command: Command): Promise<void> {
         const generation = this._state?.generation ?? 0
-        const operation = this._tail.then(async () => {
+        const snapshot: Command = JSON.parse(JSON.stringify(command))
+        const dispatched = this._tail.then(() => {
             if (this._disposed) throw new Error('PostHog renderer has been disposed')
-            const response = await this._bridge.request({
-                version: PROTOCOL_VERSION,
-                sequence: ++this._sequence,
-                generation,
-                command: JSON.parse(JSON.stringify(command)),
-            })
+            const sequence = (bridgeSequences.get(this._bridge) ?? 0) + 1
+            bridgeSequences.set(this._bridge, sequence)
+            return {
+                response: this._bridge.request({
+                    version: PROTOCOL_VERSION,
+                    sequence,
+                    generation,
+                    command: snapshot,
+                }),
+            }
+        })
+        const operation = dispatched.then(async ({ response: pending }) => {
+            const response = await pending
             if (!response.ok) throw new Error(response.error)
             this._update(response.state)
         })
-        this._tail = operation.catch(() => {})
+        this._tail = (command.type === 'flush' || command.type === 'reloadFeatureFlags' ? dispatched : operation).catch(
+            () => {}
+        )
         return operation
     }
 
     async ready(): Promise<void> {
-        await this._send({ type: 'hello' })
+        if (this._disposed) throw new Error('PostHog renderer has been disposed')
+        await (this._ready ??= this._send({ type: 'hello' }).catch((error: unknown) => {
+            this._ready = undefined
+            throw error
+        }))
     }
 
     capture(event: string, properties?: Properties): Promise<void> {
@@ -124,9 +140,13 @@ export class PostHog {
     }
 
     getFeatureFlag(key: string, options?: { sendEvent?: boolean }): FeatureFlagValue | undefined {
+        const flags = this._state?.featureFlags
         const value =
-            this._state?.featureFlags[key] ??
-            (this._state && Object.keys(this._state.featureFlags).length > 0 ? false : undefined)
+            flags && Object.prototype.hasOwnProperty.call(flags, key)
+                ? flags[key]
+                : flags && Object.keys(flags).length > 0
+                  ? false
+                  : undefined
         if (options?.sendEvent !== false && this._state) {
             const reportedFlags = this._reportedFlags
             const reportKey = JSON.stringify([key, value ?? null])
@@ -147,7 +167,8 @@ export class PostHog {
         return value === undefined ? undefined : Boolean(value)
     }
     getFeatureFlagPayload(key: string): JsonType | undefined {
-        const value = this._state?.featureFlagPayloads[key]
+        const payloads = this._state?.featureFlagPayloads
+        const value = payloads && Object.prototype.hasOwnProperty.call(payloads, key) ? payloads[key] : undefined
         return value === undefined ? (this._state?.flagsLoaded ? null : undefined) : structuredClone(value)
     }
     getState(): State {

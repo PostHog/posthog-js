@@ -46,6 +46,7 @@ export class ElectronStorage {
     private values: Values = Object.create(null)
     private serialized = JSON.stringify({ version: 1, values: {} })
     private revision = 0
+    private queueExpiresAt = Infinity
     private persistedRevision = 0
     private pending?: Promise<void>
     private failure?: { error: unknown }
@@ -101,6 +102,7 @@ export class ElectronStorage {
             const bounded = this.bound(state.values)
             this.values = bounded.values
             this.serialized = bounded.serialized
+            this.queueExpiresAt = bounded.expiresAt
             if (this.serialized !== text) {
                 this.revision++
                 this.scheduleWrite()
@@ -114,6 +116,7 @@ export class ElectronStorage {
         if (this.stopped) return
         // Consent cannot safely be inferred from unreadable state. Discard all analytics.
         this.values = Object.assign(Object.create(null), { opted_out: true })
+        this.queueExpiresAt = Infinity
         this.serialized = JSON.stringify({ version: 1, values: this.values })
         this.revision++
         this.report(error)
@@ -121,30 +124,34 @@ export class ElectronStorage {
     }
 
     get<T>(key: string): T | undefined {
-        if (key === 'queue' && !this.stopped) {
+        if (key === 'queue' && !this.stopped && Date.now() > this.queueExpiresAt) {
             const bounded = this.bound(this.values)
             if (bounded.serialized !== this.serialized) {
                 this.values = bounded.values
                 this.serialized = bounded.serialized
+                this.queueExpiresAt = bounded.expiresAt
                 this.revision++
                 this.scheduleWrite()
             }
         }
-        return Object.hasOwn(this.values, key) ? (this.values[key] as T) : undefined
+        if (!Object.hasOwn(this.values, key)) return undefined
+        const value = this.values[key]
+        return (key === 'queue' && Array.isArray(value) ? value.slice() : structuredClone(value)) as T
     }
 
     set<T>(key: string, value: T | null): void {
         if (this.stopped) return
         const next: Values = Object.assign(Object.create(null), this.values)
-        if (value === null) {
-            delete next[key]
-        } else {
-            next[key] = value
-        }
         try {
+            if (value === null) {
+                delete next[key]
+            } else {
+                next[key] = structuredClone(value)
+            }
             const bounded = this.bound(next)
             this.values = bounded.values
             this.serialized = bounded.serialized
+            this.queueExpiresAt = bounded.expiresAt
         } catch (error) {
             this.report(error)
             // In particular, callers must not mistake rejected consent changes for durable ones.
@@ -158,10 +165,11 @@ export class ElectronStorage {
     async flush(): Promise<void> {
         if (this.stopped) return
         // Retention also applies when the queue has been idle since the last write.
-        const bounded = this.bound(this.values)
-        if (bounded.serialized !== this.serialized) {
+        if (Date.now() > this.queueExpiresAt) {
+            const bounded = this.bound(this.values)
             this.values = bounded.values
             this.serialized = bounded.serialized
+            this.queueExpiresAt = bounded.expiresAt
             this.revision++
             this.scheduleWrite()
         }
@@ -176,7 +184,7 @@ export class ElectronStorage {
         }
     }
 
-    private bound(input: Values): { values: Values; serialized: string } {
+    private bound(input: Values): { values: Values; serialized: string; expiresAt: number } {
         const values: Values = Object.assign(Object.create(null), input)
         let queue: QueueItem[] | undefined
         if (Object.hasOwn(values, 'queue')) {
@@ -201,13 +209,16 @@ export class ElectronStorage {
                 bytes -= Buffer.byteLength(JSON.stringify(item), 'utf8') + (queue.length - removed.size > 1 ? 1 : 0)
                 removed.add(index)
             }
-            values.queue = queue.filter((_, index) => !removed.has(index))
+            queue = queue.filter((_, index) => !removed.has(index))
+            values.queue = queue
             serialized = JSON.stringify({ version: 1, values })
         }
         if (Buffer.byteLength(serialized, 'utf8') > this.maxStorageBytes) {
             throw new RangeError('Electron storage exceeds maxStorageBytes after removing queued events')
         }
-        return { values, serialized }
+        const expiresAt =
+            queue?.reduce((next, item) => Math.min(next, eventTime(item) + this.maxQueueAgeMs), Infinity) ?? Infinity
+        return { values, serialized, expiresAt }
     }
 
     stop(): void {

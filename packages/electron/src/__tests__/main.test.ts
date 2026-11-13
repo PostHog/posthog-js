@@ -114,6 +114,152 @@ function renderer(owner: PostHog, id: number) {
 }
 
 describe('main Electron client', () => {
+    it('reinitializes a disposed renderer on the same bridge without resetting its request sequence', async () => {
+        const owner = await start()
+        const page = renderer(owner, 1)
+        const listeners = new Set<(state: State) => void>()
+        page.contents.mainFrame.send.mockImplementation((channel, state) => {
+            if (channel === STATE_CHANNEL) for (const listener of listeners) listener(state)
+        })
+        const bridge = {
+            request: (request: Request) => mock.handlers.get(COMMAND_CHANNEL)!(page.event, request),
+            subscribe: (listener: (state: State) => void) => {
+                listeners.add(listener)
+                return () => listeners.delete(listener)
+            },
+        }
+        const first = new RendererPostHog(bridge)
+        await first.ready()
+        await first.capture('before-dispose')
+        first.dispose()
+        const second = new RendererPostHog(bridge)
+        try {
+            await second.ready()
+            await second.capture('after-reinitialize')
+            await second.flush()
+            expect(batches.map(({ event }) => event)).toEqual(['before-dispose', 'after-reinitialize'])
+        } finally {
+            second.dispose()
+        }
+    })
+
+    it.each([{ personProfiles: 'never' }, { disabled: true }])(
+        'does not invalidate identity or flags when identify is guarded by %j',
+        async (options) => {
+            const owner = await start(options)
+            if (!options.disabled) await owner.reloadFeatureFlagsAsync()
+            const before = owner.getState()
+            await owner.identify('ignored-identity')
+            const after = owner.getState()
+            expect(after.distinctId).toBe(before.distinctId)
+            expect(after.generation).toBe(before.generation)
+            expect(after.featureFlags).toEqual(before.featureFlags)
+        }
+    )
+
+    it('keeps queued events detached from nested properties after capture is acknowledged', async () => {
+        const owner = await start()
+        const nested = { value: 'accepted' }
+        await owner.capture('accepted', { nested })
+        nested.value = 'changed'
+        Object.assign(nested, { cycle: nested })
+        await owner.flush()
+        expect(batches.find(({ event }) => event === 'accepted')?.properties.nested).toEqual({ value: 'accepted' })
+    })
+
+    it.each(['cycle', 'bigint'])('does not poison accepted events after rejecting %s properties', async (kind) => {
+        const owner = await start()
+        await owner.capture('before-invalid')
+        const properties: Record<string, unknown> = {}
+        properties.invalid = kind === 'cycle' ? properties : 1n
+        await Reflect.apply(owner.capture, owner, ['invalid', properties]).catch(() => {})
+        await owner.capture('after-invalid')
+        await owner.flush()
+        expect(batches.map(({ event }) => event)).toEqual(['before-invalid', 'after-invalid'])
+    })
+
+    it('rotates expired sessions in the public getter without treating snapshots as activity', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        const now = Date.now()
+        const owner = await start()
+        const first = owner.getSessionId()
+        vi.setSystemTime(now + 20 * 60 * 1000)
+        expect(owner.getState().sessionId).toBe(first)
+        vi.setSystemTime(now + 31 * 60 * 1000)
+        expect(owner.getState().sessionId).toBe(first)
+        const next = owner.getSessionId()
+        expect(next).not.toBe(first)
+        await owner.capture('new-session')
+        await owner.flush()
+        expect(batches.find(({ event }) => event === 'new-session')?.properties.$session_id).toBe(next)
+    })
+
+    it('rejects automatic redirects on both event and flag requests', async () => {
+        const owner = await start()
+        await owner.reloadFeatureFlagsAsync()
+        await owner.capture('configured-host-only')
+        await owner.flush()
+        expect(mock.fetch.mock.calls).toHaveLength(2)
+        for (const [, options] of mock.fetch.mock.calls) expect(options?.redirect).toBe('error')
+    })
+
+    it.each([400, 407, 503])(
+        'releases an unconsumed final HTTP %i response at its diagnostic deadline',
+        async (status) => {
+            vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+            const cancelled = vi.fn()
+            const owner = await start({ requestTimeout: 100 })
+            mock.fetch.mockImplementationOnce(
+                async () => new Response(new ReadableStream({ cancel: cancelled }), { status })
+            )
+            await owner.capture('failed-response')
+            await owner.flush().catch(() => {})
+            expect(cancelled).not.toHaveBeenCalled()
+            await vi.advanceTimersByTimeAsync(101)
+            expect(cancelled).toHaveBeenCalledTimes(1)
+        }
+    )
+
+    it('preserves lazy HTTP diagnostic reads within the request deadline', async () => {
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+        let failure: unknown
+        const owner = await start({
+            requestTimeout: 100,
+            onError: (error: unknown) => {
+                failure = error
+            },
+        })
+        mock.fetch.mockResolvedValueOnce(new Response('request diagnostic', { status: 400 }))
+        await owner.capture('diagnostic')
+        await owner.flush().catch(() => {})
+        expect(failure).toBeInstanceOf(Error)
+        const diagnostic = Reflect.get(Object(failure), 'text')
+        await expect(diagnostic).resolves.toBe('request diagnostic')
+        await vi.advanceTimersByTimeAsync(101)
+    })
+
+    it('normalizes each cached flag payload only linearly when building a state snapshot', async () => {
+        const owner = await start()
+        const count = 40
+        const flags = Object.fromEntries(Array.from({ length: count }, (_, i) => ['flag-' + i, true]))
+        const payloads = Object.fromEntries(
+            Array.from({ length: count }, (_, i) => ['flag-' + i, JSON.stringify({ value: i })])
+        )
+        mock.fetch.mockResolvedValueOnce(
+            new Response(JSON.stringify({ featureFlags: flags, featureFlagPayloads: payloads }))
+        )
+        await owner.reloadFeatureFlagsAsync()
+        const parse = vi.spyOn(JSON, 'parse')
+        const state = owner.getState()
+        const payloadReads = parse.mock.calls.filter(
+            ([value]) => typeof value === 'string' && value.startsWith('{"value":')
+        ).length
+        parse.mockRestore()
+        expect(Object.keys(state.featureFlags)).toHaveLength(count)
+        expect(state.featureFlagPayloads['flag-0']).toEqual({ value: 0 })
+        expect(payloadReads).toBeLessThanOrEqual(count * 3)
+    })
+
     it.each(['capture', 'identify'] as const)(
         'accepts %s after more than 100 repeated reads through the real renderer and owner',
         async (operation) => {
