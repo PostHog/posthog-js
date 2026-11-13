@@ -135,7 +135,7 @@ export const PARITY_FLAGS: FlagSpec[] = [
   },
 ]
 
-const FAILED_FLAG: FlagSpec = {
+export const FAILED_FLAG: FlagSpec = {
   key: 'failed',
   enabled: false,
   variant: null,

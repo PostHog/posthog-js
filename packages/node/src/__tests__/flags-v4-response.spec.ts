@@ -135,8 +135,8 @@ describe('the /flags?v=4 response', () => {
 
   it('vendors the contract fixtures unchanged from the recorded release', () => {
     const source = load('SOURCE.json')
-    expect(source.release).toBe('1.29.0')
-    expect(source.contract_version).toBe('9.0.0')
+    expect(source.release).toBe('1.30.0')
+    expect(source.contract_version).toBe('10.0.0')
     for (const [name, entry] of Object.entries<any>(source.files)) {
       const digest = createHash('sha256')
         .update(readFileSync(FIXTURES + name))

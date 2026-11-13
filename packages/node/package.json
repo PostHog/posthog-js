@@ -59,6 +59,7 @@
     "@types/react": "catalog:",
     "esbuild": "^0.25.0",
     "@vitest/coverage-v8": "catalog:",
+    "ajv": "^8.18.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "rxjs": "^7.8.0",
