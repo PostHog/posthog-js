@@ -47,6 +47,7 @@ import { getRequestHeaders } from './request-headers'
 import {
   deriveSessionIdFromMCPSession,
   getSessionInfo,
+  instanceSessionSource,
   isModernEraRequest,
   newSessionId,
   resolveSession,
@@ -1240,11 +1241,13 @@ export async function handleInitializeRequest(
 
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
   const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
-  // The request itself carries no token yet, so the minted id is taken as is:
-  // resolving it would give this token-less HTTP request a fresh id instead.
-  const { sessionId, source: sessionSource } = mintedSessionId
-    ? { sessionId: mintedSessionId, source: 'transport' as const }
-    : resolveSession(server, extra, undefined, request)
+  const resolved = resolveSession(server, extra, undefined, request)
+  // The request itself carries no token yet, so resolving it lands on step 4's
+  // fresh id. When nothing outranked that, the session is the one just minted.
+  const { sessionId, source: sessionSource } =
+    mintedSessionId && resolved.source === 'generated'
+      ? { sessionId: mintedSessionId, source: instanceSessionSource(data) }
+      : resolved
   // Snapshot before identify, metadata, or the initialize handler can yield to
   // another request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)

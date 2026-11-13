@@ -1,3 +1,4 @@
+import { deriveSessionIdFromConversation } from '../extensions/session'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import {
   CallToolRequestSchema,
@@ -117,6 +118,16 @@ describe('Stateless session minting', () => {
     // Negotiated spec version off the real SDK initialize response (echoes the
     // requested version, which the SDK supports).
     expect(initEvents[0].properties.$mcp_protocol_version).toBe('2025-06-18')
+  })
+
+  it("puts $mcp_initialize in the host's session, not the minted one, when options.sessionId answers", async () => {
+    const { server } = createPod('pod-host-session', { sessionId: () => 'host-chat-1' })
+
+    expect(decodeSessionId(await mintToken(server))).not.toBeNull()
+
+    const initEvents = eventCapture.findCapturesByEvent('$mcp_initialize')
+    expect(initEvents).toHaveLength(1)
+    expect(initEvents[0].properties.$session_id).toBe(deriveSessionIdFromConversation('host-chat-1'))
   })
 
   it('mints through a getter-only wrapper transport (Node StreamableHTTP shape)', async () => {
@@ -296,7 +307,7 @@ describe('Stateless session minting', () => {
     await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
     // A later request with no session header falls back to in-memory session state;
     // the negotiated version persisted at initialize must still be stamped.
-    // With no session, the version comes from the header every 2025-11-25 request
+    // With no session, the version comes from the header every request since 2025-06-18
     // carries: an unbound handshake on a shared HTTP instance identifies no one.
     await invokeHandler(
       lowLevel,
