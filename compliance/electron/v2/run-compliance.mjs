@@ -1,7 +1,6 @@
 // Native macOS + OrbStack hybrid. This network is deliberately not claimed hermetic.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { once } from 'node:events'
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { join, resolve } from 'node:path'
@@ -49,6 +48,7 @@ const command = (milliseconds, args, name) => {
     }
 }
 let adapter,
+    adapterClosed,
     lines,
     created = false
 let result = 1
@@ -103,6 +103,7 @@ try {
         env: { ...process.env, POSTHOG_ELECTRON_CONSUMER: consumer, HOST: '127.0.0.1', PORT: '0' },
         stdio: ['ignore', 'pipe', 'pipe'],
     })
+    adapterClosed = new Promise((resolveClose) => adapter.once('close', resolveClose))
     const log = []
     adapter.stdout.on('data', (data) => log.push(data.toString()))
     adapter.stderr.on('data', (data) => log.push(data.toString()))
@@ -189,10 +190,9 @@ try {
     result = run === 0 && check === 0 && selected > 0 && executed > 0 ? 0 : 1
 } finally {
     if (adapter) {
-        const exited = once(adapter, 'close')
         adapter.kill('SIGTERM')
         const kill = setTimeout(() => adapter.kill('SIGKILL'), 5000)
-        await exited
+        await adapterClosed
         clearTimeout(kill)
         lines?.close()
     }

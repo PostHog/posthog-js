@@ -1,11 +1,63 @@
 import { test, mock } from 'node:test'
 import { EventEmitter } from 'node:events'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import { Fixture, startServer, protocol } from './server.mjs'
 import { mockOrigin } from './network-policy.mjs'
+
+test(
+    'hybrid runner records failure when the adapter closes both streams before startup exit',
+    { skip: process.platform !== 'darwin' },
+    async () => {
+        const directory = await mkdtemp(join(tmpdir(), 'electron-runner-startup-'))
+        const consumer = join(directory, 'consumer')
+        const report = join(directory, 'report')
+        const preload = join(directory, 'exit-adapter.mjs')
+        try {
+            await mkdir(consumer)
+            await writeFile(join(consumer, 'build.json'), '{}')
+            await writeFile(
+                preload,
+                `if (process.argv[1]?.endsWith('/server.mjs')) {
+            process.stdout.destroy()
+            process.stderr.destroy()
+            await new Promise((resolve) => setTimeout(resolve, 50))
+            process.exit(42)
+        }`
+            )
+            const result = spawnSync(
+                process.execPath,
+                [
+                    fileURLToPath(new URL('./run-compliance.mjs', import.meta.url)),
+                    'electron-main',
+                    'supplemental',
+                    report,
+                ],
+                {
+                    cwd: fileURLToPath(new URL('../../../', import.meta.url)),
+                    env: {
+                        ...process.env,
+                        POSTHOG_ELECTRON_CONSUMER: consumer,
+                        NODE_OPTIONS: `--import=${pathToFileURL(preload).href}`,
+                    },
+                    encoding: 'utf8',
+                    timeout: 2000,
+                }
+            )
+            assert.equal(result.error, undefined, result.stderr)
+            assert.equal(result.status, 1)
+            assert.match(result.stderr, /Adapter exited before startup/)
+            assert.equal(await readFile(join(report, 'wrapper.exit'), 'utf8'), '1\n')
+            await assert.rejects(readFile(join(report, 'network-create.exit')), { code: 'ENOENT' })
+        } finally {
+            await rm(directory, { recursive: true, force: true })
+        }
+    }
+)
 
 test('mockOrigin rejects live hosts, credentials, missing ports and non-HTTP inputs', () => {
     for (const value of [
