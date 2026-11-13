@@ -1,6 +1,8 @@
 import { isBoolean, isNull, isNullish, isNumber, isObject, isString } from '@posthog/core'
-import type { FeatureFlagDetail, FeatureFlagMetadata, JsonType } from '@posthog/types'
+import type { FeatureFlagDetail } from '@posthog/types'
 import type { FlagsResponseFormat } from './feature-flags'
+import { configVersion2FlagEvents } from './flag-events'
+import { legacyValueOf, type FlagRecordValue, type TypedFlagDetail } from './typed-flag-detail'
 import type { FlagsResponse } from './types/feature-flags'
 
 /**
@@ -20,35 +22,7 @@ import type { FlagsResponse } from './types/feature-flags'
  * are internal: no public type declares them. A stored record without `value` has no typed value.
  */
 
-/** A flag's typed value. `null` means the flag has no value. */
-export type FlagRecordValue = boolean | string | number | { [key: string]: JsonType } | null
-
-/** The stored rendering of a typed flag record: the legacy members plus the typed ones. */
-export type TypedFlagDetail = Omit<FeatureFlagDetail, 'metadata'> & {
-    /** The typed value. `null` for a failed record, whatever it carried. */
-    value: FlagRecordValue
-    metadata:
-        | (Omit<FeatureFlagMetadata, 'has_experiment'> & {
-              has_experiment: boolean | undefined
-              /** The flag's configuration format. */
-              config_version: number | undefined
-              /** The rule that produced the result. */
-              rule_type: string | undefined
-              rule_id: string | undefined
-              /** The assigned variant. */
-              variant_key: string | undefined
-              forced_variant: boolean | undefined
-          })
-        | undefined
-}
-
-/**
- * The typed record of a stored flag detail, or `undefined` when the detail has none: it came from
- * a server that does not serve v4, from an older SDK version, from bootstrap or `updateFlags`, or
- * its record could not be read.
- */
-export const typedFlagDetailOf = (detail: FeatureFlagDetail | undefined): TypedFlagDetail | undefined =>
-    isObject(detail) && 'value' in detail ? (detail as unknown as TypedFlagDetail) : undefined
+export { typedFlagDetailOf, type FlagRecordValue, type TypedFlagDetail } from './typed-flag-detail'
 
 // Thrown for a known field with the wrong JSON type. Any throw makes only its own record unreadable.
 const UNREADABLE = {}
@@ -131,12 +105,13 @@ const readTypedRecord = (key: string, raw: unknown): TypedFlagDetail => {
     const failed = record.failed === true
     const value = (failed ? null : sent) as FlagRecordValue
     const isJsonValue = isNumber(value) || isObject(value)
+    const legacyValue = legacyValueOf(value)
 
     const detail = {
         key,
-        enabled: isJsonValue || isString(value) || value === true,
+        enabled: legacyValue !== false,
         // `null`, not `undefined`, for a flag without a variant: a v2 record carries `null` there.
-        variant: isString(value) ? value : null,
+        variant: isString(legacyValue) ? legacyValue : null,
         value,
         reason: readFields((raw as Record<string, unknown>).reason, REASON_FIELDS),
         metadata:
@@ -191,7 +166,12 @@ export const readFlagRecords = (
 }
 
 /**
- * Requests `/flags?v=4` and reads its typed records. A client opts in by returning it from the
- * flags extension's `_responseFormat`.
+ * Requests `/flags?v=4`, reads its typed records, and builds the flag events of the config version
+ * 2 records among them. A client opts in by returning it from the flags extension's
+ * `_responseFormat`.
  */
-export const flagsResponseV4: FlagsResponseFormat = { version: 4, read: readFlagRecords }
+export const flagsResponseV4: FlagsResponseFormat = {
+    version: 4,
+    read: readFlagRecords,
+    flagEvents: configVersion2FlagEvents,
+}

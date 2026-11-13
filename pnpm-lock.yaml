@@ -551,6 +551,9 @@ importers:
       '@testing-library/preact':
         specifier: 'catalog:'
         version: 3.2.4(preact@10.29.3)
+      ajv:
+        specifier: ^8.18.0
+        version: 8.20.0
       jsdom:
         specifier: 'catalog:'
         version: 26.1.0

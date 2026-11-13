@@ -1931,6 +1931,16 @@ export class PostHog implements PostHogInterface {
             properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
         }
 
+        // A config version 2 flag event never carries some properties, and the flags extension names
+        // them for the event it is capturing. They are dropped here, after the super properties are
+        // merged, so a registered property cannot add them.
+        const flagEventCapture = this.featureFlags?.flagEventCapture?.(properties)
+        if (flagEventCapture) {
+            each(flagEventCapture.omit, (name) => {
+                delete data.properties[name]
+            })
+        }
+
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled
         if (event_name === EVENT_PAGEVIEW && this.config.__preview_capture_bot_pageviews && isBot) {
             data.event = '$bot_pageview'
@@ -2039,7 +2049,14 @@ export class PostHog implements PostHogInterface {
         // before_send runs after this filter and may deliberately re-add stripped properties;
         // the SDK itself must not enrich beyond allowlisted keys past this point.
         if (shouldSendMinimalFlagCalledEvent) {
-            data.properties = minimizeFlagCalledEventProperties(data.properties, FLAG_CALLED_TRANSPORT_PROPERTY_KEYS)
+            // A config version 2 call also keeps its attribution. A config version 1 call keeps the
+            // shared allowlist alone, even when a super property is named like the attribution.
+            data.properties = minimizeFlagCalledEventProperties(
+                data.properties,
+                flagEventCapture
+                    ? FLAG_CALLED_TRANSPORT_PROPERTY_KEYS.concat(flagEventCapture.keep)
+                    : FLAG_CALLED_TRANSPORT_PROPERTY_KEYS
+            )
         }
 
         if (event_name === SurveyEventName.DISMISSED || event_name === SurveyEventName.SENT) {
@@ -2078,7 +2095,8 @@ export class PostHog implements PostHogInterface {
         }
 
         if (!isNullish(this.config.before_send)) {
-            const beforeSendResult = this._runBeforeSend(data)
+            // A hook that throws is a failed capture of a flag event, not a discard.
+            const beforeSendResult = this._runBeforeSend(data, flagEventCapture?.failed)
             if (!beforeSendResult) {
                 return
             } else {
@@ -5330,7 +5348,9 @@ export class PostHog implements PostHogInterface {
         return migrateConfigField(originalConfig, 'advanced_disable_flags', 'advanced_disable_decide', false, logger)
     }
 
-    private _runBeforeSend(data: CaptureResult): CaptureResult | null {
+    // `onError` is called when a hook throws. A hook that returns null discards the event, which
+    // is not an error.
+    private _runBeforeSend(data: CaptureResult, onError?: () => void): CaptureResult | null {
         if (isNullish(this.config.before_send)) {
             return data
         }
@@ -5363,6 +5383,7 @@ export class PostHog implements PostHogInterface {
                 }
             } catch (e) {
                 logger.error(`Error in beforeSend function for event '${data.event}':`, e)
+                onError?.()
                 return null
             }
         }
