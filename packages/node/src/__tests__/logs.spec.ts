@@ -89,7 +89,37 @@ describe('PostHog Node.js logs', () => {
     expect(ids?.traceId).toMatch(/^[0-9a-f]{32}$/)
     expect(inside.traceId).toBe(ids?.traceId)
     expect(inside.spanId).toBe(ids?.spanId)
+    // A started span is sampled, so the traceparent flags (01) carry over.
+    expect(inside.flags).toBe(1)
     expect(outside.traceId).toBeUndefined()
+    expect(outside.spanId).toBeUndefined()
+    expect(outside.flags).toBeUndefined()
+  })
+
+  it('attaches no span ids when tracing is not configured', async () => {
+    create()
+    posthog.withSpan('work', () => {
+      posthog.logger.info('no tracer')
+    })
+    await posthog.flush()
+    const [record] = records()
+    expect(record.traceId).toBeUndefined()
+    expect(record.spanId).toBeUndefined()
+    expect(record.flags).toBeUndefined()
+  })
+
+  it('drops records past the rate cap until the window resets', async () => {
+    create({ logs: { rateCap: { maxLogs: 2, windowMs: 1000 } } })
+    for (let i = 0; i < 5; i++) {
+      posthog.logger.info(`burst ${i}`)
+    }
+    await posthog.flush()
+    expect(records().map((r) => r.body.stringValue)).toEqual(['burst 0', 'burst 1'])
+
+    await vi.advanceTimersByTimeAsync(1000)
+    posthog.logger.info('next window')
+    await posthog.flush()
+    expect(records().map((r) => r.body.stringValue)).toEqual(['burst 0', 'burst 1', 'next window'])
   })
 
   it('lets explicit trace ids win over the active span', async () => {
