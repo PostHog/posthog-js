@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
-import { createElement, StrictMode } from 'react'
+import { createElement, StrictMode, useEffect, useLayoutEffect, useState } from 'react'
 import { renderToString } from 'react-dom/server'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { PostHog } from '../renderer'
@@ -260,6 +260,122 @@ describe('Electron React bindings with a real renderer facade', () => {
         act(() => h.broadcast({ distinctId: 'ignored', featureFlags: { experiment: 'ignored' } }))
         expect(values().id).toBe('anonymous')
         expect(values().variant).toBe('control')
+    })
+
+    it.each(['unmount', 'update'] as const)(
+        'does not expose an unrendered flag after a layout-effect broadcast and %s',
+        async (action) => {
+            const h = await harness()
+            const rendered: (string | boolean | undefined)[] = []
+            function Probe() {
+                const variant = useFeatureFlagVariantKey('experiment')
+                const enabled = useFeatureFlagEnabled('experiment')
+                rendered.push(variant)
+                return createElement('output', null, `${variant}:${enabled}`)
+            }
+            function LayoutUpdate() {
+                const [mounted, setMounted] = useState(true)
+                useLayoutEffect(() => {
+                    h.broadcast({ featureFlags: { experiment: 'test' }, flagRevision: 2 })
+                    if (action === 'unmount') setMounted(false)
+                }, [])
+                return mounted ? createElement(Probe) : null
+            }
+            const view = render(createElement(PostHogProvider, { client: h.client }, createElement(LayoutUpdate)))
+            await settle(h.client)
+            if (action === 'unmount') {
+                expect(rendered).toEqual(['control'])
+                expect(view.container.textContent).toBe('')
+                expect(h.flags()).toEqual([])
+            } else {
+                expect(rendered).toContain('test')
+                expect(view.container.textContent).toBe('test:true')
+                expect(h.flags().map((request) => request.command)).toEqual([
+                    { type: 'flag', key: 'experiment', flagRevision: 2, value: 'test' },
+                ])
+            }
+        }
+    )
+
+    it.each([
+        { name: 'object', payload: { color: 'blue' } },
+        { name: 'array', payload: ['blue', false] },
+    ])(
+        'keeps $name payload references stable for consumer effects, rerenders and unrelated SDK state',
+        async ({ payload }) => {
+            const h = await harness({ featureFlagPayloads: { experiment: payload } })
+            const effects: unknown[] = []
+            let current: unknown
+            function PayloadConsumer() {
+                const value = useFeatureFlagPayload('experiment')
+                const [config, setConfig] = useState<unknown>()
+                current = value
+                useEffect(() => {
+                    effects.push(value)
+                    // Bound a broken hook's feedback loop so the identity assertion can diagnose it.
+                    if (effects.length < 5) setConfig(value)
+                }, [value])
+                return createElement('output', null, JSON.stringify(config))
+            }
+            const content = () => createElement(PostHogProvider, { client: h.client }, createElement(PayloadConsumer))
+            const view = render(content())
+            expect(view.container.textContent).toBe(JSON.stringify(payload))
+            expect(effects).toHaveLength(1)
+            const initial = current
+            view.rerender(content())
+            expect(current).toBe(initial)
+            act(() => h.broadcast({ sessionId: 'another-session' }))
+            expect(current).toBe(initial)
+            expect(effects).toHaveLength(1)
+            await settle(h.client)
+            expect(h.flags()).toEqual([])
+            act(() => h.broadcast({ flagRevision: 2, featureFlagPayloads: { experiment: { color: 'green' } } }))
+            expect(current).toEqual({ color: 'green' })
+            expect(current).not.toBe(initial)
+            expect(effects).toHaveLength(2)
+        }
+    )
+
+    it.each([{ generation: 1 }, { optedOut: true }])(
+        'skips stale exposure when a layout effect changes authorization before unmount: %j',
+        async (change) => {
+            const h = await harness()
+            function LayoutUnmount() {
+                const [mounted, setMounted] = useState(true)
+                useLayoutEffect(() => {
+                    h.broadcast(change)
+                    setMounted(false)
+                }, [])
+                return mounted ? createElement(Values) : null
+            }
+            render(createElement(PostHogProvider, { client: h.client }, createElement(LayoutUnmount)))
+            await settle(h.client)
+            expect(h.flags()).toEqual([])
+        }
+    )
+
+    it('switches payload keys and clients without reusing an equal-revision snapshot', async () => {
+        const first = await harness({ featureFlagPayloads: { experiment: { color: 'blue' }, off: [1, false] } })
+        const second = await harness({ featureFlagPayloads: { experiment: { color: 'red' } } })
+        let payload: unknown
+        function Payload({ flag }: { flag: string }) {
+            payload = useFeatureFlagPayload(flag)
+            return null
+        }
+        const content = (client: PostHog, flag = 'experiment') =>
+            createElement(PostHogProvider, { client }, createElement(Payload, { flag }))
+        const view = render(content(first.client))
+        expect(payload).toEqual({ color: 'blue' })
+        view.rerender(content(first.client, 'off'))
+        expect(payload).toEqual([1, false])
+        view.rerender(content(second.client))
+        expect(payload).toEqual({ color: 'red' })
+        act(() => first.broadcast({ flagRevision: 2, featureFlagPayloads: {} }))
+        expect(payload).toEqual({ color: 'red' })
+        await settle(first.client)
+        await settle(second.client)
+        expect(first.flags()).toEqual([])
+        expect(second.flags()).toEqual([])
     })
 
     it('requires an explicit Electron provider', () => {
