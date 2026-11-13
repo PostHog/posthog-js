@@ -314,6 +314,13 @@ describe('sending email through the component', () => {
         'attachments[0].disposition',
       ],
       ['a field of tracking', { ...ORDER_SHIPPED, tracking: { opens: true, bounces: true } }, 'tracking.bounces'],
+      ['a field named like an object property', { ...ORDER_SHIPPED, constructor: 3 }, 'constructor'],
+      [
+        'a field of an attachment named like an object property',
+        { ...INVOICE_ATTACHED, attachments: [{ ...INVOICE_ATTACHED.attachments[0], toString: 3 }] },
+        'attachments[0].toString',
+      ],
+      ['a field with an empty name', { ...ORDER_SHIPPED, '': 3 }, '[""]'],
     ])('%s is refused before anything is sent or queued', async (_case, email, field) => {
       const refused = {
         code: 'invalid_field',
