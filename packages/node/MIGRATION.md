@@ -62,10 +62,6 @@ Read the checklist first, then the sections that apply to you.
 
 `captureImmediate` also sends to `/i/v1/analytics/events`.
 
-If you self-host PostHog, see the [self-host docs](https://posthog.com/docs/self-host).
-
-An endpoint that isn't served drops every event sent to it. A `404` that lasts through every retry can mean the deployment has no capture v1 route.
-
 If you send events through your own reverse proxy, update it before you upgrade:
 
 - **Forward both routes.** Forward `/i/v1/analytics/events` and `/i/v1/ai/events` to PostHog.
