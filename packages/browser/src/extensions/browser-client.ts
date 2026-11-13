@@ -24,6 +24,7 @@ import { DEVICE_ID } from '../constants'
 import { AutocaptureExtension, FeatureFlagsExtension, LogsExtension, SurveysExtension } from '../extension-tokens'
 import { extendURLParams } from '../request'
 import { now } from '../utils/now'
+import { type ResourceTimingWatch, watchResourceTiming } from '../utils/resource-timing'
 import type { PostHog } from '../posthog-core'
 import type {
     CaptureOptions,
@@ -39,6 +40,12 @@ const FLAGS_REQUEST_DURATION_METRIC = 'posthog.flags.request.duration'
 // Finer than the default bounds between 50ms and 5s, where most browser round trips land.
 // The edges include 150, 300, 500 and 1000 so p95 can be compared with the status page thresholds.
 const FLAGS_REQUEST_DURATION_BOUNDS = [50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]
+// The three parts below add up to the total. Network time comes from the Resource Timing entry.
+const FLAGS_PRE_SEND_DURATION_METRIC = 'posthog.flags.request.pre_send_duration'
+const FLAGS_NETWORK_DURATION_METRIC = 'posthog.flags.request.network_duration'
+const FLAGS_MAIN_THREAD_DURATION_METRIC = 'posthog.flags.request.main_thread_duration'
+// Pre-send and main-thread time are often a few milliseconds, so these bounds add edges below 50ms.
+const FLAGS_SPLIT_DURATION_BOUNDS = [5, 10, 25, ...FLAGS_REQUEST_DURATION_BOUNDS]
 
 // OTel: a 4xx or 5xx response reports its status as the error type. Without a response,
 // the request timed out (an AbortError) or failed for another reason.
@@ -47,6 +54,25 @@ const flagsErrorType = (status: number | undefined, error: unknown): string | un
         return status >= 400 ? String(status) : undefined
     }
     return (error as Error | undefined)?.name === 'AbortError' ? 'timeout' : '_OTHER'
+}
+
+const flagsAttributes = (endpoint: string, response: ApiResponse): MetricAttributes => {
+    const status = response.statusCode || undefined
+    const attributes: MetricAttributes = {
+        'server.address': (convertToURL(endpoint)?.hostname ?? endpoint).replace(/^\[(.*)\]$/, '$1'),
+    }
+    if (status) {
+        attributes['http.response.status_code'] = status
+    }
+    const errorType = flagsErrorType(status, response.error)
+    if (errorType) {
+        attributes['error.type'] = errorType
+    }
+    const timezone = getTimezone()
+    if (timezone) {
+        attributes['client.timezone'] = timezone
+    }
+    return attributes
 }
 
 class BrowserClientKeyValueStore implements KeyValueStore {
@@ -279,44 +305,87 @@ export class BrowserClientAdapter implements Client {
             requestOptions.callback = resolve
             if (target === 'flags' && this.instance.config.metrics?.flags) {
                 let dispatchedAt: number | undefined
+                let resourceTiming: ResourceTimingWatch | undefined
                 requestOptions.onDispatch = () => {
                     dispatchedAt = now()
                 }
+                requestOptions.onSend = (url) => {
+                    resourceTiming = watchResourceTiming(url)
+                }
                 requestOptions.callback = (response) => {
-                    if (!isUndefined(dispatchedAt)) {
-                        this._recordFlagsDuration(endpoint, response, now() - dispatchedAt)
-                    }
                     resolve(response)
+                    if (isUndefined(dispatchedAt)) {
+                        return
+                    }
+                    const startedAt = dispatchedAt
+                    const completedAt = now()
+                    try {
+                        const attributes = flagsAttributes(endpoint, response)
+                        this._recordFlagsHistogram(
+                            FLAGS_REQUEST_DURATION_METRIC,
+                            completedAt - startedAt,
+                            FLAGS_REQUEST_DURATION_BOUNDS,
+                            attributes
+                        )
+                        // Without a response there is no response end to split at.
+                        if (response.statusCode && resourceTiming) {
+                            resourceTiming.take(completedAt, (entry) =>
+                                this._recordFlagsSplit(entry, startedAt, completedAt, attributes)
+                            )
+                            return
+                        }
+                    } catch (e) {
+                        logger.error('Failed to record the /flags request timing', e)
+                    }
+                    resourceTiming?.stop()
                 }
             }
             this.instance._send_request(requestOptions)
         })
     }
 
-    private _recordFlagsDuration(endpoint: string, response: ApiResponse, durationMs: number): void {
-        try {
-            const status = response.statusCode || undefined
-            const attributes: MetricAttributes = {
-                'server.address': (convertToURL(endpoint)?.hostname ?? endpoint).replace(/^\[(.*)\]$/, '$1'),
-            }
-            if (status) {
-                attributes['http.response.status_code'] = status
-            }
-            const errorType = flagsErrorType(status, response.error)
-            if (errorType) {
-                attributes['error.type'] = errorType
-            }
-            const timezone = getTimezone()
-            if (timezone) {
-                attributes['client.timezone'] = timezone
-            }
-            this.instance.metrics?.histogram(FLAGS_REQUEST_DURATION_METRIC, durationMs, {
-                unit: 'ms',
-                attributes,
-                bounds: FLAGS_REQUEST_DURATION_BOUNDS,
-            })
-        } catch (e) {
-            logger.error('Failed to record the /flags request duration', e)
+    private _recordFlagsSplit(
+        entry: PerformanceResourceTiming,
+        dispatchedAt: number,
+        completedAt: number,
+        attributes: MetricAttributes
+    ): void {
+        // A responseEnd before startTime, such as 0, would make network time negative.
+        if (entry.responseEnd < entry.startTime) {
+            return
         }
+        try {
+            const responseEnd = Math.min(entry.responseEnd, completedAt)
+            this._recordFlagsHistogram(
+                FLAGS_PRE_SEND_DURATION_METRIC,
+                entry.startTime - dispatchedAt,
+                FLAGS_SPLIT_DURATION_BOUNDS,
+                attributes
+            )
+            this._recordFlagsHistogram(
+                FLAGS_NETWORK_DURATION_METRIC,
+                responseEnd - entry.startTime,
+                FLAGS_REQUEST_DURATION_BOUNDS,
+                attributes
+            )
+            this._recordFlagsHistogram(
+                FLAGS_MAIN_THREAD_DURATION_METRIC,
+                completedAt - responseEnd,
+                FLAGS_SPLIT_DURATION_BOUNDS,
+                attributes
+            )
+        } catch (e) {
+            logger.error('Failed to record the /flags request timing split', e)
+        }
+    }
+
+    private _recordFlagsHistogram(
+        metric: string,
+        durationMs: number,
+        bounds: number[],
+        attributes: MetricAttributes
+    ): void {
+        // Core passes attributes to `beforeSend` by reference, so each histogram gets its own copy.
+        this.instance.metrics?.histogram(metric, durationMs, { unit: 'ms', attributes: { ...attributes }, bounds })
     }
 }

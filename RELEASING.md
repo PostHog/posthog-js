@@ -85,6 +85,16 @@ The `posthog-js` CLI retains its combined upload mode for compatibility. Workflo
 
 PostHoggers can join [`#alerts-posthog-js`](https://posthog.slack.com/archives/C07HTMN9X47) for release workflow failure notifications.
 
+### Failed or cancelled release
+
+The independent [release failure notification workflow](.github/workflows/release-failure-notification.yml) checks every completed release attempt on `main` and on the `posthog-node-5` maintenance branch, and alerts if a job failed, timed out, or was cancelled. This includes runner startup failures and cancellations with job records. It also alerts when the run did not succeed, no job failed, and an npm publish job (`Publish packages` or `Publish posthog-js`) was never created, for example when GitHub Actions stops a run before the publish jobs start. Maintenance runs skip `Publish posthog-js`, so only `Publish packages` counts there. Once every npm publish job succeeds, alerts describe follow-up problems rather than claiming the release failed, and the workflow alerts if the released Slack notification was skipped. It only acts on runs that a push or a manual dispatch started in this repository.
+
+Cancelled runs with no jobs are ignored, including superseded queued runs and manual cancellations before any job is created. A version-bump failure before any steps ran is also ignored when the rejection-reply step confirms an explicit rejection in the same attempt and no other job failed.
+
+Job inspection retries transient GitHub API failures up to three times. If inspection still fails, it logs the HTTP status or error type and message, then posts a fallback alert with the overall run status and logs link so the release can be checked manually. Error diagnostics stay in the run log, not in the Slack message.
+
+Alerts reply to the approval thread in the release approvals Slack channel. The release workflow preserves the thread timestamp in a run artifact for 30 days, independently of release approval. Failed-job reruns reuse the latest available thread from the same or an earlier attempt. If the timestamp is missing, invalid, or unavailable, the alert falls back to a new channel message, so it does not depend on the approval notification succeeding. The failure message surfaces Slack API errors rather than silently ignoring them. The notification workflow must be present on the default branch to run.
+
 ## Manual S3 recovery
 
 S3 recovery is an exceptional path for repairing a failed or incomplete browser release. If the failure was transient and the original run is still safe to resume, first retry its failed jobs. Use recovery when the original run cannot be completed safely, for example when one regional upload succeeded before the other failed or an existing release is missing immutable assets.

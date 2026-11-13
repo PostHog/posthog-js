@@ -14,11 +14,15 @@ import {
   PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogFeatureFlagsResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogFlagsResponse,
   PostHogMetrics,
   PostHogPersistedProperty,
   PostHogTraces,
+  PostHogLogs,
+  type CaptureLogger,
+  type CaptureLogOptions,
   inertSpan,
   Properties,
   resolveMetricsConfig,
@@ -64,6 +68,20 @@ import {
   FlagCalledEventParams,
 } from './feature-flag-evaluations'
 import {
+  FLAGS_RESPONSE_WITHOUT_TYPED_VALUES_MESSAGE,
+  isUnreadableFlagRecord,
+  ParsedFlagRecord,
+  parsedFlagRecordOf,
+  readFlagRecords,
+} from './flags-response'
+import {
+  applyFlagEventCapture,
+  buildConfigVersion2FlagEvents,
+  FlagEvent,
+  FlagEventCapture,
+  minimizeConfigVersion2FlagCalledProperties,
+} from './flag-events'
+import {
   type FeatureFlagEvaluationContext,
   FeatureFlagsPoller,
   InconclusiveMatchError,
@@ -82,6 +100,7 @@ import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
 import { DEFAULT_EMAIL_REQUEST_MAX_RETRIES, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS, EmailSender } from './emails/emails'
 import type { Emails } from './emails/types'
+import { resolveNodeLogsConfig } from './logs-config'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -92,6 +111,18 @@ const MAX_CACHE_SIZE = 50 * 1000
 const WAITUNTIL_DEBOUNCE_MS = 50
 const WAITUNTIL_MAX_WAIT_MS = 500
 const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
+
+// Internal options of one event's trip through the capture pipeline.
+type PrepareEventOptions = {
+  includeContextProperties?: boolean
+  /** How a config version 2 flag event fixes its properties; see `flag-events.ts`. */
+  flagEvent?: FlagEventCapture
+  /**
+   * Called when capture fails: `before_send` throws, or the event cannot be prepared or queued.
+   * Not called when `before_send` discards the event.
+   */
+  onCaptureFailed?: () => void
+}
 
 // Process-wide dedup for deprecation warnings — without this, calling a deprecated
 // method in a loop would spam logs. Matches Python's `warnings.warn` default-dedup behavior.
@@ -173,6 +204,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
   private _traces?: PostHogTraces
+  private _logs?: PostHogLogs
+  private _captureLogger?: CaptureLogger
+  /** Resolved once on first event; `null` means no service name is configured. */
+  private _serviceName?: string | null
   private _spanContext?: SpanContextManager
 
   private readonly captureMode: CaptureMode
@@ -194,9 +229,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   // flag-definition loads) — both derive from the same per-team server config and converge.
   private _minimalFlagCalledEvents: boolean = false
 
+  // Whether this client has logged that /flags sent records without typed values.
+  private _loggedFlagsResponseWithoutTypedValues = false
+
   // Insertion-ordered LRU of the `$feature_flag_called` keys already reported per distinct id.
   // Map iteration order is insertion order, so the first entry is always the least recently used.
   private _distinctIdHasSentFlagCalls: Map<string, Set<string>>
+
+  // The `$experiment_exposure` keys already reported per distinct id, kept apart from the
+  // `$feature_flag_called` keys so that a reported call never suppresses its exposure. Same bound
+  // and eviction. Shutdown clears it.
+  private _experimentExposuresReported: Map<string, Set<string>> = new Map()
 
   /**
    * Snapshot of the `$feature_flag_called` dedupe state, keyed by distinct id.
@@ -342,14 +385,23 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   private _flushEventsAndSpans(skipThrottledSpans = false): Promise<void> {
     const events = this.flushWithPendingPromises()
-    if (!this._traces || (skipThrottledSpans && this._traces.throttled)) {
+    const others: Promise<unknown>[] = []
+    if (this._traces && !(skipThrottledSpans && this._traces.throttled)) {
+      others.push(this._traces.flush().catch(() => {}))
+    }
+    // Same as spans: an automatic flush leaves logs alone while the endpoint's Retry-After window is open.
+    if (this._logs && !(skipThrottledSpans && this._logs.throttled)) {
+      // Not `flush()`: it clears the logs timer, and a failure here must re-arm it.
+      others.push(this._logs.flushInBackground())
+    }
+    if (others.length === 0) {
       return events
     }
     // Settled, not `all`: `all` rejects the moment the event flush does, and a
     // serverless host that treats this promise as the end of the invocation can
-    // freeze it with the span request still open. The events rejection is still
-    // the one the caller sees.
-    return allSettled([events, this._traces.flush().catch(() => {})]).then(([eventsResult]) => {
+    // freeze it with the span or log request still open. The events rejection is
+    // still the one the caller sees.
+    return allSettled([events, ...others]).then(([eventsResult]) => {
       if (eventsResult.status === 'rejected') {
         throw eventsResult.reason
       }
@@ -380,6 +432,23 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
     return flushPromise
+  }
+
+  /**
+   * Hands a metrics flush to `waitUntil` so a serverless invocation does not end before the flush timer fires.
+   * Request-triggered flushes share one queued send and wait out a metrics backoff.
+   * @internal
+   */
+  _flushMetricsWithinInvocation(): void {
+    const waitUntil = this.options.waitUntil
+    if (!waitUntil || !this._metrics) {
+      return
+    }
+    try {
+      waitUntil(this._metrics.flushCoalesced().catch(() => {}))
+    } catch {
+      // waitUntil may throw outside request context
+    }
   }
 
   private scheduleDebouncedFlush(): void {
@@ -689,14 +758,106 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * The `posthog.emails` API: sends transactional email from PostHog email templates, and reads
-   * the status of each email it sent.
+   * The `posthog.logs` pipeline, built on first use.
+   */
+  private get _logsPipeline(): PostHogLogs {
+    if (!this._logs) {
+      const config = resolveNodeLogsConfig(this.options.logs, {
+        serviceName: this._resolveServiceName() ?? undefined,
+        hostResourceAttributes: this.hostResourceAttributes(),
+      })
+      this._logs = new PostHogLogs(
+        this,
+        config,
+        this._logger,
+        () => this._logContext(),
+        (fn) => fn(),
+        undefined,
+        undefined,
+        () => this.disabled || this.optedOut
+      )
+    }
+    return this._logs
+  }
+
+  /** Identity attached to each log record, from the current `withContext`. */
+  private _logContext(): { distinctId?: string; sessionId?: string } {
+    const context = this.context?.get()
+    return { distinctId: context?.distinctId, sessionId: context?.sessionId }
+  }
+
+  /**
+   * Captures one structured log record to PostHog Logs. Attaches the active span's
+   * ids and the `withContext` person and session unless the options set their own.
    *
-   * Needs `secretKey`, a project secret API key with the `transactional_email:write` scope (the
-   * "Send transactional email" preset). A key with only `transactional_email:read` can read
-   * statuses but not send. Keys made with `hog_flow:write` still work. Requests go to `appHost`,
-   * or to the PostHog Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and
-   * do not reject.
+   * {@label Logs}
+   *
+   * @example
+   * ```ts
+   * client.captureLog({ body: 'payment failed', level: 'error', attributes: { code: 'E001' } })
+   * ```
+   */
+  captureLog(options: CaptureLogOptions): void {
+    let record = options
+    if (!options.trace_id && !options.span_id) {
+      const span = this.getActiveSpan()
+      const traceId = span?.traceId
+      const spanId = span?.spanId
+      if (traceId && spanId) {
+        const flags = parseInt(span?.traceparent()?.split('-')[3] ?? '', 16)
+        record = {
+          ...options,
+          trace_id: traceId,
+          span_id: spanId,
+          ...(options.trace_flags === undefined && !Number.isNaN(flags) && { trace_flags: flags }),
+        }
+      }
+    }
+    this._logsPipeline.captureLog(record)
+    // A handler that only logs still has to hold the invocation open.
+    this.scheduleDebouncedFlush()
+  }
+
+  /**
+   * Per-level logger: `client.logger.info('message', { attributes })`. Equivalent to
+   * `captureLog` at the matching severity.
+   *
+   * {@label Logs}
+   *
+   * @example
+   * ```ts
+   * client.logger.info('checkout completed', { order_id: 'ord_789' })
+   * client.logger.error('payment failed', { code: 'E001' })
+   * ```
+   */
+  public get logger(): CaptureLogger {
+    if (!this._captureLogger) {
+      const log =
+        (level: NonNullable<CaptureLogOptions['level']>) =>
+        (body: string, attributes?: CaptureLogOptions['attributes']): void =>
+          this.captureLog({ body, level, attributes })
+      this._captureLogger = {
+        trace: log('trace'),
+        debug: log('debug'),
+        info: log('info'),
+        warn: log('warn'),
+        error: log('error'),
+        fatal: log('fatal'),
+      }
+    }
+    return this._captureLogger
+  }
+
+  /**
+   * The `posthog.emails` API: sends transactional email from PostHog email templates, reads
+   * the status of each email it sent, and sets a recipient's topic preferences.
+   *
+   * Needs `secretKey`, a project secret API key. `send` needs the `transactional_email:write` scope
+   * (the "Send transactional email" preset), and `get` needs `transactional_email:read` or
+   * `transactional_email:write`. `setPreferences` needs the
+   * `messaging_preference:write` scope, which cannot send email. Keys made with `hog_flow:write` still
+   * work for all three. Requests go to `appHost`, or to the PostHog Cloud app host of `host`. `send`,
+   * `get` and `setPreferences` resolve to `{ data, error }` and do not reject.
    * `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
    * and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
    * returns the error `client_closed`.
@@ -716,6 +877,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * }
    *
    * const status = await client.emails.get(data.id) // later, for example from a job
+   *
+   * // From a preference center: opt out of one topic, keep the rest
+   * await client.emails.setPreferences({ to: 'user@example.com', topics: { newsletter: false } })
    * ```
    *
    * {@label Emails}
@@ -927,6 +1091,32 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * posthog-node and posthog-edge request the v4 `/flags` response, which carries one typed
+   * value per flag plus its reason and rule metadata. A server that does not serve v4 answers
+   * with the older record, which is read as before. Other SDKs on the shared core keep `v=2`.
+   *
+   * The reader reads each flag record into its legacy rendering and keeps the parsed record,
+   * then reads the rest of the response with the shared reader.
+   */
+  protected override getFlagsResponseFormat(): {
+    version: 4
+    read: (body: unknown) => PostHogFeatureFlagsResponse
+  } {
+    const shared = super.getFlagsResponseFormat()
+    return {
+      version: 4,
+      read: (response) => {
+        const { body, withoutTypedValues } = readFlagRecords(response)
+        if (withoutTypedValues && !this._loggedFlagsResponseWithoutTypedValues) {
+          this._loggedFlagsResponseWithoutTypedValues = true
+          this._logger.info(FLAGS_RESPONSE_WITHOUT_TYPED_VALUES_MESSAGE)
+        }
+        return shared.read(body)
+      },
+    }
+  }
+
+  /**
    * Returns the common properties attached to every captured event.
    *
    * @remarks
@@ -1032,12 +1222,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     type: string,
     props: EventMessage,
     immediate: boolean,
-    prepareOptions?: { includeContextProperties?: boolean },
+    prepareOptions?: PrepareEventOptions,
     explicitRoute?: string
   ): Promise<void> {
     return this.addPendingPromise(
       this._prepareEventMessage(props, prepareOptions)
         .then(({ distinctId, event, properties, options }) => {
+          // The queue drops the event without an error when the client was disabled or opted out
+          // while the event was prepared, so a flag event's dedupe key is released here.
+          if (this.disabled || this.optedOut) {
+            prepareOptions?.onCaptureFailed?.()
+          }
           const captureOptions: PostHogCaptureOptions = {
             timestamp: options.timestamp,
             disableGeoip: options.disableGeoip,
@@ -1056,8 +1251,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             : this.enqueue(type, message, captureOptions, explicitRoute)
         })
         .catch((err) => {
+          // A `before_send` discard rejects with null; it is not a failure.
           if (err) {
             console.error(err)
+            prepareOptions?.onCaptureFailed?.()
           }
         })
     )
@@ -1643,6 +1840,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let flagVersion: number | undefined = undefined
     let flagReason: string | undefined = undefined
     let flagHasExperiment: boolean | undefined = undefined
+    // The parsed /flags record when it supplied the result. Only such a read can carry config
+    // version 2 attribution and send $experiment_exposure.
+    let flagRecord: ParsedFlagRecord | undefined = undefined
 
     // Try local evaluation first
     const localEvaluationEnabled = this.featureFlagsPoller !== undefined
@@ -1740,9 +1940,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             reason: flagReason,
             reasonCode: flagDetail.reason?.code,
           }
+          flagRecord = parsedFlagRecordOf(flagDetail)
         }
 
-        if (errors.length > 0) {
+        if (flagDetail !== undefined && isUnreadableFlagRecord(flagDetail)) {
+          // The record had a known field with the wrong JSON type, so the flag reads as disabled.
+          // A single-flag read reports what a failed /flags request reports: an unknown error
+          // and no request details.
+          featureFlagError = FeatureFlagError.UNKNOWN_ERROR
+          requestId = undefined
+          evaluatedAt = undefined
+        } else if (errors.length > 0) {
           featureFlagError = errors.join(',')
         }
       }
@@ -1785,6 +1993,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         groups,
         disableGeoip,
         properties,
+        record: flagRecord,
       })
     }
 
@@ -2346,10 +2555,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * **Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the
    * first time each flag value is read for a user. Experiments use these events as exposures.
+   * When a remotely evaluated config version 2 flag assigns an experiment variant, the read also
+   * sends `$experiment_exposure`, once per user, groups, flag, rule and variant.
    * The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass
    * `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override
    * it, so one snapshot can serve both experiment flags and flags that should send no events.
-   * `getFlagPayload()` never sends events.
+   * The option governs both events. `getFlagPayload()` never sends events.
    *
    * **Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying
    * `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation
@@ -2544,6 +2755,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             reason: detail.reason?.description ?? detail.reason?.code,
             locallyEvaluated: false,
             hasExperiment: detail.metadata?.has_experiment,
+            parsed: parsedFlagRecordOf(detail),
           }
         }
       }
@@ -2574,6 +2786,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       for (const [key, payload] of Object.entries(this._payloadOverrides)) {
         const existing = records[key]
         if (existing) {
+          // A payload override keeps the parsed record, because the record still supplied the
+          // flag's value. A value override, above, drops it.
           records[key] = { ...existing, payload }
         }
       }
@@ -2626,41 +2840,46 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Fires a `$feature_flag_called` event for the given flag if the (distinctId, flag, response)
-   * triple hasn't already been reported for this client. Shared by the single-flag evaluation
-   * path and `FeatureFlagEvaluations.isEnabled() / getFlag()` so both paths dedupe identically.
+   * Sends the flag events of a flag read: `$feature_flag_called` and, for a config version 2
+   * experiment split, `$experiment_exposure`. Shared by the single-flag evaluation path and
+   * `FeatureFlagEvaluations.isEnabled() / getFlag()` so both paths report and dedupe identically.
+   *
+   * `$feature_flag_called` is sent if the (distinctId, flag, response, groups) tuple hasn't already
+   * been reported for this client. When `params.record` is a config version 2 record, both events
+   * are built from it in one step (see `flag-events.ts`): the call gains the record's attribution
+   * and its tuple gains the attribution too, and a complete experiment split also sends
+   * `$experiment_exposure`, deduped in its own namespace. Config version 1 events are sent and
+   * deduped as before.
    *
    * @internal
    */
   protected _captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void {
-    const { distinctId, key, response, groups, disableGeoip, properties } = params
+    const { distinctId, key, response, groups, disableGeoip, properties, record } = params
+
+    const configVersion2Events = buildConfigVersion2FlagEvents({ key, response, groups, properties, record })
+    if (configVersion2Events !== undefined) {
+      // Each event is attempted on its own, so a failed capture of one does not stop the other.
+      this._captureFlagEventOnce(this._distinctIdHasSentFlagCalls, distinctId, configVersion2Events.flagCalled, params)
+      if (configVersion2Events.exposure !== undefined) {
+        // Keyed by the distinct id as the event carries it, a string.
+        this._captureFlagEventOnce(
+          this._experimentExposuresReported,
+          String(distinctId),
+          configVersion2Events.exposure,
+          params
+        )
+      }
+      return
+    }
+
     const groupSuffix =
       groups && Object.keys(groups).length > 0
         ? `_${JSON.stringify(Object.entries(groups).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))}`
         : ''
     const featureFlagReportedKey = `${key}_${response}${groupSuffix}`
 
-    const reported = this._distinctIdHasSentFlagCalls.get(distinctId) ?? new Set<string>()
-
-    // Re-insert so the distinct id moves to the most-recently-used end of the map.
-    this._distinctIdHasSentFlagCalls.delete(distinctId)
-    this._distinctIdHasSentFlagCalls.set(distinctId, reported)
-
-    if (reported.has(featureFlagReportedKey)) {
+    if (this._reserveFlagEventKey(this._distinctIdHasSentFlagCalls, distinctId, featureFlagReportedKey) === undefined) {
       return
-    }
-
-    reported.add(featureFlagReportedKey)
-
-    // Evict only the least recently used distinct ids. Clearing the whole tracker under capacity
-    // pressure would re-send `$feature_flag_called` for every active user at once. The current id
-    // is always kept, even when maxCacheSize is below 1.
-    while (this._distinctIdHasSentFlagCalls.size > Math.max(this.maxCacheSize, 1)) {
-      const lruDistinctId = this._distinctIdHasSentFlagCalls.keys().next().value
-      if (lruDistinctId === undefined) {
-        break
-      }
-      this._distinctIdHasSentFlagCalls.delete(lruDistinctId)
     }
 
     this.capture({
@@ -2670,6 +2889,93 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       groups,
       disableGeoip,
     })
+  }
+
+  /**
+   * Adds `key` to the keys reported for `distinctId` unless it is there already, and returns the
+   * set that now holds it, or `undefined` when the event was already reported or is being
+   * captured. Node runs one read at a time, so the check and the add are one step.
+   *
+   * The cache is an LRU of distinct ids: each call moves `distinctId` to the most recently used
+   * end, and adding a key evicts only the least recently used distinct ids. Clearing the whole
+   * cache under capacity pressure would re-send events for every active user at once. The current
+   * id is always kept, even when maxCacheSize is below 1.
+   */
+  private _reserveFlagEventKey(
+    cache: Map<string, Set<string>>,
+    distinctId: string,
+    key: string
+  ): Set<string> | undefined {
+    const reported = cache.get(distinctId) ?? new Set<string>()
+
+    // Re-insert so the distinct id moves to the most-recently-used end of the map.
+    cache.delete(distinctId)
+    cache.set(distinctId, reported)
+
+    if (reported.has(key)) {
+      return undefined
+    }
+
+    reported.add(key)
+
+    while (cache.size > Math.max(this.maxCacheSize, 1)) {
+      const lruDistinctId = cache.keys().next().value
+      if (lruDistinctId === undefined) {
+        break
+      }
+      cache.delete(lruDistinctId)
+    }
+    return reported
+  }
+
+  /**
+   * Captures one config version 2 flag event, once per key in `cache`.
+   *
+   * The key is reserved before capture and stays reserved while capture runs, so a read during
+   * capture does not send the event again. It is released when capture fails, so a later read
+   * sends the event: the capture call throws, the client is disabled or opted out (also while the
+   * event is prepared), `before_send` throws, or the event cannot be prepared or queued. An event that `before_send` discards keeps
+   * its key: the application chose to drop it, and later reads would be dropped the same way.
+   * A failure is logged and never reaches the read.
+   */
+  private _captureFlagEventOnce(
+    cache: Map<string, Set<string>>,
+    distinctId: string,
+    flagEvent: FlagEvent,
+    params: FlagCalledEventParams
+  ): void {
+    const reported = this._reserveFlagEventKey(cache, distinctId, flagEvent.dedupeKey)
+    if (reported === undefined) {
+      return
+    }
+    let released = false
+    const release = (): void => {
+      if (!released) {
+        released = true
+        reported.delete(flagEvent.dedupeKey)
+      }
+    }
+    try {
+      if (this.disabled || this.optedOut) {
+        release()
+        return
+      }
+      void this._sendPreparedEvent(
+        'capture',
+        {
+          distinctId: params.distinctId,
+          event: flagEvent.event,
+          properties: flagEvent.properties,
+          groups: params.groups,
+          disableGeoip: params.disableGeoip,
+        },
+        false,
+        { flagEvent: flagEvent.capture, onCaptureFailed: release }
+      )
+    } catch (error) {
+      this._logger.error(`[FEATURE FLAGS] Failed to capture ${flagEvent.event}:`, error)
+      release()
+    }
   }
 
   /**
@@ -3039,6 +3345,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this._isShutdown = true
     // Sends that started before shutdown keep running alongside the flushes below, within the same budget.
     const emailsDrained = this._emails?.drain()
+    // Logs drain alongside the other pipelines rather than ahead of them, so a stalled
+    // logs endpoint can't spend the budget traces and events need.
+    const logs = this._logs
+    const logsDrained = logs
+      ? raceWithTimeout(
+          logs.flush().catch(() => {}),
+          Math.max(0, shutdownDeadlineMs - Date.now())
+        ).then(() => {
+          logs.reset()
+          // Retire a flush that lost the race: otherwise, when it settles with records
+          // left, its background retry re-arms the timer and keeps sending after shutdown.
+          logs.clearQueue()
+        })
+      : undefined
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
@@ -3075,7 +3395,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return await super._shutdown(remainingMs)
     } finally {
       await emailsSettled
+      await logsDrained
       this._distinctIdHasSentFlagCalls.clear()
+      this._experimentExposuresReported.clear()
       resolve?.()
     }
   }
@@ -3383,9 +3705,36 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this._prepareEventMessage(props)
   }
 
+  /**
+   * The configured service name, stamped on events as `service_name` so events
+   * from several services sharing one project can be told apart. Resolved with
+   * the same resolvers as the traces and metrics `service.name`, so the event
+   * carries the name the telemetry does: traces first (`resourceAttributes`,
+   * then `serviceName`), then metrics the same way. Host resource attributes
+   * are only `os.*`, so they never supply the name. Lowest precedence: a
+   * property set by the caller, the context or `register` wins.
+   */
+  private _serviceNameProperties(): PostHogEventProperties {
+    const serviceName = this._resolveServiceName()
+    return serviceName ? { service_name: serviceName } : {}
+  }
+
+  /** The configured service name shared by events and logs, or `null` when none is set. */
+  private _resolveServiceName(): string | null {
+    if (this._serviceName === undefined) {
+      this._serviceName =
+        (this.options.traces
+          ? resolveTracesConfig(this.options.traces, this.hostResourceAttributes()).serviceName
+          : undefined) ||
+        resolveMetricsConfig(this.options.metrics).serviceName ||
+        null
+    }
+    return this._serviceName
+  }
+
   private async _prepareEventMessage(
     props: EventMessage,
-    options: { includeContextProperties?: boolean } = {}
+    options: PrepareEventOptions = {}
   ): Promise<{
     distinctId: string
     event: string
@@ -3411,11 +3760,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const mergedProperties = includeContextProperties
       ? {
+          ...this._serviceNameProperties(),
           ...this.props,
           ...(contextData?.properties || {}),
           ...(properties || {}),
         }
-      : { ...(properties || {}) }
+      : { ...this._serviceNameProperties(), ...(properties || {}) }
 
     if (event === '$exception' && !('$trace_id' in mergedProperties || '$span_id' in mergedProperties)) {
       Object.assign(mergedProperties, await getActiveTraceProperties())
@@ -3430,26 +3780,37 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       mergedProperties.$session_id = contextData.sessionId
     }
 
+    // A config version 2 flag event fixes its attribution after super and context properties are
+    // merged, so neither can change it or add a field the event never carries.
+    const flagEvent = options.flagEvent
+    const enrichedProperties = flagEvent ? applyFlagEventCapture(mergedProperties, flagEvent) : mergedProperties
+
     // Minimal $feature_flag_called events: rebuild from the strict allowlist before before_send
     // runs, so a customer hook may deliberately re-add stripped properties. Everything the SDK
     // itself adds after this point ($groups, $lib/$lib_version/$is_server, $geoip_disable) is
-    // allowlisted — no SDK enrichment may reintroduce stripped properties.
-    const finalProperties = this._shouldSendMinimalFlagCalledEvent(event, mergedProperties)
-      ? minimizeFlagCalledEventProperties(mergedProperties)
-      : mergedProperties
+    // allowlisted — no SDK enrichment may reintroduce stripped properties. A config version 2
+    // event also keeps its attribution.
+    const finalProperties = this._shouldSendMinimalFlagCalledEvent(event, enrichedProperties)
+      ? flagEvent
+        ? minimizeConfigVersion2FlagCalledProperties(enrichedProperties)
+        : minimizeFlagCalledEventProperties(enrichedProperties)
+      : enrichedProperties
 
     // Run before_send if configured
-    const eventMessage = this._runBeforeSend({
-      distinctId: mergedDistinctId,
-      event,
-      properties: finalProperties,
-      groups,
-      flags,
-      sendFeatureFlags,
-      timestamp,
-      disableGeoip,
-      uuid,
-    })
+    const eventMessage = this._runBeforeSend(
+      {
+        distinctId: mergedDistinctId,
+        event,
+        properties: finalProperties,
+        groups,
+        flags,
+        sendFeatureFlags,
+        timestamp,
+        disableGeoip,
+        uuid,
+      },
+      options.onCaptureFailed
+    )
 
     if (!eventMessage) {
       return Promise.reject(null)
@@ -3537,7 +3898,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  private _runBeforeSend(eventMessage: EventMessage): EventMessage | null {
+  // `onError` is called when a hook throws. A hook that returns null discards the event, which
+  // is not an error.
+  private _runBeforeSend(eventMessage: EventMessage, onError?: () => void): EventMessage | null {
     const beforeSend = this.options.before_send
     if (!beforeSend) {
       return eventMessage
@@ -3559,6 +3922,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         }
       } catch (error) {
         this._logger.error(`Error in before_send function for event '${eventMessage.event}':`, error)
+        onError?.()
         return null
       }
     }
