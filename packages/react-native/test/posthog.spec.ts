@@ -145,7 +145,7 @@ describe('PostHog React Native', () => {
 
   it('should send custom request headers with SDK requests', async () => {
     posthog = new PostHog('test-token', {
-      requestHeaders: { Authorization: 'Bearer test-jwt' },
+      requestHeaders: { Authorization: 'Bearer test-jwt', 'X-Proxy-Token': 'proxy', 'User-Agent': 'my-app/1' },
       persistence: 'memory',
       flushInterval: 0,
       preloadFeatureFlags: false,
@@ -156,18 +156,27 @@ describe('PostHog React Native', () => {
     posthog.capture('test-event')
     await posthog.flush()
 
-    const expectedHeaders = expect.objectContaining({
-      Authorization: 'Bearer test-jwt',
-      'Content-Type': 'application/json',
-    })
-
     expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/flags/'),
-      expect.objectContaining({ headers: expectedHeaders })
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-jwt',
+          'X-Proxy-Token': 'proxy',
+          'Content-Type': 'application/json',
+        }),
+      })
     )
+    // Capture v1 authenticates with the project token and names the SDK in User-Agent, whatever requestHeaders say.
     expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/batch/'),
-      expect.objectContaining({ headers: expectedHeaders })
+      expect.stringContaining('/i/v1/analytics/events'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+          'User-Agent': expect.stringMatching(/^posthog-react-native\//),
+          'X-Proxy-Token': 'proxy',
+          'Content-Type': 'application/json',
+        }),
+      })
     )
   })
 
@@ -2502,7 +2511,7 @@ describe('Feature flag error tracking', () => {
     await posthog.flush()
 
     const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
-    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    const captureCall = calls.find((call: any[]) => call[0].includes('/i/v1/analytics/events'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
     const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
@@ -2543,7 +2552,7 @@ describe('Feature flag error tracking', () => {
     await posthog.flush()
 
     const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
-    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    const captureCall = calls.find((call: any[]) => call[0].includes('/i/v1/analytics/events'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
     const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
@@ -2578,7 +2587,7 @@ describe('Feature flag error tracking', () => {
     await posthog.flush()
 
     const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
-    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    const captureCall = calls.find((call: any[]) => call[0].includes('/i/v1/analytics/events'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
     const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
@@ -2607,7 +2616,7 @@ describe('Feature flag error tracking', () => {
     await posthog.flush()
 
     const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
-    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    const captureCall = calls.find((call: any[]) => call[0].includes('/i/v1/analytics/events'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
     const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
@@ -2640,7 +2649,7 @@ describe('Feature flag error tracking', () => {
     await posthog.flush()
 
     const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
-    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    const captureCall = calls.find((call: any[]) => call[0].includes('/i/v1/analytics/events'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
     const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
@@ -2684,7 +2693,7 @@ describe('Feature flag error tracking', () => {
     await posthog.flush()
 
     const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
-    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    const captureCall = calls.find((call: any[]) => call[0].includes('/i/v1/analytics/events'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
     const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
@@ -2728,7 +2737,7 @@ describe('Feature flag error tracking', () => {
     await posthog.flush()
 
     const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
-    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    const captureCall = calls.find((call: any[]) => call[0].includes('/i/v1/analytics/events'))
     expect(captureCall).toBeUndefined()
   })
 })

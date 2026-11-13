@@ -28,7 +28,17 @@ import {
   ErrorTracking as CoreErrorTracking,
   isObject,
   uuidv7,
+  type SendBatchOutcome,
 } from '@posthog/core'
+import {
+  ANALYTICS_CAPTURE_ENDPOINT,
+  V1CaptureSender,
+  canonicalizeUuid,
+  serializeV1Event,
+  wireProblem,
+  type SerializedV1Event,
+  type V1SendDeferral,
+} from '@posthog/core/capture-v1'
 import { Properties } from '@posthog/types'
 import {
   PostHogRNStorage,
@@ -179,7 +189,8 @@ export interface PostHogOptions extends PostHogCoreOptions {
   customStorage?: PostHogCustomStorage
 
   /**
-   * A list of headers that should be sent with requests to the PostHog API.
+   * Headers sent with requests to the PostHog API. On capture requests, headers the SDK sets
+   * itself, such as `Authorization` and `User-Agent`, replace yours.
    */
   requestHeaders?: { [header_name: string]: string }
 
@@ -358,6 +369,9 @@ export interface PostHogOptions extends PostHogCoreOptions {
   pushIdentityProvider?: PostHogPushIdentityProvider
 }
 
+// sdk-specs event-batcher: capture v1 requests carry at most 5 MiB of event bytes.
+const CAPTURE_V1_BATCH_BYTE_TARGET = 5 * 1024 * 1024
+
 export class PostHog extends PostHogCore {
   private _persistence: PostHogOptions['persistence']
   private _eventsStorage: PostHogRNStorage
@@ -430,6 +444,11 @@ export class PostHog extends PostHogCore {
   private _setDefaultPersonProperties: boolean
   private _overrideDisplayLanguage: string | null
   private _requestHeaders: { [header_name: string]: string } = {}
+  private _captureV1Sender?: V1CaptureSender
+  // Resends of events capture asked to send again: how many waits in a row, and when the next may start.
+  private _captureResendCount = 0
+  private _captureResendAt = 0
+  private _captureResendTimer?: ReturnType<typeof setTimeout>
 
   /**
    * The project token the client was created with.
@@ -817,6 +836,10 @@ export class PostHog extends PostHogCore {
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     this._cancelManualRecordingStart()
+    if (this._captureResendTimer) {
+      clearTimeout(this._captureResendTimer)
+      this._captureResendTimer = undefined
+    }
     if (nativeSessionOwner === this) {
       nativeSessionOwner = undefined
     }
@@ -826,6 +849,12 @@ export class PostHog extends PostHogCore {
       const logsBudgetMs = Math.min(remainingMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
       await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(remainingMs)])
     } finally {
+      // The final flush can schedule another resend; nothing may send after shutdown.
+      if (this._captureResendTimer) {
+        clearTimeout(this._captureResendTimer)
+        this._captureResendTimer = undefined
+      }
+      this._captureResendAt = 0
       this._replayDebugBundleAcceptedAt = undefined
       this._replayDebugBundleClaimed = false
       this._errorTracking.shutdown()
@@ -858,6 +887,131 @@ export class PostHog extends PostHogCore {
 
   protected getCustomHeaders(): { [key: string]: string } {
     return { ...super.getCustomHeaders(), ...this._requestHeaders }
+  }
+
+  /**
+   * Sends queued events to capture v1 (`/i/v1/analytics/events`), one attempt per flush. Events
+   * capture asks to send again, or that got no response, stay queued and are resent after a wait of
+   * 1 second doubling to 30 seconds, with jitter.
+   */
+  protected async sendBatch(batchMessages: (PostHogEventProperties | undefined)[]): Promise<void | SendBatchOutcome> {
+    const queuedUuids = new Map<SerializedV1Event, string | undefined>()
+    for (const message of batchMessages) {
+      if (!message) {
+        continue
+      }
+      const problem = wireProblem(message)
+      if (problem) {
+        this._logger.warn(`Dropping event "${String(message.event)}": ${problem}.`)
+        continue
+      }
+      const queuedUuid = typeof message.uuid === 'string' ? message.uuid : undefined
+      queuedUuids.set(this._serializeForCapture(message), queuedUuid)
+    }
+
+    let deferral: V1SendDeferral | undefined
+    const kept = await this._getCaptureV1Sender().send([...queuedUuids.keys()], {
+      keepUnsent: true,
+      onDeferred: (reason) => {
+        deferral = reason
+      },
+    })
+    if (!deferral) {
+      this._captureResendCount = 0
+      this._captureResendAt = 0
+      return
+    }
+    if (!deferral.tooLarge) {
+      this._scheduleCaptureResend(deferral.retryAfterMs)
+    }
+    this._logger.info(`Keeping ${kept.length} events to send again: ${deferral.reason}.`)
+    const keepUuids = kept.map((event) => queuedUuids.get(event)).filter((uuid): uuid is string => uuid !== undefined)
+    return { keepUuids, tooLarge: deferral.tooLarge }
+  }
+
+  protected batchByteTarget(): number {
+    return CAPTURE_V1_BATCH_BYTE_TARGET
+  }
+
+  protected batchEventBytes(message: PostHogEventProperties): number {
+    if (wireProblem(message)) {
+      return 0
+    }
+    try {
+      return this._serializeForCapture(message).bytes
+    } catch {
+      return 0
+    }
+  }
+
+  // batchEventBytes() and sendBatch() see the same message objects in one flush, so each is serialized once.
+  private _serializedForCapture = new WeakMap<PostHogEventProperties, SerializedV1Event>()
+
+  private _serializeForCapture(message: PostHogEventProperties): SerializedV1Event {
+    let serialized = this._serializedForCapture.get(message)
+    if (!serialized) {
+      const queuedUuid = typeof message.uuid === 'string' ? message.uuid : undefined
+      const uuid = (queuedUuid !== undefined ? canonicalizeUuid(queuedUuid) : undefined) ?? uuidv7()
+      serialized = serializeV1Event({ ...message, uuid })
+      this._serializedForCapture.set(message, serialized)
+    }
+    return serialized
+  }
+
+  protected flushAutomatic(): Promise<void> {
+    // Holds the timer and flushAt flushes while capture waits; flush() and shutdown() still send.
+    if (Date.now() < this._captureResendAt) {
+      return Promise.resolve()
+    }
+    return super.flushAutomatic()
+  }
+
+  private _scheduleCaptureResend(retryAfterMs: number | undefined): void {
+    const maxWaitMs = 30_000
+    const jitter = 0.75 + 0.5 * Math.random()
+    const backoffMs = Math.min(1000 * 2 ** this._captureResendCount * jitter, maxWaitMs)
+    const waitMs = retryAfterMs === undefined ? backoffMs : Math.max(backoffMs, Math.min(retryAfterMs, maxWaitMs))
+    this._captureResendCount++
+    this._captureResendAt = Date.now() + waitMs
+    if (this._captureResendTimer) {
+      clearTimeout(this._captureResendTimer)
+    }
+    this._captureResendTimer = safeSetTimeout(() => {
+      this._captureResendTimer = undefined
+      // Timers can fire a little early, which would otherwise leave the hold in place with nothing rescheduled.
+      this._captureResendAt = 0
+      void this.flushAutomatic().catch(logFlushError)
+    }, waitMs)
+  }
+
+  private _getCaptureV1Sender(): V1CaptureSender {
+    this._captureV1Sender ??= new V1CaptureSender(
+      {
+        host: this.host,
+        path: ANALYTICS_CAPTURE_ENDPOINT,
+        apiKey: this.projectToken,
+        libraryId: this.getLibraryId(),
+        libraryVersion: this.getLibraryVersion(),
+        userAgent: this.getCustomUserAgent() || undefined,
+        extraHeaders: this.getCustomHeaders(),
+        historicalMigration: this.historicalMigration,
+        compression: this.disableCompression ? 'none' : 'gzip',
+        requestTimeoutMs: this.requestTimeout,
+        // Resends wait between flushes instead, so a failure never holds a flush open.
+        maxRetries: 0,
+        isDebug: this.isDebug,
+      },
+      {
+        // The platform follows redirects. On react-native-web, `redirect: 'manual'` would hide a 307/308
+        // behind status 0 and the batch would be dropped.
+        fetch: (url, { redirect: _redirect, ...fetchOptions }) => this.fetch(url, fetchOptions),
+        onError: (error, summary) => {
+          this._logger.warn(summary)
+          this._events.emit('error', error)
+        },
+      }
+    )
+    return this._captureV1Sender
   }
 
   getCommonEventProperties(): PostHogEventProperties {
@@ -1347,7 +1501,9 @@ export class PostHog extends PostHogCore {
    * @see flushLogs
    * @public
    *
-   * @returns Promise that resolves when the flush is complete
+   * @returns Promise that resolves when the flush is complete. Events PostHog didn't accept for now,
+   * such as after a network error or a `503`, stay queued and are sent again later; the promise
+   * still resolves.
    */
   flush(): Promise<void> {
     return super.flush()

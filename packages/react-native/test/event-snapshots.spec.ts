@@ -14,6 +14,7 @@ type WireEvent = Record<string, any> & { properties: Record<string, any> }
 const mockResponse = (body: Record<string, unknown> = { status: 'ok' }) => ({
   status: 200,
   json: () => Promise.resolve(body),
+  text: () => Promise.resolve(JSON.stringify(body)),
 })
 
 const installFetchMock = (responseForUrl?: (url: string) => Record<string, unknown>): vi.Mock => {
@@ -35,8 +36,9 @@ const normalizeEvent = (event: WireEvent): WireEvent => {
   expect(event.uuid).not.toBe('')
   expect(typeof event.timestamp).toBe('string')
   expect(event.timestamp).toBe(fixedTime.toISOString())
-  expect(typeof event.properties.$session_id).toBe('string')
-  expect(event.properties.$session_id).not.toBe('')
+  expect(typeof event.session_id).toBe('string')
+  expect(event.session_id).not.toBe('')
+  expect(event.properties).not.toHaveProperty('$session_id')
 
   return {
     ...event,
@@ -45,8 +47,8 @@ const normalizeEvent = (event: WireEvent): WireEvent => {
     properties: {
       ...event.properties,
       $lib_version: normalizeSdkVersion(event.properties.$lib_version),
-      $session_id: '<session-id>',
     },
+    session_id: '<session-id>',
   }
 }
 
@@ -114,7 +116,7 @@ describe('PostHog React Native event and request snapshots', () => {
     )
     await posthog.flush()
 
-    const event = parsedCall(fetchMock, '/batch/').body.batch[0]
+    const event = parsedCall(fetchMock, '/i/v1/analytics/events').body.batch[0]
     expect(event.timestamp).toBe('2024-01-02T03:04:05.000Z')
     expect(event.properties.caller_timestamp).toBe('2024-01-02T12:04:05.000+09:00')
   })
@@ -150,14 +152,13 @@ describe('PostHog React Native event and request snapshots', () => {
 
     await posthog.flush()
 
-    const request = parsedCall(fetchMock, '/batch/')
-    expect(request.body.sent_at).toBe(fixedTime.toISOString())
+    const request = parsedCall(fetchMock, '/i/v1/analytics/events')
+    expect(request.body.created_at).toBe(fixedTime.toISOString())
+    expect(request.body).not.toHaveProperty('sent_at')
+    expect(request.body).not.toHaveProperty('api_key')
     expect(request.body.batch).toHaveLength(5)
     expect(request.body.batch[0].properties).not.toHaveProperty('undefined_fixture')
-    expect(new Set(request.body.batch.map((event: WireEvent) => event.properties.$session_id))).toHaveProperty(
-      'size',
-      1
-    )
+    expect(new Set(request.body.batch.map((event: WireEvent) => event.session_id))).toHaveProperty('size', 1)
     const eventUuids = request.body.batch.map((event: WireEvent) => event.uuid)
     eventUuids.forEach((uuid: unknown) => expect(typeof uuid).toBe('string'))
     expect(new Set(eventUuids)).toHaveProperty('size', eventUuids.length)
@@ -167,6 +168,13 @@ describe('PostHog React Native event and request snapshots', () => {
     headers['User-Agent'] = `posthog-react-native/${normalizeSdkVersion(
       headers['User-Agent']?.replace('posthog-react-native/', '')
     )}`
+    expect(headers['PostHog-Sdk-Info']).toMatch(/^posthog-react-native\/.+/)
+    headers['PostHog-Sdk-Info'] = `posthog-react-native/${normalizeSdkVersion(
+      headers['PostHog-Sdk-Info']?.replace('posthog-react-native/', '')
+    )}`
+    expect(headers['PostHog-Request-Id']).toMatch(/^[0-9a-f-]{36}$/)
+    headers['PostHog-Request-Id'] = '<request-id>'
+    expect(headers['PostHog-Request-Timestamp']).toBe(fixedTime.toISOString())
 
     expect({
       url: request.url,

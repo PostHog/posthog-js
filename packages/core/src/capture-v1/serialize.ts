@@ -3,11 +3,34 @@ import { safeJsonStringify } from '../utils/string-utils'
 
 import { buildV1Event } from './transform'
 
-const encoder = new TextEncoder()
+// Counted by hand: TextEncoder is missing on Hermes before React Native 0.74 and on JSC.
+// A lone surrogate counts 3 bytes, the U+FFFD it becomes when encoded.
+function utf8Length(value: string): number {
+  let bytes = 0
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index)
+    if (code < 0x80) {
+      bytes += 1
+    } else if (code < 0x800) {
+      bytes += 2
+    } else if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length) {
+      const next = value.charCodeAt(index + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4
+        index++
+      } else {
+        bytes += 3
+      }
+    } else {
+      bytes += 3
+    }
+  }
+  return bytes
+}
 
 // `buildV1Event` puts `properties` last, so the event JSON is the rest of the event with this key and the properties appended.
 const PROPERTIES_KEY = ',"properties":'
-const PROPERTIES_KEY_BYTES = encoder.encode(PROPERTIES_KEY).length
+const PROPERTIES_KEY_BYTES = utf8Length(PROPERTIES_KEY)
 
 /** One wire event, serialized once and reused verbatim in every request body that carries it. */
 export interface SerializedV1Event {
@@ -19,10 +42,11 @@ export interface SerializedV1Event {
   propertiesBytes: number
 }
 
-const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+// No lookbehind: JavaScriptCore before iOS 16.4, and the jsc-android build React Native ships, can't parse it.
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/
 // JSON.stringify writes a lone surrogate as a `\udXXX` escape (a valid pair stays raw), which capture rejects for the whole
-// request. The lookbehind skips an escaped backslash followed by literal "udXXX" text.
-const LONE_SURROGATE_ESCAPE = /(?<!\\)((?:\\\\)*)\\u[dD][89a-fA-F][0-9a-fA-F]{2}/g
+// request. Escaped backslashes are matched too and kept, so literal "\\udXXX" text is left alone.
+const LONE_SURROGATE_ESCAPE = /\\\\|\\u[dD][89a-fA-F][0-9a-fA-F]{2}/g
 
 /**
  * Why capture would reject this event, or undefined when it can be sent. A name must be a non-empty string, the
@@ -53,14 +77,14 @@ export function serializeV1Event(message: PostHogEventProperties): SerializedV1E
   // Property strings are repaired to U+FFFD rather than dropping the event.
   const propertiesJson =
     rawPropertiesJson.includes('\\ud') || rawPropertiesJson.includes('\\uD')
-      ? rawPropertiesJson.replace(LONE_SURROGATE_ESCAPE, '$1\\ufffd')
+      ? rawPropertiesJson.replace(LONE_SURROGATE_ESCAPE, (match) => (match.length === 2 ? match : '\\ufffd'))
       : rawPropertiesJson
-  const propertiesBytes = encoder.encode(propertiesJson).length
+  const propertiesBytes = utf8Length(propertiesJson)
   return {
     uuid: rest.uuid,
     json: `${restJson.slice(0, -1)}${PROPERTIES_KEY}${propertiesJson}}`,
     // The closing brace moves from the end of `restJson` to the end of the event, so it is counted once.
-    bytes: encoder.encode(restJson).length + PROPERTIES_KEY_BYTES + propertiesBytes,
+    bytes: utf8Length(restJson) + PROPERTIES_KEY_BYTES + propertiesBytes,
     propertiesBytes,
   }
 }
