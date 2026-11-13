@@ -1,4 +1,4 @@
-import type { Scheduler } from 'convex/server'
+import type { FunctionArgs, Scheduler } from 'convex/server'
 import { ConvexError } from 'convex/values'
 import type { ComponentApi } from '../component/_generated/component.js'
 import type { EmailSendFailure, SentEmail } from '../component/emails.js'
@@ -97,6 +97,8 @@ export type EmailQueue<Ctx, WorkId> = {
   enqueueAction(ctx: Ctx, fn: any, args: any, options: { retry: true }): Promise<WorkId>
 }
 
+type ComponentEmailArgs = FunctionArgs<ComponentApi['emails']['send']>
+
 const TEMPLATE_KEY = /^[a-zA-Z0-9_-]{1,400}$/
 const INTEGRATION_NAME = 'convex'
 
@@ -172,8 +174,10 @@ export class PostHog {
 
   /**
    * Queue one email on a retrying queue, such as a Workpool. Makes the idempotency key now, so every
-   * attempt reuses it and a retry never sends twice. Retryable failures retry, after the wait PostHog
-   * asks for; others stop.
+   * attempt reuses it and a retry never sends twice. Retryable failures retry; others stop. When PostHog
+   * asks to wait, the attempt waits it out, holding its slot in the queue, so give emails a pool of their
+   * own when other work shares it. A wait that ends more than five minutes after the attempt began stops
+   * the job, and its error names the wait and the key to send the email again with.
    */
   async enqueueEmail<Ctx, WorkId>(ctx: Ctx, queue: EmailQueue<Ctx, WorkId>, email: SendEmailArgs): Promise<WorkId> {
     const send = this.emailSend(email)
@@ -186,7 +190,7 @@ export class PostHog {
     )
   }
 
-  private emailSend(email: SendEmailArgs) {
+  private emailSend(email: SendEmailArgs): ComponentEmailArgs {
     if (email.templateId !== undefined) {
       throw refusal('template_unsupported', 'Render the email in your code and send its html.')
     }

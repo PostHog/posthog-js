@@ -68,7 +68,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           distinctId?: string;
           from?: string;
           html?: string;
-          idempotencyKey?: string;
+          idempotencyKey: string;
           replyTo?: string | Array<string>;
           sensitive?: boolean;
           subject: string;

@@ -41,6 +41,9 @@ const emailArgs = {
   tracking: v.optional(tracking),
 }
 
+/** Workpool stores these until the job runs, so a field added later stays optional for jobs queued before it. */
+const queuedEmailArgs = { ...emailArgs, idempotencyKey: v.string() }
+
 type EmailArgs = ObjectType<typeof emailArgs>
 
 const sentEmail = v.object({ message_id: v.string(), replayed: v.boolean() })
@@ -65,20 +68,27 @@ export const send = action({
 })
 
 /**
- * Sends the email for a retrying queue. When PostHog asks to wait, waits it out and sends again with the same
- * key, for up to five minutes, so the queue's own short backoff doesn't spend its attempts during the wait.
+ * Sends the email for a retrying queue, with the key the queue made, so every attempt sends at most once. When
+ * PostHog asks to wait, waits it out and sends again, so the queue's own short backoff doesn't spend its attempts
+ * during the wait. A wait that ends past five minutes stops the queue at once, without sending before it ends.
  */
 export const sendQueued = action({
-  args: emailArgs,
+  args: queuedEmailArgs,
   returns: sentEmail,
   handler: async (_ctx, email) => {
     const deadline = Date.now() + COOLDOWN_BUDGET_MS
-    let reply = await sendToPostHog(email)
-    for (let wait = cooldownLeft(reply, deadline); wait !== undefined; wait = cooldownLeft(reply, deadline)) {
+    for (;;) {
+      const reply = await sendToPostHog(email)
+      const { error } = reply
+      const wait = error ? cooldown(error) : undefined
+      if (!error || wait === undefined) {
+        return sentOrThrown(reply)
+      }
+      if (Date.now() + wait > deadline) {
+        throw sendFailure(error, { queueStopsFor: email.idempotencyKey })
+      }
       await sleep(wait)
-      reply = await sendToPostHog(email)
     }
-    return sentOrThrown(reply)
   },
 })
 
@@ -94,19 +104,18 @@ function sentOrThrown({ data, error }: SendEmailResponse): SentEmail {
   return { message_id: data.id, replayed: data.replayed }
 }
 
-function cooldownLeft({ error }: SendEmailResponse, deadline: number): number | undefined {
-  const left = deadline - Date.now()
-  if (!error || !isRetryable(error) || !error.retryAfterMs || left <= 0) {
-    return undefined
-  }
-  return Math.min(error.retryAfterMs, left)
+function cooldown(error: EmailError): number | undefined {
+  return isRetryable(error) && error.retryAfterMs ? error.retryAfterMs : undefined
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function sendFailure(error: EmailError): ConvexError<EmailSendFailure> {
+function sendFailure(
+  error: EmailError,
+  { queueStopsFor }: { queueStopsFor?: string } = {}
+): ConvexError<EmailSendFailure> {
   const failure: EmailSendFailure = {
     code: error.code,
     detail: error.message,
@@ -115,22 +124,30 @@ function sendFailure(error: EmailError): ConvexError<EmailSendFailure> {
     ...(error.field !== undefined && { attr: error.field }),
     ...(error.retryAfterMs !== undefined && { retry_after: Math.ceil(error.retryAfterMs / 1000) }),
   }
-  return new ConvexError(
-    failure.retryable ? failure : { ...failure, [WORKPOOL_NON_RETRYABLE]: true, message: failure.detail }
-  )
+  if (failure.retryable && queueStopsFor === undefined) {
+    return new ConvexError(failure)
+  }
+  const message =
+    queueStopsFor === undefined
+      ? failure.detail
+      : `${failure.detail} PostHog asked to wait ${failure.retry_after}s, longer than a queued send waits, so the ` +
+        `queue stopped. Send the email again after that, with idempotencyKey ${queueStopsFor}.`
+  return new ConvexError({ ...failure, [WORKPOOL_NON_RETRYABLE]: true, message })
 }
 
+/** posthog-node's own retry rule, which it keeps private: change both together. */
 function isRetryable(error: EmailError): boolean {
-  switch (error.statusCode) {
-    case undefined:
-      return error.code === 'network_error'
-    case 409:
-      return error.code === 'idempotency_key_in_flight'
-    case 429:
-      return error.code !== 'quota_limited'
-    case 503:
-      return true
-    default:
-      return false
+  if (error.statusCode === undefined) {
+    return error.code === 'network_error'
   }
+  if (error.code === 'attachment_upload_failed') {
+    return error.statusCode === 429 || error.statusCode >= 500
+  }
+  if (error.statusCode === 409) {
+    return error.code === 'idempotency_key_in_flight'
+  }
+  if (error.statusCode === 429) {
+    return error.code !== 'quota_limited' && error.code !== 'upload_quota_exceeded'
+  }
+  return error.statusCode === 503
 }
