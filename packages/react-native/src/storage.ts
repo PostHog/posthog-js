@@ -223,6 +223,9 @@ export class PostHogRNSyncMemoryStorage extends PostHogRNStorage {
 
     super(storage, storageKey)
   }
+
+  // The memory cache is the only copy, so serializing it would only hold a second one in memory.
+  persist(): void {}
 }
 
 // Factory functions that bind the storage instance to the correct SDK-internal
