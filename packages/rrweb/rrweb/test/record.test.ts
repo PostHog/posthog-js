@@ -486,6 +486,59 @@ describe('record', function (this: ISuite) {
     expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 500 }]);
   });
 
+  it('should record the resting offset when another element scrolls in the same throttle window', async () => {
+    const ids = await ctx.page.evaluate((restingY: number) => {
+      // Hide scrollend from the recorder, as on Safari before 26.2.
+      window.addEventListener(
+        'scrollend',
+        (e) => e.stopImmediatePropagation(),
+        true,
+      );
+      const make = (contentHeight: string) => {
+        const container = document.createElement('div');
+        container.setAttribute(
+          'style',
+          'overflow: auto; height: 100px; width: 100px;',
+        );
+        const child = document.createElement('div');
+        child.setAttribute('style', `height: ${contentHeight}; width: 50px;`);
+        container.appendChild(child);
+        document.body.appendChild(container);
+        return { container, child };
+      };
+      const reveal = make('10px');
+      const sibling = make('3000px');
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      // A long window keeps the browser's own queued scroll events inside it.
+      record({
+        emit: (window as unknown as IWindow).emit,
+        sampling: { scroll: 1000 },
+      });
+      reveal.container.scrollTop = restingY;
+      reveal.container.dispatchEvent(new Event('scroll'));
+      sibling.container.scrollTop = 300;
+      sibling.container.dispatchEvent(new Event('scroll'));
+      reveal.child.style.height = '3000px';
+      reveal.container.scrollTop = restingY;
+      reveal.container.dispatchEvent(new Event('scroll'));
+      const { mirror } = record as unknown as {
+        mirror: { getId(n: Node): number };
+      };
+      return {
+        reveal: mirror.getId(reveal.container),
+        sibling: mirror.getId(sibling.container),
+      };
+    }, SILK_SHEET_RESTING_Y);
+    await ctx.page.waitForTimeout(1200);
+
+    const reveal = scrollData().filter((d) => d.id === ids.reveal);
+    const sibling = scrollData().filter((d) => d.id === ids.sibling);
+    expect(reveal[0].y).toBe(0);
+    expect(reveal[reveal.length - 1].y).toBe(SILK_SHEET_RESTING_Y);
+    expect(sibling[sibling.length - 1].y).toBe(300);
+  });
+
   it('should record silk sheet resting offset after clamp-to-0', async () => {
     const restingY = SILK_SHEET_RESTING_Y;
     const expectedId = await recordSilkSheetClampToZero(restingY);
