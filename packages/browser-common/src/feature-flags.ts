@@ -429,6 +429,9 @@ export class PostHogFeatureFlags implements Extension {
     // How the client captures each config version 2 flag event that is on its way through capture,
     // by the properties object the event was captured with.
     private _flagEventCaptures = new WeakMap<object, FlagEventCapture>()
+    // How often the capture of each config version 2 flag event threw since the page loaded or the
+    // identity changed, by flag key and dedupe key.
+    private _flagEventCaptureThrows = new Map<string, number>()
 
     constructor(configSource: FeatureFlagsConfigSource) {
         this._configSource = configSource
@@ -1128,6 +1131,7 @@ export class PostHogFeatureFlags implements Extension {
     resetFlagCallReported(): void {
         this._remove(FLAG_CALL_REPORTED)
         this._flagCallsPendingCapture = new Map()
+        this._flagEventCaptureThrows = new Map()
     }
 
     /** Sends `$feature_flag_called` for the flags read while capture was off, once the client can capture. */
@@ -1720,22 +1724,27 @@ export class PostHogFeatureFlags implements Extension {
      * capture does not send the event again. It is removed when capture does not handle the event:
      * the capture call or `before_send` throws, the client rate limit drops the event, or capturing
      * was turned off while the event was captured. A later read then sends the event, and for the
-     * last two the read is also held, so the next capture sends it. An event that `before_send`
-     * discards keeps its key: the application chose to drop it, and later reads would be dropped
-     * the same way. A failure is logged and never reaches the read.
+     * last two the read is also held, so the next capture sends it. After a throw, one later read
+     * tries again; after a second throw the event waits for the next page or identity. An event
+     * that `before_send` discards keeps its key: the application chose to drop it, and later reads
+     * would be dropped the same way. A failure is logged and never reaches the read.
      */
     private _captureFlagEventOnce(key: string, dedupeKey: string, flagEvent: FlagEvent, hold: () => void): void {
         const reported: Record<string, string[]> = this._prop(FLAG_CALL_REPORTED) || {}
+        const attempt = key + dedupeKey
+        const throws = this._flagEventCaptureThrows.get(attempt) || 0
         // A read that ran while the read's other event was captured can have sent this event already.
-        if (reported[key]?.includes(dedupeKey)) {
+        // An event whose capture threw twice is left for the next page: a hook that always throws
+        // must not make every read capture again, because each capture uses a rate limit token.
+        if (reported[key]?.includes(dedupeKey) || throws > 1) {
             return
         }
         this._set({ [FLAG_CALL_REPORTED]: { ...reported, [key]: [...(reported[key] || []), dedupeKey] } })
-        let failed = false
+        let threw = false
         this._flagEventCaptures.set(flagEvent.properties, {
             ...flagEvent.capture,
             failed: () => {
-                failed = true
+                threw = true
             },
         })
         let handled = false
@@ -1746,9 +1755,13 @@ export class PostHogFeatureFlags implements Extension {
                 hold()
             }
         } catch (error) {
+            threw = true
             this._logger.error('Failed to capture ' + flagEvent.event, error)
         }
-        if (!handled || failed) {
+        if (threw) {
+            this._flagEventCaptureThrows.set(attempt, throws + 1)
+        }
+        if (!handled || threw) {
             this._unmarkFlagCallReported(key, dedupeKey)
         }
     }
@@ -2353,5 +2366,6 @@ export class PostHogFeatureFlags implements Extension {
         this._override_warning = false
         this._consecutiveStatusZeroFailures = 0
         this._flagCallsPendingCapture = new Map()
+        this._flagEventCaptureThrows = new Map()
     }
 }

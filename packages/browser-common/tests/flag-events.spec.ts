@@ -1234,6 +1234,33 @@ describe('$experiment_exposure', () => {
         )
 
         it.each([FLAG_CALLED, EXPOSURE])(
+            'a %s whose capture always throws is tried twice, not on every read',
+            async (event) => {
+                const client = failing(event, throws, Infinity)
+                const harness = await setup({ client })
+                await harness.load(response([split()]))
+                const attempts = (): number =>
+                    vi.mocked(client.capture).mock.calls.filter(([name]) => name === event).length
+
+                for (let i = 0; i < 10; i++) {
+                    expect(harness.flags.getFeatureFlag(FLAG)).toBe('annual')
+                }
+                // Each capture uses a rate limit token, so a render loop must not capture on every read.
+                expect(attempts()).toBe(2)
+                const other = event === FLAG_CALLED ? EXPOSURE : FLAG_CALLED
+                expect(eventNames(harness.events)).toEqual([other])
+                expect(storedReports(client)[FLAG]).toEqual([
+                    other === EXPOSURE ? SPLIT_EXPOSURE_KEY : SPLIT_CALLED_KEY,
+                ])
+
+                // The event is tried again for the next identity, as on the next page.
+                harness.flags.resetFlagCallReported()
+                harness.flags.getFeatureFlag(FLAG)
+                expect(attempts()).toBe(3)
+            }
+        )
+
+        it.each([FLAG_CALLED, EXPOSURE])(
             'a %s that the client rate limit drops keeps no key and is sent with the next capture',
             async (event) => {
                 const client = failing(event, () => false)

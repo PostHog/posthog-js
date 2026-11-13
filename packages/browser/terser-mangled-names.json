@@ -264,6 +264,7 @@
         "_flagCallContext",
         "_flagCalledProperties",
         "_flagCallsPendingCapture",
+        "_flagEventCaptureThrows",
         "_flagEventCaptures",
         "_flagListenerCleanup",
         "_flagToExperiments",
