@@ -26,6 +26,10 @@ Changes to `.changeset/` on `main` trigger the [`Release` workflow](https://gith
 4. Creates package tags and GitHub releases.
 5. Dispatches downstream dependency upgrades and reports the result in Slack.
 
+### Unreleased Electron package
+
+Keep `@posthog/electron` private while its implementation PRs are merged, exclude it from stable Changesets versioning, and leave it out of the stable npm publish matrix. Do not add Electron releases to changeset frontmatter; retain ordinary changesets for shared core/browser-common changes. Only the final, separately reviewed alpha-release PR may remove `private: true` and enable a protected manual alpha publishing path. Merging the implementation PRs must not publish Electron.
+
 ### `posthog-js` S3/CDN gate
 
 The `posthog-js` S3 release happens before npm publishing. When `posthog-js` changes, every npm publish job is gated on:
