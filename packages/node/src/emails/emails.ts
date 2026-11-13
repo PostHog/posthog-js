@@ -197,6 +197,9 @@ export class EmailSender implements Emails {
   private readonly inFlight = new Set<Promise<unknown>>()
   private readonly latestMoveByEmail = new Map<string, Promise<UpdateEmailResponse>>()
   private readonly unconfirmedMoveByEmail = new Map<string, UnconfirmedMove>()
+  // Emails whose cancel PostHog confirmed while moves of them were out or queued. PostHog answers
+  // those moves 409 canceled, so they record nothing, until the email's last queued move ends.
+  private readonly canceledDuringMoves = new Set<string>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
@@ -224,6 +227,7 @@ export class EmailSender implements Emails {
     void pending.finally(() => {
       if (this.latestMoveByEmail.get(move.messageId) === pending) {
         this.latestMoveByEmail.delete(move.messageId)
+        this.canceledDuringMoves.delete(move.messageId)
       }
     })
     return this.track(pending)
@@ -376,6 +380,9 @@ export class EmailSender implements Emails {
   }
 
   private rememberUnconfirmedMove(messageId: string, instant: string): void {
+    if (this.canceledDuringMoves.has(messageId)) {
+      return
+    }
     const now = Date.now()
     this.forgetLapsedGuardsOldestFirst(now)
     this.unconfirmedMoveByEmail.delete(messageId)
@@ -403,7 +410,11 @@ export class EmailSender implements Emails {
       const result = await this.withRetries(this.config.maxRetries, async () =>
         parseCancelReply(await this.request(url, 'POST', headers))
       )
+      // A late move can't undo a confirmed cancel: PostHog answers it 409 canceled.
       this.unconfirmedMoveByEmail.delete(messageId)
+      if (this.latestMoveByEmail.has(messageId)) {
+        this.canceledDuringMoves.add(messageId)
+      }
       return { data: result, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Canceling the email failed unexpectedly.') }

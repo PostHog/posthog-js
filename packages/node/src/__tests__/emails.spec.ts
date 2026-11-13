@@ -1915,6 +1915,67 @@ describe('emails', () => {
         expect(fetch).toHaveBeenCalledTimes(3)
       })
 
+      describe('when PostHog confirms a cancel while moves of the email are out or queued', () => {
+        const THIRD_TIME = '2026-12-04T09:00:00Z'
+        const answerMoves = (answerFor: (time: string) => Reply | undefined): void => {
+          fetch.mockImplementation(async (_url: string, options: { method: string; body?: string }) => {
+            if (options.method === 'POST') {
+              return fakeReply(200, { id: MESSAGE_ID, status: 'canceled' })
+            }
+            const reply = answerFor(JSON.parse(options.body!).scheduled_at)
+            return reply === undefined ? new Promise(() => {}) : fakeReply(reply.status, reply.body)
+          })
+        }
+        const canceledAtPostHog = (): Reply => rejected(409, 'canceled')
+
+        it("answers the cancel without waiting for the move that's out, and records nothing from that move", async () => {
+          answerMoves((time) => (time === FIRST_TIME ? undefined : canceledAtPostHog()))
+          const out = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+          await vi.advanceTimersByTimeAsync(0)
+
+          expect((await posthog.emails.cancel(MESSAGE_ID)).data?.status).toBe('canceled')
+          await vi.advanceTimersByTimeAsync(1_000)
+          expect((await out).error?.code).toBe('network_error')
+          const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+          expect(error).toMatchObject({ code: 'canceled', statusCode: 409 })
+          expect(fetch).toHaveBeenCalledTimes(3)
+        })
+
+        it('records nothing from a queued move, whatever PostHog answers it', async () => {
+          answerMoves((time) =>
+            time === FIRST_TIME ? undefined : time === OTHER_TIME ? rejected(503) : canceledAtPostHog()
+          )
+          const out = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+          const queued = update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+          await vi.advanceTimersByTimeAsync(0)
+
+          expect((await posthog.emails.cancel(MESSAGE_ID)).data?.status).toBe('canceled')
+          await vi.advanceTimersByTimeAsync(1_000)
+          expect((await out).error?.code).toBe('network_error')
+          expect((await queued).error?.statusCode).toBe(503)
+          const { error } = await update({ id: MESSAGE_ID, scheduledAt: THIRD_TIME })
+
+          expect(error).toMatchObject({ code: 'canceled', statusCode: 409 })
+          expect(fetch).toHaveBeenCalledTimes(4)
+        })
+
+        it('guards a later move again once the moves that were out at the cancel have ended', async () => {
+          answerMoves((time) => (time === FIRST_TIME ? undefined : rejected(503)))
+          const out = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+          await vi.advanceTimersByTimeAsync(0)
+          expect((await posthog.emails.cancel(MESSAGE_ID)).data?.status).toBe('canceled')
+          await vi.advanceTimersByTimeAsync(1_000)
+          expect((await out).error?.code).toBe('network_error')
+
+          expect((await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })).error?.statusCode).toBe(503)
+          const { error } = await update({ id: MESSAGE_ID, scheduledAt: THIRD_TIME })
+
+          expect(error?.code).toBe('move_unconfirmed')
+          expect(fetch).toHaveBeenCalledTimes(3)
+        })
+      })
+
       it('refuses a move to another time after PostHog refused the cancel', async () => {
         await moveWithoutAnswer()
         fetch.mockImplementationOnce(async () => fakeReply(409, rejected(409, 'already_sending').body))
