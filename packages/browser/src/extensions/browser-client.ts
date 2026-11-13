@@ -310,16 +310,11 @@ export class BrowserClientAdapter implements Client {
                     dispatchedAt = now()
                 }
                 requestOptions.onSend = (url) => {
-                    try {
-                        resourceTiming = watchResourceTiming(url)
-                    } catch (e) {
-                        logger.error('Failed to watch the /flags request timing', e)
-                    }
+                    resourceTiming = watchResourceTiming(url)
                 }
                 requestOptions.callback = (response) => {
                     resolve(response)
                     if (isUndefined(dispatchedAt)) {
-                        resourceTiming?.stop()
                         return
                     }
                     const startedAt = dispatchedAt

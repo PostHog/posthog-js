@@ -39,6 +39,17 @@ describe('watchResourceTiming', () => {
         expect(startWatch(URL_A)).toBeUndefined()
     })
 
+    it('returns undefined when reading PerformanceObserver throws', () => {
+        Object.defineProperty(window, 'PerformanceObserver', {
+            configurable: true,
+            get() {
+                throw new Error('boom')
+            },
+        })
+
+        expect(startWatch(URL_A)).toBeUndefined()
+    })
+
     it('returns undefined when observing resource entries throws', () => {
         vi.spyOn(FakePerformanceObserver.prototype, 'observe').mockImplementation(() => {
             throw new TypeError('unsupported')

@@ -908,26 +908,19 @@ describe('BrowserClientAdapter', () => {
                 expect(FakePerformanceObserver.latest.disconnected).toBe(true)
             })
 
-            it('sends the request when watching for its Resource Timing entry throws', async () => {
+            it('sends the request and records the total when reading PerformanceObserver throws', async () => {
                 Object.defineProperty(window, 'PerformanceObserver', {
                     configurable: true,
                     get() {
                         throw new Error('boom')
                     },
                 })
-                const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
                 const client = createTimedClient({ statusCode: 200 })
 
-                try {
-                    await expect(client.sendRequest('/flags/', { target: 'flags', method: 'POST' })).resolves.toEqual({
-                        statusCode: 200,
-                    })
-                    expect(error).toHaveBeenCalledWith('Failed to watch the /flags request timing', expect.any(Error))
-                    expect(recorded(METRIC)).toHaveLength(1)
-                } finally {
-                    // vi.unstubAllGlobals does not restore a property defined with Object.defineProperty.
-                    delete (window as { PerformanceObserver?: unknown }).PerformanceObserver
-                }
+                await expect(client.sendRequest('/flags/', { target: 'flags', method: 'POST' })).resolves.toEqual({
+                    statusCode: 200,
+                })
+                expect(recorded(METRIC)).toHaveLength(1)
             })
 
             it('logs instead of throwing when recording a split that arrives after the callback throws', async () => {

@@ -39,6 +39,15 @@ const liveWatches: LiveWatch[] = []
  * Returns undefined when the browser cannot observe resource entries.
  */
 export const watchResourceTiming = (url: string): ResourceTimingWatch | undefined => {
+    // The transport calls this just before it sends, so nothing here may throw.
+    try {
+        return createWatch(url)
+    } catch {
+        return undefined
+    }
+}
+
+const createWatch = (url: string): ResourceTimingWatch | undefined => {
     const Observer = window?.PerformanceObserver
     const name = convertToURL(url)?.href
     if (!Observer || !name) {
@@ -86,14 +95,8 @@ export const watchResourceTiming = (url: string): ResourceTimingWatch | undefine
         }
     }
 
-    // The transport calls this just before it sends, so nothing here may throw.
-    let observer: PerformanceObserver
-    try {
-        observer = new Observer((list) => collect(list.getEntriesByName(name, 'resource')))
-        observer.observe({ entryTypes: ['resource'] })
-    } catch {
-        return undefined
-    }
+    const observer = new Observer((list) => collect(list.getEntriesByName(name, 'resource')))
+    observer.observe({ entryTypes: ['resource'] })
     for (const other of liveWatches) {
         if (other.name === name) {
             other.before = Math.min(other.before, startedAt)
