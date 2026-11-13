@@ -1,6 +1,8 @@
+import { createBufferedPostHog as createPostHog } from './helpers'
+import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { analytics as createAnalytics } from '../src/analytics'
-import { createPostHog, type NewSessionInfo, type StorageLike } from '../src/core'
+import type { NewSessionInfo, StorageLike } from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
@@ -80,7 +82,7 @@ describe('browser-next session state', () => {
         posthog.onNewSession(listener)
 
         expect(posthog.session).toBeUndefined()
-        await posthog.capture('')
+        await requireInstalledExtension(posthog.analytics).capture('')
         expect(posthog.session).toBeUndefined()
         expect(listener).not.toHaveBeenCalled()
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}')).not.toHaveProperty('session')
@@ -98,7 +100,7 @@ describe('browser-next session state', () => {
             fetch: false,
         })
 
-        await posthog.capture('oversized', { value: 'a'.repeat(8 * 1024 * 1024) })
+        await requireInstalledExtension(posthog.analytics).capture('oversized', { value: 'a'.repeat(8 * 1024 * 1024) })
 
         expect(posthog.session).toBeUndefined()
         expect(JSON.parse(local.values.get(STATE_KEY) ?? '{}')).not.toHaveProperty('session')
@@ -111,17 +113,17 @@ describe('browser-next session state', () => {
         const posthog = await createMemoryClient(storage)
         const changes: NewSessionInfo[] = []
         posthog.onNewSession((change) => changes.push(change))
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
         const first = posthog.session!
         const persisted = storage.values.get(STATE_KEY)
         vi.setSystemTime(START + 1_800_001)
 
-        await posthog.capture('oversized', { value: 'a'.repeat(8 * 1024 * 1024) })
+        await requireInstalledExtension(posthog.analytics).capture('oversized', { value: 'a'.repeat(8 * 1024 * 1024) })
 
         expect(posthog.session).toEqual(first)
         expect(storage.values.get(STATE_KEY)).toBe(persisted)
         expect(changes).toEqual([])
-        await posthog.capture('admitted')
+        await requireInstalledExtension(posthog.analytics).capture('admitted')
         expect(posthog.session!.sessionId).not.toBe(first.sessionId)
         expect(changes.map(({ reason }) => reason)).toEqual(['idleTimeout'])
     })
@@ -146,21 +148,21 @@ describe('browser-next session state', () => {
             extensions: [analytics()],
         })
         const observed: string[] = []
-        posthog.onEvent(({ event }) => observed.push(event))
-        await posthog.capture('large', { value: 'a'.repeat(8_387_700) })
+        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
+        await requireInstalledExtension(posthog.analytics).capture('large', { value: 'a'.repeat(8_387_700) })
         await Promise.resolve()
         expect(fetch).toHaveBeenCalledTimes(1)
         const session = posthog.session
         vi.setSystemTime(START + 120_000)
 
-        await posthog.capture('rejected', { value: 'a'.repeat(1_000) })
+        await requireInstalledExtension(posthog.analytics).capture('rejected', { value: 'a'.repeat(1_000) })
 
         expect(observed).toEqual(['large'])
         expect(posthog.session).toEqual(session)
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.lastActivityTimestamp).toBe(START)
         finish?.(new Response('{}', { status: 200 }))
         await posthog.flush()
-        await posthog.capture('admitted')
+        await requireInstalledExtension(posthog.analytics).capture('admitted')
         expect(observed).toEqual(['large', 'admitted'])
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.lastActivityTimestamp).toBe(START + 120_000)
     })
@@ -170,16 +172,16 @@ describe('browser-next session state', () => {
         const posthog = await createMemoryClient(storage)
         const changes: NewSessionInfo[] = []
         posthog.onNewSession((change) => changes.push(change))
-        await posthog.capture('first')
-        posthog.reset()
+        await requireInstalledExtension(posthog.analytics).capture('first')
+        requireInstalledExtension(posthog.analytics).reset()
         const resetState = storage.values.get(STATE_KEY)
 
-        await posthog.capture('oversized', { value: 'a'.repeat(8 * 1024 * 1024) })
+        await requireInstalledExtension(posthog.analytics).capture('oversized', { value: 'a'.repeat(8 * 1024 * 1024) })
 
         expect(posthog.session).toBeUndefined()
         expect(storage.values.get(STATE_KEY)).toBe(resetState)
         expect(changes).toEqual([])
-        await posthog.capture('admitted')
+        await requireInstalledExtension(posthog.analytics).capture('admitted')
         expect(posthog.session!.sessionId).not.toBe('')
         expect(changes.map(({ reason }) => reason)).toEqual(['reset'])
     })
@@ -190,7 +192,7 @@ describe('browser-next session state', () => {
         const listener = vi.fn()
         posthog.onNewSession(listener)
 
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
 
         expect(posthog.session!.sessionId).not.toBe('')
         expect(posthog.session!.windowId).not.toBe('')
@@ -227,7 +229,7 @@ describe('browser-next session state', () => {
         const posthog = await createMemoryClient(storage)
         expect(posthog.session).toBeUndefined()
 
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
 
         expect(posthog.session!.sessionId).toBe('persisted-session')
         expect(posthog.session!.windowId).not.toBe('')
@@ -237,11 +239,11 @@ describe('browser-next session state', () => {
         const posthog = await createMemoryClient(false)
         const changes: NewSessionInfo[] = []
         posthog.onNewSession((change) => changes.push(change))
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
         const first = posthog.session!
 
         vi.setSystemTime(START + 1_800_000)
-        await posthog.capture('at-boundary')
+        await requireInstalledExtension(posthog.analytics).capture('at-boundary')
         expect(posthog.session).toMatchObject({
             sessionId: first.sessionId,
             windowId: first.windowId,
@@ -250,7 +252,7 @@ describe('browser-next session state', () => {
         expect(posthog.session!.lastActivityTimestamp).toBe(START + 1_800_000)
 
         vi.setSystemTime(START + 3_600_001)
-        await posthog.capture('after-boundary')
+        await requireInstalledExtension(posthog.analytics).capture('after-boundary')
         expect(posthog.session!.sessionId).not.toBe(first.sessionId)
         expect(posthog.session!.windowId).not.toBe(first.windowId)
         expect(changes.map(({ reason }) => reason)).toEqual(['idleTimeout'])
@@ -259,15 +261,15 @@ describe('browser-next session state', () => {
     it('keeps rotation and reset revisions strictly increasing', async () => {
         const storage = new MemoryStorage()
         const posthog = await createMemoryClient(storage)
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
         const firstRevision = JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.revision
 
         vi.setSystemTime(START + 1_800_001)
-        await posthog.capture('rotated')
+        await requireInstalledExtension(posthog.analytics).capture('rotated')
         const rotatedRevision = JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.revision
-        posthog.reset()
+        requireInstalledExtension(posthog.analytics).reset()
         const resetRevision = JSON.parse(storage.values.get(STATE_KEY) ?? '{}').sessionReset
-        await posthog.capture('after-reset')
+        await requireInstalledExtension(posthog.analytics).capture('after-reset')
         const replacementRevision = JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.revision
 
         expect(BigInt(rotatedRevision)).toBeGreaterThan(BigInt(firstRevision))
@@ -297,16 +299,16 @@ describe('browser-next session state', () => {
             })
         )
         const posthog = await createMemoryClient(storage)
-        await posthog.capture('adopt')
+        await requireInstalledExtension(posthog.analytics).capture('adopt')
         vi.setSystemTime(START + 1_800_001)
-        await posthog.capture('rotate')
+        await requireInstalledExtension(posthog.analytics).capture('rotate')
         const rotated = posthog.session!
         const persistedRevision = JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.revision
         expect(typeof persistedRevision).toBe('string')
         expect(persistedRevision).toBe('9007199254740992')
 
         const reloaded = await createMemoryClient(storage)
-        await reloaded.capture('reload')
+        await requireInstalledExtension(reloaded.analytics).capture('reload')
         expect(reloaded.session!.sessionId).toBe(rotated.sessionId)
     })
 
@@ -332,15 +334,15 @@ describe('browser-next session state', () => {
         )
         const first = await createMemoryClient(storage)
         const stale = await createMemoryClient(storage)
-        await first.capture('first')
-        await stale.capture('stale')
+        await requireInstalledExtension(first.analytics).capture('first')
+        await requireInstalledExtension(stale.analytics).capture('stale')
 
-        first.reset()
+        requireInstalledExtension(first.analytics).reset()
         stale.kv.set('stale', true)
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}')).toMatchObject({
             sessionReset: '10000000000000000',
         })
-        await stale.capture('after-reset')
+        await requireInstalledExtension(stale.analytics).capture('after-reset')
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}')).toMatchObject({
             session: { revision: '10000000000000001' },
         })
@@ -350,12 +352,12 @@ describe('browser-next session state', () => {
         const posthog = await createMemoryClient(false)
         const changes: NewSessionInfo[] = []
         posthog.onNewSession((change) => changes.push(change))
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
         const first = posthog.session!
 
         for (let interval = 1; interval <= 72; interval++) {
             vi.setSystemTime(START + interval * 20 * 60 * 1000)
-            await posthog.capture(`tick-${interval}`)
+            await requireInstalledExtension(posthog.analytics).capture(`tick-${interval}`)
         }
         expect(posthog.session).toMatchObject({
             sessionId: first.sessionId,
@@ -365,7 +367,7 @@ describe('browser-next session state', () => {
         expect(posthog.session!.lastActivityTimestamp).toBe(START + 86_400_000)
 
         vi.setSystemTime(START + 86_400_001)
-        await posthog.capture('after-maximum')
+        await requireInstalledExtension(posthog.analytics).capture('after-maximum')
         expect(posthog.session!.sessionId).not.toBe(first.sessionId)
         expect(posthog.session!.windowId).not.toBe(first.windowId)
         expect(changes.map(({ reason }) => reason)).toEqual(['maxLength'])
@@ -376,7 +378,7 @@ describe('browser-next session state', () => {
         const posthog = await createMemoryClient(storage)
         const changes = vi.fn()
         posthog.onNewSession(changes)
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
         const first = posthog.session
         const persisted = storage.values.get(STATE_KEY)
 
@@ -391,16 +393,16 @@ describe('browser-next session state', () => {
 
     it('defers reset session creation and notification until the next capture', async () => {
         const posthog = await createMemoryClient(false)
-        await posthog.capture('before-reset')
+        await requireInstalledExtension(posthog.analytics).capture('before-reset')
         const before = posthog.session!
         const changes: NewSessionInfo[] = []
         posthog.onNewSession((change) => changes.push(change))
 
-        posthog.reset()
+        requireInstalledExtension(posthog.analytics).reset()
         expect(posthog.session).toBeUndefined()
         expect(changes).toEqual([])
 
-        await posthog.capture('after-reset')
+        await requireInstalledExtension(posthog.analytics).capture('after-reset')
         expect(posthog.session!.sessionId).not.toBe(before.sessionId)
         expect(posthog.session!.windowId).not.toBe(before.windowId)
         expect(changes).toEqual([{ ...posthog.session, reason: 'reset' }])
@@ -410,15 +412,15 @@ describe('browser-next session state', () => {
         const storage = new MemoryStorage()
         const first = await createMemoryClient(storage)
         const second = await createMemoryClient(storage)
-        await first.capture('first')
-        await second.capture('second')
+        await requireInstalledExtension(first.analytics).capture('first')
+        await requireInstalledExtension(second.analytics).capture('second')
         const shared = second.session!.sessionId
         const secondWindow = second.session!.windowId
 
         vi.setSystemTime(START + 29 * 60 * 1000)
-        await first.capture('recent-sibling-activity')
+        await requireInstalledExtension(first.analytics).capture('recent-sibling-activity')
         vi.setSystemTime(START + 31 * 60 * 1000)
-        await second.capture('after-local-idle')
+        await requireInstalledExtension(second.analytics).capture('after-local-idle')
 
         expect(second.session!.sessionId).toBe(shared)
         expect(second.session!.windowId).toBe(secondWindow)
@@ -428,15 +430,15 @@ describe('browser-next session state', () => {
         const storage = new MemoryStorage()
         const first = await createMemoryClient(storage)
         const second = await createMemoryClient(storage)
-        await first.capture('first')
-        await second.capture('second')
+        await requireInstalledExtension(first.analytics).capture('first')
+        await requireInstalledExtension(second.analytics).capture('second')
         const oldSession = first.session!.sessionId
         const secondWindow = second.session!.windowId
 
         vi.setSystemTime(START + 1_800_001)
-        await first.capture('rotated')
+        await requireInstalledExtension(first.analytics).capture('rotated')
         expect(first.session!.sessionId).not.toBe(oldSession)
-        await second.capture('adopt')
+        await requireInstalledExtension(second.analytics).capture('adopt')
 
         expect(second.session!.sessionId).toBe(first.session!.sessionId)
         expect(second.session!.windowId).toBe(secondWindow)
@@ -457,18 +459,18 @@ describe('browser-next session state', () => {
             extensions: [analytics()],
         })
         const observed: string[] = []
-        posthog.onEvent(({ event }) => observed.push(event))
+        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
         const set = tab.setItem.bind(tab)
         let reset = false
         tab.setItem = (key, value) => {
             set(key, value)
             if (key === WINDOW_KEY && !reset) {
                 reset = true
-                sibling.reset()
+                requireInstalledExtension(sibling.analytics).reset()
             }
         }
 
-        await posthog.capture('racy')
+        await requireInstalledExtension(posthog.analytics).capture('racy')
 
         const durableReset = JSON.parse(local.values.get(STATE_KEY) ?? '{}')
         expect(reset).toBe(true)
@@ -479,7 +481,7 @@ describe('browser-next session state', () => {
         expect(tab.values.has(WINDOW_KEY)).toBe(false)
         expect(tab.values.has(PRIMARY_WINDOW_KEY)).toBe(false)
 
-        await posthog.capture('after-race')
+        await requireInstalledExtension(posthog.analytics).capture('after-race')
         await posthog.flush()
         const delivered = requests.flatMap(
             ({ body }) => (body?.batch as Array<{ event: string }> | undefined)?.map(({ event }) => event) ?? []
@@ -499,23 +501,23 @@ describe('browser-next session state', () => {
             debug: true,
         })
         const sibling = await createMemoryClient(storage)
-        await posthog.capture('first')
-        await sibling.capture('adopt')
+        await requireInstalledExtension(posthog.analytics).capture('first')
+        await requireInstalledExtension(sibling.analytics).capture('adopt')
         for (let index = 0; index < 999; index++) {
             vi.setSystemTime(START + (index + 1) * 100)
-            await posthog.capture(`queued-${index}`)
+            await requireInstalledExtension(posthog.analytics).capture(`queued-${index}`)
         }
         const observed: string[] = []
-        posthog.onEvent(({ event }) => observed.push(event))
+        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
         let reset = false
         vi.spyOn(console, 'warn').mockImplementation(() => {
             if (!reset) {
                 reset = true
-                sibling.reset()
+                requireInstalledExtension(sibling.analytics).reset()
             }
         })
 
-        await posthog.capture('racy')
+        await requireInstalledExtension(posthog.analytics).capture('racy')
 
         const durableReset = JSON.parse(storage.values.get(STATE_KEY) ?? '{}')
         expect(reset).toBe(true)
@@ -523,7 +525,7 @@ describe('browser-next session state', () => {
         expect(durableReset.sessionReset).toEqual(expect.any(String))
         expect(observed).toEqual([])
 
-        await posthog.capture('after-race')
+        await requireInstalledExtension(posthog.analytics).capture('after-race')
         const durableSession = JSON.parse(storage.values.get(STATE_KEY) ?? '{}')
         expect(BigInt(durableSession.session.revision)).toBeGreaterThan(BigInt(durableReset.sessionReset))
         expect(observed).toEqual(['after-race'])
@@ -535,25 +537,25 @@ describe('browser-next session state', () => {
         const staleKv = await createMemoryClient(storage)
         const staleIdentity = await createMemoryClient(storage)
         const staleGroup = await createMemoryClient(storage)
-        await first.capture('first')
-        await staleKv.capture('stale-kv')
-        await staleIdentity.capture('stale-identity')
-        await staleGroup.capture('stale-group')
+        await requireInstalledExtension(first.analytics).capture('first')
+        await requireInstalledExtension(staleKv.analytics).capture('stale-kv')
+        await requireInstalledExtension(staleIdentity.analytics).capture('stale-identity')
+        await requireInstalledExtension(staleGroup.analytics).capture('stale-group')
         const oldSessionId = first.session!.sessionId
 
         vi.setSystemTime(START + 1_800_001)
-        await first.capture('rotate')
+        await requireInstalledExtension(first.analytics).capture('rotate')
         const rotatedSessionId = first.session!.sessionId
         expect(rotatedSessionId).not.toBe(oldSessionId)
 
         staleKv.kv.set('key', true)
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.sessionId).toBe(rotatedSessionId)
-        await staleIdentity.identify('identified-user')
+        await requireInstalledExtension(staleIdentity.analytics).identify('identified-user')
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.sessionId).toBe(rotatedSessionId)
-        await staleGroup.group('organization', 'group')
+        await requireInstalledExtension(staleGroup.analytics).group('organization', 'group')
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.sessionId).toBe(rotatedSessionId)
 
-        await staleKv.capture('adopt')
+        await requireInstalledExtension(staleKv.analytics).capture('adopt')
         expect(staleKv.session!.sessionId).toBe(rotatedSessionId)
     })
 
@@ -561,17 +563,17 @@ describe('browser-next session state', () => {
         const storage = new MemoryStorage()
         const first = await createMemoryClient(storage)
         const stale = await createMemoryClient(storage)
-        await first.capture('first')
-        await stale.capture('stale')
+        await requireInstalledExtension(first.analytics).capture('first')
+        await requireInstalledExtension(stale.analytics).capture('stale')
         const oldSessionId = first.session!.sessionId
 
-        first.reset()
+        requireInstalledExtension(first.analytics).reset()
         stale.kv.set('key', true)
         const resetState = JSON.parse(storage.values.get(STATE_KEY) ?? '{}')
         expect(resetState.session).toBeUndefined()
         expect(resetState.sessionReset).toEqual(expect.any(String))
 
-        await stale.capture('after-reset')
+        await requireInstalledExtension(stale.analytics).capture('after-reset')
         expect(stale.session!.sessionId).not.toBe(oldSessionId)
         expect(stale.session!.windowId).not.toBe('')
     })
@@ -580,15 +582,15 @@ describe('browser-next session state', () => {
         const storage = new MemoryStorage()
         const posthog = await createMemoryClient(storage)
         const observed = vi.fn()
-        posthog.onEvent(observed)
-        await posthog.capture('first')
+        requireInstalledExtension(posthog.analytics).onEvent(observed)
+        await requireInstalledExtension(posthog.analytics).capture('first')
         const first = posthog.session
         const base = JSON.parse(storage.values.get(STATE_KEY) ?? '{}')
 
         const lazy = { ...base }
         delete lazy.session
         storage.values.set(STATE_KEY, JSON.stringify(lazy))
-        await posthog.capture('lazy-absence')
+        await requireInstalledExtension(posthog.analytics).capture('lazy-absence')
         expect(posthog.session).toEqual(first)
 
         for (const malformed of [
@@ -604,7 +606,7 @@ describe('browser-next session state', () => {
             },
         ]) {
             storage.values.set(STATE_KEY, JSON.stringify({ ...base, session: malformed }))
-            await posthog.capture('malformed')
+            await requireInstalledExtension(posthog.analytics).capture('malformed')
             expect(posthog.session).toEqual(first)
         }
         expect(observed.mock.calls.every(([payload]) => payload.properties.$session_id !== '')).toBe(true)
@@ -613,7 +615,7 @@ describe('browser-next session state', () => {
     it('retries a failed initial state read before exposing or overwriting state', async () => {
         const storage = new FailingStorage()
         const seed = await createMemoryClient(storage)
-        await seed.capture('seed')
+        await requireInstalledExtension(seed.analytics).capture('seed')
         const persisted = storage.values.get(STATE_KEY)
         const identity = seed.anonymousId
         const sessionId = seed.session!.sessionId
@@ -622,18 +624,18 @@ describe('browser-next session state', () => {
         const posthog = await createMemoryClient(storage)
         expect(storage.values.get(STATE_KEY)).toBe(persisted)
         expect(posthog.anonymousId).toBe(identity)
-        await posthog.capture('recovered')
+        await requireInstalledExtension(posthog.analytics).capture('recovered')
         expect(posthog.session!.sessionId).toBe(sessionId)
     })
 
     it('retains safe local session state when shared-state reads fail', async () => {
         const storage = new FailingStorage()
         const posthog = await createMemoryClient(storage)
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
         const first = posthog.session
         storage.failReads = true
 
-        expect(() => posthog.capture('after-read-failure')).not.toThrow()
+        expect(() => requireInstalledExtension(posthog.analytics).capture('after-read-failure')).not.toThrow()
         expect(posthog.session).toEqual(first)
     })
 
@@ -642,7 +644,7 @@ describe('browser-next session state', () => {
         const tab = new MemoryStorage()
         setDefaultStorage(local, tab)
         const posthog = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await posthog.capture('before-denial')
+        await requireInstalledExtension(posthog.analytics).capture('before-denial')
         const before = posthog.session
         const changes = vi.fn()
         posthog.onNewSession(changes)
@@ -654,7 +656,7 @@ describe('browser-next session state', () => {
         expect(tab.values.has(PRIMARY_WINDOW_KEY)).toBe(true)
         posthog.optIn()
         expect(posthog.session).toEqual(before)
-        await posthog.capture('after-grant')
+        await requireInstalledExtension(posthog.analytics).capture('after-grant')
 
         expect(posthog.session).toEqual(before)
         expect(changes).not.toHaveBeenCalled()
@@ -665,7 +667,7 @@ describe('browser-next session state', () => {
         const tab = new MemoryStorage()
         setDefaultStorage(local, tab)
         const first = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await first.capture('first')
+        await requireInstalledExtension(first.analytics).capture('first')
         const firstSession = first.session!
         expect(tab.values.get(PRIMARY_WINDOW_KEY)).toBe('1')
         await first.dispose()
@@ -674,7 +676,7 @@ describe('browser-next session state', () => {
 
         const reloaded = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
         expect(reloaded.session).toBeUndefined()
-        await reloaded.capture('reload')
+        await requireInstalledExtension(reloaded.analytics).capture('reload')
         expect(reloaded.session).toEqual(firstSession)
     })
 
@@ -689,7 +691,7 @@ describe('browser-next session state', () => {
             fetch: false,
         })
 
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
 
         expect(tab.values.get('custom-state_window_id')).toBe(posthog.session!.windowId)
         expect(tab.values.get('custom-state_primary_window_exists')).toBe('1')
@@ -700,7 +702,7 @@ describe('browser-next session state', () => {
         const tab = new MemoryStorage()
         setDefaultStorage(local, tab)
         const first = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await first.capture('first')
+        await requireInstalledExtension(first.analytics).capture('first')
         const firstSession = first.session
         Object.defineProperty(globalThis, 'performance', {
             configurable: true,
@@ -708,7 +710,7 @@ describe('browser-next session state', () => {
         })
 
         const reloaded = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await reloaded.capture('reload')
+        await requireInstalledExtension(reloaded.analytics).capture('reload')
 
         expect(reloaded.session).toEqual(firstSession)
     })
@@ -718,7 +720,7 @@ describe('browser-next session state', () => {
         const originalTab = new MemoryStorage()
         setDefaultStorage(local, originalTab)
         const first = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await first.capture('first')
+        await requireInstalledExtension(first.analytics).capture('first')
         const firstSession = first.session!
 
         const copiedTab = new MemoryStorage()
@@ -731,7 +733,7 @@ describe('browser-next session state', () => {
             },
         })
         const duplicate = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await duplicate.capture('duplicate')
+        await requireInstalledExtension(duplicate.analytics).capture('duplicate')
 
         expect(duplicate.session!.sessionId).toBe(firstSession.sessionId)
         expect(duplicate.session!.windowId).not.toBe(firstSession.windowId)
@@ -743,9 +745,9 @@ describe('browser-next session state', () => {
         const tab = new MemoryStorage()
         setDefaultStorage(local, tab)
         const posthog = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
         vi.setSystemTime(START + 30_000)
-        await posthog.capture('activity')
+        await requireInstalledExtension(posthog.analytics).capture('activity')
         expect(JSON.parse(local.values.get(STATE_KEY) ?? '{}').session.lastActivityTimestamp).toBe(START)
 
         globalThis.dispatchEvent(new Event('beforeunload'))
@@ -759,16 +761,16 @@ describe('browser-next session state', () => {
         const firstTab = new MemoryStorage()
         setDefaultStorage(local, firstTab)
         const first = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await first.capture('first')
+        await requireInstalledExtension(first.analytics).capture('first')
 
         const secondTab = new MemoryStorage()
         Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: secondTab })
         const second = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await second.capture('second')
+        await requireInstalledExtension(second.analytics).capture('second')
         vi.setSystemTime(START + 30_000)
-        await second.capture('pending-older-activity')
+        await requireInstalledExtension(second.analytics).capture('pending-older-activity')
         vi.setSystemTime(START + 120_000)
-        await first.capture('persisted-newer-activity')
+        await requireInstalledExtension(first.analytics).capture('persisted-newer-activity')
 
         globalThis.dispatchEvent(new Event('beforeunload'))
 
@@ -780,16 +782,16 @@ describe('browser-next session state', () => {
         const firstTab = new MemoryStorage()
         setDefaultStorage(local, firstTab)
         const first = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await first.capture('first')
+        await requireInstalledExtension(first.analytics).capture('first')
 
         const secondTab = new MemoryStorage()
         Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: secondTab })
         const second = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await second.capture('second')
+        await requireInstalledExtension(second.analytics).capture('second')
         vi.setSystemTime(START + 30_000)
-        await second.capture('pending-activity')
+        await requireInstalledExtension(second.analytics).capture('pending-activity')
         vi.setSystemTime(START + 1_800_001)
-        await first.capture('rotated')
+        await requireInstalledExtension(first.analytics).capture('rotated')
         const rotatedSession = first.session!.sessionId
 
         globalThis.dispatchEvent(new Event('beforeunload'))
@@ -804,9 +806,9 @@ describe('browser-next session state', () => {
         Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, get: getter })
 
         const custom = await createMemoryClient(new MemoryStorage())
-        await custom.capture('custom')
+        await requireInstalledExtension(custom.analytics).capture('custom')
         const disabled = await createMemoryClient(false)
-        await disabled.capture('disabled')
+        await requireInstalledExtension(disabled.analytics).capture('disabled')
         const deniedStorage = new MemoryStorage()
         deniedStorage.values.set('__ph_opt_in_out_ph_test', '0')
         Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: deniedStorage })
@@ -815,13 +817,13 @@ describe('browser-next session state', () => {
             navigator: false,
             fetch: false,
         })
-        await denied.capture('denied')
+        await requireInstalledExtension(denied.analytics).capture('denied')
         const blocked = await createPostHog({
             projectToken: 'ph_test',
             navigator: { webdriver: true },
             fetch: false,
         })
-        await blocked.capture('blocked')
+        await requireInstalledExtension(blocked.analytics).capture('blocked')
 
         expect(getter).not.toHaveBeenCalled()
     })
@@ -838,7 +840,7 @@ describe('browser-next session state', () => {
         })
         const posthog = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
 
-        await posthog.capture('safe')
+        await requireInstalledExtension(posthog.analytics).capture('safe')
 
         expect(posthog.session!.windowId).not.toBe('')
         expect(tab.values.has(WINDOW_KEY)).toBe(false)
@@ -867,7 +869,7 @@ describe('browser-next session state', () => {
         })
         const posthog = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
 
-        expect(() => posthog.capture('safe')).not.toThrow()
+        expect(() => requireInstalledExtension(posthog.analytics).capture('safe')).not.toThrow()
         expect(posthog.session!.sessionId).not.toBe('')
         await expect(posthog.dispose()).resolves.toBeUndefined()
     })
@@ -878,7 +880,7 @@ describe('browser-next session state', () => {
         setDefaultStorage(local, tab)
         const remove = vi.spyOn(globalThis, 'removeEventListener')
         const posthog = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
 
         await posthog.dispose()
 

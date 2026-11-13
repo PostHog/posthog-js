@@ -1,12 +1,18 @@
 import { loadRemoteConfig } from './remote-config'
-import type { BrowserClient, ConsentChangeInfo, IdentifyInfo, GroupInfo } from './browser-client'
+import type {
+    IPostHogInternal,
+    BrowserExtension as Extension,
+    BrowserProducts,
+    ConsentChangeInfo,
+    ChangePropertiesInfo,
+    IdentifyInfo,
+    GroupInfo,
+} from './browser-client'
 import {
     type ApiResponse,
-    type CaptureOptions,
     type CapturedEventInfo,
     type Client,
     type Disposable,
-    type Extension,
     type ExtensionToken,
     type RemoteConfig,
     type RemoteConfigResult,
@@ -15,39 +21,19 @@ import {
 } from '@posthog/browser-common'
 import { Publisher } from '@posthog/browser-common/pubsub'
 
-import { createAnalyticsExtension } from './analytics-buffer'
-import {
-    MAX_ANALYTICS_BYTES,
-    isAnalyticsExtension,
-    type AnalyticsMessage,
-    type CaptureSink,
-} from './analytics-internal'
+import { isAnalyticsExtension, type AnalyticsCaptureHost, type IAnalyticsExtension } from './analytics-internal'
 import { isLikelyBot } from './bot-filter'
-import { captureFailure, EMPTY_CAPTURE_SUMMARY } from './capture-summary'
-import { ExtensionRegistry } from './extensions/registry'
-import { createId } from './id'
+import { ExtensionRegistry, type AutomaticExtension, type ExtensionLoader } from './extensions/registry'
+import { deepFreeze } from './immutable'
 import { createLogger } from './logger'
-import { ClientRateLimiter } from './rate-limiter'
 import { sendRequest, type RequestRuntime } from './request'
 import { BrowserState, getDefaultSessionStorage, getDefaultStorage } from './state'
-import type {
-    BrowserFetch,
-    CaptureSummary,
-    BrowserNavigator,
-    CorePostHogOptions,
-    NewSessionInfo,
-    PostHog,
-    StorageLike,
-} from './types'
+import type { BrowserFetch, BrowserNavigator, CorePostHogOptions, NewSessionInfo, IPostHog, StorageLike } from './types'
 import { version } from './version'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000
-const CLIENT_RATE_LIMIT_WARNING = '$$client_ingestion_warning'
 
-const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null && !Array.isArray(value)
 const normalizeHost = (host: string): string => {
     let end = host.length
     while (end > 0 && host.charCodeAt(end - 1) === 47) {
@@ -69,18 +55,6 @@ const getAssetsHost = (apiHost: string): string => {
     }
     return apiHost
 }
-const isValidDistinctId = (value: unknown): value is string =>
-    isNonEmptyString(value) &&
-    !['$posthog_cookieless', 'distinct_id', 'distinctid', 'undefined', 'null'].includes(value.toLowerCase())
-
-const deepFreeze = <T>(value: T): T => {
-    if (value && typeof value === 'object') {
-        Object.values(value as Record<string, unknown>).forEach(deepFreeze)
-        Object.freeze(value)
-    }
-    return value
-}
-
 const getDefaultFetch = (): BrowserFetch | undefined => {
     try {
         return globalThis.fetch?.bind(globalThis)
@@ -97,45 +71,24 @@ const getDefaultNavigator = (): BrowserNavigator | undefined => {
     }
 }
 
-const eventTimestamp = (timestamp: Date | undefined): string => {
-    try {
-        return (timestamp ?? new Date()).toISOString()
-    } catch {
-        return new Date().toISOString()
-    }
-}
-
-const utf8Bytes = (value: string): number => {
-    let bytes = 0
-    for (let index = 0; index < value.length; index++) {
-        const code = value.charCodeAt(index)
-        if (code < 0x80) {
-            bytes++
-        } else if (code < 0x800) {
-            bytes += 2
-        } else if (code >= 0xd800 && code <= 0xdbff && value.charCodeAt(index + 1) >= 0xdc00) {
-            bytes += 4
-            index++
-        } else {
-            bytes += 3
-        }
-    }
-    return bytes
-}
-
 /** Module-private client; the top-level factory owns its initialization. */
-class PostHogBrowserClient implements PostHog {
+class PostHog implements IPostHog {
+    declare readonly analytics?: BrowserProducts['analytics']
+    declare readonly featureFlags?: BrowserProducts['featureFlags']
+    declare readonly logs?: BrowserProducts['logs']
+    declare readonly surveys?: BrowserProducts['surveys']
+    declare readonly autocapture?: BrowserProducts['autocapture']
     readonly logger: Client['logger']
     readonly kv: Client['kv']
     readonly library = Object.freeze({ name: 'web', version })
     readonly initialPersonProperties: Readonly<Record<string, unknown>>
     readonly onRemoteConfig: Client['onRemoteConfig']
-    readonly onEvent: Client['onEvent']
-    readonly onNewSession: PostHog['onNewSession']
-    readonly onIdentify: BrowserClient['onIdentify']
-    readonly onGroup: BrowserClient['onGroup']
-    readonly onReset: BrowserClient['onReset']
-    readonly onConsentChange: BrowserClient['onConsentChange']
+    readonly onNewSession: IPostHog['onNewSession']
+    readonly onIdentify: IPostHogInternal['onIdentify']
+    readonly onGroup: IPostHogInternal['onGroup']
+    readonly onGroupsReset: IPostHogInternal['onGroupsReset']
+    readonly onReset: IPostHogInternal['onReset']
+    readonly onConsentChange: IPostHogInternal['onConsentChange']
     readonly onSession: Client['onSession']
     readonly projectToken: string
 
@@ -143,13 +96,13 @@ class PostHogBrowserClient implements PostHog {
     private readonly _eventPublisher: Publisher<CapturedEventInfo>
     private readonly _newSessionPublisher: Publisher<NewSessionInfo>
     private readonly _identifyPublisher: Publisher<IdentifyInfo>
+    private readonly _changePropertiesPublisher: Publisher<ChangePropertiesInfo>
     private readonly _groupPublisher: Publisher<GroupInfo>
+    private readonly _groupsResetPublisher: Publisher<void>
     private readonly _resetPublisher: Publisher<void>
-    readonly _registry: ExtensionRegistry
+    readonly _registry: ExtensionRegistry<IPostHogInternal>
     readonly _requestRuntime: RequestRuntime
-    _captureSink: CaptureSink | undefined
-    private readonly _dynamicEventProperties: Array<() => Record<string, unknown>> = []
-    private readonly _rateLimiter = new ClientRateLimiter()
+    private _analytics: IAnalyticsExtension | undefined
     private readonly _state: BrowserState
     private readonly _consentObservation: Disposable
     private readonly _blocked: boolean
@@ -165,13 +118,21 @@ class PostHogBrowserClient implements PostHog {
     private _disposed = false
     private _shutdownPromise: Promise<void> | undefined
     private _initialPageviewPending = true
+    private _ready = false
+    private _pageviewLoading: Promise<void> | undefined
     private _pageviewListener: [Document, EventListener] | undefined
 
-    static create(options: CorePostHogOptions, capture: CaptureSink): PostHogBrowserClient {
-        return new PostHogBrowserClient(options, capture)
+    static create(
+        options: CorePostHogOptions,
+        loaders: Readonly<Record<string, ExtensionLoader<IPostHogInternal>>>
+    ): PostHog {
+        return new PostHog(options, loaders)
     }
 
-    private constructor(options: CorePostHogOptions, capture: CaptureSink) {
+    private constructor(
+        options: CorePostHogOptions,
+        loaders: Readonly<Record<string, ExtensionLoader<IPostHogInternal>>>
+    ) {
         let projectToken = ''
         try {
             projectToken = options.projectToken ?? ''
@@ -197,7 +158,11 @@ class PostHogBrowserClient implements PostHog {
         )
         this._eventPublisher = new Publisher((error) => this.logger.error('An event listener failed', error))
         this._identifyPublisher = new Publisher((error) => this.logger.error('An identify listener failed', error))
+        this._changePropertiesPublisher = new Publisher((error) =>
+            this.logger.error('A person-property listener failed', error)
+        )
         this._groupPublisher = new Publisher((error) => this.logger.error('A group listener failed', error))
+        this._groupsResetPublisher = new Publisher((error) => this.logger.error('A group reset listener failed', error))
         this._resetPublisher = new Publisher((error) => this.logger.error('A reset listener failed', error))
         this._newSessionPublisher = new Publisher((error) => this.logger.error('A session listener failed', error))
         this._consentChangePublisher = new Publisher((error) =>
@@ -227,7 +192,7 @@ class PostHogBrowserClient implements PostHog {
             (consent, previous) => {
                 if (consent === 'denied') {
                     this._immediateAuthority = {}
-                    this._captureSink?.purge()
+                    this._analytics?.purge()
                 }
                 this._consentChangePublisher.publish({ current: consent, previous })
             }
@@ -271,18 +236,21 @@ class PostHogBrowserClient implements PostHog {
             }
             return subscription
         }
-        this.onEvent = this._eventPublisher.listener
         this.onIdentify = this._identifyPublisher.listener
         this.onGroup = this._groupPublisher.listener
+        this.onGroupsReset = this._groupsResetPublisher.listener
         this.onReset = this._resetPublisher.listener
         this.onConsentChange = this._consentChangePublisher.listener
         this.onNewSession = this._newSessionPublisher.listener
         this.onSession = (listener) => this.onNewSession((session) => listener(session.sessionId))
         this._registry = new ExtensionRegistry(
-            (extensionName) => this._createExtensionClient(extensionName),
-            this.logger
+            (extensionName, resolve) => this._createExtensionClient(extensionName, resolve),
+            this.logger,
+            loaders,
+            (extension, host) => this._setupExtension(extension, host),
+            () => !this._closing && !this._disposed
         )
-        this._captureSink = capture
+        this._registry.expose(this)
     }
 
     get distinctId(): string {
@@ -318,275 +286,6 @@ class PostHogBrowserClient implements PostHog {
         return !this._closing && !this._disposed && !this._blocked && !this.hasOptedOut() && this._state.prepare()
     }
 
-    get isRateLimited(): boolean {
-        return this._rateLimiter.wouldLimit
-    }
-
-    capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): boolean {
-        try {
-            if (options.delivery === 'unload' && !this._captureSink?.isTearingDown) {
-                const authority = this._immediateAuthority
-                const message = this._admitCapture(event, properties, options, false, true)
-                if (message) {
-                    this._captureSink?.deliverUnload(message, () => this._immediateAuthority === authority)
-                }
-                return !!message || !this._rateLimiter.limited
-            }
-        } catch (error) {
-            this.logger.error('Unload capture failed', error)
-            return true
-        }
-        return this._capture(event, properties, options) || !this._rateLimiter.limited
-    }
-
-    async captureImmediate(
-        event: string,
-        properties: Record<string, unknown> | null = null,
-        options: CaptureOptions = {}
-    ): Promise<CaptureSummary> {
-        try {
-            const authority = this._immediateAuthority
-            const message = this._admitCapture(event, properties, options, false, true)
-            if (!message) {
-                return EMPTY_CAPTURE_SUMMARY
-            }
-
-            const capture = this._captureSink
-            if (!capture) {
-                return captureFailure(new Error('Immediate analytics delivery is unavailable'))
-            }
-            return await capture.deliverImmediate(message, () => this._immediateAuthority === authority)
-        } catch (error) {
-            return captureFailure(error)
-        }
-    }
-
-    private _capture(
-        event: string,
-        properties: Record<string, unknown> | null = null,
-        options: CaptureOptions = {},
-        skipRateLimit = false
-    ): boolean {
-        return this._admitCapture(event, properties, options, skipRateLimit, false) !== undefined
-    }
-
-    private _admitCapture(
-        event: string,
-        properties: Record<string, unknown> | null,
-        options: CaptureOptions,
-        skipRateLimit: boolean,
-        immediate: boolean
-    ): AnalyticsMessage | undefined {
-        if (
-            !isNonEmptyString(event) ||
-            this._closing ||
-            this._disposed ||
-            this._blocked ||
-            this.hasOptedOut() ||
-            !this._state.prepare()
-        ) {
-            return undefined
-        }
-        if (!skipRateLimit) {
-            const rateLimit = this._rateLimiter.consume()
-            if (!rateLimit.allowed) {
-                if (rateLimit.reportDropped !== undefined) {
-                    const warning = `${rateLimit.reportDropped} event(s) dropped since the last warning. Client limit is 10 events per second with a burst of 100.`
-                    this.logger.warn(`PostHog client rate limited: ${warning}`)
-                    if (
-                        this._capture(
-                            CLIENT_RATE_LIMIT_WARNING,
-                            { $$client_ingestion_warning_message: `posthog-js client rate limited: ${warning}` },
-                            {},
-                            true
-                        )
-                    ) {
-                        this._rateLimiter.reported()
-                    }
-                }
-                return undefined
-            }
-        }
-
-        const dynamicProperties: Record<string, unknown> = {}
-        for (const producer of this._dynamicEventProperties.slice()) {
-            try {
-                Object.assign(dynamicProperties, producer())
-            } catch (error) {
-                this.logger.error('An event property producer failed', error)
-            }
-        }
-
-        let messageProperties: Record<string, unknown>
-        let observedProperties: Record<string, unknown>
-        let uuid: string | undefined
-        let timestamp: Date | undefined
-        try {
-            const callerProperties: Record<string, unknown> = {
-                ...dynamicProperties,
-                ...(properties ?? {}),
-            }
-            const set = options.set
-            const setOnce = options.setOnce
-            uuid = options.uuid
-            timestamp = options.timestamp
-            if (set) {
-                callerProperties['$set'] = set
-            }
-            if (setOnce) {
-                callerProperties['$set_once'] = setOnce
-            }
-            const serializedProperties = JSON.stringify(callerProperties)
-            const parsedMessageProperties: unknown = JSON.parse(
-                serializedProperties,
-                function (this: unknown, _key: string, value: unknown) {
-                    return value === null && !Array.isArray(this) ? undefined : value
-                }
-            )
-            const parsedObservedProperties: unknown = JSON.parse(serializedProperties)
-            if (!isRecord(parsedMessageProperties) || !isRecord(parsedObservedProperties)) {
-                throw new Error('Event properties must serialize to an object')
-            }
-            messageProperties = parsedMessageProperties
-            observedProperties = parsedObservedProperties
-        } catch (error) {
-            this.logger.error('Event properties are not JSON-serializable', error)
-            return undefined
-        }
-
-        const preparedSession = this._state.prepareSessionForEvent()
-        const session = preparedSession.context
-        const distinctId = this._state.distinctId
-        const deviceId = this._state.deviceId
-        const groups = this._state.groups
-        Object.assign(messageProperties, {
-            token: this.projectToken,
-            distinct_id: distinctId,
-            $device_id: deviceId,
-            $groups: groups,
-            $session_id: session.sessionId,
-            $window_id: session.windowId,
-            $lib: 'web',
-            $lib_version: version,
-        })
-        Object.assign(observedProperties, {
-            token: this.projectToken,
-            distinct_id: distinctId,
-            $device_id: deviceId,
-            $groups: { ...groups },
-            $session_id: session.sessionId,
-            $window_id: session.windowId,
-            $lib: 'web',
-            $lib_version: version,
-        })
-
-        const message: AnalyticsMessage = {
-            uuid: uuid ?? createId(),
-            event,
-            distinct_id: distinctId,
-            properties: messageProperties,
-            timestamp: eventTimestamp(timestamp),
-        }
-        let bytes: number
-        try {
-            bytes = utf8Bytes(JSON.stringify(message))
-        } catch (error) {
-            this.logger.error('The finalized event could not be measured', error)
-            return undefined
-        }
-
-        const capture = this._captureSink
-        if (immediate ? bytes > MAX_ANALYTICS_BYTES : !capture?.enqueue(message, bytes)) {
-            if (bytes > MAX_ANALYTICS_BYTES) {
-                this.logger.warn(`Event "${event}" (${bytes} bytes) exceeds the local analytics limit and was dropped`)
-            }
-            return undefined
-        }
-        if (!this._state.sessionAdmitted(preparedSession)) {
-            if (!immediate) {
-                capture?.discardQueued(message)
-            }
-            return undefined
-        }
-        if (preparedSession.reason) {
-            this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason })
-        }
-        this._eventPublisher.publish(deepFreeze({ event, properties: observedProperties }))
-        if (!immediate) {
-            capture?.admitted()
-        }
-        return message
-    }
-
-    async identify(
-        distinctId: string,
-        set?: Record<string, unknown>,
-        setOnce?: Record<string, unknown>
-    ): Promise<void> {
-        if (!isValidDistinctId(distinctId) || this._closing || this._disposed) {
-            return
-        }
-
-        this._state.prepare()
-        const previousDistinctId = this._state.distinctId
-        const wasIdentified = this._state.isIdentified
-        const captureOptions: CaptureOptions = {}
-        if (set) {
-            captureOptions.set = set
-        }
-        if (setOnce) {
-            captureOptions.setOnce = setOnce
-        }
-        const hasPersonProperties = !!set || !!setOnce
-
-        if (distinctId === previousDistinctId) {
-            if (!wasIdentified) {
-                this._state.identify(distinctId)
-                this._identifyPublisher.publish({ distinctId, previousDistinctId, wasIdentified, set, setOnce })
-                this.capture('$set', null, { set: set ?? {}, setOnce: setOnce ?? {} })
-            } else if (hasPersonProperties) {
-                this._identifyPublisher.publish({ distinctId, previousDistinctId, wasIdentified, set, setOnce })
-                this.capture('$set', null, captureOptions)
-            }
-            return
-        }
-
-        this._state.identify(distinctId)
-        this._identifyPublisher.publish({ distinctId, previousDistinctId, wasIdentified, set, setOnce })
-        if (!wasIdentified) {
-            this.capture('$identify', { $anon_distinct_id: previousDistinctId }, captureOptions)
-        } else if (hasPersonProperties) {
-            this.capture('$set', null, captureOptions)
-        }
-    }
-
-    async group(type: string, key: string, properties?: Record<string, unknown>): Promise<void> {
-        if (!isNonEmptyString(type) || !isNonEmptyString(key) || this._closing || this._disposed) {
-            return
-        }
-
-        this._state.prepare()
-        const changed = this._state.group(type, key)
-        if (!changed && !properties) {
-            return
-        }
-        this._groupPublisher.publish({ type, key, changed, properties })
-        this.capture('$groupidentify', {
-            $group_type: type,
-            $group_key: key,
-            ...(properties ? { $group_set: properties } : {}),
-        })
-    }
-
-    reset(): void {
-        if (this._closing || this._disposed) {
-            return
-        }
-        this._state.prepare()
-        this._state.reset()
-        this._resetPublisher.publish(undefined)
-    }
-
     async flush(): Promise<void> {
         await this._registry.flush()
     }
@@ -609,28 +308,6 @@ class PostHogBrowserClient implements PostHog {
 
     hasOptedOut(): boolean {
         return this._state.consent === 'denied'
-    }
-
-    registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {
-        if (this._disposed) {
-            return { dispose() {} }
-        }
-
-        this._dynamicEventProperties.push(producer)
-        let active = true
-
-        return {
-            dispose: () => {
-                if (!active) {
-                    return
-                }
-                active = false
-                const index = this._dynamicEventProperties.indexOf(producer)
-                if (index !== -1) {
-                    this._dynamicEventProperties.splice(index, 1)
-                }
-            },
-        }
     }
 
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
@@ -732,10 +409,11 @@ class PostHogBrowserClient implements PostHog {
         return this._remoteConfigPromise
     }
 
-    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
-    getExtension<T extends Extension = Extension>(name: string): T | undefined
-    getExtension<T extends Extension = Extension>(name: string): T | undefined {
-        return this._registry.get<T>(name)
+    resolveExtension<T extends Extension>(token: ExtensionToken<T>): Promise<T | undefined>
+    resolveExtension<Name extends keyof BrowserProducts>(name: Name): Promise<BrowserProducts[Name] | undefined>
+    resolveExtension<T extends Extension = Extension>(name: string): Promise<T | undefined>
+    resolveExtension(name: string): Promise<Extension | undefined> {
+        return this._closing || this._disposed ? Promise.resolve(undefined) : this._registry.resolve(name)
     }
 
     shutdown(shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS): Promise<void> {
@@ -791,18 +469,19 @@ class PostHogBrowserClient implements PostHog {
                 this.logger.error('Failed to dispose browser state', error)
             }
 
-            this._captureSink = undefined
+            this._analytics = undefined
             const cleanup = this._registry
                 .dispose()
                 .catch((error) => this.logger.error('Failed to dispose extensions', error))
             this._remoteConfigPublisher.dispose()
             this._eventPublisher.dispose()
             this._identifyPublisher.dispose()
+            this._changePropertiesPublisher.dispose()
             this._groupPublisher.dispose()
+            this._groupsResetPublisher.dispose()
             this._resetPublisher.dispose()
             this._consentChangePublisher.dispose()
             this._newSessionPublisher.dispose()
-            this._dynamicEventProperties.splice(0)
             await Promise.race([cleanup, timeout])
             if (timedOut) {
                 this.logger.warn(`PostHog shutdown stopped waiting for cleanup after ${timeoutMs}ms`)
@@ -820,50 +499,80 @@ class PostHogBrowserClient implements PostHog {
         }
     }
 
+    async _completeInitialization(): Promise<void> {
+        await this._analytics?.start()
+        this._ready = true
+        this._startInitialPageview()
+        await this._pageviewLoading
+    }
+
     _startInitialPageview(): void {
-        if (!this._capturePageview || !this._initialPageviewPending || this._closing || this._disposed) {
+        if (
+            !this._ready ||
+            !this._capturePageview ||
+            !this._initialPageviewPending ||
+            this._closing ||
+            this._disposed ||
+            !this._pageviewIsVisible()
+        ) {
             return
         }
+        this._removePageviewListener()
+        if (!this._analytics) {
+            this._loadInitialPageviewAnalytics()
+            return
+        }
+        this._initialPageviewPending = false
+        if (!this._analytics.captureInitialPageview()) {
+            this._initialPageviewPending = !this._disposed && !this._blocked
+        }
+    }
 
+    private _pageviewIsVisible(): boolean {
         let document: Document | undefined
         let visibility: DocumentVisibilityState | undefined
         try {
             document = globalThis.document
             visibility = document?.visibilityState
         } catch {
-            this._removePageviewListener()
-            this._initialPageviewPending = false
-            return
+            this._cancelInitialPageview()
+            return false
         }
         if (!document || visibility === undefined) {
-            this._removePageviewListener()
-            this._initialPageviewPending = false
-            return
+            this._cancelInitialPageview()
+            return false
         }
         if (visibility !== 'visible') {
-            if (this._pageviewListener?.[0] !== document) {
-                this._removePageviewListener()
-            }
-            if (!this._pageviewListener) {
-                const listener = (): void => this._startInitialPageview()
-                this._pageviewListener = [document, listener]
-                try {
-                    // oxlint-disable-next-line posthog-js/no-add-event-listener
-                    document.addEventListener('visibilitychange', listener)
-                } catch {
-                    this._removePageviewListener()
-                    this._initialPageviewPending = false
-                    return
-                }
-            }
-            return
+            this._watchPageviewVisibility(document)
+            return false
         }
+        return true
+    }
 
+    private _watchPageviewVisibility(document: Document): void {
+        if (this._pageviewListener?.[0] !== document) this._removePageviewListener()
+        if (this._pageviewListener) return
+        const listener = (): void => this._startInitialPageview()
+        this._pageviewListener = [document, listener]
+        try {
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
+            document.addEventListener('visibilitychange', listener)
+        } catch {
+            this._cancelInitialPageview()
+        }
+    }
+
+    private _cancelInitialPageview(): void {
         this._removePageviewListener()
         this._initialPageviewPending = false
-        if (!this._capture('$pageview')) {
-            this._initialPageviewPending = !this._disposed && !this._blocked
-        }
+    }
+
+    private _loadInitialPageviewAnalytics(): void {
+        if (this._pageviewLoading || this._blocked || this.hasOptedOut()) return
+        this._pageviewLoading = this.resolveExtension('analytics').then(() => {
+            this._pageviewLoading = undefined
+            if (this._analytics) this._startInitialPageview()
+        })
     }
 
     private _removePageviewListener(): void {
@@ -970,7 +679,7 @@ class PostHogBrowserClient implements PostHog {
         }
     }
 
-    private _createExtensionClient(extensionName: string): BrowserClient {
+    private _createSharedExtensionClient(extensionName: string): Client {
         const host = this
         const logger = this.logger.createLogger(extensionName)
         const kv = this._state.keyValueStore(
@@ -1007,24 +716,102 @@ class PostHogBrowserClient implements PostHog {
                 return host.canCapture
             },
             get isRateLimited() {
-                return host.isRateLimited
+                return host._analytics?.isRateLimited ?? false
             },
-            capture: (event, properties, options) => host.capture(event, properties, options),
-            registerDynamicEventProperties: (producer) => host.registerDynamicEventProperties(producer),
-            getExtension: (name) => host.getExtension(name),
+            capture: (event, properties, options) => host._analytics?.capture(event, properties, options) ?? true,
+            registerDynamicEventProperties: (producer) =>
+                host._analytics?.registerDynamicEventProperties(producer) ?? { dispose() {} },
+            getExtension: (name) => host._registry.getShared(name),
             get projectToken() {
                 return host.projectToken
             },
             sendRequest: (path, init) => host.sendRequest(path, init),
-            onConsentChange: host.onConsentChange,
             onRemoteConfig: host.onRemoteConfig,
-            onEvent: host.onEvent,
-            onIdentify: host.onIdentify,
-            onGroup: host.onGroup,
-            onReset: host.onReset,
+            onEvent: host._eventPublisher.listener,
             onSession: host.onSession,
             kv,
             logger,
+        }
+    }
+
+    private _createExtensionClient(
+        extensionName: string,
+        resolve: (name: string) => Promise<Extension | undefined>
+    ): IPostHogInternal {
+        const host = this
+        const sharedClient = this._createSharedExtensionClient(extensionName)
+        const {
+            getExtension: _lookup,
+            capture: _capture,
+            registerDynamicEventProperties: _registration,
+            isRateLimited: _rateLimit,
+            ...capabilities
+        } = Object.getOwnPropertyDescriptors(sharedClient)
+        const browserClient = Object.defineProperties(
+            {
+                sharedClient,
+                resolveExtension: (name: string) =>
+                    !this._closing && !this._disposed ? resolve(name) : Promise.resolve(undefined),
+                onConsentChange: host.onConsentChange,
+                onIdentify: host.onIdentify,
+                onChangeProperties: host._changePropertiesPublisher.listener,
+                onGroup: host.onGroup,
+                onGroupsReset: host.onGroupsReset,
+                onReset: host.onReset,
+            },
+            capabilities
+        ) as IPostHogInternal
+        this._registry.expose(browserClient)
+        return browserClient
+    }
+
+    private async _setupExtension(extension: Extension, host: IPostHogInternal): Promise<void> {
+        if (this._closing || this._disposed) throw new Error('The browser client is closing')
+        if (!isAnalyticsExtension(extension)) {
+            await extension.setup(host)
+            if (this._closing || this._disposed) throw new Error('The browser client is closing')
+            return
+        }
+        this._analytics = extension
+        try {
+            extension.bindCaptureHost(this._analyticsCaptureHost(extension))
+            await extension.setup(host)
+            if (this._closing || this._disposed) throw new Error('The browser client is closing')
+            extension.initialize({
+                runtime: this._requestRuntime,
+                canRetry: () => this._canDeliver(),
+                reportFailure: (error) => this.logger.error('Event delivery failed', error),
+                reportWarning: (message) => this.logger.warn(message),
+                onAvailable: () => this._startInitialPageview(),
+            })
+        } catch (error) {
+            if (this._analytics === extension) this._analytics = undefined
+            throw error
+        }
+    }
+
+    private _canUseAnalytics(owner: IAnalyticsExtension): boolean {
+        return this._analytics === owner && !this._closing && !this._disposed
+    }
+
+    _analyticsCaptureHost(owner: IAnalyticsExtension): AnalyticsCaptureHost {
+        const canMutate = () => this._canUseAnalytics(owner)
+        return {
+            projectToken: this.projectToken,
+            logger: this.logger,
+            state: this._state,
+            canCapture: () => canMutate() && !this._blocked && !this.hasOptedOut(),
+            canMutate,
+            isDisposed: () => this._disposed,
+            authority: () => this._immediateAuthority,
+            onEvent: this._eventPublisher.listener,
+            publishEvent: (event) => this._eventPublisher.publish(event),
+            publishNewSession: (session) => this._newSessionPublisher.publish(session),
+            publishIdentify: (info) => this._identifyPublisher.publish(info),
+            publishChangeProperties: (info) => this._changePropertiesPublisher.publish(info),
+            publishGroup: (info) => this._groupPublisher.publish(info),
+            publishGroupsReset: () => this._groupsResetPublisher.publish(undefined),
+            publishReset: () => this._resetPublisher.publish(undefined),
         }
     }
 
@@ -1033,44 +820,28 @@ class PostHogBrowserClient implements PostHog {
     }
 }
 
+const selectConfiguredExtensions = (configured: readonly Extension[]): Map<string, Extension> => {
+    const selected = new Map<string, Extension>()
+    for (const extension of configured) if (!selected.has(extension.name)) selected.set(extension.name, extension)
+    return selected
+}
+
 export const createPostHogCore = async (
     options: CorePostHogOptions,
-    configured: readonly Extension[] = options?.extensions ?? []
-): Promise<PostHog> => {
-    const analytics = configured.find(isAnalyticsExtension) ?? createAnalyticsExtension()
-    const extensions = configured.filter((extension) => extension !== analytics)
-    const client = PostHogBrowserClient.create(options ?? { projectToken: '' }, analytics)
+    configured: readonly Extension[] = options?.extensions ?? [],
+    automaticLoaders: Readonly<Record<string, ExtensionLoader<IPostHogInternal>>> = {},
+    automatic: readonly AutomaticExtension<IPostHogInternal>[] = []
+): Promise<IPostHog> => {
+    const selected = selectConfiguredExtensions(configured)
+    const loaders = Object.fromEntries([
+        ...Object.entries(automaticLoaders),
+        ...Array.from(selected, ([name, extension]) => [name, () => extension] as const),
+    ])
+    const client = PostHog.create(options ?? { projectToken: '' }, loaders)
     void client.getRemoteConfig()
-    let analyticsReady = false
-    try {
-        await client._registry.install(analytics)
-        analytics.initialize({
-            runtime: client._requestRuntime,
-            canRetry: () => client._canDeliver(),
-            reportFailure: (error) => client.logger.error('Event delivery failed', error),
-            reportWarning: (message) => client.logger.warn(message),
-            onAvailable: () => client._startInitialPageview(),
-        })
-        analyticsReady = true
-    } catch (error) {
-        client._captureSink = undefined
-        try {
-            await client._registry.rollback(analytics)
-        } catch (cleanupError) {
-            client.logger.error(`Failed to dispose disabled extension "${analytics.name}"`, cleanupError)
-        }
-        client.logger.error(`Failed to install configured extension "${analytics.name}"`, error)
-    }
-    for (const extension of extensions) {
-        try {
-            await client._registry.install(extension)
-        } catch (error) {
-            client.logger.error(`Failed to install configured extension "${extension.name}"`, error)
-        }
-    }
-    if (analyticsReady) {
-        await analytics.start()
-    }
-    client._startInitialPageview()
+    if (selected.has('analytics')) await client.resolveExtension('analytics')
+    for (const name of selected.keys()) if (name !== 'analytics') await client.resolveExtension(name)
+    for (const extension of automatic) await client._registry.activate(extension)
+    await client._completeInitialization()
     return client
 }

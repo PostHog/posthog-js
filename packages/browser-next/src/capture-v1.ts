@@ -4,6 +4,7 @@ import { MAX_ANALYTICS_BATCH_EVENTS, type AnalyticsMessage } from './analytics-i
 import { createId } from './id'
 import { defineErrorName } from './named-error'
 import type { RequestRuntime } from './request'
+import { utf8Bytes } from './utf8'
 
 const RETRYABLE_STATUSES = [408, 500, 502, 503, 504]
 
@@ -141,24 +142,6 @@ const failedResult = (events: { uuid: string }[], error: unknown, statusCode = 0
     error,
     terminalError: error,
 })
-
-const utf8Bytes = (value: string): number => {
-    let bytes = 0
-    for (let index = 0; index < value.length; index++) {
-        const code = value.charCodeAt(index)
-        if (code < 0x80) {
-            bytes++
-        } else if (code < 0x800) {
-            bytes += 2
-        } else if (code >= 0xd800 && code <= 0xdbff && value.charCodeAt(index + 1) >= 0xdc00) {
-            bytes += 4
-            index++
-        } else {
-            bytes += 3
-        }
-    }
-    return bytes
-}
 
 const prepareEvents = (messages: CaptureV1Message[]): PreparedCaptureV1Event[] =>
     messages.map((source) => {

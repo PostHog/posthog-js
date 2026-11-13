@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { createPostHog } from '../src'
+import { requireInstalledExtension } from './helpers'
+import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore } from '../src/core'
 import { autocapture } from '../src/autocapture'
 import type { AutocaptureOptions } from '../src/autocapture'
-import type { PostHog, PostHogOptions } from '../src/types'
+import type { IPostHog, PostHogOptions } from '../src/types'
 import { MemoryStorage } from './helpers'
 
 const base = {
@@ -25,7 +26,7 @@ const config = {
     supportedCompression: [],
     autocapture_opt_out: false,
 }
-const clients: PostHog[] = []
+const clients: IPostHog[] = []
 const create = async (options: Partial<PostHogOptions> = {}) => {
     const client = await createPostHog({
         ...base,
@@ -51,7 +52,7 @@ describe('autocapture', () => {
         const extension = autocapture()
         const client = await create(mode === 'static' ? { autocapture: false, extensions: [extension] } : {})
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         click('span')
         expect(captured).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -67,13 +68,13 @@ describe('autocapture', () => {
             'change',
             'submit',
         ])
-        if (mode === 'static') expect(client.getExtension('autocapture')).toBe(extension)
+        if (mode === 'static') expect(client.autocapture).toBe(extension)
     })
     it.each(['static', 'dynamic'])('keeps field values private with %s autocapture', async (mode) => {
         const extension = autocapture()
         const client = await create(mode === 'static' ? { autocapture: false, extensions: [extension] } : {})
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         document.body.innerHTML = '<input data-ph-capture-value />'
         const input = document.querySelector('input')!
         input.value = 'field value'
@@ -86,8 +87,8 @@ describe('autocapture', () => {
         const disabled = await create({ autocapture: false })
         const core = await createCore(base)
         clients.push(core)
-        expect(disabled.getExtension('autocapture')).toBeUndefined()
-        expect(core.getExtension('autocapture')).toBeUndefined()
+        expect(disabled.autocapture).toBeUndefined()
+        expect(core.autocapture).toBeUndefined()
     })
     it('does not capture before remote config or when opted out remotely', async () => {
         let resolve!: (value: Response) => void
@@ -98,7 +99,7 @@ describe('autocapture', () => {
                 }),
         })
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         click()
         expect(captured).not.toHaveBeenCalled()
         resolve(new Response(JSON.stringify({ ...config, autocapture_opt_out: true })))
@@ -118,7 +119,7 @@ describe('autocapture', () => {
         })
         await vi.advanceTimersByTimeAsync(1)
         const captured = vi.fn()
-        second.onEvent(captured)
+        requireInstalledExtension(second.analytics).onEvent(captured)
         click()
         expect(captured).toHaveBeenCalledTimes(disabled ? 0 : 1)
     })
@@ -142,23 +143,23 @@ describe('autocapture', () => {
         )
         await vi.advanceTimersByTimeAsync(1)
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         click()
         expect(captured).not.toHaveBeenCalled()
     })
     it('isolates a failed setup from manual capture', async () => {
         const client = await create({ autocapture: { urlAllowlist: ['['] } })
-        expect(client.getExtension('autocapture')).toBeUndefined()
+        expect(client.autocapture).toBeUndefined()
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         click()
-        client.capture('manual')
+        requireInstalledExtension(client.analytics).capture('manual')
         expect(captured.mock.calls.map(([event]) => event.event)).toEqual(['manual'])
     })
     it('gates capture by consent and removes handlers on disposal', async () => {
         const client = await create({ optOutByDefault: true })
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         click()
         expect(captured).not.toHaveBeenCalled()
         client.optIn()
@@ -176,7 +177,7 @@ describe('autocapture', () => {
         document.body.innerHTML = '<a href="https://external.test/path#secret" data-public="safe">Documentation</a>'
         const client = await create({ autocapture: { elementAttributeIgnorelist: ['data-public'], maskAllText: true } })
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         click('a')
         const properties = captured.mock.calls[0]![0].properties
         expect(JSON.stringify(properties)).not.toContain('secret')
@@ -185,14 +186,14 @@ describe('autocapture', () => {
         await client.dispose()
         const masked = await create({ autocapture: { maskAllElementAttributes: true } })
         const maskedCapture = vi.fn()
-        masked.onEvent(maskedCapture)
+        requireInstalledExtension(masked.analytics).onEvent(maskedCapture)
         click('a')
         expect(JSON.stringify(maskedCapture.mock.calls[0]![0].properties)).not.toContain('attr__')
     })
     it('redacts sensitive controls and excludes opted-out ancestors', async () => {
         const client = await create()
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         document.body.innerHTML =
             '<div class="ph-no-capture"><button>Hidden</button></div><input type="password" value="secret"><button data-ph-no-autocapture>Private</button>'
         document.querySelectorAll<HTMLElement>('button').forEach((element) => element.click())
@@ -213,7 +214,7 @@ describe('autocapture', () => {
         options.urlAllowlist!.splice(0)
         const client = await create({ extensions: [extension] })
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         click()
         expect(captured).toHaveBeenCalledTimes(1)
     })
@@ -226,27 +227,27 @@ describe('autocapture', () => {
             },
         })
         const captured = vi.fn()
-        first.onEvent(captured)
+        requireInstalledExtension(first.analytics).onEvent(captured)
         click()
         expect(captured).not.toHaveBeenCalled()
         await first.dispose()
         const second = await create({
             autocapture: { cssSelectorAllowlist: ['button'], cssSelectorIgnorelist: ['button'] },
         })
-        second.onEvent(captured)
+        requireInstalledExtension(second.analytics).onEvent(captured)
         click()
         expect(captured).not.toHaveBeenCalled()
     })
     it('does not enable clipboard capture by default', async () => {
         const client = await create()
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => 'copied words' } as Selection)
         document.querySelector('button')!.dispatchEvent(new Event('copy', { bubbles: true }))
         expect(captured).not.toHaveBeenCalled()
         await client.dispose()
         const enabled = await create({ autocapture: { captureCopiedText: true } })
-        enabled.onEvent(captured)
+        requireInstalledExtension(enabled.analytics).onEvent(captured)
         document.querySelector('button')!.dispatchEvent(new Event('copy', { bubbles: true }))
         expect(captured).toHaveBeenCalledWith(expect.objectContaining({ event: '$copy_autocapture' }))
     })
@@ -254,17 +255,26 @@ describe('autocapture', () => {
         document.querySelector('button')!.textContent = '+'
         const client = await create()
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         click()
         click()
         click()
         expect(captured.mock.calls.some(([event]) => event.event === '$rageclick')).toBe(false)
         await client.dispose()
         const custom = await create({ autocapture: { rageclick: { contentIgnorelist: false, clickCount: 2 } } })
-        custom.onEvent(captured)
+        requireInstalledExtension(custom.analytics).onEvent(captured)
         click()
         click()
         expect(captured.mock.calls.some(([event]) => event.event === '$rageclick')).toBe(true)
+    })
+    it('captures with a custom surveys owner that does not expose selector lookup', async () => {
+        const client = await create({ extensions: [{ name: 'surveys', setup() {} }] })
+        const captured = vi.fn()
+        requireInstalledExtension(client.analytics).onEvent(captured)
+        expect(client.autocapture).toBeDefined()
+        click()
+        expect(captured).toHaveBeenCalledOnce()
+        expect(captured).toHaveBeenCalledWith(expect.objectContaining({ event: '$autocapture' }))
     })
     it('picks up selectors from an already installed surveys capability without sharing mutable sets', async () => {
         const selectors = new Set(['button'])
@@ -274,12 +284,12 @@ describe('autocapture', () => {
                     name: 'surveys',
                     setup() {},
                     getElementSelectors: () => selectors,
-                } as import('@posthog/browser-common').Extension,
+                } as import('../src/types').Extension,
             ],
         })
         selectors.clear()
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         click()
         expect(captured.mock.calls[0]![0].properties.$element_selectors).toEqual(['button'])
     })

@@ -1,6 +1,7 @@
+import { requireInstalledExtension } from './helpers'
 import { createPostHog as createRoot } from '../src'
 import { createPostHog as createCore, type BrowserFetch, type CorePostHogOptions } from '../src/core'
-import { localRemoteConfig } from './helpers'
+import { localRemoteConfig, withBufferedAnalytics } from './helpers'
 
 const options: CorePostHogOptions = {
     projectToken: 'ph_test',
@@ -11,7 +12,7 @@ const options: CorePostHogOptions = {
 
 const response = () => new Response(JSON.stringify(localRemoteConfig))
 
-// Exercise both published factory graphs, including the buffer-only core.
+// Exercise remote configuration through both published factory graphs.
 describe.each([
     ['root', (options: CorePostHogOptions) => createRoot({ ...options, flags: false })],
     ['core', createCore],
@@ -70,21 +71,23 @@ describe.each([
         )
         const first = vi.fn()
         const second = vi.fn()
-        const posthog = await create({
-            ...options,
-            fetch,
-            extensions: [
-                {
-                    name: 'subscriber',
-                    setup(client) {
-                        client.onRemoteConfig(first)
-                        client.capture('setup')
+        const posthog = await create(
+            withBufferedAnalytics({
+                ...options,
+                fetch,
+                extensions: [
+                    {
+                        name: 'subscriber',
+                        setup(client) {
+                            client.onRemoteConfig(first)
+                            requireInstalledExtension(client.analytics).capture('setup')
+                        },
                     },
-                },
-            ],
-        })
+                ],
+            })
+        )
         posthog.onRemoteConfig(second)
-        posthog.capture('before config')
+        requireInstalledExtension(posthog.analytics).capture('before config')
         expect(posthog.session!.sessionId).not.toBe('')
         const pending = posthog.getRemoteConfig()
         expect(fetch).toHaveBeenCalledTimes(1)

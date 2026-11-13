@@ -1,6 +1,7 @@
 import { createPostHog } from '@posthog/browser'
 
 void createPostHog({ projectToken: 'ph_test' }).then(async (posthog) => {
-    posthog.capture('test_event')
+    const analytics = await posthog.resolveExtension('analytics')
+    analytics?.capture('test_event')
     await posthog.flush()
 })

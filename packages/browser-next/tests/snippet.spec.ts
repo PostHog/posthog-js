@@ -1,12 +1,12 @@
 import { createPostHog } from '../src/index'
 import { parseSnippetOptions, startSnippet } from '../snippet/runtime'
-import type { PostHog } from '../src/types'
+import type { IPostHog } from '../src/types'
 
 vi.mock('../src/index', () => ({ createPostHog: vi.fn() }))
 const create = vi.mocked(createPostHog)
 const url = 'https://cdn.example/nested/script.js?projectToken=phc_fixture'
 const target = () => new EventTarget() as unknown as Window & { posthog?: unknown }
-const client = () => ({ dispose: vi.fn(async () => {}) }) as unknown as PostHog
+const client = () => ({ dispose: vi.fn(async () => {}) }) as unknown as IPostHog
 
 afterEach(() => {
     vi.restoreAllMocks()
@@ -53,8 +53,25 @@ describe('snippet query configuration', () => {
 })
 
 describe('snippet installation', () => {
+    it('explicitly composes full analytics into the installer client', async () => {
+        create.mockResolvedValueOnce(client())
+        await startSnippet(url, target())
+        expect(create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                extensions: [
+                    expect.objectContaining({
+                        name: 'analytics',
+                        capture: expect.any(Function),
+                        captureImmediate: expect.any(Function),
+                        identify: expect.any(Function),
+                    }),
+                ],
+            })
+        )
+    })
+
     it('publishes only after factory readiness, with one winner across concurrent tags', async () => {
-        let resolve!: (value: PostHog) => void
+        let resolve!: (value: IPostHog) => void
         create.mockImplementationOnce(
             () =>
                 new Promise((done) => {

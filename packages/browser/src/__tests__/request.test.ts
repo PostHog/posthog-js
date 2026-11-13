@@ -200,6 +200,16 @@ describe('request', () => {
             }
         })
 
+        it('passes the URL it opens to onSend before it sends the request', () => {
+            const onSend = vi.fn()
+
+            request(createRequest({ method: 'POST', data: bodyData(), compression: Compression.Base64, onSend }))
+
+            expect(onSend).toHaveBeenCalledTimes(1)
+            expect(onSend).toHaveBeenCalledWith(mockedXHR.open.mock.calls[0][1])
+            expect(onSend.mock.invocationCallOrder[0]).toBeLessThan(mockedXHR.send.mock.invocationCallOrder[0])
+        })
+
         describe('completion', () => {
             // The XHR spec fires `readystatechange` (readyState 4) first, then the outcome
             // event (`load`, `error` or `timeout`), then `loadend`.
@@ -330,6 +340,16 @@ describe('request', () => {
                     referrerPolicy: 'strict-origin',
                 })
             )
+        })
+
+        it('passes the URL it fetches to onSend before it calls fetch', () => {
+            const onSend = vi.fn()
+
+            request(createRequest({ method: 'POST', data: bodyData(), compression: Compression.Base64, onSend }))
+
+            expect(onSend).toHaveBeenCalledTimes(1)
+            expect(onSend).toHaveBeenCalledWith(mockedFetch.mock.calls[0][0])
+            expect(onSend.mock.invocationCallOrder[0]).toBeLessThan(mockedFetch.mock.invocationCallOrder[0])
         })
 
         it('uses the fetch captured at load, so a wrapper installed on window.fetch never sees it', () => {

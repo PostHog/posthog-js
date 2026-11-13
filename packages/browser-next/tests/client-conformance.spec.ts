@@ -1,8 +1,9 @@
+import { createBufferedPostHog as createPostHog } from './helpers'
 import { createRemoteConfigFetch } from './helpers'
 import type { Client, RemoteConfig, RemoteConfigResult } from '@posthog/browser-common'
 import { runClientConformanceSuite } from '@posthog/browser-common/tests/client-conformance'
 
-import { createPostHog, type Extension } from '../src/core'
+import type { Extension } from '../src/core'
 import { createFetch, type SentRequest } from './helpers'
 
 runClientConformanceSuite('browser-next', async () => {
@@ -12,7 +13,7 @@ runClientConformanceSuite('browser-next', async () => {
     const extension: Extension = {
         name: 'conformance',
         setup(value) {
-            client = value
+            client = value.sharedClient
         },
         dispose() {},
     }

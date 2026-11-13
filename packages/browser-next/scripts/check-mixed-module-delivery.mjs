@@ -110,9 +110,9 @@ const posthog = await createCorePostHog({
     },
 })
 
-posthog.capture('mixed_module_event')
+posthog.analytics.capture('mixed_module_event')
 await posthog.flush()
-const immediateSummary = await posthog.captureImmediate('mixed_module_immediate', undefined, {
+const immediateSummary = await posthog.analytics.captureImmediate('mixed_module_immediate', undefined, {
     uuid: 'mixed-immediate-uuid',
 })
 await posthog.dispose()
@@ -129,6 +129,10 @@ if (
 const automaticRequests = []
 const automatic = await createPostHog({
     projectToken: 'ph_test',
+    flags: false,
+    logs: false,
+    surveys: false,
+    autocapture: false,
     capturePageview: false,
     storage: false,
     navigator: false,
@@ -138,7 +142,9 @@ const automatic = await createPostHog({
         return new Response('{}', { status: 200 })
     },
 })
-automatic.capture('automatic_cjs_event')
+const automaticAnalytics = await automatic.resolveExtension('analytics')
+if (!automaticAnalytics || automaticAnalytics !== automatic.analytics) throw new Error('Analytics acquisition failed')
+automaticAnalytics.capture('automatic_cjs_event')
 await automatic.flush()
 await automatic.dispose()
 
@@ -157,7 +163,9 @@ const core = await createCorePostHog({
         return new Response('{}', { status: 200 })
     },
 })
-core.capture('core_buffered_event')
+if (core.analytics || (await core.resolveExtension('analytics'))) {
+    throw new Error('The manual CommonJS host must not construct or acquire implicit analytics')
+}
 await core.flush()
 await core.dispose()
 if (
@@ -177,19 +185,16 @@ for (const createFlags of [flags, commonJsFlags]) {
         capturePageview: false,
         extensions: [createFlags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { mixed: 'variant' } } })],
     })
-    if (client.getExtension('featureFlags').getFeatureFlag('mixed')?.variant !== 'variant')
+    if (client.featureFlags.getFeatureFlag('mixed')?.variant !== 'variant')
         throw new Error('Mixed-module flags bootstrap failed')
     let results
-    const subscription = client.getExtension('featureFlags').onFeatureFlags((values) => {
+    const subscription = client.featureFlags.onFeatureFlags((values) => {
         results = values
     })
-    client.getExtension('featureFlags').updateFlags({ mixed: false })
-    if (
-        client.getExtension('featureFlags').getFeatureFlag('mixed')?.enabled !== false ||
-        results?.[0]?.enabled !== false
-    )
+    client.featureFlags.updateFlags({ mixed: false })
+    if (client.featureFlags.getFeatureFlag('mixed')?.enabled !== false || results?.[0]?.enabled !== false)
         throw new Error('Mixed-module flags update failed')
-    if ((await client.getExtension('featureFlags').reloadFeatureFlags()).status !== 'skipped')
+    if ((await client.featureFlags.reloadFeatureFlags()).status !== 'skipped')
         throw new Error('Mixed-module flags reload did not report disabled evaluation')
     subscription.dispose()
     await client.dispose()
@@ -242,22 +247,23 @@ for (const create of [createPostHog, createEsmPostHog]) {
         capturePageview: false,
         flags: { featureFlagEvaluation: false, bootstrap: { featureFlags: { lookup: 'shared' } } },
         extensions: [
+            analytics(),
             {
                 name: 'consumer',
                 setup(value) {
-                    lookupShared = () => value.getExtension(FeatureFlagsCommonExtension)
-                    lookupFacade = () => value.getExtension('featureFlags')
+                    lookupShared = () => value.sharedClient.getExtension(FeatureFlagsCommonExtension)
+                    lookupFacade = () => value.featureFlags
                 },
             },
         ],
     })
-    const facade = client.getExtension('featureFlags')
+    const facade = client.featureFlags
     const shared = lookupShared()
     if (
         !shared ||
         shared === facade ||
         lookupFacade() !== facade ||
-        client.getExtension(FeatureFlagsCommonExtension) !== shared ||
+        'getExtension' in client ||
         facade.getFeatureFlag('lookup')?.variant !== 'shared' ||
         shared.getFeatureFlag('lookup') !== 'shared'
     )
@@ -265,18 +271,116 @@ for (const create of [createPostHog, createEsmPostHog]) {
     facade.updateFlags({ lookup: 'updated' })
     if (shared.getFeatureFlag('lookup') !== 'updated' || (await shared.reloadFeatureFlagsAsync()).status !== 'skipped')
         throw new Error('Dynamic flags shared lookup did not use the live implementation')
-    client.reset()
+    client.analytics.reset()
     if (shared.getFeatureFlag('lookup') !== undefined) throw new Error('Dynamic flags shared state survived reset')
     await client.dispose()
     if (
         lookupShared() !== undefined ||
         lookupFacade() !== undefined ||
-        client.getExtension(FeatureFlagsCommonExtension) !== undefined ||
-        client.getExtension('featureFlags') !== undefined
+        'getExtension' in client ||
+        client.featureFlags !== undefined
     )
         throw new Error('Dynamic flags lookup survived disposal')
 }
 process.stdout.write('Built CommonJS/ESM dynamic flags public/shared lookup, async reload, reset and disposal passed\n')
+
+for (const create of [createPostHog, createEsmPostHog]) {
+    const requests = []
+    let scoped
+    const client = await create({
+        projectToken: 'ph_identity_helpers',
+        storage: false,
+        navigator: false,
+        capturePageview: false,
+        analytics: { flushInterval: 0 },
+        flags: false,
+        logs: false,
+        surveys: false,
+        autocapture: false,
+        extensions: [
+            {
+                name: 'observer',
+                setup(value) {
+                    scoped = value
+                },
+            },
+        ],
+        remoteConfig: {
+            supportedCompression: [],
+            toolbarParams: {},
+            toolbarVersion: 'toolbar',
+            isAuthenticated: false,
+            siteApps: [],
+        },
+        fetch: async (input, init) => {
+            requests.push({ url: String(input), body: JSON.parse(init.body) })
+            return new Response('{}')
+        },
+    })
+    const product = await client.resolveExtension('analytics')
+    assert.ok(product)
+    assert.equal(product, client.analytics)
+    assert.equal(product, scoped.analytics)
+    const identity = { distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId }
+    let groupResets = 0
+    let scopedGroupResets = 0
+    let fullResets = 0
+    let identifies = 0
+    client.onGroupsReset(() => {
+        groupResets++
+    })
+    scoped.onGroupsReset(() => {
+        scopedGroupResets++
+    })
+    client.onReset(() => {
+        fullResets++
+    })
+    client.onIdentify(() => {
+        identifies++
+    })
+    client.kv.set('retained', true)
+    await product.group('organization', 'current')
+    const { alias, groupIdentify, resetGroups } = product
+    alias('account-123')
+    groupIdentify('organization', 0, { plan: 'paid' }, { uuid: 'group-profile-uuid' })
+    assert.deepEqual(client.groups, { organization: 'current' })
+    assert.deepEqual(
+        { distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId },
+        identity
+    )
+    product.capture('before_group_reset')
+    const session = client.session
+    resetGroups()
+    assert.deepEqual(client.groups, {})
+    assert.deepEqual(client.session, session)
+    assert.equal(client.kv.get('retained'), true)
+    assert.equal(groupResets, 1)
+    assert.equal(scopedGroupResets, 1)
+    assert.equal(fullResets, 0)
+    assert.equal(identifies, 0)
+    product.capture('after_group_reset')
+    await client.flush()
+    const events = requests.flatMap(({ body }) => body.batch)
+    assert.deepEqual(
+        events.map(({ event }) => event),
+        ['$groupidentify', '$create_alias', '$groupidentify', 'before_group_reset', 'after_group_reset']
+    )
+    assert.equal(events[1].distinct_id, identity.distinctId)
+    assert.equal(events[1].properties.alias, 'account-123')
+    assert.equal(events[1].options.process_person_profile, true)
+    assert.equal(events[2].properties.$group_key, 0)
+    assert.deepEqual(events[2].properties.$group_set, { plan: 'paid' })
+    assert.equal(events[2].uuid, 'group-profile-uuid')
+    assert.deepEqual(events[3].properties.$groups, { organization: 'current' })
+    assert.deepEqual(events[4].properties.$groups, {})
+    await client.dispose()
+    resetGroups()
+    alias('disposed')
+    groupIdentify('organization', 'disposed')
+    assert.equal(groupResets, 1)
+    assert.equal(scopedGroupResets, 1)
+}
+process.stdout.write('Built CommonJS/ESM acquired analytics alias, group profile and group-only reset passed\n')
 
 for (const factory of [surveys, commonJsSurveys]) {
     const client = await createCorePostHog({
@@ -287,7 +391,7 @@ for (const factory of [surveys, commonJsSurveys]) {
         capturePageview: false,
         extensions: [factory({ automaticDisplay: false })],
     })
-    const extension = client.getExtension('surveys')
+    const extension = client.surveys
     const result = await new Promise((resolve) => extension.getSurveys(resolve))
     if (result.length !== 0 || (await extension.canRenderSurvey('missing')).visible) {
         throw new Error('Mixed-module surveys must return unavailable results without a document')
@@ -306,7 +410,7 @@ for (const factory of [autocapture, commonJsAutocapture]) {
         capturePageview: false,
         extensions: [extension],
     })
-    assert.equal(client.getExtension('autocapture'), extension)
+    assert.equal(client.autocapture, extension)
     await client.dispose()
 }
 process.stdout.write('Pure CommonJS/ESM autocapture entrypoints and SSR lifecycle passed\n')

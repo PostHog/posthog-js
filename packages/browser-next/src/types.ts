@@ -1,5 +1,5 @@
 import type { FlagsConfiguration } from './flags-options'
-import type { BrowserClient } from './browser-client'
+import type { ICoreCapabilities, BrowserExtensionAccess, BrowserExtension as Extension } from './browser-client'
 import type { LogsConfiguration } from './logs-options'
 import type { SurveysConfiguration } from './surveys-options'
 import type { AutocaptureConfiguration } from './autocapture-options'
@@ -8,14 +8,13 @@ import type {
     AnalyticsOptions,
     AutomaticAnalyticsOptions,
     LoadStrategy,
+    PersonProfileMode,
 } from './analytics-options'
 
 import type {
     ApiResponse,
     CaptureOptions,
     Disposable,
-    Extension,
-    ExtensionToken,
     Listener,
     RemoteConfig,
     SendRequestInit,
@@ -79,23 +78,23 @@ export interface PostHogOptions {
     /** Stop waiting for remote configuration after this duration in milliseconds. Defaults to 10,000. */
     remoteConfigTimeoutMs?: number
     /**
-     * Automatic first-party analytics delivery. Defaults to lazy loading after the first admitted event.
-     * Pass `false` to retain events without automatically loading delivery.
+     * First-party analytics acquisition. Defaults to on-demand loading through resolution, product dependencies,
+     * or the initial pageview. Pass `false` to omit implicit analytics; explicit instances take precedence.
      */
     analytics?: AnalyticsConfiguration
-    /** Automatic DOM autocapture. Pass false to omit it; an explicit extension takes precedence. */
+    /** Acquire DOM autocapture from saved/fresh signals, or during initialization when configured explicitly. */
     autocapture?: AutocaptureConfiguration
     /** Dynamically include flags by default. Explicit extensions take precedence over this option. */
     flags?: FlagsConfiguration
-    /** Load survey orchestration dynamically; renderer waits for remote enablement or a manual call. */
+    /** Acquire surveys from saved/fresh enablement signals, or during initialization when configured explicitly. */
     surveys?: SurveysConfiguration
-    /** Automatically load logs. False disables automatic inclusion; explicit extensions take precedence. */
+    /** Acquire logs from saved/fresh console signals, or during initialization when configured explicitly. */
     logs?: LogsConfiguration
-    /** Install extensions before the factory resolves. A preinstalled analytics extension satisfies delivery. */
+    /** Install extensions before the factory resolves. Explicit instances take precedence over automatic product options. */
     extensions?: readonly Extension[]
 }
 
-/** Options for the delivery-free `@posthog/browser/core` entrypoint. */
+/** Options for the manually composed `@posthog/browser/core` entrypoint. */
 export type CorePostHogOptions = Omit<PostHogOptions, 'analytics' | 'flags' | 'logs' | 'surveys' | 'autocapture'>
 
 /** Capture V1's terminal verdict for one reported event. */
@@ -121,25 +120,15 @@ export interface CaptureSummary {
     readonly error?: Error
 }
 
-export interface PostHog extends BrowserClient, Disposable {
+/** Consumer-facing SDK contract; product controls use their public interfaces. */
+export interface IPostHog extends ICoreCapabilities, BrowserExtensionAccess, Disposable {
     readonly onNewSession: Listener<NewSessionInfo>
-    /** Sends one finalized event inline. Resolves with an outcome or `summary.error` instead of rejecting. */
-    captureImmediate(
-        event: string,
-        properties?: Record<string, unknown> | null,
-        options?: CaptureOptions
-    ): Promise<CaptureSummary>
-    identify(distinctId: string, set?: Record<string, unknown>, setOnce?: Record<string, unknown>): Promise<void>
-    group(type: string, key: string, properties?: Record<string, unknown>): Promise<void>
-    reset(): void
     flush(): Promise<void>
     shutdown(shutdownTimeoutMs?: number): Promise<void>
     dispose(): Promise<void>
     optIn(): void
     optOut(): void
     hasOptedOut(): boolean
-    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
-    getExtension<T extends Extension = Extension>(name: string): T | undefined
     getRemoteConfig(): Promise<RemoteConfig | undefined>
 }
 
@@ -148,6 +137,7 @@ export type {
     AnalyticsOptions,
     AutomaticAnalyticsOptions,
     LoadStrategy,
+    PersonProfileMode,
     ApiResponse,
     CaptureOptions,
     Disposable,

@@ -8,7 +8,7 @@
                 const client = event.detail
                 window.snippetEvidence.readyCount++
                 window.snippetEvidence.detailMatchesGlobal = client === window.posthog
-                client.capture('snippet_early', { placement: 'plain-html' })
+                client.analytics.capture('snippet_early', { placement: 'plain-html' })
                 client.flush().then(() => { window.snippetEvidence.flushed = true })
             })
         </script>

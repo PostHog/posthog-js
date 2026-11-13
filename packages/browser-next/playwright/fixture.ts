@@ -1,13 +1,16 @@
+import { acquisitionHarness } from './acquisition-fixture'
+window.acquisitionHarness = acquisitionHarness
+import { requireInstalledExtension } from '../tests/helpers'
 import { autocaptureHarness } from './autocapture-fixture'
 window.autocaptureHarness = autocaptureHarness
 
 import { surveysHarness } from './surveys-fixture'
 window.surveysHarness = surveysHarness
 import { logs } from '../src/logs'
-import type { PostHog } from '../src/types'
+import type { IPostHog } from '../src/types'
 import { flags } from '../src/flags'
 import { analytics } from '../src/analytics'
-import { createPostHog, FeatureFlagsExtension, type CaptureSummary, type SessionContext } from '../src/core'
+import { createPostHog, type CaptureSummary, type SessionContext } from '../src/core'
 
 interface ConsentHarness {
     updateFlags(values: Record<string, boolean | string>): Promise<void>
@@ -108,17 +111,17 @@ const client = createPostHog({
 void client.then((posthog) => posthog.onNewSession(({ reason }) => sessionChanges.push(reason)))
 
 void client.then((posthog) =>
-    posthog.getExtension(FeatureFlagsExtension)!.onFeatureFlags(() => {
+    requireInstalledExtension(posthog.featureFlags).onFeatureFlags(() => {
         flagChanges++
     })
 )
 
 window.consentHarness = {
     async updateFlags(values) {
-        ;(await client).getExtension(FeatureFlagsExtension)!.updateFlags(values)
+        requireInstalledExtension((await client).featureFlags).updateFlags(values)
     },
     async flagValue(key) {
-        const value = (await client).getExtension(FeatureFlagsExtension)!.getFeatureFlag(key)
+        const value = requireInstalledExtension((await client).featureFlags).getFeatureFlag(key)
         return value?.variant ?? value?.enabled
     },
     flagChanges: () => flagChanges,
@@ -126,16 +129,16 @@ window.consentHarness = {
         return (await client).anonymousId
     },
     async capture(event) {
-        ;(await client).capture(event)
+        requireInstalledExtension((await client).analytics).capture(event)
     },
     async captureImmediate(event) {
-        return (await client).captureImmediate(event)
+        return requireInstalledExtension((await client).analytics).captureImmediate(event)
     },
     async compressionDelivery(value) {
         const posthog = await client
         lastDelivery = undefined
         const started = performance.now()
-        await posthog.capture('compression_test', { value })
+        await requireInstalledExtension(posthog.analytics).capture('compression_test', { value })
         await posthog.flush()
         const delivery = currentDelivery()
         if (!delivery) {
@@ -174,7 +177,7 @@ window.consentHarness = {
             ],
         })
         for (const event of events) {
-            await posthog.capture(event)
+            await requireInstalledExtension(posthog.analytics).capture(event)
         }
     },
     requests() {
@@ -195,7 +198,7 @@ window.consentHarness = {
         return { config, canCapture }
     },
     async reset() {
-        ;(await client).reset()
+        requireInstalledExtension((await client).analytics).reset()
     },
     async session() {
         return (await client).session
@@ -206,7 +209,7 @@ window.consentHarness = {
 }
 
 /* oxlint-disable no-console -- Exercise native console instrumentation. */
-let logsClient: PostHog | undefined
+let logsClient: IPostHog | undefined
 let logger: ReturnType<typeof logs> | undefined
 const originalLog = console.log
 window.logsHarness = {

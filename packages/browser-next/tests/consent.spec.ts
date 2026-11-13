@@ -1,15 +1,13 @@
+import { createBufferedPostHog as createPostHog } from './helpers'
+import { requireInstalledExtension } from './helpers'
+import type { Extension } from '../src/types'
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
-import type { Client, Disposable, Extension } from '@posthog/browser-common'
+import type { Disposable } from '@posthog/browser-common'
+import type { IPostHogInternal } from '../src/browser-client'
 
 import { analytics as createAnalytics } from '../src/analytics'
-import {
-    createPostHog,
-    type BrowserFetch,
-    type RemoteConfig,
-    type SendRequestInit,
-    type StorageLike,
-} from '../src/core'
+import type { BrowserFetch, RemoteConfig, SendRequestInit, StorageLike } from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
@@ -179,9 +177,9 @@ describe('portable consent persistence', () => {
     })
 
     it('keeps extension state and persistence available under prior denial while blocking transmission', async () => {
-        const extensionSetup = vi.fn(async (client: Client) => {
+        const extensionSetup = vi.fn(async (client: IPostHogInternal) => {
             client.kv.set('private', true)
-            await client.capture('extension-blocked')
+            await requireInstalledExtension(client.analytics).capture('extension-blocked')
             await client.sendRequest('/flags/')
         })
         const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
@@ -196,11 +194,11 @@ describe('portable consent persistence', () => {
             fetch,
             extensions: [{ name: 'blocked-by-consent', setup: extensionSetup }],
         })
-        await posthog.capture('blocked')
+        await requireInstalledExtension(posthog.analytics).capture('blocked')
         await posthog.sendRequest('/flags/')
 
         expect(extensionSetup).toHaveBeenCalledTimes(1)
-        expect(posthog.getExtension('blocked-by-consent')).toBeDefined()
+        expect(await posthog.resolveExtension('blocked-by-consent')).toBeDefined()
         expect(fetch).not.toHaveBeenCalled()
         expect(posthog.anonymousId).not.toBe('')
         expect(posthog.session).toBeUndefined()
@@ -316,7 +314,7 @@ describe('portable consent persistence', () => {
             extensions: [bufferedAnalytics()],
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        await first.capture('private-before-denial')
+        await requireInstalledExtension(first.analytics).capture('private-before-denial')
 
         second.optOut()
         second.optIn()
@@ -329,7 +327,7 @@ describe('portable consent persistence', () => {
         const storage = new MemoryStorage()
         const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        await first.identify('person-before-denial')
+        await requireInstalledExtension(first.analytics).identify('person-before-denial')
         first.kv.set('private', { value: true })
         const oldAnonymousId = first.anonymousId
         const oldSessionId = first.session!.sessionId
@@ -363,7 +361,7 @@ describe('portable consent persistence', () => {
                 extensions: [analytics()],
             })
             const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-            await first.capture('retrying')
+            await requireInstalledExtension(first.analytics).capture('retrying')
             await vi.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
 
@@ -389,7 +387,7 @@ describe('portable consent persistence', () => {
             fetch: createFetch(requests),
             extensions: [bufferedAnalytics()],
         })
-        await posthog.capture('retained')
+        await requireInstalledExtension(posthog.analytics).capture('retained')
 
         storage.values.set(DEFAULT_KEY, '0')
         dispatchStorage('unrelated', storage)
@@ -411,7 +409,7 @@ describe('portable consent persistence', () => {
             fetch: createFetch(requests),
             extensions: [bufferedAnalytics()],
         })
-        await posthog.capture('private')
+        await requireInstalledExtension(posthog.analytics).capture('private')
 
         storage.values.set(DEFAULT_KEY, '0')
         dispatchStorage(DEFAULT_KEY, storage)
@@ -432,7 +430,7 @@ describe('portable consent persistence', () => {
             fetch: createFetch(requests),
             extensions: [bufferedAnalytics()],
         })
-        await posthog.capture('private')
+        await requireInstalledExtension(posthog.analytics).capture('private')
 
         storage.values.set(DEFAULT_KEY, '1')
         dispatchStorage(DEFAULT_KEY, storage, '0')
@@ -452,7 +450,7 @@ describe('portable consent persistence', () => {
             fetch: createFetch(requests),
             extensions: [bufferedAnalytics()],
         })
-        await posthog.capture('retained')
+        await requireInstalledExtension(posthog.analytics).capture('retained')
 
         storage.values.set(DEFAULT_KEY, '0')
         dispatchStorage(DEFAULT_KEY, storage)
@@ -503,7 +501,7 @@ describe('portable consent persistence', () => {
             extensions: [bufferedAnalytics()],
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        await first.capture('private')
+        await requireInstalledExtension(first.analytics).capture('private')
         delete (globalThis as Record<string, unknown>).CustomEvent
 
         expect(() => second.optOut()).not.toThrow()
@@ -524,7 +522,7 @@ describe('portable consent persistence', () => {
             fetch: createFetch(observableRequests),
             extensions: [bufferedAnalytics()],
         })
-        await observed.capture('observable-private')
+        await requireInstalledExtension(observed.analytics).capture('observable-private')
         observable.externalSet(DEFAULT_KEY, '0')
         observable.externalSet(DEFAULT_KEY, '1')
         await observed.flush()
@@ -540,7 +538,7 @@ describe('portable consent persistence', () => {
             fetch: createFetch(plainRequests),
             extensions: [bufferedAnalytics()],
         })
-        await nextGate.capture('plain-private')
+        await requireInstalledExtension(nextGate.analytics).capture('plain-private')
         plain.values.set(DEFAULT_KEY, '0')
         await expect(nextGate.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         plain.values.set(DEFAULT_KEY, '1')
@@ -550,7 +548,7 @@ describe('portable consent persistence', () => {
 
     it('retains public and extension identity state after observing external denial', async () => {
         const storage = new MemoryStorage()
-        let extensionClient: Client | undefined
+        let extensionClient: IPostHogInternal | undefined
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             storage,
@@ -558,8 +556,8 @@ describe('portable consent persistence', () => {
             fetch: false,
             extensions: [{ name: 'getter-reader', setup: (client) => void (extensionClient = client) }],
         })
-        await posthog.identify('private-person')
-        await posthog.group('company', 'private-company')
+        await requireInstalledExtension(posthog.analytics).identify('private-person')
+        await requireInstalledExtension(posthog.analytics).group('company', 'private-company')
         const anonymousId = posthog.anonymousId
         const deviceId = posthog.deviceId
         const groups = posthog.groups
@@ -591,9 +589,9 @@ describe('portable consent persistence', () => {
             extensions: [analytics()],
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        first.onEvent(observed)
+        requireInstalledExtension(first.analytics).onEvent(observed)
 
-        await first.capture('private', {
+        await requireInstalledExtension(first.analytics).capture('private', {
             value: {
                 toJSON() {
                     second.optOut()
@@ -623,14 +621,14 @@ describe('portable consent persistence', () => {
             extensions: [analytics()],
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        first.onEvent(observed)
-        first.registerDynamicEventProperties(() => {
+        requireInstalledExtension(first.analytics).onEvent(observed)
+        requireInstalledExtension(first.analytics).registerDynamicEventProperties(() => {
             second.optOut()
             second.optIn()
             return { private: true }
         })
 
-        await first.capture('private')
+        await requireInstalledExtension(first.analytics).capture('private')
         await first.flush()
         expect(observed).toHaveBeenCalledWith(
             expect.objectContaining({ event: 'private', properties: expect.objectContaining({ private: true }) })
@@ -651,13 +649,13 @@ describe('portable consent persistence', () => {
             extensions: [analytics()],
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        first.onEvent(() => {
+        requireInstalledExtension(first.analytics).onEvent(() => {
             second.optOut()
             second.optIn()
         })
-        first.onEvent(laterObserver)
+        requireInstalledExtension(first.analytics).onEvent(laterObserver)
 
-        await first.capture('private')
+        await requireInstalledExtension(first.analytics).capture('private')
         await first.flush()
         expect(laterObserver).toHaveBeenCalledTimes(1)
         expect(requests).toHaveLength(0)
@@ -686,14 +684,14 @@ describe('portable consent persistence', () => {
         })
         for (let index = 0; index < 1_000; index++) {
             captureTime = startedAt + (index + 1) * 110
-            await first.capture(`queued-${index}`)
+            await requireInstalledExtension(first.analytics).capture(`queued-${index}`)
         }
         const warn = vi.spyOn(console, 'warn').mockImplementationOnce(() => {
             second.optOut()
             second.optIn()
         })
 
-        await first.capture('private-overflow')
+        await requireInstalledExtension(first.analytics).capture('private-overflow')
         await first.flush()
 
         expect(warn).toHaveBeenCalled()
@@ -717,19 +715,19 @@ describe('portable consent persistence', () => {
                 extensions: [analytics()],
             })
             const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-            first.onEvent(observed)
+            requireInstalledExtension(first.analytics).onEvent(observed)
             first.onNewSession(() => {
                 second.optOut()
                 second.optIn()
             })
             first.onNewSession(laterSessionObserver)
-            await first.capture('baseline')
+            await requireInstalledExtension(first.analytics).capture('baseline')
             await first.flush()
             observed.mockClear()
             requests.splice(0)
             vi.advanceTimersByTime(1_800_001)
 
-            await first.capture('private')
+            await requireInstalledExtension(first.analytics).capture('private')
             await first.flush()
             expect(laterSessionObserver).toHaveBeenCalledTimes(1)
             expect(observed).toHaveBeenCalledTimes(1)
@@ -755,13 +753,13 @@ describe('portable consent persistence', () => {
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         const observed = vi.fn()
         first.onNewSession(observed)
-        first.reset()
+        requireInstalledExtension(first.analytics).reset()
         storage.onStateWrite = () => {
             second.optOut()
             second.optIn()
         }
 
-        await first.capture('after-reset')
+        await requireInstalledExtension(first.analytics).capture('after-reset')
         expect(observed).toHaveBeenCalledWith(expect.objectContaining({ reason: 'reset' }))
     })
 
@@ -800,7 +798,7 @@ describe('portable consent persistence', () => {
         const first = await creatingFirst
 
         expect(dispose).not.toHaveBeenCalled()
-        expect(first.getExtension('late-consent')).toBe(extension)
+        expect(await first.resolveExtension('late-consent')).toBe(extension)
         await first.dispose()
         expect(dispose).toHaveBeenCalledTimes(1)
     })

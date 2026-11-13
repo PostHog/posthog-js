@@ -1,5 +1,6 @@
 import { FeatureFlagValue, JsonType, UnresolvedFlagReason } from '@posthog/core'
 
+import type { ParsedFlagRecord } from './flags-response'
 import { FeatureFlagError } from './types'
 
 /**
@@ -19,6 +20,12 @@ export type EvaluatedFlagRecord = {
   locallyEvaluated: boolean
   /** Whether the flag is linked to an experiment; undefined when the server did not report it. */
   hasExperiment: boolean | undefined
+  /**
+   * The parsed `/flags` record of a remotely evaluated flag, with its typed value, failure
+   * state, reason and rule metadata, for the typed flag API and flag events. Absent for locally
+   * evaluated flags and flags with a value override.
+   */
+  parsed?: ParsedFlagRecord
 }
 
 /**
@@ -33,6 +40,13 @@ export type FlagCalledEventParams = {
   groups: Record<string, string | number> | undefined
   disableGeoip: boolean | undefined
   properties: Record<string, any>
+  /**
+   * The parsed `/flags` record that supplied the read's value. Absent when the value came from
+   * local evaluation or an override, or the flag is missing. A config version 2 record adds its
+   * attribution to `$feature_flag_called`, and a complete experiment split also sends
+   * `$experiment_exposure`.
+   */
+  record?: ParsedFlagRecord
 }
 
 /**
@@ -375,6 +389,9 @@ export class FeatureFlagEvaluations {
       groups: this._groups,
       disableGeoip: this._disableGeoip,
       properties,
+      // The record that supplied the value. A remotely evaluated experiment split also sends
+      // $experiment_exposure.
+      record: flag?.parsed,
     })
   }
 }

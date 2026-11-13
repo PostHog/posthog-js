@@ -1,12 +1,13 @@
-import type { CorePostHogOptions, PostHog } from './types'
+import type { CorePostHogOptions, IPostHog } from './types'
 import { createPostHogCore } from './posthog'
 
-/** Creates a buffer-only client unless analytics delivery is supplied through `extensions`. */
-export const createPostHog = async (options: CorePostHogOptions): Promise<PostHog> => createPostHogCore(options)
+/** Creates a host with only explicitly supplied products and no automatic product imports. */
+export const createPostHog = async (options: CorePostHogOptions): Promise<IPostHog> => createPostHogCore(options)
 
 export { version } from './version'
 export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
-export type { BrowserClient, IdentifyInfo, GroupInfo } from './browser-client'
+export type { IPostHogInternal, BrowserExtension, IdentifyInfo, GroupInfo } from './browser-client'
+export type { IAnalytics } from './analytics-api'
 export type {
     AnalyticsOptions,
     ApiResponse,
@@ -21,9 +22,11 @@ export type {
     Extension,
     NewSessionInfo,
     NewSessionReason,
-    PostHog,
+    IPostHog,
     RemoteConfig,
     SendRequestInit,
     SessionContext,
     StorageLike,
 } from './types'
+
+export type { PersonProfileMode } from './analytics-options'

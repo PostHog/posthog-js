@@ -1,8 +1,9 @@
+import { requireInstalledExtension } from '../tests/helpers'
 import { createPostHog } from '../src'
-import { surveys, type SurveysExtension } from '../src/surveys'
+import { surveys } from '../src/surveys'
 import { analytics } from '../src/analytics'
 import { createAnalyticsExtension } from '../src/analytics-buffer'
-import type { PostHog } from '../src/types'
+import type { IPostHog } from '../src/types'
 import type { Survey } from '../src/surveys-options'
 
 const survey: Survey = {
@@ -21,7 +22,7 @@ const survey: Survey = {
     current_iteration: null,
     current_iteration_start_date: null,
 }
-let client: PostHog | undefined
+let client: IPostHog | undefined
 let events: { event: string; properties: Record<string, unknown> }[] = []
 let requests = 0
 let definitions: Survey[] = []
@@ -32,7 +33,7 @@ declare global {
             initializeTeardown(projectToken: string, loading?: boolean): Promise<void>
             pagehide(): void
             initialize(
-                mode: 'static' | 'dynamic',
+                mode: 'static' | 'dynamic' | 'acquired',
                 enabled: boolean,
                 storage: boolean,
                 automatic: boolean,
@@ -74,10 +75,15 @@ export const surveysHarness: Window['surveysHarness'] = {
             ...(storage ? {} : { storage: false as const }),
             navigator: false,
             capturePageview: false,
-            analytics: false,
+            analytics: mode === 'acquired' ? { flushInterval: 0 } : false,
             flags: false,
             logs: false,
-            ...(mode === 'static' ? { surveys: false, extensions: [surveys(options)] } : { surveys: options }),
+            ...(mode === 'acquired' ? { autocapture: false as const } : {}),
+            surveys: mode === 'static' ? false : options,
+            extensions:
+                mode === 'acquired'
+                    ? []
+                    : [createAnalyticsExtension(), ...(mode === 'static' ? [surveys(options)] : [])],
             remoteConfig: {
                 toolbarParams: {},
                 toolbarVersion: 'toolbar',
@@ -94,7 +100,9 @@ export const surveysHarness: Window['surveysHarness'] = {
                 return new Response('{}')
             },
         })
-        client.onEvent((event) => events.push({ event: event.event, properties: { ...event.properties } }))
+        requireInstalledExtension(client.analytics).onEvent((event) =>
+            events.push({ event: event.event, properties: { ...event.properties } })
+        )
     },
     async initializeTeardown(projectToken, loading = false) {
         await client?.dispose()
@@ -131,14 +139,16 @@ export const surveysHarness: Window['surveysHarness'] = {
                     ? new Response(JSON.stringify({ surveys: [definition] }), { status: 200 })
                     : globalThis.fetch(url, options),
         })
-        client.onEvent((event) => events.push({ event: event.event, properties: { ...event.properties } }))
-        client.getExtension<SurveysExtension>('surveys')!.displaySurvey(survey.id)
+        requireInstalledExtension(client.analytics).onEvent((event) =>
+            events.push({ event: event.event, properties: { ...event.properties } })
+        )
+        client.surveys?.displaySurvey(survey.id)
     },
     pagehide() {
         window.dispatchEvent(new Event('pagehide'))
     },
-    display: () => client?.getExtension<SurveysExtension>('surveys')?.displaySurvey(survey.id),
-    capture: () => client?.capture('trigger-survey'),
+    display: () => client?.surveys?.displaySurvey(survey.id),
+    capture: () => client && requireInstalledExtension(client.analytics).capture('trigger-survey'),
     optOut: () => client?.optOut(),
     optIn: () => client?.optIn(),
     dispose: async () => {

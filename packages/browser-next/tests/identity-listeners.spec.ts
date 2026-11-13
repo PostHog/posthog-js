@@ -1,9 +1,10 @@
-import { createPostHog } from '../src/core'
-import type { BrowserClient, GroupInfo, IdentifyInfo, PostHog } from '../src/core'
+import { createBufferedPostHog as createPostHog } from './helpers'
+import { requireInstalledExtension } from './helpers'
+import type { IPostHogInternal, GroupInfo, IdentifyInfo, IPostHog } from '../src/core'
 import { localRemoteConfig } from './helpers'
 
-const clients: PostHog[] = []
-const create = async (setup: (client: BrowserClient) => void) => {
+const clients: IPostHog[] = []
+const create = async (setup: (client: IPostHogInternal) => void) => {
     const client = await createPostHog({
         projectToken: 'ph_identity_listeners',
         storage: false,
@@ -27,7 +28,7 @@ describe('browser client identity listeners', () => {
         const identified = vi.fn()
         const grouped = vi.fn()
         const reset = vi.fn()
-        let extensionClient!: BrowserClient
+        let extensionClient!: IPostHogInternal
         const client = await create((value) => {
             extensionClient = value
             value.onIdentify((info) => identified(info, value.distinctId))
@@ -35,9 +36,9 @@ describe('browser client identity listeners', () => {
             value.onReset(() => reset(value.distinctId, value.kv.get('local')))
         })
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         const previousDistinctId = client.distinctId
-        await client.identify('person', { plan: 'pro' }, { first: true })
+        await requireInstalledExtension(client.analytics).identify('person', { plan: 'pro' }, { first: true })
         expect(identified).toHaveBeenCalledWith(
             {
                 distinctId: 'person',
@@ -48,16 +49,36 @@ describe('browser client identity listeners', () => {
             },
             'person'
         )
-        await client.group('organization', 'team', { size: 5 })
+        await requireInstalledExtension(client.analytics).group('organization', 'team', { size: 5 })
         expect(grouped).toHaveBeenCalledWith(
             { type: 'organization', key: 'team', changed: true, properties: { size: 5 } },
             { organization: 'team' }
         )
         extensionClient.kv.set('local', true)
-        client.reset()
+        requireInstalledExtension(client.analytics).reset()
         expect(client.distinctId).not.toBe('person')
         expect(reset).toHaveBeenCalledWith(client.distinctId, undefined)
         expect(captured).not.toHaveBeenCalled()
+    })
+
+    it('publishes group-only cleanup after state changes without clearing extension state under denial', async () => {
+        const groupsReset = vi.fn()
+        const reset = vi.fn()
+        const client = await create((value) => {
+            value.kv.set('retained', true)
+            value.onGroupsReset(() => groupsReset(value.groups, value.distinctId, value.kv.get('retained')))
+            value.onReset(reset)
+        })
+        const product = requireInstalledExtension(client.analytics)
+        await product.identify('member')
+        await product.group('organization', 'acme')
+        product.resetGroups()
+        expect(groupsReset).toHaveBeenCalledTimes(1)
+        expect(groupsReset).toHaveBeenCalledWith({}, 'member', true)
+        expect(reset).not.toHaveBeenCalled()
+        product.reset()
+        expect(groupsReset).toHaveBeenCalledTimes(1)
+        expect(reset).toHaveBeenCalledTimes(1)
     })
 
     it('reports property-only updates but skips unchanged or invalid operations', async () => {
@@ -67,11 +88,11 @@ describe('browser client identity listeners', () => {
             value.onIdentify(identify)
             value.onGroup(group)
         })
-        await client.identify('person')
-        await client.identify('person')
-        await client.identify('')
+        await requireInstalledExtension(client.analytics).identify('person')
+        await requireInstalledExtension(client.analytics).identify('person')
+        await requireInstalledExtension(client.analytics).identify('')
         expect(identify).toHaveBeenCalledTimes(1)
-        await client.identify('person', { plan: 'pro' })
+        await requireInstalledExtension(client.analytics).identify('person', { plan: 'pro' })
         expect(identify).toHaveBeenLastCalledWith({
             distinctId: 'person',
             previousDistinctId: 'person',
@@ -79,11 +100,11 @@ describe('browser client identity listeners', () => {
             set: { plan: 'pro' },
             setOnce: undefined,
         })
-        await client.group('organization', 'team')
-        await client.group('organization', 'team')
-        await client.group('', 'team')
+        await requireInstalledExtension(client.analytics).group('organization', 'team')
+        await requireInstalledExtension(client.analytics).group('organization', 'team')
+        await requireInstalledExtension(client.analytics).group('', 'team')
         expect(group).toHaveBeenCalledTimes(1)
-        await client.group('organization', 'team', { size: 5 })
+        await requireInstalledExtension(client.analytics).group('organization', 'team', { size: 5 })
         expect(group).toHaveBeenLastCalledWith({
             type: 'organization',
             key: 'team',
@@ -96,6 +117,7 @@ describe('browser client identity listeners', () => {
         const identify = vi.fn()
         const group = vi.fn()
         const reset = vi.fn()
+        const groupsReset = vi.fn()
         const removed = vi.fn()
         const fail = () => {
             throw new Error('listener failed')
@@ -104,40 +126,52 @@ describe('browser client identity listeners', () => {
             value.onIdentify(fail)
             value.onGroup(fail)
             value.onReset(fail)
+            value.onGroupsReset(fail)
             value.onIdentify(identify)
             value.onGroup(group)
             value.onReset(reset)
+            value.onGroupsReset(groupsReset)
             value.onIdentify(removed).dispose()
             value.onGroup(removed).dispose()
             value.onReset(removed).dispose()
+            value.onGroupsReset(removed).dispose()
         })
-        await expect(client.identify('person')).resolves.toBeUndefined()
-        await expect(client.group('organization', 'team')).resolves.toBeUndefined()
-        expect(() => client.reset()).not.toThrow()
+        await expect(requireInstalledExtension(client.analytics).identify('person')).resolves.toBeUndefined()
+        await expect(requireInstalledExtension(client.analytics).group('organization', 'team')).resolves.toBeUndefined()
+        expect(() => requireInstalledExtension(client.analytics).resetGroups()).not.toThrow()
+        expect(() => requireInstalledExtension(client.analytics).reset()).not.toThrow()
         expect(identify).toHaveBeenCalledTimes(1)
         expect(group).toHaveBeenCalledTimes(1)
         expect(reset).toHaveBeenCalledTimes(1)
+        expect(groupsReset).toHaveBeenCalledTimes(1)
         expect(removed).not.toHaveBeenCalled()
     })
 
     it('does not replay events and stops publishing after disposal', async () => {
         const client = await create(() => {})
-        await client.identify('person')
-        await client.group('organization', 'team')
-        client.reset()
+        const installedAnalytics = requireInstalledExtension(client.analytics)
+        await installedAnalytics.identify('person')
+        await installedAnalytics.group('organization', 'team')
+        installedAnalytics.resetGroups()
+        installedAnalytics.reset()
         const identify = vi.fn()
         const group = vi.fn()
         const reset = vi.fn()
         client.onIdentify(identify)
         client.onGroup(group)
         client.onReset(reset)
+        const groupsReset = vi.fn()
+        client.onGroupsReset(groupsReset)
+        expect(groupsReset).not.toHaveBeenCalled()
         expect(identify).not.toHaveBeenCalled()
         expect(group).not.toHaveBeenCalled()
         expect(reset).not.toHaveBeenCalled()
         await client.dispose()
-        await client.identify('later')
-        await client.group('organization', 'later')
-        client.reset()
+        await installedAnalytics.identify('later')
+        await installedAnalytics.group('organization', 'later')
+        installedAnalytics.resetGroups()
+        installedAnalytics.reset()
+        expect(groupsReset).not.toHaveBeenCalled()
         expect(identify).not.toHaveBeenCalled()
         expect(group).not.toHaveBeenCalled()
         expect(reset).not.toHaveBeenCalled()

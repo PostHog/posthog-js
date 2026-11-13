@@ -3,7 +3,7 @@ import type { Disposable } from '@posthog/browser-common'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import type { FeatureFlagsConfig } from '@posthog/browser-common/feature-flags-config'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
-import type { BrowserClient } from './browser-client'
+import type { IPostHogInternal } from './browser-client'
 import type { FlagsExtension } from './flags-internal'
 import type { FlagsOptions } from './flags-options'
 import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
@@ -27,30 +27,38 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         evaluationContexts: snapshot.evaluationContexts ?? [],
         ...(snapshot.flagKeys === undefined ? {} : { flagKeys: snapshot.flagKeys }),
     }
-    let client: BrowserClient | undefined
+    let client: IPostHogInternal | undefined
     let disposed = false
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
 
     const extension: FlagsExtension = {
         name: FeatureFlagsExtension,
-        bindings: { [FeatureFlagsCommonExtension]: shared },
+        bindings: { featureFlags: shared, [FeatureFlagsCommonExtension]: shared },
         getSurveyContext: () => ({
             remoteEvaluation: !config.featureFlagsDisabled,
             personProperties: client?.kv.get(STORED_PERSON_PROPERTIES_KEY),
         }),
-        setup: async (value: BrowserClient) => {
+        setup: async (value: IPostHogInternal) => {
             client = value
-            await shared.setup(value)
+            await value.resolveExtension('analytics')
+            if (disposed) return
+            await shared.setup(value.sharedClient)
             if (disposed) return
             subscriptions.push(
-                value.onIdentify(({ distinctId, previousDistinctId, wasIdentified, set, setOnce }) => {
+                value.onIdentify(({ distinctId, previousDistinctId, wasIdentified }) => {
                     if (distinctId !== previousDistinctId) {
                         shared.resetFlagCallReported()
                         if (!wasIdentified) shared.setAnonymousDistinctId(previousDistinctId)
                     }
+                    shared.reloadFeatureFlags()
+                })
+            )
+            subscriptions.push(
+                value.onChangeProperties(({ set, setOnce, unset }) => {
                     if (set || setOnce)
                         shared.setPersonPropertiesForFlags({ $set: set ?? {}, $set_once: setOnce ?? {} }, false)
+                    if (unset) shared.unsetPersonPropertiesForFlags([...unset], false)
                     shared.reloadFeatureFlags()
                 })
             )
@@ -58,6 +66,12 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
                 value.onGroup(({ type, changed, properties }) => {
                     if (changed) shared.resetGroupPropertiesForFlags(type)
                     if (properties) shared.setGroupPropertiesForFlags({ [type]: properties }, false)
+                    shared.reloadFeatureFlags()
+                })
+            )
+            subscriptions.push(
+                value.onGroupsReset(() => {
+                    shared.resetGroupPropertiesForFlags()
                     shared.reloadFeatureFlags()
                 })
             )

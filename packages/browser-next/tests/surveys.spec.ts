@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { requireInstalledExtension } from './helpers'
 import { detectUserLanguage } from '@posthog/browser-common/surveys/survey-translations'
 import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
 import {
@@ -8,12 +9,12 @@ import {
     sendSurveyAbandonedEvent,
     dismissedSurveyEvent,
 } from '@posthog/browser-common/surveys/surveys-extension-utils'
-import { createPostHog, FeatureFlagsExtension } from '../src'
+import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore, type RemoteConfig } from '../src/core'
 import { createSurveys } from '../src/surveys-extension'
-import { surveys, type SurveysExtension } from '../src/surveys'
+import { surveys } from '../src/surveys'
 import { generateSurveys } from '@posthog/browser-common/surveys-renderer'
-import type { PostHog, PostHogOptions } from '../src/types'
+import type { IPostHog, PostHogOptions } from '../src/types'
 import type { Survey, SurveyCallback } from '../src/surveys-options'
 import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
 import { createRemoteConfigFetch, MemoryStorage } from './helpers'
@@ -51,10 +52,11 @@ const base = {
     analytics: false,
     capturePageview: false,
 } as const
-const clients: PostHog[] = []
+const clients: IPostHog[] = []
 const create = async (options: Partial<PostHogOptions> = {}) => {
     const client = await createPostHog({
         ...base,
+        surveys: {},
         remoteConfig: { ...remote, surveys: false },
         fetch: false,
         ...options,
@@ -62,8 +64,8 @@ const create = async (options: Partial<PostHogOptions> = {}) => {
     clients.push(client)
     return client
 }
-const getExtension = (client: PostHog) => client.getExtension<SurveysExtension>('surveys')!
-const getSurveys = (client: PostHog, forceReload = false) =>
+const getExtension = (client: IPostHog) => requireInstalledExtension(client.surveys)
+const getSurveys = (client: IPostHog, forceReload = false) =>
     new Promise<Survey[]>((resolve) => getExtension(client).getSurveys(resolve, forceReload))
 const renderer = () => {
     const dispose = vi.fn()
@@ -139,7 +141,7 @@ describe('surveys', () => {
         localStorage.setItem('abandonedSurvey_survey-test', 'true')
         localStorage.setItem('unrelated', 'keep')
 
-        client.reset()
+        requireInstalledExtension(client.analytics).reset()
 
         expect(getInProgressSurveyState(definition)).toBeNull()
         expect(localStorage.getItem('inProgressSurvey_survey-test')).toBeNull()
@@ -164,7 +166,7 @@ describe('surveys', () => {
             fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
         })
         await getSurveys(client)
-        client.identify('person', { language: 'fr' })
+        requireInstalledExtension(client.analytics).identify('person', { language: 'fr' })
         expect(detectUserLanguage(context)).toBe('fr')
         expect(context.config.featureFlagEvaluation).toBe(false)
         expect(context.client!.kv.get([STORED_PERSON_PROPERTIES_KEY, '$surveys'])).toMatchObject({
@@ -172,16 +174,16 @@ describe('surveys', () => {
             '$surveys': [definition],
         })
         expect(detectUserLanguage({ ...context, config: { ...context.config, overrideLanguage: 'de' } })).toBe('de')
-        client.identify('person', { language: 'es' })
+        requireInstalledExtension(client.analytics).identify('person', { language: 'es' })
         expect(detectUserLanguage(context)).toBe('es')
-        client.reset()
+        requireInstalledExtension(client.analytics).reset()
         expect(context.client!.kv.get(STORED_PERSON_PROPERTIES_KEY)).toBeUndefined()
     })
 
-    it('installs orchestration by default but keeps false remote config from fetching definitions', async () => {
+    it('initializes configured orchestration without fetching definitions when remote config disables surveys', async () => {
         const fetch = vi.fn()
         const client = await create({ fetch })
-        expect(client.getExtension('surveys')).toBeDefined()
+        expect(client.surveys).toBeDefined()
         expect(fetch).not.toHaveBeenCalled()
     })
 
@@ -190,14 +192,14 @@ describe('surveys', () => {
         const core = await createCore({ ...base, fetch: false })
         clients.push(core)
         for (const instance of [client, core]) {
-            expect(instance.getExtension('surveys')).toBeUndefined()
+            expect(instance.surveys).toBeUndefined()
         }
     })
 
     it('prefers an explicit static instance even when automatic inclusion is disabled', async () => {
         const extension = surveys({ automaticDisplay: false })
         const client = await create({ surveys: false, extensions: [extension] })
-        expect(client.getExtension('surveys')).toBe(extension)
+        expect(client.surveys).toBe(extension)
     })
 
     it.each([false, undefined])('defers the renderer for remote surveys=%s until a manual call', async (enabled) => {
@@ -443,7 +445,7 @@ describe('surveys', () => {
         })
         expect(await getSurveys(second)).toEqual([definition])
         expect(fetch).toHaveBeenCalledOnce()
-        second.reset()
+        requireInstalledExtension(second.analytics).reset()
         expect(JSON.parse(storage.getItem('custom')!).extensionData.surveys).toEqual({})
     })
 
@@ -515,10 +517,10 @@ describe('surveys', () => {
             fetch: async () => new Response(JSON.stringify({ surveys: [gated] })),
         })
         const captured = vi.fn()
-        client.onEvent(captured)
-        client.getExtension(FeatureFlagsExtension)!.updateFlags({ 'survey-targeting-gate': false })
+        requireInstalledExtension(client.analytics).onEvent(captured)
+        requireInstalledExtension(client.featureFlags).updateFlags({ 'survey-targeting-gate': false })
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
-        client.getExtension(FeatureFlagsExtension)!.updateFlags({ 'survey-targeting-gate': true })
+        requireInstalledExtension(client.featureFlags).updateFlags({ 'survey-targeting-gate': true })
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: true })
         expect(captured.mock.calls.some(([event]) => event.event === '$feature_flag_called')).toBe(false)
     })
@@ -543,9 +545,9 @@ describe('surveys', () => {
         })
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
         expect(setElementSelectors.mock.calls[0][0]).toEqual(new Set(['.trigger']))
-        client.capture('$autocapture', { $element_selectors: ['.trigger'] })
+        requireInstalledExtension(client.analytics).capture('$autocapture', { $element_selectors: ['.trigger'] })
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: true })
-        client.reset()
+        requireInstalledExtension(client.analytics).reset()
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
     })
 

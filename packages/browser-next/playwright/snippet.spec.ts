@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test'
+import { stdout } from 'node:process'
+import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import type { Inspection } from '@posthog-tooling/sdk-mock-server'
-import type { PostHog } from '../src/types'
+import type { IPostHog } from '../src/types'
 
 declare global {
     interface Window {
@@ -49,7 +51,7 @@ test.beforeEach(async ({ context }) => {
 })
 
 test.afterEach(async ({ page }) => {
-    await page.evaluate(() => (window.posthog as PostHog | undefined)?.shutdown?.(0)).catch(() => {})
+    await page.evaluate(() => (window.posthog as IPostHog | undefined)?.shutdown?.(0)).catch(() => {})
 })
 
 for (const mode of ['sync', 'async', 'defer']) {
@@ -61,7 +63,9 @@ for (const mode of ['sync', 'async', 'defer']) {
         await expect
             .poll(() => page.evaluate(() => window.snippetEvidence))
             .toMatchObject({ readyCount: 1, detailMatchesGlobal: true, flushed: true })
-        expect(await page.evaluate(() => typeof (window.posthog as PostHog | undefined)?.capture)).toBe('function')
+        expect(await page.evaluate(() => typeof (window.posthog as IPostHog | undefined)?.analytics?.capture)).toBe(
+            'function'
+        )
         const captures = (await backend.inspect()).requests.filter(
             (request) => request.path === '/i/v1/analytics/events'
         )
@@ -88,6 +92,23 @@ test('a nonce-only CSP permits deferred chunks and real Capture V1 delivery', as
     expect((await assetRequests()).some((request) => request.path.includes('/chunks/'))).toBe(true)
 })
 
+test('embedded analytics delivers queued and immediate events without optional chunk requests', async ({ page }) => {
+    await page.goto(location({ flags: 'false', logs: 'false', surveys: 'false', autocapture: 'false' }))
+    await expect.poll(() => page.evaluate(() => window.snippetEvidence)).toMatchObject({ readyCount: 1, flushed: true })
+    expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'snippet_early' })])
+    const summary = await page.evaluate(() => {
+        const product = (window.posthog as IPostHog).analytics
+        if (!product) throw new Error('Expected embedded analytics')
+        return product.captureImmediate('inline_script')
+    })
+    expect(summary).toMatchObject({ submitted: 1, allPersisted: true })
+    expect((await backend.inspect()).events.map((event) => (event as { event: string }).event)).toEqual([
+        'snippet_early',
+        'inline_script',
+    ])
+    expect((await assetRequests()).map((request) => request.path)).toEqual([`${assetPrefix}script.js`])
+})
+
 test('core is embedded in the first response; disabled products do not request chunks before capture', async ({
     page,
 }) => {
@@ -98,12 +119,63 @@ test('core is embedded in the first response; disabled products do not request c
     expect((await assetRequests()).map((request) => request.path)).toEqual([`${assetPrefix}script.js`])
     expect((await backend.inspect()).events).toHaveLength(0)
     const summary = await page.evaluate(async () => {
-        ;(window.posthog as PostHog).optIn()
-        return (window.posthog as PostHog).captureImmediate('after_opt_in')
+        ;(window.posthog as IPostHog).optIn()
+        const product = (window.posthog as IPostHog).analytics
+        if (!product) throw new Error('Expected embedded analytics')
+        return product.captureImmediate('after_opt_in')
     })
     expect(summary).toMatchObject({ submitted: 1, allPersisted: true })
     expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'after_opt_in' })])
+    expect((await assetRequests()).map((request) => request.path)).toEqual([`${assetPrefix}script.js`])
 })
+
+for (const [profile, options] of Object.entries({
+    default: {},
+    disabled: { flags: 'false', logs: 'false', surveys: 'false', autocapture: 'false' },
+    denied: { optOutByDefault: 'true' },
+})) {
+    test(`records actual startup script bytes for ${profile}`, async ({ page }) => {
+        const scripts: Array<Promise<{ path: string; minified: number; gzip: number; brotli: number }>> = []
+        page.on('response', (response) => {
+            const url = new URL(response.url())
+            if (url.origin !== assetOrigin || !url.pathname.endsWith('.js') || response.status() !== 200) return
+            scripts.push(
+                response.body().then((body) => ({
+                    path: url.pathname,
+                    minified: body.length,
+                    gzip: gzipSync(body, { level: 9 }).length,
+                    brotli: brotliCompressSync(body, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }).length,
+                }))
+            )
+        })
+        await page.goto(location(options))
+        await expect
+            .poll(() => page.evaluate(() => window.snippetEvidence))
+            .toMatchObject({ readyCount: 1, flushed: true })
+        await page.waitForLoadState('networkidle')
+        const loaded = await Promise.all(scripts)
+        expect(loaded.filter(({ path }) => path === `${assetPrefix}script.js`)).toHaveLength(1)
+        if (profile === 'disabled') expect(loaded).toHaveLength(1)
+        if (profile === 'denied') expect((await backend.inspect()).events).toHaveLength(0)
+        const sum = (files: typeof loaded) =>
+            files.reduce(
+                (total, file) => ({
+                    minified: total.minified + file.minified,
+                    gzip: total.gzip + file.gzip,
+                    brotli: total.brotli + file.brotli,
+                }),
+                { minified: 0, gzip: 0, brotli: 0 }
+            )
+        stdout.write(
+            `CDN startup ${test.info().project.name}/${profile}: ${JSON.stringify({
+                initial: sum(loaded.filter(({ path }) => path === `${assetPrefix}script.js`)),
+                deferred: sum(loaded.filter(({ path }) => path !== `${assetPrefix}script.js`)),
+                total: sum(loaded),
+                files: loaded,
+            })}\n`
+        )
+    })
+}
 
 test('persisted denial gates pageview and early capture while initialization remains ready', async ({
     page,
@@ -117,9 +189,11 @@ test('persisted denial gates pageview and early capture while initialization rem
     expect((await backend.inspect()).events).toHaveLength(0)
     expect((await assetRequests()).some((request) => request.path.includes('/chunks/'))).toBe(true)
     await page.evaluate(async () => {
-        const client = window.posthog as PostHog
+        const client = window.posthog as IPostHog
         client.optIn()
-        client.capture('after_persisted_denial')
+        const product = client.analytics
+        if (!product) throw new Error('Expected embedded analytics')
+        product.capture('after_persisted_denial')
         await client.flush()
     })
     expect((await backend.inspect()).events.map((event) => (event as { event: string }).event)).toEqual([
@@ -155,7 +229,7 @@ test('a global claimed during initialization wins and no ready event is dispatch
     await page.goto(location(), { waitUntil: 'domcontentloaded' })
     await expect.poll(async () => (await assets.inspect()).blockedRequests.length).toBeGreaterThan(0)
     await page.evaluate(() => {
-        window.posthog = { legacy: true } as unknown as PostHog
+        window.posthog = { legacy: true } as unknown as IPostHog
     })
     await assets.releaseBarrier('chunks')
     await page.waitForLoadState('load')
@@ -189,13 +263,27 @@ for (const options of [
     })
 }
 
-test('failed optional chunks still expose a usable client; analytics loading can retry', async ({ page }) => {
+test('failed optional chunks leave embedded analytics usable and optional acquisition can retry', async ({ page }) => {
     await assets.failChunks(true)
     await page.goto(location())
     await expect.poll(() => page.evaluate(() => window.snippetEvidence)).toMatchObject({ readyCount: 1, flushed: true })
-    expect(await page.evaluate(() => (window.posthog as PostHog).getExtension('featureFlags'))).toBeUndefined()
-    expect((await backend.inspect()).events).toHaveLength(0)
-    await assets.failChunks(false)
-    await page.evaluate(() => (window.posthog as PostHog).flush())
+    expect(await page.evaluate(() => (window.posthog as IPostHog).featureFlags)).toBeUndefined()
     expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'snippet_early' })])
+    const summary = await page.evaluate(() => {
+        const product = (window.posthog as IPostHog).analytics
+        if (!product) throw new Error('Expected embedded analytics')
+        return product.captureImmediate('optional_failure')
+    })
+    expect(summary).toMatchObject({ submitted: 1, allPersisted: true })
+    await assets.failChunks(false)
+    expect(
+        await page.evaluate(async () => {
+            const client = window.posthog as IPostHog
+            return Boolean(await client.resolveExtension('featureFlags')) && client.featureFlags !== undefined
+        })
+    ).toBe(true)
+    expect((await backend.inspect()).events).toEqual([
+        expect.objectContaining({ event: 'snippet_early' }),
+        expect.objectContaining({ event: 'optional_failure' }),
+    ])
 })

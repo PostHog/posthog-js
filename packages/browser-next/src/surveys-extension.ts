@@ -1,15 +1,14 @@
 import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
-import type { Client, Disposable, KeyValueStore, Extension } from '@posthog/browser-common'
+import type { Client, Disposable, KeyValueStore } from '@posthog/browser-common'
 import { PostHogSurveys } from '@posthog/browser-common/surveys'
 import { type SurveysConfigSource, type SurveysManager } from '@posthog/browser-common/surveys-config'
 import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
 import { DEFAULT_DISPLAY_SURVEY_OPTIONS } from '@posthog/browser-common/utils/survey-utils'
 import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
 import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
-import type { AnalyticsExtension, AnalyticsTeardownSubscription } from './analytics-internal'
+import type { AnalyticsTeardownSubscription } from './analytics-internal'
 import type { SurveysExtension } from './surveys-internal'
-import type { BrowserClient } from './browser-client'
-import type { FlagsExtension } from './flags-internal'
+import type { IPostHogInternal } from './browser-client'
 import {
     snapshotSurveysOptions,
     type SurveysOptions,
@@ -19,14 +18,13 @@ import {
 } from './surveys-options'
 
 type Renderer = { generateSurveys(host: SurveyRenderContext, enabled: boolean): SurveysManager | undefined }
-type AutocaptureSelectors = Extension & { setElementSelectors(selectors: Set<string>): void }
 
 export const createSurveys = (options: SurveysOptions, load: () => Promise<Renderer>): SurveysExtension => {
     const config = snapshotSurveysOptions(options)
     let elementSelectors = new Set<string>()
     let eventReceiver: SurveyEventReceiver | undefined
     const replaceTriggers = (surveys: Survey[]) => eventReceiver?.replace(surveys)
-    let client: BrowserClient | undefined
+    let client: IPostHogInternal | undefined
     let runtimeHost: SurveyRenderContext | undefined
     let remoteEnabled = false
     let manual = false
@@ -37,7 +35,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     let loading: Promise<Renderer> | undefined
     let remoteSubscription: Disposable | undefined
     let resetSubscription: Disposable | undefined
-    const getFlagsContext = () => client?.getExtension<FlagsExtension>('featureFlags')?.getSurveyContext?.()
+    const getFlagsContext = () => client?.featureFlags?.getSurveyContext?.()
     const reset = () => {
         shared.reset()
     }
@@ -85,9 +83,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                     getActionUrl: () => (runtimeHost ? getTargetingUrl(runtimeHost) : undefined),
                     setElementSelectors: (selectors) => {
                         elementSelectors = new Set(selectors)
-                        value
-                            .getExtension<AutocaptureSelectors>('autocapture')
-                            ?.setElementSelectors(new Set(elementSelectors))
+                        client?.autocapture?.setElementSelectors(new Set(elementSelectors))
                     },
                 },
                 onActivationChanged
@@ -143,12 +139,15 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     }
     return {
         name: 'surveys',
-        setup: async (value: BrowserClient) => {
+        bindings: { surveys: shared },
+        setup: async (value: IPostHogInternal) => {
             client = value
+            await value.resolveExtension('analytics')
+            if (disposed) return
             await value.kv.initialize()
             if (disposed) return
             resetSubscription = value.onReset(reset)
-            const renderClient = Object.create(value) as Client
+            const renderClient = Object.create(value.sharedClient) as Client
             const read = (key: string) =>
                 key === STORED_PERSON_PROPERTIES_KEY ? getFlagsContext()?.personProperties : value.kv.get(key)
             const renderKv: KeyValueStore = {
@@ -173,14 +172,12 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                     if (remoteEnabled && !disposed) manager?.startAutomaticDisplay?.()
                 }
             })
-            await shared.setup(value)
+            await shared.setup(value.sharedClient)
             if (disposed) {
                 shared.dispose()
                 return
             }
-            teardownSubscription = client
-                .getExtension<AnalyticsExtension>('analytics')
-                ?.onBeforeTeardown?.(() => shared.handlePageUnload())
+            teardownSubscription = client.analytics?.onBeforeTeardown?.(() => shared.handlePageUnload())
             // A missing delivery driver can admit abandonment, but cannot send during unload.
             // oxlint-disable-next-line posthog-js/no-add-event-listener
             if (typeof window !== 'undefined') window.addEventListener('pagehide', pagehide)
@@ -250,7 +247,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
             disposed = true
             elementSelectors.clear()
             try {
-                client?.getExtension<AutocaptureSelectors>('autocapture')?.setElementSelectors?.(new Set())
+                client?.autocapture?.setElementSelectors(new Set())
             } catch (error) {
                 client?.logger.error('Failed to clear survey action selectors', error)
             }

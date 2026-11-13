@@ -1,8 +1,7 @@
-import type { SurveysExtension } from '../src/surveys-internal'
+import { requireInstalledExtension } from './helpers'
 // @vitest-environment jsdom
-import { createPostHog, FeatureFlagsExtension } from '../src'
+import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { localRemoteConfig } from './helpers'
-import type { LogsExtension } from '../src/logs'
 
 it('shares default JSON configuration across flags, logs, surveys and autocapture', async () => {
     const requests: string[] = []
@@ -40,19 +39,19 @@ it('shares default JSON configuration across flags, logs, surveys and autocaptur
     try {
         await client.getRemoteConfig()
         await vi.waitFor(() =>
-            expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('remote')?.enabled).toBe(true)
+            expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('remote')?.enabled).toBe(true)
         )
         const surveys = await new Promise((resolve) =>
-            client.getExtension<SurveysExtension>('surveys')!.getSurveys((values) => resolve(values))
+            requireInstalledExtension(client.surveys).getSurveys((values) => resolve(values))
         )
         expect(surveys).toEqual([])
         expect(requests).toContain('/api/surveys/')
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         document.body.innerHTML = '<button>Save</button>'
         document.querySelector('button')!.click()
         expect(captured).toHaveBeenCalledWith(expect.objectContaining({ event: '$autocapture' }))
-        const logs = client.getExtension<LogsExtension>('logs')!
+        const logs = requireInstalledExtension(await client.resolveExtension('logs'))
         logs.captureLog({ body: 'configured products' })
         await logs.flush()
         expect(logBodies).toHaveLength(1)
