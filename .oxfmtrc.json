@@ -15,6 +15,7 @@
         "packages/core/src/vendor/*",
         "**/references/*.json",
         "**/references/*.md",
-        "packages/browser/playwright/compatibility/goldens/*.json"
+        "packages/browser/playwright/compatibility/goldens/*.json",
+        "packages/browser/src/__tests__/fixtures/released-flags-*.json"
     ]
 }
