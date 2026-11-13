@@ -33,7 +33,7 @@ declare global {
             initializeTeardown(projectToken: string, loading?: boolean): Promise<void>
             pagehide(): void
             initialize(
-                mode: 'static' | 'dynamic',
+                mode: 'static' | 'dynamic' | 'acquired',
                 enabled: boolean,
                 storage: boolean,
                 automatic: boolean,
@@ -75,10 +75,15 @@ export const surveysHarness: Window['surveysHarness'] = {
             ...(storage ? {} : { storage: false as const }),
             navigator: false,
             capturePageview: false,
-            analytics: false,
+            analytics: mode === 'acquired' ? { flushInterval: 0 } : false,
             flags: false,
             logs: false,
-            ...(mode === 'static' ? { surveys: false, extensions: [surveys(options)] } : { surveys: options }),
+            ...(mode === 'acquired' ? { autocapture: false as const } : {}),
+            surveys: mode === 'static' ? false : options,
+            extensions:
+                mode === 'acquired'
+                    ? []
+                    : [createAnalyticsExtension(), ...(mode === 'static' ? [surveys(options)] : [])],
             remoteConfig: {
                 toolbarParams: {},
                 toolbarVersion: 'toolbar',

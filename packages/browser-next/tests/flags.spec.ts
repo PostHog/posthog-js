@@ -1,5 +1,5 @@
 import { requireInstalledExtension } from './helpers'
-import { createPostHog } from '../src'
+import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore } from '../src/core'
 import { flags } from '../src/flags'
 import type { FlagsOptions } from '../src/flags'

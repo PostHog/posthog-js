@@ -10,8 +10,24 @@ export type LoadStrategy = 'lazy' | 'eager'
 
 /** Automatic analytics loading configured by the default package entrypoint. */
 export interface AutomaticAnalyticsOptions extends AnalyticsOptions {
-    /** Load after the first admitted event, or while the client initializes. Defaults to `lazy`. */
+    /** Acquire analytics on demand and load delivery after admission, or acquire and start delivery during initialization. Defaults to `lazy`. */
     load?: LoadStrategy
 }
 
 export type AnalyticsConfiguration = false | AutomaticAnalyticsOptions
+
+/** Capture configuration at client creation, independently of when the product loads. */
+export const snapshotAutomaticAnalyticsOptions = (
+    options: AutomaticAnalyticsOptions = {}
+): AutomaticAnalyticsOptions => {
+    const snapshot: AutomaticAnalyticsOptions = {}
+    for (const key of ['flushAt', 'flushInterval', 'load'] as const) {
+        try {
+            const value = options[key]
+            if (value !== undefined) Object.defineProperty(snapshot, key, { value, enumerable: true })
+        } catch {
+            // A missing value retains the product default.
+        }
+    }
+    return snapshot
+}

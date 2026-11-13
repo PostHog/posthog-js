@@ -9,7 +9,7 @@ import {
     sendSurveyAbandonedEvent,
     dismissedSurveyEvent,
 } from '@posthog/browser-common/surveys/surveys-extension-utils'
-import { createPostHog } from '../src'
+import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore, type RemoteConfig } from '../src/core'
 import { createSurveys } from '../src/surveys-extension'
 import { surveys } from '../src/surveys'
@@ -56,6 +56,7 @@ const clients: IPostHog[] = []
 const create = async (options: Partial<PostHogOptions> = {}) => {
     const client = await createPostHog({
         ...base,
+        surveys: {},
         remoteConfig: { ...remote, surveys: false },
         fetch: false,
         ...options,
@@ -179,7 +180,7 @@ describe('surveys', () => {
         expect(context.client!.kv.get(STORED_PERSON_PROPERTIES_KEY)).toBeUndefined()
     })
 
-    it('installs orchestration by default but keeps false remote config from fetching definitions', async () => {
+    it('initializes configured orchestration without fetching definitions when remote config disables surveys', async () => {
         const fetch = vi.fn()
         const client = await create({ fetch })
         expect(client.surveys).toBeDefined()

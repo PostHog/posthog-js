@@ -12,11 +12,12 @@ npm install @posthog/browser
 import { createPostHog } from '@posthog/browser'
 
 const posthog = await createPostHog({ projectToken: '<project-token>' })
+await posthog.resolveExtension('analytics')
 posthog.analytics?.capture('signed_up')
 await posthog.flush()
 ```
 
-Configure automatic scheduling or load delivery while the client initializes:
+Configure scheduling or acquire analytics and start delivery while the client initializes:
 
 ```ts
 const posthog = await createPostHog({
@@ -25,7 +26,7 @@ const posthog = await createPostHog({
 })
 ```
 
-Importing `@posthog/browser/analytics` statically includes both buffering and delivery. Supplying its extension selects that instance and its constructor options instead of automatic delivery loading:
+Importing `@posthog/browser/analytics` statically includes both buffering and delivery. Supplying its extension selects that instance and its constructor options instead of automatic product acquisition:
 
 ```ts
 import { analytics } from '@posthog/browser/analytics'
@@ -36,7 +37,7 @@ const posthog = await createPostHog({
 })
 ```
 
-Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no delivery dynamic-import reference. Both modes retain the analytics extension and its buffer. `posthog.analytics` returns the same instance before and after delivery loads; its presence alone does not indicate that delivery is available. Analytics initializes before other configured extensions so they can capture during setup. Other extensions retain their configured order.
+Use `analytics: false` to block implicit analytics acquisition, including requests from other products. An explicitly supplied analytics instance takes precedence. The manual `@posthog/browser/core` entrypoint installs only supplied products and has no automatic product imports. Installed namespaces are synchronous lookups; `await posthog.resolveExtension('analytics')` acquires an eligible unloaded product and returns its installed instance, or undefined if disabled or unavailable. Concurrent requests share loading and setup. Supplied analytics initializes before other configured extensions; extensions needing a capture dependency resolve it before exposing synchronous operations.
 
 Product namespaces expose owners only after successful setup. Reading a namespace never initiates loading. Use `await posthog.resolveExtension(token)` for typed custom-extension access; resolution waits for readiness and returns `undefined` when the extension is unavailable. Shared implementations receive a separate `Client` adapter with shared binding lookup.
 
@@ -64,7 +65,7 @@ The CDN build supports a plain external classic script in ordinary, `async`, or 
 <script async src="https://us-assets.i.posthog.com/static/browser/0/script.js?projectToken=YOUR_PROJECT_TOKEN"></script>
 ```
 
-The first response embeds the client core. Optional implementations load through native bundler-generated script chunks relative to that script's directory, including when assets and the page have different origins. Publish the entire `dist-cdn` tree together, keeping hashed chunks available during alias updates. Query parameters and fragments are not forwarded to chunk URLs. When the installing script has a CSP nonce, deferred chunk scripts inherit it. The asset host is not the ingestion host: the SDK's US ingestion default still applies. Set `apiHost` explicitly for EU ingestion or a proxy, URL-encoding its value, for example `&amp;apiHost=https%3A%2F%2Feu.i.posthog.com` in HTML.
+The first response embeds core and full analytics, including Capture V1 delivery. Queued and immediate analytics do not require another JavaScript request. Optional implementations load through native bundler-generated script chunks relative to that script's directory, including when assets and the page have different origins. Publish the entire `dist-cdn` tree together, keeping hashed chunks available during alias updates. Query parameters and fragments are not forwarded to chunk URLs. When the installing script has a CSP nonce, deferred chunk scripts inherit it. The asset host is not the ingestion host: the SDK's US ingestion default still applies. Set `apiHost` explicitly for EU ingestion or a proxy, URL-encoding its value, for example `&amp;apiHost=https%3A%2F%2Feu.i.posthog.com` in HTML.
 
 Only these query options are supported; omitted options use the existing factory defaults:
 
@@ -90,7 +91,7 @@ if (window.posthog) {
 }
 ```
 
-There is no pre-load capture queue. Concurrent tags share an in-flight installation reservation: the first valid tag wins, even if later tags specify different options. Any existing `posthog` property (including a reserved undefined property or a legacy stub) prevents installation, without initialization or a new ready event. If another installer claims the global during initialization, the unpublished client is disposed rather than overwriting it. A failed installation releases its reservation so a subsequent tag can retry. Failed optional chunks retain the factory's existing failure isolation; ready can still expose a usable core. Consent and capture admission remain unchanged.
+There is no pre-load capture queue. Concurrent tags share an in-flight installation reservation: the first valid tag wins, even if later tags specify different options. Any existing `posthog` property (including a reserved undefined property or a legacy stub) prevents installation, without initialization or a new ready event. If another installer claims the global during initialization, the unpublished client is disposed rather than overwriting it. A failed installation releases its reservation so a subsequent tag can retry. Failed optional chunks retain the factory's existing failure isolation; ready can still expose working embedded analytics. Consent and capture admission remain unchanged.
 
 Build and validate locally after building workspace dependencies:
 
@@ -104,7 +105,7 @@ pnpm --filter @posthog/browser test:snippet
 
 ## Autocapture
 
-Autocapture loads dynamically during initialization by default. Code loading alone does not enable collection: it waits for the initial remote configuration outcome and a known server opt-in (or a retained opt-in after a failed refresh). Consent, bot filtering, and local privacy exclusions still apply. `autocapture: false` omits automatic inclusion; it does not disable another product's configuration or an explicitly supplied autocapture instance.
+With no explicit autocapture configuration, its implementation loads when saved state or remote configuration indicates a server opt-in. Supplying an autocapture options object loads it during initialization. Code loading alone does not enable collection: it waits for the initial remote configuration outcome and a known server opt-in (or a retained opt-in after a failed refresh). Consent, bot filtering, and local privacy exclusions still apply. `autocapture: false` omits automatic inclusion; it does not disable another product's configuration or an explicitly supplied autocapture instance.
 
 ```ts
 const posthog = await createPostHog({
@@ -211,14 +212,14 @@ const extension = {
 
 ## Logs
 
-Logs dynamically load during initialization by default, separately from analytics. `captureLog()` explicitly queues an OTLP log; loading the extension alone does not turn on console capture. Console capture follows remote configuration or a local `captureConsoleLogs` opt-in:
+With no explicit logs configuration, logs loads from a saved console-capture hint, remote console enablement or `resolveExtension('logs')`. Supplying a logs options object loads it during initialization. Console collection starts after the implementation loads. `captureLog()` explicitly queues an OTLP log; loading the extension alone does not turn on console capture. Console capture follows remote configuration or a local `captureConsoleLogs` opt-in:
 
 ```ts
 const posthog = await createPostHog({
     projectToken: '<project-token>',
     logs: { captureConsoleLogs: true, serviceName: 'storefront', flushIntervalMs: 3_000 },
 })
-const logger = posthog.logs
+const logger = await posthog.resolveExtension('logs')
 logger?.captureLog({ body: 'Checkout completed', level: 'info', attributes: { orderId: '123' } })
 await logger?.flush()
 ```
@@ -244,14 +245,14 @@ The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits 
 
 ## Surveys
 
-Surveys orchestration loads dynamically during initialization by default. Its UI is a separate dynamic chunk: a successful remote configuration with surveys enabled loads it automatically; otherwise an explicit survey call can load it for manual use. Definitions come from a separate `/api/surveys/` request and are cached for five minutes. Client creation does not wait for the renderer or definitions.
+With no explicit surveys configuration, orchestration loads from cached definitions, remote survey enablement or `resolveExtension('surveys')`. Supplying a surveys options object loads orchestration during initialization. Its UI is a separate dynamic chunk: a successful remote configuration with surveys enabled loads it automatically; otherwise an explicit survey call can load it for manual use. Definitions come from a separate `/api/surveys/` request and are cached for five minutes. Client creation does not wait for the renderer or definitions.
 
 ```ts
 const posthog = await createPostHog({
     projectToken: '<project-token>',
     surveys: { automaticDisplay: false, requestTimeoutMs: 10_000 },
 })
-const feedback = posthog.surveys
+const feedback = await posthog.resolveExtension('surveys')
 feedback?.getSurveys((surveys, context) => {
     if (context?.isLoaded && surveys[0]) feedback.displaySurvey(surveys[0].id)
 })
@@ -281,7 +282,7 @@ Definitions and event activation state use the host-provided surveys KV namespac
 
 ## Capture and delivery
 
-The client installs one analytics extension with a bounded in-memory buffer during initialization. By default, the first successfully admitted event lazily loads its queue scheduling and Capture Analytics V1 delivery machinery. Consent-denied, bot-filtered, and rejected events do not load delivery. Feature flags, logs, surveys orchestration, and autocapture dynamically load during initialization by default; their capture and display behavior retains its own consent and remote-configuration gates. Survey rendering is a further deferred chunk.
+Capture, immediate capture, identify, group, reset and dynamic event-property registration live on the analytics extension. Core owns shared identity, sessions, groups, consent, persistence and lifecycle. The npm root acquires the complete analytics API through asynchronous resolution; delivery remains a separate lazy chunk until an admitted capture or an operation needs it. An enabled initial pageview or capture-producing product also acquires it. Feature flags initialize during startup. When their options are omitted, logs, surveys orchestration and autocapture load on existing saved-state or remote-config signals, or explicit asynchronous acquisition. Their collection and display retain their own consent and remote-configuration gates; survey rendering is a further deferred chunk.
 
 `analytics.capture()` runs synchronously. Its `false` result is a rate-limit backpressure signal, not a general rejection signal. `true` is neither an admission nor a delivery acknowledgement: consent, lifecycle, filtering, invalid properties or queue limits can suppress an event while it still returns `true`. Use `captureImmediate()` and check its summary when persistence matters. Capture never waits for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
 
@@ -290,7 +291,8 @@ Queued and immediate capture omit null or undefined object properties from deliv
 Use `captureImmediate()` only when the caller needs a terminal delivery outcome before continuing:
 
 ```ts
-const summary = await posthog.analytics?.captureImmediate('import_completed', { source: 'warehouse' })
+const analytics = await posthog.resolveExtension('analytics')
+const summary = await analytics?.captureImmediate('import_completed', { source: 'warehouse' })
 if (!summary) {
     console.warn('Analytics is unavailable')
 } else if (summary.error) {
@@ -302,7 +304,7 @@ if (!summary) {
 
 Immediate capture finalizes the event through the same consent, identity, session, protected-property, size, and rate-limit boundaries, then bypasses the lane and sends inline through the same Capture V1 sender. A valid `2xx` resolves to a `CaptureSummary`; `drop`, final `retry`, and missing outcomes set `allPersisted` to `false`, while `warning` counts as persisted. Terminal HTTP failures, exhausted transport retries, malformed responses, cancellation, and unavailable delivery resolve with `summary.error` and `allPersisted: false`, retaining any known partial outcomes. These failures do not reject the promise. Local non-admission resolves an empty summary, so durability-sensitive callers must check both `submitted` and `allPersisted`. Immediate requests can overtake buffered events and run concurrently with each other; they are never retained for a later `flush()`. An observed consent denial permanently cancels pending immediate dispatch and retries, even if the user opts in again; already-dispatched requests may finish.
 
-The default entrypoint loads delivery on the first admitted immediate call. The core entrypoint supports immediate capture only when `analytics()` was explicitly installed through `extensions`; otherwise it resolves with an unavailable-delivery error without adding a delivery import to the core graph.
+Acquire analytics before making an immediate call. The manual core exposes analytics only when explicitly supplied through `extensions`. Analytics admission and its bounded buffer remain independent of the inner delivery loader; delayed delivery retains finalized event snapshots, cancellation and retries, not raw calls to replay.
 
 The analytics extension sends FIFO Capture V1 batches of at most 100 events and partitions large backlogs by exact uncompressed envelope size. `flushAt` defaults to 20 and triggers delivery by queued count; `flushInterval` defaults to 3,000 milliseconds and triggers delivery by age. Set `flushInterval: 0` to disable timer delivery. Explicit `flush()` and shutdown bypass both thresholds. Retry-exhausted transient failures remain in the bounded lane for a later interval, reconnect, or explicit flush rather than hot-looping or being discarded.
 

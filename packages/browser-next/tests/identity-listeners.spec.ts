@@ -1,5 +1,5 @@
+import { createBufferedPostHog as createPostHog } from './helpers'
 import { requireInstalledExtension } from './helpers'
-import { createPostHog } from '../src/core'
 import type { IPostHogInternal, GroupInfo, IdentifyInfo, IPostHog } from '../src/core'
 import { localRemoteConfig } from './helpers'
 

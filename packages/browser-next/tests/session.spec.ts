@@ -1,7 +1,8 @@
+import { createBufferedPostHog as createPostHog } from './helpers'
 import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { analytics as createAnalytics } from '../src/analytics'
-import { createPostHog, type NewSessionInfo, type StorageLike } from '../src/core'
+import type { NewSessionInfo, StorageLike } from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })

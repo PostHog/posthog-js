@@ -333,10 +333,9 @@ async function initialize(): Promise<void> {
         consentPersistenceName: '__ph_browser_next_real_sandbox_consent',
         remoteConfig: remoteConfig(element<HTMLInputElement>('gzip').checked),
     })
-    const installedAnalytics = posthog.analytics
-    if (!installedAnalytics) throw new Error('Analytics is unavailable')
-    installedAnalytics.registerDynamicEventProperties(() => syntheticProperties())
-    installedAnalytics.onEvent(({ event, properties }) => {
+    const installedAnalytics = await posthog.resolveExtension('analytics')
+    installedAnalytics?.registerDynamicEventProperties(() => syntheticProperties())
+    installedAnalytics?.onEvent(({ event, properties }) => {
         queue.admit(event, properties)
         log('event', `admitted ${event}`)
     })
@@ -361,8 +360,8 @@ function refreshStatus(): void {
     element<HTMLElement>('consent-status').textContent = client ? (client.hasOptedOut() ? 'opted out' : 'allowed') : '—'
     element<HTMLElement>('distinct-id').textContent = client?.distinctId || '—'
     element<HTMLElement>('anonymous-id').textContent = client?.anonymousId || '—'
-    element<HTMLElement>('session-id').textContent = client?.session.sessionId || '—'
-    element<HTMLElement>('window-id').textContent = client?.session.windowId || '—'
+    element<HTMLElement>('session-id').textContent = client?.session?.sessionId || '—'
+    element<HTMLElement>('window-id').textContent = client?.session?.windowId || '—'
 }
 
 element<HTMLButtonElement>('initialize').addEventListener('click', () => enqueue('Initialize', initialize))

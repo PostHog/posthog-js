@@ -1,3 +1,4 @@
+import { createBufferedPostHog as createPostHog } from './helpers'
 import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { createPostHog as createAutomaticPostHog } from '../src'
@@ -7,7 +8,7 @@ import { createAnalyticsDelivery } from '../src/analytics-delivery'
 import type { AnalyticsDriver } from '../src/analytics-internal'
 import { EventBuffer } from '../src/event-buffer'
 import { Lane } from '../src/lane'
-import { createPostHog, type BrowserFetch, type CaptureOutcomeStatus, type CaptureSummary } from '../src/core'
+import type { BrowserFetch, CaptureOutcomeStatus, CaptureSummary } from '../src/core'
 import type { AnalyticsMessage } from '../src/analytics-internal'
 
 interface CapturedRequest {
@@ -163,12 +164,14 @@ describe('captureImmediate', () => {
             remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
+            flags: false,
             storage: false,
             navigator: false,
             fetch: responseFetch(requests, () => ({ result: { result: 'warning', details: 'accepted' } })),
         })
 
-        const summary = await requireInstalledExtension(posthog.analytics).captureImmediate('lazy', undefined, {
+        const product = requireInstalledExtension(await posthog.resolveExtension('analytics'))
+        const summary = await product.captureImmediate('lazy', undefined, {
             uuid: 'lazy-uuid',
         })
 

@@ -11,20 +11,47 @@ assert.deepEqual(initial[0].files, ['script.js'])
 const modules = (entries) =>
     entries.flatMap((entry) => (entry.modules ? modules(entry.modules) : entry.name ? [entry] : []))
 const initialModules = modules(initial[0].modules)
-for (const required of ['./src/posthog.ts', './src/automatic-analytics.ts', './snippet/entry.ts']) {
-    assert(
-        initialModules.some((module) => module.name === required),
-        `Initial core must contain ${required}`
-    )
+const requiredInitial = [
+    './src/posthog.ts',
+    './src/analytics.ts',
+    './src/analytics-buffer.ts',
+    './src/analytics-extension.ts',
+    './src/capture-properties.ts',
+    './src/analytics-delivery.ts',
+    './src/capture-v1.ts',
+    './src/lane.ts',
+    './snippet/entry.ts',
+]
+const assertInitialModules = (entries) => {
+    for (const required of requiredInitial) {
+        assert(
+            entries.some((module) => module.name === required),
+            `Initial core must contain ${required}`
+        )
+    }
+    for (const module of entries) {
+        assert(
+            !forbiddenInitial.some((pattern) => pattern.test(module.name)),
+            `Forbidden initial module: ${module.name}`
+        )
+    }
 }
 const forbiddenInitial = [
-    /\/(?:analytics-delivery|capture-v1|lane|flags|feature-flags|logs|console-logs|surveys|surveys-extension|surveys-renderer|autocapture|rageclick)\.(?:ts|mjs|js)$/,
+    /\/(?:flags|feature-flags|logs|console-logs|surveys|surveys-extension|surveys-renderer|autocapture|rageclick)\.(?:ts|mjs|js)$/,
     /\/(?:core|browser)\/dist\//,
     /node_modules\/(?:posthog-js|@posthog\/core|core-js|fflate|preact|dompurify|rrweb|web-vitals)\//,
 ]
-for (const module of initialModules) {
-    assert(!forbiddenInitial.some((pattern) => pattern.test(module.name)), `Forbidden initial module: ${module.name}`)
-}
+assertInitialModules(initialModules)
+assert.throws(
+    () => assertInitialModules(initialModules.filter((module) => module.name !== './src/analytics-delivery.ts')),
+    /Initial core must contain/,
+    'The CDN guard must require embedded analytics delivery'
+)
+assert.throws(
+    () => assertInitialModules([...initialModules, { name: './src/logs.ts' }]),
+    /Forbidden initial module/,
+    'The CDN guard must reject eager optional product code'
+)
 const size = (buffers) => ({
     minified: buffers.reduce((sum, value) => sum + value.length, 0),
     gzip: buffers.reduce((sum, value) => sum + gzipSync(value, { level: 9 }).length, 0),

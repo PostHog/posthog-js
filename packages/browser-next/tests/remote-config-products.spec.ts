@@ -1,6 +1,6 @@
 import { requireInstalledExtension } from './helpers'
 // @vitest-environment jsdom
-import { createPostHog } from '../src'
+import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { localRemoteConfig } from './helpers'
 
 it('shares default JSON configuration across flags, logs, surveys and autocapture', async () => {
@@ -51,7 +51,7 @@ it('shares default JSON configuration across flags, logs, surveys and autocaptur
         document.body.innerHTML = '<button>Save</button>'
         document.querySelector('button')!.click()
         expect(captured).toHaveBeenCalledWith(expect.objectContaining({ event: '$autocapture' }))
-        const logs = requireInstalledExtension(client.logs)
+        const logs = requireInstalledExtension(await client.resolveExtension('logs'))
         logs.captureLog({ body: 'configured products' })
         await logs.flush()
         expect(logBodies).toHaveLength(1)
