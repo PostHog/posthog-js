@@ -148,20 +148,23 @@ export const readFlagRecords = (
     }
 
     // A record that cannot be read is stored without the members it has no value for.
-    const rendered: Record<string, Pick<FeatureFlagDetail, 'key' | 'enabled'> & Partial<FeatureFlagDetail>> = {}
-    for (const key of Object.keys(flags)) {
-        const raw = flags[key]
-        if (isObject(raw) && !('value' in raw)) {
-            withoutTypedValues = true
-            rendered[key] = raw as FeatureFlagDetail
-            continue
-        }
-        try {
-            rendered[key] = readTypedRecord(key, raw) as unknown as FeatureFlagDetail
-        } catch {
-            rendered[key] = { key, enabled: false, failed: true }
-        }
-    }
+    // `Object.fromEntries` defines every key as an own property, whatever the flag is named.
+    const rendered = Object.fromEntries(
+        Object.keys(flags).map(
+            (key): [string, Pick<FeatureFlagDetail, 'key' | 'enabled'> & Partial<FeatureFlagDetail>] => {
+                const raw = flags[key]
+                if (isObject(raw) && !('value' in raw)) {
+                    withoutTypedValues = true
+                    return [key, raw as FeatureFlagDetail]
+                }
+                try {
+                    return [key, readTypedRecord(key, raw) as unknown as FeatureFlagDetail]
+                } catch {
+                    return [key, { key, enabled: false, failed: true }]
+                }
+            }
+        )
+    )
     return { body: { ...body, flags: rendered as Record<string, FeatureFlagDetail> }, withoutTypedValues }
 }
 
