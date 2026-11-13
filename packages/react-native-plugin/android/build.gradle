@@ -67,7 +67,14 @@ dependencies {
   // The React Native Gradle plugin provides the version.
   implementation "com.facebook.react:react-android"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-  implementation "com.posthog:posthog-android:4.0.0"
+  // strictly: Gradle otherwise raises this version when the app or another library asks for a
+  // newer posthog-android, and this plugin, compiled against 4.x, then crashes at runtime.
+  implementation("com.posthog:posthog-android") {
+    version {
+      strictly "[4.0.0,5.0.0)"
+      prefer "4.0.0"
+    }
+  }
 
   testImplementation "junit:junit:4.13.2"
   testImplementation "org.json:json:20250517"
