@@ -74,7 +74,7 @@ export interface AnalyticsCaptureHost {
         | 'distinctId'
         | 'deviceId'
         | 'groups'
-        | 'sessionId'
+        | 'activeSessionId'
         | 'isIdentified'
         | 'prepareSessionForEvent'
         | 'sessionAdmitted'

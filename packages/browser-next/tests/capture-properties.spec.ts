@@ -154,14 +154,12 @@ describe('session layering measurements', () => {
         })
     })
 
-    it('keeps root-serialized properties indivisible for session layering and minimum measurement', () => {
+    it('omits root serializer functions while retaining session layering and minimum measurement', () => {
         const serialize = vi.fn(() => ({ entire: 'caller context' }))
-        const snapshot = snapshotCaptureProperties({ fallback: true }, {}, { toJSON: serialize }, {})
-        expect(applySessionProperties(snapshot, { entire: 'session', fallback: false })).toBe(false)
-        expect(unavoidableProperties(snapshot, { token: 'project' })).toEqual({
-            entire: 'caller context',
-            token: 'project',
-        })
-        expect(serialize).toHaveBeenCalledTimes(1)
+        const snapshot = snapshotCaptureProperties({ fallback: true }, {}, { caller: true, toJSON: serialize }, {})
+        expect(applySessionProperties(snapshot, { entire: 'session', fallback: false })).toBe(true)
+        expect(snapshot.message).toEqual({ caller: true, entire: 'session', fallback: false })
+        expect(unavoidableProperties(snapshot, { token: 'project' })).toEqual({ caller: true, token: 'project' })
+        expect(serialize).not.toHaveBeenCalled()
     })
 })

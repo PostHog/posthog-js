@@ -940,46 +940,7 @@ describe('@posthog/browser core', () => {
         ['a primitive', 'invalid'],
         ['an array', []],
         ['a thrown error', new Error('toJSON failed')],
-    ])('rejects properties whose toJSON returns %s before session or persistence mutation', async (_name, result) => {
-        vi.useFakeTimers().setSystemTime(new Date('2026-01-02T03:04:05.000Z'))
-        try {
-            const requests: SentRequest[] = []
-            const storage = new MemoryStorage()
-            const posthog = await createPostHogWithAnalytics({
-                remoteConfig: localRemoteConfig,
-                projectToken: 'ph_test',
-                storage,
-                navigator: false,
-                fetch: createFetch(requests),
-            })
-            const events: string[] = []
-            requireInstalledExtension(posthog.analytics).onEvent(({ event }) => events.push(event))
-            const session = posthog.session
-            const persisted = new Map(storage.values)
-            const properties = {
-                toJSON() {
-                    if (result instanceof Error) {
-                        throw result
-                    }
-                    return result
-                },
-            }
-            vi.advanceTimersByTime(1_000)
-
-            expect(() =>
-                requireInstalledExtension(posthog.analytics).capture('hostile_to_json', properties)
-            ).not.toThrow()
-
-            expect(posthog.session).toEqual(session)
-            expect(storage.values).toEqual(persisted)
-            expect(events).toEqual([])
-            expect(requests).toEqual([])
-        } finally {
-            vi.useRealTimers()
-        }
-    })
-
-    it('accepts record-valued toJSON output while preserving protected property precedence', async () => {
+    ])('ignores root serializers returning %s while retaining caller properties', async (_name, result) => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
             remoteConfig: localRemoteConfig,
@@ -988,16 +949,34 @@ describe('@posthog/browser core', () => {
             navigator: false,
             fetch: createFetch(requests),
         })
-
-        await requireInstalledExtension(posthog.analytics).capture('valid_to_json', {
-            toJSON: () => ({ source: 'toJSON', token: 'caller-token', distinct_id: 'caller-id' }),
+        const serialize = vi.fn(() => {
+            if (result instanceof Error) throw result
+            return result
         })
+        requireInstalledExtension(posthog.analytics).capture('ordinary_props', { caller: true, toJSON: serialize })
         await posthog.flush()
+        expect(serialize).not.toHaveBeenCalled()
+        expect(captureEvent(requests[0])?.properties).toMatchObject({ caller: true })
+        expect(captureEvent(requests[0])?.properties).not.toHaveProperty('toJSON')
+    })
 
+    it('omits root serializer functions while preserving protected property precedence', async () => {
+        const requests: SentRequest[] = []
+        const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: createFetch(requests),
+        })
+        const serialize = vi.fn(() => ({ source: 'toJSON', token: 'caller-token', distinct_id: 'caller-id' }))
+        requireInstalledExtension(posthog.analytics).capture('ordinary_props', { source: 'caller', toJSON: serialize })
+        await posthog.flush()
+        expect(serialize).not.toHaveBeenCalled()
         expect(captureEvent(requests[0])).toMatchObject({
-            event: 'valid_to_json',
+            event: 'ordinary_props',
             distinct_id: posthog.distinctId,
-            properties: { source: 'toJSON' },
+            properties: { source: 'caller' },
         })
         expect(captureEvent(requests[0])?.properties).not.toMatchObject({
             token: expect.anything(),

@@ -565,20 +565,19 @@ describe('registered analytics properties', () => {
     })
 
     it.each(['capture', 'captureImmediate'] as const)(
-        '%s applies root caller serialization once to the merged context',
+        '%s ignores root caller serializer functions without discarding merged context',
         async (method) => {
             const { client, product, requests } = await create()
             product.register({ persistent: true })
             product.registerDynamicEventProperties(() => ({ dynamic: true }))
-            const toJSON = vi.fn(function (this: Record<string, unknown>) {
-                return { persistent: this.persistent, dynamic: this.dynamic, caller: this.caller }
-            })
+            const toJSON = vi.fn(() => ({ custom: true }))
             await product[method]('serialized', { caller: true, toJSON })
             await client.flush()
-            expect(toJSON).toHaveBeenCalledTimes(1)
+            expect(toJSON).not.toHaveBeenCalled()
             expect(events(requests)).toMatchObject([
                 { event: 'serialized', properties: { persistent: true, dynamic: true, caller: true } },
             ])
+            expect(events(requests)[0]?.properties).not.toHaveProperty('toJSON')
         }
     )
 

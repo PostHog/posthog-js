@@ -819,12 +819,12 @@ export class Analytics implements IAnalyticsExtension {
 
     readonly registerForSession = (properties: Record<string, unknown>): void => {
         const registration = this._prepareRegistration(properties)
-        if (registration) this._sessionProperties?.register(registration.properties, this._host?.state.sessionId)
+        if (registration) this._sessionProperties?.register(registration.properties, this._host?.state.activeSessionId)
     }
 
     readonly unregisterForSession = (property: string): void => {
         if (this._propertyStore()) {
-            this._sessionProperties?.unregister(property, this._host?.state.sessionId)
+            this._sessionProperties?.unregister(property, this._host?.state.activeSessionId)
         }
     }
 

@@ -211,6 +211,101 @@ describe('session registered properties', () => {
         }
     )
 
+    it.each(['idle', 'maximum'] as const)(
+        'keeps fresh registrations pending after %s expiry without advancing the session',
+        async (kind) => {
+            const { client, product, requests } = await create()
+            product.registerForSession({ old_session: true })
+            product.capture('first')
+            if (kind === 'maximum') {
+                for (let minute = 20; minute <= 1440; minute += 20) {
+                    vi.setSystemTime(START + minute * 60_000 - 1)
+                    product.capture('active')
+                }
+            }
+            const previous = client.session
+            vi.setSystemTime(START + (kind === 'idle' ? 1_800_001 : 86_400_001))
+            product.registerForSession({ flow: 'checkout', discarded: true })
+            product.registerForSession({ fresh: true })
+            product.unregisterForSession('discarded')
+            expect(client.session).toEqual(previous)
+            product.capture('checkout_started')
+            await client.flush()
+            expect(client.session?.sessionId).not.toBe(previous?.sessionId)
+            expect(events(requests).at(-1)?.properties).toMatchObject({ flow: 'checkout', fresh: true })
+            expect(events(requests).at(-1)?.properties).not.toHaveProperty('old_session')
+            expect(events(requests).at(-1)?.properties).not.toHaveProperty('discarded')
+        }
+    )
+
+    it('retains fresh pending registration through a rejected expired-session capture', async () => {
+        const { client, product, requests } = await create()
+        product.capture('first')
+        await client.flush()
+        const previous = client.session
+        vi.setSystemTime(START + 1_800_001)
+        client.optOut()
+        product.registerForSession({ flow: 'checkout' })
+        product.capture('denied')
+        expect(client.session).toEqual(previous)
+        client.optIn()
+        product.capture('admitted')
+        await client.flush()
+        expect(events(requests).map(({ event }) => event)).toEqual(['first', 'admitted'])
+        expect(events(requests).at(-1)?.properties.flow).toBe('checkout')
+    })
+
+    it('binds fresh pending properties to an active session adopted from another tab', async () => {
+        const first = await create()
+        first.product.registerForSession({ old_session: true })
+        first.product.capture('first')
+        vi.setSystemTime(START + 1_800_001)
+        vi.stubGlobal('sessionStorage', new MemoryStorage())
+        const second = await create()
+        second.product.capture('other_tab')
+        const adopted = second.client.session?.sessionId
+        first.product.registerForSession({ flow: 'checkout' })
+        first.product.capture('adopted')
+        await first.client.flush()
+        expect(first.client.session?.sessionId).toBe(adopted)
+        expect(events(first.requests).at(-1)?.properties.flow).toBe('checkout')
+        expect(events(first.requests).at(-1)?.properties).not.toHaveProperty('old_session')
+    })
+
+    it("uses another tab's activity before treating the shared session as expired", async () => {
+        const first = await create()
+        first.product.registerForSession({ retained: true })
+        first.product.capture('first')
+        const sessionId = first.client.session?.sessionId
+        vi.setSystemTime(START + 1_200_000)
+        vi.stubGlobal('sessionStorage', new MemoryStorage())
+        const second = await create()
+        second.product.capture('active_elsewhere')
+        vi.setSystemTime(START + 1_800_001)
+        first.product.registerForSession({ flow: 'checkout' })
+        first.product.capture('checkout_started')
+        await first.client.flush()
+        expect(first.client.session?.sessionId).toBe(sessionId)
+        expect(events(first.requests).at(-1)?.properties).toMatchObject({ retained: true, flow: 'checkout' })
+    })
+
+    it('registers fresh properties for a newer active session from another tab', async () => {
+        const first = await create()
+        first.product.registerForSession({ old_session: true })
+        first.product.capture('first')
+        vi.setSystemTime(START + 60_000)
+        vi.stubGlobal('sessionStorage', new MemoryStorage())
+        const second = await create()
+        second.product.reset()
+        second.product.capture('new')
+        first.product.registerForSession({ flow: 'checkout' })
+        first.product.capture('checkout_started')
+        await first.client.flush()
+        expect(first.client.session?.sessionId).toBe(second.client.session?.sessionId)
+        expect(events(first.requests).at(-1)?.properties.flow).toBe('checkout')
+        expect(events(first.requests).at(-1)?.properties).not.toHaveProperty('old_session')
+    })
+
     it('drops old context when adopting another tab session', async () => {
         const first = await create()
         first.product.registerForSession({ old_session: true })
@@ -279,12 +374,16 @@ describe('session registered properties', () => {
         ).toBe(true)
     })
 
-    it.each([null, [], 'invalid'])('drops non-object whole-property serialization: %j', async (result) => {
+    it('ignores a throwing root serializer without rejecting ordinary properties', async () => {
         const { product, client, requests } = await create()
-        product.capture('invalid', { toJSON: () => result })
+        const serialize = vi.fn(() => {
+            throw new Error('unavailable serializer')
+        })
+        product.capture('ordinary', { caller: true, toJSON: serialize })
         await client.flush()
-        expect(events(requests)).toHaveLength(0)
-        expect(client.session).toBeUndefined()
+        expect(serialize).not.toHaveBeenCalled()
+        expect(events(requests)).toMatchObject([{ event: 'ordinary', properties: { caller: true } }])
+        expect(events(requests)[0]?.properties).not.toHaveProperty('toJSON')
     })
 
     it('allows a session value to shrink an oversized persistent default', async () => {
@@ -328,21 +427,31 @@ describe('session registered properties', () => {
         }
     )
 
-    it('preserves whole-object caller serialization and invokes it only once', async () => {
+    it.each([
+        ['capture', 'caller'],
+        ['capture', 'dynamic'],
+        ['captureImmediate', 'caller'],
+        ['captureImmediate', 'dynamic'],
+    ] as const)('%s ignores a %s root serializer while retaining context', async (method, source) => {
         const { client, product, requests } = await create()
         product.register({ persistent: true })
         product.registerForSession({ session_default: true })
-        const serialize = vi.fn(function (this: Record<string, unknown>, key: string) {
-            expect(this.persistent).toBe(true)
-            expect(key).toBe('')
-            return { custom: true }
-        })
-        product.capture('custom', { toJSON: serialize })
+        const serialize = vi.fn(() => ({ custom: true }))
+        product.registerDynamicEventProperties(() => ({
+            dynamic: true,
+            ...(source === 'dynamic' ? { toJSON: serialize } : {}),
+        }))
+        await product[method]('custom', { caller: true, ...(source === 'caller' ? { toJSON: serialize } : {}) })
         await client.flush()
-        expect(serialize).toHaveBeenCalledTimes(1)
-        expect(events(requests)[0]?.properties).toMatchObject({ custom: true })
-        expect(events(requests)[0]?.properties).not.toHaveProperty('persistent')
-        expect(events(requests)[0]?.properties).not.toHaveProperty('session_default')
+        expect(serialize).not.toHaveBeenCalled()
+        expect(events(requests)[0]?.properties).toMatchObject({
+            persistent: true,
+            session_default: true,
+            dynamic: true,
+            caller: true,
+        })
+        expect(events(requests)[0]?.properties).not.toHaveProperty('toJSON')
+        expect(events(requests)[0]?.properties).not.toHaveProperty('custom')
     })
 
     it('keeps session storage optional for memory-only clients and failed native access', async () => {
@@ -375,9 +484,11 @@ describe('session registered properties', () => {
         const { product } = await create()
         const disposal: Promise<void>[] = []
         const summary = await product.captureImmediate('disposed_during_serialization', {
-            toJSON() {
-                disposal.push(Promise.resolve(product.dispose?.()))
-                return { caller: true }
+            value: {
+                toJSON() {
+                    disposal.push(Promise.resolve(product.dispose?.()))
+                    return 'caller'
+                },
             },
         })
         await Promise.all(disposal)

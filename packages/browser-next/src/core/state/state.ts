@@ -61,6 +61,17 @@ const isTimestamp = (value: unknown): value is number =>
     // oxlint-disable-next-line posthog-js/no-direct-number-check
     typeof value === 'number' && Number.isFinite(value) && value >= 0
 
+const sessionExpiryReason = (
+    session: PersistedSession | undefined,
+    now: number
+): 'idleTimeout' | 'maxLength' | undefined => {
+    if (!session) return undefined
+    const safeNow = isTimestamp(now) ? now : 0
+    if (Math.abs(safeNow - session.lastActivityTimestamp) > 1_800_000) return 'idleTimeout'
+    if (Math.abs(safeNow - session.sessionStartTimestamp) > 86_400_000) return 'maxLength'
+    return undefined
+}
+
 const readRevision = (value: unknown, fallback?: unknown): string | undefined => {
     if (typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value)) {
         return value
@@ -371,6 +382,12 @@ export class BrowserState {
         return this._state.session?.sessionId
     }
 
+    get activeSessionId(): string | undefined {
+        if (this._pendingSessionReason) return undefined
+        const { session } = this._readSessionAuthority()
+        return sessionExpiryReason(session, Date.now()) ? undefined : session?.sessionId
+    }
+
     get session(): SessionContext | undefined {
         const session = this._state.session
         if (!session || !this._windowId) return undefined
@@ -423,25 +440,12 @@ export class BrowserState {
 
     prepareSessionForEvent(now = Date.now()): PreparedSession {
         const safeNow = isTimestamp(now) ? now : 0
-        const [sharedRead, external] = this._readPersistedState()
-        let session = this._state.session
-        let lastActivityWriteTimestamp = this._lastActivityWriteTimestamp
-        let adoptedAfterReset = false
-        if (sharedRead && external && persistedAuthorityWins(external, this._state)) {
-            session = external.session
-            if (session) {
-                lastActivityWriteTimestamp = session.lastActivityTimestamp
-                adoptedAfterReset = this._pendingSessionReason === 'reset'
-            }
-        }
+        const { external, session, lastActivityWriteTimestamp, adoptedAfterReset } = this._readSessionAuthority()
 
         const pendingReason = this._pendingSessionReason
-        const idle = session ? Math.abs(safeNow - session.lastActivityTimestamp) > 1_800_000 : false
-        const maximum = session ? Math.abs(safeNow - session.sessionStartTimestamp) > 86_400_000 : false
-        const rotated = !!(pendingReason || !session || idle || maximum)
-        const reason = adoptedAfterReset
-            ? 'reset'
-            : (pendingReason ?? (idle ? 'idleTimeout' : maximum ? 'maxLength' : undefined))
+        const expiry = sessionExpiryReason(session, safeNow)
+        const rotated = !!(pendingReason || !session || expiry)
+        const reason = adoptedAfterReset ? 'reset' : (pendingReason ?? expiry)
         const preparedSession = rotated
             ? createSession(safeNow, nextRevision(safeNow, this._state, external))
             : { ...session!, lastActivityTimestamp: Math.max(safeNow, session!.lastActivityTimestamp) }
@@ -569,6 +573,24 @@ export class BrowserState {
         }
         const state = parseState(value)
         return state ? [true, state] : [false]
+    }
+
+    private _readSessionAuthority(): {
+        external: PersistedState | undefined
+        session: PersistedSession | undefined
+        lastActivityWriteTimestamp: number
+        adoptedAfterReset: boolean
+    } {
+        const [read, external] = this._readPersistedState()
+        const adopted = read && external !== undefined && persistedAuthorityWins(external, this._state)
+        const session = adopted ? external.session : this._state.session
+        return {
+            external,
+            session,
+            lastActivityWriteTimestamp:
+                adopted && session ? session.lastActivityTimestamp : this._lastActivityWriteTimestamp,
+            adoptedAfterReset: adopted && session !== undefined && this._pendingSessionReason === 'reset',
+        }
     }
 
     private _prepareWindow(rotated: boolean): {
