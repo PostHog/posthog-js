@@ -1,4 +1,11 @@
-import { delay, waitForPromises, createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
+import {
+  delay,
+  waitForPromises,
+  createTestClient,
+  parseBody,
+  PostHogCoreTestClient,
+  PostHogCoreTestClientMocks,
+} from '@/testing'
 import { PostHogPersistedProperty } from '@/types'
 
 describe('PostHog Core', () => {
@@ -513,6 +520,45 @@ describe('PostHog Core', () => {
       await vi.advanceTimersByTimeAsync(1)
       await flushExpectation
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
+    })
+
+    it('stamps sent_at again on each retry and resends the same events', async () => {
+      mocks.fetch
+        .mockImplementationOnce(() => Promise.resolve({ status: 500, text: async () => 'err' }))
+        .mockImplementationOnce(() => Promise.resolve({ status: 200, text: async () => 'ok' }))
+      const cartItems = ['sku-1']
+      posthog.capture('test-event-1', { cartItems })
+
+      const flushPromise = posthog.flush()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      // The app changes a captured nested value while the retry waits.
+      cartItems.push('sku-2')
+      await vi.advanceTimersByTimeAsync(100)
+      await flushPromise
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
+      const [first, retry] = mocks.fetch.mock.calls.map((call) => parseBody(call))
+      expect(Date.parse(retry.sent_at) - Date.parse(first.sent_at)).toBeGreaterThanOrEqual(100)
+      expect(first.batch[0].properties.cartItems).toEqual(['sku-1'])
+      expect(retry.batch).toEqual(first.batch)
+    })
+
+    it.each([false, true])('sends the batch body with historicalMigration %s', async (historicalMigration) => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 5,
+        preloadFeatureFlags: false,
+        historicalMigration,
+      })
+      posthog.capture('test-event-1')
+      await posthog.flush()
+
+      expect(parseBody(mocks.fetch.mock.calls[0])).toEqual({
+        api_key: 'TEST_API_KEY',
+        batch: [expect.objectContaining({ event: 'test-event-1' })],
+        sent_at: expect.any(String),
+        ...(historicalMigration && { historical_migration: true }),
+      })
     })
 
     it('skips when client is disabled', async () => {
