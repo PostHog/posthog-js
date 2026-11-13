@@ -161,7 +161,6 @@ interface PreparedMove {
   url: string
   headers: Record<string, string>
   body: string
-  /** The new time as an instant, so two spellings of one time compare equal. */
   instant: string
 }
 
@@ -189,8 +188,7 @@ export class EmailSender implements Emails {
   private readonly hooks: EmailSenderHooks
   private readonly inFlight = new Set<Promise<unknown>>()
   private readonly latestMoveByEmail = new Map<string, Promise<UpdateEmailResponse>>()
-  /** The time of a move without a clear answer, by email: PostHog may still apply it at any later time. */
-  private readonly unconfirmedMoveByEmail = new Map<string, string>()
+  private readonly unconfirmedMoveInstantByEmail = new Map<string, string>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
@@ -327,14 +325,13 @@ export class EmailSender implements Emails {
       url: appHost + STATUS_PATH.replace('{messageId}', messageId),
       headers: this.headers(secretKey, { 'Content-Type': 'application/json' }),
       body,
-      instant: instantOf(time),
+      instant: instantToTheMicrosecondOf(time),
     }
   }
 
   private async sendMove({ messageId, url, headers, body, instant }: PreparedMove): Promise<UpdateEmailResponse> {
-    const unconfirmed = this.unconfirmedMoveByEmail.get(messageId)
-    if (unconfirmed !== undefined && unconfirmed !== instant) {
-      // The late move would undo this one, and only the server could order the two.
+    const unconfirmedInstant = this.unconfirmedMoveInstantByEmail.get(messageId)
+    if (unconfirmedInstant !== undefined && unconfirmedInstant !== instant) {
       return {
         data: null,
         error: new EmailError({
@@ -351,12 +348,11 @@ export class EmailSender implements Emails {
         try {
           reply = await this.request(url, 'PATCH', headers, body)
         } catch (error) {
-          this.unconfirmedMoveByEmail.set(messageId, instant)
+          this.unconfirmedMoveInstantByEmail.set(messageId, instant)
           throw error
         }
-        if (reply.status >= 500) {
-          // A gateway answers 5xx when it gives up, and PostHog behind it may still apply the move.
-          this.unconfirmedMoveByEmail.set(messageId, instant)
+        if (mayStillApplyLater(reply)) {
+          this.unconfirmedMoveInstantByEmail.set(messageId, instant)
         }
         return parseUpdateReply(reply)
       })
@@ -687,10 +683,13 @@ function scheduledTime(value: unknown, nothingDone: string): string {
   })
 }
 
-/** The instant a valid scheduled time names, to the digit: Date keeps milliseconds, PostHog keeps microseconds. */
-function instantOf(time: string): string {
-  const subMillisecond = (/\.\d{3}(\d+)/.exec(time)?.[1] ?? '').replace(/0+$/, '')
-  return `${Date.parse(time)}${subMillisecond ? `.${subMillisecond}` : ''}`
+function instantToTheMicrosecondOf(time: string): string {
+  const digitsPastTheMillisecond = (/\.\d{3}(\d+)/.exec(time)?.[1] ?? '').replace(/0+$/, '')
+  return `${Date.parse(time)}${digitsPastTheMillisecond ? `.${digitsPastTheMillisecond}` : ''}`
+}
+
+function mayStillApplyLater(gatewayOrServerReply: Reply): boolean {
+  return gatewayOrServerReply.status >= 500
 }
 
 function isCalendarDate(isoDate: string): boolean {
