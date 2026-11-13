@@ -41,8 +41,10 @@ import {
 } from './constants'
 
 import {
+    hasOwnProperty,
     isUndefined,
     isArray,
+    isObject,
     getEnabledFromValue,
     getVariantFromValue,
     parsePayload,
@@ -307,6 +309,61 @@ export interface FlagsResponseFormat {
      * with a record and no public type declares. A format without it stores no such members.
      */
     readonly publicDetail?: (detail: FeatureFlagDetail) => FeatureFlagDetail
+    /**
+     * Builds the config version 2 flag events of a read from the stored record of the flag, or
+     * returns `undefined` when that record is not a config version 2 record or did not supply
+     * `response`. A format without it sends `$feature_flag_called` as before.
+     */
+    readonly flagEvents?: (params: {
+        key: string
+        response: string | boolean
+        groups: Readonly<Record<string, string>>
+        record: FeatureFlagDetail | undefined
+    }) => ConfigVersion2FlagEvents | undefined
+}
+
+/**
+ * How the client captures a config version 2 flag event, after its own and the super properties
+ * are merged: it drops the `omit` names, so a super property cannot add a field the event never
+ * carries, and a minimal `$feature_flag_called` keeps the `keep` names on top of the shared
+ * allowlist.
+ *
+ * @internal
+ */
+export type FlagEventCapture = {
+    readonly omit: readonly string[]
+    readonly keep: readonly string[]
+    /** The client calls it when application code that runs during capture throws and the event is dropped. */
+    readonly failed?: () => void
+}
+
+/**
+ * One flag event of a read.
+ *
+ * @internal
+ */
+export type FlagEvent = {
+    readonly event: string
+    readonly properties: Record<string, unknown>
+    readonly capture: FlagEventCapture
+}
+
+/**
+ * The config version 2 flag events of a read: `$feature_flag_called` and, for a complete
+ * experiment split, `$experiment_exposure`. Each is sent once per dedupe key. `build` makes both
+ * events from the properties the read's `$feature_flag_called` carries, and is called only when
+ * one of them is sent.
+ *
+ * @internal
+ */
+export type ConfigVersion2FlagEvents = {
+    readonly calledKey: string
+    /** Present only for a complete experiment split. */
+    readonly exposureKey: string | undefined
+    readonly build: (flagCalledProperties: Record<string, unknown>) => {
+        called: FlagEvent
+        exposure: FlagEvent | undefined
+    }
 }
 
 const FLAGS_RESPONSE_V2: FlagsResponseFormat = { version: 2 }
@@ -321,6 +378,8 @@ type FlagCallContext = {
 /** A flag read that is not reported yet. */
 type PendingFlagCall = {
     value: string
+    /** The dedupe key of the read's config version 2 `$feature_flag_called`, when it has one. */
+    calledKey: string | undefined
     context: FlagCallContext
 }
 
@@ -372,6 +431,12 @@ export class PostHogFeatureFlags implements Extension {
     private readonly _configSource: FeatureFlagsConfigSource
     // Whether this client has logged that /flags sent records without typed values.
     private _loggedResponseWithoutTypedValues: boolean = false
+    // How the client captures each config version 2 flag event that is on its way through capture,
+    // by the properties object the event was captured with.
+    private _flagEventCaptures = new WeakMap<object, FlagEventCapture>()
+    // How often the capture of each config version 2 flag event threw since the page loaded or the
+    // identity changed, by flag key and dedupe key.
+    private _flagEventCaptureThrows = new Map<string, number>()
 
     constructor(configSource: FeatureFlagsConfigSource) {
         this._configSource = configSource
@@ -1085,6 +1150,7 @@ export class PostHogFeatureFlags implements Extension {
     resetFlagCallReported(): void {
         this._remove(FLAG_CALL_REPORTED)
         this._flagCallsPendingCapture = new Map()
+        this._flagEventCaptureThrows = new Map()
     }
 
     /** Sends `$feature_flag_called` for the flags read while capture was off, once the client can capture. */
@@ -1112,8 +1178,11 @@ export class PostHogFeatureFlags implements Extension {
                 }
                 // An exposure must not be reported outside the context of its read, or with a value the user did not
                 // see. Check the context for each read, because a capture listener can call identify() during this loop.
+                const calledKey = this._configVersion2FlagEvents(key, flagVariants[key])?.calledKey
                 if (
                     pending.value !== String(flagVariants[key]) ||
+                    // The value is the same, and the config version 2 assignment behind it is not.
+                    (pending.calledKey && calledKey && pending.calledKey !== calledKey) ||
                     !isSameFlagCallContext(pending.context, this._flagCallContext())
                 ) {
                     this._flagCallsPendingCapture.delete(key)
@@ -1484,6 +1553,13 @@ export class PostHogFeatureFlags implements Extension {
             // While the client rate limit applies, the client drops the event. Hold the read without capturing or
             // marking it, so repeated reads stay cheap until sendFlagCallsPendingCapture() sends it.
             const canCapture = !captureOff && !this._client?.isRateLimited
+            // The config version 2 flag events of this read, when a config version 2 record supplied its value.
+            const flagEvents = this._configVersion2FlagEvents(key, flagValue)
+            // What stands for this read's `$feature_flag_called` among the reported calls of the flag: its value,
+            // or the dedupe key of a config version 2 call.
+            const reportKey = flagEvents ? flagEvents.calledKey : flagReportValue
+            const exposureKey = flagEvents?.exposureKey
+            const hold = (): void => this._holdFlagCall(key, flagReportValue, flagEvents?.calledKey)
             if (canCapture) {
                 this._flagCallsPendingCapture.delete(key)
             } else {
@@ -1496,13 +1572,39 @@ export class PostHogFeatureFlags implements Extension {
                 // Callers such as the React hooks do not read the flag again after consent, so
                 // sendFlagCallsPendingCapture() reports this read. A value that is already reported needs no exposure,
                 // and with per-session deduplication a later send can land in a session that did not read the flag.
-                if (!flagCallReported[key]?.includes(flagReportValue)) {
-                    this._holdFlagCall(key, flagReportValue)
+                if (
+                    !flagCallReported[key]?.includes(reportKey) ||
+                    (exposureKey && !flagCallReported[key]?.includes(exposureKey))
+                ) {
+                    hold()
                 }
             }
+            const callIsNew = !flagCallReported[key]?.includes(reportKey)
+            // `$experiment_exposure` has its own entries, so a reported call never suppresses its exposure.
+            const exposureIsNew = !!exposureKey && !flagCallReported[key]?.includes(exposureKey)
             // The client drops the event while capture is off, so marking the flag as reported would suppress the
             // exposure after consent is granted.
-            if (canCapture && !flagCallReported[key]?.includes(flagReportValue)) {
+            if (canCapture && flagEvents && (callIsNew || exposureIsNew)) {
+                if (sessionIdToPersist) {
+                    this._set({
+                        [FLAG_CALL_REPORTED]: flagCallReported,
+                        [FLAG_CALL_REPORTED_SESSION_ID]: sessionIdToPersist,
+                    })
+                }
+                const events = flagEvents.build(
+                    this._flagCalledProperties(key, flagValue, payload, requestId, evaluatedAt)
+                )
+                const context = this._flagCallContext()
+                // Each event is attempted on its own, so a failed capture of one does not stop the other.
+                if (callIsNew) {
+                    this._captureFlagEventOnce(key, reportKey, events.called, hold)
+                }
+                // Application code that runs while the call is captured can change who reads the flag. The
+                // exposure belongs to the read's own context, like a read that is held.
+                if (exposureIsNew && events.exposure && isSameFlagCallContext(context, this._flagCallContext())) {
+                    this._captureFlagEventOnce(key, exposureKey, events.exposure, hold)
+                }
+            } else if (canCapture && callIsNew) {
                 if (isArray(flagCallReported[key])) {
                     flagCallReported[key].push(flagReportValue)
                 } else {
@@ -1513,62 +1615,11 @@ export class PostHogFeatureFlags implements Extension {
                     ...(sessionIdToPersist ? { [FLAG_CALL_REPORTED_SESSION_ID]: sessionIdToPersist } : {}),
                 })
 
-                const flagDetails = this._flagsWithDetails()[key]
-                const errors: string[] = [...(this._prop(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
-                if (isUndefined(flagValue)) {
-                    errors.push(FeatureFlagError.FLAG_MISSING)
-                }
-
-                const properties: Record<string, any | undefined> = {
-                    $feature_flag: key,
-                    $feature_flag_response: flagValue,
-                    $feature_flag_payload: payload ?? null,
-                    $feature_flag_request_id: requestId,
-                    $feature_flag_evaluated_at: evaluatedAt,
-                    $feature_flag_bootstrapped_response: this._config.bootstrap?.featureFlags?.[key] ?? null,
-                    $feature_flag_bootstrapped_payload: this._config.bootstrap?.featureFlagPayloads?.[key] ?? null,
-                    // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
-                    $used_bootstrap_value: !this._flagsLoadedFromRemote,
-                }
-
-                if (!isUndefined(flagDetails?.metadata?.has_experiment)) {
-                    properties.$feature_flag_has_experiment = flagDetails.metadata.has_experiment
-                }
-
-                if (!isUndefined(flagDetails?.metadata?.version)) {
-                    properties.$feature_flag_version = flagDetails.metadata.version
-                }
-
-                const reason = flagDetails?.reason?.description ?? flagDetails?.reason?.code
-                if (reason) {
-                    properties.$feature_flag_reason = reason
-                }
-
-                if (flagDetails?.metadata?.id) {
-                    properties.$feature_flag_id = flagDetails.metadata.id
-                }
-
-                // It's possible that flag values were overridden by calling overrideFeatureFlags.
-                // We want to capture the original values in case someone forgets they were using overrides
-                // and is wondering why their app is acting weird.
-                if (!isUndefined(flagDetails?.original_variant) || !isUndefined(flagDetails?.original_enabled)) {
-                    properties.$feature_flag_original_response = !isUndefined(flagDetails.original_variant)
-                        ? flagDetails.original_variant
-                        : flagDetails.original_enabled
-                }
-
-                if (flagDetails?.metadata?.original_payload) {
-                    properties.$feature_flag_original_payload = flagDetails?.metadata?.original_payload
-                }
-
-                if (errors.length) {
-                    properties.$feature_flag_error = errors.join(',')
-                }
-
+                const properties = this._flagCalledProperties(key, flagValue, payload, requestId, evaluatedAt)
                 if (!this._captureFeatureFlagCalled(properties)) {
                     // The client rate limit dropped the event. Remove the mark so the next capture sends the exposure.
                     this._unmarkFlagCallReported(key, flagReportValue)
-                    this._holdFlagCall(key, flagReportValue)
+                    hold()
                 }
             } else if (sessionIdToPersist) {
                 this._set({
@@ -1595,6 +1646,157 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
+    /** The properties of the `$feature_flag_called` event of a read. */
+    private _flagCalledProperties(
+        key: string,
+        flagValue: string | boolean | undefined,
+        payload: JsonType,
+        requestId: string | undefined,
+        evaluatedAt: number | undefined
+    ): Record<string, any | undefined> {
+        const flagDetails = this._flagsWithDetails()[key]
+        const errors: string[] = [...(this._prop(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
+        if (isUndefined(flagValue)) {
+            errors.push(FeatureFlagError.FLAG_MISSING)
+        }
+
+        const properties: Record<string, any | undefined> = {
+            $feature_flag: key,
+            $feature_flag_response: flagValue,
+            $feature_flag_payload: payload ?? null,
+            $feature_flag_request_id: requestId,
+            $feature_flag_evaluated_at: evaluatedAt,
+            $feature_flag_bootstrapped_response: this._config.bootstrap?.featureFlags?.[key] ?? null,
+            $feature_flag_bootstrapped_payload: this._config.bootstrap?.featureFlagPayloads?.[key] ?? null,
+            // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
+            $used_bootstrap_value: !this._flagsLoadedFromRemote,
+        }
+
+        if (!isUndefined(flagDetails?.metadata?.has_experiment)) {
+            properties.$feature_flag_has_experiment = flagDetails.metadata.has_experiment
+        }
+
+        if (!isUndefined(flagDetails?.metadata?.version)) {
+            properties.$feature_flag_version = flagDetails.metadata.version
+        }
+
+        const reason = flagDetails?.reason?.description ?? flagDetails?.reason?.code
+        if (reason) {
+            properties.$feature_flag_reason = reason
+        }
+
+        if (flagDetails?.metadata?.id) {
+            properties.$feature_flag_id = flagDetails.metadata.id
+        }
+
+        // It's possible that flag values were overridden by calling overrideFeatureFlags.
+        // We want to capture the original values in case someone forgets they were using overrides
+        // and is wondering why their app is acting weird.
+        if (!isUndefined(flagDetails?.original_variant) || !isUndefined(flagDetails?.original_enabled)) {
+            properties.$feature_flag_original_response = !isUndefined(flagDetails.original_variant)
+                ? flagDetails.original_variant
+                : flagDetails.original_enabled
+        }
+
+        if (flagDetails?.metadata?.original_payload) {
+            properties.$feature_flag_original_payload = flagDetails?.metadata?.original_payload
+        }
+
+        if (errors.length) {
+            properties.$feature_flag_error = errors.join(',')
+        }
+
+        return properties
+    }
+
+    /**
+     * The config version 2 flag events of a read of `key` that returns `flagValue`, when the stored
+     * record of the flag is a config version 2 record that supplied that value. A value override
+     * replaces the record's value, and a bootstrapped flag has no record, so neither has such
+     * events. A payload override leaves the value alone, so it keeps them.
+     */
+    private _configVersion2FlagEvents(
+        key: string,
+        flagValue: string | boolean | undefined
+    ): ConfigVersion2FlagEvents | undefined {
+        const flagEvents = this._responseFormat.flagEvents
+        // The stored overrides can be anything a caller passed, and only an object overrides flags by key.
+        const overriddenFlags: unknown = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+        if (
+            !flagEvents ||
+            isUndefined(flagValue) ||
+            (isObject(overriddenFlags) && hasOwnProperty.call(overriddenFlags, key))
+        ) {
+            return undefined
+        }
+        return flagEvents({
+            key,
+            response: flagValue,
+            groups: this._client?.groups ?? {},
+            record: this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)?.[key],
+        })
+    }
+
+    /**
+     * Captures one config version 2 flag event, once per dedupe key.
+     *
+     * The key is stored before capture and stays stored while capture runs, so a read during
+     * capture does not send the event again. It is removed when capture does not handle the event:
+     * the capture call or `before_send` throws, the client rate limit drops the event, or capturing
+     * was turned off while the event was captured. A later read then sends the event, and for the
+     * last two the read is also held, so the next capture sends it. After a throw, one later read
+     * tries again; after a second throw the event waits for the next page or identity. An event
+     * that `before_send` discards keeps its key: the application chose to drop it, and later reads
+     * would be dropped the same way. A failure is logged and never reaches the read.
+     */
+    private _captureFlagEventOnce(key: string, dedupeKey: string, flagEvent: FlagEvent, hold: () => void): void {
+        const reported: Record<string, string[]> = this._prop(FLAG_CALL_REPORTED) || {}
+        const attempt = key + dedupeKey
+        const throws = this._flagEventCaptureThrows.get(attempt) || 0
+        // A read that ran while the read's other event was captured can have sent this event already.
+        // An event whose capture threw twice is left for the next page: a hook that always throws
+        // must not make every read capture again, because each capture uses a rate limit token.
+        if (reported[key]?.includes(dedupeKey) || throws > 1) {
+            return
+        }
+        this._set({ [FLAG_CALL_REPORTED]: { ...reported, [key]: [...(reported[key] || []), dedupeKey] } })
+        let threw = false
+        this._flagEventCaptures.set(flagEvent.properties, {
+            ...flagEvent.capture,
+            failed: () => {
+                threw = true
+            },
+        })
+        let handled = false
+        try {
+            handled =
+                this._client?.capture(flagEvent.event, flagEvent.properties) !== false && !!this._client?.canCapture
+            if (!handled) {
+                hold()
+            }
+        } catch (error) {
+            threw = true
+            this._logger.error('Failed to capture ' + flagEvent.event, error)
+        }
+        if (threw) {
+            this._flagEventCaptureThrows.set(attempt, throws + 1)
+        }
+        if (!handled || threw) {
+            this._unmarkFlagCallReported(key, dedupeKey)
+        }
+    }
+
+    /**
+     * How the client captures the config version 2 flag event that this extension is capturing
+     * with `properties`, or `undefined` for every other event. The client calls it with the
+     * properties object it was given.
+     *
+     * @internal
+     */
+    flagEventCapture(properties: object | null | undefined): FlagEventCapture | undefined {
+        return properties ? this._flagEventCaptures.get(properties) : undefined
+    }
+
     /** Returns `false` when the client rate limit dropped the event. */
     private _captureFeatureFlagCalled(properties: Record<string, any | undefined>): boolean {
         try {
@@ -1605,8 +1807,8 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    private _holdFlagCall(key: string, value: string): void {
-        this._flagCallsPendingCapture.set(key, { value, context: this._flagCallContext() })
+    private _holdFlagCall(key: string, value: string, calledKey?: string): void {
+        this._flagCallsPendingCapture.set(key, { value, calledKey, context: this._flagCallContext() })
     }
 
     private _flagCallContext(): FlagCallContext {
@@ -2185,5 +2387,6 @@ export class PostHogFeatureFlags implements Extension {
         this._override_warning = false
         this._consecutiveStatusZeroFailures = 0
         this._flagCallsPendingCapture = new Map()
+        this._flagEventCaptureThrows = new Map()
     }
 }
