@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.67.3
+
+### Patch Changes
+
+- [#5538](https://github.com/PostHog/posthog-js/pull/5538) [`db28c59`](https://github.com/PostHog/posthog-js/commit/db28c5989d37aa27cb384e2e8a01a8c10fb74e87) Thanks [@andehen](https://github.com/andehen)! - Let an SDK choose the `/flags` response version it requests and how it reads it. SDKs that do not opt in keep requesting `v=2`.
+  (2026-11-13)
+
 ## 1.67.2
 
 ### Patch Changes

@@ -1456,10 +1456,12 @@ omits globally inactive flags and therefore leaves those keys absent.
 
 **Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the
 first time each flag value is read for a user. Experiments use these events as exposures.
+When a remotely evaluated config version 2 flag assigns an experiment variant, the read also
+sends `$experiment_exposure`, once per user, groups, flag, rule and variant.
 The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass
 `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override
 it, so one snapshot can serve both experiment flags and flags that should send no events.
-`getFlagPayload()` never sends events.
+The option governs both events. `getFlagPayload()` never sends events.
 
 **Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying
 `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation
