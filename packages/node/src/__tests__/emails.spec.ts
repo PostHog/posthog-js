@@ -1631,6 +1631,22 @@ describe('emails', () => {
       })
     })
 
+    it("keeps each send's scheduling warning its own when a caller changes one", async () => {
+      replies = [accepted(), accepted()]
+
+      const first = await send({ scheduledAt: '2026-12-01T09:00:00Z' })
+      Object.assign(first.data!.warnings[0], { code: 'changed', message: 'changed', fix: 'changed' })
+      const second = await send({ scheduledAt: '2026-12-01T09:00:00Z' })
+
+      expect(second.data?.warnings).toEqual([
+        {
+          code: 'scheduling_unsupported',
+          message: 'This PostHog predates scheduled sends, so it ignored scheduledAt and sent the email now.',
+          fix: 'Update PostHog before you schedule emails with it.',
+        },
+      ])
+    })
+
     it('does not warn about scheduling a send that had no time', async () => {
       replies = [accepted()]
 

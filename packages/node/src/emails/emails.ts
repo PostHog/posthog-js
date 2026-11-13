@@ -1035,7 +1035,7 @@ function parseSendReply({ status, text: body, retryAfterMs }: Reply, scheduled: 
       }
     }
     if (scheduled && fields.status === undefined) {
-      warnings.push(SCHEDULING_UNSUPPORTED)
+      warnings.push({ ...SCHEDULING_UNSUPPORTED })
     }
     return {
       id,
