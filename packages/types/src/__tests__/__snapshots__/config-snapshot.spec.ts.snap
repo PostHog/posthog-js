@@ -1069,6 +1069,10 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
     \\"undefined\\",
     \\"string[]\\"
   ],
+  \\"trace_propagation_targets\\": [
+    \\"undefined\\",
+    \\"string[]\\"
+  ],
   \\"__preview_replay_sync_fetch\\": [
     \\"undefined\\",
     \\"false\\",

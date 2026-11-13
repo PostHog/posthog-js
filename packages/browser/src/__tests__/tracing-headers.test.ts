@@ -393,4 +393,364 @@ describe('tracing headers', () => {
             })
         })
     })
+
+    describe('traceparent', () => {
+        const TRACEPARENT_PATTERN = /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/
+
+        const mockFetch = () => {
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+                Promise.resolve(new Response())
+            )
+            setWindowFetch(originalFetch)
+            return originalFetch
+        }
+
+        const downstreamHeaders = (originalFetch: ReturnType<typeof mockFetch>, call = 0): Headers => {
+            const [input, init] = originalFetch.mock.calls[call]
+            return input instanceof Request ? input.headers : new Headers(init?.headers)
+        }
+
+        it('adds a fresh sampled traceparent per fetch to listed hostnames only', async () => {
+            const originalFetch = mockFetch()
+            restoreFetchPatch = patchFns._patchFetch([], 'distinct-id', sessionManager as any, ['api.example.com'])
+
+            await window.fetch('https://api.example.com/a')
+            await window.fetch('https://api.example.com/b', { method: 'POST', body: 'x' })
+            await window.fetch('https://other.example/c')
+
+            const first = downstreamHeaders(originalFetch, 0).get('traceparent')
+            const second = downstreamHeaders(originalFetch, 1).get('traceparent')
+            expect(first).toMatch(TRACEPARENT_PATTERN)
+            expect(second).toMatch(TRACEPARENT_PATTERN)
+            expect(first!.split('-')[1]).not.toEqual(second!.split('-')[1])
+            expect(first!.split('-')[2]).not.toEqual(second!.split('-')[2])
+            expect((originalFetch.mock.calls[1][1] as RequestInit).body).toBe('x')
+            expect(originalFetch.mock.calls[2]).toEqual(['https://other.example/c'])
+            // tracing_headers is empty, so the PostHog headers are not added alongside
+            expect(downstreamHeaders(originalFetch, 0).get('X-POSTHOG-SESSION-ID')).toBeNull()
+        })
+
+        it.each([
+            { target: 'https://api.example.com', url: 'https://api.example.com/path', expected: true },
+            { target: 'https://api.example.com/', url: 'https://api.example.com/path', expected: true },
+            { target: 'https://api.example.com', url: 'http://api.example.com/path', expected: false },
+            { target: 'https://api.example.com', url: 'https://api.example.com:8443/path', expected: false },
+            { target: 'http://localhost:8000', url: 'http://localhost:8000/path', expected: true },
+            { target: 'https://api.example.com:443', url: 'https://api.example.com/path', expected: true },
+            { target: 'http://API.example.com:80', url: 'http://api.example.com/path', expected: true },
+            { target: 'API.example.com', url: 'https://api.example.com:8443/path', expected: true },
+            { target: 'example.com', url: 'https://api.example.com/path', expected: false },
+            { target: 'api.example.com', url: 'https://api.example.com.evil.test/path', expected: false },
+        ])('matches $target against $url: $expected', async ({ target, url, expected }) => {
+            const originalFetch = mockFetch()
+            restoreFetchPatch = patchFns._patchFetch(undefined, 'distinct-id', sessionManager as any, [target])
+
+            await window.fetch(url)
+
+            expect(downstreamHeaders(originalFetch).has('traceparent')).toBe(expected)
+        })
+
+        it('does not overwrite a traceparent set by the app', async () => {
+            const originalFetch = mockFetch()
+            restoreFetchPatch = patchFns._patchFetch(['api.example.com'], 'distinct-id', sessionManager as any, [
+                'api.example.com',
+            ])
+            const appTraceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01'
+
+            await window.fetch('https://api.example.com/a', { headers: { TraceParent: appTraceparent } })
+            await window.fetch(new Request('https://api.example.com/b', { headers: { traceparent: appTraceparent } }))
+
+            expect(downstreamHeaders(originalFetch, 0).get('traceparent')).toBe(appTraceparent)
+            expect(downstreamHeaders(originalFetch, 0).get('X-POSTHOG-SESSION-ID')).toBe('session-id')
+            expect(downstreamHeaders(originalFetch, 1).get('traceparent')).toBe(appTraceparent)
+        })
+
+        it('adds traceparent to Request inputs', async () => {
+            const originalFetch = mockFetch()
+            restoreFetchPatch = patchFns._patchFetch(undefined, 'distinct-id', sessionManager as any, [
+                'api.example.com',
+            ])
+
+            await window.fetch(new Request('https://api.example.com/a'))
+
+            expect(downstreamHeaders(originalFetch).get('traceparent')).toMatch(TRACEPARENT_PATTERN)
+        })
+
+        it('reads the live target list without re-patching', async () => {
+            const originalFetch = mockFetch()
+            const targets: string[] = []
+            restoreFetchPatch = patchFns._patchFetch(undefined, 'distinct-id', sessionManager as any, targets)
+
+            await window.fetch('https://api.example.com/a')
+            targets.push('api.example.com')
+            await window.fetch('https://api.example.com/b')
+
+            expect(originalFetch.mock.calls[0]).toEqual(['https://api.example.com/a'])
+            expect(downstreamHeaders(originalFetch, 1).get('traceparent')).toMatch(TRACEPARENT_PATTERN)
+        })
+
+        describe('xhr', () => {
+            const sentTraceparents = (spy: { mock: { calls: unknown[][] } }): string[] =>
+                spy.mock.calls
+                    .filter(([name]) => String(name).toLowerCase() === 'traceparent')
+                    .map(([, value]) => String(value))
+
+            const setUpXHR = (targets: string[]) => {
+                const setRequestHeaderSpy = vi
+                    .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
+                    .mockImplementation(() => {})
+                vi.spyOn(XMLHttpRequest.prototype, 'send').mockImplementation(() => {})
+                restoreXHRPatch = patchFns._patchXHR(undefined, 'distinct-id', sessionManager as any, targets)
+                return setRequestHeaderSpy
+            }
+
+            it('sets traceparent on send for listed hosts', () => {
+                const setRequestHeaderSpy = setUpXHR(['api.example.com'])
+
+                const xhr = new XMLHttpRequest()
+                xhr.open('GET', 'https://api.example.com/path')
+                expect(sentTraceparents(setRequestHeaderSpy)).toEqual([])
+                xhr.send()
+
+                const sent = sentTraceparents(setRequestHeaderSpy)
+                expect(sent).toHaveLength(1)
+                expect(sent[0]).toMatch(TRACEPARENT_PATTERN)
+            })
+
+            it('does not set traceparent for unlisted hosts', () => {
+                const setRequestHeaderSpy = setUpXHR(['api.example.com'])
+
+                const xhr = new XMLHttpRequest()
+                xhr.open('GET', 'https://other.example/path')
+                xhr.send()
+
+                expect(sentTraceparents(setRequestHeaderSpy)).toEqual([])
+            })
+
+            it('does not add a second traceparent when the app set one', () => {
+                const setRequestHeaderSpy = setUpXHR(['api.example.com'])
+                const appTraceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01'
+
+                const xhr = new XMLHttpRequest()
+                xhr.open('GET', 'https://api.example.com/path')
+                xhr.setRequestHeader('Traceparent', appTraceparent)
+                xhr.send()
+
+                expect(sentTraceparents(setRequestHeaderSpy)).toEqual([appTraceparent])
+            })
+
+            it('treats a String object header name as traceparent', () => {
+                const setRequestHeaderSpy = setUpXHR(['api.example.com'])
+                const appTraceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01'
+
+                const xhr = new XMLHttpRequest()
+                xhr.open('GET', 'https://api.example.com/path')
+                xhr.setRequestHeader(new String('traceparent') as unknown as string, appTraceparent)
+                xhr.send()
+
+                expect(sentTraceparents(setRequestHeaderSpy)).toEqual([appTraceparent])
+            })
+
+            it('rechecks the live target list at send', () => {
+                const targets = ['api.example.com', 'other.example']
+                const setRequestHeaderSpy = setUpXHR(targets)
+
+                const xhr = new XMLHttpRequest()
+                xhr.open('GET', 'https://api.example.com/path')
+                targets.splice(0, 1)
+                xhr.send()
+
+                expect(sentTraceparents(setRequestHeaderSpy)).toEqual([])
+            })
+
+            it('sets traceparent when the host is added to the target list between open and send', () => {
+                const targets = ['other.example']
+                const setRequestHeaderSpy = setUpXHR(targets)
+
+                const xhr = new XMLHttpRequest()
+                xhr.open('GET', 'https://api.example.com/path')
+                targets.push('api.example.com')
+                xhr.send()
+
+                expect(sentTraceparents(setRequestHeaderSpy)).toHaveLength(1)
+            })
+
+            describe('with OpenTelemetry XHR instrumentation', () => {
+                const otelKey = Symbol.for('opentelemetry.js.api.1')
+                const otelTraceparent = '00-11111111111111111111111111111111-2222222222222222-01'
+
+                beforeEach(() => {
+                    ;(window as any)[otelKey] = { version: '1.9.0', propagation: {} }
+                })
+
+                afterEach(() => {
+                    delete (window as any)[otelKey]
+                })
+
+                // Shimmer-style wrapper that injects traceparent inside send(), like OpenTelemetry's instrumentation.
+                const otelSend = function (this: XMLHttpRequest) {
+                    this.setRequestHeader('traceparent', otelTraceparent)
+                }
+                Object.defineProperty(otelSend, '__wrapped', { value: true })
+
+                const withOtelBelow = (wrapper: typeof otelSend, run: () => void) => {
+                    const nativeSend = XMLHttpRequest.prototype.send
+                    XMLHttpRequest.prototype.send = wrapper as typeof nativeSend
+                    try {
+                        restoreXHRPatch = patchFns._patchXHR(undefined, 'distinct-id', sessionManager as any, [
+                            window.location.hostname,
+                            'api.example.com',
+                        ])
+                        run()
+                    } finally {
+                        restoreXHRPatch?.()
+                        restoreXHRPatch = undefined
+                        XMLHttpRequest.prototype.send = nativeSend
+                    }
+                }
+
+                it('leaves same-origin requests to it when it wrapped send before PostHog', () => {
+                    const setRequestHeaderSpy = vi
+                        .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
+                        .mockImplementation(() => {})
+                    withOtelBelow(otelSend, () => {
+                        const xhr = new XMLHttpRequest()
+                        xhr.open('GET', `${window.location.origin}/path`)
+                        xhr.send()
+
+                        expect(sentTraceparents(setRequestHeaderSpy)).toEqual([otelTraceparent])
+                    })
+                })
+
+                it('still sets traceparent on cross-origin targets it skips by default', () => {
+                    const setRequestHeaderSpy = vi
+                        .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
+                        .mockImplementation(() => {})
+                    // OpenTelemetry's default: no propagation to cross-origin URLs.
+                    const otelSendSkippingCrossOrigin = function (this: XMLHttpRequest) {}
+                    Object.defineProperty(otelSendSkippingCrossOrigin, '__wrapped', { value: true })
+                    withOtelBelow(otelSendSkippingCrossOrigin as typeof otelSend, () => {
+                        const xhr = new XMLHttpRequest()
+                        xhr.open('GET', 'https://api.example.com/path')
+                        xhr.send()
+
+                        const sent = sentTraceparents(setRequestHeaderSpy)
+                        expect(sent).toHaveLength(1)
+                        expect(sent[0]).toMatch(TRACEPARENT_PATTERN)
+                    })
+                })
+
+                it('still sets traceparent when OpenTelemetry has not wrapped send underneath PostHog', () => {
+                    const setRequestHeaderSpy = setUpXHR(['api.example.com'])
+
+                    const xhr = new XMLHttpRequest()
+                    xhr.open('GET', 'https://api.example.com/path')
+                    xhr.send()
+
+                    expect(sentTraceparents(setRequestHeaderSpy)).toHaveLength(1)
+                })
+
+                it('does not add a second value when it wrapped send after PostHog', () => {
+                    const setRequestHeaderSpy = setUpXHR(['api.example.com'])
+                    const posthogSend = XMLHttpRequest.prototype.send
+                    XMLHttpRequest.prototype.send = function (this: XMLHttpRequest) {
+                        this.setRequestHeader('traceparent', otelTraceparent)
+                        return posthogSend.call(this)
+                    }
+                    try {
+                        const xhr = new XMLHttpRequest()
+                        xhr.open('GET', 'https://api.example.com/path')
+                        xhr.send()
+
+                        expect(sentTraceparents(setRequestHeaderSpy)).toEqual([otelTraceparent])
+                    } finally {
+                        XMLHttpRequest.prototype.send = posthogSend
+                    }
+                })
+            })
+
+            it('restores send and setRequestHeader', () => {
+                const originalSend = XMLHttpRequest.prototype.send
+                const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader
+                restoreXHRPatch = patchFns._patchXHR(undefined, 'distinct-id', sessionManager as any, [
+                    'api.example.com',
+                ])
+                expect(XMLHttpRequest.prototype.send).not.toBe(originalSend)
+                expect(XMLHttpRequest.prototype.setRequestHeader).not.toBe(originalSetRequestHeader)
+
+                restoreXHRPatch?.()
+                restoreXHRPatch = undefined
+
+                expect(XMLHttpRequest.prototype.send).toBe(originalSend)
+                expect(XMLHttpRequest.prototype.setRequestHeader).toBe(originalSetRequestHeader)
+            })
+
+            it('does not patch send when no traceparent targets are passed (older core)', () => {
+                const originalSend = XMLHttpRequest.prototype.send
+                restoreXHRPatch = patchFns._patchXHR(['example.com'], 'distinct-id', sessionManager as any)
+                expect(XMLHttpRequest.prototype.send).toBe(originalSend)
+            })
+        })
+    })
+
+    describe('trace_propagation_targets config', () => {
+        it('enables patching with only trace_propagation_targets and keeps live arrays', () => {
+            const config: Record<string, unknown> = { trace_propagation_targets: ['api.example.com', 42, ''] }
+            const tracingHeaders = new TracingHeaders({ config } as any)
+
+            const { hostnames, traceparentTargets } = (tracingHeaders as any)._syncForPatch()
+            expect(hostnames).toBeUndefined()
+            expect(traceparentTargets).toEqual(['api.example.com'])
+
+            config.trace_propagation_targets = undefined
+            expect((tracingHeaders as any)._syncForPatch().traceparentTargets).toBeUndefined()
+            expect(traceparentTargets).toEqual([])
+        })
+
+        it('reinstalls the patches when leaving legacy __add_tracing_headers: true', () => {
+            const restore = vi.fn()
+            const patchXHR = vi.fn((_hostnames: unknown) => restore)
+            const patchFetch = vi.fn((_hostnames: unknown) => restore)
+            const extensions = ((window as any).__PosthogExtensions__ = (window as any).__PosthogExtensions__ || {})
+            const originalPatchFns = extensions.tracingHeadersPatchFns
+            extensions.tracingHeadersPatchFns = { _patchXHR: patchXHR, _patchFetch: patchFetch }
+            try {
+                const config: Record<string, unknown> = {
+                    __add_tracing_headers: true,
+                    trace_propagation_targets: ['api.example.com'],
+                }
+                const tracingHeaders = new TracingHeaders({ config, get_distinct_id: () => 'id' } as any)
+                tracingHeaders.startIfEnabledOrStop()
+                expect(patchXHR.mock.calls[0][0]).toBe(true)
+                expect(patchFetch.mock.calls[0][0]).toBe(true)
+
+                config.tracing_headers = []
+                tracingHeaders.startIfEnabledOrStop()
+
+                expect(restore).toHaveBeenCalledTimes(2)
+                expect(patchXHR).toHaveBeenCalledTimes(2)
+                expect(patchXHR.mock.calls[1][0]).toEqual([])
+                expect(patchFetch.mock.calls[1][0]).toEqual([])
+
+                // A later array change reaches the installed patches in place, without re-patching.
+                config.tracing_headers = ['example.com']
+                tracingHeaders.startIfEnabledOrStop()
+                expect(patchXHR).toHaveBeenCalledTimes(2)
+                expect(patchXHR.mock.calls[1][0]).toEqual(['example.com'])
+            } finally {
+                extensions.tracingHeadersPatchFns = originalPatchFns
+            }
+        })
+
+        it('keeps the hostname array instance when tracing_headers is removed', () => {
+            const config: Record<string, unknown> = { tracing_headers: ['example.com'] }
+            const tracingHeaders = new TracingHeaders({ config } as any)
+            const hostnames = (tracingHeaders as any)._syncHostnamesForPatch()
+
+            config.tracing_headers = undefined
+            expect((tracingHeaders as any)._syncHostnamesForPatch()).toBeUndefined()
+            config.tracing_headers = ['example.com']
+            expect((tracingHeaders as any)._syncHostnamesForPatch()).toBe(hostnames)
+        })
+    })
 })
