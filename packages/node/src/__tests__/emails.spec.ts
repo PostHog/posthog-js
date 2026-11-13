@@ -1129,8 +1129,14 @@ describe('emails', () => {
         expect(fetch).toHaveBeenCalledTimes(1)
       })
 
-      it('refuses a move to another time even when a retry of the move got an answer', async () => {
+      it.each([
+        ['a timeout', undefined],
+        ['a 503', 503],
+      ])('refuses a move to another time even when a retry after %s got an answer', async (_name, status) => {
         makeClient({ emailRequestTimeoutMs: 1_000, emailRequestMaxRetries: 1 })
+        if (status !== undefined) {
+          fetch.mockImplementationOnce(async () => fakeReply(status, null))
+        }
         const pending = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
         await vi.runAllTimersAsync()
         expect((await pending).data?.scheduledAt).toBe(FIRST_TIME)
