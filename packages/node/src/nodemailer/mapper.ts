@@ -216,9 +216,10 @@ function withStableDataUrlCids(
       return attachment
     }
     const cid = nextFreeCid()
-    // Only whole references: a longer content ID that starts with this one keeps its name.
-    // The generated ID is hex and `@localhost`, so it needs no escaping in the pattern.
-    stableHtml = stableHtml?.replace(new RegExp(`cid:${attachment.cid}(?![^\\s"'<>)])`, 'g'), `cid:${cid}`)
+    // Only whole references: a longer content ID that starts with this one, such as `…@localhost-2` or
+    // `…@localhost.example`, keeps its name. Anything else ends the reference: a quote, `&quot;`, `)`, or a
+    // srcset's comma. The generated ID is hex and `@localhost`, so it needs no escaping in the pattern.
+    stableHtml = stableHtml?.replace(new RegExp(`cid:${attachment.cid}(?![\\w.-])`, 'g'), `cid:${cid}`)
     return { ...attachment, cid }
   })
   return { html: stableHtml, attachments: stableAttachments }

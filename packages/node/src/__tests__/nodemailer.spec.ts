@@ -508,6 +508,27 @@ describe('posthog-node/nodemailer', () => {
       expect(second.contentId).toBe(`${generated}-second`)
       expect(fake.emails[0].html).toBe(`<img src="cid:${first.contentId}"><img src="cid:${second.contentId}">`)
     })
+
+    it('renumbers a generated content ID in a srcset and in a CSS url with encoded quotes', async () => {
+      const generated = '0123456789abcdef0123@localhost'
+      await transporter().sendMail({
+        ...ORDER_SHIPPED,
+        html:
+          `<img srcset="cid:${generated}, cid:retina@localhost 2x">` +
+          `<div style="background-image:url(&quot;cid:${generated}&quot;)"></div>`,
+        attachments: [
+          { filename: 'logo.png', content: 'iVBORw0KGgo=', encoding: 'base64', cid: generated },
+          { filename: 'retina.png', content: 'iVBORw0KGgo=', encoding: 'base64', cid: 'retina@localhost' },
+        ],
+      })
+
+      const [logo] = fake.emails[0].attachments
+      expect(logo.contentId).toBe('data-url-1@localhost')
+      expect(fake.emails[0].html).toBe(
+        '<img srcset="cid:data-url-1@localhost, cid:retina@localhost 2x">' +
+          '<div style="background-image:url(&quot;cid:data-url-1@localhost&quot;)"></div>'
+      )
+    })
   })
 
   describe('the error map', () => {
