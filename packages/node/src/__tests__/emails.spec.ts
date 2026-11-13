@@ -2079,21 +2079,18 @@ describe('emails', () => {
     })
 
     it.each([
-      ['a malformed cursor', 'not-a-cursor'],
-      ['a cursor over 128 characters', 'c'.repeat(129)],
-    ])('reports PostHog refusing %s as a validation error on cursor, without a retry', async (_name, cursor) => {
+      ['a malformed cursor', 'not-a-cursor', 'invalid_input'],
+      ['a cursor over 128 characters', 'c'.repeat(129), 'max_length'],
+    ])('reports PostHog refusing %s as a validation error on cursor, without a retry', async (_name, cursor, code) => {
       replies = [
-        {
-          status: 400,
-          body: { type: 'validation_error', code: 'invalid_input', detail: 'Bad cursor.', attr: 'cursor' },
-        },
+        { status: 400, body: { type: 'validation_error', code, detail: 'Bad cursor.', attr: 'cursor' } },
         page(),
       ]
 
       const { data, error } = await list({ status: 'scheduled', cursor })
 
       expect(data).toBeNull()
-      expect(error).toMatchObject({ statusCode: 400, code: 'invalid_input', field: 'cursor', name: 'validation_error' })
+      expect(error).toMatchObject({ statusCode: 400, code, field: 'cursor', name: 'validation_error' })
       expect(fetch).toHaveBeenCalledTimes(1)
     })
 
