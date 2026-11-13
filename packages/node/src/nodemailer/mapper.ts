@@ -32,23 +32,24 @@ const KNOWN_OPTIONS = new Set([
 ])
 const HEADER_OPTIONS = new Set(['inReplyTo', 'references', 'list', 'otp'])
 const PART_OPTIONS = new Set(['watchHtml', 'amp', 'icalEvent', 'alternatives', 'raw'])
+const NODEMAILER_DATA_URL_CID = /^[0-9a-f]{20}@localhost$/
 
-/**
- * Refuses what `normalize()` drops: the `raw` source of the HTML, the text or an attachment, which Nodemailer would
- * send in place of its content. Reads the message data before `normalize()`.
- */
-export function refuseBeforeNormalize(
+export function refuseWhatNormalizeDrops(
   data: { html?: unknown; text?: unknown; attachments?: unknown } | undefined
 ): void {
   const attachments = Array.isArray(data?.attachments) ? data.attachments : []
   if ([data?.html, data?.text, ...attachments].some(hasRawSource)) {
     throw unsupported('unsupported_part')
   }
+  if ([data?.html, data?.text].some(hasOwnHeaders)) {
+    throw unsupported('unsupported_header')
+  }
 }
 
-export function refuseMimeChanges(message: unknown): void {
-  const { _transforms: transforms, _processFuncs: processFuncs } = (message ?? {}) as Record<string, unknown>
-  if ([transforms, processFuncs].some((changes) => Array.isArray(changes) && changes.length > 0)) {
+export function refuseMimeChanges(mail: { mailer?: unknown; message?: unknown }): void {
+  const streamPlugins = (mail.mailer as { _userPlugins?: { stream?: unknown[] } } | undefined)?._userPlugins?.stream
+  const processFuncs = (mail.message as { _processFuncs?: unknown[] } | undefined)?._processFuncs
+  if ([streamPlugins, processFuncs].some((changes) => Array.isArray(changes) && changes.length > 0)) {
     throw unsupported('unsupported_option')
   }
 }
@@ -57,17 +58,17 @@ function hasRawSource(part: unknown): boolean {
   return typeof part === 'object' && part !== null && (part as { raw?: unknown }).raw !== undefined
 }
 
-/** A send the SDK checks again: subject, html and text stay as Nodemailer has them. */
+function hasOwnHeaders(part: unknown): boolean {
+  const headers = typeof part === 'object' && part !== null ? (part as { headers?: unknown }).headers : undefined
+  return typeof headers === 'object' && headers !== null && Object.keys(headers).length > 0
+}
+
 export type MappedSend = Omit<SendCodeEmailOptions, 'subject' | 'html' | 'text'> & {
   subject?: string
   html?: string
   text?: string
 }
 
-/**
- * Turns one normalized Nodemailer message into one send.
- * Throws a `PostHogUnsupportedError` for a message PostHog can't send.
- */
 export function mapMail(mail: NormalizedMail, defaultTemplateKey: string | undefined): MappedSend {
   const to = addressesOf(mail.to)
   if (to.length !== 1) {
@@ -88,17 +89,18 @@ export function mapMail(mail: NormalizedMail, defaultTemplateKey: string | undef
   if (options.template_key !== undefined && !TEMPLATE_KEY_PATTERN.test(options.template_key)) {
     throw unsupported('invalid_template_key')
   }
+  const { html, attachments } = withStableDataUrlCids(mail.html, mail.attachments)
   return {
     to: to[0],
     templateKey: options.template_key ?? defaultTemplateKey ?? INTEGRATION_NAME,
     subject: mail.subject ?? '',
-    html: mail.html,
+    html,
     text: mail.text,
     ...(mail.from?.address && { from: formatSender(mail.from) }),
     ...(cc.length > 0 && { cc }),
     ...(bcc.length > 0 && { bcc }),
     ...(mail.replyTo && { replyTo: addressesOf(mail.replyTo) }),
-    ...(mail.attachments?.length && { attachments: mail.attachments.map(attachmentOf) }),
+    ...(attachments?.length && { attachments: attachments.map(attachmentOf) }),
     ...(options.distinct_id !== undefined && { distinctId: options.distinct_id }),
     ...(options.idempotency_key !== undefined && { idempotencyKey: options.idempotency_key }),
     ...(options.tracking !== undefined && { tracking: options.tracking }),
@@ -155,7 +157,6 @@ function unsupportedHeader(mail: NormalizedMail): PostHogRefusal | undefined {
   return hasHeader || hasAttachmentHeader || hasSender ? 'unsupported_header' : undefined
 }
 
-/** Nodemailer takes headers as an object or as a list of `{ key, value }`, and skips a header without a value. */
 function headerNames(headers: NormalizedMail['headers']): string[] {
   if (Array.isArray(headers)) {
     return headers.filter((header) => header?.value).map((header) => header.key)
@@ -164,7 +165,10 @@ function headerNames(headers: NormalizedMail['headers']): string[] {
 }
 
 function envelopeMismatch(mail: NormalizedMail, recipients: string[]): PostHogRefusal | undefined {
-  const envelope = mail.envelope ?? {}
+  const { envelope } = mail
+  if (!envelope) {
+    return undefined
+  }
   const sameSender = sameAddress(envelope.from || undefined, mail.from?.address)
   return sameSender && sameAddresses(envelope.to ?? [], recipients) ? undefined : 'envelope_mismatch'
 }
@@ -193,16 +197,35 @@ function inlineWithoutCid(attachments: NormalizedAttachment[] | undefined): Post
     : undefined
 }
 
+function withStableDataUrlCids(
+  html: string | undefined,
+  attachments: NormalizedAttachment[] | undefined
+): { html: string | undefined; attachments: NormalizedAttachment[] | undefined } {
+  let stableHtml = html
+  let count = 0
+  const stableAttachments = attachments?.map((attachment) => {
+    if (!attachment.cid || !NODEMAILER_DATA_URL_CID.test(attachment.cid)) {
+      return attachment
+    }
+    const cid = `data-url-${++count}@localhost`
+    stableHtml = stableHtml?.replaceAll(`cid:${attachment.cid}`, `cid:${cid}`)
+    return { ...attachment, cid }
+  })
+  return { html: stableHtml, attachments: stableAttachments }
+}
+
 function attachmentOf(attachment: NormalizedAttachment): EmailAttachment {
-  const { content = '', encoding, filename, contentType, cid } = attachment
+  const { filename, contentType, cid } = attachment
   return {
     filename: filename || '',
-    // normalize() hands over a file's bytes as Base64, which the SDK sends as it is
-    content:
-      typeof content === 'string' && encoding !== 'base64'
-        ? Buffer.from(content, (encoding as BufferEncoding) ?? 'utf8')
-        : content,
+    content: bytesOrBase64Of(attachment),
     ...(contentType && { contentType }),
     ...(cid && { contentId: cid }),
   }
+}
+
+function bytesOrBase64Of({ content = '', encoding }: NormalizedAttachment): EmailAttachment['content'] {
+  return typeof content === 'string' && encoding !== 'base64'
+    ? Buffer.from(content, (encoding as BufferEncoding) ?? 'utf8')
+    : content
 }

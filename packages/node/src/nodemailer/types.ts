@@ -56,7 +56,10 @@ export interface PostHogSendError extends Error {
   detail: string
   /** The request field the error is about, when PostHog named one. */
   attr?: string
-  /** Whether sending the same message again, with the same `idempotency_key`, can succeed. */
+  /**
+   * Whether sending the same message again can succeed without a second copy reaching the recipient. A failure that may
+   * have reached PostHog, such as a network error, is retryable only when the message has a `posthog.idempotency_key`.
+   */
   retryable: boolean
   /** How long PostHog asked to wait before a retry, in seconds. */
   retry_after?: number
@@ -106,8 +109,9 @@ export interface NormalizedMail {
  * its data stays `unknown` here and the transport reads it as a `NormalizedMail`.
  */
 export interface NodemailerMail {
-  data?: { html?: unknown; text?: unknown; attachments?: unknown }
+  data?: { html?: unknown; text?: unknown; attachments?: unknown; envelope?: unknown }
   message?: unknown
+  mailer?: unknown
   normalize(callback: (error: Error | null, data?: unknown) => void): void
 }
 

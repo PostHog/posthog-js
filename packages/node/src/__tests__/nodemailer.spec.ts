@@ -292,6 +292,18 @@ describe('posthog-node/nodemailer', () => {
       { html: { content: '<p>On its way.</p>', raw: 'Content-Type: text/html\r\n\r\n<p>Other</p>' } },
       'unsupported_part',
     ],
+    [
+      'an HTML part with its own headers',
+      {
+        html: { content: '<p>On its way.</p>', headers: { 'Content-Disposition': 'attachment; filename=letter.html' } },
+      },
+      'unsupported_header',
+    ],
+    [
+      'a text part with its own headers',
+      { text: { content: 'On its way.', headers: { 'Content-Language': 'de' } } },
+      'unsupported_header',
+    ],
     ['a REQUIRETLS delivery', { requireTLSExtensionEnabled: true }, 'unsupported_option'],
     [
       'a DKIM signature',
@@ -328,6 +340,14 @@ describe('posthog-node/nodemailer', () => {
           done()
         }),
     ],
+    [
+      'a header a stream plugin sets',
+      (mailer: nodemailer.Transporter) =>
+        mailer.use('stream', (mail, done) => {
+          mail.message.setHeader('Subject', 'Changed by a plugin')
+          done()
+        }),
+    ],
   ])('refuses %s, which PostHog cannot apply', async (_name, register) => {
     const mailer = transporter()
     register(mailer)
@@ -339,6 +359,28 @@ describe('posthog-node/nodemailer', () => {
 
     expect(refusalOf(error)).toBe('unsupported_option')
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('sends a message without from that has a reply-to, from the project default sender', async () => {
+    replies = [{ status: 202, body: { message_id: MESSAGE_ID, replayed: false } }]
+    const { from: _from, ...withoutFrom } = ORDER_SHIPPED
+
+    const info = await transporter().sendMail({ ...withoutFrom, replyTo: 'help@example.com' })
+
+    expect(info.messageId).toBe(MESSAGE_ID)
+    expect(sentRequests()[0].body).not.toHaveProperty('from')
+  })
+
+  it('sends a message whose own envelope names the same people the way Nodemailer allows', async () => {
+    replies = [{ status: 202, body: { message_id: MESSAGE_ID, replayed: false } }]
+
+    const info = await transporter().sendMail({
+      ...ORDER_SHIPPED,
+      cc: 'bo@example.com',
+      envelope: { from: 'Shop <shop@example.com>', to: 'Ana <ana@example.com>', cc: ['bo@example.com'] },
+    })
+
+    expect(info.messageId).toBe(MESSAGE_ID)
   })
 
   it('sends a message without a subject with an empty one', async () => {
@@ -416,13 +458,31 @@ describe('posthog-node/nodemailer', () => {
         { filename: 'report.csv', contentType: 'text/csv', bytes: new Uint8Array(Buffer.from('a,b\n1,2\n')) },
       ])
     })
+
+    it('replays a retry of a message whose data URL images Nodemailer attaches', async () => {
+      const mail = {
+        ...ORDER_SHIPPED,
+        html: '<p><img src="data:image/png;base64,iVBORw0KGgo="><img src="data:image/gif;base64,R0lGODlh"></p>',
+        attachDataUrls: true,
+        posthog: { idempotency_key: 'order-981-shipped' },
+      }
+
+      const first = await transporter().sendMail(mail)
+      const retry = await transporter().sendMail(mail)
+
+      expect(retry.messageId).toBe(first.messageId)
+      expect(fake.emails).toHaveLength(1)
+      const [png, gif] = fake.emails[0].attachments
+      expect(fake.emails[0].html).toBe(`<p><img src="cid:${png.contentId}"><img src="cid:${gif.contentId}"></p>`)
+      expect(png.contentId).not.toBe(gif.contentId)
+    })
   })
 
   describe('the error map', () => {
-    const failureOf = async (reply: Reply): Promise<unknown> => {
+    const failureOf = async (reply: Reply, mail: nodemailer.SendMailOptions = ORDER_SHIPPED): Promise<unknown> => {
       replies = [reply]
       return transporter()
-        .sendMail(ORDER_SHIPPED)
+        .sendMail(mail)
         .then(
           () => undefined,
           (rejection: unknown) => rejection
@@ -443,7 +503,7 @@ describe('posthog-node/nodemailer', () => {
       [
         '409 in flight',
         apiError(409, 'idempotency_key_in_flight'),
-        { status: 409, code: 'idempotency_key_in_flight', retryable: true },
+        { status: 409, code: 'idempotency_key_in_flight', retryable: false },
       ],
       ['422', apiError(422, 'recipient_suppressed'), { status: 422, code: 'recipient_suppressed', retryable: false }],
       ['429 quota', apiError(429, 'quota_limited'), { status: 429, code: 'quota_limited', retryable: false }],
@@ -454,7 +514,7 @@ describe('posthog-node/nodemailer', () => {
       ],
       ['503', apiError(503, 'delivery_unavailable'), { status: 503, code: 'delivery_unavailable', retryable: true }],
       ['500', { status: 500 }, { status: 500, code: 'api_error', retryable: false }],
-      ['a network error', new TypeError('fetch failed'), { code: 'network_error', retryable: true }],
+      ['a network error', new TypeError('fetch failed'), { code: 'network_error', retryable: false }],
     ])('turns %s into an error that says whether to retry', async (_name, reply, expected) => {
       const error = await failureOf(reply)
 
@@ -467,6 +527,18 @@ describe('posthog-node/nodemailer', () => {
         expect(error).not.toHaveProperty('status')
       }
     })
+
+    it.each([
+      ['409 in flight', apiError(409, 'idempotency_key_in_flight'), 'idempotency_key_in_flight'],
+      ['a network error', new TypeError('fetch failed'), 'network_error'],
+    ])(
+      'says %s, which may have reached PostHog, is retryable only for a message with an idempotency key',
+      async (_name, reply, code) => {
+        const error = await failureOf(reply, { ...ORDER_SHIPPED, posthog: { idempotency_key: 'order-981-shipped' } })
+
+        expect(error).toMatchObject({ code, retryable: true })
+      }
+    )
   })
 
   it('reports a send the client could not make', async () => {
