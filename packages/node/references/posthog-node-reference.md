@@ -4986,6 +4986,7 @@ What every send takes, whatever its form.
 | ------ | ------ | ------ |
 | <a id="property-distinctid-1"></a> `distinctId?` | `string` | The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address. |
 | <a id="property-idempotencykey"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too. |
+| <a id="property-integration"></a> `integration?` | `string` | Names the library that made this send, as `<name>/<version>`, such as `'nodemailer/5.61.2'`, so PostHog can tell its sends apart. Set by integrations that send through this client, not by app code. Lower-case letters, digits and hyphens for the name, at most 40 each side. |
 | <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
 | <a id="property-to-1"></a> `to` | `string` | One recipient email address. |
 
