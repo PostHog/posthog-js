@@ -39,13 +39,24 @@ export function fieldNotSent(email: object): string | undefined {
   return fieldOutside(email, v.object(emailArgs), '')
 }
 
+const PLAIN_NAME = /^[A-Za-z_$][\w$]*$/
+
+function fieldPath(path: string, key: string): string {
+  if (!PLAIN_NAME.test(key)) {
+    return `${path}[${JSON.stringify(key)}]`
+  }
+  return path === '' ? key : `${path}.${key}`
+}
+
 function fieldOutside(value: unknown, validator: GenericValidator, path: string): string | undefined {
   if (validator.kind === 'object' && isRecord(value)) {
     for (const [key, field] of Object.entries(value)) {
-      const at = path ? `${path}.${key}` : key
-      const fieldValidator = validator.fields[key] as GenericValidator | undefined
+      const at = fieldPath(path, key)
+      const fieldValidator = Object.prototype.hasOwnProperty.call(validator.fields, key)
+        ? (validator.fields[key] as GenericValidator)
+        : undefined
       const outside = fieldValidator ? fieldOutside(field, fieldValidator, at) : field === undefined ? undefined : at
-      if (outside) {
+      if (outside !== undefined) {
         return outside
       }
     }
@@ -53,7 +64,7 @@ function fieldOutside(value: unknown, validator: GenericValidator, path: string)
   if (validator.kind === 'array' && Array.isArray(value)) {
     for (const [index, element] of value.entries()) {
       const outside = fieldOutside(element, validator.element, `${path}[${index}]`)
-      if (outside) {
+      if (outside !== undefined) {
         return outside
       }
     }
