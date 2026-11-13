@@ -536,6 +536,8 @@ describe('memory leak prevention', () => {
           mutationCb,
           stylesheetManager: mockStylesheetManager,
           recordCrossOriginIframes: true,
+          blockClass: 'rr-block',
+          blockSelector: null,
           wrappedEmit,
         });
 
@@ -630,6 +632,8 @@ describe('memory leak prevention', () => {
           adoptStyleSheets: vi.fn(),
         } as any,
         recordCrossOriginIframes: true,
+        blockClass: 'rr-block',
+        blockSelector: null,
         wrappedEmit: vi.fn(),
       });
       return { iframeManager, mirror };
@@ -1065,6 +1069,8 @@ describe('memory leak prevention', () => {
           adoptStyleSheets: vi.fn(),
         } as any,
         recordCrossOriginIframes: false,
+        blockClass: 'rr-block',
+        blockSelector: null,
         wrappedEmit: vi.fn(),
       });
       return { iframeManager, mirror };
@@ -1229,6 +1235,8 @@ describe('memory leak prevention', () => {
           adoptStyleSheets: vi.fn(),
         } as any,
         recordCrossOriginIframes: false,
+        blockClass: 'rr-block',
+        blockSelector: null,
         wrappedEmit,
       });
 
@@ -1280,6 +1288,8 @@ describe('memory leak prevention', () => {
           adoptStyleSheets: vi.fn(),
         } as any,
         recordCrossOriginIframes: false,
+        blockClass: 'rr-block',
+        blockSelector: null,
         wrappedEmit,
       });
 
@@ -1388,6 +1398,8 @@ describe('memory leak prevention', () => {
           adoptStyleSheets: vi.fn(),
         } as any,
         recordCrossOriginIframes: false,
+        blockClass: 'rr-block',
+        blockSelector: null,
         wrappedEmit,
       });
 
