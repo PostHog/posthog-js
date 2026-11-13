@@ -3077,7 +3077,8 @@ cancel, and `invalid_scheduled_at` for a time more than 30 days after the first 
 email at once. Network errors, rate limits and an unavailable service are retried, because
 the same move twice ends the same; after a move to now, the retry can answer `already_sending`,
 which means the email is going out. Moves of one email from this client run one after another,
-in call order, so a retry never undoes a later move.
+in call order. A move that ends in an error, such as a timeout, may still reach PostHog later
+and undo a move made after it, so check the time with `emails.list()` before you rely on it.
 
 ###### Parameters
 
