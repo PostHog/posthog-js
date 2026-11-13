@@ -1,120 +1,196 @@
-import { hasOwnProperty, isPlainObject } from '@posthog/core'
+import { isBoolean, isNull, isNullish, isNumber, isObject, isString } from '@posthog/core'
 import type { FeatureFlagDetail } from '@posthog/types'
 import type { FlagsResponseFormat } from './feature-flags'
 import { configVersion2FlagEvents } from './flag-events'
-import {
-    isUnreadableFlagRecord,
-    parsedFlagRecordOf,
-    readFlagRecords,
-    type FeatureFlagDetail as RenderedFlagDetail,
-    type ParsedFlagRecord,
-} from './flags-response'
+import { legacyValueOf, typedFlagDetailOf, type FlagRecordValue, type TypedFlagDetail } from './typed-flag-detail'
 import type { FlagsResponse } from './types/feature-flags'
 
 /**
- * What a browser SDK does differently from posthog-node when it reads the `/flags?v=4` response.
- * `flags-response.ts` has the reader the two share, and this file only calls it.
+ * Reads the flag records of the `/flags?v=4` response.
  *
- * 1. **The parsed record is stored.** posthog-node keeps the parsed record of a flag in memory,
- *    beside its legacy rendering. A browser SDK stores its flags, and other page loads, other tabs
- *    and other SDK versions read them back. So the typed members of the record are stored with
- *    the rendering, in `$feature_flag_details`, under their wire names: `value`, and
- *    `config_version`, `rule_type`, `rule_id`, `variant_key` and `forced_variant` in `metadata`.
- *    No stored property is added, because a released SDK adds every stored property it does not
- *    know to each event it sends. A stored record is read back with the shared reader, so the
- *    members are checked again: other code can have written them.
- * 2. **A record without a typed value is stored as sent.** posthog-node also checks the types of
- *    such a record. The browser never did, and a server that does not serve v4 is read exactly as
- *    before.
- * 3. **A flag without a variant has `variant: null`**, as a v2 record carries it. The events of an
- *    overridden flag depend on it.
+ * A v4 record carries one typed `value` (boolean, string, number, object or null) instead of
+ * `enabled` and `variant`, plus a structured reason and rule metadata. The getters, the events and
+ * the stored flag state read the legacy rendering of each record, which is derived from `value`
+ * here: a boolean as is, a string as the variant, `null` as `false`, and a number or object as
+ * `true` with the value as its JSON payload.
  *
- * The stored members are internal: no public type declares them.
+ * A record without `value` comes from a server that does not serve v4. It is returned as sent,
+ * which is how the SDK read it before.
+ *
+ * The rendering of a typed record keeps the typed value and the rule metadata beside the legacy
+ * members, under their wire names, so they are stored with the flag and survive a page load. They
+ * are internal: no public type declares them, and {@link publicFlagDetail} takes them off every
+ * record a public getter returns. A stored record without `value` has no typed value.
  */
 
-/** Whether a record, as sent or as stored, has a typed value. */
-const hasTypedValue = (record: unknown): record is Record<string, unknown> =>
-    isPlainObject(record) && hasOwnProperty.call(record, 'value')
+export { typedFlagDetailOf, type FlagRecordValue, type TypedFlagDetail } from './typed-flag-detail'
 
-// The parsed record of each stored rendering, by the stored object. `undefined` for a stored
-// record that cannot be read.
-const storedRecords = new WeakMap<object, ParsedFlagRecord | undefined>()
+// Thrown for a known field with the wrong JSON type. Any throw makes only its own record unreadable.
+const UNREADABLE = {}
 
-/** The stored rendering of a record that the shared reader read: its legacy rendering plus its typed members. */
-function storedFlagDetail(detail: RenderedFlagDetail): FeatureFlagDetail {
-    if (isUnreadableFlagRecord(detail)) {
-        // A record that cannot be read is stored as the disabled, failed flag it reads as.
-        return detail as FeatureFlagDetail
-    }
-    const record = parsedFlagRecordOf(detail)
-    const { configVersion, ruleType, ruleId, variantKey, forcedVariant } = record.metadata
-    const stored = {
-        ...detail,
-        variant: detail.variant ?? null,
-        value: record.value,
-        metadata: detail.metadata && {
-            ...detail.metadata,
-            config_version: configVersion,
-            rule_type: ruleType,
-            rule_id: ruleId,
-            variant_key: variantKey,
-            forced_variant: forcedVariant,
-        },
-    }
-    storedRecords.set(stored, record)
-    return stored as unknown as FeatureFlagDetail
-}
+type Check = (value: unknown) => boolean
+type Fields = readonly (readonly [name: string, is: Check])[]
+
+// JSON has one number type, so an integral number such as 2.0 is an integer.
+const isInteger: Check = (value) => isNumber(value) && value % 1 === 0
+
+// The known fields of a record and the JSON type of each. Unknown fields are ignored.
+const RECORD_FIELDS: Fields = [
+    // The flag key is the record's map key. A `key` member that is not a string fails the record;
+    // a string that differs from the map key is ignored.
+    ['key', isString],
+    ['failed', isBoolean],
+]
+const REASON_FIELDS: Fields = [
+    ['code', isString],
+    ['condition_index', isInteger],
+    ['description', isString],
+]
+const METADATA_FIELDS: Fields = [
+    ['id', isInteger],
+    ['version', isInteger],
+    ['description', isString],
+    ['has_experiment', isBoolean],
+    ['config_version', isInteger],
+    ['rule_type', isString],
+    ['rule_id', isString],
+    ['variant_key', isString],
+    ['forced_variant', isBoolean],
+    // Only config version 1 records carry an experiment ID. It is checked, like every known
+    // field, but not kept.
+    ['experiment_id', isInteger],
+]
 
 /**
- * The parsed record of a stored flag detail, or `undefined` when the detail has no typed value: it
- * came from a server that does not serve v4, from an older SDK version, from bootstrap or
- * `updateFlags`, or its record could not be read.
+ * The known fields of an object. An absent or null object reads as absent, and so does an absent
+ * or null field. Anything of the wrong JSON type throws.
  */
-export function storedParsedFlagRecordOf(detail: FeatureFlagDetail | undefined): ParsedFlagRecord | undefined {
-    if (!hasTypedValue(detail)) {
+const readFields = (raw: unknown, fields: Fields): Record<string, any> | undefined => {
+    if (isNullish(raw)) {
         return undefined
     }
-    if (!storedRecords.has(detail)) {
-        // The detail came from storage. Its typed members are read as a record from the wire is.
-        const { flags } = readFlagRecords({ flags: { stored: detail } }).body as {
-            flags: { stored: RenderedFlagDetail }
-        }
-        storedRecords.set(detail, isUnreadableFlagRecord(flags.stored) ? undefined : parsedFlagRecordOf(flags.stored))
+    if (!isObject(raw)) {
+        throw UNREADABLE
     }
-    return storedRecords.get(detail)
+    const read: Record<string, any> = {}
+    for (const [name, is] of fields) {
+        const value = raw[name]
+        if (!isNullish(value)) {
+            if (!is(value)) {
+                throw UNREADABLE
+            }
+            read[name] = value
+        }
+    }
+    return read
 }
 
 /**
- * Reads the flag records of a `/flags` response body into what the SDK stores. A typed record is
- * replaced by its stored rendering, a record without a typed value is kept as sent, and the rest
- * of the body is returned unchanged. A typed record that cannot be read is replaced by a disabled,
- * failed flag, and the other records are not affected.
+ * Reads a `/flags?v=4` record into its stored rendering, which holds only the fields this SDK
+ * reads. A record that is not an object throws, as does a field with the wrong JSON type and a
+ * value nested too deeply to encode as a payload.
+ */
+const readTypedRecord = (key: string, raw: unknown): TypedFlagDetail => {
+    const record = readFields(raw, RECORD_FIELDS)
+    const sent: unknown = (raw as Record<string, unknown> | null | undefined)?.value
+    if (
+        !record ||
+        !(isNull(sent) || isBoolean(sent) || isString(sent) || isObject(sent) || (isNumber(sent) && isFinite(sent)))
+    ) {
+        throw UNREADABLE
+    }
+    const rawMetadata = (raw as Record<string, any>).metadata
+    const metadata = readFields(rawMetadata, METADATA_FIELDS)
+
+    // A failed record has no value, whatever it carries.
+    const failed = record.failed === true
+    const value = (failed ? null : sent) as FlagRecordValue
+    const isJsonValue = isNumber(value) || isObject(value)
+    const legacyValue = legacyValueOf(value)
+
+    const detail = {
+        key,
+        enabled: legacyValue !== false,
+        // `null`, not `undefined`, for a flag without a variant: a v2 record carries `null` there.
+        variant: isString(legacyValue) ? legacyValue : null,
+        value,
+        reason: readFields((raw as Record<string, unknown>).reason, REASON_FIELDS),
+        metadata:
+            metadata || isJsonValue
+                ? {
+                      ...metadata,
+                      // A number or object value is its own payload; a payload the record also
+                      // carries is ignored. Other payloads are kept as sent, like a v2 record's.
+                      // A failed record reads as disabled, so it has no payload.
+                      payload: failed ? null : isJsonValue ? JSON.stringify(value) : rawMetadata?.payload,
+                      experiment_id: undefined,
+                  }
+                : undefined,
+        failed: failed || undefined,
+    }
+    return detail as unknown as TypedFlagDetail
+}
+
+/**
+ * Reads the flag records of a `/flags` response body. Each typed record in `flags` is replaced by
+ * its stored rendering, and the rest of the body is returned unchanged. A record that cannot be
+ * read is replaced by a disabled, failed flag, and the other records are not affected.
  *
  * `withoutTypedValues` says whether the body has a record without a typed `value`, or is a v1
  * response with flags, which a server that does not serve v4 sends.
  */
-export function readFlagRecordsForStorage(body: Partial<FlagsResponse>): {
+export const readFlagRecords = (
     body: Partial<FlagsResponse>
-    withoutTypedValues: boolean
-} {
-    const read = readFlagRecords(body)
-    const sent: unknown = isPlainObject(body) ? body.flags : undefined
-    const rendered: unknown = isPlainObject(read.body) ? read.body.flags : undefined
-    if (!isPlainObject(sent) || !isPlainObject(rendered)) {
-        return { body, withoutTypedValues: read.withoutTypedValues }
+): { body: Partial<FlagsResponse>; withoutTypedValues: boolean } => {
+    const flags: Record<string, unknown> | undefined = isObject(body) ? body.flags : undefined
+    let withoutTypedValues = false
+    if (!isObject(flags)) {
+        const featureFlags: unknown = isObject(body) ? body.featureFlags : undefined
+        return { body, withoutTypedValues: isObject(featureFlags) && Object.keys(featureFlags).length > 0 }
     }
-    const flags = Object.fromEntries(
-        Object.entries(rendered).map(([key, detail]) => {
-            const record = sent[key]
-            return [
-                key,
-                isPlainObject(record) && !hasTypedValue(record)
-                    ? (record as FeatureFlagDetail)
-                    : storedFlagDetail(detail as RenderedFlagDetail),
-            ]
-        })
+
+    // A record that cannot be read is stored without the members it has no value for.
+    // `Object.fromEntries` defines every key as an own property, whatever the flag is named.
+    const rendered = Object.fromEntries(
+        Object.keys(flags).map(
+            (key): [string, Pick<FeatureFlagDetail, 'key' | 'enabled'> & Partial<FeatureFlagDetail>] => {
+                const raw = flags[key]
+                if (isObject(raw) && !('value' in raw)) {
+                    withoutTypedValues = true
+                    return [key, raw as FeatureFlagDetail]
+                }
+                try {
+                    return [key, readTypedRecord(key, raw) as unknown as FeatureFlagDetail]
+                } catch {
+                    return [key, { key, enabled: false, failed: true }]
+                }
+            }
+        )
     )
-    return { body: { ...body, flags }, withoutTypedValues: read.withoutTypedValues }
+    return { body: { ...body, flags: rendered as Record<string, FeatureFlagDetail> }, withoutTypedValues }
+}
+
+// The members of a stored typed record's metadata that no public type declares.
+const TYPED_METADATA_MEMBERS = ['config_version', 'rule_type', 'rule_id', 'variant_key', 'forced_variant']
+
+/**
+ * A stored flag record as the public getters return it. The rendering of a typed record is
+ * returned without its typed value and rule metadata, which leaves the members a v2 record has.
+ * Any other record is returned as it is.
+ */
+export const publicFlagDetail = (detail: FeatureFlagDetail): FeatureFlagDetail => {
+    if (!typedFlagDetailOf(detail)) {
+        return detail
+    }
+    const legacy: Record<string, any> = { ...detail }
+    delete legacy.value
+    if (isObject(legacy.metadata)) {
+        const metadata: Record<string, any> = (legacy.metadata = { ...legacy.metadata })
+        for (const member of TYPED_METADATA_MEMBERS) {
+            delete metadata[member]
+        }
+    }
+    return legacy as FeatureFlagDetail
 }
 
 /**
@@ -124,6 +200,7 @@ export function readFlagRecordsForStorage(body: Partial<FlagsResponse>): {
  */
 export const flagsResponseV4: FlagsResponseFormat = {
     version: 4,
-    read: readFlagRecordsForStorage,
+    read: readFlagRecords,
+    publicDetail: publicFlagDetail,
     flagEvents: configVersion2FlagEvents,
 }

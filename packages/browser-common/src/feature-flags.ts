@@ -305,6 +305,11 @@ export interface FlagsResponseFormat {
     /** `withoutTypedValues` says that the body has a record a server that does not serve `version` sends. */
     readonly read?: (body: Partial<FlagsResponse>) => { body: Partial<FlagsResponse>; withoutTypedValues: boolean }
     /**
+     * A stored flag record as the public getters return it: without the members that `read` stores
+     * with a record and no public type declares. A format without it stores no such members.
+     */
+    readonly publicDetail?: (detail: FeatureFlagDetail) => FeatureFlagDetail
+    /**
      * Builds the config version 2 flag events of a read from the stored record of the flag, or
      * returns `undefined` when that record is not a config version 2 record or did not supply
      * `response`. A format without it sends `$feature_flag_called` as before.
@@ -893,6 +898,20 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     getFlagsWithDetails(): Record<string, FeatureFlagDetail> {
+        const details = this._flagsWithDetails()
+        const publicDetail = this._responseFormat.publicDetail
+        if (!publicDetail) {
+            return details
+        }
+        // `Object.fromEntries` defines every key as an own property, whatever the flag is named.
+        return Object.fromEntries(Object.entries(details).map(([key, detail]) => [key, publicDetail(detail)]))
+    }
+
+    /**
+     * The stored flag records with the overrides applied, as stored. A record can have members that
+     * no public type declares, so the code of this module reads it and no public getter returns it.
+     */
+    private _flagsWithDetails(): Record<string, FeatureFlagDetail> {
         const flagDetails = this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
 
         const overridenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
@@ -1449,8 +1468,9 @@ export class PostHogFeatureFlags implements Extension {
      * @param {String} key Key of the feature flag.
      */
     getFeatureFlagDetails(key: string): FeatureFlagDetail | undefined {
-        const details = this.getFlagsWithDetails()
-        return details[key]
+        const detail = this._flagsWithDetails()[key]
+        const publicDetail = this._responseFormat.publicDetail
+        return detail && publicDetail ? publicDetail(detail) : detail
     }
 
     /**
@@ -1634,7 +1654,7 @@ export class PostHogFeatureFlags implements Extension {
         requestId: string | undefined,
         evaluatedAt: number | undefined
     ): Record<string, any | undefined> {
-        const flagDetails = this.getFeatureFlagDetails(key)
+        const flagDetails = this._flagsWithDetails()[key]
         const errors: string[] = [...(this._prop(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
         if (isUndefined(flagValue)) {
             errors.push(FeatureFlagError.FLAG_MISSING)
@@ -1945,7 +1965,8 @@ export class PostHogFeatureFlags implements Extension {
 
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
-        const currentFlagDetails = this.getFlagsWithDetails()
+        // The stored records, so a response that is merged into them keeps what they hold.
+        const currentFlagDetails = this._flagsWithDetails()
         const statePatch = parseFlagsResponse(
             response,
             currentFlags,

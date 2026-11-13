@@ -7,7 +7,7 @@ import { isUndefined } from '@posthog/core'
 import { PostHogFeatureFlags, type FlagsResponseFormat } from '../src/feature-flags'
 import type { FeatureFlagsConfig, FeatureFlagsConfigSource } from '../src/feature-flags-config'
 import { ruleAttribution } from '../src/flag-events'
-import { flagsResponseV4, readFlagRecordsForStorage } from '../src/flags-response-v4'
+import { flagsResponseV4, readFlagRecords } from '../src/flags-response-v4'
 import { createTestClient, type TestCapturedEvent, type TestClient } from './helpers/test-client'
 
 // `$experiment_exposure` and the attribution of `$feature_flag_called`. A stored config version 2
@@ -658,7 +658,7 @@ describe('$experiment_exposure', () => {
         })
 
         it('reads the attribution of a stored record whose members have the wrong types as absent', () => {
-            const record = readFlagRecordsForStorage(response([split()]) as any).body.flags![FLAG] as any
+            const record = readFlagRecords(response([split()]) as any).body.flags![FLAG] as any
             record.metadata.rule_id = 7
             record.metadata.variant_key = { nested: true }
             record.reason.code = ['experiment_split']
@@ -670,6 +670,38 @@ describe('$experiment_exposure', () => {
                 variantKey: undefined,
             })
         })
+
+        // Other code, and other SDK versions, write the same storage. A stored member of the wrong
+        // type is never sent: the call reports what is left, and the split is not an exposure.
+        it.each([
+            ['metadata.rule_id', 7, { $feature_flag_config_version: 2, $feature_flag_reason_code: 'experiment_split' }],
+            [
+                'metadata.variant_key',
+                { nested: true },
+                { $feature_flag_config_version: 2, $feature_flag_reason_code: 'experiment_split' },
+            ],
+            ['reason.code', ['experiment_split'], { $feature_flag_config_version: 2 }],
+            // Without config version 2, or without the value the read returns, the record gets the
+            // call that was sent before.
+            ['metadata.config_version', '2', {}],
+            ['value', ['annual'], {}],
+        ])(
+            'a stored record whose %s has the wrong type sends no exposure and no wrong attribution',
+            async (memberPath, value, expectedAttribution) => {
+                const harness = await setup()
+                await harness.load(response([split()]))
+                const stored = JSON.parse(JSON.stringify(harness.client.kv.get('$feature_flag_details')))
+                const tokens = memberPath.split('.')
+                const parent = tokens.slice(0, -1).reduce((target, token) => target[token], stored[FLAG])
+                parent[tokens[tokens.length - 1]!] = value
+                harness.client.kv.set({ $feature_flag_details: stored })
+
+                expect(harness.flags.getFeatureFlag(FLAG)).toBe('annual')
+
+                expect(eventNames(harness.events)).toEqual([FLAG_CALLED])
+                expect(attribution(harness.events[0]!.properties)).toEqual(expectedAttribution)
+            }
+        )
     })
 
     describe('$feature_flag_reason', () => {

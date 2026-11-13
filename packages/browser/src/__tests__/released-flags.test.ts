@@ -1,8 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
+import { isArray, isObject as isRecord } from '@posthog/core'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { storedParsedFlagRecordOf } from '@posthog/browser-common/flags-response-v4'
+import { typedFlagDetailOf } from '@posthog/browser-common/flags-response-v4'
 import { PARITY_FLAGS, quietReads, runAll, startClient, trackedReads, type Shape } from './released-flags-scenarios'
 
 // Flag results, events and stored state pinned to what posthog-js 1.448.0 returned, sent and
@@ -72,20 +73,21 @@ const legacyDetail = (detail: Record<string, any>): Record<string, any> => {
     return legacy
 }
 
+const legacyDetails = (details: Record<string, any>): Record<string, any> =>
+    Object.fromEntries(Object.entries<any>(details).map(([key, detail]) => [key, legacyDetail(detail)]))
+
 const withLegacyDetails = (stored: Record<string, any>): Record<string, any> =>
     stored.$feature_flag_details
-        ? {
-              ...stored,
-              $feature_flag_details: Object.fromEntries(
-                  Object.entries<any>(stored.$feature_flag_details).map(([key, detail]) => [key, legacyDetail(detail)])
-              ),
-          }
+        ? { ...stored, $feature_flag_details: legacyDetails(stored.$feature_flag_details) }
         : stored
 
+// What `getFlagsWithDetails()` returned, which `quietReads` collects.
+const PUBLIC_DETAILS = 'getFlagsWithDetails'
+
 /**
- * A scenario's results with the stored flag records reduced to the members released versions read.
- * From the v4 response the reported calls of config version 2 flags are stored under other keys,
- * which their own test checks.
+ * A scenario's results with every flag record, stored or returned by a getter, reduced to the
+ * members released versions read. From the v4 response the reported calls of config version 2
+ * flags are stored under other keys, which their own test checks.
  */
 const comparable = (results: Record<string, any>, shape: Shape): Record<string, any> => {
     const reduced = { ...results }
@@ -95,10 +97,54 @@ const comparable = (results: Record<string, any>, shape: Shape): Record<string, 
             if (shape === 'v4') {
                 delete reduced[name].$flag_call_reported
             }
+        } else if (name === PUBLIC_DETAILS) {
+            reduced[name] = legacyDetails(reduced[name])
+        } else if (isRecord(reduced[name]) && PUBLIC_DETAILS in reduced[name]) {
+            // The reads of an earlier step of the scenario.
+            reduced[name] = comparable(reduced[name], shape)
         }
     }
     return reduced
 }
+
+// The typed value and the rule metadata that are stored with a flag record of the v4 response.
+// They are for this SDK's own use, and no public type declares them.
+const TYPED_MEMBERS = ['value', 'config_version', 'rule_type', 'rule_id', 'variant_key', 'forced_variant']
+
+/** Where `value` has a member named like a typed member, at any depth. */
+const typedMembersIn = (value: unknown, at: string = ''): string[] =>
+    isArray(value)
+        ? value.flatMap((item, index) => typedMembersIn(item, `${at}[${index}]`))
+        : isRecord(value)
+          ? Object.keys(value).flatMap((name) => [
+                ...(TYPED_MEMBERS.includes(name) ? [`${at}.${name}`] : []),
+                ...typedMembersIn(value[name], `${at}.${name}`),
+            ])
+          : []
+
+/** The members of `source` that are not in `declared`, as `prefix` plus the name. */
+const undeclared = (source: Record<string, any> | null | undefined, declared: string[], prefix: string): string[] =>
+    Object.keys(source ?? {})
+        .filter((name) => !declared.includes(name))
+        .map((name) => prefix + name)
+
+/** The members of the flag records a getter returned that the public types do not declare. */
+const undeclaredDetailMembersIn = (value: unknown): string[] =>
+    isRecord(value)
+        ? Object.keys(value).flatMap((name) =>
+              name === PUBLIC_DETAILS
+                  ? Object.entries<any>(value[name]).flatMap(([key, detail]) => [
+                        ...undeclared(detail, LEGACY_DETAIL_MEMBERS, `${key}.`),
+                        ...undeclared(detail.reason, LEGACY_REASON_MEMBERS, `${key}.reason.`),
+                        ...undeclared(detail.metadata, LEGACY_METADATA_MEMBERS, `${key}.metadata.`),
+                    ])
+                  : undeclaredDetailMembersIn(value[name])
+          )
+        : []
+
+/** What a scenario got from the public API: every result except the stored properties it read directly. */
+const shown = (results: Record<string, any>): Record<string, any> =>
+    Object.fromEntries(Object.entries(results).filter(([name]) => !name.startsWith('stored')))
 
 const RULE_ID = '50000000-0000-4000-8000-000000000001'
 const REASON_ONLY = (code: string): Record<string, unknown> => ({
@@ -183,6 +229,36 @@ const withConfigVersion2Events = (scenario: string, events: RecordedEvent[]): Re
         ]
     })
 
+/** Recorded flag records with the reason code that the v4 response gives a config version 2 flag. */
+const v4ReasonCodes = (details: Record<string, any>): Record<string, any> =>
+    Object.fromEntries(
+        Object.entries<any>(details).map(([key, detail]) => [
+            key,
+            key in ATTRIBUTION && detail.reason
+                ? { ...detail, reason: { ...detail.reason, code: ATTRIBUTION[key].$feature_flag_reason_code } }
+                : detail,
+        ])
+    )
+
+/** Recorded results with those reason codes in every flag record, stored or returned by a getter. */
+const withV4ReasonCodes = (recorded: Record<string, any>): Record<string, any> => {
+    const changed = { ...recorded }
+    for (const name of Object.keys(changed)) {
+        if (name.startsWith('stored') && changed[name].$feature_flag_details) {
+            changed[name] = {
+                ...changed[name],
+                $feature_flag_details: v4ReasonCodes(changed[name].$feature_flag_details),
+            }
+        } else if (name === PUBLIC_DETAILS) {
+            changed[name] = v4ReasonCodes(changed[name])
+        } else if (isRecord(changed[name]) && PUBLIC_DETAILS in changed[name]) {
+            // The reads of an earlier step of the scenario.
+            changed[name] = withV4ReasonCodes(changed[name])
+        }
+    }
+    return changed
+}
+
 /**
  * The recording as this source reproduces it: it requests `v=4` where the release requested `v=2`,
  * and from the v4 response it sends the config version 2 flag events.
@@ -222,26 +298,7 @@ const expected = (scenario: string, recorded: Record<string, any>, shape: Shape)
             }
         }
         // The server names the reason of a config version 2 flag by another code at v4.
-        for (const name of Object.keys(recorded).filter((member) => member.startsWith('stored'))) {
-            const details = recorded[name].$feature_flag_details
-            if (!details) {
-                continue
-            }
-            reproduced[name] = {
-                ...recorded[name],
-                $feature_flag_details: Object.fromEntries(
-                    Object.entries<any>(details).map(([key, detail]) => [
-                        key,
-                        key in ATTRIBUTION && detail.reason
-                            ? {
-                                  ...detail,
-                                  reason: { ...detail.reason, code: ATTRIBUTION[key].$feature_flag_reason_code },
-                              }
-                            : detail,
-                    ])
-                ),
-            }
-        }
+        return comparable(withV4ReasonCodes(reproduced), shape)
     }
     return comparable(reproduced, shape)
 }
@@ -262,6 +319,21 @@ describe.skipIf(recordVersion || !existsSync(RECORDING)).each<Shape>(['v2', 'v4'
         // `withConfigVersion2Events` says, and nothing else does.
         it.each(Object.keys(released))(`match ${RELEASED_VERSION}: %s`, (scenario) => {
             expect(comparable(results[scenario], shape)).toEqual(expected(scenario, released[scenario], shape))
+        })
+
+        // The typed value and rule metadata of a v4 record are stored, and the stored properties are
+        // the only place that has them. A getter result, an `onFeatureFlags` callback or an event
+        // that carried one would make it public API.
+        it('shows no typed member of a flag record through the public API', () => {
+            for (const scenario of Object.keys(released)) {
+                expect([scenario, typedMembersIn(shown(results[scenario]))]).toEqual([scenario, []])
+                expect([scenario, undeclaredDetailMembersIn(shown(results[scenario]))]).toEqual([scenario, []])
+            }
+            // The scan reads something: the stored records of the v4 response do have typed members.
+            expect(typedMembersIn(results.getters.stored).length > 0).toBe(shape === 'v4')
+            expect(Object.keys(results.getters[PUBLIC_DETAILS])).toEqual(
+                Object.keys(results.getters.stored.$feature_flag_details)
+            )
         })
 
         it('stores no property that 1.448.0 does not store', () => {
@@ -384,7 +456,7 @@ describe.skipIf(recordVersion || !existsSync(RECORDING))('flag state that 1.448.
         )
         const details = client.stored().$feature_flag_details as Record<string, any>
         expect(Object.keys(details)).toEqual(Object.keys(recorded.stored.$feature_flag_details))
-        expect(Object.values(details).map((detail) => storedParsedFlagRecordOf(detail))).toEqual(
+        expect(Object.values(details).map((detail) => typedFlagDetailOf(detail))).toEqual(
             Object.values(details).map(() => undefined)
         )
         expect(client.requests).toEqual([])
