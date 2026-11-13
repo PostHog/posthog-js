@@ -385,7 +385,7 @@ async function prepareToolCallEvent(
     )
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
-    const sessionInfo = getSessionInfo(server, data, sessionId)
+    const sessionInfo = getSessionInfo(server, data, sessionId, extra)
 
     const toolName = request.params?.name
     const event: McpEvent = {
@@ -655,7 +655,7 @@ async function captureResourceRequest(params: TraceRequestParams): Promise<unkno
   let preparedEvent: PreparedToolEvent | null = null
   try {
     const { sessionId, source: sessionSource } = resolveSession(server, extra, undefined, request)
-    const sessionInfo = getSessionInfo(server, data, sessionId)
+    const sessionInfo = getSessionInfo(server, data, sessionId, extra)
     const event: McpEvent = {
       sessionId,
       sessionSource,
@@ -846,7 +846,7 @@ export async function handleListToolsRequest(
   const { sessionId, source: sessionSource } = resolveSession(server, extra, undefined, request)
   // Snapshot before identify, metadata resolution, or the list handler can yield
   // to a concurrent request using the same instrumented server.
-  const sessionInfo = getSessionInfo(server, data, sessionId)
+  const sessionInfo = getSessionInfo(server, data, sessionId, extra)
   const event: McpEvent = {
     sessionId,
     sessionSource,
@@ -1250,7 +1250,7 @@ export async function handleInitializeRequest(
       : resolved
   // Snapshot before identify, metadata, or the initialize handler can yield to
   // another request using the same instrumented server.
-  const sessionInfo = getSessionInfo(server, data, sessionId)
+  const sessionInfo = getSessionInfo(server, data, sessionId, extra)
   const initializeClientInfo = readInitializeClientInfo(request)
   const requestSessionInfo: SessionInfo = {
     ...sessionInfo,

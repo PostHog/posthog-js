@@ -10,7 +10,9 @@
  * The token is unsigned: it holds only what the client already self-reports.
  */
 
+import type { CompatibleRequestHandlerExtra } from '../types'
 import { readHeaderValue } from './headers'
+import { getRequestHeaders } from './request-headers'
 
 export const MCP_SESSION_HEADER = 'mcp-session-id'
 
@@ -108,6 +110,22 @@ export function decodeSessionId(value: unknown): SessionTokenPayload | null {
  */
 export function readMcpSessionHeader(headers: unknown): string | undefined {
   return readHeaderValue(headers, MCP_SESSION_HEADER)
+}
+
+/**
+ * Whether the instance's `initialize` handshake was this request's own client's.
+ * True on a one-client connection (no HTTP request) and on a transport session,
+ * unless that session id is a token of ours the request does not itself present.
+ * Otherwise the instance may serve other clients, and what it remembers names one of them.
+ */
+export function isHandshakeBound(extra: CompatibleRequestHandlerExtra | undefined): boolean {
+  const headers = getRequestHeaders(extra)
+  const transportSession = extra?.sessionId
+  return (
+    headers === undefined ||
+    (transportSession !== undefined &&
+      (decodeSessionId(transportSession) === null || readMcpSessionHeader(headers) === transportSession))
+  )
 }
 
 type SendFn = (message: unknown, options?: unknown) => unknown
