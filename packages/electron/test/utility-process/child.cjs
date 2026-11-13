@@ -1,7 +1,10 @@
+const assert = require('node:assert/strict')
 const { init } = require('@posthog/electron/utility')
 
 async function run() {
     const client = await init()
+    await Promise.all([client.ready(), client.ready()])
+    await client.ready()
     const port = process.parentPort
     port.on('message', async ({ data }) => {
         if (data.fixture !== 'command') return
@@ -24,6 +27,19 @@ async function run() {
                 case 'capture':
                     await client.capture(data.value, { $electron_process: 'spoof', $utility_process_id: 'spoof' })
                     break
+                case 'burst': {
+                    for (let i = 0; i < 110; i++) {
+                        try {
+                            await client.capture(`burst-${i}`)
+                        } catch (error) {
+                            assert.match(error.message, /rate limit/)
+                        }
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 1100))
+                    await client.capture('after-rate-window')
+                    await client.flush()
+                    break
+                }
                 case 'exception':
                     await client.captureException(new Error('handled utility fixture'))
                     break
@@ -36,6 +52,10 @@ async function run() {
                 case 'flags':
                     await client.reloadFeatureFlags()
                     if (client.getFeatureFlag('test') !== 'variant') throw new Error('missing utility flag')
+                    assert.deepEqual(
+                        client.getFeatureFlagPayload('test'),
+                        JSON.parse('{"color":"blue","constructor":{"prototype":true},"__proto__":{"canary":1}}')
+                    )
                     client.getFeatureFlag('test')
                     await client.flush()
                     break

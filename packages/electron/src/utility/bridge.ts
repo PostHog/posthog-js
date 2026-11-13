@@ -34,7 +34,7 @@ export function createUtilityBridge(port: ParentPort): Bridge {
     }
     const message = (event: Electron.MessageEvent): void => {
         try {
-            const data = readEnvelope(event.data)
+            const data = readEnvelope(event.data, 'to-utility')
             if (!data) return
             if (data.kind === 'connected' && typeof data.token === 'string' && data.token.length <= 128) {
                 if (token && token !== data.token) throw new Error('PostHog utility connection changed')

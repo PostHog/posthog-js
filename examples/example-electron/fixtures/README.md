@@ -33,7 +33,9 @@ pnpm test:forge
 pnpm test:builder
 ```
 
-Forge's actual package API and Builder's actual `dir` target produce native applications with an ASAR payload. Each resulting executable runs the combined `platform` profile with the original smoke assertions and temporary userData/mock receiver. It must report `app.isPackaged` and an `app.asar` application path. Missing production dependencies, preload bundles or packaged assets therefore fail at runtime, not just a directory assertion. Generated applications stay in ignored `packaging/dist/` for inspection.
+Forge's actual package API and Builder's actual `dir` target produce native applications with an ASAR payload. Each resulting app is copied intact to a temporary directory with no `node_modules` ancestors, preserving framework symlinks. The executable runs from that isolated directory with `NODE_PATH` cleared, using the combined `platform` profile, original smoke assertions and temporary userData/mock receiver. It must report `app.isPackaged` and an `app.asar` application path.
+
+Each command first tests a throwaway copy with `@posthog/core` removed from its ASAR: launch must fail specifically with the native `ERR_MODULE_NOT_FOUND` diagnostic, not borrow the workspace dependency or time out. A packaging-only bootstrap reports import errors and exits nonzero; it otherwise imports the unchanged example main. The untampered package must then pass every original smoke assertion. Generated applications stay in ignored `packaging/dist/` for inspection; temporary launch/control copies are removed.
 
 These are unsigned/unnotarized unpacked applications, not installer, signing, native-module or store-distribution tests. Builder explicitly skips signing and native rebuilding (the consumer has no native modules); Forge has no signing or maker configuration. No secrets are needed. All test launches retain `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false` and no renderer Node access.
 

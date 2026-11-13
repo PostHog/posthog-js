@@ -1,11 +1,21 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
-import type { ParentPort, UtilityProcess } from 'electron'
+import type { UtilityProcess } from 'electron'
 import { attachUtilityProcess } from '../utility/attach'
-import { createUtilityBridge } from '../utility/bridge'
-import { PostHog } from '../renderer'
+import { PostHog } from '../utility'
 import { envelope, UTILITY_TIMEOUT_MS } from '../utility/protocol'
 import type { Command, Properties, State } from '../shared/protocol'
+
+function utilityClient(port: EventEmitter): PostHog {
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'parentPort')
+    Object.defineProperty(process, 'parentPort', { configurable: true, value: port })
+    try {
+        return new PostHog()
+    } finally {
+        if (descriptor) Object.defineProperty(process, 'parentPort', descriptor)
+        else Reflect.deleteProperty(process, 'parentPort')
+    }
+}
 
 function harness(execute?: (command: Command, authorize: () => void) => Promise<void>) {
     const child = Object.assign(new EventEmitter(), {
@@ -45,7 +55,7 @@ function harness(execute?: (command: Command, authorize: () => void) => Promise<
         () => state,
         removed
     )
-    const client = new PostHog(createUtilityBridge(port as unknown as ParentPort))
+    const client = utilityClient(port)
     return {
         child,
         port,
@@ -61,12 +71,137 @@ function harness(execute?: (command: Command, authorize: () => void) => Promise<
 }
 
 describe('utilityProcess transport', () => {
+    it('keeps repeated and concurrent ready calls idempotent before capture and flush', async () => {
+        const h = harness()
+        try {
+            await Promise.all([h.client.ready(), h.client.ready()])
+            await h.client.ready()
+            await h.client.capture('after-ready')
+            await h.client.flush()
+            expect(h.contexts).toHaveLength(3)
+            expect(h.removed).not.toHaveBeenCalled()
+            h.client.dispose()
+            await expect(h.client.ready()).rejects.toThrow('disposed')
+        } finally {
+            h.client.dispose()
+            h.registration.dispose()
+        }
+    })
+
+    it('recovers from a supported sequential facade burst after the rate window resets', async () => {
+        let now = 0
+        vi.spyOn(performance, 'now').mockImplementation(() => now)
+        const h = harness()
+        try {
+            await h.client.ready()
+            const errors: string[] = []
+            for (let i = 0; i < 110; i++) {
+                await h.client.capture(`burst-${i}`).catch((error: Error) => errors.push(error.message))
+            }
+            expect(errors.length).toBeGreaterThan(0)
+            expect(new Set(errors)).toEqual(new Set(['PostHog utility rate limit exceeded']))
+            expect(h.removed).not.toHaveBeenCalled()
+            now = 1000
+            await h.client.capture('after-window-reset')
+            await h.client.flush()
+            expect(h.contexts.length).toBeGreaterThan(2)
+        } finally {
+            h.client.dispose()
+            h.registration.dispose()
+        }
+    })
+
+    it('consumes authenticated pending-limit rejections without losing protocol order', async () => {
+        let now = 0
+        vi.spyOn(performance, 'now').mockImplementation(() => now)
+        let release!: () => void
+        const gate = new Promise<void>((resolve) => {
+            release = resolve
+        })
+        const h = harness(async (command) => {
+            if (command.type === 'capture') await gate
+        })
+        try {
+            await h.client.ready()
+            const hello = h.port.postMessage.mock.calls
+                .map(([value]) => value as Record<string, any>)
+                .find((value) => value.kind === 'request')!
+            const send = (sequence: number, command: Command) => {
+                now += 20
+                h.child.emit('message', { ...hello, request: { ...hello.request, sequence, command } })
+            }
+            const response = (sequence: number) =>
+                h.child.postMessage.mock.calls
+                    .map(([value]) => value as Record<string, any>)
+                    .find((value) => value.kind === 'response' && value.sequence === sequence)?.response
+            for (let sequence = 2; sequence <= 101; sequence++) send(sequence, { type: 'capture', event: 'pending' })
+            send(102, { type: 'capture', event: 'over-capacity' })
+            expect(response(102)).toEqual({ ok: false, error: 'Too many pending PostHog utility requests' })
+            expect(h.contexts).toHaveLength(101)
+            release()
+            await vi.waitFor(() => expect(response(101)?.ok).toBe(true))
+            send(103, { type: 'flush' })
+            await vi.waitFor(() => expect(response(103)?.ok).toBe(true))
+            expect(h.removed).not.toHaveBeenCalled()
+        } finally {
+            release()
+            h.client.dispose()
+            h.registration.dispose()
+        }
+    })
+
+    it('delivers outbound JSON payload keys without weakening inbound command restrictions', async () => {
+        const h = harness()
+        try {
+            await h.client.ready()
+            const payload = JSON.parse('{"constructor":{"prototype":true},"__proto__":{"canary":1}}')
+            h.publish({ featureFlagPayloads: { test: payload } })
+            await Promise.resolve()
+            expect(h.removed).not.toHaveBeenCalled()
+            expect(h.client.getFeatureFlagPayload('test')).toEqual(payload)
+            await h.client.capture('still-connected')
+            const request = h.port.postMessage.mock.calls
+                .map(([value]) => value as Record<string, any>)
+                .find((value) => value.kind === 'request')!
+            h.child.emit('message', {
+                ...request,
+                request: {
+                    ...request.request,
+                    sequence: 3,
+                    command: { type: 'capture', event: 'unsafe', properties: payload },
+                },
+            })
+            expect(h.removed).toHaveBeenCalledOnce()
+            expect(h.contexts).toHaveLength(2)
+        } finally {
+            h.client.dispose()
+            h.registration.dispose()
+        }
+    })
+
+    it.each([
+        { test: 'x'.repeat(256 * 1024) },
+        { test: Array.from({ length: 21 }).reduce<unknown>((value) => [value], null) },
+    ])('retains outbound state size and depth bounds', async (featureFlagPayloads) => {
+        const h = harness()
+        try {
+            await h.client.ready()
+            h.publish({ featureFlagPayloads: featureFlagPayloads as State['featureFlagPayloads'] })
+            await Promise.resolve()
+            expect(h.removed).toHaveBeenCalledOnce()
+            await expect(h.client.flush()).rejects.toThrow('closed')
+        } finally {
+            h.client.dispose()
+            h.registration.dispose()
+        }
+    })
+
     it('requires a new main registration rather than restarting a disposed facade in the same child', async () => {
         const h = harness()
         await h.client.ready()
         await h.client.capture('before-dispose')
         h.client.dispose()
-        const replacement = new PostHog(createUtilityBridge(h.port as unknown as ParentPort))
+        const replacement = utilityClient(h.port)
         await expect(replacement.ready()).rejects.toThrow('Out-of-order')
         replacement.dispose()
         h.registration.dispose()
@@ -259,7 +394,7 @@ describe('utilityProcess transport', () => {
         vi.useFakeTimers()
         try {
             const port = Object.assign(new EventEmitter(), { postMessage: vi.fn() })
-            const facade = new PostHog(createUtilityBridge(port as unknown as ParentPort))
+            const facade = utilityClient(port)
             const ready = expect(facade.ready()).rejects.toThrow('timed out')
             await vi.advanceTimersByTimeAsync(UTILITY_TIMEOUT_MS)
             await ready

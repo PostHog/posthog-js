@@ -31,7 +31,17 @@ export function PostHogProvider({ client, children }: PostHogProviderProps): Rea
             getSnapshot: (): State => {
                 const next = client.getState()
                 // Renderer snapshots are clones: React needs the same object until the revision changes.
-                if (next.revision !== snapshot.revision) snapshot = next
+                if (next.revision !== snapshot.revision) {
+                    // Unrelated SDK updates must not change object/array payload identities.
+                    if (
+                        next.generation === snapshot.generation &&
+                        next.flagRevision === snapshot.flagRevision &&
+                        next.flagsLoaded === snapshot.flagsLoaded
+                    ) {
+                        next.featureFlagPayloads = snapshot.featureFlagPayloads
+                    }
+                    snapshot = next
+                }
                 return snapshot
             },
             subscribe: (notify: () => void): (() => void) => client.onStateChange(() => notify()),
@@ -52,25 +62,43 @@ export function usePostHog(): PostHog {
     return usePostHogContext().client
 }
 
-function useFlagClient(key: string): PostHog {
+function useFlagValue(key: string): FeatureFlagValue | undefined {
     const { client, state } = usePostHogContext()
-    const { generation, flagRevision, optedOut } = state
+    const { generation, flagRevision, optedOut, featureFlags } = state
     useEffect(() => {
+        const current = client.getState()
+        // A layout effect may replace flags or identity before this committed render's passive effect.
+        if (
+            current.generation !== generation ||
+            current.flagRevision !== flagRevision ||
+            current.optedOut !== optedOut
+        ) {
+            return
+        }
         // Main owns consent, exposure provenance and deduplication. Never emit during render.
         client.getFeatureFlag(key)
     }, [client, key, generation, flagRevision, optedOut])
-    return client
+    return Object.prototype.hasOwnProperty.call(featureFlags, key)
+        ? featureFlags[key]
+        : Object.keys(featureFlags).length > 0
+          ? false
+          : undefined
 }
 
 export function useFeatureFlagEnabled(key: string): boolean | undefined {
-    return useFlagClient(key).isFeatureEnabled(key, { sendEvent: false })
+    const value = useFlagValue(key)
+    return value === undefined ? undefined : Boolean(value)
 }
 
 export function useFeatureFlagVariantKey(key: string): FeatureFlagValue | undefined {
-    return useFlagClient(key).getFeatureFlag(key, { sendEvent: false })
+    return useFlagValue(key)
 }
 
 /** Payload-only reads do not report exposure. */
 export function useFeatureFlagPayload(key: string): JsonType | undefined {
-    return usePostHogContext().client.getFeatureFlagPayload(key)
+    const { state } = usePostHogContext()
+    const payload = Object.prototype.hasOwnProperty.call(state.featureFlagPayloads, key)
+        ? state.featureFlagPayloads[key]
+        : undefined
+    return payload === undefined ? (state.flagsLoaded ? null : undefined) : payload
 }
