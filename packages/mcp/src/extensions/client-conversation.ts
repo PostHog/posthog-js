@@ -121,8 +121,14 @@ export function readRequestClientSignals(
   const headers = getRequestHeaders(extra)
   // A session-scoped instance or a one-client connection (no HTTP request) only
   // ever handshook with this request's client. A shared HTTP instance's last
-  // handshake may be another client's.
-  const handshakeBound = extra?.sessionId !== undefined || headers === undefined
+  // handshake may be another client's, and its transport may still hold the
+  // token we minted for that client, so a token binds only the request that
+  // presents it.
+  const transportSession = extra?.sessionId
+  const handshakeBound =
+    headers === undefined ||
+    (transportSession !== undefined &&
+      (decodeSessionId(transportSession) === null || readMcpSessionHeader(headers) === transportSession))
   return readClientSignals(
     headers,
     readHostClientInfo(server, request, extra)?.name ?? resolveClientIdentity({ request, extra })?.clientName,

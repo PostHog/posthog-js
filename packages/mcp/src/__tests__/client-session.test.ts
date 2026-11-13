@@ -30,6 +30,8 @@ const VSCODE_CLIENT_META = {
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
 }
 
+const MINTED_TOKEN = encodeSessionId({ sessionId: 'ses_minted', clientName: 'codex-mcp-client' })
+
 const handlerArgs: unknown[] = []
 
 function createPod(options?: MCPAnalyticsOptions): MCPServerLike {
@@ -249,6 +251,19 @@ describe('client conversation ids', () => {
       name: 'a session-scoped pod',
       extra: requestExtra({ extra: { sessionId: 'transport-session' } as never }),
       session: CODEX_SESSION,
+    },
+    {
+      name: 'a pod whose transport keeps the token the request presents',
+      extra: requestExtra({
+        headers: { [MCP_SESSION_HEADER]: MINTED_TOKEN },
+        extra: { sessionId: MINTED_TOKEN } as never,
+      }),
+      session: CODEX_SESSION,
+    },
+    {
+      name: "a shared HTTP pod whose transport keeps an earlier client's token",
+      extra: requestExtra({ extra: { sessionId: MINTED_TOKEN } as never }),
+      session: HANDLE_SESSION,
     },
     { name: 'a stdio connection', extra: undefined, session: CODEX_SESSION },
   ])('recognizes a client from its handshake only when bound to the request on $name', async ({ extra, session }) => {
