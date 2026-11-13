@@ -213,8 +213,6 @@ The SDK retries `404`, `408`, `429`, `500`, `502`, `503`, and `504` responses an
 
 5.x.x retried `408`, `429`, and every `5xx`, but not `404`. A proxy in front of capture can return `404` or `429`.
 
-A `404` that lasts through every retry can mean the PostHog deployment has no capture v1 route.
-
 - **`captureMaxRetries`.** This new option sets how many times a capture request is retried after its first attempt, on both lanes. It accepts 0 to 9. When it isn't set, the SDK uses `fetchRetryCount` (default 3).
 - **Waits.** Waits start at 100 ms and double each retry, up to 30 seconds. Each wait varies randomly by up to 25%, so many clients don't retry at the same moment.
 - **`Retry-After`.** A `Retry-After` header sets the minimum wait, up to 30 seconds.
