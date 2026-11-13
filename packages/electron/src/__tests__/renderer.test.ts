@@ -46,6 +46,94 @@ function harness() {
 }
 
 describe('renderer facade', () => {
+    it.each(['constructor', 'toString', 'hasOwnProperty'])('treats inherited %s as a missing flag', async (key) => {
+        const { client, broadcast } = harness()
+        await client.ready()
+        broadcast({ revision: 2, flagsLoaded: true })
+        try {
+            expect(client.getFeatureFlag(key, { sendEvent: false })).toBe(false)
+            expect(client.isFeatureEnabled(key, { sendEvent: false })).toBe(false)
+            expect(client.getFeatureFlagPayload(key)).toBeNull()
+        } finally {
+            client.dispose()
+        }
+    })
+
+    it('retains genuine own prototype-named flag values and payloads', async () => {
+        const { client, broadcast } = harness()
+        await client.ready()
+        broadcast({
+            revision: 2,
+            featureFlags: JSON.parse('{"constructor":"own"}'),
+            featureFlagPayloads: JSON.parse('{"constructor":{"kind":"button"}}'),
+        })
+        expect(client.getFeatureFlag('constructor', { sendEvent: false })).toBe('own')
+        expect(client.getFeatureFlagPayload('constructor')).toEqual({ kind: 'button' })
+        client.dispose()
+    })
+
+    it('allows readiness to retry after a transient handshake rejection', async () => {
+        const { client, bridge } = harness()
+        vi.mocked(bridge.request).mockRejectedValueOnce(new Error('handler unavailable'))
+        const first = await Promise.allSettled([client.ready(), client.ready()])
+        expect(first.map(({ status }) => status)).toEqual(['rejected', 'rejected'])
+        try {
+            await expect(client.ready()).resolves.toBeUndefined()
+            await client.capture('after-handshake-retry')
+            expect(vi.mocked(bridge.request).mock.calls.map(([request]) => request.command.type)).toEqual([
+                'hello',
+                'hello',
+                'capture',
+            ])
+        } finally {
+            client.dispose()
+        }
+    })
+
+    it('makes repeated readiness calls share one handshake', async () => {
+        const { client, bridge } = harness()
+        await Promise.all([client.ready(), client.ready()])
+        await client.ready()
+        expect(vi.mocked(bridge.request).mock.calls.map(([request]) => request.command.type)).toEqual(['hello'])
+        client.dispose()
+    })
+
+    it.each(['flush', 'reloadFeatureFlags'] as const)(
+        'dispatches consent and capture while %s waits for a response',
+        async (method) => {
+            const { client, bridge } = harness()
+            await client.ready()
+            const normal = vi.mocked(bridge.request).getMockImplementation()!
+            let release!: (response: Awaited<ReturnType<Bridge['request']>>) => void
+            const blocked = new Promise<Awaited<ReturnType<Bridge['request']>>>((resolve) => {
+                release = resolve
+            })
+            let request: Parameters<Bridge['request']>[0] | undefined
+            vi.mocked(bridge.request).mockImplementationOnce((value) => {
+                request = value
+                return blocked
+            })
+            const pending = client[method]()
+            for (let i = 0; i < 5; i++) await Promise.resolve()
+            const capture = client.capture('not-blocked')
+            const consent = client.optOut()
+            try {
+                for (let i = 0; i < 15; i++) await Promise.resolve()
+                expect(vi.mocked(bridge.request).mock.calls.map(([value]) => value.command.type)).toEqual([
+                    'hello',
+                    method,
+                    'capture',
+                    'optOut',
+                ])
+                await Promise.all([capture, consent])
+            } finally {
+                if (request) release(await normal(request))
+                await Promise.allSettled([pending, capture, consent])
+                client.dispose()
+            }
+        }
+    )
+
     it('coalesces repeated cached flag reads before IPC, including in-flight reads and ordinary state revisions', async () => {
         const { client, bridge, broadcast } = harness()
         await client.ready()

@@ -59,6 +59,7 @@ export async function loadFixtureWindow(window) {
 
 export async function assertRuntimeFixture(windows) {
     if (process.env.ELECTRON_EXAMPLE_PACKAGER) {
+        assert.equal(process.env.NODE_PATH, undefined, 'packaged consumer must not inherit NODE_PATH')
         assert.equal(app.isPackaged, true, 'must execute the packaged application, not electron .')
         assert.match(app.getAppPath(), /[\\/]app\.asar$/, 'packager must ship an ASAR app')
     }

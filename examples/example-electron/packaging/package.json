@@ -7,7 +7,7 @@
     "license": "MIT",
     "private": true,
     "type": "module",
-    "main": "dist/app/main.mjs",
+    "main": "dist/app/fixtures/packaged-main.mjs",
     "packageManager": "pnpm@11.7.0",
     "scripts": {
         "test:forge": "node package-test.mjs forge",
@@ -29,7 +29,7 @@
                 "executableName": "PostHogFixture",
                 "ignore": [
                     "^/dist/(?!app(?:/|$))",
-                    "^/package-test\\.mjs$",
+                    "^/package-(?:test|isolation\\.test)\\.mjs$",
                     "^/pnpm",
                     "^/\\.pnpmfile\\.cjs$"
                 ]
