@@ -91,7 +91,7 @@ async function main() {
         fetchRetryCount: 0,
     })
     await posthog.ready()
-    posthog.capture('electron_main_startup', { example: 'electron' })
+    await posthog.capture('electron_main_startup', { example: 'electron' })
 
     if (smokeTest) {
         const { runSmokeDriver } = await import('./smoke-driver.mjs')

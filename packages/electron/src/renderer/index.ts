@@ -38,12 +38,14 @@ export interface RendererOptions {
     onError?: (error: unknown) => void
 }
 
+const bridgeSequences = new WeakMap<Bridge, number>()
+
 export class PostHog {
     private _autocapture?: RendererAutocapture
     private _autocapturePauses = 0
     private _state?: State
     private _reportedFlags = new Set<string>()
-    private _sequence = 0
+    private _ready?: Promise<void>
     private _tail: Promise<unknown> = Promise.resolve()
     private _listeners = new Set<(state: State) => void>()
     private _unsubscribe: () => void
@@ -106,18 +108,31 @@ export class PostHog {
     private async _send(command: Command): Promise<void> {
         const generation = this._state?.generation ?? 0
         const snapshot: Command = JSON.parse(JSON.stringify(structuredClone(command)))
-        const operation = this._tail.then(async () => {
+        const dispatched = this._tail.then(() => {
             if (this._disposed) throw new Error('PostHog renderer has been disposed')
-            const response = await this._bridge.request({
-                version: PROTOCOL_VERSION,
-                sequence: ++this._sequence,
-                generation,
-                command: snapshot,
-            })
+            const sequence = (bridgeSequences.get(this._bridge) ?? 0) + 1
+            bridgeSequences.set(this._bridge, sequence)
+            return {
+                response: this._bridge.request({
+                    version: PROTOCOL_VERSION,
+                    sequence,
+                    generation,
+                    command: snapshot,
+                }),
+            }
+        })
+        const operation = dispatched.then(async ({ response: pending }) => {
+            const response = await pending
             if (!response.ok) throw new Error(response.error)
             this._update(response.state)
         })
-        this._tail = operation.catch(() => {})
+        this._tail = (
+            command.type === 'flush' ||
+            command.type === 'reloadFeatureFlags' ||
+            command.type === 'loadAutocaptureConfig'
+                ? dispatched
+                : operation
+        ).catch(() => {})
         return operation
     }
 
@@ -131,7 +146,11 @@ export class PostHog {
     }
 
     async ready(): Promise<void> {
-        await this._send({ type: 'hello' })
+        if (this._disposed) throw new Error('PostHog renderer has been disposed')
+        await (this._ready ??= this._send({ type: 'hello' }).catch((error: unknown) => {
+            this._ready = undefined
+            throw error
+        }))
     }
 
     capture(event: string, properties?: Properties): Promise<void> {

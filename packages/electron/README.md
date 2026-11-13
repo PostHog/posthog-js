@@ -149,6 +149,8 @@ Main options `disableRemoteConfig: true` explicitly permit local-only autocaptur
 - Corrupt/unreadable existing storage falls back to opted out and empty analytics, reporting via `onError`. Call `optIn()` explicitly after addressing the cause if appropriate.
 - Network errors, 407, 408, 429 and 5xx preserve batches after bounded immediate retries; background retries use backoff, jitter and Retry-After. Permanent failures may drop the batch. Retries retain event UUIDs, but duplicate delivery remains possible. `flushInterval: 0` disables scheduled background flushes; explicit flush and queue-size-triggered flush still work.
 
+Requests use an isolated Electron session with omitted cookies and HTTP credentials. Automatic redirects are rejected: configure the final ingestion URL, including any reverse-proxy path, rather than relying on redirects to move event or flag bodies.
+
 ## Lifecycle and shutdown
 
 Lifecycle capture defaults on (`captureAppLifecycleEvents: false` disables its events). Installed means first observed SDK launch, not installer execution. Updates compare the saved app version and optional `appBuild`. Installed/Updated carry Electron/Node/Chromium versions; ordinary events carry app/OS context. Focus is aggregated across registered windows. Sessions start fresh on process restart, with core's default 30-minute inactivity and 24-hour maximum boundaries; periodic flag reloads alone do not extend them. Admitted analytics events currently count as activity; avoid periodic heartbeat captures if that is not the session behavior you want.
@@ -172,6 +174,7 @@ pnpm turbo run build check-types test:unit test:built --filter=@posthog/electron
 # After installing the Electron binary explicitly (installs use --ignore-scripts):
 node packages/electron/node_modules/electron/install.js
 pnpm --filter @posthog/electron test:autocapture
+pnpm --filter @posthog/electron test:transport
 ```
 
 For loopback subprocess delivery/network tests and their real-versus-synthetic coverage limits, see [delivery tests](test/delivery/README.md).

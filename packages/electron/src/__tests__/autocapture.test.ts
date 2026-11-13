@@ -68,6 +68,52 @@ function observeAttributes(element: Element) {
 
 const enabled = { status: 'loaded', autocapture_opt_out: false, elementsChainAsString: true } as const
 
+describe('renderer config loading', () => {
+    it('does not hold renderer opt-out behind a stalled project config response', async () => {
+        let state: State = {
+            revision: 1,
+            flagRevision: 0,
+            generation: 0,
+            distinctId: 'anonymous',
+            anonymousId: 'anonymous',
+            sessionId: 'session',
+            optedOut: false,
+            featureFlags: {},
+            featureFlagPayloads: {},
+            autocapture: { status: 'pending' },
+        }
+        let releaseConfig!: () => void
+        const commands: string[] = []
+        const bridge: Bridge = {
+            request: vi.fn(async (request) => {
+                commands.push(request.command.type)
+                if (request.command.type === 'loadAutocaptureConfig') {
+                    await new Promise<void>((resolve) => {
+                        releaseConfig = resolve
+                    })
+                }
+                if (request.command.type === 'optOut')
+                    state = { ...state, revision: state.revision + 1, optedOut: true }
+                return { ok: true as const, state }
+            }),
+            subscribe: () => () => {},
+        }
+        const client = new PostHog(bridge, { autocapture: true })
+        try {
+            await client.ready()
+            await vi.waitFor(() => expect(commands).toContain('loadAutocaptureConfig'))
+            const consent = client.optOut()
+            await vi.waitFor(() => expect(commands.slice(-2)).toEqual(['loadAutocaptureConfig', 'optOut']), {
+                timeout: 500,
+            })
+            await consent
+        } finally {
+            releaseConfig?.()
+            client.dispose()
+        }
+    })
+})
+
 describe('Electron DOM autocapture', () => {
     it('keeps full browser extension clients structurally compatible', () => {
         expectTypeOf<Client>().toMatchTypeOf<AutocaptureClient>()
